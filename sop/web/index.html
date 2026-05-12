@@ -19,9 +19,15 @@
 <script type="text/babel" src="pages/orchestration.js"></script>
 <script type="text/babel" src="pages/docker.js"></script>
 <script type="text/babel" src="pages/skill_repo.js"></script>
-<script type="text/babel" src="pages/vibe.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script type="text/babel" src="pages/vibe.js?v=20260512d"></script>
 <script type="text/babel" src="pages/notify.js"></script>
 <script type="text/babel" src="pages/cli.js"></script>
+<script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
+<script type="text/babel" src="pages/dev_flow.js"></script>
 <style>
 /* ── CSS 变量（主题） ─────────────────────────────────────────── */
 :root{
@@ -60,6 +66,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .topbar-badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
 .topbar-project{font-size:12px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-health{font-size:11px;display:flex;align-items:center;gap:6px;margin-left:8px;margin-right:4px;color:var(--text2);white-space:nowrap}
+.topbar-health .health-dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
+.topbar-health.ok .health-dot{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.45)}
+.topbar-health.down .health-dot{background:#ef4444}
+.topbar-health.checking .health-dot{background:#eab308;animation:pulse-dot 1.2s ease-in-out infinite}
+@keyframes pulse-dot{50%{opacity:.45}}
+.help-kbd{font-family:ui-monospace,monospace;font-size:11px;background:var(--bg3);padding:2px 6px;border-radius:4px;border:1px solid var(--border);color:var(--text)}
 
 .body-wrap{display:flex;flex:1;overflow:hidden;min-height:0}
 
@@ -98,6 +111,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 [data-theme=light] .scroll-slim{scrollbar-color:rgba(100,116,139,.4) transparent}
 [data-theme=light] .scroll-slim::-webkit-scrollbar-thumb{background:rgba(100,116,139,.28)}
 [data-theme=light] .scroll-slim::-webkit-scrollbar-thumb:hover{background:rgba(100,116,139,.45)}
+
+/* Vibe IDE：Markdown / 文档预览 */
+.vibe-md-view{line-height:1.65;font-size:13px;color:var(--text);word-break:break-word}
+.vibe-md-view h1,.vibe-md-view h2,.vibe-md-view h3,.vibe-md-view h4{margin:.85em 0 .45em;font-weight:700;line-height:1.25}
+.vibe-md-view h1{font-size:1.35em}.vibe-md-view h2{font-size:1.2em}.vibe-md-view h3{font-size:1.08em}
+.vibe-md-view pre{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow:auto;font-size:12px;margin:.6em 0}
+.vibe-md-view pre code{background:transparent;padding:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.vibe-md-view code:not(pre code){background:var(--bg3);padding:2px 6px;border-radius:4px;font-family:ui-monospace,monospace;font-size:12px}
+.vibe-md-view p{margin:.55em 0}
+.vibe-md-view ul,.vibe-md-view ol{margin:.45em 0;padding-left:1.35em}
+.vibe-md-view li{margin:.2em 0}
+.vibe-md-view blockquote{border-left:3px solid var(--accent);margin:.55em 0;padding:.2em 0 .2em 12px;color:var(--text2)}
+.vibe-md-view table{border-collapse:collapse;font-size:12px;margin:.65em 0;width:100%}
+.vibe-md-view th,.vibe-md-view td{border:1px solid var(--border);padding:6px 8px;text-align:left}
+.vibe-md-view a{color:var(--accent)}
+.vibe-md-view img{max-width:100%;height:auto;border-radius:6px}
 
 /* ── 主内容 ───────────────────────────────────────────────────── */
 .main-content{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:22px 26px 28px;background:var(--bg);scroll-behavior:smooth}
@@ -219,7 +248,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const API = 'http://localhost:8765/api';
+const API = (typeof window !== 'undefined' && window.location && (window.location.protocol === 'http:' || window.location.protocol === 'https:'))
+  ? (window.location.origin.replace(/\/$/, '') + '/api')
+  : 'http://localhost:8765/api';
+
+/** 统一超时与 Abort，供 useFetch / 健康检查使用 */
+function apiFetch(input, init) {
+  const opts = init || {};
+  const timeoutMs = opts.timeoutMs != null ? opts.timeoutMs : 32000;
+  const ctrl = new AbortController();
+  const tid = setTimeout(function () { ctrl.abort(); }, timeoutMs);
+  var next = Object.assign({}, opts);
+  delete next.timeoutMs;
+  next.signal = ctrl.signal;
+  return fetch(input, next).finally(function () { clearTimeout(tid); });
+}
+window.apiFetch = apiFetch;
 
 function showToast(message, type) {
   window.dispatchEvent(new CustomEvent('devdash-toast', { detail: { message, type: type || 'info' } }));
@@ -263,19 +307,31 @@ function useFetch(url) {
   const load = React.useCallback(() => {
     setLoading(true);
     setError(null);
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+    apiFetch(url, { timeoutMs: 32000 })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (txt) {
+            var detail = 'HTTP ' + r.status;
+            try {
+              var j = JSON.parse(txt);
+              if (j && (j.detail != null || j.message != null)) detail = String(j.detail != null ? j.detail : j.message);
+            } catch (_) {}
+            throw new Error(detail);
+          });
+        }
         return r.json();
       })
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => {
-        setError('无法连接 API 或响应异常');
+      .then(function (d) { setData(d); setLoading(false); })
+      .catch(function (err) {
+        var msg = '无法连接 API 或响应异常';
+        if (err && err.name === 'AbortError') msg = '请求超时（>32s），请检查网络或缩小查询范围';
+        else if (err && err.message) msg = String(err.message);
+        setError(msg);
         setLoading(false);
         setData(null);
       });
   }, [url]);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(function () { load(); }, [load]);
   return { data, loading, error, reload: load };
 }
 
@@ -283,7 +339,7 @@ function Tag({type, label}) {
   const cls = {
     P0:'tag-p0',P1:'tag-p1',P2:'tag-p2',P3:'tag-p3',
     completed:'tag-done',in_progress:'tag-progress',blocked:'tag-blocked',pending:'tag-pending',
-    open:'tag-open',resolved:'tag-resolved',
+    open:'tag-open',resolved:'tag-resolved',cancelled:'tag-p3',done:'tag-done',
   }[type] || 'tag-p3';
   return <span className={`tag ${cls}`}>{label||type}</span>;
 }
@@ -310,6 +366,10 @@ function Dashboard() {
       <div className="section-title">📊 项目总览 {sprint && <span style={{color:'#64748b',fontWeight:400}}>· {sprint.id} · {sprint.goal}</span>}</div>
       <RefreshBtn onClick={reload} />
     </div>
+    <div className="card" style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
+      <div style={{fontSize:13,color:'#94a3b8',lineHeight:1.5}}>🧭 <strong style={{color:'#e2e8f0'}}>研发全流程</strong>：从需求→方案→迭代→多 Agent 开发→环境/发布，一站式跳转与<strong style={{color:'#93c5fd'}}>低 Token</strong>提示模板。</div>
+      <button type="button" className="btn btn-primary btn-sm" onClick={()=>window.dispatchEvent(new CustomEvent('app-set-tab',{detail:{tab:'dev-flow'}}))}>进入枢纽</button>
+    </div>
     <div className="grid-4">
       <div className="card"><h3>迭代完成率</h3><div className="stat-val">{pct}%</div><div className="progress-bar"><div className="progress-fill" style={{width:pct+'%'}}/></div><div className="stat-sub">{tasks.completed}/{tasks.total} 任务</div></div>
       <div className="card"><h3>阻塞任务</h3><div className="stat-val" style={{color:tasks.blocked?.length?'#fca5a5':'#86efac'}}>{tasks.blocked?.length||0}</div><div className="stat-sub">需要人工介入</div></div>
@@ -335,58 +395,315 @@ function Dashboard() {
   </>;
 }
 
-// ── 需求看板 ────────────────────────────────────────────────────
+// ── 需求看板（手动录入 / AI 文档拆解 / 编辑 / 原型说明与配图） ───────────────────
 function Requirements() {
   const {data, loading, error, reload} = useFetch(`${API}/requirements`);
-  const [modal, setModal] = React.useState(null);
-  const [form, setForm] = React.useState({priority:'P1',human_notes:''});
+  const [detail, setDetail] = React.useState(null);
+  const [editForm, setEditForm] = React.useState(null);
+  const [proto, setProto] = React.useState('');
+  const [protoBusy, setProtoBusy] = React.useState(false);
+  const [manualOpen, setManualOpen] = React.useState(false);
+  const [manualForm, setManualForm] = React.useState({title:'',description:'',priority:'P1',acceptance:'',tags:''});
+  const [docOpen, setDocOpen] = React.useState(false);
+  const [docText, setDocText] = React.useState('');
+  const [docBusy, setDocBusy] = React.useState(false);
+  const [previewItems, setPreviewItems] = React.useState(null);
+  const [selPreview, setSelPreview] = React.useState(() => new Set());
 
-  const save = () => {
-    fetch(`${API}/requirements/${modal.id}/priority`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+  React.useEffect(() => {
+    if (!detail) { setProto(''); return; }
+    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}/prototype`)
+      .then((r) => r.json())
+      .then((d) => setProto(d.content || ''))
+      .catch(() => setProto(''));
+  }, [detail?.id]);
+
+  const openDetail = (r) => {
+    setDetail(r);
+    setEditForm({
+      title: r.title || '',
+      description: r.description || '',
+      priority: r.priority || 'P1',
+      status: r.status || 'pending',
+      acceptance: Array.isArray(r.acceptance_criteria) ? r.acceptance_criteria.join('\n') : '',
+      human_notes: r.human_notes || '',
+    });
+  };
+
+  const saveDetail = () => {
+    if (!detail || !editForm) return;
+    const ac = editForm.acceptance.split('\n').map((s) => s.trim()).filter(Boolean);
+    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        title: editForm.title,
+        description: editForm.description,
+        priority: editForm.priority,
+        status: editForm.status,
+        acceptance_criteria: ac,
+        human_notes: editForm.human_notes,
+      }),
+    })
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(null);reload();showToast('优先级已更新','ok');})
-      .catch(()=>showToast('保存失败','err'));
+      .then(() => {
+        reload();
+        setDetail((d) => (d ? {...d, title: editForm.title, description: editForm.description, priority: editForm.priority, status: editForm.status, acceptance_criteria: ac, human_notes: editForm.human_notes} : null));
+        showToast('需求已保存', 'ok');
+      })
+      .catch(() => showToast('保存失败', 'err'));
+  };
+
+  const deleteDetail = () => {
+    if (!detail || !confirm(`删除需求 ${detail.id}？`)) return;
+    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}`, {method: 'DELETE'})
+      .then((r) => { if (!r.ok) throw new Error(); })
+      .then(() => { setDetail(null); reload(); showToast('已删除', 'ok'); })
+      .catch(() => showToast('删除失败', 'err'));
+  };
+
+  const runPrototype = (mode, genImage) => {
+    if (!detail) return;
+    setProtoBusy(true);
+    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}/prototype`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode, gen_image: !!genImage, extra_context: ''}),
+    })
+      .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+      .then(({ok, d}) => {
+        setProtoBusy(false);
+        if (!ok) {
+          const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) ? d.detail.map((x) => x.msg || x.type).join(';') : '生成失败');
+          showToast(msg, 'err');
+          return;
+        }
+        setProto(d.content || '');
+        showToast(genImage && d.image_url ? '原型与配图已生成' : '原型说明已生成', 'ok');
+      })
+      .catch(() => { setProtoBusy(false); showToast('请求失败', 'err'); });
+  };
+
+  const saveManual = () => {
+    const ac = manualForm.acceptance.split('\n').map((s) => s.trim()).filter(Boolean);
+    const tags = manualForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    if (!manualForm.title.trim()) { showToast('请填写标题', 'err'); return; }
+    fetch(`${API}/requirements`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        title: manualForm.title.trim(),
+        description: manualForm.description.trim(),
+        priority: manualForm.priority,
+        acceptance_criteria: ac,
+        tags,
+      }),
+    })
+      .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+      .then(({ok, d}) => {
+        if (!ok) { showToast(d.detail || '创建失败', 'err'); return; }
+        setManualOpen(false);
+        setManualForm({title:'',description:'',priority:'P1',acceptance:'',tags:''});
+        reload();
+        showToast('需求已创建', 'ok');
+      })
+      .catch(() => showToast('请求失败', 'err'));
+  };
+
+  const parseDoc = () => {
+    if (docText.trim().length < 20) { showToast('请粘贴至少 20 字的文档内容', 'err'); return; }
+    setDocBusy(true);
+    fetch(`${API}/requirements/parse-document`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: docText, filename: 'upload.txt'}),
+    })
+      .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+      .then(({ok, d}) => {
+        setDocBusy(false);
+        if (!ok) { showToast(typeof d.detail === 'string' ? d.detail : '解析失败', 'err'); return; }
+        setPreviewItems(d.items || []);
+        setSelPreview(new Set((d.items || []).map((_, i) => i)));
+        showToast(`已解析 ${(d.items || []).length} 条，请确认后导入`, 'ok');
+      })
+      .catch(() => { setDocBusy(false); showToast('请求失败', 'err'); });
+  };
+
+  const importSelected = () => {
+    if (!previewItems || !previewItems.length) return;
+    const items = previewItems.filter((_, i) => selPreview.has(i)).map((it) => ({
+      title: it.title,
+      description: it.description || '',
+      priority: it.priority || 'P2',
+      acceptance_criteria: it.acceptance_criteria || [],
+      tags: it.tags || [],
+    }));
+    if (!items.length) { showToast('请至少选择一条', 'err'); return; }
+    fetch(`${API}/requirements/batch`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({items}),
+    })
+      .then((r) => { if (!r.ok) throw new Error(); })
+      .then(() => {
+        setDocOpen(false);
+        setDocText('');
+        setPreviewItems(null);
+        setSelPreview(new Set());
+        reload();
+        showToast(`已导入 ${items.length} 条需求`, 'ok');
+      })
+      .catch(() => showToast('导入失败', 'err'));
+  };
+
+  const updatePreviewRow = (i, field, val) => {
+    setPreviewItems((rows) => {
+      const copy = [...(rows || [])];
+      if (!copy[i]) return rows;
+      copy[i] = {...copy[i], [field]: val};
+      return copy;
+    });
   };
 
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
-  const reqs = data||[];
-  const groups = {P0:[],P1:[],P2:[],P3:[]};
-  reqs.forEach(r=>{const p=r.priority||'P3';(groups[p]||groups.P3).push(r);});
+  const reqs = data || [];
+  const groups = {P0: [], P1: [], P2: [], P3: []};
+  reqs.forEach((r) => { const p = r.priority || 'P3'; (groups[p] || groups.P3).push(r); });
 
   return <>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
       <div className="section-title">📋 需求看板</div>
-      <RefreshBtn onClick={reload} />
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setManualOpen(true)}>＋ 手动录入</button>
+        <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} onClick={()=>{setDocOpen(true);setPreviewItems(null);setDocText('');}}>AI 读文档生成</button>
+        <RefreshBtn onClick={reload} />
+      </div>
     </div>
     <div className="grid-2">
-      {Object.entries(groups).map(([p,items])=><div key={p} className="card">
+      {Object.entries(groups).map(([p, items]) => <div key={p} className="card scroll-slim" style={{maxHeight:480,overflowY:'auto'}}>
         <div className="section-title"><Tag type={p}/> <span style={{color:'#64748b',fontWeight:400}}>({items.length})</span></div>
-        {items.length===0?<div className="empty">暂无</div>:items.map(r=><div key={r.id} className="list-item">
-          <div style={{flex:1}}>
+        {items.length === 0 ? <div className="empty">暂无</div> : items.map((r) => <div key={r.id} className="list-item" style={{alignItems:'flex-start'}}>
+          <div style={{flex:1,cursor:'pointer'}} onClick={() => openDetail(r)}>
             <div className="title">{r.title}</div>
-            <div className="meta">{r.id} · <Tag type={r.status||'pending'}/></div>
-            {r.human_notes&&<div className="meta" style={{color:'#fbbf24'}}>💬 {r.human_notes}</div>}
+            <div className="meta">{r.id} · <Tag type={r.status === 'done' ? 'done' : (r.status || 'pending')}/></div>
+            {r.human_notes && <div className="meta" style={{color:'#fbbf24'}}>💬 {r.human_notes}</div>}
           </div>
-          <button className="btn btn-sm btn-primary" onClick={()=>{setModal(r);setForm({priority:r.priority||'P1',human_notes:r.human_notes||''});}}>调整</button>
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => openDetail(r)}>编辑</button>
         </div>)}
       </div>)}
     </div>
-    {modal&&<div className="modal-bg" onClick={()=>setModal(null)}>
-      <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>调整需求优先级</h3>
-        <div style={{fontSize:13,color:'#94a3b8',marginBottom:12}}>{modal.title}</div>
+
+    {manualOpen && <div className="modal-bg" onClick={()=>setManualOpen(false)}>
+      <div className="modal" style={{width:520,maxWidth:'96vw'}} onClick={(e)=>e.stopPropagation()}>
+        <h3>手动录入需求</h3>
+        <div className="form-group"><label>标题</label>
+          <input value={manualForm.title} onChange={(e)=>setManualForm({...manualForm,title:e.target.value})} placeholder="简短描述需求"/></div>
+        <div className="form-group"><label>详细说明</label>
+          <textarea value={manualForm.description} onChange={(e)=>setManualForm({...manualForm,description:e.target.value})} style={{minHeight:80}} placeholder="背景、范围、约束..."/></div>
         <div className="form-group"><label>优先级</label>
-          <select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>
-            <option>P0</option><option>P1</option><option>P2</option><option>P3</option>
-          </select>
-        </div>
-        <div className="form-group"><label>人工备注</label>
-          <textarea value={form.human_notes} onChange={e=>setForm({...form,human_notes:e.target.value})} placeholder="说明调整原因..."/>
-        </div>
+          <select value={manualForm.priority} onChange={(e)=>setManualForm({...manualForm,priority:e.target.value})}>
+            {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
+          </select></div>
+        <div className="form-group"><label>验收标准（每行一条）</label>
+          <textarea value={manualForm.acceptance} onChange={(e)=>setManualForm({...manualForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}} placeholder="可测、可交付"/></div>
+        <div className="form-group"><label>标签（逗号分隔）</label>
+          <input value={manualForm.tags} onChange={(e)=>setManualForm({...manualForm,tags:e.target.value})} placeholder="backend,api"/></div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>
-          <button className="btn btn-primary" onClick={save}>保存</button>
+          <button type="button" className="btn btn-cancel" onClick={()=>setManualOpen(false)}>取消</button>
+          <button type="button" className="btn btn-primary" onClick={saveManual}>创建</button>
+        </div>
+      </div>
+    </div>}
+
+    {docOpen && <div className="modal-bg" onClick={()=>{if(!docBusy)setDocOpen(false);}}>
+      <div className="modal" style={{width:Math.min(720,typeof window!=='undefined'?window.innerWidth-24:720),maxWidth:'96vw'}} onClick={(e)=>e.stopPropagation()}>
+        <h3>AI 从文档生成需求列表</h3>
+        <p style={{fontSize:12,color:'#64748b',marginBottom:10}}>粘贴 PRD、需求说明或会议纪要全文。需配置 <code style={{color:'#93c5fd'}}>ANTHROPIC_API_KEY</code>。生成后可在表格中修改再导入。</p>
+        {!previewItems ? <>
+          <div className="form-group"><label>文档内容</label>
+            <textarea value={docText} onChange={(e)=>setDocText(e.target.value)} style={{minHeight:200,fontSize:12}} placeholder="在此粘贴文档..."/></div>
+          <div className="form-group"><label>或选择本地文本文件</label>
+            <input type="file" accept=".txt,.md,.markdown,text/plain" onChange={(e)=>{
+              const f = e.target.files && e.target.files[0];
+              if(!f)return;
+              const rd = new FileReader();
+              rd.onload = ()=>setDocText(String(rd.result||''));
+              rd.readAsText(f);
+            }}/></div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-cancel" onClick={()=>setDocOpen(false)} disabled={docBusy}>取消</button>
+            <button type="button" className="btn btn-primary" onClick={parseDoc} disabled={docBusy}>{docBusy?'解析中...':'解析文档'}</button>
+          </div>
+        </> : <>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <span style={{fontSize:12,color:'#94a3b8'}}>共 {previewItems.length} 条 · 勾选将导入</span>
+            <div style={{display:'flex',gap:6}}>
+              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set(previewItems.map((_,i)=>i)))}>全选</button>
+              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set())}>全不选</button>
+            </div>
+          </div>
+          <div className="scroll-slim" style={{maxHeight:320,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8}}>
+            {previewItems.map((it,i)=><div key={i} className="list-item" style={{flexDirection:'column',alignItems:'stretch',gap:6}}>
+              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+                <input type="checkbox" checked={selPreview.has(i)} onChange={(e)=>{
+                  const n = new Set(selPreview);
+                  e.target.checked ? n.add(i) : n.delete(i);
+                  setSelPreview(n);
+                }}/>
+                <span style={{fontSize:11,color:'#64748b'}}>导入</span>
+              </label>
+              <input style={{width:'100%',padding:8,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)'}} value={it.title}
+                onChange={(e)=>updatePreviewRow(i,'title',e.target.value)} placeholder="标题"/>
+              <select value={it.priority} onChange={(e)=>updatePreviewRow(i,'priority',e.target.value)} style={{padding:6,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontSize:12}}>
+                {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
+              </select>
+              <textarea value={it.description||''} onChange={(e)=>updatePreviewRow(i,'description',e.target.value)} style={{minHeight:48,fontSize:12,width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',padding:8}} placeholder="说明"/>
+            </div>)}
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-cancel" onClick={()=>{setPreviewItems(null);}}>上一步</button>
+            <button type="button" className="btn btn-primary" onClick={importSelected}>导入选中</button>
+          </div>
+        </>}
+      </div>
+    </div>}
+
+    {detail && editForm && <div className="modal-bg" onClick={()=>setDetail(null)}>
+      <div className="modal" style={{width:Math.min(640,typeof window!=='undefined'?window.innerWidth-24:640),maxWidth:'96vw',maxHeight:'90vh',overflowY:'auto'}} onClick={(e)=>e.stopPropagation()}>
+        <h3>编辑需求</h3>
+        <div style={{fontSize:11,color:'#64748b',marginBottom:10}}>{detail.id}</div>
+        <div className="form-group"><label>标题</label>
+          <input value={editForm.title} onChange={(e)=>setEditForm({...editForm,title:e.target.value})}/></div>
+        <div className="form-group"><label>说明</label>
+          <textarea value={editForm.description} onChange={(e)=>setEditForm({...editForm,description:e.target.value})} style={{minHeight:80}}/></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div className="form-group"><label>优先级</label>
+            <select value={editForm.priority} onChange={(e)=>setEditForm({...editForm,priority:e.target.value})}>
+              {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
+            </select></div>
+          <div className="form-group"><label>状态</label>
+            <select value={editForm.status} onChange={(e)=>setEditForm({...editForm,status:e.target.value})}>
+              {['pending','in_progress','done','cancelled'].map((x)=><option key={x}>{x}</option>)}
+            </select></div>
+        </div>
+        <div className="form-group"><label>验收标准（每行一条）</label>
+          <textarea value={editForm.acceptance} onChange={(e)=>setEditForm({...editForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}}/></div>
+        <div className="form-group"><label>人工备注</label>
+          <textarea value={editForm.human_notes} onChange={(e)=>setEditForm({...editForm,human_notes:e.target.value})} style={{minHeight:48,fontSize:12}}/></div>
+        <div className="section-title" style={{fontSize:12,marginTop:12}}>产品原型（AI）</div>
+        <p style={{fontSize:11,color:'#64748b',marginBottom:8}}>生成 Markdown 线框/旅程说明，保存在本地 .ai-memory/requirement_prototypes/。可选生成概念配图（需 OPENAI_API_KEY）。</p>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+          <button type="button" className="btn btn-sm btn-primary" disabled={protoBusy} onClick={()=>runPrototype('wireframe', false)}>{protoBusy?'生成中...':'线框说明'}</button>
+          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={protoBusy} onClick={()=>runPrototype('user_journey', false)}>用户旅程</button>
+          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={protoBusy} onClick={()=>runPrototype('ia', false)}>信息架构</button>
+          <button type="button" className="btn btn-sm" style={{background:'#7c3aed',color:'#fff'}} disabled={protoBusy} onClick={()=>{ if(confirm('将调用 DALL·E 3 生成配图（可能产生费用），继续？')) runPrototype('wireframe', true); }}>线框+概念配图</button>
+        </div>
+        {proto ? <pre className="scroll-slim" style={{maxHeight:220,overflow:'auto',fontSize:11,whiteSpace:'pre-wrap',background:'var(--bg3)',padding:10,borderRadius:8,border:'1px solid var(--border)'}}>{proto}</pre> : <div className="empty" style={{padding:12}}>尚未生成原型说明</div>}
+        <div className="modal-actions" style={{marginTop:12}}>
+          <button type="button" className="btn btn-cancel" onClick={()=>setDetail(null)}>关闭</button>
+          <button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5'}} onClick={deleteDetail}>删除</button>
+          <button type="button" className="btn btn-primary" onClick={saveDetail}>保存修改</button>
         </div>
       </div>
     </div>}
@@ -1137,7 +1454,7 @@ function IterationProgress() {
   </>;
 }
 
-// ── 知识库管理（增强版） ──────────────────────────────────────────
+// ── 知识库管理（增强版：文档导入 + AI 总结/润色） ──────────────────
 function KnowledgeManager() {
   const {data,loading,error,reload} = useFetch(`${API}/knowledge`);
   const [modal,setModal] = React.useState(false);
@@ -1145,10 +1462,12 @@ function KnowledgeManager() {
   const [indexing,setIndexing] = React.useState(false);
   const [searchQ,setSearchQ] = React.useState('');
   const [searchResults,setSearchResults] = React.useState(null);
+  const [aiBusy,setAiBusy] = React.useState(false);
+  const [fileBusy,setFileBusy] = React.useState(false);
 
   const save = () => {
     fetch(`${API}/knowledge`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({...form,tags:form.tags.split(',').map(t=>t.trim()).filter(Boolean)})})
+      body:JSON.stringify({...form,tags:form.tags.split(/[,，]/).map(t=>t.trim()).filter(Boolean)})})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(false);reload();setForm({title:'',content:'',category:'general',tags:''});showToast('知识条目已添加','ok');})
       .catch(()=>showToast('添加失败（请检查标题与内容）','err'));
@@ -1172,6 +1491,59 @@ function KnowledgeManager() {
     fetch(`${API}/knowledge/search?q=${encodeURIComponent(searchQ)}`).then(r=>r.json()).then(setSearchResults);
   };
 
+  const importFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+    setFileBusy(true);
+    const fd = new FormData();
+    fd.append('file', f);
+    fetch(`${API}/knowledge/extract-text`,{method:'POST',body:fd})
+      .then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        setFileBusy(false);
+        if(!ok){showToast(typeof d.detail==='string'?d.detail:'导入失败','err');return;}
+        setForm(p=>{
+          const next = {...p, content: (p.content ? p.content + '\n\n' : '') + (d.text || '')};
+          if (f.name && !String(p.title || '').trim()) {
+            next.title = f.name.replace(/\.[^.]+$/,'');
+          }
+          return next;
+        });
+        showToast('已导入文本到内容区','ok');
+      })
+      .catch(()=>{setFileBusy(false);showToast('导入失败','err');});
+  };
+
+  const runAi = (mode) => {
+    const raw = (form.content||'').trim();
+    if(raw.length < 30){showToast('请先在内容区粘贴或导入至少约 30 字的素材','err');return;}
+    setAiBusy(true);
+    fetch(`${API}/knowledge/ai-polish`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        raw_text: raw,
+        mode,
+        category_hint: form.category,
+        title_hint: form.title||undefined,
+      }),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        setAiBusy(false);
+        if(!ok){showToast(typeof d.detail==='string'?d.detail:'AI 失败','err');return;}
+        setForm(p=>({
+          ...p,
+          title:d.title||p.title,
+          content:d.content||p.content,
+          category:d.category||p.category,
+          tags:Array.isArray(d.tags)?d.tags.join(', '):(p.tags||''),
+        }));
+        showToast(mode==='polish'?'已润色':'已总结并填充表单','ok');
+      })
+      .catch(()=>{setAiBusy(false);showToast('请求失败','err');});
+  };
+
   if (loading) return <PageSkeleton cards={4} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
 
@@ -1184,14 +1556,14 @@ function KnowledgeManager() {
       <div className="section-title">🗄️ 知识库管理</div>
       <div style={{display:'flex',gap:8}}>
         <RefreshBtn onClick={reload}>{''}</RefreshBtn>
-        <button className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={indexCustom} disabled={indexing}>{indexing?'索引中...':'⚡ 索引 custom/'}</button>
-        <button className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>+ 添加知识</button>
+        <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={indexCustom} disabled={indexing}>{indexing?'索引中...':'⚡ 索引 custom/'}</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>+ 添加知识</button>
       </div>
     </div>
     <div style={{display:'flex',gap:8,marginBottom:16}}>
       <input style={{flex:1,background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'7px 12px',borderRadius:6,fontSize:13}}
         value={searchQ} onChange={e=>setSearchQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="语义搜索知识库..."/>
-      <button className="btn btn-primary" onClick={doSearch}>搜索</button>
+      <button type="button" className="btn btn-primary" onClick={doSearch}>搜索</button>
     </div>
     {searchResults&&<div className="card" style={{marginBottom:12}}>
       <div className="section-title">搜索结果 ({searchResults.length})</div>
@@ -1213,13 +1585,14 @@ function KnowledgeManager() {
           </div>
           <div style={{display:'flex',gap:4,alignItems:'center'}}>
             <span className="tag tag-p2">{i.category}</span>
-            <button className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5',padding:'2px 6px'}} onClick={()=>del(i.id)}>×</button>
+            <button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5',padding:'2px 6px'}} onClick={()=>del(i.id)}>×</button>
           </div>
         </div>)}
     </div>
-    {modal&&<div className="modal-bg" onClick={()=>setModal(false)}>
-      <div className="modal" style={{width:520}} onClick={e=>e.stopPropagation()}>
+    {modal&&<div className="modal-bg" onClick={()=>!aiBusy&&!fileBusy&&setModal(false)}>
+      <div className="modal" style={{width:560,maxWidth:'96vw'}} onClick={e=>e.stopPropagation()}>
         <h3>添加知识</h3>
+        <p style={{fontSize:11,color:'#64748b',marginBottom:10}}>支持上传 <strong>.txt / .md / .pdf</strong>（PDF 需服务端 <code style={{color:'#93c5fd'}}>pypdf</code>）。AI 总结/润色需 <code style={{color:'#93c5fd'}}>ANTHROPIC_API_KEY</code>。</p>
         <div className="form-group"><label>标题</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="知识标题"/></div>
         <div className="form-group"><label>分类</label>
           <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
@@ -1227,10 +1600,19 @@ function KnowledgeManager() {
           </select>
         </div>
         <div className="form-group"><label>标签（逗号分隔）</label><input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder="java, spring, auth"/></div>
-        <div className="form-group"><label>内容</label><textarea value={form.content} onChange={e=>setForm({...form,content:e.target.value})} style={{minHeight:120}} placeholder="知识内容（支持 Markdown）"/></div>
+        <div className="form-group"><label>导入文档</label>
+          <input type="file" accept=".txt,.md,.markdown,.pdf,text/plain" disabled={fileBusy} onChange={importFile}/>
+          {fileBusy&&<span style={{fontSize:11,color:'#94a3b8',marginLeft:8}}>读取中...</span>}
+        </div>
+        <div className="form-group"><label>内容</label>
+          <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+            <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} disabled={aiBusy} onClick={()=>runAi('summarize')}>{aiBusy?'处理中...':'AI 总结并填充'}</button>
+            <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={aiBusy} onClick={()=>runAi('polish')}>AI 润色优化</button>
+          </div>
+          <textarea value={form.content} onChange={e=>setForm({...form,content:e.target.value})} style={{minHeight:160}} placeholder="知识内容（支持 Markdown），或先导入文件再点 AI"/></div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(false)}>取消</button>
-          <button className="btn btn-primary" onClick={save}>保存</button>
+          <button type="button" className="btn btn-cancel" onClick={()=>setModal(false)} disabled={aiBusy||fileBusy}>取消</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={aiBusy||fileBusy}>保存</button>
         </div>
       </div>
     </div>}
@@ -1362,7 +1744,7 @@ function Analytics() {
 
 /** Babel Standalone 对外部 src 的 text/babel 脚本编译可能是异步的；须等 pages/*.js 注册完全局组件后再构建 ALL_PAGES，否则 ReferenceError 白屏。 */
 function waitForPageModules(done) {
-  var names = ['AgentManager','SkillManager','McpManager','SystemManager','AuthManager','ModelManager','OrchestrationManager','DockerEnvManager','SkillRepoManager','VibeCoding','NotifyManager','CliManager'];
+  var names = ['AgentManager','SkillManager','McpManager','SystemManager','AuthManager','ModelManager','OrchestrationManager','DockerEnvManager','SkillRepoManager','VibeCoding','NotifyManager','CliManager','DesignDocsManager','DevFlowHub'];
   var tries = 0;
   function tick() {
     var missing = names.filter(function (n) { return typeof window[n] !== 'function'; });
@@ -1383,6 +1765,7 @@ function mountApp() {
 const MENU_GROUPS = [
   { label: '项目管理', items: [
     {id:'dashboard',icon:'📊',label:'总览'},
+    {id:'dev-flow',icon:'🧭',label:'研发全流程'},
     {id:'analytics',icon:'📈',label:'统计分析'},
     {id:'requirements',icon:'📋',label:'需求管理'},
     {id:'plan',icon:'✅',label:'执行计划'},
@@ -1399,6 +1782,7 @@ const MENU_GROUPS = [
   ]},
   { label: '知识与规范', items: [
     {id:'specs',icon:'📖',label:'规范文档'},
+    {id:'design-docs',icon:'📐',label:'技术方案'},
     {id:'knowledge-mgr',icon:'🗄️',label:'知识库'},
     {id:'rules',icon:'📐',label:'规则库'},
     {id:'custom',icon:'📁',label:'自定义模块'},
@@ -1421,10 +1805,10 @@ const MENU_GROUPS = [
 ];
 
 const ALL_PAGES = {
-  dashboard:<Dashboard/>,analytics:<Analytics/>,requirements:<Requirements/>,
+  dashboard:<Dashboard/>,'dev-flow':<DevFlowHub/>,analytics:<Analytics/>,requirements:<Requirements/>,
   plan:<ExecutionPlan/>,iteration:<IterationProgress/>,sprints:<Sprints/>,
   issues:<Issues/>,search:<Search/>,vibe:<VibeCoding/>,'spec-editor':<SpecEditor/>,
-  docker:<DockerEnvManager/>,cli:<CliManager/>,specs:<Specs/>,'knowledge-mgr':<KnowledgeManager/>,
+  docker:<DockerEnvManager/>,cli:<CliManager/>,specs:<Specs/>,'design-docs':<DesignDocsManager/>,'knowledge-mgr':<KnowledgeManager/>,
   rules:<Rules/>,custom:<Custom/>,agents:<AgentManager/>,skills:<SkillManager/>,
   'skill-repo':<SkillRepoManager/>,models:<ModelManager/>,orchestration:<OrchestrationManager/>,
   mcp:<McpManager/>,logs:<AgentLogs/>,notify:<NotifyManager/>,config:<Config/>,
@@ -1434,17 +1818,64 @@ const ALL_PAGES = {
 function AppV3() {
   const [tab, setTab] = React.useState('dashboard');
   const [theme, setTheme] = React.useState(() => localStorage.getItem('theme') || 'dark');
-  const [collapsed, setCollapsed] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem('devdash-sidebar-collapsed') === '1');
   const [projectId, setProjectId] = React.useState('');
   const [toasts, setToasts] = React.useState([]);
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const [apiHealth, setApiHealth] = React.useState('checking');
+  const [apiPingMs, setApiPingMs] = React.useState(null);
+  const [apiVer, setApiVer] = React.useState('');
+
+  const pingApi = React.useCallback(function () {
+    var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    apiFetch(API + '/health', { timeoutMs: 8000 })
+      .then(function (r) {
+        var ms = Math.round(((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0);
+        setApiPingMs(ms);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        setApiHealth('ok');
+        setApiVer((j && j.version) ? String(j.version) : '');
+      })
+      .catch(function () {
+        setApiHealth('down');
+        setApiPingMs(null);
+        setApiVer('');
+      });
+  }, []);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  React.useEffect(function () {
+    pingApi();
+    var id = setInterval(pingApi, 20000);
+    return function () { clearInterval(id); };
+  }, [pingApi]);
+
+  React.useEffect(function () {
+    var onKey = function (e) {
+      if (e.key === 'Escape') { setHelpOpen(false); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        e.preventDefault();
+        setHelpOpen(function (h) { return !h; });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return function () { window.removeEventListener('keydown', onKey); };
+  }, []);
+
   React.useEffect(() => {
-    fetch(`${API}/state`).then(r=>r.json()).then(d=>{ if(d.project_id) setProjectId(d.project_id); }).catch(()=>{});
+    apiFetch(`${API}/state`, { timeoutMs: 12000 })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((d) => { if (d.project_id) setProjectId(d.project_id); })
+      .catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -1459,8 +1890,23 @@ function AppV3() {
     return () => window.removeEventListener('devdash-toast', onToast);
   }, []);
 
+  React.useEffect(() => {
+    const onNav = (e) => {
+      const id = e.detail && e.detail.tab;
+      if (id && typeof id === 'string') setTab(id);
+    };
+    window.addEventListener('app-set-tab', onNav);
+    return () => window.removeEventListener('app-set-tab', onNav);
+  }, []);
+
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
   const exportAll = () => window.open(`${API}/export`, '_blank');
+  const apiOrigin = () => String(API).replace(/\/api\/?$/, '');
+  const toggleCollapsed = () => setCollapsed((c) => {
+    const n = !c;
+    try { localStorage.setItem('devdash-sidebar-collapsed', n ? '1' : '0'); } catch (_) {}
+    return n;
+  });
 
   return <div className="app-shell">
     <div className="toast-host" aria-live="polite">
@@ -1468,16 +1914,39 @@ function AppV3() {
         <div key={t.id} className={'toast ' + (t.type === 'ok' ? 'ok' : t.type === 'err' ? 'err' : 'info')} role="status">{t.message}</div>
       ))}
     </div>
+    {helpOpen && <div className="modal-bg" onClick={() => setHelpOpen(false)}>
+      <div className="modal" style={{width:520,maxWidth:'94vw'}} onClick={(e) => e.stopPropagation()}>
+        <h3>开发者速查</h3>
+        <p style={{fontSize:12,color:'var(--text2)',lineHeight:1.6}}>本页为 <strong>无构建</strong> 模式（Babel Standalone + React UMD）。API 基址当前为 <code style={{fontSize:11}}>{API}</code>；从本后台同源打开时会自动跟随端口。</p>
+        <ul style={{fontSize:13,color:'var(--text)',lineHeight:1.85,margin:'8px 0 0 18px',padding:0}}>
+          <li><span className="help-kbd">Ctrl / ⌘ + /</span> 打开或关闭本帮助（在输入框内不触发）</li>
+          <li><span className="help-kbd">Esc</span> 关闭本帮助</li>
+          <li>左侧菜单支持 <span className="help-kbd">Enter</span> / <span className="help-kbd">Space</span> 激活</li>
+          <li>顶栏 <strong>⬇</strong> 导出 JSON；日月图标切换主题；折叠状态会写入 localStorage</li>
+          <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录</li>
+        </ul>
+        <div className="modal-actions" style={{flexWrap:'wrap',gap:8}}>
+          <button type="button" className="btn btn-cancel" onClick={() => setHelpOpen(false)}>关闭</button>
+          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} onClick={() => window.open(apiOrigin() + '/docs', '_blank')}>OpenAPI 文档 (/docs)</button>
+          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} onClick={() => window.open(apiOrigin() + '/redoc', '_blank')}>ReDoc (/redoc)</button>
+        </div>
+      </div>
+    </div>}
     {/* 顶栏 */}
     <div className="topbar">
-      <button type="button" className="btn-icon" onClick={()=>setCollapsed(c=>!c)} title="折叠菜单">☰</button>
+      <button type="button" className="btn-icon" onClick={toggleCollapsed} title="折叠菜单（状态已保存）">☰</button>
       <div className="topbar-brand" title="ai-team-devops">
         <img className="topbar-logo-img" src="/assets/brand-mark.png" width="32" height="32" alt="" decoding="async" fetchPriority="high"/>
         <span className="topbar-logo">ai-team-devops</span>
       </div>
       <span className="topbar-badge">管理后台</span>
       {projectId && <span className="topbar-project">📁 {projectId}</span>}
+      <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/health">
+        <span className="health-dot" aria-hidden="true"/>
+        {apiHealth === 'ok' ? <>API 在线{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>API 离线</> : <>检查中…</>}
+      </div>
       <div className="topbar-right">
+        <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title="开发者帮助 (Ctrl+/)">?</button>
         <button type="button" className="btn-icon" onClick={toggleTheme} title="切换主题">{theme==='dark'?'☀️':'🌙'}</button>
         <button type="button" className="btn-icon" onClick={exportAll} title="导出数据">⬇</button>
       </div>

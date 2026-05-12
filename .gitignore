@@ -14,6 +14,10 @@ opencode.json
 __pycache__/
 *.pyc
 .venv/
+.venv-integrations/
+
+# install-integrations.sh 可选 MCP npm 预装目录
+sop/tools/.mcp-npm-smoke/
 
 # Node
 node_modules/

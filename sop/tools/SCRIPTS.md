@@ -1,5 +1,21 @@
 # 持久化脚本集
 
+## Shell 脚本索引（sop/tools/）
+
+| 脚本 | 用途 |
+|------|------|
+| `install-integrations.sh` | 创建/使用虚拟环境，按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持 `SOP_PYTHON`、`INSTALL_INTEGRATIONS_RECREATE`、`WRITE_INTEGRATIONS_LOCK` 等环境变量 |
+| `init-ai-project.sh` | 初始化业务项目：生成 CLAUDE.md、各 IDE 规则、`memory/`、`.ai-memory/` 等 |
+| `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`，支持 `PROJECT_PATH`、`PORT` |
+| `start-dashboard.sh` | 兼容/备用启动入口（若存在） |
+| `health-check.sh` | 仓库与依赖健康检查 |
+| `snapshot.sh` | LanceDB / 状态快照导出 |
+| `sync-rules.sh` | 将规则同步到各工具可读位置 |
+
+详细参数见各脚本文件头注释（`install-integrations.sh` 支持 `--help`）。
+
+---
+
 ## persist_state.py
 # 在 Claude Code Stop hook 中调用，持久化当前状态
 

@@ -138,3 +138,14 @@ curl -X POST "http://localhost:8765/api/notify/broadcast?title=任务完成&cont
 
 - `/api/v1/` — 新版本（推荐）
 - `/api/` — 旧版本（向后兼容）
+
+## Web 管理后台（人机协同）
+
+- 启动：`bash sop/tools/start-manager.sh`（可选 `--port 9000`、`--no-reload`、`--help`）；数据根目录由 **`PROJECT_PATH`** 决定（默认当前目录）。前端 **`API` 自动跟随当前页面 origin**；顶栏有 **/api/health** 延迟与 **`Ctrl+/` 开发者帮助**（含 OpenAPI / ReDoc 链接）。  
+- **研发全流程**：人读 `GET /api/dev-flow/summary` 与页面建议，再决定是否调用模型；勿让模型重复拉取全表。  
+- **Vibe Coding**：会话/记忆外化在 `.ai-memory/vibe_*.json`；提示词用 **ID + 规范相对路径**，长文打开「规范文档 / 技术方案」页而非粘贴。  
+- 操作手册（人类）：仓库根 **`docs/USER_MANUAL.md`**；开发与路由：**`sop/web/README.md`**。
+
+## 与架构文档同步
+
+体系级说明见 **`ARCHITECTURE.md`**（含 Web、Vibe、dev-flow、静态挂载约定）。

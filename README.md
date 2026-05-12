@@ -9,7 +9,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Tools](https://img.shields.io/badge/tools-Claude%20Code%20%7C%20opencode%20%7C%20Cursor%20%7C%20Trae-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
 
-[快速开始](#快速开始) · [功能全景](#功能全景) · [使用手册](TUTORIAL.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
 </div>
 
@@ -55,10 +55,11 @@ AI 编码工具（Claude Code、Cursor、opencode 等）正在改变软件开发
 | 多 Agent | `sop/specs/agents-collab/` |
 
 ### 🖥️ Web 管理后台
-- 需求看板、任务追踪、问题管理、Sprint 管理
-- 规范文档浏览器、规则库可视化
-- Agent 日志实时流、知识库管理
-- 全局搜索、数据导出
+- **研发全流程**：`GET /api/dev-flow/summary` 聚合指标 + 阶段导航 + 低 Token 提示模板（[使用手册](docs/USER_MANUAL.md)）
+- **Vibe Coding**：会话/记忆/附件、多模态 LLM、Markdown·代码·HTML 预览、项目目录只读浏览
+- 需求看板、执行计划、迭代与 Sprint、问题中心、全局搜索、数据导出
+- 技术方案管理、知识库（含文档抽取 / AI 润色）、规范与规则库
+- Agent / 专家组 / 技能 / MCP / 模型 / 编排工作流、Docker 环境、CLI 配置、消息通知
 
 ### 🔧 多工具支持
 一次初始化，自动生成所有工具配置：
@@ -80,7 +81,7 @@ bash sop/tools/init-ai-project.sh my-app
 ## 快速开始
 
 ### 前置条件
-- Git · Python 3.8+ · 任意 AI 编码工具
+- Git · Python **3.10+**（Web 与集成脚本推荐；见 `install-integrations.sh`）· 任意 AI 编码工具
 
 ### 5 分钟上手
 
@@ -89,15 +90,15 @@ bash sop/tools/init-ai-project.sh my-app
 git clone https://github.com/magic-devops/ai-team-devops.git
 cd ai-team-devops
 
-# 2. 安装依赖
+# 2. 安装依赖（FastAPI / LanceDB / 可选 PDF 等，推荐虚拟环境）
 bash sop/tools/install-integrations.sh
 
 # 3. 初始化你的项目
 bash sop/tools/init-ai-project.sh my-app
 
-# 4. 启动 Web 管理后台
+# 4. 启动 Web 管理后台（默认 PROJECT_PATH=当前目录）
 bash sop/tools/start-manager.sh
-# 打开 http://localhost:8765
+# 打开 http://localhost:8765 — 详见 docs/USER_MANUAL.md 与 sop/web/README.md
 
 # 5. 健康检查
 bash sop/tools/health-check.sh
@@ -136,6 +137,9 @@ ai-team-devops/
 │   ├── commands/              # 自定义命令
 │   └── hooks/                 # 自动化 hooks
 ├── ARCHITECTURE.md            # 系统架构设计
+├── docs/                      # 人类可读文档索引与使用手册
+│   ├── README.md
+│   └── USER_MANUAL.md         # Web 后台操作说明
 ├── TUTORIAL.md                # 详细使用教程
 ├── ROADMAP.md                 # 路线图
 ├── CONTRIBUTING.md            # 贡献指南
@@ -146,14 +150,13 @@ ai-team-devops/
 
 ## 使用手册
 
-详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：
-- 项目初始化与配置
-- 日常开发工作流（需求 → 规划 → 实现 → 审查 → 提交）
-- 多 Agent 协作模式
-- Web 后台使用指南
-- 自定义模块（规范/样例/设计）
-- 自我进化机制（`/evolve` 命令）
-- 多工具切换与状态共享
+| 文档 | 读者 | 内容 |
+|------|------|------|
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 使用 Web 后台的同事 | 启动、菜单、研发流、Vibe、常见问题 |
+| [TUTORIAL.md](TUTORIAL.md) | 全员 | 初始化、日常工作流、多 Agent、Web、自定义模块、`/evolve`、多工具 |
+| [sop/web/README.md](sop/web/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
+
+详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：项目初始化与配置、日常开发工作流、多 Agent 协作、Web 后台、自定义模块、自我进化、多工具切换与状态共享。
 
 ---
 

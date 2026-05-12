@@ -1,0 +1,11 @@
+# 文档索引
+
+| 文档 | 说明 |
+|------|------|
+| [USER_MANUAL.md](USER_MANUAL.md) | Web 管理后台使用手册（操作者） |
+| [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构（含 Web、Vibe、研发流 API） |
+| [../README.md](../README.md) | 仓库总览与快速开始 |
+| [../TUTORIAL.md](../TUTORIAL.md) | 详细教程 |
+| [../sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查卡 |
+| [../sop/web/README.md](../sop/web/README.md) | Web 开发与 API 模块说明 |
+| [../sop/tools/README.md](../sop/tools/README.md) | 脚本入口索引 |

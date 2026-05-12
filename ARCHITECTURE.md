@@ -117,19 +117,41 @@ Windsurf     → .windsurfrules
 共享状态：memory/ + .ai-memory/（所有工具共用）
 ```
 
-### 6. Web 后台（web/）
+### 6. Web 管理后台（sop/web/）
+
+人机协同入口：**模块化 FastAPI + Babel/React（无构建步骤）**，默认由 `sop/tools/start-manager.sh` 启动。
 
 ```
-前端（React SPA）
-    ↓ REST API
-后端（FastAPI）
-    ↓ 读写
-LanceDB（.ai-memory/lancedb/）
-    +
-memory/current_state.json
+浏览器 index.html（shell）
+    ↓ 加载 pages/*.js 全局组件
+React 主应用（侧栏 + ALL_PAGES）
+    ↓ fetch
+FastAPI main:app（/api/*）
+    ├─ routers/*  按域拆分（需求、任务、问题、Agent、技能、MCP、模型、编排、Docker、CLI、Vibe、技术方案、研发流…）
+    └─ LanceDB / 文件索引（PROJECT_PATH 下的 .ai-memory/）
 ```
 
-**人工介入点**：调整需求优先级、解除任务阻塞、关闭问题、新建 Sprint
+**关键约定**
+
+| 项 | 说明 |
+|----|------|
+| `PROJECT_PATH` | 环境变量，指向被管理的业务仓库根；LanceDB、会话、上传、工作区浏览均相对此路径 |
+| 静态资源 | `StaticFiles` 须注册在 **所有 `/api` 路由之后**，避免吞掉 API |
+| 跨页导航 | 自定义事件 `app-set-tab`，便于「研发全流程」等模块跳转到既有菜单页 |
+| 低 Token | `GET /api/dev-flow/summary` 一次返回聚合指标；Vibe 提供短提示模板与引用路径，避免贴全文规范 |
+
+**Vibe Coding（IDE 化能力摘要）**
+
+- 会话与持久记忆、附件上传、多模态 LLM（Anthropic）、专家组 system 注入  
+- 会话/附件 JSON 持久化：`.ai-memory/vibe_sessions.json`、`vibe_uploads/`  
+- 右侧：Markdown（marked+DOMPurify）、代码块（highlight.js）、HTML 沙箱预览、项目文件只读预览  
+- 工作区 API：`/api/vibe/workspace/list|file`（路径校验，防穿越）
+
+**研发全流程枢纽**
+
+- `GET /api/dev-flow/summary`：需求/任务/问题/Sprint/技术方案数/Agent 与仓库线索聚合，供可视化驾驶舱与规则建议  
+
+**人工介入点**：调整需求优先级、解除任务阻塞、关闭问题、新建 Sprint、维护技术方案版本、配置 Agent/专家组、在 Vibe 中发起实现/审查类对话
 
 ## 数据流
 
@@ -147,37 +169,29 @@ Reviewer 审查（置信度 < 0.85 时触发）
 /evolve → 提取规则 → 更新 RULES.md
 ```
 
-## 目录结构
+## 目录结构（仓库根）
 
 ```
-ai-team-devops/
-├── LICENSE                    # MIT 开源协议
-├── README.md                  # 项目说明（本文件）
-├── ARCHITECTURE.md            # 架构设计（本文件）
-├── CLAUDE.md.template         # CLAUDE.md 模板
-├── TUTORIAL.md                # 详细使用教程
-├── .claude/                   # Claude Code 配置
-│   ├── settings.json          # 权限 + hooks 配置
-│   ├── hooks/                 # 自动化 hooks
-│   │   ├── pre-tool-call.sh   # 工具调用前安全检查
-│   │   ├── post-tool-call.sh  # 工具调用后状态更新
-│   │   └── stop.sh            # 会话结束时快照
-│   └── commands/              # 自定义命令（/plan /review /test 等）
-├── sop/                # 核心规约体系
-│   ├── QUICK_REF.md           # ★ 速查卡（每次启动必读）
-│   ├── agents/                # Agent 规范
-│   ├── core/                  # 核心原则
-│   ├── memory/                # 记忆管理
-│   ├── workflow/              # 开发流程
-│   ├── quality/               # 质量管理
-│   ├── skills/                # 技能库
-│   ├── specs/                 # 开发规范（按技术栈）
-│   ├── custom/                # 自定义模块（人工输入）
-│   ├── templates/             # 模板库
-│   ├── tools/                 # 工具脚本
-│   └── web/             # Web 管理后台
-└── ai-docs/                   # 参考文档（原始规范文档）
+./
+├── LICENSE
+├── README.md                  # 项目说明与快速入口
+├── ARCHITECTURE.md            # 本架构说明
+├── TUTORIAL.md                # 详细教程（含 Web）
+├── docs/
+│   └── USER_MANUAL.md         # Web 管理后台使用手册（操作者向）
+├── CLAUDE.md.template
+├── .claude/                   # Claude Code：settings / hooks / commands
+├── sop/
+│   ├── QUICK_REF.md           # ★ AI 速查卡
+│   ├── README.md              # SOP 包内导航
+│   ├── agents/ core/ memory/ workflow/ quality/ skills/
+│   ├── specs/ custom/ templates/ knowledge/
+│   ├── tools/                 # Shell/Python 脚本与集成文档
+│   └── web/                   # FastAPI + 前端 SPA（main.py / routers/ / pages/）
+└── ai-docs/                   # 可选参考文档
 ```
+
+业务数据默认写在 **`PROJECT_PATH/.ai-memory/`**（与规约仓库可分离）。
 
 ## 技术选型
 
@@ -185,7 +199,7 @@ ai-team-devops/
 |------|------|------|
 | 向量记忆 | LanceDB | 本地运行，零配置，原生向量搜索 |
 | Web 后台后端 | FastAPI | 轻量，自动生成 OpenAPI 文档 |
-| Web 后台前端 | React（单文件） | 无需构建，直接打开 |
+| Web 后台前端 | React（Babel standalone + `pages/*.js`） | 无需构建；Markdown 与代码高亮经 CDN 按需加载 |
 | 规范格式 | Markdown | AI 可直接读取，人类友好 |
 | 状态格式 | JSON | 通用，所有工具可读 |
 | 脚本 | Bash + Python | 无额外依赖 |

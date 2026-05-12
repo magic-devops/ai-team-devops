@@ -21,7 +21,7 @@
 ### 前置条件
 
 - Git
-- Python 3.8+（用于 LanceDB 和 Dashboard）
+- Python 3.10+（用于 LanceDB、Web 后台与 `install-integrations.sh` 推荐环境）
 - 任意 AI 编码工具（Claude Code / opencode / Cursor / Trae 等）
 
 ### 5 分钟上手
@@ -261,18 +261,21 @@ PORT=9000 bash sop/tools/start-manager.sh
 
 浏览器自动打开 `http://localhost:8765`
 
-### 5.2 功能页面
+### 5.2 功能页面（菜单摘要）
 
 | 页面 | 功能 |
 |------|------|
-| 📊 总览 | Sprint 进度、阻塞任务、问题告警、速度趋势 |
-| 📋 需求 | 需求看板（按优先级分组）、调整优先级、添加备注 |
-| ⚙️ 任务 | 任务状态追踪、解除阻塞 |
-| 🐛 问题 | 问题列表、人工处理、关闭问题 |
-| 🏃 Sprint | 迭代管理、新建 Sprint |
-| 🔍 搜索 | 全局搜索需求/任务/问题 |
-| 📁 自定义 | 浏览 custom/ 目录文件 |
-| 🧠 反思 | 查看 Agent 反思记录和规则提取 |
+| 📊 总览 | Sprint 进度、阻塞任务、问题告警、速度趋势；可一键进入「研发全流程」 |
+| 🧭 研发全流程 | 聚合指标、阶段跳转、低 Token 提示模板（见 `docs/USER_MANUAL.md`） |
+| 📋 需求 / 执行计划 / 迭代 / Sprint / 问题 / 搜索 | 需求全生命周期、任务与迭代、缺陷、全局搜索 |
+| 📐 技术方案 | 多文档与版本、落盘 `.ai-memory/tech_design/` |
+| 🗄️ 知识库 | 文档、抽取、AI 润色（依赖见 `install-integrations.sh`） |
+| 🎯 Vibe Coding | 会话与记忆、附件与多模态 LLM、Markdown/代码/HTML 预览、项目目录只读浏览 |
+| 🐳 环境管理 | Docker 检查与镜像相关能力 |
+| 🤖 Agent / 编排 / MCP / 模型 | 多 Agent、专家组、工作流与模型配置 |
+| 其余 | 规范、规则、CLI、通知、系统与账号等 |
+
+更细操作步骤见 **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)**。
 
 ### 5.3 人工介入
 
@@ -290,6 +293,12 @@ PORT=9000 bash sop/tools/start-manager.sh
 
 **导出数据**：
 - 点击顶部「⬇ 导出」按钮，下载完整 JSON 数据
+
+### 5.4 省 Token 的推荐习惯
+
+1. 先看 **研发全流程** 页的聚合数据与建议，再决定问 AI 什么。  
+2. 向 Vibe / 外部模型描述任务时，只带 **需求 ID、任务 ID、文件相对路径**；规范与技术方案在后台页面打开。  
+3. 需要 PDF/长文档内容时，用知识库 **抽取文本** 或 Vibe **文档抽取**，避免整文件进上下文。
 
 ---
 

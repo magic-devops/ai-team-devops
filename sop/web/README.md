@@ -1,91 +1,107 @@
-# Web 管理后台
+# Web 管理后台（sop/web）
 
-## 模块化结构（AI 按需修改，最小 token 开销）
-
-```
-web/
-├── main.py              # 入口（注册路由，向后兼容接口）
-├── index.html           # 前端 shell（加载 pages/ 模块）
-├── routers/             # 后端路由模块（每个 ≤100 行）
-│   ├── db.py            # 共享 LanceDB 工具
-│   ├── requirements.py  # 需求 CRUD
-│   ├── tasks.py         # 任务 CRUD
-│   ├── issues.py        # 问题 CRUD
-│   ├── agents.py        # Agent 定义/专家组
-│   ├── skills.py        # 技能注册/管理
-│   ├── mcp_mgr.py       # MCP Server 管理
-│   ├── auth.py          # 账号认证
-│   └── system.py        # 脚本/配置/记忆管理
-└── pages/               # 前端页面模块（每个独立 JS 文件）
-    ├── agents.js        # Agent 管理页面
-    ├── skills.js        # 技能管理页面
-    ├── mcp.js           # MCP 管理页面
-    ├── system.js        # 系统管理页面（脚本/配置/记忆）
-    └── auth.js          # 账号管理页面
-```
+FastAPI + React（Babel Standalone，**无构建步骤**）。默认入口 **`main.py`**，通过 `bash sop/tools/start-manager.sh` 启动。
 
 ## 启动
 
 ```bash
-bash sop/tools/start-manager.sh
-# 打开 http://localhost:8765
+bash sop/tools/install-integrations.sh   # 推荐：先装依赖
+PROJECT_PATH=/path/to/your-app bash sop/tools/start-manager.sh
+# http://localhost:8765
 ```
 
-## AI 修改原则
+| 变量 | 说明 |
+|------|------|
+| `PROJECT_PATH` | 业务仓库根；LanceDB、`.ai-memory/`、Vibe 上传与会话、工作区浏览均相对此路径 |
+| `PORT` | 监听端口，默认 `8765` |
 
-- 修改某个功能时，只读取对应的路由文件（≤100 行）
-- 新增页面时，在 pages/ 创建新 JS 文件，在 index.html 加一行 `<script>` 引用
-- 新增 API 时，在 routers/ 创建新文件，在 main.py 加一行 `include_router`
-- 不要修改 main.py 的核心逻辑，只在末尾追加
+前端 `index.html` 顶部常量 **`API`** 须与访问端口一致（默认 `http://localhost:8765/api`）。
 
-## 页面列表（16个）
+## 目录结构
 
-| 页面 | 文件 | 功能 |
+```
+web/
+├── main.py              # ★ 主入口：注册各 router、兼容旧 /api、静态文件最后挂载
+├── api.py               # 备用：单体 FastAPI（部分环境仍引用）
+├── index.html           # Shell：React、全局组件、侧栏菜单、ALL_PAGES、useFetch、事件总线
+├── routers/             # 后端按域拆分
+│   ├── db.py            # LanceDB 连接与 rows()/table()
+│   ├── requirements.py
+│   ├── tasks.py
+│   ├── issues.py
+│   ├── agents.py
+│   ├── skills.py
+│   ├── mcp_mgr.py
+│   ├── auth.py
+│   ├── system.py
+│   ├── models.py
+│   ├── orchestration.py
+│   ├── docker_env.py
+│   ├── skill_repo.py
+│   ├── cli_wrapper.py
+│   ├── vibe.py          # Vibe 会话/上传/LLM/工作区只读
+│   ├── design_docs.py   # 技术方案 Markdown 与版本
+│   └── dev_flow.py      # GET /summary 研发流聚合
+└── pages/               # 前端模块化（每文件暴露全局函数组件）
+    ├── agents.js
+    ├── skills.js
+    ├── mcp.js
+    ├── system.js
+    ├── auth.js
+    ├── models.js
+    ├── orchestration.js
+    ├── docker.js
+    ├── skill_repo.js
+    ├── vibe.js
+    ├── design_docs.js
+    ├── dev_flow.js      # 研发全流程枢纽 DevFlowHub
+    ├── notify.js
+    └── cli.js
+```
+
+## 主导航与页面注册
+
+- 菜单定义于 `index.html` 内 `MENU_GROUPS` + `ALL_PAGES`。  
+- 新增页面：`pages/foo.js` 暴露组件 → `index.html` 增加 `<script type="text/babel" src="pages/foo.js">` → `waitForPageModules` 名称列表 → `ALL_PAGES`。
+
+## 跨页导航（无 props 穿透）
+
+- 派发：`window.dispatchEvent(new CustomEvent('app-set-tab', { detail: { tab: 'requirements' } }))`  
+- `AppV3` 内监听并 `setTab`，供「研发全流程」、总览横幅等跳转。
+
+## 关键 API 摘要
+
+| 前缀 | 用途 |
+|------|------|
+| `/api/requirements` | 需求 CRUD、文档解析等 |
+| `/api/tasks` | 任务 |
+| `/api/issues` | 问题 |
+| `/api/agents` | Agent 与专家组 JSON |
+| `/api/design-docs` | 技术方案索引与内容 |
+| `/api/vibe` | 模板、运行、LLM、**sessions**、**upload**、**workspace**、history |
+| `/api/dev-flow` | **`GET /summary`** 聚合驾驶舱数据 |
+| `/api/env` | Docker / 环境检查 |
+| `/api/knowledge` | 知识库、**extract-text**（PDF 需 pypdf）、ai-polish |
+| `/api/dashboard` 等 | 见 `main.py` 保留接口 |
+
+## 静态资源与路由顺序
+
+**`StaticFiles` 必须挂在所有 `/api` 路由之后**，否则静态根会拦截 API。当前 `main.py` 采用「先 API、后 mount `/`」。
+
+## 前端依赖（CDN）
+
+`index.html` 可引入 marked、DOMPurify、highlight.js（供 Vibe Markdown/代码块）。加载顺序：依赖库 → `pages/vibe.js`。
+
+## AI 修改约定（仍建议遵守）
+
+| 类型 | 建议 | 说明 |
 |------|------|------|
-| 📊 总览 | index.html | Sprint 进度、告警 |
-| 📈 分析 | index.html | 统计图表 |
-| 📋 执行计划 | index.html | 任务 CRUD |
-| 🔄 迭代进度 | index.html | Sprint 详情 |
-| 🗄️ 知识库 | index.html | 语义搜索、CRUD |
-| ✏️ 规范编辑 | index.html | 规范文件编辑 |
-| 📋 需求 | index.html | 需求看板 |
-| ⚙️ 任务 | index.html | 任务追踪 |
-| 🐛 问题 | index.html | 问题管理 |
-| 🏃 Sprint | index.html | 迭代管理 |
-| 📖 规范 | index.html | 规范浏览 |
-| 📐 规则库 | index.html | 规则管理 |
-| 📡 日志 | index.html | Agent 日志 |
-| 🤖 Agent | pages/agents.js | Agent/专家组管理 |
-| ⚡ 技能 | pages/skills.js | 技能注册 |
-| 🔌 MCP | pages/mcp.js | MCP Server 管理 |
-| 🖥️ 系统 | pages/system.js | 脚本/配置/记忆 |
-| 👤 账号 | pages/auth.js | 用户管理 |
+| 新 API | 新建 `routers/xxx.py` + `include_router` | 避免 `main.py` 无限膨胀 |
+| 新页面 | 新建 `pages/xxx.js` + 注册 | 超大页面可再拆文件（需同步 Babel 加载） |
+| 改动范围 | 单文件增量编辑 | 与仓库 `sop/QUICK_REF.md` 一致 |
 
-## 模块化开发约定（AI 必须遵守）
+## 相关文档
 
-### 文件大小上限
-
-| 类型 | 上限 | 超限处理 |
-|------|------|---------|
-| 后端路由 `routers/*.py` | 100 行 | 按资源拆分新文件 |
-| 前端页面 `pages/*.js` | 200 行 | 按功能拆分子组件 |
-| 入口文件 `main.py` | 250 行 | 只保留注册逻辑 |
-| 入口文件 `index.html` | 保持 shell | 组件全部移到 pages/ |
-
-### 新增功能流程
-
-```
-1. 后端：在 routers/ 创建新文件（≤100行）
-2. 后端：在 main.py 加一行 include_router
-3. 前端：在 pages/ 创建新 .js 文件（≤200行）
-4. 前端：在 index.html 加一行 <script src="pages/xxx.js">
-5. 前端：在 AppV2 的 tabs/pages 中注册
-```
-
-### 修改功能流程
-
-```
-1. 只读取对应的单个路由文件或页面文件
-2. 不需要读取 main.py 全文或 index.html 全文
-3. Edit 增量修改，不 Write 全量重写
-```
+- 操作者向：[docs/USER_MANUAL.md](../../docs/USER_MANUAL.md)  
+- 架构：[ARCHITECTURE.md](../../ARCHITECTURE.md)  
+- 脚本：[sop/tools/SCRIPTS.md](../tools/SCRIPTS.md)、[install-integrations.sh](../tools/install-integrations.sh)

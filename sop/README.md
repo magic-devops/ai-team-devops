@@ -50,32 +50,36 @@ sop/
 │   └── TOOL_USAGE.md                  # 工具使用规范
 ├── templates/                         # 模板库
 │   └── TASK_TEMPLATE.md               # 任务/简报/问题报告/Sprint 模板
-└── tools/                             # 工具集成
-    ├── init-ai-project.sh             # ★ 项目快速初始化（生成所有工具配置）
-    ├── start-manager.sh             # ★ 一键启动 Web 后台
+└── tools/                             # Shell 脚本与集成文档
+    ├── install-integrations.sh        # ★ Python 依赖锁定安装（推荐虚拟环境）
+    ├── init-ai-project.sh             # ★ 项目快速初始化（生成各 AI 工具配置）
+    ├── start-manager.sh               # ★ 启动 Web 管理后台（uvicorn main:app）
+    ├── start-dashboard.sh             # 兼容入口（若存在）
     ├── health-check.sh                # 项目健康检查
     ├── snapshot.sh                    # LanceDB 记忆快照导出
     ├── sync-rules.sh                  # 同步规范到各工具配置
-    ├── TOOL_INTEGRATION.md            # 多工具集成规范（opencode/Cursor/Trae/Qoder）
-    ├── LANCEDB_SETUP.md               # LanceDB 配置指南
-    ├── GIT_WORKFLOW.md                # Git 工作流规范
-    ├── CI_CD.md                       # CI/CD 集成规范
-    ├── MCP_INTEGRATION.md             # MCP 工具集成（Claude Code/Cursor）
-    ├── AUTOMATION_TRIGGERS.md         # 自动化触发器（Git Hooks/CI/Cron）
-    └── SCRIPTS.md                     # 持久化脚本集
-dashboard/                             # ★ 项目管理 Web 后台（人机协同）
-    ├── index.html                     # 前端（React，8个页面：总览/需求/任务/问题/Sprint/搜索/自定义/反思）
-    ├── api.py                         # 后端 API（FastAPI + LanceDB，含创建/搜索/导出）
-    └── README.md                      # 启动说明
-custom/                                # ★ 自定义模块（人工输入，AI 自我进化）
-    ├── specs/                         # 项目特定规范（覆盖通用规范）
-    ├── examples/                      # 代码样例（java/frontend/sql）
-    ├── design/                        # 设计规范（brand/components/layouts）
-    ├── interaction/                   # 交互规范
-    └── daily/                         # 日常输入（会议记录/用户反馈）
-specs/
-    └── database/TIMESTAMP_CONVENTION.md  # 时间字段命名约定（gmt_created/updated_at 决策）
+    ├── integrations-requirements.txt  # Web/LanceDB/可选 PDF 等依赖清单
+    ├── TOOL_INTEGRATION.md            # 多工具集成规范
+    ├── MCP_INTEGRATION.md             # MCP 集成
+    ├── AUTOMATION_TRIGGERS.md         # 自动化触发器
+    └── SCRIPTS.md                     # 脚本与内嵌 Python 片段说明
+├── web/                               # ★ 管理后台（FastAPI + React 模块化页面）
+│   ├── main.py                        # 推荐入口：注册 routers + 兼容旧 /api
+│   ├── api.py                         # 备用单体 API（部分部署场景）
+│   ├── index.html                     # 前端 shell + 内联大组件 + 加载 pages/*.js
+│   ├── routers/                       # 按域拆分的路由（需求/任务/Vibe/研发流…）
+│   ├── pages/                         # 前端页面模块（*.js）
+│   └── README.md                      # Web 开发与 API 说明
+├── custom/                            # ★ 自定义模块（人工输入，AI 自我进化）
+│   ├── specs/
+│   ├── examples/
+│   ├── design/
+│   ├── interaction/
+│   └── daily/
+└── specs/                             # 通用开发规范（按技术栈）
 ```
+
+仓库根另有 **`docs/USER_MANUAL.md`**（Web 操作手册）、**`ARCHITECTURE.md`**（含 Web 扩展架构）。
 
 ## 快速入门
 
@@ -112,7 +116,7 @@ cat .ai-memory/rules/RULES.md
 | 配置工具 | `tools/MCP_INTEGRATION.md` + `tools/AUTOMATION_TRIGGERS.md` |
 | Hermes 工具调用/CoT/反思 | `agents/HERMES_AGENT.md` |
 | Agent 自进化 | `agents/SELF_EVOLUTION.md` + `agents/HERMES_AGENT.md#反思驱动进化` |
-| 查看项目进展（人工） | `dashboard/README.md` → 启动 Web 后台 |
+| 查看项目进展（人工） | `web/README.md` → `bash sop/tools/start-manager.sh`；操作说明见仓库根 `docs/USER_MANUAL.md` |
 
 ## 核心设计理念
 
@@ -124,7 +128,7 @@ cat .ai-memory/rules/RULES.md
 
 ## 版本
 
-- SOP Version: 1.0.0
+- SOP Bundle: 1.1.0
 - Last Updated: 2026-05-12
 - Compatible Models: Claude Opus 4.x, GPT-4o, Gemini 1.5 Pro+
 
