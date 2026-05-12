@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)", "Bash(grep *)", "Bash(find *)", "Bash(cat *)", "Bash(ls *)",
+      "Bash(npm run *)", "Bash(mvn *)", "Bash(python3 *)", "Bash(pytest *)",
+      "Bash(bash sop/tools/*)", "Bash(curl http://localhost:*)"
+    ],
+    "deny": ["Bash(rm -rf /*)", "Bash(git push --force*)"]
+  },
+  "mcpServers": {
+    "lancedb": {
+      "command": "python3",
+      "args": ["sop/integrations/mcp/lancedb_server.py"],
+      "description": "LanceDB 语义搜索：semantic_search / get_task_context / add_rule"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "."]
+    }
+  },
+  "hooks": {
+    "PreToolCall": [{"matcher":"","hooks":[{"type":"command","command":"bash .claude/hooks/pre-tool-call.sh"}]}],
+    "PostToolCall": [{"matcher":"","hooks":[{"type":"command","command":"bash .claude/hooks/post-tool-call.sh"}]}],
+    "Stop": [{"hooks":[{"type":"command","command":"bash .claude/hooks/stop.sh"}]}]
+  }
+}

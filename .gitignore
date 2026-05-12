@@ -1,0 +1,23 @@
+# AI 记忆（本地数据，不提交）
+.ai-memory/lancedb/
+memory/snapshots/
+.ai-memory/tool-audit.log
+
+# 工具生成的配置（由 init 脚本生成）
+opencode.json
+.cursorrules
+.windsurfrules
+.trae/
+.qoder/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+*.swp

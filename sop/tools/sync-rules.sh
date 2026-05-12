@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# sync-rules.sh - 同步 sop 规范到各工具配置
+# 用法：bash sync-rules.sh [project-path]
+set -euo pipefail
+
+PROJECT="${1:-$(pwd)}"
+SOP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+echo "🔄 同步规范到: $PROJECT"
+
+# 同步 .cursorrules
+cat > "$PROJECT/.cursorrules" << 'CURSOR'
+# AI 开发规约（Cursor）
+# 完整规范: sop/
+
+## 项目约定
+- 包名: com.magic.{app}，默认 superpower
+- 时间字段: MySQL 用 gmt_created/gmt_modified，API 响应用 createdAt/updatedAt
+- API 基础路径: /api/v1/
+
+## 核心规则
+1. 只写解决问题所需的最少代码
+2. 失败时 <reflect> 分析换思路，最多重试3次
+3. 完成后说明置信度，< 0.70 时主动说明不确定点
+4. 禁止硬编码密钥
+
+## 启动检查
+读取 memory/current_state.json 了解当前状态。
+
+## 规范（按需加载）
+- Java: sop/specs/backend/JAVA_SPEC.md
+- DB: sop/specs/database/DATABASE_SPEC.md
+- 安全: sop/specs/security/SECURITY_SPEC.md
+CURSOR
+
+# 同步 .trae/rules.md
+mkdir -p "$PROJECT/.trae"
+cp "$PROJECT/.cursorrules" "$PROJECT/.trae/rules.md"
+
+# 同步 .windsurfrules
+cp "$PROJECT/.cursorrules" "$PROJECT/.windsurfrules"
+
+echo "✅ 已同步: .cursorrules / .trae/rules.md / .windsurfrules"

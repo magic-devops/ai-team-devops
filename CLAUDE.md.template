@@ -1,0 +1,63 @@
+# {PROJECT_NAME}
+
+> AI 开发规约入口。Claude Code / opencode / Cursor 等工具启动时自动读取。
+
+## 项目概述
+
+- **名称**: {PROJECT_NAME}
+- **包名**: com.magic.{app_name}
+- **技术栈**: Spring Boot 3.x + MySQL 8 + Vue3/React
+- **API 基础路径**: /api/v1/
+
+## 构建命令
+
+```bash
+# 后端
+cd backend && mvn clean package -DskipTests
+mvn test
+
+# 前端
+cd frontend && npm install && npm run build
+npm test
+
+# 代码检查
+npm run lint
+```
+
+## 启动检查（AI 每次启动必做）
+
+```bash
+cat memory/current_state.json     # 当前状态和待处理任务
+cat .ai-memory/rules/RULES.md     # 项目规则库
+```
+
+## 核心约定
+
+- 包名: `com.magic.{app_name}`
+- 时间字段: MySQL 用 `gmt_created`/`gmt_modified`，API 响应用 `createdAt`/`updatedAt`
+- 失败时 `<reflect>` 分析换思路，最多重试 3 次，第 3 次失败上报
+- 完成任务后输出置信度（0-1），< 0.70 时主动说明不确定点
+
+## 规范文档（按需加载）
+
+| 任务类型 | 加载文档 |
+|---------|---------|
+| Java 后端 | `ai-dev-sop/specs/backend/JAVA_SPEC.md` |
+| 数据库设计 | `ai-dev-sop/specs/database/DATABASE_SPEC.md` |
+| 安全相关 | `ai-dev-sop/specs/security/SECURITY_SPEC.md` |
+| 多 Agent | `ai-dev-sop/specs/agents-collab/MULTI_AGENT_COLLAB_SPEC.md` |
+| 项目约定 | `ai-dev-sop/specs/PROJECT_CONVENTIONS.md` |
+
+## 自定义规范（优先级高于通用规范）
+
+查看 `ai-dev-sop/custom/specs/` 目录。
+
+## 可用命令
+
+- `/plan` - 需求规划和任务拆解
+- `/review` - 代码审查
+- `/test` - 运行测试
+- `/commit` - 智能提交
+- `/debug` - 问题诊断
+- `/standup` - 每日站会报告
+- `/evolve` - 触发 AI 自我进化

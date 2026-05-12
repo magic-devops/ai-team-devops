@@ -96,7 +96,7 @@ bash sop/tools/install-integrations.sh
 bash sop/tools/init-ai-project.sh my-app
 
 # 4. 启动 Web 管理后台
-bash sop/tools/start-dashboard.sh
+bash sop/tools/start-manager.sh
 # 打开 http://localhost:8765
 
 # 5. 健康检查
@@ -185,6 +185,15 @@ git commit -m "docs(java-spec): 增加事务管理最佳实践"
 
 ---
 
+## 作者
+
+**superhero**
+- 📧 Email: [zyc2012518@gmail.com](mailto:zyc2012518@gmail.com)
+- 💬 微信: super_hero_88
+- 🐙 GitHub: [magic-devops](https://github.com/magic-devops)
+
+---
+
 ## 参考项目
 
 - [obra/superpowers](https://github.com/obra/superpowers) — Claude Code hooks/commands 增强
@@ -193,4 +202,4 @@ git commit -m "docs(java-spec): 增加事务管理最佳实践"
 
 ## 许可证
 
-[MIT License](LICENSE) © 2026 Magic DevOps Team
+[MIT License](LICENSE) © 2026 superhero (zyc2012518@gmail.com)
