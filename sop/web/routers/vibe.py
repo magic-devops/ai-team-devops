@@ -15,12 +15,14 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/vibe", tags=["vibe"])
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", "."))
+from path_config import ai_memory_root, project_path
 
-HISTORY_FILE = PROJECT_PATH / ".ai-memory" / "vibe_history.json"
-UPLOAD_ROOT = PROJECT_PATH / ".ai-memory" / "vibe_uploads"
-SESSIONS_FILE = PROJECT_PATH / ".ai-memory" / "vibe_sessions.json"
+router = APIRouter(prefix="/api/vibe", tags=["vibe"])
+PROJECT_PATH = project_path()
+
+HISTORY_FILE = ai_memory_root() / "vibe_history.json"
+UPLOAD_ROOT = ai_memory_root() / "vibe_uploads"
+SESSIONS_FILE = ai_memory_root() / "vibe_sessions.json"
 
 _MAX_FILE_SIZE = 6 * 1024 * 1024
 _MAX_SESSION_MESSAGES = 200

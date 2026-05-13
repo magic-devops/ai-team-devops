@@ -121,3 +121,4 @@ function BroadcastPanel() {
     {result&&<div style={{marginTop:8,fontSize:12,color:'#94a3b8'}}>{JSON.stringify(result,null,2)}</div>}
   </div>;
 }
+window.i18nExtend && window.i18nExtend({zh:{},en:{}});

@@ -10,13 +10,13 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
-from .db import PROJECT_PATH, rows
+from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, rows
 
 router = APIRouter(prefix="/api/dev-flow", tags=["dev-flow"])
 
 
 def _design_docs_count() -> int:
-    p = PROJECT_PATH / ".ai-memory" / "tech_design" / "index.json"
+    p = AI_MEMORY_ROOT / "tech_design" / "index.json"
     if not p.exists():
         return 0
     try:
@@ -27,14 +27,14 @@ def _design_docs_count() -> int:
 
 
 def _count_agents() -> int:
-    d = PROJECT_PATH / ".ai-memory" / "agents"
+    d = AI_MEMORY_ROOT / "agents"
     if not d.is_dir():
         return 0
     return len(list(d.glob("agent_*.json")))
 
 
 def _count_groups() -> int:
-    d = PROJECT_PATH / ".ai-memory" / "agents"
+    d = AI_MEMORY_ROOT / "agents"
     if not d.is_dir():
         return 0
     return len(list(d.glob("group_*.json")))

@@ -4,10 +4,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import json, os
+from path_config import ai_memory_root
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
-AGENTS_DIR = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "agents"
+AGENTS_DIR = ai_memory_root() / "agents"
 AGENTS_DIR.mkdir(parents=True, exist_ok=True)
 
 class AgentDef(BaseModel):

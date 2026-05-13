@@ -59,7 +59,7 @@ AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变
 - **Vibe Coding**：会话/记忆/附件、多模态 LLM、Markdown·代码·HTML 预览、项目目录只读浏览
 - 需求看板、执行计划、迭代与 Sprint、问题中心、全局搜索、数据导出
 - 技术方案管理、知识库（含文档抽取 / AI 润色）、规范与规则库
-- Agent / 专家组 / 技能 / MCP / 模型 / **编排（开发工具目录、环境检查、AI 安装与受控一键安装）**、Docker 环境、CLI 配置、消息通知
+- Agent / 专家组 / 技能 / MCP / 模型 / **编排（开发工具目录、本机环境子页、AI 安装与受控一键安装）**、Docker 环境、CLI 配置、消息通知
 
 ### 🔧 多工具支持
 一次初始化，自动生成所有工具配置：
@@ -108,6 +108,8 @@ bash sop/tools/start-manager.sh
 # 5. 健康检查
 bash sop/tools/health-check.sh
 ```
+
+**脚本完整清单**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)。若需重置或创建管理员账号：`python3 sop/tools/reset-admin.py`（见脚本说明）。
 
 ### 在 Claude Code 中使用
 
@@ -173,6 +175,7 @@ ai-team-devops/
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 使用 Web 后台的同事 | 启动、菜单、研发流、Vibe、常见问题 |
 | [TUTORIAL.md](TUTORIAL.md) | 全员 | 初始化、日常工作流、多 Agent、Web、自定义模块、`/evolve`、多工具 |
 | [sop/web/README.md](sop/web/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
+| [sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md) | 运维 / 集成 | `sop/tools` 下 Shell、Python、配置与规范文档索引 |
 
 详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：项目初始化与配置、日常开发工作流、多 Agent 协作、Web 后台、自定义模块、自我进化、多工具切换与状态共享。
 

@@ -5,27 +5,62 @@ ai-team-devops 项目管理后台 - 模块化入口
 import os
 from datetime import datetime
 from pathlib import Path
+
+# 必须在 logger / sql_models 之前：统一运行时目录、迁移旧 sop.db 与 .ai-memory
+from path_config import apply_startup_defaults
+
+apply_startup_defaults()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+# ── 日志系统（最先初始化）────────────────────────────────────────
+from routers.logger import app_logger, access_logger
+
 app = FastAPI(title="ai-team-devops Manager", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# ── 初始化 SQL 数据库 ─────────────────────────────────────────────
+from routers.sql_models import create_all as _sql_create_all
+_sql_create_all()
+
+# ── 审计中间件 + 访问日志 ─────────────────────────────────────────
+from routers.audit import audit_middleware
+app.middleware("http")(audit_middleware)
+
+import time
+from fastapi import Request as _Req
+@app.middleware("http")
+async def _access_log(request: _Req, call_next):
+    t0 = time.time()
+    resp = await call_next(request)
+    ms = round((time.time() - t0) * 1000)
+    access_logger.info("%s %s %d %dms", request.method, request.url.path, resp.status_code, ms)
+    return resp
+
 # ── 按需注册路由模块 ──────────────────────────────────────────────
-from routers import requirements, tasks, issues, agents, skills, mcp_mgr, auth, system, dev_flow
+from routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
 from routers import models, orchestration, docker_env, skill_repo, vibe, design_docs
-from routers.db import rows, table, now, PROJECT_PATH
+from routers.db_sql_compat import rows, table, now, PROJECT_PATH, AI_MEMORY_ROOT
+
+# ── 新增：SQL 认证 + 租户/项目/数据库配置 ─────────────────────────
+from routers import auth_sql, db_config, audit, webhook
+from routers.health import router as health_router
+from routers.tenants import router as tenants_router, biz_router, proj_router
+from routers.sprints import router as sprints_router
+
+from routers import data_exchange
 
 _APP_BOOT_AT = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
+app.include_router(health_router)
 app.include_router(requirements.router)
 app.include_router(tasks.router)
 app.include_router(issues.router)
 app.include_router(agents.router)
 app.include_router(skills.router)
 app.include_router(mcp_mgr.router)
-app.include_router(auth.router)
 app.include_router(system.router)
 app.include_router(models.router)
 app.include_router(orchestration.router)
@@ -34,6 +69,17 @@ app.include_router(skill_repo.router)
 app.include_router(vibe.router)
 app.include_router(design_docs.router)
 app.include_router(dev_flow.router)
+
+# ── 新增路由 ──────────────────────────────────────────────────────
+app.include_router(auth_sql.router)
+app.include_router(db_config.router)
+app.include_router(audit.router)
+app.include_router(webhook.router)
+app.include_router(sprints_router)
+app.include_router(tenants_router)
+app.include_router(biz_router)
+app.include_router(proj_router)
+app.include_router(data_exchange.router)
 
 # ── 保留原有接口（向后兼容） ──────────────────────────────────────
 import json
@@ -71,7 +117,7 @@ def get_sprints(): return rows("sprints", 20)
 @app.post("/api/sprints")
 def create_sprint(goal: str, planned_points: int = 0, ends_at: Optional[str] = None):
     t = table("sprints")
-    if t is None: raise HTTPException(503, "LanceDB not available")
+    if t is None: raise HTTPException(503, "数据库不可用")
     existing = rows("sprints")
     for s in existing:
         if s.get("status") == "active":
@@ -96,7 +142,12 @@ def sprint_progress(sprint_id: str):
             "open_issues": [i for i in issues_all if i.get("status") == "open"], "tasks": tasks_all}
 
 @app.get("/api/reflections")
-def get_reflections(limit: int = 100): return rows("agent_reflections", limit=limit)
+def get_reflections(limit: int = 100):
+    try:
+        from routers.db import rows as lance_rows
+        return lance_rows("agent_reflections", limit=limit)
+    except Exception:
+        return []
 
 @app.get("/api/search")
 def search(q: str = Query(..., min_length=1)):
@@ -106,17 +157,6 @@ def search(q: str = Query(..., min_length=1)):
             if q.lower() in f"{row.get('title','')} {row.get('description','')}".lower():
                 results.append({"type": name, **{k: v for k, v in row.items() if k != "vector"}})
     return results[:50]
-
-@app.get("/api/export")
-def export_all():
-    data = {}
-    for name in ["requirements", "tasks", "issues", "sprints", "agent_reflections"]:
-        raw = rows(name, 1000)
-        for row in raw:
-            for k, v in row.items():
-                if hasattr(v, "isoformat"): row[k] = v.isoformat()
-        data[name] = raw
-    return JSONResponse(content=data, headers={"Content-Disposition": "attachment; filename=export.json"})
 
 @app.get("/api/state")
 def get_state():
@@ -202,7 +242,20 @@ def get_custom_content(path: str = Query(...)):
     return {"content": target.read_text(errors="replace"), "type": "text"} if target.suffix in (".md",".txt",".html",".json",".yaml",".yml",".java",".ts",".tsx",".py",".sql") else {"content": None, "type": "binary"}
 
 @app.get("/api/rules")
-def get_rules(): return rows("rules", 200)
+def get_rules():
+    try:
+        from routers.db import rows as lr
+        return lr("rules", 200)
+    except Exception:
+        return []
+
+@app.get("/api/knowledge")
+def get_knowledge():
+    try:
+        from routers.db import rows as lr
+        return lr("knowledge", 200)
+    except Exception:
+        return []
 
 @app.post("/api/rules")
 def create_rule(rule: str, category: str = "coding", source: str = "human", confidence: float = 0.75):
@@ -212,9 +265,6 @@ def create_rule(rule: str, category: str = "coding", source: str = "human", conf
         rid = LanceOps().add_rule(rule, category, source, confidence)
         return {"ok": True, "id": rid}
     except Exception as e: raise HTTPException(500, str(e))
-
-@app.get("/api/knowledge")
-def get_knowledge(): return rows("knowledge", 200)
 
 class KnowledgeCreate(BaseModel):
     title: str
@@ -351,7 +401,7 @@ async def knowledge_extract_text(file: UploadFile = File(...)):
 @app.delete("/api/knowledge/{doc_id}")
 def delete_knowledge(doc_id: str):
     t = table("knowledge")
-    if t is None: raise HTTPException(503, "LanceDB not available")
+    if t is None: raise HTTPException(503, "数据库不可用")
     try:
         t.delete(f"id = '{doc_id}'")
         return {"ok": True}
@@ -377,11 +427,11 @@ def search_knowledge(q: str = Query(...), category: Optional[str] = None):
 
 @app.get("/api/health")
 def health():
-    """探活与版本信息（监控 / 网关健康检查）；展示版本可读自 .ai-memory/admin_release.json 或环境变量 ADMIN_RELEASE_VERSION。"""
+    """探活与版本信息；展示版本可读自运行时 ai-memory/admin_release.json 或环境变量 ADMIN_RELEASE_VERSION。"""
     display_version = "2.0"
     notes_val: Optional[str] = None
     updated_at: Optional[str] = None
-    rp = PROJECT_PATH / ".ai-memory" / "admin_release.json"
+    rp = AI_MEMORY_ROOT / "admin_release.json"
     if rp.is_file():
         try:
             d = json.loads(rp.read_text(encoding="utf-8"))
@@ -416,7 +466,7 @@ app.include_router(cli_wrapper.router)
 from fastapi import APIRouter as _AR
 v1 = _AR(prefix="/api/v1")
 for _r in [requirements.router, tasks.router, issues.router, agents.router,
-           skills.router, mcp_mgr.router, auth.router, system.router,
+           skills.router, mcp_mgr.router, system.router,
            models.router, orchestration.router, docker_env.router,
            skill_repo.router, vibe.router, design_docs.router, notify.router, cli_wrapper.router]:
     v1.include_router(_r, prefix=_r.prefix.replace("/api",""))

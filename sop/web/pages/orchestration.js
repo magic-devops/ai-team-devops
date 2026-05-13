@@ -1,8 +1,313 @@
+/** 编排 — 本机环境检查（独立子页，与「开发工具」列表分离） */
+function OrchEnvCheckPanel(props) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  var onGoTool = props && props.onGoTool ? props.onGoTool : function () {};
+
+  const { data: tools, reload: reloadTools } = useFetch(`${API}/orchestration/tools`);
+  const { data: envChecks, reload: reloadEnv } = useFetch(`${API}/orchestration/environment-checks`);
+
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [aiBusy, setAiBusy] = React.useState(false);
+  const [aiMd, setAiMd] = React.useState('');
+  const [aiActions, setAiActions] = React.useState([]);
+  const [aiGoal, setAiGoal] = React.useState(function () {
+    try {
+      return localStorage.getItem('sop_orch_ai_goal') || '';
+    } catch (e) {
+      return '';
+    }
+  });
+  const [aiToolIdForPlan, setAiToolIdForPlan] = React.useState(null);
+  const [instBusy, setInstBusy] = React.useState(null);
+
+  React.useEffect(
+    function () {
+      try {
+        localStorage.setItem('sop_orch_ai_goal', aiGoal);
+      } catch (e) {}
+    },
+    [aiGoal]
+  );
+
+  const resolveEnvLinkedToolId = React.useCallback(
+    function (envKey) {
+      if (!envKey || String(envKey).indexOf('py:') === 0) return null;
+      if (!(tools || []).some(function (x) { return x.id === envKey; })) return null;
+      return envKey;
+    },
+    [tools]
+  );
+
+  const goToolForEnv = function (envKey) {
+    var tid = resolveEnvLinkedToolId(envKey);
+    if (!tid) return;
+    onGoTool(tid);
+  };
+
+  const runAiPlan = function (toolId, forcedGoal) {
+    setAiToolIdForPlan(toolId || null);
+    setAiBusy(true);
+    setAiOpen(true);
+    setAiMd('');
+    setAiActions([]);
+    var payload = { tool_id: toolId || undefined };
+    var g = forcedGoal != null && String(forcedGoal).trim() !== '' ? String(forcedGoal).trim() : (aiGoal || '').trim();
+    if (g) payload.goal = g;
+    else if (!toolId) payload.goal = t('orch_ai_goal_default');
+    fetch(`${API}/orchestration/tools/ai-install-plan-v2`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { ok: r.ok, d: d };
+        });
+      })
+      .then(function (_ref) {
+        var ok = _ref.ok;
+        var d = _ref.d;
+        setAiBusy(false);
+        if (!ok) {
+          showToast(typeof d.detail === 'string' ? d.detail : t('gen_req_fail'), 'err');
+          return;
+        }
+        setAiMd(d.markdown || '');
+        setAiActions(Array.isArray(d.actions) ? d.actions : []);
+      })
+      .catch(function () {
+        setAiBusy(false);
+        showToast(t('gen_req_fail'), 'err');
+      });
+  };
+
+  const regenerateAiPlan = function () {
+    runAiPlan(aiToolIdForPlan || undefined);
+  };
+
+  const openAiForEnv = function (envKey) {
+    var g = t('orch_env_ai_goal_prefill', { item: envKey });
+    setAiGoal(g);
+    runAiPlan(null, g);
+  };
+
+  const runGuardedRecipe = function (recipeId) {
+    if (!recipeId || !confirm(t('orch_confirm_guard'))) return;
+    setInstBusy('recipe:' + recipeId);
+    fetch(`${API}/orchestration/tools/install-guarded`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipe_id: recipeId }),
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { httpOk: r.ok, d: d };
+        });
+      })
+      .then(function (_ref2) {
+        var httpOk = _ref2.httpOk;
+        var d = _ref2.d;
+        setInstBusy(null);
+        if (!httpOk) {
+          showToast(typeof d.detail === 'string' ? d.detail : t('gen_req_fail'), 'err');
+          return;
+        }
+        if (!d.ok) showToast(t('orch_toast_install_cmd_fail'), 'err');
+        else showToast(t('orch_toast_install_cmd_ok'), 'ok');
+        reloadEnv();
+        reloadTools();
+      })
+      .catch(function () {
+        setInstBusy(null);
+        showToast(t('gen_req_fail'), 'err');
+      });
+  };
+
+  var envKeys = envChecks && typeof envChecks === 'object' ? Object.keys(envChecks).sort() : [];
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>{t('orch_env_page_blurb')}</div>
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <div>
+            <div className="section-title" style={{ marginBottom: 4 }}>
+              {t('orch_env_section')}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{t('orch_env_section_sub')}</div>
+          </div>
+          <button type="button" className="btn btn-sm input-surface" onClick={() => reloadEnv()}>
+            {t('orch_env_refresh')}
+          </button>
+        </div>
+        {envKeys.length === 0 ? (
+          <div className="empty">{t('idx_none')}</div>
+        ) : (
+          envKeys.map(function (k) {
+            var row = envChecks[k];
+            var ok = row && row.available;
+            var ver = (row && row.version) || '';
+            if (!ok && row && row.error_code === 'cmd_not_found') ver = t('orch_env_cmd_not_found', { cmd: row.exe || k });
+            else if (!ok && row && row.error_code === 'timeout') ver = t('orch_env_timeout');
+            var linked = resolveEnvLinkedToolId(k);
+            return (
+              <div key={k} className="list-item" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="title" style={{ fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>
+                    {k}
+                  </div>
+                  <div className="meta text-tertiary" style={{ fontSize: 11, wordBreak: 'break-word' }}>
+                    {ver}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <span className={'tag ' + (ok ? 'tag-done' : 'tag-p0')}>{ok ? t('orch_env_ok') : t('orch_env_missing')}</span>
+                  {!ok ? (
+                    <button type="button" className="btn btn-sm btn-primary" disabled={aiBusy} onClick={() => openAiForEnv(k)}>
+                      {t('orch_env_ai_btn')}
+                    </button>
+                  ) : null}
+                  {linked ? (
+                    <button type="button" className="btn btn-sm input-surface" onClick={() => goToolForEnv(k)}>
+                      {t('orch_env_go_tool')}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {aiOpen && (
+        <div className="modal-bg" onClick={() => !aiBusy && setAiOpen(false)}>
+          <div
+            className="modal"
+            style={{
+              width: Math.min(720, typeof window !== 'undefined' ? window.innerWidth - 24 : 720),
+              maxWidth: '96vw',
+              maxHeight: '88vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3>{t('orch_ai_modal_title')}</h3>
+            <div className="form-group" style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11, color: 'var(--text3)' }}>{t('orch_ai_goal_label')}</label>
+              <textarea
+                className="textarea-surface"
+                rows={2}
+                style={{ width: '100%', fontSize: 12 }}
+                value={aiGoal}
+                onChange={(e) => setAiGoal(e.target.value)}
+                placeholder={t('orch_ai_goal_ph')}
+                disabled={aiBusy}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-sm btn-primary" disabled={aiBusy} onClick={regenerateAiPlan}>
+                {t('orch_ai_regenerate')}
+              </button>
+            </div>
+            {aiBusy ? (
+              <div className="empty" style={{ marginBottom: 12 }}>
+                …
+              </div>
+            ) : null}
+            {!aiBusy && aiActions && aiActions.length > 0 ? (
+              <div className="card" style={{ marginBottom: 12, padding: '10px 12px' }}>
+                <div className="section-title" style={{ fontSize: 13, marginBottom: 8 }}>
+                  {t('orch_ai_actions_title')}
+                </div>
+                {aiActions.map(function (act, i) {
+                  return (
+                    <div key={i} className="list-item" style={{ alignItems: 'flex-start', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="meta" style={{ fontSize: 12 }}>
+                          {act.label}
+                        </div>
+                        <code style={{ fontSize: 10, color: 'var(--link-inline)' }}>{act.recipe_id}</code>
+                        {act.argv_shell ? (
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{t('orch_argv_caption')}</div>
+                              <button
+                                type="button"
+                                className="btn btn-sm input-surface"
+                                style={{ fontSize: 10, padding: '2px 8px' }}
+                                onClick={() =>
+                                  navigator.clipboard
+                                    .writeText(act.argv_shell)
+                                    .then(() => showToast(t('vibe_toast_copy_ok'), 'ok'))
+                                    .catch(() => showToast(t('vibe_toast_copy_fail'), 'err'))
+                                }
+                              >
+                                {t('orch_argv_copy')}
+                              </button>
+                            </div>
+                            <pre
+                              style={{
+                                whiteSpace: 'pre-wrap',
+                                fontFamily: 'ui-monospace, monospace',
+                                fontSize: 10,
+                                lineHeight: 1.4,
+                                margin: 0,
+                                padding: 6,
+                                background: 'var(--bg3)',
+                                borderRadius: 4,
+                                color: 'var(--text2)',
+                                wordBreak: 'break-all',
+                              }}
+                            >
+                              {act.argv_shell}
+                            </pre>
+                          </div>
+                        ) : null}
+                      </div>
+                      <button type="button" className="btn btn-sm btn-primary" disabled={!!instBusy} onClick={() => runGuardedRecipe(act.recipe_id)}>
+                        {t('orch_run_recipe_btn')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+            <pre
+              className="doc-plain-pre"
+              style={{ whiteSpace: 'pre-wrap', fontSize: 12, lineHeight: 1.55, maxHeight: '48vh', overflow: 'auto', marginBottom: 12 }}
+            >
+              {aiMd || (aiBusy ? '…' : '')}
+            </pre>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-cancel" disabled={aiBusy} onClick={() => setAiOpen(false)}>
+                {t('gen_close')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={aiBusy || !aiMd}
+                onClick={() =>
+                  navigator.clipboard.writeText(aiMd).then(() => showToast(t('vibe_toast_copy_ok'), 'ok')).catch(() => showToast(t('vibe_toast_copy_fail'), 'err'))
+                }
+              >
+                {t('df_copy')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrchestrationManager() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const [tab, setTab] = React.useState('tools');
+  const [orchNavFocus, setOrchNavFocus] = React.useState(null);
   const [wide, setWide] = React.useState(function () {
     return typeof window !== 'undefined' && window.innerWidth >= 880;
   });
@@ -17,6 +322,7 @@ function OrchestrationManager() {
   }, []);
   const tabs = [
     ['tools', t('orch_tab_tools')],
+    ['envcheck', t('orch_tab_env')],
     ['workflows', t('orch_tab_wf')],
     ['quality', t('orch_tab_quality')],
     ['versions', t('orch_tab_versions')],
@@ -75,7 +381,22 @@ function OrchestrationManager() {
         </nav>
       </div>
       <div style={{ minWidth: 0 }}>
-        {tab === 'tools' && <DevToolsPanel />}
+        {tab === 'tools' && (
+          <DevToolsPanel
+            orchNavFocus={orchNavFocus}
+            onConsumedOrchNavFocus={function () {
+              setOrchNavFocus(null);
+            }}
+          />
+        )}
+        {tab === 'envcheck' && (
+          <OrchEnvCheckPanel
+            onGoTool={function (id) {
+              setOrchNavFocus({ toolId: id });
+              setTab('tools');
+            }}
+          />
+        )}
         {tab === 'workflows' && <WorkflowPanel />}
         {tab === 'quality' && <QualityConfigPanel />}
         {tab === 'versions' && <VersionPanel />}
@@ -84,10 +405,12 @@ function OrchestrationManager() {
   );
 }
 
-function DevToolsPanel() {
+function DevToolsPanel(props) {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  var orchNavFocus = props && props.orchNavFocus;
+  var onConsumedOrchNavFocus = props && props.onConsumedOrchNavFocus ? props.onConsumedOrchNavFocus : function () {};
   /** 将受控安装 API 的机器可读 stderr/log 前缀转为界面语言说明（并保留原始日志）。 */
   const humanizeInstallResult = (obj) => {
     if (!obj || typeof obj !== 'object') return null;
@@ -106,7 +429,6 @@ function DevToolsPanel() {
   const { data, loading: lt, error: et, reload } = useFetch(`${API}/orchestration/tools`);
   const { data: meta, reload: reloadMeta } = useFetch(`${API}/orchestration/tools/meta`);
   const { data: cfg, loading: lc, error: ec, reload: reloadCfg } = useFetch(`${API}/orchestration/config`);
-  const { data: envChecks, reload: reloadEnv } = useFetch(`${API}/orchestration/environment-checks`);
   const [catFilter, setCatFilter] = React.useState('all');
   const [toolSearch, setToolSearch] = React.useState('');
   const [addOpen, setAddOpen] = React.useState(false);
@@ -130,6 +452,16 @@ function DevToolsPanel() {
   const [logBody, setLogBody] = React.useState('');
   const [consoleText, setConsoleText] = React.useState('');
   const [histItems, setHistItems] = React.useState([]);
+  const [navWide, setNavWide] = React.useState(function () {
+    return typeof window !== 'undefined' && window.innerWidth >= 860;
+  });
+  const [catCollapsed, setCatCollapsed] = React.useState(function () {
+    try {
+      return localStorage.getItem('orch-devtools-cat-collapsed') === '1';
+    } catch (e) {
+      return false;
+    }
+  });
 
   const loading = lt || lc;
   const errText = et || ec;
@@ -145,13 +477,32 @@ function DevToolsPanel() {
     reload();
     reloadCfg();
     reloadMeta();
-    reloadEnv();
     loadInstallLogs();
   };
 
   React.useEffect(function () {
     loadInstallLogs();
   }, []);
+
+  React.useEffect(function () {
+    function onR() {
+      setNavWide(window.innerWidth >= 860);
+    }
+    window.addEventListener('resize', onR);
+    return function () {
+      window.removeEventListener('resize', onR);
+    };
+  }, []);
+
+  const toggleCatCollapse = () => {
+    setCatCollapsed(function (c) {
+      var n = !c;
+      try {
+        localStorage.setItem('orch-devtools-cat-collapsed', n ? '1' : '0');
+      } catch (e) {}
+      return n;
+    });
+  };
 
   React.useEffect(
     function () {
@@ -199,15 +550,6 @@ function DevToolsPanel() {
     [data, catFilter, toolSearch]
   );
 
-  const resolveEnvLinkedToolId = React.useCallback(
-    function (envKey) {
-      if (!envKey || String(envKey).indexOf('py:') === 0) return null;
-      if (!(data || []).some(function (x) { return x.id === envKey; })) return null;
-      return envKey;
-    },
-    [data]
-  );
-
   const scrollToLinkedTool = function (toolId) {
     window.requestAnimationFrame(function () {
       var el = document.getElementById('orch-tool-' + toolId);
@@ -215,16 +557,26 @@ function DevToolsPanel() {
     });
   };
 
-  const goToolForEnv = function (envKey) {
-    var tid = resolveEnvLinkedToolId(envKey);
-    if (!tid) return;
-    var tool = (data || []).find(function (x) { return x.id === tid; });
-    var cat = tool && tool.category ? tool.category : 'chain';
-    if (cat !== 'agent_cli' && cat !== 'ide' && cat !== 'assistant' && cat !== 'chain') cat = 'chain';
-    setCatFilter(cat);
-    setToolSearch('');
-    scrollToLinkedTool(tid);
-  };
+  React.useEffect(
+    function () {
+      if (!orchNavFocus || !orchNavFocus.toolId) return;
+      if (loading) return;
+      if (!data) return;
+      var tid = orchNavFocus.toolId;
+      var tool = (data || []).find(function (x) { return x.id === tid; });
+      if (!tool) {
+        onConsumedOrchNavFocus();
+        return;
+      }
+      var cat = tool.category || 'chain';
+      if (cat !== 'agent_cli' && cat !== 'ide' && cat !== 'assistant' && cat !== 'chain') cat = 'chain';
+      setCatFilter(cat);
+      setToolSearch('');
+      scrollToLinkedTool(tid);
+      onConsumedOrchNavFocus();
+    },
+    [orchNavFocus, data, loading, onConsumedOrchNavFocus]
+  );
 
   const showInstallLog = (title, d, opts) => {
     const body =
@@ -411,12 +763,6 @@ function DevToolsPanel() {
     runAiPlan(aiToolIdForPlan || undefined);
   };
 
-  const openAiForEnv = function (envKey) {
-    var g = t('orch_env_ai_goal_prefill', { item: envKey });
-    setAiGoal(g);
-    runAiPlan(null, g);
-  };
-
   const runGuardedRecipe = (recipeId) => {
     if (!recipeId || !confirm(t('orch_confirm_guard'))) return;
     setInstBusy('recipe:' + recipeId);
@@ -488,14 +834,18 @@ function DevToolsPanel() {
   if (errText) return <LoadError message={errText} onRetry={reloadAll}/>;
 
   const hidden = (meta && meta.hidden) || [];
-  const CAT_KEYS = [
-    ['all', t('orch_cat_all')],
-    ['agent_cli', t('orch_cat_agent_cli')],
-    ['ide', t('orch_cat_ide')],
-    ['assistant', t('orch_cat_assistant')],
-    ['chain', t('orch_cat_chain')],
+  const CAT_DEFS = [
+    { id: 'all', icon: '📦', label: t('orch_cat_all') },
+    { id: 'agent_cli', icon: '🤖', label: t('orch_cat_agent_cli') },
+    { id: 'ide', icon: '💻', label: t('orch_cat_ide') },
+    { id: 'assistant', icon: '✨', label: t('orch_cat_assistant') },
+    { id: 'chain', icon: '⛓️', label: t('orch_cat_chain') },
   ];
-  const envKeys = envChecks && typeof envChecks === 'object' ? Object.keys(envChecks).sort() : [];
+  const CAT_KEYS = CAT_DEFS.map(function (d) {
+    return [d.id, d.label];
+  });
+
+  var collapsedStrip = navWide && catCollapsed;
 
   return (
     <div>
@@ -538,32 +888,186 @@ function DevToolsPanel() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
-        <div style={{ flex: '0 0 200px', minWidth: 160 }}>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>{t('orch_cat_nav_title')}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {CAT_KEYS.map(([k, lab]) => {
-              const n = catCounts[k] != null ? catCounts[k] : 0;
+      {!navWide ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', letterSpacing: '0.02em' }}>{t('orch_cat_nav_title')}</span>
+            <span style={{ fontSize: 10, color: 'var(--text3)', lineHeight: 1.45, maxWidth: 440 }}>{t('orch_catnav_hint')}</span>
+          </div>
+          <div
+            className="scroll-slim"
+            style={{
+              display: 'flex',
+              gap: 8,
+              overflowX: 'auto',
+              paddingBottom: 6,
+              margin: '0 -2px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {CAT_DEFS.map(function (def) {
+              var n = catCounts[def.id] != null ? catCounts[def.id] : 0;
+              var active = catFilter === def.id;
               return (
                 <button
-                  key={k}
+                  key={def.id}
                   type="button"
-                  className={'btn btn-sm' + (catFilter === k ? ' btn-primary' : '')}
-                  style={{
-                    ...(catFilter !== k ? { background: 'var(--bg4)', color: 'var(--text3)' } : {}),
-                    textAlign: 'left',
-                    justifyContent: 'flex-start',
-                    width: '100%',
+                  aria-current={active ? 'page' : undefined}
+                  onClick={function () {
+                    setCatFilter(def.id);
                   }}
-                  onClick={() => setCatFilter(k)}
+                  style={{
+                    flex: '0 0 auto',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '9px 14px',
+                    borderRadius: 999,
+                    border: '1px solid ' + (active ? 'color-mix(in srgb, var(--accent) 55%, var(--border))' : 'var(--border)'),
+                    background: active ? 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 26%, var(--bg2)), var(--bg3))' : 'var(--bg2)',
+                    color: active ? 'var(--text)' : 'var(--text2)',
+                    fontSize: 12,
+                    fontWeight: active ? 700 : 500,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    boxShadow: active ? '0 0 22px color-mix(in srgb, var(--accent) 14%, transparent)' : 'none',
+                  }}
                 >
-                  {lab} ({n})
+                  <span style={{ fontSize: 15 }} aria-hidden="true">
+                    {def.icon}
+                  </span>
+                  <span>{def.label}</span>
+                  <span style={{ fontSize: 11, opacity: 0.88, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
                 </button>
               );
             })}
           </div>
         </div>
-        <div style={{ flex: '1 1 380px', minWidth: 0 }}>
+      ) : null}
+
+      <div
+        style={
+          navWide
+            ? {
+                display: 'grid',
+                gridTemplateColumns: collapsedStrip ? '58px minmax(0, 1fr)' : 'min(236px, 27vw) minmax(0, 1fr)',
+                gap: 18,
+                alignItems: 'start',
+              }
+            : {}
+        }
+      >
+        {navWide ? (
+          <aside
+            style={{
+              position: 'sticky',
+              top: 12,
+              alignSelf: 'start',
+              borderRadius: 14,
+              border: '1px solid var(--border)',
+              background: 'linear-gradient(165deg, color-mix(in srgb, var(--bg2) 90%, var(--accent) 7%) 0%, var(--bg3) 100%)',
+              boxShadow: '0 8px 36px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.06)',
+              overflow: 'hidden',
+              minWidth: 0,
+            }}
+          >
+            <button
+              type="button"
+              onClick={toggleCatCollapse}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: collapsedStrip ? 'center' : 'space-between',
+                gap: 6,
+                padding: collapsedStrip ? '10px 6px' : '10px 12px',
+                border: 'none',
+                borderBottom: '1px solid var(--border)',
+                background: 'color-mix(in srgb, var(--bg3) 75%, transparent)',
+                color: 'var(--text2)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+              }}
+              title={collapsedStrip ? t('orch_catnav_expand') : t('orch_catnav_collapse')}
+            >
+              {collapsedStrip ? (
+                <span aria-hidden="true" style={{ fontSize: 15 }}>
+                  ▸
+                </span>
+              ) : (
+                <React.Fragment>
+                  <span style={{ textTransform: 'uppercase' }}>{t('orch_cat_nav_title')}</span>
+                  <span aria-hidden="true" style={{ fontSize: 12, opacity: 0.65 }}>
+                    ◀
+                  </span>
+                </React.Fragment>
+              )}
+            </button>
+            <div style={{ padding: collapsedStrip ? '8px 6px 12px' : '12px 10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {CAT_DEFS.map(function (def) {
+                var n = catCounts[def.id] != null ? catCounts[def.id] : 0;
+                var active = catFilter === def.id;
+                return (
+                  <button
+                    key={def.id}
+                    type="button"
+                    title={collapsedStrip ? def.label + ' (' + n + ')' : def.label + ' · ' + n}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={function () {
+                      setCatFilter(def.id);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: collapsedStrip ? 0 : 10,
+                      width: '100%',
+                      padding: collapsedStrip ? '11px 6px' : '11px 12px',
+                      justifyContent: collapsedStrip ? 'center' : 'flex-start',
+                      borderRadius: 12,
+                      border: '1px solid ' + (active ? 'color-mix(in srgb, var(--accent) 42%, var(--border))' : 'transparent'),
+                      background: active
+                        ? 'linear-gradient(105deg, color-mix(in srgb, var(--accent) 22%, transparent), color-mix(in srgb, var(--accent) 6%, var(--bg3)))'
+                        : 'transparent',
+                      color: active ? 'var(--text)' : 'var(--text2)',
+                      fontSize: 13,
+                      fontWeight: active ? 650 : 500,
+                      cursor: 'pointer',
+                      boxShadow: active ? 'inset 3px 0 0 var(--accent), 0 1px 0 rgba(255,255,255,.05)' : 'none',
+                      transition: 'background .18s, border-color .18s, color .18s, box-shadow .18s',
+                    }}
+                  >
+                    <span style={{ fontSize: 17, lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
+                      {def.icon}
+                    </span>
+                    {!collapsedStrip ? (
+                      <React.Fragment>
+                        <span style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>{def.label}</span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: active ? 'var(--text)' : 'var(--text3)',
+                            background: active ? 'rgba(255,255,255,.07)' : 'var(--bg4)',
+                            padding: '3px 9px',
+                            borderRadius: 999,
+                            border: active ? '1px solid color-mix(in srgb, var(--accent) 35%, transparent)' : '1px solid transparent',
+                          }}
+                        >
+                          {n}
+                        </span>
+                      </React.Fragment>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        ) : null}
+
+        <div style={{ minWidth: 0, width: navWide ? 'auto' : '100%' }}>
           <div className="card" style={{ marginBottom: 0 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
               <input
@@ -596,7 +1100,11 @@ function DevToolsPanel() {
                     <span className={'tag ' + (tool.available ? 'tag-done' : 'tag-p0')}>{tool.available ? t('orch_installed') : t('orch_not_installed')}</span>
                     {cfg && cfg.default_tool === tool.id && <span className="tag tag-progress">{t('orch_tag_default')}</span>}
                     <span className="tag tag-p2">{tool.source === 'custom' ? t('orch_tag_custom') : t('orch_tag_builtin')}</span>
-                    <span className="tag tag-p3">{CAT_KEYS.find(([c]) => c === (tool.category || 'agent_cli'))?.[1] || tool.category}</span>
+                    <span className="tag tag-p3">
+                      {(CAT_DEFS.find(function (d) {
+                        return d.id === (tool.category || 'agent_cli');
+                      }) || {}).label || tool.category}
+                    </span>
                   </div>
                   <div className="meta">
                     {tool.description} · {t('orch_cmd_label')}: <code style={{ color: 'var(--link-inline)' }}>{tool.cmd}</code>
@@ -726,55 +1234,6 @@ function DevToolsPanel() {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="card" style={{ marginTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          <div>
-            <div className="section-title" style={{ marginBottom: 4 }}>{t('orch_env_section')}</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{t('orch_env_section_sub')}</div>
-          </div>
-          <button type="button" className="btn btn-sm input-surface" onClick={() => reloadEnv()}>
-            {t('orch_env_refresh')}
-          </button>
-        </div>
-        {envKeys.length === 0 ? (
-          <div className="empty">{t('idx_none')}</div>
-        ) : (
-          envKeys.map((k) => {
-            const row = envChecks[k];
-            const ok = row && row.available;
-            var ver = (row && row.version) || '';
-            if (!ok && row && row.error_code === 'cmd_not_found') ver = t('orch_env_cmd_not_found', { cmd: row.exe || k });
-            else if (!ok && row && row.error_code === 'timeout') ver = t('orch_env_timeout');
-            const linked = resolveEnvLinkedToolId(k);
-            return (
-              <div key={k} className="list-item" style={{ alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="title" style={{ fontFamily: 'ui-monospace,monospace', fontSize: 13 }}>
-                    {k}
-                  </div>
-                  <div className="meta text-tertiary" style={{ fontSize: 11, wordBreak: 'break-word' }}>
-                    {ver}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <span className={'tag ' + (ok ? 'tag-done' : 'tag-p0')}>{ok ? t('orch_env_ok') : t('orch_env_missing')}</span>
-                  {!ok ? (
-                    <button type="button" className="btn btn-sm btn-primary" disabled={aiBusy} onClick={() => openAiForEnv(k)}>
-                      {t('orch_env_ai_btn')}
-                    </button>
-                  ) : null}
-                  {linked ? (
-                    <button type="button" className="btn btn-sm input-surface" onClick={() => goToolForEnv(k)}>
-                      {t('orch_env_go_tool')}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })
-        )}
       </div>
 
       {hidden.length > 0 && (
@@ -1437,3 +1896,4 @@ function VersionPanel() {
     </div>
   );
 }
+window.i18nExtend && window.i18nExtend({zh:{},en:{}});

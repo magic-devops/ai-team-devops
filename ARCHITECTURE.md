@@ -154,7 +154,7 @@ FastAPI main:app（/api/*）
 **Agent 编排与开发工具（`/api/orchestration`）**
 
 - Web 侧：开发工具 **分类与搜索**、默认工具、内置覆盖/隐藏、自定义工具、**AI 安装方案**（Markdown + 白名单 `actions` 与 `argv_shell`）、**受控一键安装**、安装控制台与 JSONL 历史、本机 **环境检查**（与 `docker_env` 同源，支持缺失项 **AI 方案** 与 **定位工具**）。  
-- 数据目录：`PROJECT_PATH/.ai-memory/orchestration/`（详见 [docs/ORCHESTRATION_DEV_TOOLS.md](../docs/ORCHESTRATION_DEV_TOOLS.md)）。
+- 数据目录：`PROJECT_PATH/.sop-runtime/ai-memory/orchestration/`（Unix 上项目根 `.ai-memory` 多为符号链接；详见 [docs/ORCHESTRATION_DEV_TOOLS.md](../docs/ORCHESTRATION_DEV_TOOLS.md)）。
 
 **人工介入点**：调整需求优先级、解除任务阻塞、关闭问题、新建 Sprint、维护技术方案版本、配置 Agent/专家组、在 Vibe 中发起实现/审查类对话
 

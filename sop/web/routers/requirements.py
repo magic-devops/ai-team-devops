@@ -11,13 +11,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .db import PROJECT_PATH, now, rows, table
+from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, now, rows, table
 
 router = APIRouter(prefix="/api/requirements", tags=["requirements"])
 
 _DOC_MAX = 120_000
 _PRIOS = ("P0", "P1", "P2", "P3")
-_UI_STATE_PATH = PROJECT_PATH / ".ai-memory" / "requirements_ui_state.json"
+_UI_STATE_PATH = AI_MEMORY_ROOT / "requirements_ui_state.json"
 
 
 def _ui_default_state() -> Dict[str, Any]:
@@ -170,7 +170,7 @@ class GeneratePrototypeBody(BaseModel):
 
 
 def _prototype_dir() -> Path:
-    d = PROJECT_PATH / ".ai-memory" / "requirement_prototypes"
+    d = AI_MEMORY_ROOT / "requirement_prototypes"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -304,7 +304,7 @@ def list_reqs(status: Optional[str] = None, priority: Optional[str] = None):
 def create_req(body: ReqCreate):
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     row = {
         "id": f"REQ-{uuid.uuid4().hex[:16]}",
         "project_id": os.getenv("PROJECT_ID", "default"),
@@ -337,7 +337,7 @@ def create_req(body: ReqCreate):
 def batch_create(body: BatchCreateBody):
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     ids: List[str] = []
     rows_add: List[Dict[str, Any]] = []
     for it in body.items:
@@ -424,7 +424,7 @@ def reorder_board(body: ReorderBoardBody):
         raise HTTPException(400, "各列 ID 须覆盖当前全部需求且无多余项（拖拽后请提交完整四列顺序）")
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     ts = now()
     for p in _PRIOS:
         for rid in groups[p]:
@@ -449,7 +449,7 @@ def generate_prototype(req_id: str, body: GeneratePrototypeBody):
     req_id = _safe_req_id(req_id)
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     found = [x for x in rows("requirements", 500) if x.get("id") == req_id]
     if not found:
         raise HTTPException(404, "需求不存在")
@@ -503,7 +503,7 @@ def update_priority(req_id: str, body: PriorityBody):
     req_id = _safe_req_id(req_id)
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     t.update(
         where=f"id = '{req_id}'",
         values={"priority": body.priority, "human_notes": body.human_notes or "", "updated_at": now()},
@@ -519,7 +519,7 @@ def update_req(req_id: str, body: ReqUpdate):
     req_id = _safe_req_id(req_id)
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     try:
         raw = body.model_dump(exclude_unset=True)
     except AttributeError:
@@ -551,7 +551,7 @@ def delete_req(req_id: str):
     req_id = _safe_req_id(req_id)
     t = table("requirements")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     t.delete(f"id = '{req_id}'")
     st = _ui_load()
     _ui_delete_id(st, req_id)

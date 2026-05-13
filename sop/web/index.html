@@ -20,16 +20,97 @@
 <link rel="apple-touch-icon" href="/assets/brand-mark.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="pages/i18n.js?v=20260513a"></script>
+<script src="pages/i18n.js?v=20260513orchui2"></script>
+<script src="pages/i18n-extend.js?v=20260513c"></script>
+<script>
+(function () {
+  if (typeof window.i18nExtend === 'function' && window.DEVDASH_I18N && window.DEVDASH_I18N.zh) {
+    window.i18nExtend({
+      zh: {
+        topbar_logout: '退出',
+        topbar_data_hub: '数据港',
+        dh_title: '项目数据导出 / 导入',
+        dh_intro: '导出为 JSON 备份或迁移；导入仅处理需求、任务、缺陷、Sprint 四表，按记录 id 与当前租户/项目合并（同 id 覆盖，新 id 新增）。Agent 反思仅支持导出。',
+        dh_sec_export: '导出范围',
+        dh_sec_import: '从 JSON 导入',
+        dh_mod_requirements: '需求 requirements',
+        dh_mod_requirements_d: '看板、优先级、验收标准、标签与置信度等',
+        dh_mod_tasks: '任务 tasks',
+        dh_mod_tasks_d: '状态、估点、分配、迭代与需求关联',
+        dh_mod_issues: '缺陷 issues',
+        dh_mod_issues_d: '类型、严重度、状态与解决说明',
+        dh_mod_sprints: '迭代 sprints',
+        dh_mod_sprints_d: '目标、计划点、速率与回顾',
+        dh_mod_agent_reflections: 'Agent 反思 agent_reflections',
+        dh_mod_agent_reflections_d: '仅导出（LanceDB），不可从此处导入',
+        dh_sel_all: '全选',
+        dh_sel_none: '全不选',
+        dh_btn_download: '下载 JSON',
+        dh_pick_file: '选择 JSON 文件',
+        dh_btn_import: '合并导入',
+        dh_import_hint: '请选择由本后台「导出」生成的 JSON；导入会写入当前项目数据，请先备份。',
+        dh_err_json: '无法解析 JSON',
+        dh_toast_export_ok: '导出已开始下载',
+        dh_toast_import_ok: '导入完成',
+        dh_toast_import_fail: '导入失败',
+        dh_preview: '解析预览',
+        dh_close: '关闭',
+        dh_import_role_gate: '合并导入仅对「超级管理员 / 租户管理员 / 项目管理员 / 运维」开放；其他角色可照常导出备份。',
+        dh_import_forbidden: '当前账号无权执行合并导入。',
+        help_li_datahub: '「数据港」可勾选模块导出 JSON；合并导入四表需具备超级管理员、租户管理员、项目管理员或运维角色。',
+        nav_back: '返回上一页',
+        sidebar_expand: '展开分组',
+        sidebar_collapse: '收起分组',
+      },
+      en: {
+        topbar_logout: 'Sign out',
+        topbar_data_hub: 'Data hub',
+        dh_title: 'Export / import project data',
+        dh_intro: 'Export JSON for backup or migration. Import merges requirements, tasks, issues and sprints by id into the current tenant/project (same id updates, new ids insert). Agent reflections are export-only.',
+        dh_sec_export: 'Export scope',
+        dh_sec_import: 'Import from JSON',
+        dh_mod_requirements: 'Requirements',
+        dh_mod_requirements_d: 'Board fields, priority, acceptance, tags, confidence',
+        dh_mod_tasks: 'Tasks',
+        dh_mod_tasks_d: 'Status, estimate, assignee, sprint & requirement links',
+        dh_mod_issues: 'Issues',
+        dh_mod_issues_d: 'Type, severity, status, resolution',
+        dh_mod_sprints: 'Sprints',
+        dh_mod_sprints_d: 'Goals, planned points, velocity, retro',
+        dh_mod_agent_reflections: 'Agent reflections',
+        dh_mod_agent_reflections_d: 'Export only (LanceDB); not importable here',
+        dh_sel_all: 'Select all',
+        dh_sel_none: 'Select none',
+        dh_btn_download: 'Download JSON',
+        dh_pick_file: 'Choose JSON file',
+        dh_btn_import: 'Merge import',
+        dh_import_hint: 'Use JSON exported from this console. Writes to the current project—backup first.',
+        dh_err_json: 'Invalid JSON file',
+        dh_toast_export_ok: 'Download started',
+        dh_toast_import_ok: 'Import finished',
+        dh_toast_import_fail: 'Import failed',
+        dh_preview: 'Parsed preview',
+        dh_close: 'Close',
+        dh_import_role_gate: 'Merge import is limited to super admin, tenant admin, project admin, or DevOps. Everyone logged in can still export.',
+        dh_import_forbidden: 'Your account cannot run merge import.',
+        help_li_datahub: 'Data hub: export modules as JSON; merge-import needs super admin, tenant admin, project admin, or DevOps.',
+        nav_back: 'Go back',
+        sidebar_expand: 'Expand section',
+        sidebar_collapse: 'Collapse section',
+      },
+    });
+  }
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- 模块化页面文件（每个文件独立，AI 按需修改） -->
 <script type="text/babel" src="pages/agents.js"></script>
 <script type="text/babel" src="pages/skills.js"></script>
 <script type="text/babel" src="pages/mcp.js"></script>
 <script type="text/babel" src="pages/system.js?v=20260512c"></script>
-<script type="text/babel" src="pages/auth.js"></script>
+<script type="text/babel" src="pages/auth.js?v=20260513roles"></script>
 <script type="text/babel" src="pages/models.js?v=20260512h"></script>
-<script type="text/babel" src="pages/orchestration.js?v=20260512orch10"></script>
+<script type="text/babel" src="pages/orchestration.js?v=20260513orchui2"></script>
 <script type="text/babel" src="pages/docker.js?v=20260513a"></script>
 <script type="text/babel" src="pages/skill_repo.js?v=20260512d"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
@@ -41,6 +122,13 @@
 <script type="text/babel" src="pages/cli.js?v=20260512i"></script>
 <script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
 <script type="text/babel" src="pages/dev_flow.js?v=20260512g"></script>
+<script type="text/babel" src="pages/sprints_mgr.js?v=20260513d"></script>
+<script type="text/babel" src="pages/db_config.js?v=20260513b"></script>
+<script type="text/babel" src="pages/tenants.js?v=20260513b"></script>
+<script type="text/babel" src="pages/health.js?v=20260513c"></script>
+<script type="text/babel" src="pages/audit.js?v=20260513c"></script>
+<script type="text/babel" src="pages/webhook.js?v=20260513c"></script>
+<script type="text/babel" src="pages/logs_viewer.js?v=20260513d"></script>
 <style>
 /* ── CSS 变量（多主题 + 语义色，供页面内联样式改为 var / class） ── */
 :root,
@@ -122,6 +210,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .app-shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .topbar{height:var(--header-h);background:var(--bg2);border-bottom:1px solid var(--border);box-shadow:var(--shadow-sm);
   display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0;z-index:20}
+.topbar-crumb{font-size:12px;color:var(--text3);font-weight:600;max-width:min(160px,22vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar-brand{display:flex;align-items:center;gap:10px;min-width:0;user-select:none}
 .topbar-logo-img{width:32px;height:32px;border-radius:10px;object-fit:cover;flex-shrink:0;
   box-shadow:0 2px 10px rgba(59,130,246,.28),inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent);
@@ -132,7 +221,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   letter-spacing:-.4px;white-space:nowrap}
 [data-theme=light] .topbar-logo{-webkit-text-fill-color:transparent}
 .topbar-badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:min(560px,54vw)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;justify-content:flex-end;flex:1;min-width:0;max-width:min(720px,70vw);overflow:hidden}
+.topbar-tools{display:flex;align-items:center;gap:8px;flex-shrink:1;min-width:0;overflow:hidden}
+.topbar-user{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;white-space:nowrap}
+.topbar-hub-btn{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:650;
+  border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 14%,var(--bg2)),var(--bg2));
+  color:var(--text);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 8%,transparent),0 2px 10px rgba(0,0,0,.12);
+  transition:transform .15s,box-shadow .2s,border-color .2s;
+}
+.topbar-hub-btn:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 0 20px color-mix(in srgb,var(--accent) 18%,transparent)}
+.topbar-hub-btn:active{transform:scale(.98)}
+.topbar-hub-ic{font-size:14px;line-height:1;opacity:.95}
+[data-theme=contrast] .topbar-hub-btn{border-width:2px}
+.datahub-modal .datahub-intro{font-size:12px;color:var(--text2);line-height:1.65;margin:0 0 14px}
+.datahub-modal h4{font-size:12px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:14px 0 8px}
+.datahub-row{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);margin-bottom:6px;background:var(--bg3)}
+.datahub-row input{margin-top:3px;accent-color:var(--accent)}
+.datahub-row .dh-label{flex:1;min-width:0}
+.datahub-row .dh-label strong{display:block;font-size:13px;color:var(--text)}
+.datahub-row .dh-label span{display:block;font-size:11px;color:var(--text3);margin-top:2px;line-height:1.45}
+.datahub-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.datahub-note{font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5}
+.datahub-preview{font-size:11px;background:var(--surface-code);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;max-height:120px;overflow:auto}
 .topbar-project{font-size:12px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar-health{font-size:11px;display:flex;align-items:center;gap:6px;margin-left:8px;margin-right:4px;color:var(--text2);white-space:nowrap}
 .topbar-health .health-dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
@@ -161,7 +273,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sidebar-group-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.04em;
   padding:14px 16px 6px;white-space:nowrap;overflow:hidden;border-top:1px solid transparent}
 .sidebar-group:first-child .sidebar-group-label{border-top:none;padding-top:8px}
+.sidebar-group:first-child .sidebar-group-head{margin-top:4px}
 .sidebar.collapsed .sidebar-group-label{display:none}
+.sidebar-group-head{display:flex;align-items:center;gap:6px;width:calc(100% - 12px);margin:6px 8px 4px 4px;padding:8px 10px;border:none;border-radius:10px;
+  background:transparent;font:inherit;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.04em;cursor:pointer;text-align:left;
+  transition:background .15s,color .15s}
+.sidebar-group-head:hover{background:rgba(148,163,184,.1);color:var(--text2)}
+.sidebar-group-head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sidebar-chevron{font-size:9px;width:14px;flex-shrink:0;opacity:.8;color:var(--text3);font-family:ui-sans-serif,system-ui,sans-serif}
+[data-theme=light] .sidebar-group-head:hover{background:rgba(59,130,246,.08)}
 .sidebar-item{display:flex;align-items:center;gap:10px;margin:1px 8px 1px 4px;padding:8px 12px;cursor:pointer;
   border-radius:10px;font-size:13px;color:var(--text2);transition:background .16s,color .16s,box-shadow .16s;white-space:nowrap;border-left:none}
 .sidebar-item:hover{background:rgba(148,163,184,.1);color:var(--text)}
@@ -364,7 +484,31 @@ const API = (typeof window !== 'undefined' && window.location && (window.locatio
   ? (window.location.origin.replace(/\/$/, '') + '/api')
   : 'http://localhost:8765/api';
 
-/** 统一超时与 Abort，供 useFetch / 健康检查使用 */
+// ── 认证：token 检查 + 自动跳转登录 ─────────────────────────────
+(function(){
+  var token = '';
+  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
+  if (!token) { window.location.replace('login.html'); return; }
+  // 验证 token 有效性（静默，失败则跳转）
+  fetch(API + '/auth/me', { headers: { Authorization: 'Bearer ' + token } })
+    .then(function(r) { if (!r.ok) { localStorage.removeItem('sop-token'); window.location.replace('login.html'); } })
+    .catch(function() {});
+})();
+
+// ── 全局认证工具 ──────────────────────────────────────────────────
+window.authHeaders = function() {
+  var token = '';
+  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+};
+window.__ADMIN_MODE__ = (function() {
+  try { return localStorage.getItem('sop-admin-mode') || 'single'; } catch(e) { return 'single'; }
+})();
+window.__CURRENT_USER__ = (function() {
+  try { return JSON.parse(localStorage.getItem('sop-user') || 'null'); } catch(e) { return null; }
+})();
+
+/** 统一超时与 Abort，自动注入 Authorization header */
 function apiFetch(input, init) {
   const opts = init || {};
   const timeoutMs = opts.timeoutMs != null ? opts.timeoutMs : 32000;
@@ -373,7 +517,17 @@ function apiFetch(input, init) {
   var next = Object.assign({}, opts);
   delete next.timeoutMs;
   next.signal = ctrl.signal;
-  return fetch(input, next).finally(function () { clearTimeout(tid); });
+  // 自动注入 token
+  var token = '';
+  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
+  if (token) {
+    next.headers = Object.assign({ 'Authorization': 'Bearer ' + token }, next.headers || {});
+  }
+  return fetch(input, next).then(function(r) {
+    if (r.status === 401) { localStorage.removeItem('sop-token'); window.location.replace('login.html'); }
+    clearTimeout(tid);
+    return r;
+  }).catch(function(e) { clearTimeout(tid); throw e; });
 }
 window.apiFetch = apiFetch;
 
@@ -2675,7 +2829,7 @@ function Analytics() {
 
 /** Babel Standalone 对外部 src 的 text/babel 脚本编译可能是异步的；须等 pages/*.js 注册完全局组件后再构建 ALL_PAGES，否则 ReferenceError 白屏。 */
 function waitForPageModules(done) {
-  var names = ['AgentManager','SkillManager','McpManager','SystemManager','AuthManager','ModelManager','OrchestrationManager','DockerEnvManager','SkillRepoManager','VibeCoding','NotifyManager','CliManager','DesignDocsManager','DevFlowHub'];
+  var names = ['AgentManager','SkillManager','McpManager','SystemManager','AuthManager','ModelManager','OrchestrationManager','DockerEnvManager','SkillRepoManager','VibeCoding','NotifyManager','CliManager','DesignDocsManager','DevFlowHub','DbConfigPage','TenantsPage','HealthPage','AuditPage','WebhookPage','SprintManager','LogsViewer'];
   var tries = 0;
   function tick() {
     var missing = names.filter(function (n) { return typeof window[n] !== 'function'; });
@@ -2695,16 +2849,30 @@ function waitForPageModules(done) {
 }
 
 // ── 新版主应用（左侧菜单 + 多主题 + i18n） ────────────────────────────
+// 全局认证工具函数
+window.authHeaders = function() {
+  var token = '';
+  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
+  return token ? { 'Authorization': 'Bearer ' + token } : {};
+};
+window.__ADMIN_MODE__ = (function() {
+  try {
+    var m = localStorage.getItem('sop-admin-mode');
+    if (m) return m;
+  } catch(e) {}
+  return 'single';
+})();
 function mountApp() {
 const ALL_PAGES = {
   dashboard:<Dashboard/>,'dev-flow':<DevFlowHub/>,analytics:<Analytics/>,requirements:<Requirements/>,
-  plan:<ExecutionPlan/>,iteration:<IterationProgress/>,sprints:<Sprints/>,
+  plan:<ExecutionPlan/>,iteration:<IterationProgress/>,sprints:<Sprints/>,'sprints-mgr':<SprintManager/>,
   issues:<Issues/>,search:<Search/>,vibe:<VibeCoding/>,'spec-editor':<SpecEditor/>,
   docker:<DockerEnvManager/>,cli:<CliManager/>,specs:<Specs/>,'design-docs':<DesignDocsManager/>,'knowledge-mgr':<KnowledgeManager/>,
   rules:<Rules/>,custom:<Custom/>,agents:<AgentManager/>,skills:<SkillManager/>,
   'skill-repo':<SkillRepoManager/>,models:<ModelManager/>,orchestration:<OrchestrationManager/>,
-  mcp:<McpManager/>,logs:<AgentLogs/>,notify:<NotifyManager/>,config:<Config/>,
-  system:<SystemManager/>,auth:<AuthManager/>,
+  mcp:<McpManager/>,logs:<AgentLogs/>,'logs-viewer':<LogsViewer/>,notify:<NotifyManager/>,config:<Config/>,
+  system:<SystemManager/>,auth:<AuthManager/>,'db-config':<DbConfigPage/>,tenants:<TenantsPage/>,
+  health:<HealthPage/>,audit:<AuditPage/>,webhook:<WebhookPage/>,
 };
 
 function AppV3() {
@@ -2726,23 +2894,64 @@ function AppV3() {
     try { return localStorage.getItem('devdash-lang') || 'zh'; } catch (e) { return 'zh'; }
   });
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem('devdash-sidebar-collapsed') === '1');
+  const [groupOpen, setGroupOpen] = React.useState(function () {
+    var def = { g_pm: true, g_dev: true, g_kb: true, g_ai: true, g_sys: true };
+    try {
+      var raw = localStorage.getItem('devdash-nav-groups');
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && typeof o === 'object') return Object.assign({}, def, o);
+      }
+    } catch (e) {}
+    return Object.assign({}, def);
+  });
   const [projectId, setProjectId] = React.useState('');
   const [toasts, setToasts] = React.useState([]);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [apiHealth, setApiHealth] = React.useState('checking');
   const [apiPingMs, setApiPingMs] = React.useState(null);
   const [apiVer, setApiVer] = React.useState('');
+  const [dataHubOpen, setDataHubOpen] = React.useState(false);
+  const [expSel, setExpSel] = React.useState({
+    requirements: true, tasks: true, issues: true, sprints: true, agent_reflections: true,
+  });
+  const [importPayload, setImportPayload] = React.useState(null);
+  const [importPreview, setImportPreview] = React.useState(null);
+  const importFileRef = React.useRef(null);
+  const [dataHubImportRoles, setDataHubImportRoles] = React.useState(null);
+
+  React.useEffect(function () {
+    apiFetch(API + '/auth/role-constants', { timeoutMs: 10000 })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        setDataHubImportRoles(Array.isArray(j && j.data_hub_import_roles) ? j.data_hub_import_roles : null);
+      })
+      .catch(function () { setDataHubImportRoles(null); });
+  }, []);
+
+  const canDataHubImport = React.useMemo(function () {
+    var allow = dataHubImportRoles;
+    if (!allow || !allow.length) {
+      allow = ['super_admin', 'tenant_admin', 'project_admin', 'devops'];
+    }
+    var u = typeof window !== 'undefined' && window.__CURRENT_USER__ ? window.__CURRENT_USER__ : null;
+    var role = u && u.role != null ? String(u.role) : '';
+    return allow.indexOf(role) >= 0;
+  }, [dataHubImportRoles]);
 
   const tk = React.useCallback(function (key) {
     var I = (typeof window !== 'undefined' && window.DEVDASH_I18N) || {};
-    var pack = I[lang] || {};
+    var pack = I[lang] || I.zh || {};
     var zh = I.zh || {};
-    return pack[key] || zh[key] || key;
+    var s = pack[key];
+    if (s == null || s === '') s = zh[key];
+    if (s == null || s === '') s = key;
+    return String(s);
   }, [lang]);
 
   const MENU_GROUPS = React.useMemo(function () {
     return [
-      { label: tk('nav_pm'), items: [
+      { id: 'g_pm', label: tk('nav_pm'), items: [
         {id:'dashboard',icon:'📊',label:tk('page_dashboard')},
         {id:'dev-flow',icon:'🧭',label:tk('page_dev_flow')},
         {id:'analytics',icon:'📈',label:tk('page_analytics')},
@@ -2750,23 +2959,24 @@ function AppV3() {
         {id:'plan',icon:'✅',label:tk('page_plan')},
         {id:'iteration',icon:'🔄',label:tk('page_iteration')},
         {id:'sprints',icon:'🏃',label:tk('page_sprints')},
+        {id:'sprints-mgr',icon:'📅',label:tk('page_sprints_mgr') || 'Sprint 管理'},
         {id:'issues',icon:'🐛',label:tk('page_issues')},
         {id:'search',icon:'🔍',label:tk('page_search')},
       ]},
-      { label: tk('nav_dev'), items: [
+      { id: 'g_dev', label: tk('nav_dev'), items: [
         {id:'vibe',icon:'🎯',label:tk('page_vibe')},
         {id:'spec-editor',icon:'✏️',label:tk('page_spec_editor')},
         {id:'docker',icon:'🐳',label:tk('page_docker')},
         {id:'cli',icon:'🛠️',label:tk('page_cli')},
       ]},
-      { label: tk('nav_kb'), items: [
+      { id: 'g_kb', label: tk('nav_kb'), items: [
         {id:'specs',icon:'📖',label:tk('page_specs')},
         {id:'design-docs',icon:'📐',label:tk('page_design_docs')},
         {id:'knowledge-mgr',icon:'🗄️',label:tk('page_knowledge')},
         {id:'rules',icon:'📐',label:tk('page_rules')},
         {id:'custom',icon:'📁',label:tk('page_custom')},
       ]},
-      { label: tk('nav_ai'), items: [
+      { id: 'g_ai', label: tk('nav_ai'), items: [
         {id:'agents',icon:'🤖',label:tk('page_agents')},
         {id:'skills',icon:'⚡',label:tk('page_skills')},
         {id:'skill-repo',icon:'📦',label:tk('page_skill_repo')},
@@ -2774,15 +2984,57 @@ function AppV3() {
         {id:'orchestration',icon:'🔀',label:tk('page_orchestration')},
         {id:'mcp',icon:'🔌',label:tk('page_mcp')},
         {id:'logs',icon:'📡',label:tk('page_logs')},
+        {id:'logs-viewer',icon:'📜',label:tk('page_logs_viewer') || '日志查看'},
       ]},
-      { label: tk('nav_sys'), items: [
+      { id: 'g_sys', label: tk('nav_sys'), items: [
         {id:'notify',icon:'📣',label:tk('page_notify')},
         {id:'config',icon:'⚙️',label:tk('page_config')},
         {id:'system',icon:'🖥️',label:tk('page_system')},
         {id:'auth',icon:'👤',label:tk('page_auth')},
+        {id:'tenants',icon:'🏢',label:tk('page_tenants') || '组织管理'},
+        {id:'db-config',icon:'🗃️',label:tk('page_db_config') || '数据库配置'},
+        {id:'health',icon:'💚',label:tk('page_health') || '健康监控'},
+        {id:'audit',icon:'📋',label:tk('page_audit') || '审计日志'},
+        {id:'webhook',icon:'🔔',label:tk('page_webhook') || 'Webhook'},
       ]},
     ];
   }, [tk]);
+
+  const currentTabLabel = React.useMemo(function () {
+    for (var i = 0; i < MENU_GROUPS.length; i++) {
+      var items = MENU_GROUPS[i].items || [];
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].id === tab) return items[j].label;
+      }
+    }
+    return tab;
+  }, [MENU_GROUPS, tab]);
+
+  const goTab = React.useCallback(function (id, opts) {
+    opts = opts || {};
+    if (!id || !ALL_PAGES || !Object.prototype.hasOwnProperty.call(ALL_PAGES, id)) return;
+    var next = '#' + id;
+    var cur = '';
+    try { cur = location.hash || ''; } catch (e) {}
+    if (cur === next && !opts.force) {
+      setTab(id);
+      return;
+    }
+    setTab(id);
+    try {
+      if (opts.replace) history.replaceState({ sopTab: id }, '', next);
+      else history.pushState({ sopTab: id }, '', next);
+    } catch (e2) {}
+  }, []);
+
+  const toggleGroup = React.useCallback(function (gid) {
+    setGroupOpen(function (prev) {
+      var next = Object.assign({}, prev);
+      next[gid] = !prev[gid];
+      try { localStorage.setItem('devdash-nav-groups', JSON.stringify(next)); } catch (e) {}
+      return next;
+    });
+  }, []);
 
   const pingApi = React.useCallback(function () {
     var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -2861,11 +3113,26 @@ function AppV3() {
   }, []);
 
   React.useEffect(function () {
+    function onPop() {
+      try {
+        var h = (location.hash || '').replace(/^#/, '').trim();
+        if (h && ALL_PAGES && Object.prototype.hasOwnProperty.call(ALL_PAGES, h)) setTab(h);
+        else if (!h) setTab('dashboard');
+      } catch (e) {}
+    }
+    window.addEventListener('popstate', onPop);
+    return function () { window.removeEventListener('popstate', onPop); };
+  }, []);
+
+  React.useEffect(function () {
     try {
-      var cur = (location.hash || '').replace(/^#/, '');
-      if (cur !== tab) history.replaceState(null, '', '#' + tab);
+      var h = (location.hash || '').replace(/^#/, '').trim();
+      if (!h || !Object.prototype.hasOwnProperty.call(ALL_PAGES, h)) {
+        history.replaceState({ sopTab: 'dashboard' }, '', '#dashboard');
+        setTab('dashboard');
+      }
     } catch (e) {}
-  }, [tab]);
+  }, []);
 
   React.useEffect(() => {
     const onToast = (e) => {
@@ -2882,14 +3149,117 @@ function AppV3() {
   React.useEffect(() => {
     const onNav = (e) => {
       const id = e.detail && e.detail.tab;
-      if (id && typeof id === 'string') setTab(id);
+      if (id && typeof id === 'string') goTab(id);
     };
     window.addEventListener('app-set-tab', onNav);
     return () => window.removeEventListener('app-set-tab', onNav);
-  }, []);
+  }, [goTab]);
 
-  const exportAll = () => window.open(`${API}/export`, '_blank');
+  const closeDataHub = () => {
+    setDataHubOpen(false);
+    setImportPayload(null);
+    setImportPreview(null);
+    try { if (importFileRef.current) importFileRef.current.value = ''; } catch (e) {}
+  };
+  const setExpKey = (key, val) => setExpSel((s) => Object.assign({}, s, { [key]: val }));
+  const selectAllExport = (on) => {
+    setExpSel({
+      requirements: !!on, tasks: !!on, issues: !!on, sprints: !!on, agent_reflections: !!on,
+    });
+  };
+  const runExportDownload = () => {
+    var allOn = expSel.requirements && expSel.tasks && expSel.issues && expSel.sprints && expSel.agent_reflections;
+    var qs = '';
+    if (!allOn) {
+      var mods = ['requirements', 'tasks', 'issues', 'sprints', 'agent_reflections'].filter(function (k) { return expSel[k]; });
+      if (mods.length) qs = '?modules=' + encodeURIComponent(mods.join(','));
+    }
+    apiFetch(API + '/export' + qs, { timeoutMs: 120000 })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) { throw new Error(t || 'HTTP ' + r.status); });
+        return r.blob();
+      })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'sop-export.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast(tk('dh_toast_export_ok'), 'ok');
+      })
+      .catch(function (e) { showToast((e && e.message) || String(e), 'err'); });
+  };
+  const onImportFileChange = (e) => {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var j = JSON.parse(String(reader.result || ''));
+        setImportPayload(j);
+        setImportPreview({
+          requirements: Array.isArray(j.requirements) ? j.requirements.length : 0,
+          tasks: Array.isArray(j.tasks) ? j.tasks.length : 0,
+          issues: Array.isArray(j.issues) ? j.issues.length : 0,
+          sprints: Array.isArray(j.sprints) ? j.sprints.length : 0,
+        });
+      } catch (err) {
+        setImportPayload(null);
+        setImportPreview(null);
+        showToast(tk('dh_err_json'), 'err');
+      }
+    };
+    reader.readAsText(f);
+  };
+  const runImportMerge = () => {
+    if (!canDataHubImport) {
+      showToast(tk('dh_import_forbidden'), 'err');
+      return;
+    }
+    if (!importPayload) { showToast(tk('dh_err_json'), 'err'); return; }
+    var body = { mode: 'merge' };
+    ['requirements', 'tasks', 'issues', 'sprints'].forEach(function (k) {
+      if (Array.isArray(importPayload[k])) body[k] = importPayload[k];
+    });
+    apiFetch(API + '/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      timeoutMs: 120000,
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          var msg = (res.d && (res.d.detail || res.d.message)) || tk('dh_toast_import_fail');
+          showToast(typeof msg === 'string' ? msg : tk('dh_toast_import_fail'), 'err');
+          return;
+        }
+        var c = res.d && res.d.counts ? res.d.counts : {};
+        showToast(tk('dh_toast_import_ok') + ' · ' + JSON.stringify(c), 'ok');
+        closeDataHub();
+      })
+      .catch(function () { showToast(tk('dh_toast_import_fail'), 'err'); });
+  };
+
   const apiOrigin = () => String(API).replace(/\/api\/?$/, '');
+  const doLogout = () => {
+    var token = '';
+    try { token = localStorage.getItem('sop-token') || ''; } catch (e) {}
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    fetch(API + '/auth/logout', { method: 'POST', headers: headers })
+      .catch(function () {})
+      .finally(function () {
+        try {
+          localStorage.removeItem('sop-token');
+          localStorage.removeItem('sop-user');
+        } catch (e) {}
+        window.location.replace('login.html');
+      });
+  };
   const toggleCollapsed = () => setCollapsed((c) => {
     const n = !c;
     try { localStorage.setItem('devdash-sidebar-collapsed', n ? '1' : '0'); } catch (_) {}
@@ -2909,8 +3279,9 @@ function AppV3() {
         <ul style={{fontSize:13,color:'var(--text)',lineHeight:1.85,margin:'8px 0 0 18px',padding:0}}>
           <li><span className="help-kbd">Ctrl / ⌘ + /</span> 打开或关闭本帮助（在输入框内不触发）</li>
           <li><span className="help-kbd">Esc</span> 关闭本帮助</li>
+          <li>侧栏按模块分组，可点击分组标题<strong>展开 / 收起</strong>（状态写入 localStorage）；顶栏 <span className="help-kbd">←</span> 与浏览器<strong>后退</strong>可回到上一页签（使用路由历史，不再每次覆盖地址栏）</li>
           <li>支持浏览器地址 <span className="help-kbd">#页签</span> 直达（如 <code style={{fontSize:11}}>#vibe</code>、<code style={{fontSize:11}}>#plan</code>），便于分享与书签</li>
-          <li>顶栏可选择<strong>主题</strong>与<strong>语言</strong>；<strong>⬇</strong> 导出 JSON；折叠状态会写入 localStorage</li>
+          <li>顶栏 <strong>数据港</strong>：导出 JSON 任意登录用户可用；<strong>合并导入</strong>仅限超级管理员、租户管理员、项目管理员或运维角色</li>
           <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录</li>
         </ul>
         <div className="modal-actions" style={{flexWrap:'wrap',gap:8}}>
@@ -2920,9 +3291,44 @@ function AppV3() {
         </div>
       </div>
     </div>}
+    {dataHubOpen && <div className="modal-bg" onClick={closeDataHub}>
+      <div className="modal datahub-modal" style={{ width: 540, maxWidth: '94vw' }} onClick={(e) => e.stopPropagation()}>
+        <h3>{tk('dh_title')}</h3>
+        <p className="datahub-intro">{tk('dh_intro')}</p>
+        <h4>{tk('dh_sec_export')}</h4>
+        {['requirements', 'tasks', 'issues', 'sprints', 'agent_reflections'].map((key) => (
+          <label key={key} className="datahub-row">
+            <input type="checkbox" checked={!!expSel[key]} onChange={(e) => setExpKey(key, e.target.checked)} />
+            <span className="dh-label">
+              <strong>{tk('dh_mod_' + key)}</strong>
+              <span>{tk('dh_mod_' + key + '_d')}</span>
+            </span>
+          </label>
+        ))}
+        <div className="datahub-actions">
+          <button type="button" className="btn btn-sm btn-muted" onClick={() => selectAllExport(true)}>{tk('dh_sel_all')}</button>
+          <button type="button" className="btn btn-sm btn-muted" onClick={() => selectAllExport(false)}>{tk('dh_sel_none')}</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={runExportDownload}>{tk('dh_btn_download')}</button>
+        </div>
+        <h4>{tk('dh_sec_import')}</h4>
+        <p className="datahub-note">{tk('dh_import_hint')}</p>
+        <p className="datahub-note" style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 10, marginTop: 8 }}>{tk('dh_import_role_gate')}</p>
+        <input ref={importFileRef} type="file" accept=".json,application/json,.txt" style={{ display: 'none' }} onChange={onImportFileChange} />
+        <div className="datahub-actions">
+          <button type="button" className="btn btn-sm btn-muted" disabled={!canDataHubImport} title={!canDataHubImport ? tk('dh_import_forbidden') : ''} onClick={() => importFileRef.current && importFileRef.current.click()}>{tk('dh_pick_file')}</button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={!canDataHubImport || !importPayload} title={!canDataHubImport ? tk('dh_import_forbidden') : ''} onClick={runImportMerge}>{tk('dh_btn_import')}</button>
+        </div>
+        {importPreview && <div className="datahub-preview"><strong>{tk('dh_preview')}</strong> · requirements {importPreview.requirements} · tasks {importPreview.tasks} · issues {importPreview.issues} · sprints {importPreview.sprints}</div>}
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="btn btn-cancel" onClick={closeDataHub}>{tk('dh_close')}</button>
+        </div>
+      </div>
+    </div>}
     {/* 顶栏 */}
     <div className="topbar">
       <button type="button" className="btn-icon" onClick={toggleCollapsed} title={tk('topbar_toggle_sidebar')}>☰</button>
+      <button type="button" className="btn-icon" onClick={() => { try { window.history.back(); } catch (e) {} }} title={tk('nav_back')}>←</button>
+      <span className="topbar-crumb" aria-current="page">{currentTabLabel}</span>
       <div className="topbar-brand" title="ai-team-devops">
         <img className="topbar-logo-img" src="/assets/brand-mark.png" width="32" height="32" alt="" decoding="async" fetchPriority="high"/>
         <span className="topbar-logo">ai-team-devops</span>
@@ -2934,6 +3340,7 @@ function AppV3() {
         {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}
       </div>
       <div className="topbar-right">
+        <div className="topbar-tools">
         <label className="text-tertiary" style={{fontSize:10,marginRight:2}} htmlFor="devdash-theme-sel">{tk('topbar_theme')}</label>
         <select id="devdash-theme-sel" className="topbar-select" value={theme} onChange={(e) => setTheme(e.target.value)} aria-label={tk('topbar_theme')}>
           <option value="dark">{tk('theme_dark')}</option>
@@ -2947,27 +3354,46 @@ function AppV3() {
           <option value="en">English</option>
         </select>
         <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title={tk('topbar_help')}>?</button>
-        <button type="button" className="btn-icon" onClick={exportAll} title={tk('topbar_export')}>⬇</button>
+        <button type="button" className="topbar-hub-btn" onClick={() => setDataHubOpen(true)} title={tk('dh_title')}>
+          <span className="topbar-hub-ic" aria-hidden="true">⇄</span>
+          <span>{tk('topbar_data_hub')}</span>
+        </button>
+        </div>
+        <div className="topbar-user">
+          {window.__CURRENT_USER__ && <span style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>
+            👤 {window.__CURRENT_USER__.username}
+            <span style={{fontSize:10,color:'var(--text3)',marginLeft:4}}>[{(() => { var r = String(window.__CURRENT_USER__.role || ''); var k = 'role_' + r; var s = tk(k); return s === k ? r : s; })()}]</span>
+          </span>}
+          <button type="button" className="btn btn-sm btn-muted" onClick={doLogout} title={tk('topbar_logout')}>{tk('topbar_logout')}</button>
+        </div>
       </div>
     </div>
 
     <div className="body-wrap">
       {/* 左侧菜单 */}
       <div className={`sidebar scroll-slim${collapsed?' collapsed':''}`}>
-        {MENU_GROUPS.map((g,gi) => <div key={gi} className="sidebar-group">
-          {gi > 0 && <div className="sidebar-divider"/>}
-          <div className="sidebar-group-label">{g.label}</div>
-          {g.items.map(item => <div key={item.id}
-            role="button"
-            tabIndex={0}
-            className={`sidebar-item${tab===item.id?' active':''}`}
-            onClick={()=>setTab(item.id)}
-            onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); setTab(item.id);} }}
-            title={collapsed ? item.label : ''}>
-            <span className="sidebar-icon">{item.icon}</span>
-            <span>{item.label}</span>
-          </div>)}
-        </div>)}
+        {MENU_GROUPS.map((g, gi) => {
+          var open = groupOpen[g.id] !== false;
+          return <div key={g.id} className="sidebar-group">
+            {gi > 0 && <div className="sidebar-divider"/>}
+            {!collapsed ? (
+              <button type="button" className="sidebar-group-head" onClick={() => toggleGroup(g.id)} aria-expanded={open} title={open ? tk('sidebar_collapse') : tk('sidebar_expand')}>
+                <span className="sidebar-chevron" aria-hidden="true">{open ? '▼' : '▸'}</span>
+                <span>{g.label}</span>
+              </button>
+            ) : null}
+            {(collapsed || open) && g.items.map(item => <div key={item.id}
+              role="button"
+              tabIndex={0}
+              className={`sidebar-item${tab===item.id?' active':''}`}
+              onClick={()=>goTab(item.id)}
+              onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); goTab(item.id);} }}
+              title={collapsed ? item.label : ''}>
+              <span className="sidebar-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </div>)}
+          </div>;
+        })}
       </div>
 
       {/* 主内容 */}

@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('devdash-theme') || localStorage.getItem('theme') || 'dark';
+    if (t !== 'light' && t !== 'dim' && t !== 'contrast' && t !== 'dark') t = 'dark';
+    var lg = localStorage.getItem('devdash-lang') || 'zh';
+    document.documentElement.setAttribute('data-theme', t);
+    document.documentElement.setAttribute('lang', lg === 'en' ? 'en' : 'zh-CN');
+    window.__LOGIN_LANG__ = lg;
+  } catch (e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<title>登录 — ai-team-devops</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* 与 index.html 四主题语义对齐（登录页独立视觉变量） */
+:root,[data-theme=dark]{
+  --bg:#0f172a;--bg2:rgba(30,41,59,.78);--border:rgba(59,130,246,.22);
+  --text:#e8eef7;--text2:#94a3b8;--text3:#64748b;
+  --accent:#3b82f6;--accent2:#22d3ee;--accent-hot:#38bdf8;
+  --input-bg:rgba(15,23,42,.72);--shadow:0 0 0 1px rgba(59,130,246,.12),0 28px 90px rgba(0,0,0,.45);
+  --glass:linear-gradient(145deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,.02) 40%,rgba(59,130,246,.06) 100%);
+  --hero-dim:rgba(148,163,184,.72);--mesh-a:rgba(59,130,246,.22);--mesh-b:rgba(129,140,248,.2);--mesh-c:rgba(34,211,238,.12);
+  --grid-line:rgba(59,130,246,.08);--orb-1:rgba(59,130,246,.42);--orb-2:rgba(99,102,241,.38);--orb-3:rgba(34,211,238,.28);
+}
+[data-theme=dim]{
+  --bg:#0c1220;--bg2:rgba(21,29,46,.82);--border:rgba(56,189,248,.2);
+  --text:#e6edf5;--text2:#8b9cb3;--text3:#5c6b80;
+  --accent:#3b82f6;--accent2:#a78bfa;--accent-hot:#2dd4bf;
+  --input-bg:rgba(10,16,28,.78);--shadow:0 0 0 1px rgba(99,102,241,.14),0 28px 90px rgba(0,0,0,.55);
+  --glass:linear-gradient(145deg,rgba(255,255,255,.05) 0%,rgba(99,102,241,.06) 100%);
+  --hero-dim:rgba(139,156,179,.68);--mesh-a:rgba(56,189,248,.2);--mesh-b:rgba(167,139,250,.18);--mesh-c:rgba(45,212,191,.1);
+  --grid-line:rgba(99,102,241,.1);--orb-1:rgba(56,189,248,.38);--orb-2:rgba(167,139,250,.32);--orb-3:rgba(45,212,191,.22);
+}
+[data-theme=light]{
+  --bg:#eef2f7;--bg2:rgba(255,255,255,.9);--border:rgba(59,130,246,.28);
+  --text:#0f172a;--text2:#334155;--text3:#64748b;
+  --accent:#2563eb;--accent2:#7c3aed;--accent-hot:#0891b2;
+  --input-bg:rgba(255,255,255,.95);--shadow:0 0 0 1px rgba(59,130,246,.12),0 20px 56px rgba(15,23,42,.08);
+  --glass:linear-gradient(145deg,rgba(255,255,255,.96) 0%,rgba(241,245,249,.9) 100%);
+  --hero-dim:rgba(51,65,85,.78);--mesh-a:rgba(37,99,235,.14);--mesh-b:rgba(124,58,237,.12);--mesh-c:rgba(6,182,212,.1);
+  --grid-line:rgba(59,130,246,.1);--orb-1:rgba(59,130,246,.2);--orb-2:rgba(124,58,237,.16);--orb-3:rgba(6,182,212,.12);
+}
+[data-theme=contrast]{
+  --bg:#ffffff;--bg2:#f3f4f6;--border:#000000;
+  --text:#000000;--text2:#1a1a1a;--text3:#374151;
+  --accent:#0000c0;--accent2:#000080;--accent-hot:#0000c0;
+  --input-bg:#ffffff;--shadow:0 0 0 2px #000,0 12px 40px rgba(0,0,0,.12);
+  --glass:linear-gradient(180deg,#ffffff 0%,#f3f4f6 100%);
+  --hero-dim:#1f2937;--mesh-a:rgba(0,0,192,.06);--mesh-b:rgba(0,0,128,.05);--mesh-c:rgba(0,0,0,.04);
+  --grid-line:rgba(0,0,0,.12);--orb-1:rgba(0,0,192,.08);--orb-2:rgba(0,0,128,.06);--orb-3:rgba(0,0,0,.05);
+}
+
+html,body{min-height:100%;height:100%}
+body{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--text);
+  overflow-x:hidden;
+  transition:color .25s,background .25s;
+}
+
+.login-bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--bg)}
+.login-bg-mesh{
+  position:absolute;inset:-40%;
+  background:
+    radial-gradient(ellipse 78% 52% at 18% 38%,var(--mesh-a),transparent 56%),
+    radial-gradient(ellipse 58% 44% at 82% 18%,var(--mesh-b),transparent 52%),
+    radial-gradient(ellipse 48% 58% at 58% 88%,var(--mesh-c),transparent 46%),
+    radial-gradient(ellipse 100% 100% at 50% 50%,rgba(15,23,42,.35),transparent 72%);
+  animation:meshMove 20s ease-in-out infinite alternate;
+}
+[data-theme=light] .login-bg-mesh{
+  background:
+    radial-gradient(ellipse 78% 52% at 15% 36%,var(--mesh-a),transparent 56%),
+    radial-gradient(ellipse 56% 42% at 86% 22%,var(--mesh-b),transparent 52%),
+    radial-gradient(ellipse 46% 52% at 54% 86%,var(--mesh-c),transparent 48%),
+    radial-gradient(ellipse 100% 100% at 50% 50%,rgba(255,255,255,.55),transparent 68%);
+}
+[data-theme=contrast] .login-bg-mesh{animation-duration:28s;opacity:.85}
+@keyframes meshMove{
+  0%{transform:translate(0,0) scale(1)}
+  100%{transform:translate(-3%,2.5%) scale(1.04)}
+}
+.login-bg-beam{
+  position:absolute;inset:0;pointer-events:none;opacity:.12;
+  background:linear-gradient(115deg,transparent 0%,color-mix(in srgb,var(--accent) 35%,transparent) 42%,transparent 44%,color-mix(in srgb,var(--accent2) 28%,transparent) 58%,transparent 62%);
+  background-size:200% 200%;
+  animation:beamDrift 22s ease-in-out infinite;
+}
+[data-theme=light] .login-bg-beam{opacity:.1}
+[data-theme=contrast] .login-bg-beam{opacity:.06}
+@keyframes beamDrift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+
+.login-bg-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(var(--grid-line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(ellipse 88% 72% at 50% 44%,#000 18%,transparent 78%);
+  animation:gridFade 5s ease-in-out infinite alternate;
+}
+@keyframes gridFade{0%{opacity:.5}100%{opacity:.88}}
+.login-bg-scan{
+  position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--accent) 12%,transparent) 50%,transparent 100%);
+  background-size:100% 300%;
+  animation:scanMove 12s linear infinite;
+}
+@keyframes scanMove{0%{background-position:0 -100%}100%{background-position:0 100%}}
+.login-bg-noise{
+  position:absolute;inset:0;opacity:.028;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-theme=contrast] .login-bg-noise{opacity:.04}
+.login-bg-orbs span{
+  position:absolute;border-radius:50%;filter:blur(86px);opacity:.42;
+  animation:orbFloat 16s ease-in-out infinite;
+}
+.login-bg-orbs span:nth-child(1){width:min(40vw,360px);height:min(40vw,360px);left:-6%;top:8%;background:var(--orb-1)}
+.login-bg-orbs span:nth-child(2){width:min(36vw,320px);height:min(36vw,320px);right:-4%;bottom:6%;background:var(--orb-2);animation-delay:-6s}
+.login-bg-orbs span:nth-child(3){width:min(26vw,240px);height:min(26vw,240px);left:42%;bottom:18%;background:var(--orb-3);animation-delay:-9s}
+@keyframes orbFloat{
+  0%,100%{transform:translate(0,0) scale(1)}
+  50%{transform:translate(3%,-2.5%) scale(1.06)}
+}
+
+.topbar{
+  position:fixed;top:0;right:0;z-index:50;display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px 12px;
+  padding:12px 18px;max-width:100%;
+}
+.topbar-lbl{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-right:-4px}
+.topbar select{
+  padding:6px 10px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg2);color:var(--text);font-size:12px;cursor:pointer;outline:none;
+  backdrop-filter:blur(12px);
+}
+.topbar select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.login-layout{
+  position:relative;z-index:1;min-height:100%;
+  display:flex;align-items:stretch;justify-content:center;
+  gap:clamp(28px,5vw,64px);padding:clamp(76px,11vh,108px) clamp(20px,4vw,48px) 44px;
+  max-width:1280px;margin:0 auto;
+}
+@media(max-width:900px){
+  .login-layout{flex-direction:column;align-items:center;padding-top:88px}
+  .login-hero{max-width:520px;text-align:center;align-items:center}
+  .hero-copy{align-items:center;text-align:center}
+  .hero-badge{align-self:center}
+  .hero-bento{grid-template-columns:1fr !important}
+  .hero-bento-tile{text-align:left}
+}
+
+.login-hero{
+  flex:1;min-width:0;max-width:min(100%,640px);display:flex;flex-direction:column;justify-content:center;gap:22px;
+  padding:8px 0;position:relative;
+}
+.hero-glow{
+  position:absolute;left:-25%;top:6%;width:min(100%,520px);height:min(52vh,420px);
+  background:
+    radial-gradient(ellipse 70% 55% at 30% 35%,color-mix(in srgb,var(--accent) 26%,transparent),transparent 62%),
+    radial-gradient(ellipse 55% 50% at 75% 55%,color-mix(in srgb,var(--accent2) 20%,transparent),transparent 58%);
+  filter:blur(48px);pointer-events:none;opacity:.85;z-index:0;
+}
+[data-theme=contrast] .hero-glow{opacity:.4;filter:blur(36px)}
+.hero-inner{
+  position:relative;z-index:1;width:100%;min-width:0;
+  display:flex;flex-direction:column;gap:18px;
+}
+.hero-copy{
+  width:100%;min-width:0;display:flex;flex-direction:column;gap:12px;align-items:stretch;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:8px;align-self:flex-start;
+  font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--accent-hot);padding:8px 16px;border-radius:999px;
+  border:1px solid color-mix(in srgb,var(--accent) 42%,transparent);
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 14%,transparent),color-mix(in srgb,var(--accent2) 8%,transparent));
+  box-shadow:0 0 32px color-mix(in srgb,var(--accent) 16%,transparent),inset 0 1px 0 rgba(255,255,255,.06);
+}
+[data-theme=light] .hero-badge{box-shadow:0 4px 20px rgba(37,99,235,.1)}
+[data-theme=contrast] .hero-badge{border-width:2px;box-shadow:none}
+.hero-badge .pulse{
+  width:7px;height:7px;border-radius:50%;background:var(--accent-hot);
+  box-shadow:0 0 14px var(--accent);animation:pulseDot 1.8s ease-in-out infinite;
+}
+@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.86)}}
+
+.hero-kicker{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:700;letter-spacing:.24em;
+  color:var(--text3);text-transform:uppercase;margin-top:-4px;
+}
+
+.hero-headline{margin:2px 0 4px}
+.hero-title{margin:0}
+.hero-title .hero-line1{
+  display:block;font-size:clamp(22px,3.8vw,38px);font-weight:900;letter-spacing:-.04em;line-height:1.12;
+  background:linear-gradient(100deg,var(--accent) 0%,#818cf8 40%,var(--accent2) 78%,#22d3ee 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+[data-theme=light] .hero-title .hero-line1{
+  background:linear-gradient(100deg,#1d4ed8 0%,#5b21b6 48%,#0e7490 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+[data-theme=contrast] .hero-title .hero-line1{
+  background:none;-webkit-text-fill-color:var(--accent);color:var(--accent);
+}
+.hero-title .hero-line2{
+  display:block;margin-top:8px;font-size:clamp(15px,2.1vw,20px);font-weight:700;letter-spacing:-.015em;
+  color:var(--text2);line-height:1.35;
+}
+.hero-subline{
+  font-size:13px;font-weight:600;color:var(--text2);letter-spacing:.04em;margin-top:10px;
+  padding-left:2px;border-left:3px solid color-mix(in srgb,var(--accent) 65%,transparent);
+  padding:8px 0 8px 12px;line-height:1.45;
+}
+
+.hero-desc{
+  font-size:14.5px;line-height:1.75;color:var(--hero-dim);max-width:none;width:100%;box-sizing:border-box;font-weight:450;
+  padding:14px 16px;border-radius:16px;
+  background:color-mix(in srgb,var(--bg2) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--border) 70%,transparent);
+  backdrop-filter:blur(10px);
+}
+
+.hero-bento{
+  display:grid;
+  width:100%;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  margin-top:0;
+  align-items:stretch;
+}
+@media(max-width:1100px) and (min-width:901px){
+  .hero-bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+.hero-bento-tile{
+  position:relative;border-radius:18px;padding:17px 16px 15px;
+  border:1px solid color-mix(in srgb,var(--border) 85%,transparent);
+  background:linear-gradient(165deg,color-mix(in srgb,var(--bg2) 92%,transparent) 0%,color-mix(in srgb,var(--bg2) 55%,transparent) 100%);
+  backdrop-filter:blur(14px) saturate(1.2);
+  box-shadow:0 4px 28px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.04);
+  transition:transform .22s ease,border-color .22s,box-shadow .22s;
+  overflow:hidden;
+  min-height:0;
+}
+.hero-bento-tile::before{
+  content:"";position:absolute;inset:0;border-radius:18px;padding:1px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 40%,transparent),transparent 55%,color-mix(in srgb,var(--accent2) 30%,transparent));
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.45;
+}
+.hero-bento-tile:hover{
+  transform:translateY(-3px);
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--border));
+  box-shadow:0 12px 40px color-mix(in srgb,var(--accent) 14%,transparent),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.hero-bento-req::after{
+  content:"01";position:absolute;top:12px;right:14px;font-family:ui-monospace,monospace;font-size:10px;font-weight:800;
+  letter-spacing:.12em;color:var(--text3);opacity:.55;
+}
+.hero-bento-dev::after{
+  content:"02";position:absolute;top:12px;right:14px;font-family:ui-monospace,monospace;font-size:10px;font-weight:800;
+  letter-spacing:.12em;color:var(--text3);opacity:.55;
+}
+.hero-bento-orc::after{
+  content:"03";position:absolute;top:12px;right:14px;font-family:ui-monospace,monospace;font-size:10px;font-weight:800;
+  letter-spacing:.12em;color:var(--text3);opacity:.55;
+}
+.hero-bento-ops::after{
+  content:"04";position:absolute;top:12px;right:14px;font-family:ui-monospace,monospace;font-size:10px;font-weight:800;
+  letter-spacing:.12em;color:var(--text3);opacity:.55;
+}
+.hero-bento-eyebrow{
+  font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:var(--accent-hot);margin-bottom:6px;
+}
+.hero-bento-h{
+  font-size:16px;font-weight:800;letter-spacing:-.02em;color:var(--text);margin-bottom:6px;line-height:1.2;
+}
+.hero-bento-p{font-size:12px;color:var(--text2);line-height:1.55;margin:0}
+[data-theme=contrast] .hero-bento-tile{border-width:2px}
+
+.login-panel-wrap{flex:0 1 440px;width:100%;max-width:440px;display:flex;align-items:center}
+
+.card{
+  position:relative;width:100%;border-radius:22px;padding:40px 34px;
+  background:var(--glass);backdrop-filter:blur(22px) saturate(1.35);
+  border:1px solid var(--border);box-shadow:var(--shadow);
+  transition:background .25s,border-color .25s,box-shadow .3s;
+}
+.card::before{
+  content:"";position:absolute;inset:0;border-radius:22px;padding:1px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 55%,transparent),color-mix(in srgb,var(--accent2) 40%,transparent),transparent 65%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;opacity:.5;
+}
+[data-theme=contrast] .card::before{opacity:.9}
+.card:hover{box-shadow:var(--shadow),0 0 40px color-mix(in srgb,var(--accent) 12%,transparent)}
+
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:26px;position:relative;z-index:1}
+.logo img{width:42px;height:42px;border-radius:14px;
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent),0 10px 36px color-mix(in srgb,var(--accent) 22%,transparent)}
+.logo-text{font-size:19px;font-weight:800;letter-spacing:-.02em;color:var(--text)}
+.logo-badge{font-size:10px;font-weight:700;letter-spacing:.05em;padding:4px 10px;border-radius:999px;
+  border:1px solid var(--border);background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent-hot)}
+[data-theme=contrast] .logo-badge{border-width:2px;color:var(--accent)}
+
+h2{font-size:21px;font-weight:800;margin-bottom:6px;color:var(--text);letter-spacing:-.02em;position:relative;z-index:1}
+.subtitle{font-size:13px;color:var(--text3);margin-bottom:22px;line-height:1.55;position:relative;z-index:1}
+label{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text2);margin-bottom:6px;margin-top:14px;position:relative;z-index:1}
+input{
+  width:100%;padding:11px 14px;border-radius:11px;border:1px solid var(--border);
+  background:var(--input-bg);color:var(--text);font-size:14px;outline:none;transition:border .2s,box-shadow .2s;
+  position:relative;z-index:1;
+}
+input:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+.pw-wrap{position:relative;z-index:1}
+.pw-wrap input{padding-right:44px}
+.pw-eye{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid var(--border);border-radius:9px;
+  cursor:pointer;color:var(--text2);font-size:14px;padding:6px 8px;line-height:1;transition:background .15s,color .15s;
+}
+.pw-eye:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}
+
+.btn{
+  width:100%;margin-top:24px;padding:13px 16px;border-radius:12px;border:none;position:relative;overflow:hidden;
+  background:linear-gradient(105deg,#1d4ed8,#2563eb,#0891b2);background-size:200% 100%;
+  color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:filter .2s,transform .15s;
+  box-shadow:0 4px 26px color-mix(in srgb,var(--accent) 45%,transparent),inset 0 1px 0 rgba(255,255,255,.18);
+  animation:btnShimmer 9s ease infinite;z-index:1;
+}
+@keyframes btnShimmer{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.btn:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{background:var(--border);animation:none;box-shadow:none;cursor:not-allowed;color:var(--text3)}
+.btn-init{background:linear-gradient(105deg,#5b21b6,#7c3aed,#a78bfa);background-size:200% 100%;
+  box-shadow:0 4px 26px rgba(91,33,182,.38),inset 0 1px 0 rgba(255,255,255,.14)}
+[data-theme=contrast] .btn{background:#0000c0;animation:none}
+[data-theme=contrast] .btn-init{background:#000080;animation:none}
+
+.msg{margin-top:14px;padding:11px 14px;border-radius:10px;font-size:13px;border:1px solid;display:none;position:relative;z-index:1}
+.msg.err{background:rgba(239,68,68,.1);color:#dc2626;border-color:rgba(239,68,68,.3)}
+.msg.ok{background:rgba(34,197,94,.1);color:#15803d;border-color:rgba(34,197,94,.28)}
+.init-banner{
+  position:relative;z-index:1;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent2) 15%,transparent),color-mix(in srgb,var(--accent) 12%,transparent));
+  border:1px solid var(--border);border-radius:12px;padding:13px 16px;margin-bottom:20px;font-size:13px;color:var(--text2);line-height:1.55;
+}
+.hint{font-size:12px;color:var(--text3);margin-top:16px;text-align:center;position:relative;z-index:1}
+.loading{text-align:center;color:var(--text2);padding:48px 0;font-size:14px;letter-spacing:.02em;position:relative;z-index:1}
+.loading::after{
+  content:"";display:block;width:32px;height:32px;margin:16px auto 0;border-radius:50%;
+  border:2px solid color-mix(in srgb,var(--accent) 25%,transparent);border-top-color:var(--accent);
+  animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+#tenant-row{display:none}
+
+a#forgot-link,a#back-login-link{
+  font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;
+  transition:opacity .15s;
+}
+a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underline}
+
+@media (prefers-reduced-motion: reduce){
+  .login-bg-mesh,.login-bg-grid,.login-bg-scan,.login-bg-beam,.login-bg-orbs span,.btn,.hero-badge .pulse,.loading::after{animation:none !important}
+  .btn{background:#2563eb}
+  .btn-init{background:#7c3aed}
+}
+</style>
+</head>
+<body>
+<div class="login-bg" aria-hidden="true">
+  <div class="login-bg-mesh"></div>
+  <div class="login-bg-grid"></div>
+  <div class="login-bg-scan"></div>
+  <div class="login-bg-noise"></div>
+  <div class="login-bg-beam" aria-hidden="true"></div>
+  <div class="login-bg-orbs"><span></span><span></span><span></span></div>
+</div>
+
+<div class="topbar">
+  <label class="topbar-lbl" for="theme-sel" data-i18n="topbar_theme">外观主题</label>
+  <select id="theme-sel" title="Theme">
+    <option value="dark" data-i18n="theme_dark">深色</option>
+    <option value="dim" data-i18n="theme_dim">柔深</option>
+    <option value="light" data-i18n="theme_light">浅色</option>
+    <option value="contrast" data-i18n="theme_contrast">高对比</option>
+  </select>
+  <label class="topbar-lbl" for="lang-sel" data-i18n="topbar_lang">界面语言</label>
+  <select id="lang-sel" aria-label="Language">
+    <option value="zh">中文</option>
+    <option value="en">English</option>
+  </select>
+</div>
+
+<div class="login-layout">
+  <aside class="login-hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <div class="hero-copy">
+      <div class="hero-badge"><span class="pulse" aria-hidden="true"></span><span data-i18n="hero_badge">核心能力</span></div>
+      <p class="hero-kicker" data-i18n="hero_kicker">REQUIREMENTS × AI</p>
+      <div class="hero-headline">
+        <h1 class="hero-title">
+          <span class="hero-line1" data-i18n="hero_title_line1">智能需求管理与 AI 原生开发</span>
+          <span class="hero-line2" data-i18n="hero_title_line2">一体化中枢</span>
+        </h1>
+        <p class="hero-subline" data-i18n="hero_subline">Spec 驱动 · 看板迭代 · Vibe 编码 · 多 Agent 编排与可观测运维</p>
+      </div>
+      <p class="hero-desc" data-i18n="hero_desc">描述</p>
+      </div>
+      <div class="hero-bento" aria-label="capabilities">
+        <article class="hero-bento-tile hero-bento-req">
+          <div class="hero-bento-eyebrow" data-i18n="hero_bn_req_e">需求智能</div>
+          <div class="hero-bento-h" data-i18n="hero_bn_req_h">全链路需求管理</div>
+          <p class="hero-bento-p" data-i18n="hero_bn_req_p">从澄清、拆解、优先级与看板到验收与置信度回流；与迭代、任务、缺陷天然对齐。</p>
+        </article>
+        <article class="hero-bento-tile hero-bento-dev">
+          <div class="hero-bento-eyebrow" data-i18n="hero_bn_dev_e">AI 工程</div>
+          <div class="hero-bento-h" data-i18n="hero_bn_dev_h">智能辅助开发</div>
+          <p class="hero-bento-p" data-i18n="hero_bn_dev_p">Vibe 交互式编码、规范驱动（Spec）与评审闭环；让 AI 真正落在可交付代码与可验证结果上。</p>
+        </article>
+        <article class="hero-bento-tile hero-bento-orc">
+          <div class="hero-bento-eyebrow" data-i18n="hero_bn_orc_e">编排</div>
+          <div class="hero-bento-h" data-i18n="hero_bn_orc_h">多 Agent</div>
+          <p class="hero-bento-p" data-i18n="hero_bn_orc_p">工作流定义、开发工具编排与 MCP 接入，把多 Agent 串成可重复执行的交付链。</p>
+        </article>
+        <article class="hero-bento-tile hero-bento-ops">
+          <div class="hero-bento-eyebrow" data-i18n="hero_bn_ops_e">运维</div>
+          <div class="hero-bento-h" data-i18n="hero_bn_ops_h">可观测</div>
+          <p class="hero-bento-p" data-i18n="hero_bn_ops_p">健康探活、发布版本、运行态与审计、数据港备份导入，在一面屏里把控运维与可观测。</p>
+        </article>
+      </div>
+    </div>
+  </aside>
+
+  <div class="login-panel-wrap">
+  <div class="card">
+    <div class="logo">
+      <img src="/assets/brand-mark.png" alt="" onerror="this.style.display='none'">
+      <span class="logo-text">ai-team-devops</span>
+      <span class="logo-badge" id="mode-badge"></span>
+    </div>
+
+    <div id="loading" class="loading" data-i18n="checking">检测中...</div>
+
+    <div id="init-section" style="display:none">
+      <div class="init-banner" data-i18n="init_banner">首次使用，请创建管理员账号</div>
+      <h2 data-i18n="init_title">创建管理员</h2>
+      <p class="subtitle" data-i18n="init_subtitle">设置您的管理员账号信息</p>
+      <form id="init-form" autocomplete="off">
+        <label data-i18n="field_username">用户名</label>
+        <input id="init-username" type="text" placeholder="admin" required>
+        <label data-i18n="field_password_min">密码（至少 8 位）</label>
+        <input id="init-password" type="password" placeholder="••••••••" required minlength="8">
+        <label data-i18n="field_password_confirm">确认密码</label>
+        <input id="init-password2" type="password" placeholder="••••••••" required minlength="8">
+        <label data-i18n="field_tenant">租户名称（可选）</label>
+        <input id="init-tenant" type="text" placeholder="default">
+        <button class="btn btn-init" type="submit" id="init-btn" data-i18n="init_btn">创建账号并登录</button>
+      </form>
+      <div class="msg" id="init-msg"></div>
+    </div>
+
+    <div id="login-section" style="display:none">
+      <h2 data-i18n="login_title">登录管理后台</h2>
+      <p class="subtitle" data-i18n="login_subtitle">请输入您的账号信息</p>
+      <form id="login-form" autocomplete="on">
+        <div id="tenant-row">
+          <label data-i18n="field_tenant_slug">租户 Slug</label>
+          <input id="tenant" type="text" placeholder="your-org" autocomplete="organization">
+        </div>
+        <label data-i18n="field_username">用户名</label>
+        <input id="username" type="text" placeholder="admin" required autocomplete="username">
+        <label data-i18n="field_password">密码</label>
+        <div class="pw-wrap"><input id="password" type="password" placeholder="••••••••" required autocomplete="current-password"><button type="button" class="pw-eye" onclick="togglePw('password',this)">👁</button></div>
+        <button class="btn" type="submit" id="login-btn" data-i18n="login_btn">登录</button>
+      </form>
+      <div class="msg" id="login-msg"></div>
+      <p class="hint" id="hint"></p>
+      <p style="text-align:center;margin-top:14px">
+        <a href="#" id="forgot-link" data-i18n="forgot_link">忘记密码？</a>
+      </p>
+    </div>
+
+    <div id="reset-section" style="display:none">
+      <h2 data-i18n="reset_title">重置密码</h2>
+      <p class="subtitle" data-i18n="reset_subtitle">需要管理员账号验证身份</p>
+      <form id="reset-form" autocomplete="off">
+        <label data-i18n="reset_admin_user">管理员用户名</label>
+        <input id="reset-admin-user" type="text" placeholder="admin" required>
+        <label data-i18n="reset_admin_pw">管理员密码</label>
+        <input id="reset-admin-pw" type="password" placeholder="••••••••" required>
+        <label data-i18n="reset_target_user">要重置的用户名</label>
+        <input id="reset-target-user" type="text" placeholder="admin" required>
+        <label data-i18n="reset_new_pw">新密码（至少 8 位）</label>
+        <input id="reset-new-pw" type="password" placeholder="••••••••" required minlength="8">
+        <label data-i18n="reset_new_pw2">确认新密码</label>
+        <input id="reset-new-pw2" type="password" placeholder="••••••••" required minlength="8">
+        <button class="btn" type="submit" id="reset-btn" data-i18n="reset_btn">重置密码</button>
+      </form>
+      <div class="msg" id="reset-msg"></div>
+      <p style="text-align:center;margin-top:14px">
+        <a href="#" id="back-login-link" data-i18n="back_login">← 返回登录</a>
+      </p>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var API = window.location.origin + '/api';
+
+  var I18N = {
+    zh:{
+      topbar_theme:'外观主题', topbar_lang:'界面语言',
+      theme_dark:'深色', theme_dim:'柔深', theme_light:'浅色', theme_contrast:'高对比',
+      checking:'同步控制平面…', mode_single:'单项目', mode_saas:'SaaS 多租户',
+      hero_badge:'智能需求 × AI 开发 核心能力', hero_kicker:'REQUIREMENTS INTELLIGENCE · AI-NATIVE BUILD',
+      hero_title_line1:'智能需求管理与 AI 原生开发',
+      hero_title_line2:'企业级一体化中枢 · 交付 / 编排 / 运维同一平面',
+      hero_subline:'Spec 驱动 · 看板迭代 · Vibe 编码 · 多 Agent 编排与可观测运维',
+      hero_desc:'以「需求 → 任务 → 代码 → 发布」为主线：智能拆解与优先级、看板与验收驱动交付；Vibe 与规范（Spec）约束 AI 写码与评审，置信度与状态回流需求侧。编排与运维能力在同一控制台扩展，无需割裂工具链。',
+      hero_bn_req_e:'需求智能', hero_bn_req_h:'全链路需求管理',
+      hero_bn_req_p:'从澄清、拆解、优先级与看板到验收与置信度回流；与迭代、任务、缺陷天然对齐。',
+      hero_bn_dev_e:'AI 工程', hero_bn_dev_h:'智能辅助开发',
+      hero_bn_dev_p:'Vibe 交互式编码、规范驱动（Spec）与评审闭环；让 AI 落在可交付代码与可验证结果上。',
+      hero_bn_orc_e:'编排', hero_bn_orc_h:'多 Agent',
+      hero_bn_orc_p:'工作流定义、开发工具编排与 MCP 接入，把多 Agent 串成可重复执行的交付链。',
+      hero_bn_ops_e:'运维', hero_bn_ops_h:'可观测',
+      hero_bn_ops_p:'健康探活、发布版本、运行态与审计、数据港备份导入，在一面屏里把控运维与可观测。',
+      init_banner:'首次使用，请创建管理员账号', init_title:'创建管理员',
+      init_subtitle:'设置您的管理员账号信息', init_btn:'创建账号并登录',
+      init_creating:'创建中...', init_ok:'账号创建成功，正在登录...',
+      init_fail:'初始化失败', init_pw_mismatch:'两次密码不一致',
+      init_pw_short:'密码至少 8 位',
+      login_title:'登录管理后台', login_subtitle:'请输入您的账号信息',
+      login_btn:'登录', login_loading:'登录中...', login_fail:'登录失败',
+      field_username:'用户名', field_password:'密码',
+      field_password_min:'密码（至少 8 位）', field_password_confirm:'确认密码',
+      field_tenant:'租户名称（可选）', field_tenant_slug:'租户 Slug',
+      saas_hint:'多租户模式：请填写您所在的租户 Slug',
+      net_err:'网络错误：',
+      forgot_link:'忘记密码？',
+      reset_title:'重置密码', reset_subtitle:'需要管理员账号验证身份',
+      reset_admin_user:'管理员用户名', reset_admin_pw:'管理员密码',
+      reset_target_user:'要重置的用户名', reset_new_pw:'新密码（至少 8 位）',
+      reset_new_pw2:'确认新密码', reset_btn:'重置密码', reset_loading:'重置中...',
+      reset_ok:'密码重置成功，请登录', reset_fail:'重置失败',
+      back_login:'← 返回登录',
+    },
+    en:{
+      topbar_theme:'Theme', topbar_lang:'Language',
+      theme_dark:'Dark', theme_dim:'Dim', theme_light:'Light', theme_contrast:'High contrast',
+      checking:'Syncing control plane…', mode_single:'Single Project', mode_saas:'SaaS Multi-tenant',
+      hero_badge:'Core: Intelligent Req × AI Dev', hero_kicker:'REQUIREMENTS INTELLIGENCE · AI-NATIVE BUILD',
+      hero_title_line1:'Intelligent requirements & AI-native development',
+      hero_title_line2:'Enterprise hub — delivery, orchestration & ops in one plane',
+      hero_subline:'Spec-driven · board iterations · Vibe coding · multi-agent orchestration & observability',
+      hero_desc:'End-to-end from requirements to shipped code: intelligent decomposition, priorities, boards and acceptance; Vibe plus spec guardrails for AI-assisted implementation and review, with confidence feeding back to requirements. Orchestration and ops extend in the same console—no fragmented toolchain.',
+      hero_bn_req_e:'Req intelligence', hero_bn_req_h:'Full-lifecycle requirements',
+      hero_bn_req_p:'Clarify, split, prioritize and board through acceptance and confidence loops—aligned with iterations, tasks and issues.',
+      hero_bn_dev_e:'AI engineering', hero_bn_dev_h:'Assisted development',
+      hero_bn_dev_p:'Interactive Vibe sessions, spec-driven guardrails and review—AI output tied to shippable, verifiable code.',
+      hero_bn_orc_e:'Orchestrate', hero_bn_orc_h:'Multi-agent',
+      hero_bn_orc_p:'Workflow definitions, dev-tool wiring and MCP—chain agents into repeatable delivery.',
+      hero_bn_ops_e:'Operate', hero_bn_ops_h:'Observable',
+      hero_bn_ops_p:'Health checks, releases, runtime signals, audit and data hub import/export in one surface.',
+      init_banner:'First time setup — create admin account', init_title:'Create Admin',
+      init_subtitle:'Set up your administrator account', init_btn:'Create & Login',
+      init_creating:'Creating...', init_ok:'Account created, logging in...',
+      init_fail:'Initialization failed', init_pw_mismatch:'Passwords do not match',
+      init_pw_short:'Password must be at least 8 characters',
+      login_title:'Sign in', login_subtitle:'Enter your account credentials',
+      login_btn:'Sign in', login_loading:'Signing in...', login_fail:'Sign-in failed',
+      field_username:'Username', field_password:'Password',
+      field_password_min:'Password (min 8 chars)', field_password_confirm:'Confirm password',
+      field_tenant:'Tenant name (optional)', field_tenant_slug:'Tenant Slug',
+      saas_hint:'Multi-tenant mode: enter your tenant slug',
+      net_err:'Network error: ',
+      forgot_link:'Forgot password?',
+      reset_title:'Reset Password', reset_subtitle:'Verify with an admin account',
+      reset_admin_user:'Admin username', reset_admin_pw:'Admin password',
+      reset_target_user:'Username to reset', reset_new_pw:'New password (min 8 chars)',
+      reset_new_pw2:'Confirm new password', reset_btn:'Reset Password', reset_loading:'Resetting...',
+      reset_ok:'Password reset, please login', reset_fail:'Reset failed',
+      back_login:'← Back to login',
+    }
+  };
+
+  var lang = localStorage.getItem('devdash-lang') || 'zh';
+  var theme = localStorage.getItem('devdash-theme') || localStorage.getItem('theme') || 'dark';
+  if (theme !== 'light' && theme !== 'dim' && theme !== 'contrast' && theme !== 'dark') theme = 'dark';
+
+  function t(k){ return (I18N[lang]||I18N.zh)[k] || k; }
+
+  window.togglePw = function(id, btn) {
+    var el = document.getElementById(id);
+    var show = el.type === 'password';
+    el.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁';
+  };
+
+  document.querySelectorAll('input[type=password]').forEach(function(el){
+    if(el.parentElement.classList.contains('pw-wrap')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'pw-wrap';
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(el);
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'pw-eye'; btn.textContent = '👁';
+    btn.onclick = function(){ window.togglePw(el.id, btn); };
+    wrap.appendChild(btn);
+  });
+
+  function applyLang(){
+    document.querySelectorAll('[data-i18n]').forEach(function(el){
+      var k = el.getAttribute('data-i18n');
+      if(el.tagName === 'INPUT') el.placeholder = t(k);
+      else el.textContent = t(k);
+    });
+    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+    try { localStorage.setItem('devdash-lang', lang); } catch (e) {}
+  }
+
+  function themeColorHex() {
+    if (theme === 'light') return '#eef2f7';
+    if (theme === 'dim') return '#0c1220';
+    if (theme === 'contrast') return '#ffffff';
+    return '#0f172a';
+  }
+
+  function applyTheme(){
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('devdash-theme', theme);
+      localStorage.setItem('theme', theme === 'light' ? 'light' : 'dark');
+    } catch (e) {}
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', themeColorHex());
+  }
+
+  document.getElementById('theme-sel').value = theme;
+  document.getElementById('lang-sel').value = lang;
+  applyTheme(); applyLang();
+
+  document.getElementById('theme-sel').addEventListener('change', function(e){
+    theme = e.target.value;
+    if (theme !== 'light' && theme !== 'dim' && theme !== 'contrast' && theme !== 'dark') theme = 'dark';
+    applyTheme();
+  });
+  document.getElementById('lang-sel').addEventListener('change', function(e){
+    lang = e.target.value;
+    applyLang();
+  });
+
+  function show(id){
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById(id).style.display = 'block';
+    applyLang();
+  }
+
+  function showMsg(el, text, type){
+    el.textContent = text; el.className = 'msg '+type; el.style.display = 'block';
+  }
+
+  function doLogin(username, password, tenant_slug){
+    var body = {username:username, password:password};
+    if(tenant_slug) body.tenant_slug = tenant_slug;
+    return fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});});
+  }
+
+  function saveAndRedirect(d){
+    localStorage.setItem('sop-token', d.token);
+    localStorage.setItem('sop-user', JSON.stringify({id:d.user_id,username:d.username,role:d.role,tenant_id:d.tenant_id}));
+    window.location.replace('index.html');
+  }
+
+  var token = localStorage.getItem('sop-token');
+  if(token){
+    fetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
+      .then(function(r){if(r.ok) window.location.replace('index.html');})
+      .catch(function(){});
+  }
+
+  fetch(API+'/health').then(function(r){return r.json();}).then(function(d){
+    var mode = d.admin_mode||'single';
+    var badge = document.getElementById('mode-badge');
+    badge.textContent = mode==='saas' ? t('mode_saas') : t('mode_single');
+    if(mode==='saas'){
+      document.getElementById('tenant-row').style.display='block';
+      document.getElementById('hint').textContent = t('saas_hint');
+      badge.style.background='rgba(59,130,246,.18)';
+      badge.style.color='var(--accent-hot)';
+      badge.style.borderColor='rgba(59,130,246,.45)';
+    }
+  }).catch(function(){
+    document.getElementById('mode-badge').textContent = t('mode_single');
+  });
+
+  fetch(API+'/auth/init/status')
+    .then(function(r){
+      if(!r.ok){ show('login-section'); return; }
+      return r.json().then(function(d){ show(d.initialized ? 'login-section' : 'init-section'); });
+    })
+    .catch(function(){ show('login-section'); });
+
+  document.getElementById('init-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var msgEl = document.getElementById('init-msg');
+    var btn = document.getElementById('init-btn');
+    var username = document.getElementById('init-username').value.trim();
+    var pw = document.getElementById('init-password').value;
+    var pw2 = document.getElementById('init-password2').value;
+    var tenant = document.getElementById('init-tenant').value.trim()||'default';
+    if(pw!==pw2){ showMsg(msgEl, t('init_pw_mismatch'), 'err'); return; }
+    if(pw.length<8){ showMsg(msgEl, t('init_pw_short'), 'err'); return; }
+    btn.disabled=true; btn.textContent=t('init_creating');
+    fetch(API+'/auth/init',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:username,password:pw,tenant_name:tenant})})
+      .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+      .then(function(res){
+        if(!res.ok){ showMsg(msgEl, res.d.detail||t('init_fail'), 'err'); btn.disabled=false; btn.textContent=t('init_btn'); return; }
+        showMsg(msgEl, t('init_ok'), 'ok');
+        return doLogin(username, pw, null).then(function(r2){
+          if(r2.ok){ saveAndRedirect(r2.d); return; }
+          document.getElementById('init-section').style.display='none';
+          document.getElementById('login-section').style.display='block';
+          document.getElementById('username').value = username;
+        });
+      }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('init_btn'); });
+  });
+
+  document.getElementById('login-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var msgEl = document.getElementById('login-msg');
+    var btn = document.getElementById('login-btn');
+    btn.disabled=true; btn.textContent=t('login_loading');
+    var tenant = document.getElementById('tenant').value.trim();
+    doLogin(document.getElementById('username').value.trim(), document.getElementById('password').value, tenant||null)
+      .then(function(res){
+        if(!res.ok){ showMsg(msgEl, res.d.detail||t('login_fail'), 'err'); btn.disabled=false; btn.textContent=t('login_btn'); return; }
+        saveAndRedirect(res.d);
+      }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('login_btn'); });
+  });
+
+  function switchTo(id) {
+    ['login-section','reset-section','init-section'].forEach(function(s){ document.getElementById(s).style.display='none'; });
+    document.getElementById(id).style.display='block';
+    applyLang();
+  }
+  document.getElementById('forgot-link').addEventListener('click', function(e){ e.preventDefault(); switchTo('reset-section'); });
+  document.getElementById('back-login-link').addEventListener('click', function(e){ e.preventDefault(); switchTo('login-section'); });
+
+  document.getElementById('reset-form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var msgEl = document.getElementById('reset-msg');
+    var btn = document.getElementById('reset-btn');
+    var newPw = document.getElementById('reset-new-pw').value;
+    var newPw2 = document.getElementById('reset-new-pw2').value;
+    if(newPw !== newPw2){ showMsg(msgEl, t('init_pw_mismatch'), 'err'); return; }
+    if(newPw.length < 8){ showMsg(msgEl, t('init_pw_short'), 'err'); return; }
+    btn.disabled=true; btn.textContent=t('reset_loading');
+    fetch(API+'/auth/reset-password', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        admin_username: document.getElementById('reset-admin-user').value.trim(),
+        admin_password: document.getElementById('reset-admin-pw').value,
+        target_username: document.getElementById('reset-target-user').value.trim(),
+        new_password: newPw
+      })
+    }).then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
+    .then(function(res){
+      if(!res.ok){ showMsg(msgEl, res.d.detail||t('reset_fail'), 'err'); btn.disabled=false; btn.textContent=t('reset_btn'); return; }
+      showMsg(msgEl, t('reset_ok'), 'ok');
+      setTimeout(function(){ switchTo('login-section'); }, 1500);
+    }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('reset_btn'); });
+  });
+})();
+</script>
+</body>
+</html>

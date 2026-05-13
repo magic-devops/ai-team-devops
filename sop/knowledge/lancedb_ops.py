@@ -7,7 +7,21 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-DB_PATH = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "lancedb"
+
+def _lancedb_dir() -> Path:
+    """与 Web path_config 对齐：LANCE_DB_PATH → .ai-memory/lancedb（可符号链接）→ .sop-runtime/ai-memory/lancedb。"""
+    pp = Path(os.getenv("PROJECT_PATH", ".")).expanduser().resolve()
+    raw = os.getenv("LANCE_DB_PATH", "").strip()
+    if raw:
+        p = Path(raw)
+        return p.resolve() if p.is_absolute() else (pp / p).resolve()
+    leg = pp / ".ai-memory" / "lancedb"
+    if leg.exists():
+        return leg.resolve()
+    return (pp / ".sop-runtime" / "ai-memory" / "lancedb").resolve()
+
+
+DB_PATH = _lancedb_dir()
 
 class LanceOps:
     def __init__(self, db_path: str = None):

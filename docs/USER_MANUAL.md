@@ -23,8 +23,20 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 
 | 变量 | 含义 |
 |------|------|
-| `PROJECT_PATH` | LanceDB、`.ai-memory/`、工作区浏览的根目录，默认当前工作目录 |
+| `PROJECT_PATH` | LanceDB、工作区浏览、规约 `memory/` 的根目录，默认当前工作目录 |
+| `SOP_RUNTIME_DIR` | 可选。统一运行时根；默认 `PROJECT_PATH/.sop-runtime`（SQLite、日志、编排/Vibe 等生成的 `ai-memory` 物理目录） |
 | `PORT` | Uvicorn 端口 |
+
+### 1.1 脚本与运维工具
+
+**完整索引**（含环境变量与只读规范文档）：[sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)；常用入口摘要：[sop/tools/README.md](../sop/tools/README.md)。
+
+| 场景 | 命令 |
+|------|------|
+| 健康检查 | `bash sop/tools/health-check.sh` |
+| 忘记管理员密码 / 新建管理员 | `python3 sop/tools/reset-admin.py`（交互式）或 `python3 sop/tools/reset-admin.py reset <用户> <新密码>`（见脚本头说明，密码长度等校验） |
+| 脚本或 CI 调 Manager API | 配置 `MANAGER_URL`、`MANAGER_API_KEY` 等后 `python3 sop/tools/manager_client.py`（见文件内用法） |
+| 与 `start-manager` 等价的备用入口 | `bash sop/tools/start-dashboard.sh` |
 
 ## 2. 菜单与职责速览
 
@@ -36,7 +48,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 | 开发工具 | **Vibe Coding** | 会话与记忆、附件与多模态 LLM、Markdown/代码/页面预览、项目目录只读浏览 |
 | 开发工具 | 规范编辑、环境管理（Docker）、CLI 工具 | 本地规范、容器与 CLI 配置；CLI 工具包含 Codex CLI |
 | 知识与规范 | 技术方案、知识库、规范文档、规则库 | 方案版本、文档导入与 AI 润色、规范只读 |
-| AI 能力 | Agent / 技能 / **编排** / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具目录、环境检查、AI 安装方案与受控一键安装（详见 §4.5） |
+| AI 能力 | Agent / 技能 / **编排** / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具目录、**本机环境**独立子页、AI 安装方案与受控一键安装（详见 §4.5） |
 | 系统设置 | 通知、配置、系统、账号 | 运维与账号 |
 
 ## 3. 推荐工作流（省 Token）
@@ -73,32 +85,32 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 
 ### 4.5 Agent 编排与开发工具
 
-入口：**AI 能力 → Agent / 编排 / MCP / 模型**（编排模块内再选子页：开发工具、工作流、质量配置、版本管理）。
+入口：**AI 能力 → Agent / 编排 / MCP / 模型**（编排模块内再选子页：开发工具、**本机环境**、工作流、质量配置、版本管理）。
 
 **开发工具**
 
 - **宽屏**：编排左侧为子模块导航；「开发工具」页左侧为 **分类**（Agent CLI / IDE / 助手 / 链路与运行时），右侧为工具列表。  
 - **搜索**：列表上方可按名称、命令、说明过滤。  
-- **默认工具**：每条可「设为默认」，供工作流等读取（存于 `.ai-memory/orchestration/config.json`）。  
+- **默认工具**：每条可「设为默认」，供工作流等读取（存于 `.sop-runtime/ai-memory/orchestration/config.json`；项目根 `.ai-memory` 在 Unix 上多为符号链接）。  
 - **内置工具**：可改显示名/命令/说明（覆盖配置）、**隐藏**；已隐藏区可单条恢复或 **恢复全部内置工具**。  
 - **自定义工具**：添加 / 编辑 / 删除（仅自定义可删）。  
 - **补充说明**：参与 AI 安装上下文，自动保存在本机浏览器（`localStorage` 键 `sop_orch_ai_goal`）。  
 - **AI 安装说明**：打开弹窗展示 Markdown 步骤；若有 **白名单配方**，列出可点击的「执行此步骤」（实际调用受控安装 API，仅允许服务端固定 npm/pip 等命令）。弹窗内展示 **`argv_shell`** 便于核对后再执行。  
 - **受控一键安装**：仅对部分带 `guard_install_recipe` 且未检测到 PATH 的工具显示；需确认后执行。  
-- **安装控制台与历史**：查看完整输出、复制、打开弹窗；历史来自 `.ai-memory/orchestration/install_logs.jsonl`。
+- **安装控制台与历史**：查看完整输出、复制、打开弹窗；历史来自 `.sop-runtime/ai-memory/orchestration/install_logs.jsonl`。
 
-**本机环境检查（编排页底部）**
+**本机环境**（编排侧栏独立子页）
 
 - 与 Docker 页 **同源** 内置检查（`python3`、`node`、`java`、`mvn`、`docker compose` 等）。  
 - **仅刷新检查**：不整页重载。  
-- 状态为 **Missing** 时：**AI 方案** 会预填目标并请求安装说明；若检查项 id 与内置工具 id 一致（如 `java`），可 **定位工具** 跳转到列表对应行。
+- 状态为 **Missing** 时：**AI 方案** 会预填目标并请求安装说明；若检查项 id 与内置工具 id 一致（如 `java`），可 **定位工具** 切换到「开发工具」并滚动到对应行；受控一键安装仍在「开发工具」页执行。
 
 **API 与持久化、白名单安全** 见 **[ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md)**。
 
 ## 5. 常见问题
 
 **Q：数据存在哪里？**  
-A：默认在 `PROJECT_PATH/.ai-memory/lancedb` 与各 JSON 索引中；Vibe 会话在 `.ai-memory/vibe_sessions.json`，上传附件在 `.ai-memory/vibe_uploads/`。
+A：默认在 `PROJECT_PATH/.sop-runtime/ai-memory/lancedb` 与各 JSON 索引中（项目根 `.ai-memory` 在 Unix 上多为指向该目录的符号链接）；Vibe 会话在 `ai-memory/vibe_sessions.json`，上传附件在 `ai-memory/vibe_uploads/`。
 
 **Q：PDF 知识库抽取失败？**  
 A：需安装 `pypdf`（`install-integrations.sh` 或手动 `pip install pypdf`）。
@@ -116,3 +128,4 @@ A：生产入口须保证 **`StaticFiles` 挂载在 API 路由之后**，否则 
 | [sop/web/README.md](../sop/web/README.md) | 路由、页面模块、开发约定 |
 | [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与持久化 |
 | [sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |
+| [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | 本目录脚本与工具完整清单 |

@@ -15,15 +15,18 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/env", tags=["env"])
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", ".")).resolve()
+from path_config import ai_memory_root, project_path
 
-_CUSTOM_CHECKS_PATH = PROJECT_PATH / ".ai-memory" / "env_custom_checks.json"
-_VERSION_PINS_PATH = PROJECT_PATH / ".ai-memory" / "env_version_pins.json"
-_EXEC_ALLOWLIST_EXTRA_PATH = PROJECT_PATH / ".ai-memory" / "env_exec_allowlist_extra.json"
-_DOCKER_CUSTOM_PRESETS_PATH = PROJECT_PATH / ".ai-memory" / "docker_custom_presets.json"
-_DOCKER_MANAGED_ROOT = PROJECT_PATH / ".ai-memory" / "managed_dockerfiles"
-_COMPOSE_MANAGED_ROOT = PROJECT_PATH / ".ai-memory" / "managed_compose"
+router = APIRouter(prefix="/api/env", tags=["env"])
+PROJECT_PATH = project_path()
+_AI = ai_memory_root()
+
+_CUSTOM_CHECKS_PATH = _AI / "env_custom_checks.json"
+_VERSION_PINS_PATH = _AI / "env_version_pins.json"
+_EXEC_ALLOWLIST_EXTRA_PATH = _AI / "env_exec_allowlist_extra.json"
+_DOCKER_CUSTOM_PRESETS_PATH = _AI / "docker_custom_presets.json"
+_DOCKER_MANAGED_ROOT = _AI / "managed_dockerfiles"
+_COMPOSE_MANAGED_ROOT = _AI / "managed_compose"
 _COMPOSE_MAX_BYTES = 512 * 1024
 
 _DEFAULT_EXEC_ALLOW: Set[str] = {
@@ -100,7 +103,7 @@ def _validate_argv(argv: List[str]) -> List[str]:
         raise HTTPException(400, "命令 argv 非法或过长")
     allow = _exec_allowlist()
     if argv[0] not in allow:
-        raise HTTPException(400, f"可执行文件「{argv[0]}」不在允许列表；可在 .ai-memory/env_exec_allowlist_extra.json 追加白名单")
+        raise HTTPException(400, f"可执行文件「{argv[0]}」不在允许列表；可在运行时目录 ai-memory 下 env_exec_allowlist_extra.json 追加白名单")
     if argv[0] in ("bash", "sh") and len(argv) == 2:
         sp = Path(argv[1]).resolve()
         root = PROJECT_PATH.resolve()
@@ -1193,7 +1196,7 @@ def get_presets():
 
 @router.get("/docker/presets/catalog")
 def docker_presets_catalog():
-    """内置 + 自定义预设（持久化在 .ai-memory/docker_custom_presets.json）。"""
+    """内置 + 自定义预设（持久化在运行时 ai-memory/docker_custom_presets.json）。"""
     return {"builtin": PRESETS, "custom": _load_docker_custom_presets()}
 
 

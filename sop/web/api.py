@@ -19,8 +19,21 @@ from pydantic import BaseModel
 app = FastAPI(title="AI Dev Dashboard")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", "."))
-DB_PATH = PROJECT_PATH / ".ai-memory" / "lancedb"
+PROJECT_PATH = Path(os.getenv("PROJECT_PATH", ".")).resolve()
+
+
+def _lancedb_path() -> Path:
+    raw = os.getenv("LANCE_DB_PATH", "").strip()
+    if raw:
+        p = Path(raw)
+        return p.resolve() if p.is_absolute() else (PROJECT_PATH / p).resolve()
+    leg = PROJECT_PATH / ".ai-memory" / "lancedb"
+    if leg.exists():
+        return leg.resolve()
+    return (PROJECT_PATH / ".sop-runtime" / "ai-memory" / "lancedb").resolve()
+
+
+DB_PATH = _lancedb_path()
 
 # ── 懒加载 LanceDB ──────────────────────────────────────────────
 _db = None

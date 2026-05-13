@@ -125,7 +125,8 @@ parse_args() {
 backup_before_reinit() {
   local ts backup_dir tarball n
   ts="$(date '+%Y%m%d-%H%M%S')"
-  backup_dir=".ai-reinit-backups"
+  local rt="${SOP_RUNTIME_DIR:-${PWD}/.sop-runtime}"
+  backup_dir="${rt}/reinit-backups"
   tarball="${backup_dir}/reinit-${ts}.tar.gz"
   mkdir -p "${backup_dir}"
 
@@ -133,6 +134,7 @@ backup_before_reinit() {
   paths=()
   [ -d memory ] && paths+=(memory)
   [ -d .ai-memory ] && paths+=(.ai-memory)
+  [ -d "${rt}/ai-memory" ] && paths+=("${rt}/ai-memory")
   [ -f .claude/settings.json ] && paths+=(.claude/settings.json)
   [ -f .codex/config.toml ] && paths+=(.codex/config.toml)
   [ -f .codex/hooks.json ] && paths+=(.codex/hooks.json)
@@ -156,8 +158,9 @@ backup_before_reinit() {
 }
 
 clean_for_reinit() {
-  step "清理: 删除 memory/ 与 .ai-memory/ …"
-  rm -rf memory .ai-memory
+  local rt="${SOP_RUNTIME_DIR:-${PWD}/.sop-runtime}"
+  step "清理: 删除 memory/、.ai-memory/ 与运行时目录 .sop-runtime/ …"
+  rm -rf memory .ai-memory "${rt}" .ai-reinit-backups
 
   step "清理: 覆盖工具配置（.claude、opencode、各 IDE 规则）…"
   rm -f opencode.json .cursorrules .windsurfrules
@@ -376,8 +379,8 @@ EOF
 }
 
 write_rules_md() {
-  mkdir -p .ai-memory/rules
-  cat > .ai-memory/rules/RULES.md << 'EOF'
+  mkdir -p "${SOP_AI_MEM_ROOT}/rules"
+  cat > "${SOP_AI_MEM_ROOT}/rules/RULES.md" << 'EOF'
 # 项目规则库
 
 AI 智能体每次启动时读取此文件，加载适用规则。
@@ -395,11 +398,11 @@ EOF
 }
 
 write_ai_capability_registry() {
-  mkdir -p .ai-memory
+  mkdir -p "${SOP_AI_MEM_ROOT}"
   if [ -f "${SCRIPT_DIR}/AI_CAPABILITY_REGISTRY.json" ]; then
-    cp "${SCRIPT_DIR}/AI_CAPABILITY_REGISTRY.json" .ai-memory/ai_capabilities.json
+    cp "${SCRIPT_DIR}/AI_CAPABILITY_REGISTRY.json" "${SOP_AI_MEM_ROOT}/ai_capabilities.json"
   else
-    cat > .ai-memory/ai_capabilities.json << 'EOF'
+    cat > "${SOP_AI_MEM_ROOT}/ai_capabilities.json" << 'EOF'
 {
   "version": "1.0",
   "control_plane": "sop",
@@ -412,21 +415,28 @@ EOF
 
 patch_gitignore() {
   if [ -f .gitignore ]; then
+    if ! grep -q ".sop-runtime/" .gitignore; then
+      echo "" >> .gitignore
+      echo "# 管理后台 / 工具链运行时数据（SQLite、LanceDB、编排状态等）" >> .gitignore
+      echo ".sop-runtime/" >> .gitignore
+    fi
     if ! grep -q ".ai-memory/lancedb" .gitignore; then
       echo "" >> .gitignore
-      echo "# AI 记忆系统" >> .gitignore
+      echo "# AI 记忆系统（若未使用符号链接可忽略）" >> .gitignore
       echo ".ai-memory/lancedb/" >> .gitignore
     fi
     if ! grep -q ".ai-reinit-backups" .gitignore; then
       echo "" >> .gitignore
-      echo "# init-ai-project.sh reinit 备份" >> .gitignore
+      echo "# 历史 reinit 备份目录（已迁移至 .sop-runtime/reinit-backups）" >> .gitignore
       echo ".ai-reinit-backups/" >> .gitignore
     fi
   else
     cat > .gitignore << 'EOF'
+# 运行时统一目录
+.sop-runtime/
 # AI 记忆系统
 .ai-memory/lancedb/
-# init-ai-project.sh reinit 备份
+# 历史 reinit 备份
 .ai-reinit-backups/
 EOF
   fi
@@ -519,14 +529,16 @@ init_lancedb_optional() {
     step "跳过 LanceDB（未找到 python3）"
     return 0
   fi
+  export _LANCE_INIT_DIR="${SOP_AI_MEM_ROOT}/lancedb"
   python3 - << 'PYEOF'
+import os
 import sys
 try:
     import lancedb
     import pyarrow as pa
     from datetime import datetime, timezone
 
-    db = lancedb.connect(".ai-memory/lancedb")
+    db = lancedb.connect(os.environ["_LANCE_INIT_DIR"])
 
     schemas = {
         "tasks": pa.schema([
@@ -607,14 +619,18 @@ OEOF
 }
 
 run_init() {
-  step "1/10 创建目录 .ai-memory、memory 子结构…"
-  mkdir -p .ai-memory/{lancedb,snapshots,rules/{coding,testing,security,workflow}}
+  export SOP_RUNTIME_DIR="${SOP_RUNTIME_DIR:-${PWD}/.sop-runtime}"
+  export SOP_AI_MEM_ROOT="${SOP_RUNTIME_DIR}/ai-memory"
+  mkdir -p "${SOP_RUNTIME_DIR}/db" "${SOP_RUNTIME_DIR}/logs" "${SOP_AI_MEM_ROOT}"
+
+  step "1/10 创建目录 ${SOP_AI_MEM_ROOT}、memory 子结构…"
+  mkdir -p "${SOP_AI_MEM_ROOT}/"{lancedb,snapshots,rules/{coding,testing,security,workflow}}
   mkdir -p memory/{decisions,incidents,sprints}
 
   step "2/10 写入 memory/current_state.json…"
   write_current_state
 
-  step "3/10 写入 .ai-memory/rules/RULES.md…"
+  step "3/10 写入规则库 RULES.md…"
   write_rules_md
 
   step "4/10 写入统一 AI 能力注册表…"
@@ -638,6 +654,11 @@ run_init() {
 
   step "10/10 写入 opencode / IDE 规则与 sop/custom…"
   write_tool_configs
+
+  if [[ ! -e .ai-memory ]]; then
+    rel="$(python3 -c "import os.path; print(os.path.relpath('${SOP_AI_MEM_ROOT}', os.getcwd()))")"
+    ln -sfn "${rel}" .ai-memory 2>/dev/null || log "（未创建 .ai-memory 符号链接，可设置 SOP_RUNTIME_NO_SYMLINK 或 Windows 下忽略）"
+  fi
 }
 
 # ── main ──────────────────────────────────────────────────────────
@@ -668,10 +689,9 @@ run_init
 log ""
 log "──────────────────────────────────────────────────────────────"
 log "完成。目录与文件说明:"
+log "  .sop-runtime/              - 统一运行时目录（SQLite、日志、ai-memory 等）"
+log "  .ai-memory/ → 符号链接   - 指向 .sop-runtime/ai-memory（Unix；供 CLI 与文档路径）"
 log "  memory/current_state.json  - 项目状态"
-log "  .ai-memory/lancedb/        - 向量记忆库"
-log "  .ai-memory/rules/          - 规则库"
-log "  .ai-memory/ai_capabilities.json - 统一 AI 能力注册表"
 log "  CLAUDE.md                  - Claude Code 规约"
 log "  AGENTS.md                  - Codex CLI / App 规约"
 log "  .codex/config.toml         - Codex CLI 配置"
@@ -682,7 +702,7 @@ log "  .windsurfrules             - Windsurf 规则"
 log "  .trae/rules.md             - Trae 规则"
 log "  sop/custom/                - 自定义模块（reinit 不删除其中已有文件）"
 log ""
-log "reinit 备份目录: .ai-reinit-backups/（若未使用 --no-backup）"
+log "reinit 备份目录: \${SOP_RUNTIME_DIR:-.sop-runtime}/reinit-backups/（若未使用 --no-backup）"
 log ""
 log "下一步:"
 log "  1. 编辑 CLAUDE.md，填写项目技术栈和构建命令"

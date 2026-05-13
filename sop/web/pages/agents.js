@@ -177,3 +177,7 @@ function GroupManager({groups,reload,allAgents}) {
     </div>}
   </div>;
 }
+window.i18nExtend && window.i18nExtend({
+  zh:{page_agents:'Agent 管理',agent_new:'+ 新建 Agent',agent_builtin:'内置 Agent',agent_groups:'专家组',agent_del:'删除',agent_edit:'编辑',agent_a2a:'A2A 协议',agent_port:'端口'},
+  en:{page_agents:'Agents',agent_new:'+ New Agent',agent_builtin:'Built-in',agent_groups:'Groups',agent_del:'Delete',agent_edit:'Edit',agent_a2a:'A2A',agent_port:'Port'},
+});

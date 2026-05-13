@@ -4,9 +4,10 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 from pathlib import Path
 import json, os
+from path_config import ai_memory_root
 
 router = APIRouter(prefix="/api/models", tags=["models"])
-MODELS_FILE = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "models.json"
+MODELS_FILE = ai_memory_root() / "models.json"
 
 BUILTIN_MODELS = [
     {"id":"claude-opus-4-7","provider":"anthropic","name":"Claude Opus 4.7","context":200000,"recommended":True},

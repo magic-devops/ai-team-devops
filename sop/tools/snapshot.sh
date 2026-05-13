@@ -5,17 +5,29 @@ set -euo pipefail
 DATE=$(date +%Y-%m-%d)
 OUT="memory/snapshots/${DATE}.json"
 mkdir -p memory/snapshots
+export PROJECT_PATH="${PROJECT_PATH:-.}"
 
 python3 << PYEOF
 import json, os
 from pathlib import Path
 from datetime import datetime
 
+def lancedb_path():
+    pp = Path(os.environ.get("PROJECT_PATH", ".")).resolve()
+    raw = os.environ.get("LANCE_DB_PATH", "").strip()
+    if raw:
+        p = Path(raw)
+        return p.resolve() if p.is_absolute() else (pp / p).resolve()
+    leg = pp / ".ai-memory" / "lancedb"
+    if leg.exists():
+        return leg.resolve()
+    return (pp / ".sop-runtime" / "ai-memory" / "lancedb").resolve()
+
 snapshot = {"date": "$DATE", "tables": {}}
 
 try:
     import lancedb
-    db = lancedb.connect(".ai-memory/lancedb")
+    db = lancedb.connect(str(lancedb_path()))
     for name in db.table_names():
         try:
             rows = db.open_table(name).to_pandas().to_dict("records")

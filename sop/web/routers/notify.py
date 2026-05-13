@@ -3,10 +3,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
-import json, os, requests as req_lib
+import json, os
+from path_config import ai_memory_root
 
 router = APIRouter(prefix="/api/notify", tags=["notify"])
-NOTIFY_FILE = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "notify.json"
+NOTIFY_FILE = ai_memory_root() / "notify.json"
 
 def _load(): return json.loads(NOTIFY_FILE.read_text()) if NOTIFY_FILE.exists() else {"channels": {}, "rules": []}
 def _save(d): NOTIFY_FILE.parent.mkdir(parents=True, exist_ok=True); NOTIFY_FILE.write_text(json.dumps(d, indent=2))

@@ -4,8 +4,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any
 
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", "."))
-DB_PATH = PROJECT_PATH / ".ai-memory" / "lancedb"
+from path_config import ai_memory_root, project_path
+
+PROJECT_PATH = project_path()
+DB_PATH = ai_memory_root() / "lancedb"
 
 _db = None
 def get_db():

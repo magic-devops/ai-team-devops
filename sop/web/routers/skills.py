@@ -4,9 +4,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import json, os
+from path_config import ai_memory_root
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
-SKILLS_DIR = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "skills"
+SKILLS_DIR = ai_memory_root() / "skills"
 SKILLS_DIR.mkdir(parents=True, exist_ok=True)
 
 class SkillDef(BaseModel):

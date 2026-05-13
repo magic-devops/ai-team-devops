@@ -7,10 +7,15 @@ from pathlib import Path
 import json, os, re, subprocess, uuid, sys, tarfile
 from datetime import datetime as dt
 
+from path_config import ai_memory_root, project_path, runtime_dir
+
 router = APIRouter(prefix="/api/system", tags=["system"])
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", ".")).resolve()
+
+PROJECT_PATH = project_path()
+RUNTIME_DIR = runtime_dir()
+AI_MEMORY_ROOT = ai_memory_root()
 SOP_DIR = Path(__file__).parent.parent.parent  # sop/
-_WORKSPACE_ARTIFACTS_PATH = PROJECT_PATH / ".ai-memory" / "workspace_artifacts.json"
+_WORKSPACE_ARTIFACTS_PATH = AI_MEMORY_ROOT / "workspace_artifacts.json"
 
 # ── 脚本管理 ──────────────────────────────────────────────────────
 @router.get("/scripts")
@@ -73,7 +78,7 @@ def update_claude_config(body: dict):
 # ── 记忆管理 ──────────────────────────────────────────────────────
 @router.get("/memory")
 def list_memory():
-    mem_dir = PROJECT_PATH / ".ai-memory"
+    mem_dir = AI_MEMORY_ROOT
     if not mem_dir.exists(): return {"rules": [], "snapshots": [], "lancedb_tables": []}
     rules = [f.name for f in sorted((mem_dir / "rules").glob("*.md"))] if (mem_dir / "rules").exists() else []
     snaps = [f.name for f in sorted((PROJECT_PATH / "memory" / "snapshots").glob("*.json"))] if (PROJECT_PATH / "memory" / "snapshots").exists() else []
@@ -87,7 +92,7 @@ def list_memory():
 
 @router.get("/memory/rules/{filename}")
 def get_rule_file(filename: str):
-    f = (PROJECT_PATH / ".ai-memory" / "rules" / filename).resolve()
+    f = (AI_MEMORY_ROOT / "rules" / filename).resolve()
     if not f.exists(): raise HTTPException(404, "Not found")
     return {"content": f.read_text(errors="replace")}
 
@@ -101,7 +106,7 @@ def delete_snapshot(filename: str):
 def table_stats(table: str):
     try:
         import lancedb
-        db = lancedb.connect(str(PROJECT_PATH / ".ai-memory" / "lancedb"))
+        db = lancedb.connect(str(AI_MEMORY_ROOT / "lancedb"))
         t = db.open_table(table)
         df = t.to_pandas()
         return {"table": table, "rows": len(df), "columns": list(df.columns)}
@@ -238,8 +243,8 @@ def workspace_artifacts_delete(artifact_id: str):
 
 
 # ── 发布版本 / 备份 / 运维提示（管理后台自身）────────────────────────
-_ADMIN_RELEASE_PATH = PROJECT_PATH / ".ai-memory" / "admin_release.json"
-_BACKUP_DIR = PROJECT_PATH / ".ai-memory" / "admin_backups"
+_ADMIN_RELEASE_PATH = AI_MEMORY_ROOT / "admin_release.json"
+_BACKUP_DIR = AI_MEMORY_ROOT / "admin_backups"
 _BACKUP_SKIP_DIRS = frozenset(
     {"lancedb", "node_modules", "__pycache__", ".pytest_cache", ".git", "venv", ".venv", "dist", "build", ".mypy_cache"}
 )
@@ -282,7 +287,7 @@ class AdminReleasePut(BaseModel):
 
 @router.get("/release")
 def release_get():
-    """当前登记的后台展示版本（写入 .ai-memory/admin_release.json，健康检查与网关可读）。"""
+    """当前登记的后台展示版本（写入运行时 ai-memory/admin_release.json；健康检查可读）。"""
     return _load_release()
 
 
@@ -327,7 +332,7 @@ class BackupCreateBody(BaseModel):
 
 @router.get("/backups")
 def backups_list():
-    """列出 .ai-memory/admin_backups 下由本接口生成的 tar.gz。"""
+    """列出运行时 ai-memory/admin_backups 下由本接口生成的 tar.gz。"""
     _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     items: List[Dict[str, Any]] = []
     root = _BACKUP_DIR.resolve()
@@ -350,7 +355,7 @@ def backups_list():
 
 @router.post("/backups")
 def backup_create(body: BackupCreateBody):
-    """打包备份：admin_state=.ai-memory 内配置与托管 Dockerfile 等（跳过大库表目录）；sop_web=sop/web 前端与路由（跳过 node_modules）。"""
+    """打包备份：admin_state=运行时 ai-memory 内配置与托管 Dockerfile 等（跳过大库表目录）；sop_web=sop/web 前端与路由（跳过 node_modules）。"""
     prof = (body.profile or "admin_state").strip().lower()
     if prof not in ("admin_state", "sop_web"):
         raise HTTPException(400, "profile 仅支持 admin_state | sop_web")
@@ -364,7 +369,7 @@ def backup_create(body: BackupCreateBody):
     added = 0
     with tarfile.open(out, "w:gz") as tf:
         if prof == "admin_state":
-            mem = PROJECT_PATH / ".ai-memory"
+            mem = AI_MEMORY_ROOT
             if mem.is_dir():
                 added += _tar_add_filtered(tf, mem, "ai-memory")
             for extra in (".cursorrules", "ARCHITECTURE.md", "README.md"):
@@ -444,7 +449,7 @@ def ops_upgrade_hint():
 # ── 项目初始化 / 重置（封装 sop/tools/init-ai-project.sh）────────────────
 _INIT_SCRIPT = (SOP_DIR / "tools" / "init-ai-project.sh").resolve()
 _STATE_FILE = PROJECT_PATH / "memory" / "current_state.json"
-_REINIT_BACKUP_DIR = PROJECT_PATH / ".ai-reinit-backups"
+_REINIT_BACKUP_DIR = RUNTIME_DIR / "reinit-backups"
 _REINIT_TAR_RE = re.compile(r"^reinit-\d{8}-\d{6}\.tar\.gz$")
 _PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$")
 
@@ -470,7 +475,7 @@ def _run_init_script(argv: List[str], timeout: int) -> Dict[str, Any]:
 @router.get("/project/bootstrap-status")
 def project_bootstrap_status():
     """未初始化页用：脚本是否存在、是否已有状态文件、两类备份数量与安全提示。"""
-    admin_bak = PROJECT_PATH / ".ai-memory" / "admin_backups"
+    admin_bak = AI_MEMORY_ROOT / "admin_backups"
     n_admin = 0
     if admin_bak.is_dir():
         n_admin = len([x for x in admin_bak.glob("backup-*.tar.gz") if x.is_file()])
@@ -481,6 +486,10 @@ def project_bootstrap_status():
         rel_script = str(_INIT_SCRIPT.relative_to(PROJECT_PATH.resolve()))
     except ValueError:
         rel_script = str(_INIT_SCRIPT)
+    try:
+        reinit_dir_rel = str(_REINIT_BACKUP_DIR.relative_to(PROJECT_PATH))
+    except ValueError:
+        reinit_dir_rel = str(_REINIT_BACKUP_DIR)
     return {
         "initialized": _STATE_FILE.is_file(),
         "statePath": "memory/current_state.json",
@@ -488,10 +497,10 @@ def project_bootstrap_status():
         "initScriptPath": rel_script,
         "adminBackupsCount": n_admin,
         "reinitBackupsCount": n_reinit,
-        "reinitBackupDir": ".ai-reinit-backups",
+        "reinitBackupDir": reinit_dir_rel,
         "safetyReminders": [
             "初始化与重置会在服务器上对当前 PROJECT_PATH 执行 shell 脚本，请仅在可信环境使用。",
-            "重置（reinit）默认会先打包 memory、.ai-memory、CLAUDE.md 等至 .ai-reinit-backups/，再删除并重建；仍建议先在「系统管理 → 运维/版本」创建 admin_state 备份。",
+            "重置（reinit）默认会先打包 memory、运行时 ai-memory（及项目根 .ai-memory 符号链接若存在）、CLAUDE.md 等至运行时 reinit-backups/，再删除并重建；仍建议先在「系统管理 → 运维/版本」创建 admin_state 备份。",
             "重置需手动在确认框输入 REINIT；无法撤销，请确认无未提交的重要改动。",
         ],
     }

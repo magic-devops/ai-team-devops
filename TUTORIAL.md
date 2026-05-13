@@ -48,7 +48,7 @@ bash sop/tools/start-manager.sh
 - `opencode.json` — opencode 配置
 - `.cursorrules` — Cursor 规则
 - `memory/current_state.json` — 项目状态
-- `.ai-memory/` — AI 记忆目录
+- `.ai-memory/` — AI 记忆入口（Web/向量等运行时数据默认物理目录在 `.sop-runtime/ai-memory/`；Unix 上项目根 `.ai-memory` 可为指向该目录的符号链接）
 
 ---
 
@@ -261,6 +261,12 @@ PORT=9000 bash sop/tools/start-manager.sh
 
 浏览器自动打开 `http://localhost:8765`
 
+### 5.1.1 脚本索引与管理员
+
+- **Shell / Python / 文档完整表**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)  
+- **常用入口摘要**：[sop/tools/README.md](sop/tools/README.md)  
+- **管理员密码**：`python3 sop/tools/reset-admin.py`（交互）或 `reset` / `create` 子命令，详见脚本文件头。
+
 ### 5.2 功能页面（菜单摘要）
 
 | 页面 | 功能 |
@@ -272,7 +278,7 @@ PORT=9000 bash sop/tools/start-manager.sh
 | 🗄️ 知识库 | 文档、抽取、AI 润色（依赖见 `install-integrations.sh`） |
 | 🎯 Vibe Coding | 会话与记忆、附件与多模态 LLM、Markdown/代码/HTML 预览、项目目录只读浏览 |
 | 🐳 环境管理 | Docker 检查与镜像相关能力 |
-| 🤖 Agent / 编排 / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具（分类/搜索/默认）、环境检查联动、AI 安装方案 v2 与白名单受控执行（详见 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md)） |
+| 🤖 Agent / 编排 / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具（分类/搜索/默认）、**本机环境**独立子页与工具联动、AI 安装方案 v2 与白名单受控执行（详见 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md)） |
 | 其余 | 规范、规则、CLI、通知、系统与账号等 |
 
 更细操作步骤见 **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)**。
@@ -508,7 +514,7 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 | 🖥️ 系统 | 脚本/配置/记忆管理 |
 | 👤 账号 | 用户管理 |
 | 🤖 模型 | 多模型配置、角色模型 |
-| 🔄 编排 | 开发工具（分类/搜索/环境联动/AI 受控安装）、工作流、质量配置、版本管理；参考 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md) |
+| 🔄 编排 | 开发工具（分类/搜索/AI 受控安装）、**本机环境**（PATH 检查与定位工具）、工作流、质量配置、版本管理；参考 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md) |
 | 🐳 环境 | 环境检查、Docker 管理 |
 | 📦 技能仓库 | 自定义仓库、安装/卸载 |
 | 🎯 Vibe Coding | 界面化 AI 开发 |

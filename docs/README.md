@@ -10,5 +10,6 @@
 | [../sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查卡 |
 | [../sop/web/README.md](../sop/web/README.md) | Web 开发与 API 模块说明 |
 | [../sop/tools/README.md](../sop/tools/README.md) | 脚本入口索引 |
+| [../sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | **完整清单**：Shell / Python / 配置与规范文档 |
 | [../sop/tools/AI_CAPABILITY_CONTROL_PLANE.md](../sop/tools/AI_CAPABILITY_CONTROL_PLANE.md) | 统一 AI 能力控制平面规范 |
 | [../sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI、AGENTS.md 与 hooks 集成规范 |

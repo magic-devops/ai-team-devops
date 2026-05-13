@@ -17,8 +17,10 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 
+from path_config import ai_memory_root
+
 router = APIRouter(prefix="/api/skill-repo", tags=["skill-repo"])
-REPO_DIR = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "skill-repos"
+REPO_DIR = ai_memory_root() / "skill-repos"
 REPO_DIR.mkdir(parents=True, exist_ok=True)
 INSTALLED_FILE = REPO_DIR / "installed.json"
 

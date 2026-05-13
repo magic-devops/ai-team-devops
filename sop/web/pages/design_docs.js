@@ -517,3 +517,4 @@ function DesignDocsManager() {
 }
 
 window.DesignDocsManager = DesignDocsManager;
+window.i18nExtend && window.i18nExtend({zh:{},en:{}});

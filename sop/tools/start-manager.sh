@@ -12,8 +12,9 @@
 #   PROJECT_PATH      被管理仓库根路径，默认当前工作目录
 #   MANAGER_VENV      Python venv 目录，默认 <仓库根>/.venv-integrations
 #   SOP_PYTHON        显式指定 python 可执行文件（优先于 venv / PATH）
-#   START_MANAGER_NO_RELOAD=1  关闭 --reload（生产或避免 StatReload 子进程问题）
-#   START_MANAGER_SKIP_BROWSER=1  不自动打开浏览器
+#   SOP_RUNTIME_DIR   统一运行时根目录，默认 <PROJECT_PATH>/.sop-runtime（SQLite、日志、ai-memory）
+#   AI_MEMORY_ROOT    覆盖默认的 <SOP_RUNTIME_DIR>/ai-memory
+#   SOP_RUNTIME_NO_SYMLINK=1  不在项目根创建 .ai-memory 符号链接（Unix 默认会创建）
 #
 set -euo pipefail
 
@@ -84,19 +85,30 @@ fi
 
 log ""
 log "🔎 预检依赖与入口模块…"
-if ! "$PY" -c "import fastapi, uvicorn" 2>/dev/null; then
-  die "缺少 fastapi/uvicorn。请执行: bash sop/tools/install-integrations.sh"
+if ! "$PY" -c "import fastapi, uvicorn, sqlalchemy, jwt" 2>/dev/null; then
+  die "缺少核心依赖。请执行: bash sop/tools/install-integrations.sh 或 pip install -r sop/web/requirements.txt"
 fi
 cd "$WEB_DIR"
+
+# 加载 .env（如存在）
+if [[ -f ".env" ]]; then
+  log "   加载 .env 配置…"
+  set -a; source .env; set +a
+fi
+
+# 统一运行时目录（创建 .sop-runtime、迁移旧 sop.db / .ai-memory / 日志）
+log "   初始化运行时目录…"
+env PROJECT_PATH="$PROJECT_PATH" "$PY" -c "
+import os, sys
+sys.path.insert(0, '.')
+from path_config import apply_startup_defaults
+apply_startup_defaults()
+" || die "运行时目录初始化失败"
+
 if ! PROJECT_PATH="$PROJECT_PATH" "$PY" -c "import main" 2>/dev/null; then
   log "   尝试输出具体错误:"
   PROJECT_PATH="$PROJECT_PATH" "$PY" -c "import main" || true
   die "main 模块加载失败（见上方 Traceback）。常见原因: routers 导入错误、缺依赖。"
-fi
-
-if [[ ! -d "$PROJECT_PATH/.ai-memory/lancedb" ]]; then
-  log "🗄️  创建 LanceDB 数据目录（空库，首次访问时再写入）…"
-  mkdir -p "$PROJECT_PATH/.ai-memory/lancedb"
 fi
 
 if [[ -z "${START_MANAGER_SKIP_BROWSER:-}" ]]; then
@@ -119,4 +131,4 @@ log "   手册: 仓库根 docs/USER_MANUAL.md · sop/web/README.md"
 log ""
 
 export PROJECT_PATH
-exec "$PY" -m uvicorn main:app --host 0.0.0.0 --port "$PORT" "${UVICORN_EXTRA[@]}"
+exec "$PY" -m uvicorn main:app --host 0.0.0.0 --port "$PORT" "${UVICORN_EXTRA[@]+"${UVICORN_EXTRA[@]}"}"

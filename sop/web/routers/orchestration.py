@@ -14,9 +14,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from path_config import ai_memory_root, project_path
+
 router = APIRouter(prefix="/api/orchestration", tags=["orchestration"])
-REPO_ROOT = Path(os.getenv("PROJECT_PATH", ".")).resolve()
-ORCH_DIR = REPO_ROOT / ".ai-memory" / "orchestration"
+REPO_ROOT = project_path()
+ORCH_DIR = ai_memory_root() / "orchestration"
 ORCH_DIR.mkdir(parents=True, exist_ok=True)
 DEV_TOOLS_STATE = ORCH_DIR / "dev_tools_state.json"
 

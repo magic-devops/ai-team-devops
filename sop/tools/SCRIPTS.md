@@ -1,22 +1,68 @@
-# 持久化脚本集
+# sop/tools 脚本与工具
 
-## Shell 脚本索引（sop/tools/）
+本目录**权威清单**见下表；文末为可选 **Hook 示例片段**（非仓库内置可执行文件），仅供自定义 hooks 参考。
 
-| 脚本 | 用途 |
+## 仓库内可执行与核心文件（权威清单）
+
+路径均相对于仓库根目录 `sop/tools/`。
+
+### Shell
+
+| 文件 | 用途 |
 |------|------|
-| `install-integrations.sh` | 创建/使用虚拟环境，按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持 `SOP_PYTHON`、`INSTALL_INTEGRATIONS_RECREATE`、`WRITE_INTEGRATIONS_LOCK` 等环境变量 |
-| `init-ai-project.sh` | 初始化业务项目：生成 CLAUDE.md、各 IDE 规则、`memory/`、`.ai-memory/` 等 |
-| `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`，支持 `PROJECT_PATH`、`PORT` |
-| `start-dashboard.sh` | 兼容/备用启动入口（若存在） |
+| `install-integrations.sh` | 创建/使用虚拟环境，按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持 `SOP_PYTHON`、`INSTALL_INTEGRATIONS_RECREATE`、`WRITE_INTEGRATIONS_LOCK` 等；`--help` 查看变量 |
+| `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`；环境变量 `PROJECT_PATH`（被管理仓库根）、`PORT`（默认 8765）；启动前会执行 `path_config.apply_startup_defaults()` 创建/迁移 `.sop-runtime/` |
+| `start-dashboard.sh` | 与 `start-manager.sh` 等价入口，同样启动 **`main:app`**（历史命名保留） |
 | `health-check.sh` | 仓库与依赖健康检查 |
-| `snapshot.sh` | LanceDB / 状态快照导出 |
+| `cleanup-legacy-runtime.sh` | 在数据已迁移到 `PROJECT_PATH/.sop-runtime/` 后，可选清理遗留的 `sop/web/sop.db*`、空日志目录等；默认 dry-run，`--apply` 真正删除（见脚本头） |
+| `snapshot.sh` | LanceDB / 状态快照相关导出（见脚本头注释） |
 | `sync-rules.sh` | 将规则同步到各工具可读位置 |
 
-详细参数见各脚本文件头注释（`install-integrations.sh` 支持 `--help`）。
+**运行时目录（环境变量，由 Web `path_config` 与 `start-manager.sh` 使用）**
+
+| 变量 | 说明 |
+|------|------|
+| `SOP_RUNTIME_DIR` | 可选。统一运行时根；默认 `PROJECT_PATH/.sop-runtime`（内含 `db/sop.db`、`logs/`、`ai-memory/`、`reinit-backups/`） |
+| `AI_MEMORY_ROOT` | 可选。覆盖默认的 `SOP_RUNTIME_DIR/ai-memory` |
+| `SOP_RUNTIME_NO_SYMLINK` | 设为 `1` 时不在项目根创建 `.ai-memory` → `.sop-runtime/ai-memory` 符号链接（Unix） |
+
+### Python
+
+| 文件 | 用途 |
+|------|------|
+| `sop_ai_hook.py` | 统一 AI hook 策略引擎；Codex / Claude 等 adapter 调用 |
+| `reset-admin.py` | **管理员账号**：交互式或 `create` / `reset` 子命令；默认 SQLite（读 `sop/web/.env`）；用法见文件头 docstring |
+| `manager_client.py` | 程序化调用 Manager HTTP API：`MANAGER_URL`、`MANAGER_API_KEY`、`PROJECT_ID`、`TENANT_ID` 等（见文件头） |
+
+### 数据与配置
+
+| 文件 | 用途 |
+|------|------|
+| `integrations-requirements.txt` | Web / LanceDB 等 Python 依赖清单（由 `install-integrations.sh` 消费） |
+| `AI_CAPABILITY_REGISTRY.json` | 标准能力与工具适配注册表模板 |
+
+### 规范与集成文档（只读）
+
+| 文件 | 说明 |
+|------|------|
+| `AI_CAPABILITY_CONTROL_PLANE.md` | 统一 AI 能力控制平面 |
+| `TOOL_INTEGRATION.md` | 多工具（Codex / Cursor / Claude 等）集成总览 |
+| `CODEX_CLI.md` | Codex CLI、AGENTS.md、hooks |
+| `MCP_INTEGRATION.md` | MCP 接入说明 |
+| `LANCEDB_SETUP.md` | LanceDB 与向量相关 |
+| `AUTOMATION_TRIGGERS.md` | 自动化触发约定 |
+| `CI_CD.md` | CI/CD 相关 |
+| `GIT_WORKFLOW.md` | Git 工作流 |
+
+入口索引另见 [README.md](README.md)。
 
 ---
 
-## persist_state.py
+## Hook 示例片段（仅供参考，非本仓库内置文件）
+
+以下 Python 块为**示例实现思路**，文件名如 `persist_state.py` 等**不一定存在于本仓库**；复制到自有 hooks 时请自行校验路径与依赖。
+
+## persist_state.py（示例）
 # 在 Claude Code Stop hook 中调用，持久化当前状态
 
 ```python
@@ -41,13 +87,14 @@ if __name__ == "__main__":
     persist()
 ```
 
-## check_budget.py
+## check_budget.py（示例）
 # 在 PreToolUse hook 中调用，检查 token 预算
 
 ```python
 #!/usr/bin/env python3
 """检查 token 预算，超限时发出警告"""
 import json
+import os
 from pathlib import Path
 from datetime import date
 
@@ -74,7 +121,7 @@ if __name__ == "__main__":
     check()
 ```
 
-## snapshot.py
+## snapshot.py（示例）
 # 定时调用，创建记忆快照
 
 ```python
@@ -133,7 +180,7 @@ if __name__ == "__main__":
     snapshot()
 ```
 
-## check_blockers.py
+## check_blockers.py（示例）
 # 定时调用，检查长期阻塞任务
 
 ```python

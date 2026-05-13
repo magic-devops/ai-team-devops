@@ -8,12 +8,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .db import PROJECT_PATH, rows, table, now
+from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, rows, table, now
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 _PRIOS = ("P0", "P1", "P2", "P3")
-_TASK_UI_PATH = PROJECT_PATH / ".ai-memory" / "tasks_plan_ui_state.json"
+_TASK_UI_PATH = AI_MEMORY_ROOT / "tasks_plan_ui_state.json"
 
 
 def _safe_task_id(tid: str) -> str:
@@ -173,7 +173,7 @@ def list_tasks(status: Optional[str] = None, sprint_id: Optional[str] = None):
 def create_task(body: TaskCreate):
     t = table("tasks")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     tid = f"T-{int(now().timestamp() * 1000)}"
     row = {
         "id": tid,
@@ -236,7 +236,7 @@ def reorder_tasks_board(body: ReorderTasksBody):
         raise HTTPException(400, "各列须覆盖当前全部任务 ID 且无多余项")
     t = table("tasks")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     ts = now()
     for p in _PRIOS:
         for tid in groups[p]:
@@ -252,7 +252,7 @@ def unblock_task(task_id: str, human_notes: str = ""):
     _safe_task_id(task_id)
     t = table("tasks")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     t.update(
         where=f"id = '{task_id}'",
         values={"status": "pending", "human_notes": human_notes, "updated_at": now()},
@@ -265,7 +265,7 @@ def update_task(task_id: str, body: TaskUpdate):
     _safe_task_id(task_id)
     t = table("tasks")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     try:
         raw = body.model_dump(exclude_unset=True)
     except AttributeError:
@@ -311,7 +311,7 @@ def delete_task(task_id: str):
     _safe_task_id(task_id)
     t = table("tasks")
     if t is None:
-        raise HTTPException(503, "LanceDB not available")
+        raise HTTPException(503, "数据库不可用")
     t.delete(f"id = '{task_id}'")
     st = _ui_load()
     _ui_delete_id(st, task_id)

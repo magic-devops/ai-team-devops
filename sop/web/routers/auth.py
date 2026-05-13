@@ -2,11 +2,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from pathlib import Path
 import json, hashlib, os, secrets
 
+from path_config import ai_memory_root
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-AUTH_FILE = Path(os.getenv("PROJECT_PATH", ".")) / ".ai-memory" / "auth.json"
+AUTH_FILE = ai_memory_root() / "auth.json"
 security = HTTPBearer(auto_error=False)
 
 def _load(): return json.loads(AUTH_FILE.read_text()) if AUTH_FILE.exists() else {"users": [], "tokens": {}}

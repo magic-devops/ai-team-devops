@@ -396,3 +396,4 @@ function ImportPanel() {
     </div>
   );
 }
+window.i18nExtend && window.i18nExtend({zh:{},en:{}});

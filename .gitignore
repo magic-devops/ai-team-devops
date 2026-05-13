@@ -1,4 +1,5 @@
 # AI runtime data (local only, do not commit)
+.sop-runtime/
 .ai-memory/activity.log
 .ai-memory/tool-audit.log
 .ai-memory/lancedb/
@@ -62,3 +63,7 @@ node_modules/
 .ai-reinit-backups/
 
 .ai-memory/admin_backups/
+
+logs/
+
+.sop-runtime/

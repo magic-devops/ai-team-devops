@@ -20,10 +20,17 @@ python3 -c "import fastapi,lancedb" 2>/dev/null || {
   exit 1
 }
 
-if [ ! -d "$PROJECT_PATH/.ai-memory/lancedb" ]; then
-  echo "🗄️  初始化 LanceDB 目录..."
-  mkdir -p "$PROJECT_PATH/.ai-memory/lancedb"
+cd "$WEB_DIR"
+if [[ -f ".env" ]]; then
+  set -a; source .env; set +a
 fi
+echo "   初始化运行时目录…"
+env PROJECT_PATH="$PROJECT_PATH" python3 -c "
+import os, sys
+sys.path.insert(0, '.')
+from path_config import apply_startup_defaults
+apply_startup_defaults()
+"
 
 if command -v open &>/dev/null; then
   sleep 1.5 && open "http://localhost:$PORT" &
@@ -31,5 +38,4 @@ elif command -v xdg-open &>/dev/null; then
   sleep 1.5 && xdg-open "http://localhost:$PORT" &
 fi
 
-cd "$WEB_DIR"
 PROJECT_PATH="$PROJECT_PATH" python3 -m uvicorn main:app --host 0.0.0.0 --port "$PORT" --reload
