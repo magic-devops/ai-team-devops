@@ -1,6 +1,8 @@
 """环境检查、Docker 开发验证、基础组件部署、自定义检查 / 版本约束 / AI 诊断与受控修复"""
 from __future__ import annotations
 
+import asyncio
+import datetime
 import json
 import os
 import re
@@ -10,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/env", tags=["env"])
@@ -20,6 +22,9 @@ _CUSTOM_CHECKS_PATH = PROJECT_PATH / ".ai-memory" / "env_custom_checks.json"
 _VERSION_PINS_PATH = PROJECT_PATH / ".ai-memory" / "env_version_pins.json"
 _EXEC_ALLOWLIST_EXTRA_PATH = PROJECT_PATH / ".ai-memory" / "env_exec_allowlist_extra.json"
 _DOCKER_CUSTOM_PRESETS_PATH = PROJECT_PATH / ".ai-memory" / "docker_custom_presets.json"
+_DOCKER_MANAGED_ROOT = PROJECT_PATH / ".ai-memory" / "managed_dockerfiles"
+_COMPOSE_MANAGED_ROOT = PROJECT_PATH / ".ai-memory" / "managed_compose"
+_COMPOSE_MAX_BYTES = 512 * 1024
 
 _DEFAULT_EXEC_ALLOW: Set[str] = {
     "python3",
@@ -44,6 +49,7 @@ _DEFAULT_EXEC_ALLOW: Set[str] = {
     "uv",
     "pnpm",
     "corepack",
+    "codex",
     "claude",
     "opencode",
     "aider",
@@ -55,9 +61,24 @@ def _run(cmd: list, cwd=None, timeout=30) -> dict:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd or str(PROJECT_PATH))
         return {"stdout": r.stdout[-3000:], "stderr": r.stderr[-500:], "returncode": r.returncode, "ok": r.returncode == 0}
     except subprocess.TimeoutExpired:
-        return {"stdout": "", "stderr": "超时", "returncode": -1, "ok": False}
+        return {
+            "stdout": "",
+            "stderr": "timeout",
+            "returncode": -1,
+            "ok": False,
+            "error_code": "timeout",
+            "exe": (cmd[0] if cmd else None),
+        }
     except FileNotFoundError:
-        return {"stdout": "", "stderr": f"命令未找到: {cmd[0]}", "returncode": -1, "ok": False}
+        exe = cmd[0] if cmd else ""
+        return {
+            "stdout": "",
+            "stderr": f"cmd_not_found:{exe}",
+            "returncode": -1,
+            "ok": False,
+            "error_code": "cmd_not_found",
+            "exe": exe,
+        }
 
 
 def _exec_allowlist() -> Set[str]:
@@ -107,27 +128,194 @@ def _safe_path_under_project(rel_or_abs: str) -> Path:
     return target
 
 
+_MANAGED_STORE_RE = re.compile(r"^mf-[a-f0-9]{10}$")
+_COMPOSE_STORE_RE = re.compile(r"^cf-[a-f0-9]{10}$")
+_MANAGED_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,40}$")
+
+
+def _compose_manifest_load() -> Dict[str, Any]:
+    mf = _COMPOSE_MANAGED_ROOT / "manifest.json"
+    if not mf.exists():
+        return {"stores": []}
+    try:
+        d = json.loads(mf.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {"stores": []}
+    except Exception:
+        return {"stores": []}
+
+
+def _compose_manifest_save(data: Dict[str, Any]) -> None:
+    _COMPOSE_MANAGED_ROOT.mkdir(parents=True, exist_ok=True)
+    (_COMPOSE_MANAGED_ROOT / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _compose_store_dir(sid: str) -> Path:
+    if not _COMPOSE_STORE_RE.match((sid or "").strip()):
+        raise HTTPException(400, "非法 Compose 托管 id")
+    d = (_COMPOSE_MANAGED_ROOT / sid.strip()).resolve()
+    root = _COMPOSE_MANAGED_ROOT.resolve()
+    if not str(d).startswith(str(root) + os.sep):
+        raise HTTPException(400, "路径越界")
+    return d
+
+
+def _compose_latest_version(sid: str) -> int:
+    d = _compose_store_dir(sid)
+    if not d.is_dir():
+        return 0
+    vs = []
+    for x in d.iterdir():
+        if x.is_dir() and re.match(r"^v\d+$", x.name):
+            try:
+                vs.append(int(x.name[1:]))
+            except ValueError:
+                pass
+    return max(vs) if vs else 0
+
+
+def _compose_version_yaml_path(store_id: str, version: int) -> Path:
+    sid = (store_id or "").strip()
+    d = _compose_store_dir(sid)
+    p = (d / f"v{int(version)}" / "compose.yaml").resolve()
+    root = d.resolve()
+    if not str(p).startswith(str(root) + os.sep):
+        raise HTTPException(400, "路径越界")
+    return p
+
+
+def _compose_yaml_path(rel: str) -> Path:
+    rel = (rel or "docker-compose.yml").strip().replace("\\", "/")
+    if rel.startswith("managed:"):
+        sid = rel.split(":", 1)[1].strip()
+        if _MANAGED_STORE_RE.match(sid):
+            raise HTTPException(400, "此为 Dockerfile 托管 id（mf-）；Compose 请使用 managed:cf-xxxx")
+        if not _COMPOSE_STORE_RE.match(sid):
+            raise HTTPException(400, "非法托管 Compose id")
+        lv = _compose_latest_version(sid)
+        if lv <= 0:
+            raise HTTPException(404, "托管 Compose 尚无版本")
+        p = _compose_version_yaml_path(sid, lv)
+        if not p.is_file():
+            raise HTTPException(404, "compose.yaml 不存在")
+        return p
+    if ".." in rel or rel.startswith("/"):
+        raise HTTPException(400, "非法 compose 文件路径")
+    p = (PROJECT_PATH / rel).resolve()
+    root = PROJECT_PATH.resolve()
+    if not str(p).startswith(str(root) + os.sep):
+        raise HTTPException(400, "compose 文件须位于项目根下")
+    if p.suffix.lower() not in (".yml", ".yaml"):
+        raise HTTPException(400, "须为 .yml / .yaml")
+    return p
+
+
+def _compose_cmd(file_rel: str, parts: List[str], timeout: int = 120) -> dict:
+    cf = _compose_yaml_path(file_rel)
+    if not cf.is_file():
+        raise HTTPException(404, f"未找到 compose 文件: {file_rel}")
+    cmd = ["docker", "compose", "-f", str(cf), *parts]
+    return _run(cmd, timeout=timeout)
+
+
+def _managed_manifest_load() -> Dict[str, Any]:
+    mf = _DOCKER_MANAGED_ROOT / "manifest.json"
+    if not mf.exists():
+        return {"stores": []}
+    try:
+        d = json.loads(mf.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {"stores": []}
+    except Exception:
+        return {"stores": []}
+
+
+def _managed_manifest_save(data: Dict[str, Any]) -> None:
+    _DOCKER_MANAGED_ROOT.mkdir(parents=True, exist_ok=True)
+    (_DOCKER_MANAGED_ROOT / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _managed_store_dir(sid: str) -> Path:
+    if not _MANAGED_STORE_RE.match((sid or "").strip()):
+        raise HTTPException(400, "非法 Dockerfile 仓库 id")
+    d = (_DOCKER_MANAGED_ROOT / sid.strip()).resolve()
+    root = _DOCKER_MANAGED_ROOT.resolve()
+    if not str(d).startswith(str(root) + os.sep):
+        raise HTTPException(400, "路径越界")
+    return d
+
+
+def _managed_latest_version(sid: str) -> int:
+    d = _managed_store_dir(sid)
+    if not d.is_dir():
+        return 0
+    vs = []
+    for x in d.iterdir():
+        if x.is_dir() and re.match(r"^v\d+$", x.name):
+            try:
+                vs.append(int(x.name[1:]))
+            except ValueError:
+                pass
+    return max(vs) if vs else 0
+
+
+def _managed_resolve_dockerfile(dockerfile: str) -> Path:
+    """支持仓库相对路径或 managed:mf-xxxx。"""
+    spec = (dockerfile or "Dockerfile").strip()
+    if spec.startswith("managed:"):
+        sid = spec.split(":", 1)[1].strip()
+        if _COMPOSE_STORE_RE.match(sid):
+            raise HTTPException(400, "此为 Compose 托管 id（cf-）；构建请使用 Dockerfile 托管 managed:mf-xxxx")
+        p = _managed_store_dir(sid) / f"v{_managed_latest_version(sid)}" / "Dockerfile"
+        if not p.is_file():
+            raise HTTPException(404, "托管 Dockerfile 不存在或尚无版本")
+        return p
+    return _safe_path_under_project(spec)
+
+
 def _builtin_checks_dict() -> Dict[str, Any]:
     checks: Dict[str, Any] = {}
     tools = {
         "python3": ["python3", "--version"],
+        "pip3": ["pip3", "--version"],
         "git": ["git", "--version"],
         "docker": ["docker", "--version"],
         "docker-compose": ["docker", "compose", "version"],
+        "kubectl": ["kubectl", "version", "--client"],
+        "helm": ["helm", "version"],
         "java": ["java", "-version"],
         "mvn": ["mvn", "--version"],
+        "gradle": ["gradle", "--version"],
         "node": ["node", "--version"],
         "npm": ["npm", "--version"],
+        "npx": ["npx", "--version"],
+        "yarn": ["yarn", "--version"],
         "pnpm": ["pnpm", "--version"],
         "go": ["go", "version"],
+        "bun": ["bun", "--version"],
+        "deno": ["deno", "--version"],
         "uv": ["uv", "--version"],
+        "rustc": ["rustc", "--version"],
+        "cargo": ["cargo", "--version"],
+        "terraform": ["terraform", "version"],
+        "aws": ["aws", "--version"],
+        "gh": ["gh", "--version"],
+        "rg": ["rg", "--version"],
+        "make": ["make", "--version"],
+        "cmake": ["cmake", "--version"],
+        "jq": ["jq", "--version"],
+        "curl": ["curl", "--version"],
+        "codex": ["codex", "--version"],
         "claude": ["claude", "--version"],
         "opencode": ["opencode", "--version"],
     }
     for name, cmd in tools.items():
         r = _run(cmd, timeout=8)
         line = (r["stdout"] or r["stderr"] or "").split("\n")[0][:120]
-        checks[name] = {"available": r["ok"], "version": line}
+        row: Dict[str, Any] = {"available": r["ok"], "version": line}
+        if not r["ok"] and r.get("error_code"):
+            row["error_code"] = r["error_code"]
+            if r.get("exe") is not None:
+                row["exe"] = r["exe"]
+        checks[name] = row
     for pkg in ["fastapi", "lancedb", "sentence_transformers"]:
         r = _run(
             ["python3", "-c", f"import {pkg}; print({pkg}.__version__ if hasattr({pkg},'__version__') else 'ok')"],
@@ -667,6 +855,32 @@ class DockerImageRemoveBody(BaseModel):
     ref: str = Field(..., min_length=1, max_length=320)
 
 
+class DockerExecBody(BaseModel):
+    container: str = Field(..., max_length=120)
+    argv: List[str] = Field(default_factory=list)
+    tty: bool = Field(False, description="为 True 时使用 docker exec -it（需 TTY 环境，失败可改回 false）")
+
+
+class ManagedDockerfileCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=42)
+    content: str = Field(..., min_length=1, max_length=260000)
+
+
+class ManagedDockerfileUpdate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=260000)
+    bump_version: bool = True
+
+
+class ManagedComposeCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=42)
+    content: str = Field(..., min_length=1, max_length=_COMPOSE_MAX_BYTES)
+
+
+class ManagedComposeUpdate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=_COMPOSE_MAX_BYTES)
+    bump_version: bool = True
+
+
 def _docker_json_lines(stdout: str) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for line in (stdout or "").strip().split("\n"):
@@ -753,7 +967,7 @@ def docker_build(tag: str, dockerfile: str = "Dockerfile", context: str = "."):
         raise HTTPException(400, "非法 tag")
     if not re.match(r"^[a-zA-Z0-9_.\-/:]{1,200}$", t):
         raise HTTPException(400, "非法 tag")
-    df = _safe_path_under_project((dockerfile or "Dockerfile").strip() or "Dockerfile")
+    df = _managed_resolve_dockerfile(dockerfile)
     if not df.is_file():
         raise HTTPException(400, "Dockerfile 不存在或不是文件")
     ctx = _safe_path_under_project((context or ".").strip())
@@ -762,25 +976,89 @@ def docker_build(tag: str, dockerfile: str = "Dockerfile", context: str = "."):
     return _run(["docker", "build", "-t", t, "-f", str(df), str(ctx)], timeout=600)
 
 
+@router.get("/docker/compose/files")
+def compose_files_list():
+    """列出项目根下常见 compose 文件，并附带托管 Compose（managed:cf-xxxx）。"""
+    found: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for pattern in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+        p = PROJECT_PATH / pattern
+        if p.is_file():
+            found.append({"path": pattern, "size": p.stat().st_size, "kind": "project"})
+            seen.add(pattern)
+    for p in (
+        sorted(PROJECT_PATH.glob("docker-compose*.yml"))
+        + sorted(PROJECT_PATH.glob("docker-compose*.yaml"))
+        + sorted(PROJECT_PATH.glob("compose*.yml"))
+        + sorted(PROJECT_PATH.glob("compose*.yaml"))
+    ):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(PROJECT_PATH).as_posix()
+        if rel in seen or "node_modules" in rel.split("/"):
+            continue
+        found.append({"path": rel, "size": p.stat().st_size, "kind": "project"})
+        seen.add(rel)
+    for s in _compose_manifest_load().get("stores") or []:
+        sid = str(s.get("id") or "")
+        if not _COMPOSE_STORE_RE.match(sid):
+            continue
+        found.append(
+            {
+                "path": f"managed:{sid}",
+                "name": str(s.get("name") or sid),
+                "kind": "managed",
+                "latest": int(s.get("latest") or 0),
+                "size": 0,
+            }
+        )
+    return {"files": found}
+
+
 @router.get("/docker/compose/services")
-def compose_services():
-    r = _run(["docker", "compose", "ps", "--format", "json"])
+def compose_services(file: str = Query("docker-compose.yml", description="相对项目根的 compose 文件")):
+    r = _compose_cmd(file, ["ps", "--format", "json"], timeout=60)
     if not r["ok"]:
-        return {"error": r["stderr"], "services": []}
+        return {"error": r["stderr"], "services": [], "file": file}
     try:
-        return {"services": json.loads(r["stdout"])}
+        return {"services": json.loads(r["stdout"]), "file": file}
     except Exception:
-        return {"services": [], "raw": r["stdout"][:500]}
+        return {"services": [], "raw": r["stdout"][:500], "file": file}
 
 
 @router.post("/docker/compose/{action}")
-def compose_action(action: str):
+def compose_action(
+    action: str,
+    file: str = Query("docker-compose.yml", description="相对项目根的 compose 文件"),
+):
     if action not in ("up", "down", "restart", "pull"):
-        raise HTTPException(400, "Invalid action")
-    cmd = ["docker", "compose", action]
+        raise HTTPException(400, "action 仅支持 up | down | restart | pull")
+    parts = [action]
     if action == "up":
-        cmd.append("-d")
-    return _run(cmd, timeout=120)
+        parts.append("-d")
+    to = 300 if action == "pull" else 180
+    return _compose_cmd(file, parts, timeout=to)
+
+
+@router.get("/docker/logs/container/{name}")
+def docker_container_logs(name: str, tail: int = Query(200, ge=10, le=10000)):
+    n = (name or "").strip()
+    if not re.match(r"^[a-zA-Z0-9._-]{1,120}$", n):
+        raise HTTPException(400, "非法容器名")
+    return _run(["docker", "logs", "--tail", str(int(tail)), n], timeout=90)
+
+
+@router.get("/docker/logs/compose")
+def docker_compose_logs(
+    file: str = Query("docker-compose.yml"),
+    service: str = Query("", max_length=80),
+    tail: int = Query(200, ge=10, le=10000),
+):
+    parts = ["logs", "--tail", str(int(tail))]
+    sv = (service or "").strip()
+    if sv:
+        parts.append(sv)
+    return _compose_cmd(file, parts, timeout=120)
 
 
 @router.get("/docker/presets")
@@ -903,3 +1181,337 @@ def start_preset(name: str):
                 )
             )
     raise HTTPException(404, "Preset 不存在")
+
+
+def _utc_now() -> str:
+    return datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+@router.post("/docker/exec")
+def docker_exec_run(body: DockerExecBody):
+    """在运行中容器内执行命令；argv 经白名单校验（与自定义检查相同）。tty=true 时等价 docker exec -it。"""
+    c = (body.container or "").strip()
+    if not re.match(r"^[a-zA-Z0-9._-]{1,120}$", c):
+        raise HTTPException(400, "非法容器名")
+    inner = [str(x) for x in (body.argv or [])]
+    if not inner:
+        raise HTTPException(400, "argv 不能为空")
+    inner2 = _validate_argv(inner)
+    flags = ["-it"] if body.tty else ["-i"]
+    cmd = ["docker", "exec"] + flags + [c] + inner2
+    return _run(cmd, timeout=120)
+
+
+@router.websocket("/docker/ws-exec/{name}")
+async def docker_ws_exec(websocket: WebSocket, name: str):
+    """交互式 shell：WebSocket 双向转发 docker exec -i <name> sh|bash。首条消息 JSON {\"argv\":[\"sh\"]} 或 [\"bash\"]。"""
+    await websocket.accept()
+    n = (name or "").strip()
+    if not re.match(r"^[a-zA-Z0-9._-]{1,120}$", n):
+        await websocket.send_json({"type": "error", "message": "非法容器名"})
+        await websocket.close(code=4400)
+        return
+    try:
+        first = await asyncio.wait_for(websocket.receive_text(), timeout=45.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=4408)
+        return
+    except WebSocketDisconnect:
+        return
+    try:
+        msg = json.loads(first)
+    except Exception:
+        await websocket.send_json({"type": "error", "message": "首条消息须为 JSON，例如 {\"argv\": [\"sh\"]}"})
+        await websocket.close(code=4400)
+        return
+    argv = msg.get("argv")
+    if not isinstance(argv, list) or not argv:
+        argv = ["sh"]
+    try:
+        inner = _validate_argv([str(x) for x in argv])
+    except HTTPException as e:
+        await websocket.send_json({"type": "error", "message": str(e.detail)})
+        await websocket.close(code=4400)
+        return
+    if len(inner) != 1 or inner[0] not in ("sh", "bash"):
+        await websocket.send_json({"type": "error", "message": "交互会话仅允许 argv 为 [\"sh\"] 或 [\"bash\"]"})
+        await websocket.close(code=4400)
+        return
+    cmd = ["docker", "exec", "-i", n] + inner
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(PROJECT_PATH),
+        )
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close(code=4500)
+        return
+
+    await websocket.send_json({"type": "ready", "argv": inner})
+    try:
+        while True:
+            recv_task = asyncio.create_task(websocket.receive_text())
+            read_task = asyncio.create_task(proc.stdout.read(4096))
+            done, pend = await asyncio.wait({recv_task, read_task}, return_when=asyncio.FIRST_COMPLETED, timeout=600.0)
+            for t in pend:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+            if not done:
+                break
+            if read_task in done:
+                try:
+                    chunk = read_task.result()
+                except Exception:
+                    break
+                if not chunk:
+                    break
+                try:
+                    await websocket.send_json({"type": "stdout", "data": chunk.decode(errors="replace")})
+                except Exception:
+                    break
+            elif recv_task in done:
+                try:
+                    raw = recv_task.result()
+                except WebSocketDisconnect:
+                    break
+                try:
+                    m = json.loads(raw)
+                except Exception:
+                    continue
+                if m.get("type") == "stdin" and isinstance(m.get("data"), str):
+                    proc.stdin.write(m["data"].encode(errors="replace"))
+                    await proc.stdin.drain()
+                elif m.get("type") == "close":
+                    break
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        try:
+            if proc.stdin and not proc.stdin.is_closing():
+                proc.stdin.close()
+                await proc.stdin.wait_closed()
+        except Exception:
+            pass
+        try:
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), timeout=3.0)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    rc = proc.returncode if proc.returncode is not None else -1
+    try:
+        await websocket.send_json({"type": "exit", "code": rc})
+    except Exception:
+        pass
+    try:
+        await websocket.close()
+    except Exception:
+        pass
+
+
+@router.get("/docker/managed-dockerfiles")
+def managed_dockerfiles_list():
+    return _managed_manifest_load()
+
+
+@router.get("/docker/managed-dockerfiles/{store_id}")
+def managed_dockerfiles_get(store_id: str, version: Optional[int] = Query(None, ge=1, le=99999)):
+    sid = (store_id or "").strip()
+    _managed_store_dir(sid)
+    lv = int(version) if version is not None else _managed_latest_version(sid)
+    if lv <= 0:
+        raise HTTPException(404, "无版本")
+    p = _managed_store_dir(sid) / f"v{lv}" / "Dockerfile"
+    if not p.is_file():
+        raise HTTPException(404, "该版本不存在")
+    return {"id": sid, "version": lv, "content": p.read_text(encoding="utf-8", errors="replace")}
+
+
+@router.post("/docker/managed-dockerfiles")
+def managed_dockerfiles_create(body: ManagedDockerfileCreate):
+    nm = body.name.strip().lower()
+    if not _MANAGED_NAME_RE.match(nm):
+        raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
+    man = _managed_manifest_load()
+    stores = list(man.get("stores") or [])
+    if any(str(s.get("name")) == nm for s in stores):
+        raise HTTPException(400, "name 已存在")
+    sid = f"mf-{uuid.uuid4().hex[:10]}"
+    root = _managed_store_dir(sid)
+    root.mkdir(parents=True, exist_ok=True)
+    vdir = root / "v1"
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+    ts = _utc_now()
+    stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
+    man["stores"] = stores
+    _managed_manifest_save(man)
+    return {"ok": True, "id": sid, "version": 1, "dockerfile_param": f"managed:{sid}"}
+
+
+@router.put("/docker/managed-dockerfiles/{store_id}")
+def managed_dockerfiles_update(store_id: str, body: ManagedDockerfileUpdate):
+    sid = (store_id or "").strip()
+    _managed_store_dir(sid)
+    man = _managed_manifest_load()
+    stores = list(man.get("stores") or [])
+    idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
+    if idx < 0:
+        raise HTTPException(404, "未找到")
+    cur = max(1, int(stores[idx].get("latest") or 1))
+    if body.bump_version:
+        nxt = cur + 1
+        vdir = _managed_store_dir(sid) / f"v{nxt}"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+        stores[idx]["latest"] = nxt
+    else:
+        vdir = _managed_store_dir(sid) / f"v{cur}"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+    stores[idx]["updated_at"] = _utc_now()
+    man["stores"] = stores
+    _managed_manifest_save(man)
+    return {"ok": True, "latest": stores[idx]["latest"]}
+
+
+@router.delete("/docker/managed-dockerfiles/{store_id}")
+def managed_dockerfiles_delete(store_id: str):
+    sid = (store_id or "").strip()
+    root = _managed_store_dir(sid)
+    if not root.is_dir():
+        raise HTTPException(404, "未找到")
+    shutil.rmtree(root, ignore_errors=True)
+    man = _managed_manifest_load()
+    man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
+    _managed_manifest_save(man)
+    return {"ok": True}
+
+
+def _read_upload_text_limited(file: UploadFile, max_bytes: int) -> str:
+    raw = file.file.read(max_bytes + 1)
+    if len(raw) > max_bytes:
+        raise HTTPException(400, f"文件过大（>{max_bytes} bytes）")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "须为 UTF-8 文本")
+
+
+@router.post("/docker/managed-dockerfiles/{store_id}/upload")
+def managed_dockerfiles_upload(
+    store_id: str,
+    bump_version: bool = Query(True, description="True 则新版本；False 覆盖当前 latest 目录"),
+    file: UploadFile = File(...),
+):
+    sid = (store_id or "").strip()
+    _managed_store_dir(sid)
+    text = _read_upload_text_limited(file, 260000)
+    body = ManagedDockerfileUpdate(content=text, bump_version=bump_version)
+    return managed_dockerfiles_update(sid, body)
+
+
+@router.get("/docker/managed-compose")
+def managed_compose_list():
+    return _compose_manifest_load()
+
+
+@router.get("/docker/managed-compose/{store_id}")
+def managed_compose_get(store_id: str, version: Optional[int] = Query(None, ge=1, le=99999)):
+    sid = (store_id or "").strip()
+    _compose_store_dir(sid)
+    lv = int(version) if version is not None else _compose_latest_version(sid)
+    if lv <= 0:
+        raise HTTPException(404, "无版本")
+    p = _compose_version_yaml_path(sid, lv)
+    if not p.is_file():
+        raise HTTPException(404, "该版本不存在")
+    return {"id": sid, "version": lv, "content": p.read_text(encoding="utf-8", errors="replace")}
+
+
+@router.post("/docker/managed-compose")
+def managed_compose_create(body: ManagedComposeCreate):
+    nm = body.name.strip().lower()
+    if not _MANAGED_NAME_RE.match(nm):
+        raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
+    man = _compose_manifest_load()
+    stores = list(man.get("stores") or [])
+    if any(str(s.get("name")) == nm for s in stores):
+        raise HTTPException(400, "name 已存在")
+    sid = f"cf-{uuid.uuid4().hex[:10]}"
+    root = _compose_store_dir(sid)
+    root.mkdir(parents=True, exist_ok=True)
+    vdir = root / "v1"
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+    ts = _utc_now()
+    stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
+    man["stores"] = stores
+    _compose_manifest_save(man)
+    return {"ok": True, "id": sid, "version": 1, "compose_file_param": f"managed:{sid}"}
+
+
+@router.put("/docker/managed-compose/{store_id}")
+def managed_compose_update(store_id: str, body: ManagedComposeUpdate):
+    sid = (store_id or "").strip()
+    _compose_store_dir(sid)
+    man = _compose_manifest_load()
+    stores = list(man.get("stores") or [])
+    idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
+    if idx < 0:
+        raise HTTPException(404, "未找到")
+    cur = max(1, int(stores[idx].get("latest") or 1))
+    if body.bump_version:
+        nxt = cur + 1
+        vdir = _compose_store_dir(sid) / f"v{nxt}"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+        stores[idx]["latest"] = nxt
+    else:
+        vdir = _compose_store_dir(sid) / f"v{cur}"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+    stores[idx]["updated_at"] = _utc_now()
+    man["stores"] = stores
+    _compose_manifest_save(man)
+    return {"ok": True, "latest": stores[idx]["latest"]}
+
+
+@router.delete("/docker/managed-compose/{store_id}")
+def managed_compose_delete(store_id: str):
+    sid = (store_id or "").strip()
+    root = _compose_store_dir(sid)
+    if not root.is_dir():
+        raise HTTPException(404, "未找到")
+    shutil.rmtree(root, ignore_errors=True)
+    man = _compose_manifest_load()
+    man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
+    _compose_manifest_save(man)
+    return {"ok": True}
+
+
+@router.post("/docker/managed-compose/{store_id}/upload")
+def managed_compose_upload(
+    store_id: str,
+    bump_version: bool = Query(True),
+    file: UploadFile = File(...),
+):
+    sid = (store_id or "").strip()
+    _compose_store_dir(sid)
+    fn = (file.filename or "").lower()
+    if fn and not (fn.endswith(".yml") or fn.endswith(".yaml")):
+        raise HTTPException(400, "上传文件名须以 .yml 或 .yaml 结尾")
+    text = _read_upload_text_limited(file, _COMPOSE_MAX_BYTES)
+    body = ManagedComposeUpdate(content=text, bump_version=bump_version)
+    return managed_compose_update(sid, body)

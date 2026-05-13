@@ -5,92 +5,96 @@ function devFlowNavigate(tabId) {
   window.dispatchEvent(new CustomEvent('app-set-tab', { detail: { tab: tabId } }));
 }
 
-const DEV_FLOW_STAGES = [
-  { id: 'req', label: '需求', sub: '澄清 · 优先级 · 范围', tab: 'requirements', icon: '📋' },
-  { id: 'split', label: '拆解', sub: '需求→子项/估点', tab: 'requirements', icon: '✂️' },
-  { id: 'design', label: '方案', sub: '架构 · 接口 · 回滚', tab: 'design-docs', icon: '📐' },
-  { id: 'iterate', label: '迭代', sub: 'Sprint · 燃尽', tab: 'iteration', icon: '🔄' },
-  { id: 'task', label: '执行', sub: '分配 · 状态', tab: 'plan', icon: '⚙️' },
-  { id: 'dev', label: '开发', sub: 'Vibe · CLI · 规范', tab: 'vibe', icon: '💻' },
-  { id: 'multi', label: '多 Agent', sub: '专家组 · 编排', tab: 'agents', icon: '🤖' },
-  { id: 'env', label: '镜像/环境', sub: 'Docker · 检查', tab: 'docker', icon: '🐳' },
-  { id: 'debug', label: '调试', sub: '问题 · 根因', tab: 'issues', icon: '🔧' },
-  { id: 'orch', label: '发布/编排', sub: '工作流 · MCP', tab: 'orchestration', icon: '🚀' },
-];
-
-/** 复制到剪贴板：短提示，减少模型上下文；引用仓库内路径由人/工具按需加载 */
-const DEV_FLOW_PROMPTS = [
-  {
-    title: '需求澄清（低 Token）',
-    text:
-      '针对需求 [ID/标题]：仅输出①范围/非范围 ②验收标准（可测）③风险与假设④待确认问题（≤5条）。不要写实现代码；引用 specs/ 时只写相对路径。',
-  },
-  {
-    title: '需求拆解 → 任务',
-    text:
-      '将需求拆为 ≤10 条任务：每条含标题、依赖、估点(1-5)、负责人角色；用表格输出。不展开技术细节；接口/表结构放到「技术方案」阶段。',
-  },
-  {
-    title: '功能/接口设计摘要',
-    text:
-      '输出≤300字摘要 + 「变更清单」：影响模块、对外接口、数据表、兼容策略。详设写入技术方案文档（.ai-memory/tech_design），此处不贴长文。',
-  },
-  {
-    title: '开发计划（迭代内）',
-    text:
-      '基于当前 Sprint 任务：给出本周交付顺序（拓扑排序）、阻塞项、每日可验证里程碑。不要重复需求全文，只引用任务 ID。',
-  },
-  {
-    title: '编码实现（规范驱动）',
-    text:
-      '实现任务 [TASK-ID]：严格遵守 specs/backend 或 specs/frontend 中相关文件；改动面尽量小；先列文件清单再给补丁思路。禁止无关重构。',
-  },
-  {
-    title: '调试 / 排障',
-    text:
-      '根据错误日志/堆栈：①最小复现步骤 ②根因假设（≤3条）③验证实验 ④最小修复 diff。不要猜测未给出的代码路径。',
-  },
-  {
-    title: '多 Agent 分工',
-    text:
-      '拆分为 Planner / Coder / Reviewer 可并行子任务：每段输入≤150字 + 明确产出物格式。由编排页触发，避免单轮超长 system prompt。',
-  },
-  {
-    title: '镜像 / 运行 / 发布检查',
-    text:
-      '输出发布前检查表：配置项、DB 迁移、回滚步骤、监控与告警各 1 行；Docker/compose 仅确认镜像名与端口，不粘贴整个 yaml。',
-  },
-];
-
 function DevFlowHub() {
-  const { data, loading, error, reload } = useFetch(`${API}/dev-flow/summary`);
-  const [openPrompt, setOpenPrompt] = React.useState(0);
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
 
-  const copy = (t) => {
-    navigator.clipboard.writeText(t).then(() => showToast('已复制', 'ok')).catch(() => showToast('复制失败', 'err'));
+  const stages = React.useMemo(
+    () => (typeof window.dfStagesT === 'function' ? window.dfStagesT(t) : []),
+    [langTick]
+  );
+  const prompts = React.useMemo(
+    () => (typeof window.dfPromptsT === 'function' ? window.dfPromptsT(t) : []),
+    [langTick]
+  );
+
+  const { data, loading, error, reload } = useFetch(`${API}/dev-flow/summary`);
+  const { data: wsCtx, loading: wsLoading, reload: reloadWs } = useFetch(`${API}/system/workspace/context`);
+  const [openPrompt, setOpenPrompt] = React.useState(0);
+  const [artForm, setArtForm] = React.useState({ title: '', kind: 'url', url: '', path: '', notes: '' });
+  const [artBusy, setArtBusy] = React.useState(false);
+
+  const addWorkspaceArtifact = () => {
+    const title = (artForm.title || '').trim();
+    if (!title) {
+      showToast(t('df_toast_title'), 'err');
+      return;
+    }
+    setArtBusy(true);
+    const body =
+      artForm.kind === 'path'
+        ? { title, kind: 'path', path: (artForm.path || '').trim(), notes: (artForm.notes || '').trim() }
+        : { title, kind: 'url', url: (artForm.url || '').trim(), notes: (artForm.notes || '').trim() };
+    fetch(`${API}/system/workspace/artifacts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        setArtBusy(false);
+        if (!ok) {
+          showToast(typeof d.detail === 'string' ? d.detail : t('df_toast_add_fail'), 'err');
+          return;
+        }
+        showToast(t('df_toast_add_ok'), 'ok');
+        setArtForm({ title: '', kind: 'url', url: '', path: '', notes: '' });
+        reloadWs();
+      })
+      .catch(() => {
+        setArtBusy(false);
+        showToast(t('cli_toast_req_fail'), 'err');
+      });
+  };
+
+  const delWorkspaceArtifact = (id) => {
+    if (!confirm(t('df_confirm_del_bm'))) return;
+    fetch(`${API}/system/workspace/artifacts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        reloadWs();
+        showToast(t('df_toast_del_ok'), 'ok');
+      })
+      .catch(() => showToast(t('df_toast_del_fail'), 'err'));
+  };
+
+  const copyText = (txt) => {
+    navigator.clipboard.writeText(txt).then(() => showToast(t('df_toast_copy_ok'), 'ok')).catch(() => showToast(t('df_toast_copy_fail'), 'err'));
   };
 
   const hints = React.useMemo(() => {
     const h = [];
     if (!data) return h;
-    if (!(data.requirements && data.requirements.total)) h.push({ type: 'warn', text: '尚无需求入库：从「需求管理」录入或导入。' });
-    else if (data.requirements && data.requirements.p0 > 0) h.push({ type: 'info', text: `存在 P0 需求 ${data.requirements.p0} 条，建议优先闭环验收标准。` });
+    if (!(data.requirements && data.requirements.total)) h.push({ type: 'warn', text: t('df_hint_req_empty') });
+    else if (data.requirements && data.requirements.p0 > 0) h.push({ type: 'info', text: t('df_hint_p0', { n: data.requirements.p0 }) });
     if (data.tasks && data.tasks.total_all && data.tasks.linked_to_requirement / data.tasks.total_all < 0.25) {
-      h.push({ type: 'warn', text: '任务与需求关联度偏低：拆解时在任务上绑定 requirement_id，便于追溯。' });
+      h.push({ type: 'warn', text: t('df_hint_tasks') });
     }
-    if (!(data.design_docs && data.design_docs.count)) h.push({ type: 'info', text: '技术方案文档数为 0：关键变更前先落「技术方案」再开发，降低返工。' });
-    if (data.issues && data.issues.critical_open > 0) h.push({ type: 'err', text: `有 ${data.issues.critical_open} 个高优未关闭问题，建议先处理再扩功能。` });
-    if (!(data.repo_hints && data.repo_hints.dockerfile) && !(data.repo_hints && data.repo_hints.compose)) h.push({ type: 'info', text: '未发现 Dockerfile/compose：环境管理可从模板初始化。' });
+    if (!(data.design_docs && data.design_docs.count)) h.push({ type: 'info', text: t('df_hint_design') });
+    if (data.issues && data.issues.critical_open > 0) h.push({ type: 'err', text: t('df_hint_crit', { n: data.issues.critical_open }) });
+    if (!(data.repo_hints && data.repo_hints.dockerfile) && !(data.repo_hints && data.repo_hints.compose)) h.push({ type: 'info', text: t('df_hint_docker') });
     if (((data.agents && data.agents.definitions) || 0) >= 1 && ((data.agents && data.agents.groups) || 0) === 0) {
-      h.push({ type: 'info', text: '已定义 Agent 但未建专家组：可在 Agent 管理创建 group 供 Vibe 与编排复用。' });
+      h.push({ type: 'info', text: t('df_hint_agents') });
     }
     return h;
-  }, [data]);
+  }, [data, langTick]);
 
   if (loading) {
     return (
       <div>
-        <div className="section-title">研发全流程</div>
+        <div className="section-title">{t('df_loading')}</div>
         <PageSkeleton cards={3} />
       </div>
     );
@@ -98,7 +102,7 @@ function DevFlowHub() {
   if (error) {
     return (
       <div>
-        <div className="section-title">研发全流程</div>
+        <div className="section-title">{t('df_loading')}</div>
         <LoadError message={error} onRetry={reload} />
       </div>
     );
@@ -112,62 +116,162 @@ function DevFlowHub() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <div className="section-title">研发全流程 · 智能交付枢纽</div>
+        <div className="section-title">{t('df_title')}</div>
         <RefreshBtn onClick={reload} />
       </div>
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, lineHeight: 1.6 }}>
-        单接口聚合项目状态，减少多轮问答消耗；阶段卡片直达对应模块。提示短句强调<strong style={{ color: '#94a3b8' }}>引用路径、限制长度、分阶段输入</strong>以控制 Token。
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14, lineHeight: 1.6 }}>
+        {t('df_intro_1')}
+        <strong style={{ color: 'var(--text2)' }}>{t('df_intro_strong')}</strong>
+        {t('df_intro_2')}
       </div>
 
+      {!wsLoading && wsCtx && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            <div className="section-title" style={{ fontSize: 14, margin: 0 }}>
+              {t('df_workspace_title')}
+            </div>
+            <RefreshBtn onClick={reloadWs}>{''}</RefreshBtn>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.55 }}>
+            {t('df_workspace_p1')}{' '}
+            {t('df_workspace_p2')} <code style={{ color: 'var(--link-inline)' }}>.ai-memory/workspace_artifacts.json</code>
+            {' '}
+            {t('df_workspace_p3')} <code style={{ color: 'var(--link-inline)' }}>ADMIN_PUBLIC_BASE_URL</code>.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => copyText(wsCtx.project_path || '')}>
+              {t('df_copy_root')}
+            </button>
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => copyText((wsCtx.admin_ui_base || '') + '/#vibe')}>
+              {t('df_copy_vibe')}
+            </button>
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => copyText(wsCtx.api_base || '')}>
+              {t('df_copy_api')}
+            </button>
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => window.open(wsCtx.docs && wsCtx.docs.openapi, '_blank')}>
+              OpenAPI
+            </button>
+          </div>
+          {(wsCtx.nav || []).length > 0 && (
+            <div style={{ marginBottom: 12, fontSize: 11, color: 'var(--text2)' }}>
+              {t('df_nav_label')}
+              {(wsCtx.nav || []).slice(0, 8).map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ marginRight: 6, marginBottom: 6, background: 'var(--surface-muted)', color: 'var(--text2)' }}
+                  onClick={() => devFlowNavigate(n.id)}
+                >
+                  {n.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {(wsCtx.artifacts || []).length > 0 ? (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>{t('df_bookmarks_saved')}</div>
+              {(wsCtx.artifacts || []).map((a) => (
+                <div key={a.id} className="list-item" style={{ padding: '6px 0', alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{a.title}</div>
+                    <div className="meta" style={{ wordBreak: 'break-all' }}>
+                      {a.kind === 'url' ? a.url : `${a.path}${a.resolved_path ? ' → ' + a.resolved_path : ''}`}
+                    </div>
+                  </div>
+                  {a.kind === 'url' && a.url && (
+                    <button type="button" className="btn btn-sm btn-primary" style={{ marginRight: 6 }} onClick={() => window.open(a.url, '_blank')}>
+                      {t('df_open')}
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-sm btn-danger" onClick={() => delWorkspaceArtifact(a.id)}>
+                    {t('df_del_short')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div style={{ borderTop: '1px solid var(--vibe-divider)', paddingTop: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>{t('df_add_bookmark')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: 11 }}>{t('df_bm_title')}</label>
+                <input value={artForm.title} onChange={(e) => setArtForm({ ...artForm, title: e.target.value })} placeholder={t('df_bm_title_ph')} style={{ fontSize: 12 }} />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: 11 }}>{t('df_bm_type')}</label>
+                <select value={artForm.kind} onChange={(e) => setArtForm({ ...artForm, kind: e.target.value })} style={{ fontSize: 12 }}>
+                  <option value="url">{t('df_bm_kind_url')}</option>
+                  <option value="path">{t('df_bm_kind_path')}</option>
+                </select>
+              </div>
+            </div>
+            {artForm.kind === 'url' ? (
+              <div className="form-group" style={{ marginBottom: 8 }}>
+                <label style={{ fontSize: 11 }}>{t('df_bm_url')}</label>
+                <input value={artForm.url} onChange={(e) => setArtForm({ ...artForm, url: e.target.value })} placeholder="https://..." style={{ fontSize: 12, fontFamily: 'monospace' }} />
+              </div>
+            ) : (
+              <div className="form-group" style={{ marginBottom: 8 }}>
+                <label style={{ fontSize: 11 }}>{t('df_bm_path')}</label>
+                <input value={artForm.path} onChange={(e) => setArtForm({ ...artForm, path: e.target.value })} placeholder={t('df_bm_path_ph')} style={{ fontSize: 12, fontFamily: 'monospace' }} />
+              </div>
+            )}
+            <button type="button" className="btn btn-sm btn-primary" disabled={artBusy} onClick={addWorkspaceArtifact}>
+              {artBusy ? t('df_bm_saving') : t('df_bm_save')}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="grid-4" style={{ marginBottom: 16 }}>
         <div className="card">
-          <h3>需求</h3>
+          <h3>{t('df_stat_req')}</h3>
           <div className="stat-val">{R.total != null ? R.total : 0}</div>
           <div className="stat-sub">P0 {R.p0 != null ? R.p0 : 0}</div>
         </div>
         <div className="card">
-          <h3>任务(Sprint)</h3>
+          <h3>{t('df_stat_task')}</h3>
           <div className="stat-val">{T.sprint_scope != null ? T.sprint_scope : 0}</div>
-          <div className="stat-sub">完成 {T.done_sprint != null ? T.done_sprint : 0} · 已关联需求 {T.linked_to_requirement != null ? T.linked_to_requirement : 0}/{T.total_all != null ? T.total_all : 0}</div>
+          <div className="stat-sub">
+            {t('df_stat_task_sub', {
+              d: T.done_sprint != null ? T.done_sprint : 0,
+              l: T.linked_to_requirement != null ? T.linked_to_requirement : 0,
+              a: T.total_all != null ? T.total_all : 0,
+            })}
+          </div>
         </div>
         <div className="card">
-          <h3>问题(未关闭)</h3>
+          <h3>{t('df_stat_issue')}</h3>
           <div className="stat-val">{I.open != null ? I.open : 0}</div>
-          <div className="stat-sub">高优 {I.critical_open != null ? I.critical_open : 0}</div>
+          <div className="stat-sub">{t('df_stat_issue_sub', { n: I.critical_open != null ? I.critical_open : 0 })}</div>
         </div>
         <div className="card">
-          <h3>方案 / Agent</h3>
+          <h3>{t('df_stat_agent')}</h3>
           <div className="stat-val">{data.design_docs && data.design_docs.count != null ? data.design_docs.count : 0}</div>
           <div className="stat-sub">
-            Agent {data.agents && data.agents.definitions != null ? data.agents.definitions : 0} · 组 {data.agents && data.agents.groups != null ? data.agents.groups : 0}
+            {t('df_stat_agent_sub', {
+              a: data.agents && data.agents.definitions != null ? data.agents.definitions : 0,
+              g: data.agents && data.agents.groups != null ? data.agents.groups : 0,
+            })}
           </div>
         </div>
       </div>
 
       {S && (
         <div className="card" style={{ marginBottom: 16, fontSize: 13 }}>
-          <span style={{ color: '#94a3b8' }}>当前 Sprint</span>{' '}
-          <strong style={{ color: '#e2e8f0' }}>{S.id || '-'}</strong> · {S.goal || '（无描述）'}
+          <span className="text-secondary">{t('df_sprint')}</span>{' '}
+          <strong style={{ color: 'var(--text)' }}>{S.id || '-'}</strong> · {S.goal || t('df_sprint_empty')}
         </div>
       )}
 
       {hints.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="section-title" style={{ fontSize: 13, marginBottom: 8 }}>
-            质量与节奏建议
+            {t('df_hints_title')}
           </div>
           {hints.map((x, i) => (
-            <div
-              key={i}
-              style={{
-                fontSize: 12,
-                marginBottom: 6,
-                padding: '8px 10px',
-                borderRadius: 8,
-                background: x.type === 'err' ? 'rgba(127,29,29,0.35)' : x.type === 'warn' ? 'rgba(120,53,15,0.35)' : 'rgba(30,58,95,0.5)',
-                color: '#e2e8f0',
-              }}
-            >
+            <div key={i} className={'flow-hint ' + (x.type === 'err' ? 'flow-hint--err' : x.type === 'warn' ? 'flow-hint--warn' : 'flow-hint--info')}>
               {x.text}
             </div>
           ))}
@@ -175,27 +279,14 @@ function DevFlowHub() {
       )}
 
       <div className="section-title" style={{ marginBottom: 10 }}>
-        阶段导航（一键进入）
+        {t('df_stages_title')}
       </div>
       <div className="scroll-slim" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 10, marginBottom: 20 }}>
-        {DEV_FLOW_STAGES.map((st) => (
-          <button
-            key={st.id}
-            type="button"
-            className="card"
-            onClick={() => devFlowNavigate(st.tab)}
-            style={{
-              minWidth: 132,
-              flexShrink: 0,
-              cursor: 'pointer',
-              textAlign: 'left',
-              border: '1px solid #334155',
-              background: '#1e293b',
-            }}
-          >
+        {stages.map((st) => (
+          <button key={st.id} type="button" className="dev-stage-nav-btn" onClick={() => devFlowNavigate(st.tab)}>
             <div style={{ fontSize: 20, marginBottom: 4 }}>{st.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: 13, color: '#f1f5f9' }}>{st.label}</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{st.sub}</div>
+            <div className="dev-stage-nav-title">{st.label}</div>
+            <div className="dev-stage-nav-sub">{st.sub}</div>
           </button>
         ))}
       </div>
@@ -203,55 +294,61 @@ function DevFlowHub() {
       <div className="grid-2">
         <div className="card">
           <div className="section-title" style={{ fontSize: 14 }}>
-            低 Token 提示模板（点击展开 / 复制）
+            {t('df_prompts_title')}
           </div>
-          {DEV_FLOW_PROMPTS.map((p, i) => (
-            <div key={i} style={{ borderBottom: '1px solid #334155', padding: '10px 0' }}>
+          {prompts.map((p, i) => (
+            <div key={i} style={{ borderBottom: '1px solid var(--vibe-divider)', padding: '10px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <button type="button" className="btn btn-sm" style={{ background: 'transparent', color: '#93c5fd', textAlign: 'left', flex: 1 }} onClick={() => setOpenPrompt(openPrompt === i ? -1 : i)}>
+                <button type="button" className="btn btn-sm" style={{ background: 'transparent', color: 'var(--link-inline)', textAlign: 'left', flex: 1 }} onClick={() => setOpenPrompt(openPrompt === i ? -1 : i)}>
                   {openPrompt === i ? '▼' : '▶'} {p.title}
                 </button>
-                <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => copy(p.text)}>
-                  复制
+                <button type="button" className="btn btn-sm btn-muted" onClick={() => copyText(p.text)}>
+                  {t('df_copy')}
                 </button>
               </div>
               {openPrompt === i && (
-                <pre style={{ marginTop: 8, fontSize: 11, color: '#cbd5e1', whiteSpace: 'pre-wrap', lineHeight: 1.55, maxHeight: 160, overflow: 'auto' }}>{p.text}</pre>
+                <pre style={{ marginTop: 8, fontSize: 11, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.55, maxHeight: 160, overflow: 'auto' }}>{p.text}</pre>
               )}
             </div>
           ))}
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 10 }}>
-            用法：复制到 Vibe Coding / 外部 Agent；把 [ID] 替换为真实键值。长规范用「规范文档」「技术方案」页打开，勿粘贴全文。
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 10 }}>
+            {t('df_prompts_footer')}
           </div>
         </div>
 
         <div className="card">
           <div className="section-title" style={{ fontSize: 14 }}>
-            仓库与工程线索
+            {t('df_repo_title')}
           </div>
-          <ul style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.9, paddingLeft: 18 }}>
+          <ul style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.9, paddingLeft: 18 }}>
             <li>
-              项目路径：<code style={{ color: '#e2e8f0' }}>{data.project_path}</code>
+              {t('df_repo_path')} <code style={{ color: 'var(--text)' }}>{data.project_path}</code>
             </li>
-            <li>specs/ 目录：{data.repo_hints && data.repo_hints.specs_dir ? '✅ 已存在' : '— 未检测到'}</li>
-            <li>Dockerfile：{data.repo_hints && data.repo_hints.dockerfile ? '✅' : '—'}</li>
-            <li>Compose：{data.repo_hints && data.repo_hints.compose ? '✅' : '—'}</li>
+            <li>
+              {t('df_repo_specs')} {data.repo_hints && data.repo_hints.specs_dir ? t('df_repo_specs_ok') : t('df_repo_specs_no')}
+            </li>
+            <li>
+              {t('df_repo_df')} {data.repo_hints && data.repo_hints.dockerfile ? t('df_repo_yes') : t('df_repo_dash')}
+            </li>
+            <li>
+              {t('df_repo_compose')} {data.repo_hints && data.repo_hints.compose ? t('df_repo_yes') : t('df_repo_dash')}
+            </li>
           </ul>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             <button type="button" className="btn btn-sm btn-primary" onClick={() => devFlowNavigate('knowledge-mgr')}>
-              知识库
+              {t('df_nav_kb')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => devFlowNavigate('specs')}>
-              规范文档
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => devFlowNavigate('specs')}>
+              {t('df_nav_specs')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => devFlowNavigate('cli')}>
-              CLI 工具
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => devFlowNavigate('cli')}>
+              {t('df_nav_cli')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => devFlowNavigate('models')}>
-              模型配置
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => devFlowNavigate('models')}>
+              {t('df_nav_models')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => devFlowNavigate('mcp')}>
-              MCP
+            <button type="button" className="btn btn-sm btn-muted" onClick={() => devFlowNavigate('mcp')}>
+              {t('df_nav_mcp')}
             </button>
           </div>
         </div>

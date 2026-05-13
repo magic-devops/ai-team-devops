@@ -393,6 +393,11 @@ def _build_cmd(body: VibeRequest) -> Optional[list]:
         if body.model:
             cmd += ["--model", body.model]
         return cmd
+    if body.tool == "codex":
+        cmd = ["codex", "exec", full_prompt]
+        if body.model:
+            cmd += ["--model", body.model]
+        return cmd
     if body.tool == "opencode":
         return ["opencode", "run", "--prompt", full_prompt]
     if body.tool == "aider":
@@ -405,6 +410,7 @@ def _build_cmd(body: VibeRequest) -> Optional[list]:
 
 def _install_hint(tool: str) -> str:
     hints = {
+        "codex": "npm install -g @openai/codex  # 或 brew install --cask codex",
         "claude": "npm install -g @anthropic-ai/claude-code",
         "opencode": "参考 https://github.com/sst/opencode",
         "aider": "pip install aider-chat --break-system-packages",

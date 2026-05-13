@@ -2,50 +2,118 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('devdash-theme') || localStorage.getItem('theme') || 'dark';
+    if (t !== 'light' && t !== 'dim' && t !== 'contrast' && t !== 'dark') t = 'dark';
+    var lg = localStorage.getItem('devdash-lang') || 'zh';
+    document.documentElement.setAttribute('lang', lg === 'en' ? 'en' : 'zh-CN');
+    window.__DEVDASH_LANG__ = lg;
+    document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ai-team-devops 管理后台</title>
 <link rel="icon" type="image/png" href="/assets/brand-mark.png"/>
 <link rel="apple-touch-icon" href="/assets/brand-mark.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="pages/i18n.js?v=20260512orch8"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- 模块化页面文件（每个文件独立，AI 按需修改） -->
 <script type="text/babel" src="pages/agents.js"></script>
 <script type="text/babel" src="pages/skills.js"></script>
 <script type="text/babel" src="pages/mcp.js"></script>
-<script type="text/babel" src="pages/system.js"></script>
+<script type="text/babel" src="pages/system.js?v=20260512c"></script>
 <script type="text/babel" src="pages/auth.js"></script>
-<script type="text/babel" src="pages/models.js"></script>
-<script type="text/babel" src="pages/orchestration.js"></script>
-<script type="text/babel" src="pages/docker.js?v=20260512a"></script>
-<script type="text/babel" src="pages/skill_repo.js"></script>
+<script type="text/babel" src="pages/models.js?v=20260512h"></script>
+<script type="text/babel" src="pages/orchestration.js?v=20260512orch8"></script>
+<script type="text/babel" src="pages/docker.js?v=20260512g"></script>
+<script type="text/babel" src="pages/skill_repo.js?v=20260512d"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script type="text/babel" src="pages/vibe.js?v=20260512e"></script>
+<script type="text/babel" src="pages/vibe.js?v=20260512i"></script>
 <script type="text/babel" src="pages/notify.js"></script>
-<script type="text/babel" src="pages/cli.js"></script>
+<script type="text/babel" src="pages/cli.js?v=20260512i"></script>
 <script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
-<script type="text/babel" src="pages/dev_flow.js"></script>
+<script type="text/babel" src="pages/dev_flow.js?v=20260512g"></script>
 <style>
-/* ── CSS 变量（主题） ─────────────────────────────────────────── */
-:root{
+/* ── CSS 变量（多主题 + 语义色，供页面内联样式改为 var / class） ── */
+:root,
+[data-theme=dark]{
   --bg:#0f172a;--bg2:#1e293b;--bg3:#0f172a;--border:#334155;
-  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --text:#e8eef7;--text2:#94a3b8;--text3:#64748b;
   --accent:#3b82f6;--accent2:#2563eb;
   --sidebar-w:220px;--header-h:52px;
   --shadow-sm:0 1px 2px rgba(0,0,0,.12);
   --shadow-md:0 8px 24px rgba(0,0,0,.22);
   --toast-ok:#22c55e;--toast-err:#ef4444;--toast-info:#3b82f6;
   --skeleton:#334155;--skeleton-shine:rgba(255,255,255,.06);
+  --surface-input:#0f172a;--surface-code:#0b1222;--surface-muted:#1e293b;
+  --border-strong:#334155;--border-subtle:#1e293b;
+  --btn-muted-bg:#334155;--btn-muted-fg:#e2e8f0;--btn-muted-fg2:#94a3b8;--btn-muted-border:#475569;
+  --btn-accent-soft-bg:#1e3a5f;--btn-accent-soft-fg:#93c5fd;
+  --link-inline:#93c5fd;--tree-dir:#60a5fa;--tree-file:var(--text);
+  --vibe-divider:var(--border);
+  --hint-err-bg:rgba(127,29,29,.42);--hint-warn-bg:rgba(120,53,15,.42);--hint-info-bg:rgba(30,58,95,.55);
+  --hint-fg:var(--text);
+  --stage-nav-bg:var(--bg2);--stage-nav-border:var(--border-strong);--stage-nav-title:var(--text);--stage-nav-sub:var(--text3);
+  --iframe-preview-bg:#ffffff;
+  --list-select-bg: color-mix(in srgb, var(--accent) 28%, var(--bg2));
+}
+[data-theme=dim]{
+  --bg:#0c1220;--bg2:#151d2e;--bg3:#0c1220;--border:#2a3648;
+  --text:#e6edf5;--text2:#8b9cb3;--text3:#5c6b80;
+  --surface-input:#0a101c;--surface-code:#080e18;--surface-muted:#121a28;
+  --border-strong:#3d4f66;--border-subtle:#1a2433;
+  --btn-muted-bg:#2a3648;--btn-muted-fg:#e2e8f0;--btn-muted-fg2:#8b9cb3;--btn-muted-border:#3d4f66;
+  --btn-accent-soft-bg:#1a2f4d;--btn-accent-soft-fg:#7eb8ff;
+  --link-inline:#7eb8ff;--tree-dir:#7eb8ff;
+  --vibe-divider:var(--border);
+  --hint-err-bg:rgba(127,29,29,.42);--hint-warn-bg:rgba(120,53,15,.42);--hint-info-bg:rgba(30,58,95,.55);
+  --hint-fg:var(--text);
+  --iframe-preview-bg:#ffffff;
+  --skeleton:#2a3648;--skeleton-shine:rgba(255,255,255,.05);
+  --stage-nav-bg:var(--bg2);--stage-nav-border:var(--border-strong);--stage-nav-title:var(--text);--stage-nav-sub:var(--text3);
+  --list-select-bg: color-mix(in srgb, var(--accent) 26%, var(--bg2));
 }
 [data-theme=light]{
-  --bg:#f1f5f9;--bg2:#ffffff;--bg3:#f8fafc;--border:#e2e8f0;
-  --text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --bg:#eef2f7;--bg2:#ffffff;--bg3:#f8fafc;--border:#d8e0ea;
+  --text:#0f172a;--text2:#334155;--text3:#64748b;
   --shadow-sm:0 1px 3px rgba(15,23,42,.08);
-  --shadow-md:0 12px 32px rgba(15,23,42,.1);
-  --skeleton:#e2e8f0;--skeleton-shine:rgba(255,255,255,.7);
+  --shadow-md:0 12px 32px rgba(15,23,42,.12);
+  --skeleton:#e2e8f0;--skeleton-shine:rgba(255,255,255,.85);
+  --surface-input:#ffffff;--surface-code:#f1f5f9;--surface-muted:#f1f5f9;
+  --border-strong:#94a3b8;--border-subtle:#e2e8f0;
+  --btn-muted-bg:#e2e8f0;--btn-muted-fg:#0f172a;--btn-muted-fg2:#475569;--btn-muted-border:#cbd5e1;
+  --btn-accent-soft-bg:#dbeafe;--btn-accent-soft-fg:#1d4ed8;
+  --link-inline:#1d4ed8;--tree-dir:#1d4ed8;--tree-file:#0f172a;
+  --vibe-divider:var(--border);
+  --hint-err-bg:#fee2e2;--hint-warn-bg:#ffedd5;--hint-info-bg:#dbeafe;
+  --hint-fg:#0f172a;
+  --stage-nav-bg:#f8fafc;--stage-nav-border:#cbd5e1;--stage-nav-title:#0f172a;--stage-nav-sub:#475569;
+  --iframe-preview-bg:#ffffff;
+  --list-select-bg: color-mix(in srgb, var(--accent) 20%, var(--bg2));
+}
+[data-theme=contrast]{
+  --bg:#ffffff;--bg2:#f3f4f6;--bg3:#ffffff;--border:#000000;
+  --text:#000000;--text2:#1a1a1a;--text3:#374151;
+  --accent:#0000c0;--accent2:#000080;
+  --surface-input:#ffffff;--surface-code:#f3f4f6;--surface-muted:#e5e7eb;
+  --border-strong:#000000;--border-subtle:#6b7280;
+  --btn-muted-bg:#e5e7eb;--btn-muted-fg:#000000;--btn-muted-fg2:#1f2937;--btn-muted-border:#000000;
+  --btn-accent-soft-bg:#dbeafe;--btn-accent-soft-fg:#000080;
+  --link-inline:#0000c0;--tree-dir:#0000a0;--tree-file:#000000;
+  --vibe-divider:var(--border);
+  --hint-err-bg:#fecaca;--hint-warn-bg:#fde68a;--hint-info-bg:#bfdbfe;
+  --hint-fg:#000000;
+  --stage-nav-bg:#f3f4f6;--stage-nav-border:#000000;--stage-nav-title:#000000;--stage-nav-sub:#374151;
+  --iframe-preview-bg:#ffffff;
+  --list-select-bg: color-mix(in srgb, var(--accent) 18%, var(--bg2));
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
@@ -64,7 +132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   letter-spacing:-.4px;white-space:nowrap}
 [data-theme=light] .topbar-logo{-webkit-text-fill-color:transparent}
 .topbar-badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:min(560px,54vw)}
 .topbar-project{font-size:12px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar-health{font-size:11px;display:flex;align-items:center;gap:6px;margin-left:8px;margin-right:4px;color:var(--text2);white-space:nowrap}
 .topbar-health .health-dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
@@ -143,6 +211,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media(max-width:900px){.grid-4{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;
   transition:box-shadow .2s,border-color .2s,transform .2s}
+[data-theme=light] .card,[data-theme=contrast] .card{box-shadow:var(--shadow-sm)}
+[data-theme=light] .list-item:hover,[data-theme=contrast] .list-item:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .grid-4>.card,.grid-2>.card{position:relative;overflow:hidden}
 .grid-4>.card::after,.grid-2>.card::after{content:'';position:absolute;inset:0;pointer-events:none;border-radius:12px;opacity:0;
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent);transition:opacity .25s}
@@ -182,6 +252,47 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-icon{background:none;border:1px solid var(--border);color:var(--text2);padding:5px 8px;border-radius:6px;cursor:pointer;font-size:13px;transition:background .15s,color .15s,border-color .15s}
 .btn-icon:hover{background:var(--bg3);color:var(--text)}
 .btn-icon:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* 语义化：避免各页硬编码 slate 色，随主题切换 */
+.btn-muted{background:var(--btn-muted-bg);color:var(--btn-muted-fg2);border:1px solid var(--btn-muted-border)}
+.btn-muted:hover:not(:disabled){color:var(--btn-muted-fg);filter:brightness(1.06)}
+.btn-muted:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn-danger{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b}
+.btn-danger:hover:not(:disabled){filter:brightness(1.08)}
+.btn-soft{background:var(--btn-accent-soft-bg);color:var(--btn-accent-soft-fg);border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border))}
+.btn-soft:hover:not(:disabled){filter:brightness(1.08)}
+.input-surface,.textarea-surface{background:var(--surface-input);border:1px solid var(--border-strong);color:var(--text);border-radius:7px}
+.input-surface::placeholder,.textarea-surface::placeholder{color:var(--text3)}
+.code-surface{background:var(--surface-code);border:1px solid var(--border-strong);color:var(--text);border-radius:8px}
+.text-secondary{color:var(--text2)}.text-tertiary{color:var(--text3)}
+.vibe-tree-icon-dir{color:var(--tree-dir)}.vibe-tree-icon-file{color:var(--text2)}
+.vibe-tree-name{color:var(--tree-file);margin-left:6px;font-weight:500}
+.vibe-list-selected{background:var(--list-select-bg)!important;box-shadow:inset 3px 0 0 color-mix(in srgb,var(--accent) 65%,transparent)}
+.vibe-list-selected .title{color:var(--text)!important}
+.vibe-list-selected .meta{color:var(--text2)!important}
+/* 规范/自定义文件树 + 纯文本预览（禁止 #e2e8f0 贴白底导致不可读） */
+.file-browser-cat{font-size:11px;color:var(--text3);text-transform:uppercase;padding:10px 0 6px;font-weight:700;border-bottom:1px solid var(--border);letter-spacing:.04em}
+.file-browser-row{cursor:pointer;border-radius:8px;transition:background .15s,box-shadow .15s}
+.file-browser-row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.doc-path-bar{font-size:11px;color:var(--text3);margin-bottom:10px;padding:6px 0;border-bottom:1px solid var(--border);word-break:break-all;font-family:ui-monospace,monospace}
+.doc-plain-pre{margin:0;font-size:13px;line-height:1.65;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--text);background:var(--surface-code);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.doc-plain-pre--compact{font-size:12px;padding:12px;max-height:min(70vh,560px);overflow:auto}
+.doc-plain-pre--log{font-size:11px;padding:10px 12px;max-height:220px;overflow:auto;margin-top:8px}
+.doc-plain-pre--stderr{color:var(--toast-err);border-color:color-mix(in srgb,var(--toast-err) 28%,var(--border));background:color-mix(in srgb,var(--toast-err) 6%,var(--surface-code))}
+.panel-scroll{max-height:min(620px,72vh);overflow-y:auto}
+.doc-fetch-hint{padding:28px 20px;text-align:center;color:var(--text3);font-size:13px}
+.doc-fetch-hint::before{content:'';display:block;width:28px;height:28px;margin:0 auto 10px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite}
+.dev-stage-nav-btn{min-width:132px;flex-shrink:0;cursor:pointer;text-align:left;border-radius:12px;padding:14px 16px!important;
+  border:1px solid var(--stage-nav-border)!important;background:var(--stage-nav-bg)!important;box-shadow:var(--shadow-sm);transition:box-shadow .2s,border-color .2s,transform .12s}
+.dev-stage-nav-btn:hover{box-shadow:var(--shadow-md);border-color:var(--accent)!important}
+.dev-stage-nav-btn:active{transform:scale(.98)}
+.dev-stage-nav-title{font-weight:700;font-size:13px;color:var(--stage-nav-title)}
+.dev-stage-nav-sub{font-size:11px;color:var(--stage-nav-sub);margin-top:4px;line-height:1.35}
+.flow-hint{padding:8px 10px;border-radius:8px;font-size:12px;margin-bottom:6px;color:var(--hint-fg);line-height:1.45}
+.flow-hint--err{background:var(--hint-err-bg)}.flow-hint--warn{background:var(--hint-warn-bg)}.flow-hint--info{background:var(--hint-info-bg)}
+.topbar-select{font-size:11px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 8px;max-width:118px;cursor:pointer}
+.topbar-select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 
 /* ── 表单 ─────────────────────────────────────────────────────── */
 .form-group{margin-bottom:12px}
@@ -242,6 +353,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media (prefers-reduced-motion: reduce) {
   .page-enter,.toast,.modal,.refresh-btn.busy .refresh-icon,.skeleton-line,.skeleton-card{animation:none!important}
   .sidebar-item,.btn,.card,.list-item{transition:none!important}
+  .doc-fetch-hint::before{animation:none!important;opacity:.45}
 }
 </style>
 </head>
@@ -270,7 +382,10 @@ function showToast(message, type) {
 }
 
 function PageSkeleton({cards = 4}) {
-  return <div className="skeleton-wrap page-enter" aria-busy="true" aria-label="加载中">
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  return <div className="skeleton-wrap page-enter" aria-busy="true" aria-label={tr('gen_loading')}>
     <div className="grid-4" style={{marginBottom: 16}}>
       {[...Array(cards)].map((_, i) => <div key={i} className="skeleton-card" />)}
     </div>
@@ -281,22 +396,31 @@ function PageSkeleton({cards = 4}) {
 }
 
 function LoadError({message, onRetry}) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   return <div className="card page-enter" style={{ borderLeft: '4px solid var(--toast-err)', padding: '20px 22px' }}>
-    <div className="section-title">加载失败</div>
-    <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>{message || '请确认后端已启动（如 uvicorn main:app --port 8765）'}</p>
-    {onRetry && <button type="button" className="btn btn-primary btn-sm" onClick={onRetry}>重试</button>}
+    <div className="section-title">{tr('gen_load_fail')}</div>
+    <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>{message || tr('idx_load_hint')}</p>
+    {onRetry && <button type="button" className="btn btn-primary btn-sm" onClick={onRetry}>{tr('idx_retry')}</button>}
   </div>;
 }
 
 function RefreshBtn({onClick, children}) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const [busy, setBusy] = React.useState(false);
   const run = () => {
     if (busy) return;
     setBusy(true);
-    try { onClick(); } finally { setTimeout(() => setBusy(false), 500); }
+    Promise.resolve()
+      .then(function () { return onClick && onClick(); })
+      .catch(function () {})
+      .finally(function () { setTimeout(function () { setBusy(false); }, 200); });
   };
   return <button type="button" className={'refresh-btn' + (busy ? ' busy' : '')} disabled={busy} onClick={run}>
-    <span className="refresh-icon" aria-hidden="true">↻</span>{children === undefined ? '刷新' : children}
+    <span className="refresh-icon" aria-hidden="true">↻</span>{children === undefined ? tr('gen_refresh') : children}
   </button>;
 }
 
@@ -304,10 +428,10 @@ function useFetch(url) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
-  const load = React.useCallback(() => {
+  const load = React.useCallback(function () {
     setLoading(true);
     setError(null);
-    apiFetch(url, { timeoutMs: 32000 })
+    return apiFetch(url, { timeoutMs: 32000 })
       .then(function (r) {
         if (!r.ok) {
           return r.text().then(function (txt) {
@@ -321,18 +445,50 @@ function useFetch(url) {
         }
         return r.json();
       })
-      .then(function (d) { setData(d); setLoading(false); })
+      .then(function (d) {
+        setData(d);
+        setLoading(false);
+        return d;
+      })
       .catch(function (err) {
-        var msg = '无法连接 API 或响应异常';
-        if (err && err.name === 'AbortError') msg = '请求超时（>32s），请检查网络或缩小查询范围';
+        var tr = (typeof window.t === 'function' ? window.t : function (k) { return k; });
+        var msg = tr('idx_api_unreachable');
+        if (err && err.name === 'AbortError') msg = tr('idx_fetch_timeout');
         else if (err && err.message) msg = String(err.message);
         setError(msg);
         setLoading(false);
         setData(null);
+        throw err;
       });
   }, [url]);
-  React.useEffect(function () { load(); }, [load]);
+  React.useEffect(function () { load().catch(function () {}); }, [load]);
   return { data, loading, error, reload: load };
+}
+
+/** 拉取 specs/custom 文件内容 JSON（带超时与非 2xx 解析） */
+function fetchFileContentJson(url) {
+  return apiFetch(url, { timeoutMs: 120000 })
+    .then(function (r) {
+      return r.text().then(function (txt) {
+        var d = {};
+        try {
+          d = txt ? JSON.parse(txt) : {};
+        } catch (e) {
+          var trJ = (typeof window.t === 'function' ? window.t : function (k) { return k; });
+          throw new Error(trJ('idx_json_invalid'));
+        }
+        return { httpOk: r.ok, d: d };
+      });
+    })
+    .then(function (x) {
+      if (!x.httpOk) {
+        var d = x.d || {};
+        var trH = (typeof window.t === 'function' ? window.t : function (k) { return k; });
+        var msg = typeof d.detail === 'string' ? d.detail : typeof d.message === 'string' ? d.message : trH('idx_http_err');
+        throw new Error(msg);
+      }
+      return x.d;
+    });
 }
 
 function Tag({type, label}) {
@@ -355,36 +511,39 @@ function ConfBar({val}) {
 
 // ── 仪表盘 ──────────────────────────────────────────────────────
 function Dashboard() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/dashboard`);
   if (loading) return <PageSkeleton cards={4} />;
   if (error || !data) return <LoadError message={error} onRetry={reload} />;
   const {sprint, tasks, requirements, issues, velocity} = data;
   const pct = tasks.total ? Math.round(tasks.completed/tasks.total*100) : 0;
   return <>
-    {(issues.critical && issues.critical.length) > 0 && <div className="alert">⚠ {issues.critical.length} 个 P0/P1 问题待处理：{issues.critical.map(i=>i.title).join('、')}</div>}
+    {(issues.critical && issues.critical.length) > 0 && <div className="alert">{tr('dash_alert_p0', { n: issues.critical.length, titles: issues.critical.map(i=>i.title).join('、') })}</div>}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📊 项目总览 {sprint && <span style={{color:'#64748b',fontWeight:400}}>· {sprint.id} · {sprint.goal}</span>}</div>
+      <div className="section-title">{tr('dash_overview_title')} {sprint && <span style={{color:'#64748b',fontWeight:400}}>· {sprint.id} · {sprint.goal}</span>}</div>
       <RefreshBtn onClick={reload} />
     </div>
     <div className="card" style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
-      <div style={{fontSize:13,color:'#94a3b8',lineHeight:1.5}}>🧭 <strong style={{color:'#e2e8f0'}}>研发全流程</strong>：从需求→方案→迭代→多 Agent 开发→环境/发布，一站式跳转与<strong style={{color:'#93c5fd'}}>低 Token</strong>提示模板。</div>
-      <button type="button" className="btn btn-primary btn-sm" onClick={()=>window.dispatchEvent(new CustomEvent('app-set-tab',{detail:{tab:'dev-flow'}}))}>进入枢纽</button>
+      <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.5}}>🧭 <strong style={{color:'var(--text)'}}>{tr('dash_hub_strong_flow')}</strong>{tr('dash_hub_mid')}<strong style={{color:'var(--link-inline)'}}>{tr('dash_hub_strong_token')}</strong>{tr('dash_hub_suffix')}</div>
+      <button type="button" className="btn btn-primary btn-sm" onClick={()=>window.dispatchEvent(new CustomEvent('app-set-tab',{detail:{tab:'dev-flow'}}))}>{tr('dash_enter_hub')}</button>
     </div>
     <div className="grid-4">
-      <div className="card"><h3>迭代完成率</h3><div className="stat-val">{pct}%</div><div className="progress-bar"><div className="progress-fill" style={{width:pct+'%'}}/></div><div className="stat-sub">{tasks.completed}/{tasks.total} 任务</div></div>
-      <div className="card"><h3>阻塞任务</h3><div className="stat-val" style={{color:(tasks.blocked && tasks.blocked.length)?'#fca5a5':'#86efac'}}>{(tasks.blocked && tasks.blocked.length)||0}</div><div className="stat-sub">需要人工介入</div></div>
-      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:(issues.open && issues.open.length)?'#fdba74':'#86efac'}}>{(issues.open && issues.open.length)||0}</div><div className="stat-sub">P0/P1: {(issues.critical && issues.critical.length)||0}</div></div>
-      <div className="card"><h3>需求总数</h3><div className="stat-val">{requirements.total||0}</div><div className="stat-sub">P0: {(requirements.by_priority && requirements.by_priority.P0)||0} · P1: {(requirements.by_priority && requirements.by_priority.P1)||0}</div></div>
+      <div className="card"><h3>{tr('dash_stat_iter')}</h3><div className="stat-val">{pct}%</div><div className="progress-bar"><div className="progress-fill" style={{width:pct+'%'}}/></div><div className="stat-sub">{tr('dash_stat_tasks', { done: tasks.completed, total: tasks.total })}</div></div>
+      <div className="card"><h3>{tr('dash_stat_blocked')}</h3><div className="stat-val" style={{color:(tasks.blocked && tasks.blocked.length)?'#fca5a5':'#86efac'}}>{(tasks.blocked && tasks.blocked.length)||0}</div><div className="stat-sub">{tr('dash_stat_blocked_need')}</div></div>
+      <div className="card"><h3>{tr('dash_stat_issues')}</h3><div className="stat-val" style={{color:(issues.open && issues.open.length)?'#fdba74':'#86efac'}}>{(issues.open && issues.open.length)||0}</div><div className="stat-sub">{tr('dash_stat_issues_sub', { n: (issues.critical && issues.critical.length)||0 })}</div></div>
+      <div className="card"><h3>{tr('dash_stat_req_total')}</h3><div className="stat-val">{requirements.total||0}</div><div className="stat-sub">{tr('dash_stat_req_sub', { p0: (requirements.by_priority && requirements.by_priority.P0)||0, p1: (requirements.by_priority && requirements.by_priority.P1)||0 })}</div></div>
     </div>
     {(tasks.blocked && tasks.blocked.length) > 0 && <div className="card" style={{marginBottom:16}}>
-      <div className="section-title">🚧 阻塞任务（需人工介入）</div>
-      {tasks.blocked.map(t=><div key={t.id} className="list-item">
-        <div style={{flex:1}}><div className="title">{t.title}</div><div className="meta">{t.id} · {t.assigned_to}</div><div className="meta" style={{color:'#fca5a5'}}>{t.blocked_reason||'原因未记录'}</div></div>
-        <Tag type="blocked" label="阻塞"/>
+      <div className="section-title">{tr('dash_blocked_section')}</div>
+      {tasks.blocked.map(blk=><div key={blk.id} className="list-item">
+        <div style={{flex:1}}><div className="title">{blk.title}</div><div className="meta">{blk.id} · {blk.assigned_to}</div><div className="meta" style={{color:'#fca5a5'}}>{blk.blocked_reason||tr('dash_reason_unknown')}</div></div>
+        <Tag type="blocked" label={tr('dash_tag_blocked')}/>
       </div>)}
     </div>}
     {(velocity && velocity.length) > 0 && <div className="card">
-      <div className="section-title">📈 速度趋势（近5迭代）</div>
+      <div className="section-title">{tr('dash_velocity')}</div>
       <div style={{display:'flex',gap:8,alignItems:'flex-end',height:80}}>
         {velocity.map(s=>{const h=Math.max(8,Math.round((s.velocity/(Math.max(...velocity.map(x=>x.planned||1))))*70));return <div key={s.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
           <div style={{width:'100%',background:'#3b82f6',borderRadius:'3px 3px 0 0',height:h+'px'}}/>
@@ -399,6 +558,9 @@ function Dashboard() {
 const DEV_TOOL_PRESETS = ['', 'claude-code', 'cursor', 'windsurf', 'opencode', 'direct-llm', 'trae', 'vscode', 'custom'];
 
 function Requirements() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/requirements`);
   const [detail, setDetail] = React.useState(null);
   const [editForm, setEditForm] = React.useState(null);
@@ -451,14 +613,14 @@ function Requirements() {
       .then((r) => r.json().then((d) => ({ok: r.ok, d})))
       .then(({ok, d}) => {
         if (!ok) {
-          const msg = typeof d.detail === 'string' ? d.detail : '排序保存失败';
+          const msg = typeof d.detail === 'string' ? d.detail : tr('req_toast_reorder_fail');
           showToast(msg, 'err');
           return;
         }
         reload();
-        showToast('看板顺序与优先级已保存', 'ok');
+        showToast(tr('req_toast_reorder_ok'), 'ok');
       })
-      .catch(() => showToast('请求失败', 'err'));
+      .catch(() => showToast(tr('gen_req_fail'), 'err'));
   };
 
   const moveReq = (id, targetP, insertBeforeId) => {
@@ -496,9 +658,9 @@ function Requirements() {
       })
       .then(() => {
         reload();
-        showToast('已更新', 'ok');
+        showToast(tr('req_toast_updated'), 'ok');
       })
-      .catch(() => showToast('更新失败', 'err'));
+      .catch(() => showToast(tr('req_toast_update_fail'), 'err'));
   };
 
   React.useEffect(() => {
@@ -544,17 +706,17 @@ function Requirements() {
       .then(() => {
         reload();
         setDetail((d) => (d ? {...d, title: editForm.title, description: editForm.description, priority: editForm.priority, status: editForm.status, acceptance_criteria: ac, human_notes: editForm.human_notes, assigned_agent: editForm.assigned_agent, dev_tool: editForm.dev_tool} : null));
-        showToast('需求已保存', 'ok');
+        showToast(tr('req_toast_saved'), 'ok');
       })
-      .catch(() => showToast('保存失败', 'err'));
+      .catch(() => showToast(tr('req_toast_save_fail'), 'err'));
   };
 
   const deleteDetail = () => {
-    if (!detail || !confirm(`删除需求 ${detail.id}？`)) return;
+    if (!detail || !confirm(tr('req_confirm_del', { id: detail.id }))) return;
     fetch(`${API}/requirements/${encodeURIComponent(detail.id)}`, {method: 'DELETE'})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(() => { setDetail(null); reload(); showToast('已删除', 'ok'); })
-      .catch(() => showToast('删除失败', 'err'));
+      .then(() => { setDetail(null); reload(); showToast(tr('req_toast_deleted'), 'ok'); })
+      .catch(() => showToast(tr('req_toast_delete_fail'), 'err'));
   };
 
   const runPrototype = (mode, genImage) => {
@@ -569,20 +731,20 @@ function Requirements() {
       .then(({ok, d}) => {
         setProtoBusy(false);
         if (!ok) {
-          const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) ? d.detail.map((x) => x.msg || x.type).join(';') : '生成失败');
+          const msg = typeof d.detail === 'string' ? d.detail : (Array.isArray(d.detail) ? d.detail.map((x) => x.msg || x.type).join(';') : tr('req_toast_gen_fail'));
           showToast(msg, 'err');
           return;
         }
         setProto(d.content || '');
-        showToast(genImage && d.image_url ? '原型与配图已生成' : '原型说明已生成', 'ok');
+        showToast(genImage && d.image_url ? tr('req_toast_proto_img_ok') : tr('req_toast_proto_ok'), 'ok');
       })
-      .catch(() => { setProtoBusy(false); showToast('请求失败', 'err'); });
+      .catch(() => { setProtoBusy(false); showToast(tr('gen_req_fail'), 'err'); });
   };
 
   const saveManual = () => {
     const ac = manualForm.acceptance.split('\n').map((s) => s.trim()).filter(Boolean);
     const tags = manualForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    if (!manualForm.title.trim()) { showToast('请填写标题', 'err'); return; }
+    if (!manualForm.title.trim()) { showToast(tr('req_toast_title_required'), 'err'); return; }
     fetch(`${API}/requirements`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -598,17 +760,17 @@ function Requirements() {
     })
       .then((r) => r.json().then((d) => ({ok: r.ok, d})))
       .then(({ok, d}) => {
-        if (!ok) { showToast(d.detail || '创建失败', 'err'); return; }
+        if (!ok) { showToast(d.detail || tr('req_toast_create_fail'), 'err'); return; }
         setManualOpen(false);
         setManualForm({title:'',description:'',priority:'P1',acceptance:'',tags:'',assigned_agent:'',dev_tool:''});
         reload();
-        showToast('需求已创建', 'ok');
+        showToast(tr('req_toast_created'), 'ok');
       })
-      .catch(() => showToast('请求失败', 'err'));
+      .catch(() => showToast(tr('gen_req_fail'), 'err'));
   };
 
   const parseDoc = () => {
-    if (docText.trim().length < 20) { showToast('请粘贴至少 20 字的文档内容', 'err'); return; }
+    if (docText.trim().length < 20) { showToast(tr('req_toast_doc_short'), 'err'); return; }
     setDocBusy(true);
     fetch(`${API}/requirements/parse-document`, {
       method: 'POST',
@@ -618,12 +780,12 @@ function Requirements() {
       .then((r) => r.json().then((d) => ({ok: r.ok, d})))
       .then(({ok, d}) => {
         setDocBusy(false);
-        if (!ok) { showToast(typeof d.detail === 'string' ? d.detail : '解析失败', 'err'); return; }
+        if (!ok) { showToast(typeof d.detail === 'string' ? d.detail : tr('req_toast_parse_fail'), 'err'); return; }
         setPreviewItems(d.items || []);
         setSelPreview(new Set((d.items || []).map((_, i) => i)));
-        showToast(`已解析 ${(d.items || []).length} 条，请确认后导入`, 'ok');
+        showToast(tr('req_toast_parsed_n', { n: (d.items || []).length }), 'ok');
       })
-      .catch(() => { setDocBusy(false); showToast('请求失败', 'err'); });
+      .catch(() => { setDocBusy(false); showToast(tr('gen_req_fail'), 'err'); });
   };
 
   const importSelected = () => {
@@ -635,7 +797,7 @@ function Requirements() {
       acceptance_criteria: it.acceptance_criteria || [],
       tags: it.tags || [],
     }));
-    if (!items.length) { showToast('请至少选择一条', 'err'); return; }
+    if (!items.length) { showToast(tr('req_toast_select_one'), 'err'); return; }
     fetch(`${API}/requirements/batch`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -648,9 +810,9 @@ function Requirements() {
         setPreviewItems(null);
         setSelPreview(new Set());
         reload();
-        showToast(`已导入 ${items.length} 条需求`, 'ok');
+        showToast(tr('req_toast_imported_n', { n: items.length }), 'ok');
       })
-      .catch(() => showToast('导入失败', 'err'));
+      .catch(() => showToast(tr('req_toast_import_fail'), 'err'));
   };
 
   const updatePreviewRow = (i, field, val) => {
@@ -670,12 +832,12 @@ function Requirements() {
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
       <div>
-        <div className="section-title">📋 需求看板</div>
-        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>拖拽卡片调整优先级与顺序；卡片上可指定 Agent / 开发工具；拖到卡片前可插队。</div>
+        <div className="section-title">{tr('req_board_title')}</div>
+        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>{tr('req_board_hint')}</div>
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setManualOpen(true)}>＋ 手动录入</button>
-        <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} onClick={()=>{setDocOpen(true);setPreviewItems(null);setDocText('');}}>AI 读文档生成</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setManualOpen(true)}>{tr('req_manual_add')}</button>
+        <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} onClick={()=>{setDocOpen(true);setPreviewItems(null);setDocText('');}}>{tr('req_ai_doc')}</button>
         <RefreshBtn onClick={reload} />
       </div>
     </div>
@@ -684,7 +846,7 @@ function Requirements() {
         onDragOver={(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';}}
       >
         <div className="section-title"><Tag type={p}/> <span style={{color:'#64748b',fontWeight:400}}>({items.length})</span></div>
-        {items.length === 0 ? <div className="empty">暂无</div> : items.map((r) => <div key={r.id}
+        {items.length === 0 ? <div className="empty">{tr('idx_none')}</div> : items.map((r) => <div key={r.id}
           draggable
           onDragStart={(e)=>{e.dataTransfer.setData('text/req-id', r.id);e.dataTransfer.effectAllowed='move';}}
           className="list-item"
@@ -699,68 +861,68 @@ function Requirements() {
               {r.description && <div className="meta" style={{color:'#94a3b8',marginTop:4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{r.description}</div>}
               {r.human_notes && <div className="meta" style={{color:'#fbbf24'}}>💬 {r.human_notes}</div>}
             </div>
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => openDetail(r)}>编辑</button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => openDetail(r)}>{tr('gen_edit')}</button>
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',fontSize:11}}>
-            <span style={{color:'#64748b'}}>Agent</span>
+            <span style={{color:'#64748b'}}>{tr('req_label_agent')}</span>
             <select value={r.assigned_agent || ''} onChange={(e)=>patchReqMeta(r.id,{assigned_agent:e.target.value})} onClick={(e)=>e.stopPropagation()} style={{padding:'4px 8px',borderRadius:6,background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border)',fontSize:11,maxWidth:160}}>
-              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || tr('idx_unspecified')}</option>)}
             </select>
-            <span style={{color:'#64748b'}}>工具</span>
+            <span style={{color:'#64748b'}}>{tr('req_label_tool')}</span>
             <select value={r.dev_tool || ''} onChange={(e)=>patchReqMeta(r.id,{dev_tool:e.target.value})} onClick={(e)=>e.stopPropagation()} style={{padding:'4px 8px',borderRadius:6,background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border)',fontSize:11,maxWidth:140}}>
-              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+              {DEV_TOOL_PRESETS.map((preset)=><option key={String(preset)} value={preset}>{preset || tr('idx_unspecified')}</option>)}
             </select>
-            <span style={{marginLeft:'auto',color:'#475569',fontSize:10}}>⋮⋮ 拖拽排序</span>
+            <span style={{marginLeft:'auto',color:'#475569',fontSize:10}}>{tr('req_drag_sort_hint')}</span>
           </div>
         </div>)}
         <div
           style={{minHeight:32,border:'1px dashed var(--border)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'var(--text3)',marginTop:4}}
           onDragOver={(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';}}
           onDrop={(e)=>{e.preventDefault();const dragId=e.dataTransfer.getData('text/req-id');if(!dragId)return;moveReq(dragId,p,null);}}
-        >拖放到此 · 置于{p}列末尾</div>
+        >{tr('req_drop_col_end', { p })}</div>
       </div>)}
     </div>
 
     {manualOpen && <div className="modal-bg" onClick={()=>setManualOpen(false)}>
       <div className="modal" style={{width:520,maxWidth:'96vw'}} onClick={(e)=>e.stopPropagation()}>
-        <h3>手动录入需求</h3>
-        <div className="form-group"><label>标题</label>
-          <input value={manualForm.title} onChange={(e)=>setManualForm({...manualForm,title:e.target.value})} placeholder="简短描述需求"/></div>
-        <div className="form-group"><label>详细说明</label>
-          <textarea value={manualForm.description} onChange={(e)=>setManualForm({...manualForm,description:e.target.value})} style={{minHeight:80}} placeholder="背景、范围、约束..."/></div>
-        <div className="form-group"><label>优先级</label>
+        <h3>{tr('req_modal_manual_title')}</h3>
+        <div className="form-group"><label>{tr('req_label_title')}</label>
+          <input value={manualForm.title} onChange={(e)=>setManualForm({...manualForm,title:e.target.value})} placeholder={tr('req_ph_title_short')}/></div>
+        <div className="form-group"><label>{tr('req_label_detail')}</label>
+          <textarea value={manualForm.description} onChange={(e)=>setManualForm({...manualForm,description:e.target.value})} style={{minHeight:80}} placeholder={tr('req_ph_detail')}/></div>
+        <div className="form-group"><label>{tr('req_label_priority')}</label>
           <select value={manualForm.priority} onChange={(e)=>setManualForm({...manualForm,priority:e.target.value})}>
             {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
           </select></div>
-        <div className="form-group"><label>验收标准（每行一条）</label>
-          <textarea value={manualForm.acceptance} onChange={(e)=>setManualForm({...manualForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}} placeholder="可测、可交付"/></div>
-        <div className="form-group"><label>标签（逗号分隔）</label>
-          <input value={manualForm.tags} onChange={(e)=>setManualForm({...manualForm,tags:e.target.value})} placeholder="backend,api"/></div>
+        <div className="form-group"><label>{tr('req_label_acceptance')}</label>
+          <textarea value={manualForm.acceptance} onChange={(e)=>setManualForm({...manualForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}} placeholder={tr('req_ph_acceptance')}/></div>
+        <div className="form-group"><label>{tr('req_label_tags')}</label>
+          <input value={manualForm.tags} onChange={(e)=>setManualForm({...manualForm,tags:e.target.value})} placeholder={tr('req_ph_tags')}/></div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div className="form-group"><label>开发 Agent（可选）</label>
+          <div className="form-group"><label>{tr('req_label_agent_opt')}</label>
             <select value={manualForm.assigned_agent} onChange={(e)=>setManualForm({...manualForm,assigned_agent:e.target.value})}>
-              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || tr('idx_unspecified')}</option>)}
             </select></div>
-          <div className="form-group"><label>开发工具（可选）</label>
+          <div className="form-group"><label>{tr('req_label_devtool_opt')}</label>
             <select value={manualForm.dev_tool} onChange={(e)=>setManualForm({...manualForm,dev_tool:e.target.value})}>
-              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+              {DEV_TOOL_PRESETS.map((preset)=><option key={String(preset)} value={preset}>{preset || tr('idx_unspecified')}</option>)}
             </select></div>
         </div>
         <div className="modal-actions">
-          <button type="button" className="btn btn-cancel" onClick={()=>setManualOpen(false)}>取消</button>
-          <button type="button" className="btn btn-primary" onClick={saveManual}>创建</button>
+          <button type="button" className="btn btn-cancel" onClick={()=>setManualOpen(false)}>{tr('gen_cancel')}</button>
+          <button type="button" className="btn btn-primary" onClick={saveManual}>{tr('gen_create')}</button>
         </div>
       </div>
     </div>}
 
     {docOpen && <div className="modal-bg" onClick={()=>{if(!docBusy)setDocOpen(false);}}>
       <div className="modal" style={{width:Math.min(720,typeof window!=='undefined'?window.innerWidth-24:720),maxWidth:'96vw'}} onClick={(e)=>e.stopPropagation()}>
-        <h3>AI 从文档生成需求列表</h3>
-        <p style={{fontSize:12,color:'#64748b',marginBottom:10}}>粘贴 PRD、需求说明或会议纪要全文。需配置 <code style={{color:'#93c5fd'}}>ANTHROPIC_API_KEY</code>。生成后可在表格中修改再导入。</p>
+        <h3>{tr('req_modal_doc_title')}</h3>
+        <p style={{fontSize:12,color:'#64748b',marginBottom:10}}>{tr('req_modal_doc_intro_before')}<code style={{color:'#93c5fd'}}>ANTHROPIC_API_KEY</code>{tr('req_modal_doc_intro_after')}</p>
         {!previewItems ? <>
-          <div className="form-group"><label>文档内容</label>
-            <textarea value={docText} onChange={(e)=>setDocText(e.target.value)} style={{minHeight:200,fontSize:12}} placeholder="在此粘贴文档..."/></div>
-          <div className="form-group"><label>或选择本地文本文件</label>
+          <div className="form-group"><label>{tr('req_label_doc_content')}</label>
+            <textarea value={docText} onChange={(e)=>setDocText(e.target.value)} style={{minHeight:200,fontSize:12}} placeholder={tr('req_ph_doc_paste')}/></div>
+          <div className="form-group"><label>{tr('req_label_or_file')}</label>
             <input type="file" accept=".txt,.md,.markdown,text/plain" onChange={(e)=>{
               const f = e.target.files && e.target.files[0];
               if(!f)return;
@@ -769,15 +931,15 @@ function Requirements() {
               rd.readAsText(f);
             }}/></div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-cancel" onClick={()=>setDocOpen(false)} disabled={docBusy}>取消</button>
-            <button type="button" className="btn btn-primary" onClick={parseDoc} disabled={docBusy}>{docBusy?'解析中...':'解析文档'}</button>
+            <button type="button" className="btn btn-cancel" onClick={()=>setDocOpen(false)} disabled={docBusy}>{tr('gen_cancel')}</button>
+            <button type="button" className="btn btn-primary" onClick={parseDoc} disabled={docBusy}>{docBusy ? tr('req_parse_busy') : tr('req_parse_btn')}</button>
           </div>
         </> : <>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <span style={{fontSize:12,color:'#94a3b8'}}>共 {previewItems.length} 条 · 勾选将导入</span>
+            <span style={{fontSize:12,color:'#94a3b8'}}>{tr('req_preview_count', { n: previewItems.length })}</span>
             <div style={{display:'flex',gap:6}}>
-              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set(previewItems.map((_,i)=>i)))}>全选</button>
-              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set())}>全不选</button>
+              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set(previewItems.map((_,i)=>i)))}>{tr('req_select_all')}</button>
+              <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>setSelPreview(new Set())}>{tr('req_select_none')}</button>
             </div>
           </div>
           <div className="scroll-slim" style={{maxHeight:320,overflowY:'auto',border:'1px solid var(--border)',borderRadius:8}}>
@@ -788,19 +950,19 @@ function Requirements() {
                   e.target.checked ? n.add(i) : n.delete(i);
                   setSelPreview(n);
                 }}/>
-                <span style={{fontSize:11,color:'#64748b'}}>导入</span>
+                <span style={{fontSize:11,color:'#64748b'}}>{tr('req_import_flag')}</span>
               </label>
               <input style={{width:'100%',padding:8,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)'}} value={it.title}
-                onChange={(e)=>updatePreviewRow(i,'title',e.target.value)} placeholder="标题"/>
+                onChange={(e)=>updatePreviewRow(i,'title',e.target.value)} placeholder={tr('req_ph_title')}/>
               <select value={it.priority} onChange={(e)=>updatePreviewRow(i,'priority',e.target.value)} style={{padding:6,background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',fontSize:12}}>
                 {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
               </select>
-              <textarea value={it.description||''} onChange={(e)=>updatePreviewRow(i,'description',e.target.value)} style={{minHeight:48,fontSize:12,width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',padding:8}} placeholder="说明"/>
+              <textarea value={it.description||''} onChange={(e)=>updatePreviewRow(i,'description',e.target.value)} style={{minHeight:48,fontSize:12,width:'100%',background:'var(--bg3)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)',padding:8}} placeholder={tr('req_ph_desc')}/>
             </div>)}
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn btn-cancel" onClick={()=>{setPreviewItems(null);}}>上一步</button>
-            <button type="button" className="btn btn-primary" onClick={importSelected}>导入选中</button>
+            <button type="button" className="btn btn-cancel" onClick={()=>{setPreviewItems(null);}}>{tr('req_back')}</button>
+            <button type="button" className="btn btn-primary" onClick={importSelected}>{tr('req_import_selected')}</button>
           </div>
         </>}
       </div>
@@ -808,49 +970,49 @@ function Requirements() {
 
     {detail && editForm && <div className="modal-bg" onClick={()=>setDetail(null)}>
       <div className="modal" style={{width:Math.min(640,typeof window!=='undefined'?window.innerWidth-24:640),maxWidth:'96vw',maxHeight:'90vh',overflowY:'auto'}} onClick={(e)=>e.stopPropagation()}>
-        <h3>编辑需求</h3>
+        <h3>{tr('req_modal_edit_title')}</h3>
         <div style={{fontSize:11,color:'#64748b',marginBottom:10}}>{detail.id}</div>
-        <div className="form-group"><label>标题</label>
+        <div className="form-group"><label>{tr('req_label_title')}</label>
           <input value={editForm.title} onChange={(e)=>setEditForm({...editForm,title:e.target.value})}/></div>
-        <div className="form-group"><label>说明</label>
+        <div className="form-group"><label>{tr('req_label_desc')}</label>
           <textarea value={editForm.description} onChange={(e)=>setEditForm({...editForm,description:e.target.value})} style={{minHeight:80}}/></div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div className="form-group"><label>优先级</label>
+          <div className="form-group"><label>{tr('req_label_priority')}</label>
             <select value={editForm.priority} onChange={(e)=>setEditForm({...editForm,priority:e.target.value})}>
               {['P0','P1','P2','P3'].map((x)=><option key={x}>{x}</option>)}
             </select></div>
-          <div className="form-group"><label>状态</label>
+          <div className="form-group"><label>{tr('req_label_status')}</label>
             <select value={editForm.status} onChange={(e)=>setEditForm({...editForm,status:e.target.value})}>
               {['pending','in_progress','done','cancelled'].map((x)=><option key={x}>{x}</option>)}
             </select></div>
         </div>
-        <div className="form-group"><label>验收标准（每行一条）</label>
+        <div className="form-group"><label>{tr('req_label_acceptance')}</label>
           <textarea value={editForm.acceptance} onChange={(e)=>setEditForm({...editForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}}/></div>
-        <div className="form-group"><label>人工备注</label>
+        <div className="form-group"><label>{tr('req_label_human_notes')}</label>
           <textarea value={editForm.human_notes} onChange={(e)=>setEditForm({...editForm,human_notes:e.target.value})} style={{minHeight:48,fontSize:12}}/></div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div className="form-group"><label>开发 Agent</label>
+          <div className="form-group"><label>{tr('req_label_dev_agent')}</label>
             <select value={editForm.assigned_agent || ''} onChange={(e)=>setEditForm({...editForm,assigned_agent:e.target.value})}>
-              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || tr('idx_unspecified')}</option>)}
             </select></div>
-          <div className="form-group"><label>开发工具</label>
+          <div className="form-group"><label>{tr('req_label_dev_tool')}</label>
             <select value={editForm.dev_tool || ''} onChange={(e)=>setEditForm({...editForm,dev_tool:e.target.value})}>
-              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+              {DEV_TOOL_PRESETS.map((preset)=><option key={String(preset)} value={preset}>{preset || tr('idx_unspecified')}</option>)}
             </select></div>
         </div>
-        <div className="section-title" style={{fontSize:12,marginTop:12}}>产品原型（AI）</div>
-        <p style={{fontSize:11,color:'#64748b',marginBottom:8}}>生成 Markdown 线框/旅程说明，保存在本地 .ai-memory/requirement_prototypes/。可选生成概念配图（需 OPENAI_API_KEY）。</p>
+        <div className="section-title" style={{fontSize:12,marginTop:12}}>{tr('req_proto_section')}</div>
+        <p style={{fontSize:11,color:'#64748b',marginBottom:8}}>{tr('req_proto_hint')}</p>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
-          <button type="button" className="btn btn-sm btn-primary" disabled={protoBusy} onClick={()=>runPrototype('wireframe', false)}>{protoBusy?'生成中...':'线框说明'}</button>
-          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={protoBusy} onClick={()=>runPrototype('user_journey', false)}>用户旅程</button>
-          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={protoBusy} onClick={()=>runPrototype('ia', false)}>信息架构</button>
-          <button type="button" className="btn btn-sm" style={{background:'#7c3aed',color:'#fff'}} disabled={protoBusy} onClick={()=>{ if(confirm('将调用 DALL·E 3 生成配图（可能产生费用），继续？')) runPrototype('wireframe', true); }}>线框+概念配图</button>
+          <button type="button" className="btn btn-sm btn-primary" disabled={protoBusy} onClick={()=>runPrototype('wireframe', false)}>{protoBusy ? tr('req_proto_busy') : tr('req_proto_wireframe')}</button>
+          <button type="button" className="btn btn-sm btn-muted" disabled={protoBusy} onClick={()=>runPrototype('user_journey', false)}>{tr('req_proto_journey')}</button>
+          <button type="button" className="btn btn-sm btn-muted" disabled={protoBusy} onClick={()=>runPrototype('ia', false)}>{tr('req_proto_ia')}</button>
+          <button type="button" className="btn btn-sm" style={{background:'#7c3aed',color:'#fff'}} disabled={protoBusy} onClick={()=>{ if(confirm(tr('req_proto_confirm_dalle'))) runPrototype('wireframe', true); }}>{tr('req_proto_wire_img')}</button>
         </div>
-        {proto ? <pre className="scroll-slim" style={{maxHeight:220,overflow:'auto',fontSize:11,whiteSpace:'pre-wrap',background:'var(--bg3)',padding:10,borderRadius:8,border:'1px solid var(--border)'}}>{proto}</pre> : <div className="empty" style={{padding:12}}>尚未生成原型说明</div>}
+        {proto ? <pre className="scroll-slim" style={{maxHeight:220,overflow:'auto',fontSize:11,whiteSpace:'pre-wrap',background:'var(--bg3)',padding:10,borderRadius:8,border:'1px solid var(--border)'}}>{proto}</pre> : <div className="empty" style={{padding:12}}>{tr('req_proto_empty')}</div>}
         <div className="modal-actions" style={{marginTop:12}}>
-          <button type="button" className="btn btn-cancel" onClick={()=>setDetail(null)}>关闭</button>
-          <button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5'}} onClick={deleteDetail}>删除</button>
-          <button type="button" className="btn btn-primary" onClick={saveDetail}>保存修改</button>
+          <button type="button" className="btn btn-cancel" onClick={()=>setDetail(null)}>{tr('gen_close')}</button>
+          <button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5'}} onClick={deleteDetail}>{tr('gen_delete')}</button>
+          <button type="button" className="btn btn-primary" onClick={saveDetail}>{tr('req_save_changes')}</button>
         </div>
       </div>
     </div>}
@@ -859,6 +1021,9 @@ function Requirements() {
 
 // ── 任务追踪 ────────────────────────────────────────────────────
 function Tasks() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/tasks`);
   const [modal, setModal] = React.useState(null);
   const [note, setNote] = React.useState('');
@@ -866,8 +1031,8 @@ function Tasks() {
   const unblock = () => {
     fetch(`${API}/tasks/${modal.id}/unblock`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({human_notes:note})})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(null);reload();showToast('已解除阻塞','ok');})
-      .catch(()=>showToast('操作失败','err'));
+      .then(()=>{setModal(null);reload();showToast(tr('task_toast_unblocked'),'ok');})
+      .catch(()=>showToast(tr('task_toast_op_fail'),'err'));
   };
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -878,31 +1043,31 @@ function Tasks() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">⚙️ 任务追踪</div>
+      <div className="section-title">{tr('task_title')}</div>
       <RefreshBtn onClick={reload} />
     </div>
     {['in_progress','blocked','pending','completed'].map(s=><div key={s} className="card" style={{marginBottom:12}}>
       <div className="section-title"><Tag type={s}/> <span style={{color:'#64748b',fontWeight:400}}>({groups[s].length})</span></div>
-      {groups[s].length===0?<div className="empty">暂无</div>:groups[s].slice(0,20).map(t=><div key={t.id} className="list-item">
+      {groups[s].length===0?<div className="empty">{tr('task_empty')}</div>:groups[s].slice(0,20).map(tk=><div key={tk.id} className="list-item">
         <div style={{flex:1}}>
-          <div className="title">{t.title}</div>
-          <div className="meta">{t.id} · {t.assigned_to||'未分配'} · 估算:{t.estimate||'-'}</div>
-          {t.status==='blocked'&&<div className="meta" style={{color:'#fca5a5'}}>🚧 {t.blocked_reason||'原因未记录'}</div>}
-          {t.confidence!=null&&<ConfBar val={t.confidence}/>}
+          <div className="title">{tk.title}</div>
+          <div className="meta">{tk.id} · {tk.assigned_to||tr('task_meta_unassigned')} · {tr('task_meta_estimate', { est: tk.estimate||'-' })}</div>
+          {tk.status==='blocked'&&<div className="meta" style={{color:'#fca5a5'}}>🚧 {tk.blocked_reason||tr('dash_reason_unknown')}</div>}
+          {tk.confidence!=null&&<ConfBar val={tk.confidence}/>}
         </div>
-        {t.status==='blocked'&&<button className="btn btn-sm btn-warn" onClick={()=>{setModal(t);setNote('');}}>解除阻塞</button>}
+        {tk.status==='blocked'&&<button className="btn btn-sm btn-warn" onClick={()=>{setModal(tk);setNote('');}}>{tr('task_unblock_btn')}</button>}
       </div>)}
     </div>)}
     {modal&&<div className="modal-bg" onClick={()=>setModal(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>解除任务阻塞</h3>
+        <h3>{tr('task_unblock_modal_title')}</h3>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:12}}>{modal.title}</div>
-        <div className="form-group"><label>解决方案 / 备注</label>
-          <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="说明如何解除阻塞..."/>
+        <div className="form-group"><label>{tr('task_label_resolution')}</label>
+          <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder={tr('task_ph_resolution')}/>
         </div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>
-          <button className="btn btn-primary" onClick={unblock}>确认解除</button>
+          <button className="btn btn-cancel" onClick={()=>setModal(null)}>{tr('gen_cancel')}</button>
+          <button className="btn btn-primary" onClick={unblock}>{tr('task_unblock_submit')}</button>
         </div>
       </div>
     </div>}
@@ -911,6 +1076,9 @@ function Tasks() {
 
 // ── 问题中心 ────────────────────────────────────────────────────
 function Issues() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/issues`);
   const [modal, setModal] = React.useState(null);
   const [resolution, setResolution] = React.useState('');
@@ -918,8 +1086,8 @@ function Issues() {
   const resolve = () => {
     fetch(`${API}/issues/${modal.id}/resolve`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolution})})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(null);reload();showToast('已标记为已解决','ok');})
-      .catch(()=>showToast('操作失败','err'));
+      .then(()=>{setModal(null);reload();showToast(tr('issue_toast_resolved'),'ok');})
+      .catch(()=>showToast(tr('task_toast_op_fail'),'err'));
   };
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -930,25 +1098,25 @@ function Issues() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">🐛 问题中心</div>
+      <div className="section-title">{tr('issue_title')}</div>
       <RefreshBtn onClick={reload} />
     </div>
     <div className="card" style={{marginBottom:12}}>
-      <div className="section-title">待处理 ({open.length})</div>
-      {open.length===0?<div className="empty">暂无问题 🎉</div>:open.map(i=><div key={i.id} className="list-item">
+      <div className="section-title">{tr('issue_open_section', { n: open.length })}</div>
+      {open.length===0?<div className="empty">{tr('issue_empty_celebrate')}</div>:open.map(i=><div key={i.id} className="list-item">
         <div style={{flex:1}}>
           <div className="title">{i.title}</div>
-          <div className="meta">{i.id} · <Tag type={i.type||'bug'} label={i.type}/> · 上报: {i.reported_by||'agent'}</div>
+          <div className="meta">{i.id} · <Tag type={i.type||'bug'} label={i.type}/> · {tr('issue_meta_report', { who: i.reported_by||'agent' })}</div>
           {i.description&&<div className="meta">{i.description}</div>}
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
           <Tag type={i.severity||'P2'}/>
-          <button className="btn btn-sm btn-primary" onClick={()=>{setModal(i);setResolution('');}}>处理</button>
+          <button className="btn btn-sm btn-primary" onClick={()=>{setModal(i);setResolution('');}}>{tr('issue_btn_handle')}</button>
         </div>
       </div>)}
     </div>
     <div className="card">
-      <div className="section-title">已解决 ({resolved.length})</div>
+      <div className="section-title">{tr('issue_resolved_section', { n: resolved.length })}</div>
       {resolved.slice(0,10).map(i=><div key={i.id} className="list-item">
         <div style={{flex:1}}><div className="title">{i.title}</div><div className="meta">{i.resolution}</div></div>
         <Tag type="resolved"/>
@@ -956,15 +1124,15 @@ function Issues() {
     </div>
     {modal&&<div className="modal-bg" onClick={()=>setModal(null)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>处理问题</h3>
+        <h3>{tr('issue_modal_title')}</h3>
         <div style={{fontSize:13,color:'#94a3b8',marginBottom:4}}>{modal.title}</div>
         <div style={{marginBottom:12}}><Tag type={modal.severity}/></div>
-        <div className="form-group"><label>解决方案</label>
-          <textarea value={resolution} onChange={e=>setResolution(e.target.value)} placeholder="描述解决方案..."/>
+        <div className="form-group"><label>{tr('issue_label_resolution')}</label>
+          <textarea value={resolution} onChange={e=>setResolution(e.target.value)} placeholder={tr('issue_ph_resolution')}/>
         </div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>
-          <button className="btn btn-primary" onClick={resolve}>标记已解决</button>
+          <button className="btn btn-cancel" onClick={()=>setModal(null)}>{tr('gen_cancel')}</button>
+          <button className="btn btn-primary" onClick={resolve}>{tr('issue_resolve_btn')}</button>
         </div>
       </div>
     </div>}
@@ -973,33 +1141,36 @@ function Issues() {
 
 // ── Agent 反思 ──────────────────────────────────────────────────
 function Reflections() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/reflections`);
   if (loading) return <PageSkeleton cards={1} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
   const items = data||[];
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">🧠 Agent 反思记录</div>
+      <div className="section-title">{tr('refl_title')}</div>
       <RefreshBtn onClick={reload} />
     </div>
     <div className="card">
-      {items.length===0?<div className="empty">暂无反思记录</div>:items.map(r=><div key={r.id} className="list-item" style={{flexDirection:'column',gap:8}}>
+      {items.length===0?<div className="empty">{tr('refl_empty')}</div>:items.map(r=><div key={r.id} className="list-item" style={{flexDirection:'column',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
           <span style={{fontSize:13,fontWeight:600,flex:1}}>{r.task_id} · {r.agent_role}</span>
           <span className={`tag ${r.outcome==='success'?'tag-done':r.outcome==='escalated'?'tag-p1':'tag-p0'}`}>{r.outcome}</span>
-          <span style={{fontSize:11,color:'#64748b'}}>重试:{r.retry_count||0}次</span>
+          <span style={{fontSize:11,color:'#64748b'}}>{tr('refl_retry_n', { n: r.retry_count||0 })}</span>
         </div>
         {r.confidence_before!=null&&<div style={{width:'100%'}}>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:2}}>置信度变化</div>
+          <div style={{fontSize:11,color:'#64748b',marginBottom:2}}>{tr('refl_conf_delta')}</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <ConfBar val={r.confidence_before}/><span style={{color:'#64748b'}}>→</span><ConfBar val={r.confidence_after}/>
           </div>
         </div>}
         {r.reflect_content&&<div style={{width:'100%'}}>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>反思内容</div>
+          <div style={{fontSize:11,color:'#64748b',marginBottom:4}}>{tr('refl_content')}</div>
           <div className="reflect-box">{r.reflect_content}</div>
         </div>}
-        {r.rule_extracted&&<div style={{fontSize:12,color:'#86efac',background:'#14532d',padding:'4px 8px',borderRadius:4}}>📌 提取规则: {r.rule_extracted}</div>}
+        {r.rule_extracted&&<div style={{fontSize:12,color:'#86efac',background:'#14532d',padding:'4px 8px',borderRadius:4}}>{tr('refl_rule_extracted', { rule: r.rule_extracted })}</div>}
       </div>)}
     </div>
   </>;
@@ -1007,44 +1178,47 @@ function Reflections() {
 
 // ── Sprint 管理 ─────────────────────────────────────────────────
 function Sprints() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/sprints`);
   const [modal, setModal] = React.useState(false);
   const [form, setForm] = React.useState({goal:'',planned_points:0,ends_at:''});
   const save = () => {
     fetch(`${API}/sprints`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(false);reload();showToast('Sprint 已创建','ok');})
-      .catch(()=>showToast('创建失败','err'));
+      .then(()=>{setModal(false);reload();showToast(tr('sprint_toast_created'),'ok');})
+      .catch(()=>showToast(tr('gen_create_fail'),'err'));
   };
   if (loading) return <PageSkeleton cards={1} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
   const sprints = data||[];
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">🏃 Sprint 管理</div>
+      <div className="section-title">{tr('sprint_title')}</div>
       <div style={{display:'flex',gap:8}}>
         <RefreshBtn onClick={reload} />
-        <button className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>+ 新建 Sprint</button>
+        <button className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>{tr('sprint_new_btn')}</button>
       </div>
     </div>
     <div className="card">
-      {sprints.length===0?<div className="empty">暂无 Sprint</div>:sprints.map(s=><div key={s.id} className="list-item">
+      {sprints.length===0?<div className="empty">{tr('sprint_empty')}</div>:sprints.map(s=><div key={s.id} className="list-item">
         <div style={{flex:1}}>
           <div className="title">{s.id} · {s.goal}</div>
-          <div className="meta">计划: {s.planned_points||0}点 · 完成率: {Math.round((s.completion_rate||0)*100)/100}%</div>
+          <div className="meta">{tr('sprint_meta_planned', { pts: s.planned_points||0, pct: Math.round((s.completion_rate||0)*100)/100 })}</div>
         </div>
         <span className={`tag ${s.status==='active'?'tag-progress':s.status==='completed'?'tag-done':'tag-pending'}`}>{s.status}</span>
       </div>)}
     </div>
     {modal&&<div className="modal-bg" onClick={()=>setModal(false)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>新建 Sprint</h3>
-        <div className="form-group"><label>迭代目标</label><input value={form.goal} onChange={e=>setForm({...form,goal:e.target.value})} placeholder="本迭代要完成什么..."/></div>
-        <div className="form-group"><label>计划点数</label><input type="number" value={form.planned_points} onChange={e=>setForm({...form,planned_points:+e.target.value})}/></div>
-        <div className="form-group"><label>结束日期</label><input type="date" value={form.ends_at} onChange={e=>setForm({...form,ends_at:e.target.value})}/></div>
+        <h3>{tr('sprint_modal_new')}</h3>
+        <div className="form-group"><label>{tr('sprint_label_goal')}</label><input value={form.goal} onChange={e=>setForm({...form,goal:e.target.value})} placeholder={tr('sprint_ph_goal')}/></div>
+        <div className="form-group"><label>{tr('sprint_label_points')}</label><input type="number" value={form.planned_points} onChange={e=>setForm({...form,planned_points:+e.target.value})}/></div>
+        <div className="form-group"><label>{tr('sprint_label_end')}</label><input type="date" value={form.ends_at} onChange={e=>setForm({...form,ends_at:e.target.value})}/></div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(false)}>取消</button>
-          <button className="btn btn-primary" onClick={save}>创建</button>
+          <button className="btn btn-cancel" onClick={()=>setModal(false)}>{tr('gen_cancel')}</button>
+          <button className="btn btn-primary" onClick={save}>{tr('gen_create')}</button>
         </div>
       </div>
     </div>}
@@ -1053,6 +1227,8 @@ function Sprints() {
 
 // ── 搜索 ────────────────────────────────────────────────────────
 function Search() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const [q, setQ] = React.useState('');
   const [results, setResults] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -1061,36 +1237,58 @@ function Search() {
     setLoading(true);
     fetch(`${API}/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(d=>{setResults(d);setLoading(false);});
   };
-  const typeLabel = {requirements:'需求',tasks:'任务',issues:'问题'};
+  const typeLabel = {
+    requirements: t('search_type_req'),
+    tasks: t('search_type_task'),
+    issues: t('search_type_issue'),
+  };
   return <>
-    <div className="section-title" style={{marginBottom:16}}>🔍 全局搜索</div>
-    <div style={{display:'flex',gap:8,marginBottom:16}}>
-      <input style={{flex:1,background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'8px 12px',borderRadius:6,fontSize:13}}
-        value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="搜索需求、任务、问题..."/>
-      <button className="btn btn-primary" onClick={doSearch}>搜索</button>
+    <div className="section-title" style={{marginBottom:16}}>🔍 {t('search_title')}</div>
+    <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'stretch'}}>
+      <input className="input-surface" style={{flex:1,padding:'8px 12px',fontSize:13}}
+        value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder={t('search_ph')}/>
+      <button className="btn btn-primary" onClick={doSearch}>{t('search_btn')}</button>
     </div>
     {loading&&<div className="card page-enter" style={{padding:20}}><div className="skeleton-line"/><div className="skeleton-line mid"/><div className="skeleton-line short"/></div>}
     {results&&<div className="card">
-      {results.length===0?<div className="empty">无结果</div>:results.map((r,i)=><div key={i} className="list-item">
+      {results.length===0?<div className="empty">{t('search_none')}</div>:results.map((r,i)=><div key={i} className="list-item">
         <div style={{flex:1}}>
           <div className="title">{r.title}</div>
           <div className="meta">{typeLabel[r.type]||r.type} · {r.id} · <Tag type={r.status||r.severity||'pending'}/></div>
         </div>
       </div>)}
-      <div style={{padding:'8px 12px',fontSize:12,color:'#64748b'}}>共 {results.length} 条结果</div>
+      <div style={{padding:'8px 12px',fontSize:12}} className="text-tertiary">{t('search_count', { n: results.length })}</div>
     </div>}
   </>;
 }
 
 // ── 自定义模块 ───────────────────────────────────────────────────
 function Custom() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data, loading, error, reload} = useFetch(`${API}/custom`);
   const [selected, setSelected] = React.useState(null);
   const [content, setContent] = React.useState(null);
+  const [contentBusy, setContentBusy] = React.useState(false);
+  const [contentErr, setContentErr] = React.useState(null);
 
   const open = (file) => {
     setSelected(file);
-    fetch(`${API}/custom/content?path=${encodeURIComponent(file.path)}`).then(r=>r.json()).then(setContent);
+    setContent(null);
+    setContentErr(null);
+    setContentBusy(true);
+    fetchFileContentJson(`${API}/custom/content?path=${encodeURIComponent(file.path)}`)
+      .then(function (d) {
+        setContent(d);
+        setContentBusy(false);
+      })
+      .catch(function (err) {
+        setContentBusy(false);
+        var m = err && err.message ? String(err.message) : tr('gen_load_fail');
+        setContentErr(m);
+        showToast(m, 'err');
+      });
   };
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -1101,15 +1299,15 @@ function Custom() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📁 自定义模块</div>
+      <div className="section-title">{tr('idx_custom_title')}</div>
       <RefreshBtn onClick={reload} />
     </div>
     <div className="grid-2">
-      <div className="card" style={{maxHeight:600,overflowY:'auto'}}>
-        {Object.keys(cats).length===0?<div className="empty">custom/ 目录为空，请添加规范/样例/设计文件</div>:
+      <div className="card scroll-slim panel-scroll">
+        {Object.keys(cats).length===0?<div className="empty">{tr('idx_custom_empty_dir')}</div>:
           Object.entries(cats).map(([cat,items])=><div key={cat}>
-            <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'8px 0 4px',fontWeight:700}}>{cat}</div>
-            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',borderRadius:4}} onClick={()=>open(f)}>
+            <div className="file-browser-cat">{cat}</div>
+            {items.map(f=><div key={f.path} className={'list-item file-browser-row' + ((selected && selected.path)===f.path?' vibe-list-selected':'')} onClick={()=>open(f)}>
               <div style={{flex:1}}>
                 <div className="title" style={{fontSize:12}}>{f.name}</div>
                 <div className="meta">{f.ext} · {(f.size/1024).toFixed(1)}KB</div>
@@ -1117,10 +1315,13 @@ function Custom() {
             </div>)}
           </div>)}
       </div>
-      <div className="card" style={{maxHeight:600,overflowY:'auto'}}>
-        {!selected?<div className="empty">点击左侧文件查看内容</div>:
-          (content && content.type)==='text'?<pre style={{fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{content.content}</pre>:
-          <div className="empty">二进制文件 ({(content && content.size)} bytes)，请在本地打开</div>}
+      <div className="card scroll-slim panel-scroll">
+        {!selected?<div className="empty">{tr('idx_pick_file_left')}</div>:
+          contentBusy?<div className="doc-fetch-hint">{tr('idx_loading_file')}</div>:
+          contentErr?<LoadError message={contentErr} onRetry={()=>open(selected)} />:
+          (content && content.type)==='text'?<pre className="doc-plain-pre">{content.content}</pre>:
+          content?<div className="empty">{tr('idx_binary_open_local', { bytes: (content.size != null ? content.size : '?') })}</div>:
+          <div className="empty">{tr('idx_no_content')}</div>}
       </div>
     </div>
   </>;
@@ -1160,43 +1361,75 @@ function App() {
 }
 // ── 规范文档浏览器 ────────────────────────────────────────────────
 function Specs() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data:files,loading,error,reload} = useFetch(`${API}/custom`);
   const [selected,setSelected] = React.useState(null);
   const [content,setContent] = React.useState(null);
+  const [contentBusy,setContentBusy] = React.useState(false);
+  const [contentErr,setContentErr] = React.useState(null);
   const [specFiles,setSpecFiles] = React.useState([]);
 
-  React.useEffect(()=>{
-    // 加载 sop/specs 目录文件列表
-    fetch(`${API}/specs`).then(r=>r.json()).then(d=>setSpecFiles(d||[])).catch(()=>{});
-  },[]);
+  const reloadSpecList = React.useCallback(function () {
+    return apiFetch(`${API}/specs`, { timeoutMs: 32000 })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (x) {
+        if (x.ok && Array.isArray(x.d)) setSpecFiles(x.d);
+        else setSpecFiles([]);
+      })
+      .catch(function () { setSpecFiles([]); });
+  }, []);
 
-  const open = (f,isSpec=false) => {
-    setSelected({...f,isSpec});
-    const url = isSpec ? `${API}/specs/content?path=${encodeURIComponent(f.path)}` : `${API}/custom/content?path=${encodeURIComponent(f.path)}`;
-    fetch(url).then(r=>r.json()).then(setContent);
+  React.useEffect(function () { reloadSpecList(); }, [reloadSpecList]);
+
+  const reloadAll = React.useCallback(function () {
+    return Promise.all([reload(), reloadSpecList()]);
+  }, [reload, reloadSpecList]);
+
+  const open = (f,isSpec) => {
+    setSelected(Object.assign({}, f, { isSpec: !!isSpec }));
+    setContent(null);
+    setContentErr(null);
+    setContentBusy(true);
+    var url = isSpec
+      ? `${API}/specs/content?path=${encodeURIComponent(f.path)}`
+      : `${API}/custom/content?path=${encodeURIComponent(f.path)}`;
+    fetchFileContentJson(url)
+      .then(function (d) { setContent(d); setContentBusy(false); })
+      .catch(function (err) {
+        setContentBusy(false);
+        var m = err && err.message ? String(err.message) : tr('gen_load_fail');
+        setContentErr(m);
+        showToast(m, 'err');
+      });
   };
 
   const allFiles = [
-    ...specFiles.map(f=>({...f,source:'规范'})),
-    ...(files||[]).map(f=>({...f,source:'自定义'}))
+    ...specFiles.map(function (f) { return Object.assign({}, f, { _isSpec: true }); }),
+    ...(files||[]).map(function (f) { return Object.assign({}, f, { _isSpec: false }); }),
   ];
   const cats = {};
-  allFiles.forEach(f=>{const k=`[${f.source}] ${f.category||'root'}`;(cats[k]||(cats[k]=[])).push(f);});
+  allFiles.forEach(function (f) {
+    var sourceLabel = f._isSpec ? tr('idx_source_spec') : tr('idx_source_custom');
+    var k = tr('idx_cat_bracket', { source: sourceLabel, cat: f.category || tr('idx_root') });
+    (cats[k] || (cats[k] = [])).push(f);
+  });
 
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📖 规范文档浏览器</div>
-      <RefreshBtn onClick={reload} />
+      <div className="section-title">{tr('idx_specs_browser_title')}</div>
+      <RefreshBtn onClick={reloadAll} />
     </div>
     <div className="grid-2">
-      <div className="card" style={{maxHeight:620,overflowY:'auto'}}>
-        {Object.keys(cats).length===0?<div className="empty">暂无文件（请检查 sop/specs 与 custom/）</div>:
+      <div className="card scroll-slim panel-scroll">
+        {Object.keys(cats).length===0?<div className="empty">{tr('idx_specs_empty')}</div>:
           Object.entries(cats).map(([cat,items])=><div key={cat}>
-            <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'8px 0 4px',fontWeight:700,borderBottom:'1px solid #1e293b'}}>{cat}</div>
-            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',borderRadius:4,padding:'6px 8px'}} onClick={()=>open(f,f.source==='规范')}>
+            <div className="file-browser-cat">{cat}</div>
+            {items.map(f=><div key={f.path} className={'list-item file-browser-row' + ((selected && selected.path)===f.path?' vibe-list-selected':'')} style={{padding:'6px 8px'}} onClick={()=>open(f, !!f._isSpec)}>
               <div style={{flex:1}}>
                 <div className="title" style={{fontSize:12}}>{f.name}</div>
                 <div className="meta">{f.ext} · {(f.size/1024).toFixed(1)}KB</div>
@@ -1204,14 +1437,17 @@ function Specs() {
             </div>)}
           </div>)}
       </div>
-      <div className="card" style={{maxHeight:620,overflowY:'auto'}}>
-        {!selected?<div className="empty">← 点击左侧文件查看内容</div>:
+      <div className="card scroll-slim panel-scroll">
+        {!selected?<div className="empty">{tr('idx_specs_pick_left')}</div>:
+          contentBusy?<div className="doc-fetch-hint">{tr('idx_loading_file')}</div>:
+          contentErr?<LoadError message={contentErr} onRetry={()=>open(selected, !!selected.isSpec)} />:
           (content && content.type)==='text'?
           <div>
-            <div style={{fontSize:11,color:'#64748b',marginBottom:8,padding:'4px 0',borderBottom:'1px solid #334155'}}>{selected.path}</div>
-            <pre style={{fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.6}}>{content.content}</pre>
+            <div className="doc-path-bar">{selected.path}</div>
+            <pre className="doc-plain-pre">{content.content}</pre>
           </div>:
-          <div className="empty">二进制文件，请在本地打开</div>}
+          content?<div className="empty">{tr('idx_binary_open_local_short')}</div>:
+          <div className="empty">{tr('idx_no_content')}</div>}
       </div>
     </div>
   </>;
@@ -1219,6 +1455,9 @@ function Specs() {
 
 // ── 规则库管理 ────────────────────────────────────────────────────
 function Rules() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data,loading,error,reload} = useFetch(`${API}/rules`);
   const [modal,setModal] = React.useState(false);
   const [form,setForm] = React.useState({rule:'',category:'coding',source:'human',confidence:0.75});
@@ -1226,8 +1465,8 @@ function Rules() {
   const save = () => {
     fetch(`${API}/rules`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(false);reload();setForm({rule:'',category:'coding',source:'human',confidence:0.75});showToast('规则已添加','ok');})
-      .catch(()=>showToast('添加失败','err'));
+      .then(()=>{setModal(false);reload();setForm({rule:'',category:'coding',source:'human',confidence:0.75});showToast(tr('rules_toast_added'),'ok');})
+      .catch(()=>showToast(tr('rules_toast_add_fail'),'err'));
   };
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -1240,42 +1479,42 @@ function Rules() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📐 规则库管理</div>
+      <div className="section-title">{tr('rules_page_title')}</div>
       <div style={{display:'flex',gap:8}}>
         <RefreshBtn onClick={reload} />
-        <button className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>+ 添加规则</button>
+        <button className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>{tr('rules_add_btn')}</button>
       </div>
     </div>
     {['active','testing','deprecated'].map(s=><div key={s} className="card" style={{marginBottom:12}}>
       <div className="section-title">
         <span className={`tag ${statusColor[s]}`}>{s}</span>
-        <span style={{color:'#64748b',fontWeight:400,marginLeft:8}}>({(byStatus[s] && byStatus[s].length)||0})</span>
+        <span className="text-tertiary" style={{fontWeight:400,marginLeft:8}}>({(byStatus[s] && byStatus[s].length)||0})</span>
       </div>
-      {(byStatus[s]||[]).length===0?<div className="empty">暂无</div>:(byStatus[s]||[]).map(r=><div key={r.id} className="list-item">
+      {(byStatus[s]||[]).length===0?<div className="empty">{tr('idx_none')}</div>:(byStatus[s]||[]).map(r=><div key={r.id} className="list-item">
         <div style={{flex:1}}>
           <div className="title" style={{fontSize:13}}>{r.rule}</div>
-          <div className="meta">{r.id} · {r.category} · 来源: {r.source}</div>
+          <div className="meta">{r.id} · {r.category} · {tr('rules_meta_source', { src: r.source })}</div>
           <ConfBar val={r.confidence||0}/>
         </div>
       </div>)}
     </div>)}
     {modal&&<div className="modal-bg" onClick={()=>setModal(false)}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <h3>添加规则</h3>
-        <div className="form-group"><label>规则内容</label><textarea value={form.rule} onChange={e=>setForm({...form,rule:e.target.value})} placeholder="描述规则，如：密码必须使用 BCrypt 加密"/></div>
-        <div className="form-group"><label>分类</label>
+        <h3>{tr('rules_modal_add')}</h3>
+        <div className="form-group"><label>{tr('rules_label_content')}</label><textarea value={form.rule} onChange={e=>setForm({...form,rule:e.target.value})} placeholder={tr('rules_ph_content')}/></div>
+        <div className="form-group"><label>{tr('rules_label_category')}</label>
           <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
             <option value="coding">coding</option><option value="security">security</option>
             <option value="testing">testing</option><option value="workflow">workflow</option>
           </select>
         </div>
-        <div className="form-group"><label>来源</label><input value={form.source} onChange={e=>setForm({...form,source:e.target.value})} placeholder="如: INC-003 或 human"/></div>
-        <div className="form-group"><label>置信度 ({form.confidence})</label>
+        <div className="form-group"><label>{tr('rules_label_src_field')}</label><input value={form.source} onChange={e=>setForm({...form,source:e.target.value})} placeholder={tr('rules_ph_src')}/></div>
+        <div className="form-group"><label>{tr('rules_label_confidence', { n: form.confidence })}</label>
           <input type="range" min="0.5" max="1" step="0.05" value={form.confidence} onChange={e=>setForm({...form,confidence:+e.target.value})} style={{width:'100%'}}/>
         </div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(false)}>取消</button>
-          <button className="btn btn-primary" onClick={save}>保存</button>
+          <button className="btn btn-cancel" onClick={()=>setModal(false)}>{tr('gen_cancel')}</button>
+          <button className="btn btn-primary" onClick={save}>{tr('gen_save')}</button>
         </div>
       </div>
     </div>}
@@ -1284,6 +1523,9 @@ function Rules() {
 
 // ── 知识库管理 ────────────────────────────────────────────────────
 function Knowledge() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data,loading,error,reload} = useFetch(`${API}/knowledge`);
   const [indexing,setIndexing] = React.useState(false);
   const [selected,setSelected] = React.useState(null);
@@ -1292,8 +1534,8 @@ function Knowledge() {
     setIndexing(true);
     fetch(`${API}/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
       setIndexing(false);reload();
-      showToast(`已索引 ${d.count||0} 个文档`,'ok');
-    }).catch(()=>{setIndexing(false);showToast('索引失败','err');});
+      showToast(tr('kb_toast_indexed', { n: d.count||0 }),'ok');
+    }).catch(()=>{setIndexing(false);showToast(tr('kb_toast_index_fail'),'err');});
   };
 
   if (loading) return <PageSkeleton cards={4} />;
@@ -1304,24 +1546,24 @@ function Knowledge() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">🗄️ 知识库管理</div>
+      <div className="section-title">{tr('kb_title')}</div>
       <div style={{display:'flex',gap:8}}>
         <RefreshBtn onClick={reload} />
         <button className="btn btn-primary btn-sm" onClick={indexCustom} disabled={indexing}>
-          {indexing?'索引中...':'⚡ 重新索引 custom/'}
+          {indexing ? tr('kb_reindexing') : tr('kb_reindex')}
         </button>
       </div>
     </div>
     <div className="grid-4" style={{marginBottom:16}}>
-      <div className="card"><h3>文档总数</h3><div className="stat-val">{items.length}</div></div>
-      <div className="card"><h3>分类数</h3><div className="stat-val">{Object.keys(cats).length}</div></div>
-      <div className="card"><h3>规范文档</h3><div className="stat-val">{items.filter(i=>i.category==='specs').length}</div></div>
-      <div className="card"><h3>样例代码</h3><div className="stat-val">{items.filter(i=>i.category==='examples').length}</div></div>
+      <div className="card"><h3>{tr('kb_stat_docs')}</h3><div className="stat-val">{items.length}</div></div>
+      <div className="card"><h3>{tr('kb_stat_cats')}</h3><div className="stat-val">{Object.keys(cats).length}</div></div>
+      <div className="card"><h3>{tr('kb_stat_specs')}</h3><div className="stat-val">{items.filter(i=>i.category==='specs').length}</div></div>
+      <div className="card"><h3>{tr('kb_stat_examples')}</h3><div className="stat-val">{items.filter(i=>i.category==='examples').length}</div></div>
     </div>
     <div className="card">
-      <div className="section-title">文档列表</div>
-      {items.length===0?<div className="empty">知识库为空，点击「重新索引」将 custom/ 目录文档加入知识库</div>:
-        items.slice(0,50).map(i=><div key={i.id} className="list-item" style={{cursor:'pointer',background:(selected && selected.id)===i.id?'#1e3a5f':''}} onClick={()=>setSelected((selected && selected.id)===i.id?null:i)}>
+      <div className="section-title">{tr('kb_list_title')}</div>
+      {items.length===0?<div className="empty">{tr('kb_empty_hint')}</div>:
+        items.slice(0,50).map(i=><div key={i.id} className={'list-item file-browser-row' + ((selected && selected.id)===i.id?' vibe-list-selected':'')} onClick={()=>setSelected((selected && selected.id)===i.id?null:i)}>
           <div style={{flex:1}}>
             <div className="title" style={{fontSize:12}}>{i.path}</div>
             <div className="meta">{i.category} · {(i.content && i.content.slice(0,80))}...</div>
@@ -1334,6 +1576,9 @@ function Knowledge() {
 
 // ── Agent 日志 ────────────────────────────────────────────────────
 function AgentLogs() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data,loading,error,reload} = useFetch(`${API}/reflections?limit=100`);
   const [filter,setFilter] = React.useState('all');
 
@@ -1344,35 +1589,306 @@ function AgentLogs() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📡 Agent 执行日志</div>
+      <div className="section-title">{tr('logs_title')}</div>
       <div style={{display:'flex',gap:8,alignItems:'center'}}>
-        <select style={{background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'4px 8px',borderRadius:6,fontSize:12}}
+        <select className="input-surface" style={{padding:'4px 8px',fontSize:12,minWidth:100}}
           value={filter} onChange={e=>setFilter(e.target.value)}>
-          <option value="all">全部</option>
-          <option value="success">成功</option>
-          <option value="escalated">已上报</option>
-          <option value="failed">失败</option>
+          <option value="all">{tr('logs_filter_all')}</option>
+          <option value="success">{tr('logs_filter_success')}</option>
+          <option value="escalated">{tr('logs_filter_escalated')}</option>
+          <option value="failed">{tr('logs_filter_failed')}</option>
         </select>
         <RefreshBtn onClick={reload} />
       </div>
     </div>
     <div className="card">
-      {items.length===0?<div className="empty">暂无日志</div>:items.map(r=><div key={r.id} className="list-item" style={{flexDirection:'column',gap:6}}>
+      {items.length===0?<div className="empty">{tr('logs_empty')}</div>:items.map(r=><div key={r.id} className="list-item" style={{flexDirection:'column',gap:6}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
-          <span style={{fontSize:12,color:'#94a3b8',minWidth:160}}>{(r.created_at && r.created_at.slice && r.created_at.slice(0,16))||''}</span>
+          <span className="text-secondary" style={{fontSize:12,minWidth:160}}>{(r.created_at && r.created_at.slice && r.created_at.slice(0,16))||''}</span>
           <span style={{flex:1,fontSize:13,fontWeight:600}}>{r.task_id} · {r.agent_role}</span>
           <span className={`tag ${r.outcome==='success'?'tag-done':r.outcome==='escalated'?'tag-p1':'tag-p0'}`}>{r.outcome}</span>
-          <span style={{fontSize:11,color:'#64748b'}}>重试:{r.retry_count||0}</span>
+          <span className="text-tertiary" style={{fontSize:11}}>{tr('refl_retry_n', { n: r.retry_count||0 })}</span>
         </div>
         {r.confidence_before!=null&&<div style={{display:'flex',gap:8,alignItems:'center',width:'100%'}}>
-          <span style={{fontSize:11,color:'#64748b',minWidth:60}}>置信度:</span>
-          <ConfBar val={r.confidence_before}/><span style={{color:'#64748b',fontSize:11}}>→</span><ConfBar val={r.confidence_after}/>
+          <span className="text-tertiary" style={{fontSize:11,minWidth:60}}>{tr('logs_conf_label')}</span>
+          <ConfBar val={r.confidence_before}/><span className="text-tertiary" style={{fontSize:11}}>→</span><ConfBar val={r.confidence_after}/>
         </div>}
         {r.reflect_content&&<div className="reflect-box" style={{width:'100%'}}>{r.reflect_content}</div>}
         {r.rule_extracted&&<div style={{fontSize:12,color:'#86efac',background:'#14532d',padding:'3px 8px',borderRadius:4}}>📌 {r.rule_extracted}</div>}
       </div>)}
     </div>
   </>;
+}
+
+// ── 未初始化：向导式 init / reinit / 备份提示 ───────────────────────
+function ProjectBootstrapPanel({ onReloadState }) {
+  const [boot, setBoot] = React.useState(null);
+  const [reinitItems, setReinitItems] = React.useState([]);
+  const [projectId, setProjectId] = React.useState('');
+  const [busy, setBusy] = React.useState(null);
+  const [result, setResult] = React.useState(null);
+  const [showDanger, setShowDanger] = React.useState(false);
+  const [confirmPhrase, setConfirmPhrase] = React.useState('');
+  const [keepClaude, setKeepClaude] = React.useState(false);
+
+  const loadMeta = React.useCallback(function () {
+    apiFetch(API + '/system/project/bootstrap-status', { timeoutMs: 20000 })
+      .then(function (r) { return r.json(); })
+      .then(setBoot)
+      .catch(function () { setBoot(null); });
+    apiFetch(API + '/system/project/reinit-backups', { timeoutMs: 20000 })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { setReinitItems((d && d.items) || []); })
+      .catch(function () { setReinitItems([]); });
+  }, []);
+
+  React.useEffect(function () { loadMeta(); }, [loadMeta]);
+
+  const runInit = function () {
+    var pid = String(projectId || '').trim();
+    if (!pid) {
+      showToast('请填写项目 ID（如 my-app）', 'err');
+      return;
+    }
+    if (!window.confirm('即将在项目根执行 init-ai-project.sh：会创建 memory/、.ai-memory/ 及多套工具配置。确定继续？')) return;
+    setBusy('init');
+    setResult(null);
+    apiFetch(API + '/system/project/init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: pid }),
+      timeoutMs: 620000,
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { httpOk: r.ok, d: d };
+        });
+      })
+      .then(function (x) {
+        setBusy(null);
+        if (!x.httpOk) {
+          var msg =
+            x.d && typeof x.d.detail === 'string'
+              ? x.d.detail
+              : x.d && x.d.detail
+                ? JSON.stringify(x.d.detail)
+                : JSON.stringify(x.d || {});
+          setResult({ ok: false, returncode: -1, stderr: msg });
+          showToast('请求被拒绝', 'err');
+          return;
+        }
+        setResult(x.d);
+        if (x.d && x.d.ok) {
+          showToast('初始化已完成', 'ok');
+          onReloadState();
+          loadMeta();
+        } else {
+          showToast('初始化未成功（见下方输出）', 'err');
+        }
+      })
+      .catch(function (e) {
+        setBusy(null);
+        setResult({ ok: false, stderr: (e && e.message) ? String(e.message) : String(e) });
+        showToast('请求失败或超时', 'err');
+      });
+  };
+
+  const runReinit = function () {
+    var pid = String(projectId || '').trim();
+    if (String(confirmPhrase || '').trim() !== 'REINIT') {
+      showToast('请在确认框精确输入 REINIT（全大写）', 'err');
+      return;
+    }
+    if (!pid) {
+      showToast('重置须填写项目 ID（本页尚未有 current_state 可供推断）', 'err');
+      return;
+    }
+    if (!window.confirm('将执行 reinit：默认先写入 .ai-reinit-backups/ 再删除 memory、.ai-memory、CLAUDE.md 等并重建。不可撤销。最后确认？')) return;
+    setBusy('reinit');
+    setResult(null);
+    apiFetch(API + '/system/project/reinit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        confirm_phrase: 'REINIT',
+        project_id: pid,
+        keep_claude_md: !!keepClaude,
+      }),
+      timeoutMs: 920000,
+    })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          return { httpOk: r.ok, d: d };
+        });
+      })
+      .then(function (x) {
+        setBusy(null);
+        if (!x.httpOk) {
+          var msg2 =
+            x.d && typeof x.d.detail === 'string'
+              ? x.d.detail
+              : x.d && x.d.detail
+                ? JSON.stringify(x.d.detail)
+                : JSON.stringify(x.d || {});
+          setResult({ ok: false, returncode: -1, stderr: msg2 });
+          showToast('请求被拒绝', 'err');
+          return;
+        }
+        setResult(x.d);
+        if (x.d && x.d.ok) {
+          showToast('重置并初始化已完成', 'ok');
+          onReloadState();
+          loadMeta();
+          setConfirmPhrase('');
+        } else {
+          showToast('重置未成功（见下方输出）', 'err');
+        }
+      })
+      .catch(function (e) {
+        setBusy(null);
+        setResult({ ok: false, stderr: (e && e.message) ? String(e.message) : String(e) });
+        showToast('请求失败或超时', 'err');
+      });
+  };
+
+  var dlReinit = function (name) {
+    window.open(API + '/system/project/reinit-backups/download?name=' + encodeURIComponent(name), '_blank');
+  };
+
+  return (
+    <div className="page-enter">
+      <div className="card" style={{ borderLeft: '4px solid #f59e0b', padding: 24, marginBottom: 12 }}>
+        <div className="section-title">尚未初始化</div>
+        <p style={{ color: 'var(--text2)', fontSize: 14, lineHeight: 1.65 }}>
+          当前缺少 <code style={{ color: '#fbbf24' }}>memory/current_state.json</code>。可在下方直接执行与命令行等价的初始化脚本，无需手动登录服务器敲命令。
+        </p>
+        {boot && boot.safetyReminders && (
+          <ul style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.6, margin: '12px 0 8px 18px', padding: 0 }}>
+            {boot.safetyReminders.map(function (t, i) {
+              return (
+                <li key={i} style={{ marginBottom: 6 }}>
+                  {t}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {boot && (
+          <div className="meta" style={{ marginTop: 8, fontSize: 12 }}>
+            脚本就绪：{boot.initScriptReady ? '是' : '否'} · 管理后台备份包：{boot.adminBackupsCount != null ? boot.adminBackupsCount : 0} · reinit 历史包：{boot.reinitBackupsCount != null ? boot.reinitBackupsCount : 0}
+          </div>
+        )}
+        <div style={{ marginTop: 14 }}>
+          <a href="#system" style={{ fontSize: 13, color: '#38bdf8' }}>
+            打开「系统管理 → 运维/版本」创建 admin_state / sop_web 备份
+          </a>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="section-title">首次初始化</div>
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>等价于在项目根执行：<code style={{ fontSize: 11 }}>bash sop/tools/init-ai-project.sh &lt;项目ID&gt;</code></p>
+          <div className="form-group">
+            <label>项目 ID *</label>
+            <input
+              value={projectId}
+              onChange={function (e) {
+                setProjectId(e.target.value);
+              }}
+              placeholder="例如 my-service"
+              style={{ fontFamily: 'monospace', fontSize: 13 }}
+            />
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" style={{ width: '100%' }} disabled={!!busy} onClick={runInit}>
+            {busy === 'init' ? '正在初始化（可能数分钟）…' : '执行初始化'}
+          </button>
+          <div style={{ marginTop: 10 }}>
+            <RefreshBtn
+              onClick={function () {
+                loadMeta();
+                onReloadState();
+              }}
+            />
+          </div>
+        </div>
+        <div className="card">
+          <div className="section-title">reinit 备份包</div>
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>由脚本在<strong>重置</strong>前自动写入目录 <code>.ai-reinit-backups/</code>。</p>
+          {reinitItems.length === 0 ? (
+            <div className="empty">暂无</div>
+          ) : (
+            reinitItems.slice(0, 12).map(function (it) {
+              return (
+                <div key={it.name} className="list-item">
+                  <div style={{ flex: 1 }}>
+                    <div className="title" style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                      {it.name}
+                    </div>
+                    <div className="meta">
+                      {(it.size / 1024).toFixed(1)} KB · {it.updatedAt}
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={function () { dlReinit(it.name); }}>
+                    下载
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 12, borderLeft: '4px solid #b91c1c' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div className="section-title" style={{ margin: 0, color: '#fca5a5' }}>
+            危险：重置并重新初始化（reinit）
+          </div>
+          <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={function () { setShowDanger(!showDanger); }}>
+            {showDanger ? '收起' : '展开选项'}
+          </button>
+        </div>
+        {!showDanger ? (
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>会删除 memory、.ai-memory 及工具侧配置文件后重建。请先备份。</p>
+        ) : (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ fontSize: 12, color: '#fdba74', lineHeight: 1.6 }}>
+              本页在未初始化状态下<strong>必须填写项目 ID</strong>。请在上方填写与初始化一致的 ID。勾选「保留 CLAUDE.md」可减少文档丢失风险（仍建议先下载备份包）。
+            </p>
+            <div className="form-group" style={{ marginTop: 10 }}>
+              <label>确认口令（输入 REINIT）</label>
+              <input
+                value={confirmPhrase}
+                onChange={function (e) {
+                  setConfirmPhrase(e.target.value);
+                }}
+                placeholder="REINIT"
+                autoComplete="off"
+                style={{ fontFamily: 'monospace' }}
+              />
+            </div>
+            <label className="text-secondary" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <input type="checkbox" checked={keepClaude} onChange={function (e) { setKeepClaude(e.target.checked); }} />
+              保留已有 CLAUDE.md（--keep-claude-md）
+            </label>
+            <button type="button" className="btn btn-sm" style={{ background: '#991b1b', color: '#fecaca', width: '100%' }} disabled={!!busy} onClick={runReinit}>
+              {busy === 'reinit' ? '正在执行 reinit…' : '执行重置（reinit）'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {result && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="section-title" style={{ fontSize: 13, color: result.ok ? '#86efac' : '#fca5a5' }}>
+            {result.ok ? '命令成功' : '命令失败'} {result.returncode != null ? '(exit ' + result.returncode + ')' : ''}
+          </div>
+          {result.stdout ? <pre className="doc-plain-pre doc-plain-pre--log">{result.stdout}</pre> : null}
+          {result.stderr ? <pre className="doc-plain-pre doc-plain-pre--log doc-plain-pre--stderr">{result.stderr}</pre> : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── 项目配置 ─────────────────────────────────────────────────────
@@ -1392,11 +1908,7 @@ function Config() {
 
   if(loading) return <PageSkeleton cards={2} />;
   if(error && !state) return <LoadError message={error} onRetry={reload} />;
-  if((state && state.error)) return <div className="card page-enter" style={{borderLeft:'4px solid #f59e0b',padding:24}}>
-    <div className="section-title">⚠️ 尚未初始化</div>
-    <p style={{color:'var(--text2)',fontSize:14,lineHeight:1.6}}>{state.error}<br/>请先运行 init-ai-project.sh 初始化项目</p>
-    <RefreshBtn onClick={reload} />
-  </div>;
+  if((state && state.error)) return <ProjectBootstrapPanel onReloadState={reload} />;
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -1449,9 +1961,33 @@ function ExecutionPlan() {
   const {data, loading, error, reload} = useFetch(`${API}/tasks`);
   const {data: agentsBuiltin} = useFetch(`${API}/agents/builtin`);
   const {data: agentsCustom} = useFetch(`${API}/agents`);
+  const {data: orchTools} = useFetch(`${API}/orchestration/tools`);
   const [modal, setModal] = React.useState(null);
-  const [form, setForm] = React.useState({title: '', description: '', priority: 'P1', estimate: 'M', assigned_to: 'Coder', req_id: '', sprint_id: '', dev_tool: ''});
+  const [form, setForm] = React.useState({
+    title: '',
+    description: '',
+    priority: 'P1',
+    estimate: 'M',
+    assigned_to: 'Coder',
+    req_id: '',
+    sprint_id: '',
+    dev_tool: '',
+    artifact_url: '',
+    artifact_path: '',
+    debug_notes: '',
+    branch: '',
+  });
   const [filter, setFilter] = React.useState('all');
+
+  const toolOptions = React.useMemo(() => {
+    const a = DEV_TOOL_PRESETS.slice();
+    if (Array.isArray(orchTools)) {
+      orchTools.forEach((x) => {
+        if (x && x.id && a.indexOf(x.id) < 0) a.push(x.id);
+      });
+    }
+    return a;
+  }, [orchTools]);
 
   const agentOptions = React.useMemo(() => {
     const defs = Array.isArray(agentsBuiltin) ? agentsBuiltin : [];
@@ -1590,12 +2126,12 @@ function ExecutionPlan() {
     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8}}>
       <div>
         <div className="section-title">📋 执行计划</div>
-        <div style={{fontSize: 11, color: '#64748b', marginTop: 4}}>
-          {filter === 'all' ? '按优先级 P0–P3 看板；拖拽调整顺序与优先级；卡片可改状态 / Agent / 工具。' : '筛选模式下为列表视图；调整顺序请切回「全部」。'}
+        <div style={{fontSize: 11, color: 'var(--text3)', marginTop: 4}}>
+          {filter === 'all' ? '按优先级 P0–P3 看板；拖拽调整顺序与优先级；卡片可改状态 / Agent / 工具，支持产出 URL 与路径、一键进 Vibe。' : '筛选模式下为列表视图；调整顺序请切回「全部」。'}
         </div>
       </div>
       <div style={{display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap'}}>
-        <select style={{background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', padding: '4px 8px', borderRadius: 6, fontSize: 12}}
+        <select className="input-surface" style={{padding:'4px 8px',borderRadius:6,fontSize:12}}
           value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">全部</option>
           {statusOpts.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -1603,7 +2139,7 @@ function ExecutionPlan() {
         <RefreshBtn onClick={reload}>{''}</RefreshBtn>
         <button className="btn btn-primary btn-sm" onClick={() => {
           setModal('create');
-          setForm({title: '', description: '', priority: 'P1', estimate: 'M', assigned_to: 'Coder', req_id: '', sprint_id: '', dev_tool: ''});
+          setForm({title: '', description: '', priority: 'P1', estimate: 'M', assigned_to: 'Coder', req_id: '', sprint_id: '', dev_tool: '', artifact_url: '', artifact_path: '', debug_notes: '', branch: ''});
         }}>+ 新建任务</button>
       </div>
     </div>
@@ -1629,6 +2165,28 @@ function ExecutionPlan() {
                   <span style={{fontSize: 11, color: '#64748b'}}>{t.estimate || '-'}</span>
                 </div>
                 <div className="meta">{t.id} {t.req_id && `· 需求:${t.req_id}`}</div>
+                {(t.artifact_url || t.artifact_path) && (
+                  <div style={{fontSize: 11, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center'}}>
+                    {t.artifact_url && (
+                      <a href={t.artifact_url} target="_blank" rel="noreferrer" style={{color: '#60a5fa'}} onClick={(e) => e.stopPropagation()}>
+                        产出 URL
+                      </a>
+                    )}
+                    {t.artifact_path && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{background: '#334155', color: '#94a3b8', padding: '2px 6px'}}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(t.artifact_path).then(() => showToast('已复制相对路径', 'ok')).catch(() => showToast('复制失败', 'err'));
+                        }}
+                      >
+                        复制产出路径
+                      </button>
+                    )}
+                  </div>
+                )}
                 {t.description && <div className="meta" style={{color: '#94a3b8', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{t.description}</div>}
                 {Number(t.confidence) > 0 && <ConfBar val={t.confidence}/>}
               </div>
@@ -1639,7 +2197,7 @@ function ExecutionPlan() {
                 </select>
                 <button className="btn btn-sm btn-primary" onClick={() => {
                   setModal(t);
-                  setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || ''});
+                  setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || '', artifact_url: t.artifact_url || '', artifact_path: t.artifact_path || '', debug_notes: t.debug_notes || '', branch: t.branch || ''});
                 }}>编辑</button>
                 <button className="btn btn-sm" style={{background: '#7f1d1d', color: '#fca5a5'}} onClick={() => del(t.id)}>删除</button>
               </div>
@@ -1653,8 +2211,9 @@ function ExecutionPlan() {
               <span style={{color: '#64748b'}}>工具</span>
               <select value={t.dev_tool || ''} onChange={(e) => patchTask(t.id, {dev_tool: e.target.value})} onClick={(e) => e.stopPropagation()}
                 style={{padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', fontSize: 11, maxWidth: 140}}>
-                {DEV_TOOL_PRESETS.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
+                {toolOptions.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
               </select>
+              <button type="button" className="btn btn-sm" style={{background: '#1e3a5f', color: '#93c5fd'}} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('app-set-tab', {detail: {tab: 'vibe'}})); }}>Vibe</button>
               <span style={{marginLeft: 'auto', color: '#475569', fontSize: 10}}>拖拽排序</span>
             </div>
           </div>)}
@@ -1675,7 +2234,7 @@ function ExecutionPlan() {
               <Tag type={t.priority || 'P2'}/>
               <span style={{fontSize: 11, color: '#64748b'}}>{t.estimate || '-'}</span>
             </div>
-            <div className="meta">{t.id} · {t.assigned_to || '-'} · 工具:{t.dev_tool || '-'} {t.req_id && `· 需求:${t.req_id}`}</div>
+            <div className="meta">{t.id} · {t.assigned_to || '-'} · 工具:{t.dev_tool || '-'} {t.req_id && `· 需求:${t.req_id}`} {t.artifact_url && '· 🔗'} {t.artifact_path && '· 📁'}</div>
             {Number(t.confidence) > 0 && <ConfBar val={t.confidence}/>}
           </div>
           <div style={{display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end'}}>
@@ -1685,7 +2244,7 @@ function ExecutionPlan() {
             </select>
             <button className="btn btn-sm btn-primary" onClick={() => {
               setModal(t);
-              setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || ''});
+              setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || '', artifact_url: t.artifact_url || '', artifact_path: t.artifact_path || '', debug_notes: t.debug_notes || '', branch: t.branch || ''});
             }}>编辑</button>
             <button className="btn btn-sm" style={{background: '#7f1d1d', color: '#fca5a5'}} onClick={() => del(t.id)}>删除</button>
           </div>
@@ -1705,10 +2264,18 @@ function ExecutionPlan() {
               {agentOptions.map((aid) => <option key={String(aid)} value={aid}>{aid}</option>)}
             </select></div>
         </div>
-        <div className="form-group"><label>开发工具</label>
+        <div className="form-group"><label>开发工具（含编排页配置的工具）</label>
           <select value={form.dev_tool || ''} onChange={(e) => setForm({...form, dev_tool: e.target.value})}>
-            {DEV_TOOL_PRESETS.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
+            {toolOptions.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
           </select></div>
+        <div className="form-group"><label>产出 / 预览 URL（http(s)，可选）</label>
+          <input value={form.artifact_url} onChange={(e) => setForm({...form, artifact_url: e.target.value})} placeholder="https://preview.example.com 或本地 http://127.0.0.1:5173"/></div>
+        <div className="form-group"><label>产出相对路径（相对 PROJECT_PATH，可选）</label>
+          <input value={form.artifact_path} onChange={(e) => setForm({...form, artifact_path: e.target.value})} placeholder="dist/index.html 或 build/libs/foo.jar"/></div>
+        <div className="form-group"><label>分支 / 版本（可选）</label>
+          <input value={form.branch} onChange={(e) => setForm({...form, branch: e.target.value})} placeholder="feature/xxx"/></div>
+        <div className="form-group"><label>调试 / 联调备注（可选）</label>
+          <textarea value={form.debug_notes} onChange={(e) => setForm({...form, debug_notes: e.target.value})} placeholder="端口、环境变量、如何复现…" style={{minHeight: 56, fontSize: 12}}/></div>
         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8}}>
           <div className="form-group"><label>关联需求 ID</label><input value={form.req_id} onChange={(e) => setForm({...form, req_id: e.target.value})} placeholder="REQ-xxx"/></div>
           <div className="form-group"><label>Sprint ID</label><input value={form.sprint_id} onChange={(e) => setForm({...form, sprint_id: e.target.value})} placeholder="SPRINT-1"/></div>
@@ -1747,7 +2314,7 @@ function IterationProgress() {
     <div className="grid-2">
       <div className="card">
         <div className="section-title">迭代列表</div>
-        {(sprints||[]).length===0?<div className="empty">暂无迭代</div>:(sprints||[]).map(s=><div key={s.id} className="list-item" style={{cursor:'pointer',background:selected===s.id?'#1e3a5f':''}} onClick={()=>loadProgress(s.id)}>
+        {(sprints||[]).length===0?<div className="empty">暂无迭代</div>:(sprints||[]).map(s=><div key={s.id} className={'list-item file-browser-row' + (selected===s.id?' vibe-list-selected':'')} onClick={()=>loadProgress(s.id)}>
           <div style={{flex:1}}>
             <div className="title">{s.id}</div>
             <div className="meta">{(s.goal && s.goal.slice(0,40))}</div>
@@ -1785,6 +2352,9 @@ function IterationProgress() {
 
 // ── 知识库管理（增强版：文档导入 + AI 总结/润色） ──────────────────
 function KnowledgeManager() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data,loading,error,reload} = useFetch(`${API}/knowledge`);
   const [modal,setModal] = React.useState(false);
   const [form,setForm] = React.useState({title:'',content:'',category:'general',tags:''});
@@ -1798,21 +2368,21 @@ function KnowledgeManager() {
     fetch(`${API}/knowledge`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...form,tags:form.tags.split(/[,，]/).map(t=>t.trim()).filter(Boolean)})})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(false);reload();setForm({title:'',content:'',category:'general',tags:''});showToast('知识条目已添加','ok');})
-      .catch(()=>showToast('添加失败（请检查标题与内容）','err'));
+      .then(()=>{setModal(false);reload();setForm({title:'',content:'',category:'general',tags:''});showToast(tr('kbm_toast_entry_added'),'ok');})
+      .catch(()=>showToast(tr('kbm_toast_add_fail'),'err'));
   };
   const del = (id) => {
-    if(!confirm('确认删除？')) return;
+    if(!confirm(tr('kbm_confirm_del'))) return;
     fetch(`${API}/knowledge/${id}`,{method:'DELETE'})
       .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{reload();showToast('已删除','ok');})
-      .catch(()=>showToast('删除失败','err'));
+      .then(()=>{reload();showToast(tr('req_toast_deleted'),'ok');})
+      .catch(()=>showToast(tr('req_toast_delete_fail'),'err'));
   };
   const indexCustom = () => {
     setIndexing(true);
     fetch(`${API}/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
-      setIndexing(false);reload();showToast(`已索引 ${d.count||0} 个文档`,'ok');
-    }).catch(()=>{setIndexing(false);showToast('索引失败','err');});
+      setIndexing(false);reload();showToast(tr('kb_toast_indexed', { n: d.count||0 }),'ok');
+    }).catch(()=>{setIndexing(false);showToast(tr('kb_toast_index_fail'),'err');});
   };
   const doSearch = () => {
     if(!searchQ.trim()) return;
@@ -1831,7 +2401,7 @@ function KnowledgeManager() {
       .then(r=>r.json().then(d=>({ok:r.ok,d})))
       .then(({ok,d})=>{
         setFileBusy(false);
-        if(!ok){showToast(typeof d.detail==='string'?d.detail:'导入失败','err');return;}
+        if(!ok){showToast(typeof d.detail==='string'?d.detail:tr('kbm_toast_import_fail'),'err');return;}
         setForm(p=>{
           const next = {...p, content: (p.content ? p.content + '\n\n' : '') + (d.text || '')};
           if (f.name && !String(p.title || '').trim()) {
@@ -1839,14 +2409,14 @@ function KnowledgeManager() {
           }
           return next;
         });
-        showToast('已导入文本到内容区','ok');
+        showToast(tr('kbm_toast_imported'),'ok');
       })
-      .catch(()=>{setFileBusy(false);showToast('导入失败','err');});
+      .catch(()=>{setFileBusy(false);showToast(tr('kbm_toast_import_fail'),'err');});
   };
 
   const runAi = (mode) => {
     const raw = (form.content||'').trim();
-    if(raw.length < 30){showToast('请先在内容区粘贴或导入至少约 30 字的素材','err');return;}
+    if(raw.length < 30){showToast(tr('kbm_toast_material'),'err');return;}
     setAiBusy(true);
     fetch(`${API}/knowledge/ai-polish`,{
       method:'POST',
@@ -1860,7 +2430,7 @@ function KnowledgeManager() {
     }).then(r=>r.json().then(d=>({ok:r.ok,d})))
       .then(({ok,d})=>{
         setAiBusy(false);
-        if(!ok){showToast(typeof d.detail==='string'?d.detail:'AI 失败','err');return;}
+        if(!ok){showToast(typeof d.detail==='string'?d.detail:tr('kbm_toast_ai_fail'),'err');return;}
         setForm(p=>({
           ...p,
           title:d.title||p.title,
@@ -1868,9 +2438,9 @@ function KnowledgeManager() {
           category:d.category||p.category,
           tags:Array.isArray(d.tags)?d.tags.join(', '):(p.tags||''),
         }));
-        showToast(mode==='polish'?'已润色':'已总结并填充表单','ok');
+        showToast(mode==='polish'?tr('kbm_toast_polish_ok'):tr('kbm_toast_summarize_ok'),'ok');
       })
-      .catch(()=>{setAiBusy(false);showToast('请求失败','err');});
+      .catch(()=>{setAiBusy(false);showToast(tr('gen_req_fail'),'err');});
   };
 
   if (loading) return <PageSkeleton cards={4} />;
@@ -1882,31 +2452,31 @@ function KnowledgeManager() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">🗄️ 知识库管理</div>
+      <div className="section-title">{tr('kbm_title')}</div>
       <div style={{display:'flex',gap:8}}>
         <RefreshBtn onClick={reload}>{''}</RefreshBtn>
-        <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={indexCustom} disabled={indexing}>{indexing?'索引中...':'⚡ 索引 custom/'}</button>
-        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>+ 添加知识</button>
+        <button type="button" className="btn btn-sm btn-muted" onClick={indexCustom} disabled={indexing}>{indexing ? tr('kbm_indexing') : tr('kbm_index_btn')}</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>setModal(true)}>{tr('kbm_add_btn')}</button>
       </div>
     </div>
     <div style={{display:'flex',gap:8,marginBottom:16}}>
-      <input style={{flex:1,background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'7px 12px',borderRadius:6,fontSize:13}}
-        value={searchQ} onChange={e=>setSearchQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="语义搜索知识库..."/>
-      <button type="button" className="btn btn-primary" onClick={doSearch}>搜索</button>
+      <input className="input-surface" style={{flex:1,padding:'7px 12px',borderRadius:6,fontSize:13}}
+        value={searchQ} onChange={e=>setSearchQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder={tr('kbm_search_ph')}/>
+      <button type="button" className="btn btn-primary" onClick={doSearch}>{tr('search_btn')}</button>
     </div>
     {searchResults&&<div className="card" style={{marginBottom:12}}>
-      <div className="section-title">搜索结果 ({searchResults.length})</div>
-      {searchResults.length===0?<div className="empty">无结果</div>:searchResults.map((r,i)=><div key={i} className="list-item">
+      <div className="section-title">{tr('kbm_results_n', { n: searchResults.length })}</div>
+      {searchResults.length===0?<div className="empty">{tr('search_none')}</div>:searchResults.map((r,i)=><div key={i} className="list-item">
         <div style={{flex:1}}><div className="title">{r.path}</div><div className="meta">{r.content}</div></div>
         <span className="tag tag-p2">{r.category}</span>
       </div>)}
     </div>}
     <div className="grid-4" style={{marginBottom:12}}>
-      <div className="card"><h3>文档总数</h3><div className="stat-val">{items.length}</div></div>
+      <div className="card"><h3>{tr('kbm_stat_docs')}</h3><div className="stat-val">{items.length}</div></div>
       {Object.entries(cats).slice(0,3).map(([c,v])=><div key={c} className="card"><h3>{c}</h3><div className="stat-val">{v.length}</div></div>)}
     </div>
     <div className="card">
-      {items.length===0?<div className="empty">知识库为空，点击「索引 custom/」或「添加知识」</div>:
+      {items.length===0?<div className="empty">{tr('kbm_empty_hint')}</div>:
         items.slice(0,100).map(i=><div key={i.id} className="list-item">
           <div style={{flex:1}}>
             <div className="title" style={{fontSize:12}}>{i.path||i.id}</div>
@@ -1920,28 +2490,28 @@ function KnowledgeManager() {
     </div>
     {modal&&<div className="modal-bg" onClick={()=>!aiBusy&&!fileBusy&&setModal(false)}>
       <div className="modal" style={{width:560,maxWidth:'96vw'}} onClick={e=>e.stopPropagation()}>
-        <h3>添加知识</h3>
-        <p style={{fontSize:11,color:'#64748b',marginBottom:10}}>支持上传 <strong>.txt / .md / .pdf</strong>（PDF 需服务端 <code style={{color:'#93c5fd'}}>pypdf</code>）。AI 总结/润色需 <code style={{color:'#93c5fd'}}>ANTHROPIC_API_KEY</code>。</p>
-        <div className="form-group"><label>标题</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="知识标题"/></div>
-        <div className="form-group"><label>分类</label>
+        <h3>{tr('kbm_modal_add')}</h3>
+        <p className="text-tertiary" style={{fontSize:11,marginBottom:10}}>{tr('kbm_modal_intro_p1')}<strong className="text-secondary">{tr('kbm_modal_intro_types')}</strong>{tr('kbm_modal_intro_p2')}<code className="text-secondary" style={{fontFamily:'monospace'}}>pypdf</code>{tr('kbm_modal_intro_p3')}<code className="text-secondary" style={{fontFamily:'monospace'}}>ANTHROPIC_API_KEY</code>{tr('kbm_modal_intro_end')}</p>
+        <div className="form-group"><label>{tr('req_label_title')}</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder={tr('kbm_ph_knowledge_title')}/></div>
+        <div className="form-group"><label>{tr('rules_label_category')}</label>
           <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>
             {['general','specs','examples','design','interaction','daily','rules'].map(c=><option key={c}>{c}</option>)}
           </select>
         </div>
-        <div className="form-group"><label>标签（逗号分隔）</label><input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder="java, spring, auth"/></div>
-        <div className="form-group"><label>导入文档</label>
+        <div className="form-group"><label>{tr('kbm_label_tags')}</label><input value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})} placeholder={tr('kbm_ph_tags')}/></div>
+        <div className="form-group"><label>{tr('kbm_label_import')}</label>
           <input type="file" accept=".txt,.md,.markdown,.pdf,text/plain" disabled={fileBusy} onChange={importFile}/>
-          {fileBusy&&<span style={{fontSize:11,color:'#94a3b8',marginLeft:8}}>读取中...</span>}
+          {fileBusy&&<span className="text-secondary" style={{fontSize:11,marginLeft:8}}>{tr('kbm_file_reading')}</span>}
         </div>
-        <div className="form-group"><label>内容</label>
+        <div className="form-group"><label>{tr('kbm_label_content')}</label>
           <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-            <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} disabled={aiBusy} onClick={()=>runAi('summarize')}>{aiBusy?'处理中...':'AI 总结并填充'}</button>
-            <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} disabled={aiBusy} onClick={()=>runAi('polish')}>AI 润色优化</button>
+            <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} disabled={aiBusy} onClick={()=>runAi('summarize')}>{aiBusy ? tr('kbm_ai_busy') : tr('kbm_ai_summarize')}</button>
+            <button type="button" className="btn btn-sm btn-muted" disabled={aiBusy} onClick={()=>runAi('polish')}>{tr('kbm_ai_polish')}</button>
           </div>
-          <textarea value={form.content} onChange={e=>setForm({...form,content:e.target.value})} style={{minHeight:160}} placeholder="知识内容（支持 Markdown），或先导入文件再点 AI"/></div>
+          <textarea value={form.content} onChange={e=>setForm({...form,content:e.target.value})} style={{minHeight:160}} placeholder={tr('kbm_content_ph')}/></div>
         <div className="modal-actions">
-          <button type="button" className="btn btn-cancel" onClick={()=>setModal(false)} disabled={aiBusy||fileBusy}>取消</button>
-          <button type="button" className="btn btn-primary" onClick={save} disabled={aiBusy||fileBusy}>保存</button>
+          <button type="button" className="btn btn-cancel" onClick={()=>setModal(false)} disabled={aiBusy||fileBusy}>{tr('gen_cancel')}</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={aiBusy||fileBusy}>{tr('gen_save')}</button>
         </div>
       </div>
     </div>}
@@ -1950,6 +2520,9 @@ function KnowledgeManager() {
 
 // ── 规范编辑器 ────────────────────────────────────────────────────
 function SpecEditor() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data:files,loading,error,reload} = useFetch(`${API}/specs`);
   const [selected,setSelected] = React.useState(null);
   const [content,setContent] = React.useState('');
@@ -1957,16 +2530,42 @@ function SpecEditor() {
   const [saving,setSaving] = React.useState(false);
 
   const open = (f) => {
-    setSelected(f);setEditing(false);
-    fetch(`${API}/specs/content?path=${encodeURIComponent(f.path)}`).then(r=>r.json()).then(d=>setContent(d.content||''));
+    setSelected(f);
+    setEditing(false);
+    setContent('');
+    fetchFileContentJson(`${API}/specs/content?path=${encodeURIComponent(f.path)}`)
+      .then(function (d) { setContent((d && d.content) ? d.content : ''); })
+      .catch(function (err) { showToast(err && err.message ? String(err.message) : tr('gen_load_fail'), 'err'); });
   };
   const save = () => {
     setSaving(true);
-    fetch(`${API}/specs/content?path=${encodeURIComponent(selected.path)}`,{
-      method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})
-    }).then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setSaving(false);setEditing(false);showToast('规范已保存','ok');})
-      .catch(()=>{setSaving(false);showToast('保存失败','err');});
+    apiFetch(`${API}/specs/content?path=${encodeURIComponent(selected.path)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content }),
+      timeoutMs: 120000,
+    })
+      .then(function (r) {
+        if (!r.ok) {
+          return r.text().then(function (t) {
+            var detail = 'HTTP ' + r.status;
+            try {
+              var j = JSON.parse(t);
+              if (j && j.detail != null) detail = String(j.detail);
+            } catch (_) { if (t) detail = t.slice(0, 200); }
+            throw new Error(detail);
+          });
+        }
+      })
+      .then(function () {
+        setSaving(false);
+        setEditing(false);
+        showToast(tr('spec_toast_saved'), 'ok');
+      })
+      .catch(function () {
+        setSaving(false);
+        showToast(tr('gen_save_fail'), 'err');
+      });
   };
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -1977,32 +2576,32 @@ function SpecEditor() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">✏️ 规范编辑器</div>
+      <div className="section-title">{tr('spec_editor_title')}</div>
       <div style={{display:'flex',gap:8,alignItems:'center'}}>
         <RefreshBtn onClick={reload}>{''}</RefreshBtn>
-        {selected&&!editing&&<button className="btn btn-primary btn-sm" onClick={()=>setEditing(true)}>编辑</button>}
+        {selected&&!editing&&<button className="btn btn-primary btn-sm" onClick={()=>setEditing(true)}>{tr('gen_edit')}</button>}
         {editing&&<>
-          <button className="btn btn-cancel btn-sm" onClick={()=>setEditing(false)}>取消</button>
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving?'保存中...':'保存'}</button>
+          <button className="btn btn-cancel btn-sm" onClick={()=>setEditing(false)}>{tr('gen_cancel')}</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving ? tr('gen_saving') : tr('gen_save')}</button>
         </>}
       </div>
     </div>
     <div className="grid-2">
-      <div className="card" style={{maxHeight:640,overflowY:'auto'}}>
+      <div className="card scroll-slim panel-scroll">
         {Object.entries(cats).map(([cat,items])=><div key={cat}>
-          <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'6px 0 3px',fontWeight:700,borderBottom:'1px solid #1e293b'}}>{cat}</div>
-          {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',padding:'5px 8px',borderRadius:4}} onClick={()=>open(f)}>
+          <div className="file-browser-cat">{cat}</div>
+          {items.map(f=><div key={f.path} className={'list-item file-browser-row' + ((selected && selected.path)===f.path?' vibe-list-selected':'')} style={{padding:'5px 8px'}} onClick={()=>open(f)}>
             <div style={{flex:1}}><div className="title" style={{fontSize:12}}>{f.name}</div><div className="meta">{(f.size/1024).toFixed(1)}KB</div></div>
           </div>)}
         </div>)}
       </div>
-      <div className="card" style={{maxHeight:640,display:'flex',flexDirection:'column'}}>
-        {!selected?<div className="empty">← 选择规范文件</div>:<>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:8,padding:'4px 0',borderBottom:'1px solid #334155'}}>{selected.path}</div>
+      <div className="card scroll-slim panel-scroll" style={{display:'flex',flexDirection:'column'}}>
+        {!selected?<div className="empty">{tr('spec_pick_file')}</div>:<>
+          <div className="doc-path-bar">{selected.path}</div>
           {editing?
             <textarea value={content} onChange={e=>setContent(e.target.value)}
-              style={{flex:1,background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:10,borderRadius:6,fontSize:12,fontFamily:'monospace',resize:'none',minHeight:500}}/>:
-            <pre style={{flex:1,fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word',overflowY:'auto',lineHeight:1.6}}>{content}</pre>
+              className="textarea-surface" style={{flex:1,resize:'none',minHeight:500,fontSize:12,fontFamily:'ui-monospace,monospace'}}/>:
+            <pre className="doc-plain-pre doc-plain-pre--compact" style={{flex:1,margin:0}}>{content}</pre>
           }
         </>}
       </div>
@@ -2012,16 +2611,19 @@ function SpecEditor() {
 
 // ── 统计分析 ──────────────────────────────────────────────────────
 function Analytics() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const {data,loading,error,reload} = useFetch(`${API}/analytics`);
   if(loading) return <PageSkeleton cards={4} />;
-  if(error || !data) return <LoadError message={error || '暂无统计数据'} onRetry={reload} />;
+  if(error || !data) return <LoadError message={error || tr('analytics_no_data')} onRetry={reload} />;
   const {tasks,requirements,issues,avg_confidence,velocity_trend} = data;
 
   const Bar = ({label,val,max,color='#3b82f6'}) => {
     const pct = max>0?Math.round(val/max*100):0;
     return <div style={{marginBottom:6}}>
       <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:2}}>
-        <span style={{color:'#94a3b8'}}>{label}</span><span style={{color:'#e2e8f0'}}>{val}</span>
+        <span className="text-secondary">{label}</span><span style={{color:'var(--text)',fontWeight:600}}>{val}</span>
       </div>
       <div className="progress-bar"><div className="progress-fill" style={{width:pct+'%',background:color}}/></div>
     </div>;
@@ -2029,29 +2631,29 @@ function Analytics() {
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📈 统计分析</div>
+      <div className="section-title">{tr('analytics_title')}</div>
       <RefreshBtn onClick={reload} />
     </div>
     <div className="grid-4" style={{marginBottom:16}}>
-      <div className="card"><h3>任务总数</h3><div className="stat-val">{(tasks && tasks.total)||0}</div><div className="stat-sub">完成 {(tasks && tasks.by_status && tasks.by_status.completed)||0}</div></div>
-      <div className="card"><h3>需求总数</h3><div className="stat-val">{(requirements && requirements.total)||0}</div><div className="stat-sub">完成 {(requirements && requirements.by_status && requirements.by_status.done)||0}</div></div>
-      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:(issues && issues.open)?'#fdba74':'#86efac'}}>{(issues && issues.open)||0}</div></div>
-      <div className="card"><h3>平均置信度</h3><div className="stat-val">{Math.round((avg_confidence||0)*100)}%</div><ConfBar val={avg_confidence||0}/></div>
+      <div className="card"><h3>{tr('analytics_tasks_total')}</h3><div className="stat-val">{(tasks && tasks.total)||0}</div><div className="stat-sub">{tr('analytics_tasks_done_sub', { n: (tasks && tasks.by_status && tasks.by_status.completed)||0 })}</div></div>
+      <div className="card"><h3>{tr('analytics_req_total')}</h3><div className="stat-val">{(requirements && requirements.total)||0}</div><div className="stat-sub">{tr('analytics_req_done_sub', { n: (requirements && requirements.by_status && requirements.by_status.done)||0 })}</div></div>
+      <div className="card"><h3>{tr('analytics_issues_open')}</h3><div className="stat-val" style={{color:(issues && issues.open)?'#fdba74':'#86efac'}}>{(issues && issues.open)||0}</div></div>
+      <div className="card"><h3>{tr('analytics_avg_conf')}</h3><div className="stat-val">{Math.round((avg_confidence||0)*100)}%</div><ConfBar val={avg_confidence||0}/></div>
     </div>
     <div className="grid-2">
       <div className="card">
-        <div className="section-title">任务状态分布</div>
+        <div className="section-title">{tr('analytics_task_status')}</div>
         {Object.entries((tasks && tasks.by_status)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(tasks && tasks.total)||1} color={k==='completed'?'#22c55e':k==='blocked'?'#ef4444':'#3b82f6'}/>)}
       </div>
       <div className="card">
-        <div className="section-title">问题类型分布</div>
+        <div className="section-title">{tr('analytics_issue_types')}</div>
         {Object.entries((issues && issues.by_type)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(issues && issues.total)||1} color='#f59e0b'/>)}
-        <div className="section-title" style={{marginTop:12}}>需求优先级分布</div>
+        <div className="section-title" style={{marginTop:12}}>{tr('analytics_req_priority')}</div>
         {Object.entries((requirements && requirements.by_priority)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(requirements && requirements.total)||1} color={k==='P0'?'#ef4444':k==='P1'?'#f59e0b':'#3b82f6'}/>)}
       </div>
     </div>
     {(velocity_trend && velocity_trend.length)>0&&<div className="card" style={{marginTop:12}}>
-      <div className="section-title">速度趋势（近5迭代）</div>
+      <div className="section-title">{tr('analytics_velocity')}</div>
       <div style={{display:'flex',gap:8,alignItems:'flex-end',height:80,padding:'0 8px'}}>
         {velocity_trend.map(s=>{
           const maxV=Math.max(...velocity_trend.map(x=>x.planned||1));
@@ -2059,14 +2661,14 @@ function Analytics() {
           const hp=Math.max(4,Math.round((s.planned/maxV)*70));
           return <div key={s.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
             <div style={{width:'100%',display:'flex',gap:2,alignItems:'flex-end',height:72}}>
-              <div style={{flex:1,background:'#3b82f6',borderRadius:'2px 2px 0 0',height:h+'px'}} title={`实际:${s.velocity}`}/>
-              <div style={{flex:1,background:'#334155',borderRadius:'2px 2px 0 0',height:hp+'px'}} title={`计划:${s.planned}`}/>
+              <div style={{flex:1,background:'#3b82f6',borderRadius:'2px 2px 0 0',height:h+'px'}} title={tr('analytics_tip_done', { n: s.velocity })}/>
+              <div style={{flex:1,background:'#334155',borderRadius:'2px 2px 0 0',height:hp+'px'}} title={tr('analytics_tip_planned', { n: s.planned })}/>
             </div>
             <div style={{fontSize:10,color:'#64748b'}}>{(s.id && s.id.replace('SPRINT-','S'))}</div>
           </div>;
         })}
       </div>
-      <div style={{fontSize:11,color:'#64748b',marginTop:4}}>■ 实际 □ 计划</div>
+      <div style={{fontSize:11,color:'#64748b',marginTop:4}}>{tr('analytics_legend')}</div>
     </div>}
   </>;
 }
@@ -2081,7 +2683,10 @@ function waitForPageModules(done) {
     tries++;
     if (tries > 300) {
       var el = document.getElementById('root');
-      if (el) el.innerHTML = '<div style="padding:28px;font-family:system-ui,sans-serif;max-width:560px;margin:40px auto;background:#1e293b;border:1px solid #334155;border-radius:12px;color:#e2e8f0;"><h2 style="margin:0 0 12px;font-size:18px;color:#fca5a5;">页面模块未加载完成</h2><p style="color:#94a3b8;font-size:14px;line-height:1.6;">以下全局组件仍不可用（常见于脚本顺序或 Babel 编译延迟）：</p><pre style="background:#0f172a;padding:12px;border-radius:8px;font-size:12px;color:#fbbf24;overflow:auto;margin:12px 0;white-space:pre-wrap;">' + missing.join(', ') + '</pre><p style="color:#64748b;font-size:13px;">请强制刷新 (Cmd+Shift+R) 或打开开发者工具查看控制台错误。</p></div>';
+      if (el) {
+        var T = (typeof window !== 'undefined' && typeof window.t === 'function') ? window.t : function (k) { return k; };
+        el.innerHTML = '<div style="padding:28px;font-family:system-ui,sans-serif;max-width:560px;margin:40px auto;background:#1e293b;border:1px solid #334155;border-radius:12px;color:#e2e8f0;"><h2 style="margin:0 0 12px;font-size:18px;color:#fca5a5;">' + T('idx_boot_mod_title') + '</h2><p style="color:#94a3b8;font-size:14px;line-height:1.6;">' + T('idx_boot_mod_p1') + '</p><pre style="background:#0f172a;padding:12px;border-radius:8px;font-size:12px;color:#fbbf24;overflow:auto;margin:12px 0;white-space:pre-wrap;">' + missing.join(', ') + '</pre><p style="color:#64748b;font-size:13px;">' + T('idx_boot_mod_hint') + '</p></div>';
+      }
       return;
     }
     setTimeout(tick, 16);
@@ -2089,50 +2694,8 @@ function waitForPageModules(done) {
   tick();
 }
 
-// ── 新版主应用（左侧菜单 + 主题切换） ────────────────────────────
+// ── 新版主应用（左侧菜单 + 多主题 + i18n） ────────────────────────────
 function mountApp() {
-const MENU_GROUPS = [
-  { label: '项目管理', items: [
-    {id:'dashboard',icon:'📊',label:'总览'},
-    {id:'dev-flow',icon:'🧭',label:'研发全流程'},
-    {id:'analytics',icon:'📈',label:'统计分析'},
-    {id:'requirements',icon:'📋',label:'需求管理'},
-    {id:'plan',icon:'✅',label:'执行计划'},
-    {id:'iteration',icon:'🔄',label:'迭代进度'},
-    {id:'sprints',icon:'🏃',label:'Sprint'},
-    {id:'issues',icon:'🐛',label:'问题中心'},
-    {id:'search',icon:'🔍',label:'全局搜索'},
-  ]},
-  { label: '开发工具', items: [
-    {id:'vibe',icon:'🎯',label:'Vibe Coding'},
-    {id:'spec-editor',icon:'✏️',label:'规范编辑'},
-    {id:'docker',icon:'🐳',label:'环境管理'},
-    {id:'cli',icon:'🛠️',label:'CLI 工具'},
-  ]},
-  { label: '知识与规范', items: [
-    {id:'specs',icon:'📖',label:'规范文档'},
-    {id:'design-docs',icon:'📐',label:'技术方案'},
-    {id:'knowledge-mgr',icon:'🗄️',label:'知识库'},
-    {id:'rules',icon:'📐',label:'规则库'},
-    {id:'custom',icon:'📁',label:'自定义模块'},
-  ]},
-  { label: 'AI 能力', items: [
-    {id:'agents',icon:'🤖',label:'Agent 管理'},
-    {id:'skills',icon:'⚡',label:'技能管理'},
-    {id:'skill-repo',icon:'📦',label:'技能仓库'},
-    {id:'models',icon:'🧠',label:'模型配置'},
-    {id:'orchestration',icon:'🔀',label:'编排工作流'},
-    {id:'mcp',icon:'🔌',label:'MCP Server'},
-    {id:'logs',icon:'📡',label:'Agent 日志'},
-  ]},
-  { label: '系统设置', items: [
-    {id:'notify',icon:'📣',label:'消息通知'},
-    {id:'config',icon:'⚙️',label:'项目配置'},
-    {id:'system',icon:'🖥️',label:'系统管理'},
-    {id:'auth',icon:'👤',label:'账号管理'},
-  ]},
-];
-
 const ALL_PAGES = {
   dashboard:<Dashboard/>,'dev-flow':<DevFlowHub/>,analytics:<Analytics/>,requirements:<Requirements/>,
   plan:<ExecutionPlan/>,iteration:<IterationProgress/>,sprints:<Sprints/>,
@@ -2145,8 +2708,23 @@ const ALL_PAGES = {
 };
 
 function AppV3() {
-  const [tab, setTab] = React.useState('dashboard');
-  const [theme, setTheme] = React.useState(() => localStorage.getItem('theme') || 'dark');
+  const [tab, setTab] = React.useState(function () {
+    try {
+      var h = (typeof location !== 'undefined' && location.hash ? String(location.hash) : '').replace(/^#/, '').trim();
+      if (h && ALL_PAGES && Object.prototype.hasOwnProperty.call(ALL_PAGES, h)) return h;
+    } catch (e) {}
+    return 'dashboard';
+  });
+  const [theme, setTheme] = React.useState(function () {
+    try {
+      var t = localStorage.getItem('devdash-theme') || localStorage.getItem('theme') || 'dark';
+      if (t === 'light' || t === 'dim' || t === 'contrast' || t === 'dark') return t;
+      return 'dark';
+    } catch (e) { return 'dark'; }
+  });
+  const [lang, setLang] = React.useState(function () {
+    try { return localStorage.getItem('devdash-lang') || 'zh'; } catch (e) { return 'zh'; }
+  });
   const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem('devdash-sidebar-collapsed') === '1');
   const [projectId, setProjectId] = React.useState('');
   const [toasts, setToasts] = React.useState([]);
@@ -2154,6 +2732,57 @@ function AppV3() {
   const [apiHealth, setApiHealth] = React.useState('checking');
   const [apiPingMs, setApiPingMs] = React.useState(null);
   const [apiVer, setApiVer] = React.useState('');
+
+  const tk = React.useCallback(function (key) {
+    var I = (typeof window !== 'undefined' && window.DEVDASH_I18N) || {};
+    var pack = I[lang] || {};
+    var zh = I.zh || {};
+    return pack[key] || zh[key] || key;
+  }, [lang]);
+
+  const MENU_GROUPS = React.useMemo(function () {
+    return [
+      { label: tk('nav_pm'), items: [
+        {id:'dashboard',icon:'📊',label:tk('page_dashboard')},
+        {id:'dev-flow',icon:'🧭',label:tk('page_dev_flow')},
+        {id:'analytics',icon:'📈',label:tk('page_analytics')},
+        {id:'requirements',icon:'📋',label:tk('page_requirements')},
+        {id:'plan',icon:'✅',label:tk('page_plan')},
+        {id:'iteration',icon:'🔄',label:tk('page_iteration')},
+        {id:'sprints',icon:'🏃',label:tk('page_sprints')},
+        {id:'issues',icon:'🐛',label:tk('page_issues')},
+        {id:'search',icon:'🔍',label:tk('page_search')},
+      ]},
+      { label: tk('nav_dev'), items: [
+        {id:'vibe',icon:'🎯',label:tk('page_vibe')},
+        {id:'spec-editor',icon:'✏️',label:tk('page_spec_editor')},
+        {id:'docker',icon:'🐳',label:tk('page_docker')},
+        {id:'cli',icon:'🛠️',label:tk('page_cli')},
+      ]},
+      { label: tk('nav_kb'), items: [
+        {id:'specs',icon:'📖',label:tk('page_specs')},
+        {id:'design-docs',icon:'📐',label:tk('page_design_docs')},
+        {id:'knowledge-mgr',icon:'🗄️',label:tk('page_knowledge')},
+        {id:'rules',icon:'📐',label:tk('page_rules')},
+        {id:'custom',icon:'📁',label:tk('page_custom')},
+      ]},
+      { label: tk('nav_ai'), items: [
+        {id:'agents',icon:'🤖',label:tk('page_agents')},
+        {id:'skills',icon:'⚡',label:tk('page_skills')},
+        {id:'skill-repo',icon:'📦',label:tk('page_skill_repo')},
+        {id:'models',icon:'🧠',label:tk('page_models')},
+        {id:'orchestration',icon:'🔀',label:tk('page_orchestration')},
+        {id:'mcp',icon:'🔌',label:tk('page_mcp')},
+        {id:'logs',icon:'📡',label:tk('page_logs')},
+      ]},
+      { label: tk('nav_sys'), items: [
+        {id:'notify',icon:'📣',label:tk('page_notify')},
+        {id:'config',icon:'⚙️',label:tk('page_config')},
+        {id:'system',icon:'🖥️',label:tk('page_system')},
+        {id:'auth',icon:'👤',label:tk('page_auth')},
+      ]},
+    ];
+  }, [tk]);
 
   const pingApi = React.useCallback(function () {
     var t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
@@ -2175,10 +2804,23 @@ function AppV3() {
       });
   }, []);
 
-  React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
-    localStorage.setItem('theme', theme);
+  React.useEffect(function () {
+    var th = theme === 'light' || theme === 'dim' || theme === 'contrast' || theme === 'dark' ? theme : 'dark';
+    document.documentElement.setAttribute('data-theme', th);
+    try {
+      localStorage.setItem('devdash-theme', th);
+      localStorage.setItem('theme', th === 'light' ? 'light' : 'dark');
+    } catch (e) {}
   }, [theme]);
+
+  React.useEffect(function () {
+    try {
+      localStorage.setItem('devdash-lang', lang);
+      document.documentElement.setAttribute('lang', lang === 'en' ? 'en' : 'zh-CN');
+      window.__DEVDASH_LANG__ = lang;
+      window.dispatchEvent(new CustomEvent('devdash-lang-change', { detail: { lang: lang } }));
+    } catch (e) {}
+  }, [lang]);
 
   React.useEffect(function () {
     pingApi();
@@ -2207,6 +2849,24 @@ function AppV3() {
       .catch(() => {});
   }, []);
 
+  React.useEffect(function () {
+    function onHash() {
+      try {
+        var h = (location.hash || '').replace(/^#/, '').trim();
+        if (h && ALL_PAGES && Object.prototype.hasOwnProperty.call(ALL_PAGES, h)) setTab(h);
+      } catch (e) {}
+    }
+    window.addEventListener('hashchange', onHash);
+    return function () { window.removeEventListener('hashchange', onHash); };
+  }, []);
+
+  React.useEffect(function () {
+    try {
+      var cur = (location.hash || '').replace(/^#/, '');
+      if (cur !== tab) history.replaceState(null, '', '#' + tab);
+    } catch (e) {}
+  }, [tab]);
+
   React.useEffect(() => {
     const onToast = (e) => {
       const { message, type } = e.detail || {};
@@ -2228,7 +2888,6 @@ function AppV3() {
     return () => window.removeEventListener('app-set-tab', onNav);
   }, []);
 
-  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
   const exportAll = () => window.open(`${API}/export`, '_blank');
   const apiOrigin = () => String(API).replace(/\/api\/?$/, '');
   const toggleCollapsed = () => setCollapsed((c) => {
@@ -2245,39 +2904,50 @@ function AppV3() {
     </div>
     {helpOpen && <div className="modal-bg" onClick={() => setHelpOpen(false)}>
       <div className="modal" style={{width:520,maxWidth:'94vw'}} onClick={(e) => e.stopPropagation()}>
-        <h3>开发者速查</h3>
+        <h3>{tk('help_title')}</h3>
         <p style={{fontSize:12,color:'var(--text2)',lineHeight:1.6}}>本页为 <strong>无构建</strong> 模式（Babel Standalone + React UMD）。API 基址当前为 <code style={{fontSize:11}}>{API}</code>；从本后台同源打开时会自动跟随端口。</p>
         <ul style={{fontSize:13,color:'var(--text)',lineHeight:1.85,margin:'8px 0 0 18px',padding:0}}>
           <li><span className="help-kbd">Ctrl / ⌘ + /</span> 打开或关闭本帮助（在输入框内不触发）</li>
           <li><span className="help-kbd">Esc</span> 关闭本帮助</li>
-          <li>左侧菜单支持 <span className="help-kbd">Enter</span> / <span className="help-kbd">Space</span> 激活</li>
-          <li>顶栏 <strong>⬇</strong> 导出 JSON；日月图标切换主题；折叠状态会写入 localStorage</li>
+          <li>支持浏览器地址 <span className="help-kbd">#页签</span> 直达（如 <code style={{fontSize:11}}>#vibe</code>、<code style={{fontSize:11}}>#plan</code>），便于分享与书签</li>
+          <li>顶栏可选择<strong>主题</strong>与<strong>语言</strong>；<strong>⬇</strong> 导出 JSON；折叠状态会写入 localStorage</li>
           <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录</li>
         </ul>
         <div className="modal-actions" style={{flexWrap:'wrap',gap:8}}>
-          <button type="button" className="btn btn-cancel" onClick={() => setHelpOpen(false)}>关闭</button>
-          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} onClick={() => window.open(apiOrigin() + '/docs', '_blank')}>OpenAPI 文档 (/docs)</button>
-          <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#e2e8f0'}} onClick={() => window.open(apiOrigin() + '/redoc', '_blank')}>ReDoc (/redoc)</button>
+          <button type="button" className="btn btn-cancel" onClick={() => setHelpOpen(false)}>{tk('help_close')}</button>
+          <button type="button" className="btn btn-sm btn-muted" onClick={() => window.open(apiOrigin() + '/docs', '_blank')}>{tk('help_openapi')}</button>
+          <button type="button" className="btn btn-sm btn-muted" onClick={() => window.open(apiOrigin() + '/redoc', '_blank')}>{tk('help_redoc')}</button>
         </div>
       </div>
     </div>}
     {/* 顶栏 */}
     <div className="topbar">
-      <button type="button" className="btn-icon" onClick={toggleCollapsed} title="折叠菜单（状态已保存）">☰</button>
+      <button type="button" className="btn-icon" onClick={toggleCollapsed} title={tk('topbar_toggle_sidebar')}>☰</button>
       <div className="topbar-brand" title="ai-team-devops">
         <img className="topbar-logo-img" src="/assets/brand-mark.png" width="32" height="32" alt="" decoding="async" fetchPriority="high"/>
         <span className="topbar-logo">ai-team-devops</span>
       </div>
-      <span className="topbar-badge">管理后台</span>
+      <span className="topbar-badge">{tk('badge_admin')}</span>
       {projectId && <span className="topbar-project">📁 {projectId}</span>}
       <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/health">
         <span className="health-dot" aria-hidden="true"/>
-        {apiHealth === 'ok' ? <>API 在线{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>API 离线</> : <>检查中…</>}
+        {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}
       </div>
       <div className="topbar-right">
-        <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title="开发者帮助 (Ctrl+/)">?</button>
-        <button type="button" className="btn-icon" onClick={toggleTheme} title="切换主题">{theme==='dark'?'☀️':'🌙'}</button>
-        <button type="button" className="btn-icon" onClick={exportAll} title="导出数据">⬇</button>
+        <label className="text-tertiary" style={{fontSize:10,marginRight:2}} htmlFor="devdash-theme-sel">{tk('topbar_theme')}</label>
+        <select id="devdash-theme-sel" className="topbar-select" value={theme} onChange={(e) => setTheme(e.target.value)} aria-label={tk('topbar_theme')}>
+          <option value="dark">{tk('theme_dark')}</option>
+          <option value="dim">{tk('theme_dim')}</option>
+          <option value="light">{tk('theme_light')}</option>
+          <option value="contrast">{tk('theme_contrast')}</option>
+        </select>
+        <label className="text-tertiary" style={{fontSize:10,marginRight:2}} htmlFor="devdash-lang-sel">{tk('topbar_lang')}</label>
+        <select id="devdash-lang-sel" className="topbar-select" value={lang} onChange={(e) => setLang(e.target.value)} aria-label={tk('topbar_lang')}>
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+        </select>
+        <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title={tk('topbar_help')}>?</button>
+        <button type="button" className="btn-icon" onClick={exportAll} title={tk('topbar_export')}>⬇</button>
       </div>
     </div>
 
@@ -2302,7 +2972,7 @@ function AppV3() {
 
       {/* 主内容 */}
       <div className="main-content page-enter scroll-slim app-main" key={tab}>
-        {ALL_PAGES[tab] || <div className="empty">页面不存在: {tab}</div>}
+        {ALL_PAGES[tab] || <div className="empty">{tk('page_missing')}: {tab}</div>}
       </div>
     </div>
   </div>;

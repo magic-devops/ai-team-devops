@@ -390,7 +390,23 @@ cat .ai-memory/rules/RULES.md
 
 ## 8. 多工具使用
 
-### 8.1 Claude Code
+### 8.1 Codex CLI
+
+```bash
+# 安装
+npm install -g @openai/codex
+# 或: brew install --cask codex
+
+# 启动（自动读取 AGENTS.md、.codex/config.toml、.codex/hooks.json）
+codex
+
+# 非交互执行
+codex exec "按 AGENTS.md 规约检查项目健康状态"
+```
+
+首次看到 hook 审查提示时，逐项确认 `.codex/hooks.json` 与 `.codex/hooks/sop_hook.py` 的内容。默认 hook 只做启动上下文、危险命令拦截、活动日志和 Stop 状态同步。
+
+### 8.2 Claude Code
 
 ```bash
 # 安装
@@ -400,7 +416,7 @@ npm install -g @anthropic-ai/claude-code
 claude
 ```
 
-### 8.2 opencode
+### 8.3 opencode
 
 ```bash
 # 安装
@@ -410,22 +426,22 @@ claude
 opencode
 ```
 
-### 8.3 Cursor
+### 8.4 Cursor
 
 1. 打开项目文件夹
 2. Cursor 自动读取 `.cursorrules`
 3. 在 AI 对话中直接使用
 
-### 8.4 同步规范到所有工具
+### 8.5 同步规范到所有工具
 
 ```bash
 bash sop/tools/sync-rules.sh
 ```
 
-### 8.5 跨工具状态共享
+### 8.6 跨工具状态共享
 
 所有工具共用 `memory/` 和 `.ai-memory/` 目录：
-- 在 Claude Code 中开始的任务，可以在 Cursor 中继续
+- 在 Codex CLI / Claude Code 中开始的任务，可以在 Cursor 中继续
 - 规则库对所有工具可见
 
 ---

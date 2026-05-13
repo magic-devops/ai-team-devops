@@ -9,6 +9,7 @@ router = APIRouter(prefix="/api/cli", tags=["cli"])
 PROJECT_PATH = Path(os.getenv("PROJECT_PATH", ".")).resolve()
 
 CLI_TOOLS: Dict[str, Dict[str, str]] = {
+    "codex":        {"cmd": "codex",       "description": "OpenAI Codex CLI"},
     "openclaw":     {"cmd": "openclaw",    "description": "OpenClaw AI 编码工具"},
     "workbuddy":    {"cmd": "workbuddy",   "description": "WorkBuddy AI 助手"},
     "hermes-agent": {"cmd": "hermes",      "description": "Hermes Agent（NousResearch）"},
@@ -67,6 +68,7 @@ def _save_state(st: Dict[str, Any]) -> None:
 
 def _hint(tool: str) -> str:
     hints = {
+        "codex":        "npm install -g @openai/codex  # 或 brew install --cask codex",
         "claude":       "npm install -g @anthropic-ai/claude-code",
         "opencode":     "参考 https://github.com/sst/opencode",
         "aider":        "pip install aider-chat --break-system-packages",

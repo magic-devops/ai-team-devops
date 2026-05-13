@@ -6,6 +6,7 @@
 代码事件 ──► Git Hooks
 CI 事件  ──► GitHub Actions / CI Webhooks
 AI 事件  ──► Claude Code Hooks
+AI 事件  ──► Codex Hooks
 时间事件 ──► Cron Jobs
 ```
 
@@ -70,6 +71,91 @@ print(f'已记录变更: $TASK_ID → {commit_hash[:8]}')
 " 2>/dev/null || true
 fi
 ```
+
+## AI Hooks 设计原则
+
+- 统一策略入口是 `sop/tools/sop_ai_hook.py`；各工具 hook 配置只负责把本地事件转成 sop 标准事件。
+- Hook 脚本必须可审计，禁止 `curl|sh`、动态下载执行和隐藏网络调用。
+- `PreToolUse` / `PermissionRequest` 只做轻量策略判断，重型检查放到 `PostToolUse` 或 CI。
+- Hook 输出应尽量结构化，失败时给出明确阻断原因。
+- Hook 首次安装或修改后，需要在对应 AI 工具中人工审查并信任。
+
+## Codex Hooks（`.codex/hooks.json`）
+
+Codex CLI 支持 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`PermissionRequest`、`PostToolUse`、`Stop` 等生命周期事件，可用于 sop 启动上下文、危险操作拦截、权限请求二次判断、工具调用审计和状态持久化。
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" SessionStart",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PreToolUse",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PermissionRequest",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PostToolUse",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" Stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+默认脚本 `.codex/hooks/sop_hook.py`：
+- 作为 Codex adapter shim 调用 `sop/tools/sop_ai_hook.py codex <event>`。
+- 中央引擎在 `SessionStart` 输出 `additionalContext`，提醒加载 `memory/current_state.json`、`.ai-memory/rules/RULES.md`、工具入口文件。
+- 中央引擎在 `PreToolUse` / `PermissionRequest` 拦截 `rm -rf /`、`git reset --hard`、`git clean -fdx`、`chmod -R 777`、`curl|sh`、`wget|bash` 等高风险命令。
+- 中央引擎在 `PostToolUse` / `UserPromptSubmit` / `Stop` 追加 `.ai-memory/activity.log`。
+- 中央引擎在 `Stop` 更新 `memory/current_state.json.updated_at`。
 
 ## Claude Code Hooks（`.claude/settings.json`）
 

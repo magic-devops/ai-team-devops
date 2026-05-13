@@ -34,7 +34,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 | 项目管理 | **研发全流程** | 单接口聚合状态、阶段跳转、低 Token 提示模板复制 |
 | 项目管理 | 需求 / 执行计划 / 迭代 / Sprint / 问题 / 搜索 | 需求全生命周期与任务、迭代、缺陷 |
 | 开发工具 | **Vibe Coding** | 会话与记忆、附件与多模态 LLM、Markdown/代码/页面预览、项目目录只读浏览 |
-| 开发工具 | 规范编辑、环境管理（Docker）、CLI 工具 | 本地规范、容器与 CLI 配置 |
+| 开发工具 | 规范编辑、环境管理（Docker）、CLI 工具 | 本地规范、容器与 CLI 配置；CLI 工具包含 Codex CLI |
 | 知识与规范 | 技术方案、知识库、规范文档、规则库 | 方案版本、文档导入与 AI 润色、规范只读 |
 | AI 能力 | Agent / 技能 / 编排 / MCP / 模型 | 多 Agent、专家组、工作流与模型选择 |
 | 系统设置 | 通知、配置、系统、账号 | 运维与账号 |
@@ -60,6 +60,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 - **项目目录**：只读树，点击文件在右侧「项目文件」查看（受大小与 UTF-8 限制）。  
 - **右侧视图**：原始输出、Markdown 渲染、代码块高亮、图片、PDF/文本附件、HTML 沙箱预览。  
 - **直接调用 LLM**：支持图片等多模态（需 `ANTHROPIC_API_KEY`）；CLI 模式无法传图。
+- **Codex CLI**：项目初始化后会生成 `AGENTS.md`、`.codex/config.toml`、`.codex/hooks.json`；首次启用 hook 时需在 Codex 中审查并信任。
 
 ### 4.3 需求与技术方案
 
@@ -89,3 +90,4 @@ A：生产入口须保证 **`StaticFiles` 挂载在 API 路由之后**，否则 
 | [sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查与 Token 策略 |
 | [TUTORIAL.md](../TUTORIAL.md) | 全流程教程含 Web 章节 |
 | [sop/web/README.md](../sop/web/README.md) | 路由、页面模块、开发约定 |
+| [sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |

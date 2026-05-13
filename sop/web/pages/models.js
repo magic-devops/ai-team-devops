@@ -58,7 +58,7 @@ function ModelManager() {
               <span className="title">{m.name}</span>
               {m.recommended&&<span className="tag tag-done">推荐</span>}
               <span className="tag tag-p2">{m.provider}</span>
-              <span style={{fontSize:11,color:'#64748b'}}>{(m.context/1000).toFixed(0)}K ctx</span>
+              <span className="text-tertiary" style={{fontSize:11}}>{(m.context/1000).toFixed(0)}K ctx</span>
             </div>
             <div className="meta">{m.id}</div>
           </div>
@@ -101,7 +101,7 @@ function ModelManager() {
       <div className="card">
         {ROLES.map(role=><div key={role} className="list-item">
           <div style={{flex:1}}><div className="title">{role}</div></div>
-          <select style={{background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'4px 8px',borderRadius:6,fontSize:12}}
+          <select className="input-surface" style={{padding:'4px 8px',borderRadius:6,fontSize:12}}
             value={(data&&data.role_models&&data.role_models[role])||(data&&data.default)||''} onChange={e=>setRoleModel(role,e.target.value)}>
             <option value="">使用默认 ({data&&data.default})</option>
             {allModels.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}

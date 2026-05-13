@@ -82,39 +82,35 @@ function VibeHighlightedCode({ lang, code }) {
     }
   }, [lang, code]);
   return (
-    <pre className="scroll-slim" style={{ maxHeight: '58vh', overflow: 'auto', fontSize: 12, margin: 0, background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 10 }}>
+    <pre className="scroll-slim" style={{ maxHeight: '58vh', overflow: 'auto', fontSize: 12, margin: 0, background: 'var(--surface-input)', border: '1px solid var(--vibe-divider)', borderRadius: 8, padding: 10 }}>
       <code ref={ref} />
     </pre>
   );
 }
 
-const VIBE_MODE_HINTS = {
-  chat: '你是资深开发搭档，用清晰中文协助对话与决策。',
-  code: '你是资深工程师，优先给出可运行、可落地的代码与步骤。',
-  review: '你是代码审查者，从安全、性能、可维护性给出分级建议。',
-  plan: '你是技术规划者，输出结构化任务拆解与依赖关系。',
-};
-
 let vibeDefaultSessionBootstrapStarted = false;
 
 function VibeCoding() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const [tab, setTab] = React.useState('ide');
   const [focusSessionId, setFocusSessionId] = React.useState(null);
+  void langTick;
   return (
     <div>
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          ['ide', '🛠️ AI 开发 IDE'],
-          ['sessions', '📚 会话管理'],
-          ['templates', '📝 模板'],
-          ['history', '📜 执行历史'],
-          ['cli', '⌨️ CLI 快捷'],
+          ['ide', tr('vibe_tab_ide')],
+          ['sessions', tr('vibe_tab_sessions')],
+          ['templates', tr('vibe_tab_templates')],
+          ['history', tr('vibe_tab_history')],
+          ['cli', tr('vibe_tab_cli')],
         ].map(([id, l]) => (
           <button
             key={id}
             type="button"
             className={`btn btn-sm ${tab === id ? 'btn-primary' : ''}`}
-            style={tab !== id ? { background: '#334155', color: '#94a3b8' } : {}}
+            style={tab !== id ? { background: 'var(--btn-muted-bg)', color: 'var(--btn-muted-fg2)' } : {}}
             onClick={() => setTab(id)}
           >
             {l}
@@ -131,12 +127,15 @@ function VibeCoding() {
 }
 
 function VibeSessionsManager({ onOpenInIde }) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
   const { data, loading, error, reload } = useFetch(`${API}/vibe/sessions`);
   const [q, setQ] = React.useState('');
   const sessions = (data && data.sessions) || [];
   const filtered = sessions.filter((s) => {
-    const t = `${s.title || ''} ${s.id || ''}`.toLowerCase();
-    return t.includes(q.trim().toLowerCase());
+    const line = `${s.title || ''} ${s.id || ''}`.toLowerCase();
+    return line.includes(q.trim().toLowerCase());
   });
 
   const exportOne = (s) => {
@@ -146,39 +145,39 @@ function VibeSessionsManager({ onOpenInIde }) {
     a.download = `vibe-session-${s.id}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    showToast('已导出', 'ok');
+    showToast(tr('vibe_toast_exported'), 'ok');
   };
 
   const del = (id) => {
-    if (!confirm('删除该会话？不可恢复。')) return;
+    if (!confirm(tr('vibe_sess_del_confirm'))) return;
     fetch(`${API}/vibe/sessions/${id}`, { method: 'DELETE' })
       .then(() => {
         reload();
-        showToast('已删除', 'ok');
+        showToast(tr('vibe_toast_deleted'), 'ok');
       })
-      .catch(() => showToast('删除失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_del_fail'), 'err'));
   };
 
   const rename = (s) => {
-    const t = window.prompt('会话标题', s.title || s.id);
-    if (t == null || !t.trim()) return;
+    const titleIn = window.prompt(tr('vibe_sess_rename_prompt'), s.title || s.id);
+    if (titleIn == null || !titleIn.trim()) return;
     fetch(`${API}/vibe/sessions/${s.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: t.trim() }),
+      body: JSON.stringify({ title: titleIn.trim() }),
     })
       .then((r) => {
         if (!r.ok) throw new Error();
         reload();
-        showToast('已重命名', 'ok');
+        showToast(tr('vibe_prompt_ok'), 'ok');
       })
-      .catch(() => showToast('保存失败', 'err'));
+      .catch(() => showToast(tr('vibe_prompt_save_fail'), 'err'));
   };
 
   if (loading) {
     return (
       <div>
-        <div className="section-title">会话管理</div>
+        <div className="section-title">{tr('vibe_sess_title')}</div>
         <PageSkeleton cards={2} />
       </div>
     );
@@ -186,7 +185,7 @@ function VibeSessionsManager({ onOpenInIde }) {
   if (error) {
     return (
       <div>
-        <div className="section-title">会话管理</div>
+        <div className="section-title">{tr('vibe_sess_title')}</div>
         <LoadError message={error} onRetry={reload} />
       </div>
     );
@@ -195,18 +194,18 @@ function VibeSessionsManager({ onOpenInIde }) {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div className="section-title">历史会话管理</div>
+        <div className="section-title">{tr('vibe_sess_hist_title')}</div>
         <RefreshBtn onClick={reload} />
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="form-group" style={{ margin: 0 }}>
-          <label>搜索标题 / ID</label>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="输入关键字过滤…" />
+          <label>{tr('vibe_sess_search_label')}</label>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={tr('vibe_sess_search_ph')} />
         </div>
       </div>
       <div className="card scroll-slim" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
         {filtered.length === 0 ? (
-          <div className="empty">无匹配会话</div>
+          <div className="empty">{tr('vibe_sess_empty')}</div>
         ) : (
           filtered.map((s) => (
             <div key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
@@ -216,21 +215,25 @@ function VibeSessionsManager({ onOpenInIde }) {
                     {s.title || s.id}
                   </div>
                   <div className="meta">
-                    {s.id} · 更新 {(s.updated_at || '').slice(0, 19)} · 消息 {Array.isArray(s.messages) ? s.messages.length : 0} 条
+                    {tr('vibe_sess_meta', {
+                      id: s.id,
+                      ts: (s.updated_at || '').slice(0, 19),
+                      n: Array.isArray(s.messages) ? s.messages.length : 0,
+                    })}
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenInIde(s.id)}>
-                    在 IDE 打开
+                    {tr('vibe_sess_open')}
                   </button>
-                  <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => rename(s)}>
-                    重命名
+                  <button type="button" className="btn btn-sm btn-muted" onClick={() => rename(s)}>
+                    {tr('vibe_sess_rename')}
                   </button>
-                  <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => exportOne(s)}>
-                    导出 JSON
+                  <button type="button" className="btn btn-sm btn-muted" onClick={() => exportOne(s)}>
+                    {tr('vibe_sess_export_json')}
                   </button>
-                  <button type="button" className="btn btn-sm" style={{ background: '#7f1d1d', color: '#fca5a5' }} onClick={() => del(s.id)}>
-                    删除
+                  <button type="button" className="btn btn-sm btn-danger" onClick={() => del(s.id)}>
+                    {tr('vibe_sess_del')}
                   </button>
                 </div>
               </div>
@@ -243,6 +246,9 @@ function VibeSessionsManager({ onOpenInIde }) {
 }
 
 function VibeWorkspaceTree({ onOpenFile }) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
   const [path, setPath] = React.useState('');
   const [items, setItems] = React.useState([]);
   const [err, setErr] = React.useState(null);
@@ -254,7 +260,7 @@ function VibeWorkspaceTree({ onOpenFile }) {
         setItems(d.items || []);
         setErr(null);
       })
-      .catch(() => setErr('无法加载目录'));
+      .catch(() => setErr(typeof window.t === 'function' ? window.t('vibe_tree_err') : 'vibe_tree_err'));
   }, [path]);
 
   React.useEffect(() => {
@@ -269,22 +275,22 @@ function VibeWorkspaceTree({ onOpenFile }) {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, wordBreak: 'break-all' }}>
-        📁 {path || '(项目根)'}
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, wordBreak: 'break-all' }}>
+        📁 {path || tr('vibe_tree_root')}
       </div>
       {err && <div style={{ fontSize: 11, color: '#fca5a5', marginBottom: 6 }}>{err}</div>}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={parentPath} disabled={!path}>
-          ↑ 上级
+        <button type="button" className="btn btn-sm btn-muted" onClick={parentPath} disabled={!path}>
+          {tr('vibe_tree_up')}
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={load}>
-          刷新
+        <button type="button" className="btn btn-sm btn-muted" onClick={load}>
+          {tr('vibe_tree_refresh')}
         </button>
       </div>
       <div className="scroll-slim" style={{ maxHeight: 280, overflowY: 'auto', fontSize: 12 }}>
         {items.length === 0 ? (
           <div className="empty" style={{ padding: 12, fontSize: 11 }}>
-            空目录
+            {tr('vibe_tree_empty')}
           </div>
         ) : (
           items.map((it) => (
@@ -297,8 +303,8 @@ function VibeWorkspaceTree({ onOpenFile }) {
                 else onOpenFile(it.path, it.name);
               }}
             >
-              <span style={{ color: it.dir ? '#93c5fd' : '#94a3b8' }}>{it.dir ? '📂' : '📄'}</span>
-              <span style={{ color: '#e2e8f0', marginLeft: 6 }}>{it.name}</span>
+              <span className={it.dir ? 'vibe-tree-icon-dir' : 'vibe-tree-icon-file'}>{it.dir ? '📂' : '📄'}</span>
+              <span className="vibe-tree-name">{it.name}</span>
             </div>
           ))
         )}
@@ -308,34 +314,38 @@ function VibeWorkspaceTree({ onOpenFile }) {
 }
 
 function VibeCliShortcutPanel() {
-  const [cmd, setCmd] = React.useState('claude --print "说明你的任务"');
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
+  const [cmd, setCmd] = React.useState(() => (typeof window.t === 'function' ? window.t('vibe_cli_default_cmd') : 'claude --print "Describe your task"'));
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="section-title">CLI 快捷参考</div>
+        <div className="section-title">{tr('vibe_cli_title')}</div>
       </div>
         <div className="card" style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
-          在本地终端执行（需已安装对应 CLI）。在「AI 开发 IDE」右栏「终端」可在服务端 PROJECT_PATH 下受控执行白名单命令（脚本见 bash path/to/script.sh）。
+        <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 8 }}>
+          {tr('vibe_cli_p1')}
         </div>
         <textarea
           value={cmd}
           onChange={(e) => setCmd(e.target.value)}
-          style={{ width: '100%', minHeight: 100, fontFamily: 'monospace', fontSize: 12, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: 8 }}
+          className="textarea-surface"
+          style={{ width: '100%', minHeight: 100, fontFamily: 'monospace', fontSize: 12, borderRadius: 6, padding: 8 }}
         />
         <button
           type="button"
-          className="btn btn-sm"
-          style={{ marginTop: 8, background: '#334155', color: '#94a3b8' }}
-          onClick={() => navigator.clipboard.writeText(cmd).then(() => showToast('已复制', 'ok')).catch(() => showToast('复制失败', 'err'))}
+          className="btn btn-sm btn-muted"
+          style={{ marginTop: 8 }}
+          onClick={() => navigator.clipboard.writeText(cmd).then(() => showToast(tr('vibe_toast_copy_ok'), 'ok')).catch(() => showToast(tr('vibe_toast_copy_fail'), 'err'))}
         >
-          复制命令
+          {tr('vibe_cli_copy')}
         </button>
       </div>
-      <div className="card" style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6 }}>
-        <div><strong style={{ color: '#94a3b8' }}>Claude Code</strong>：npm i -g @anthropic-ai/claude-code</div>
-        <div><strong style={{ color: '#94a3b8' }}>Aider</strong>：pip install aider-chat</div>
-        <div><strong style={{ color: '#94a3b8' }}>直接 LLM</strong>：在 IDE 页选择「直接调用 LLM」，需配置 ANTHROPIC_API_KEY。</div>
+      <div className="card" style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+        <div><strong style={{ color: 'var(--text2)' }}>{tr('vibe_cli_hint1')}</strong>{tr('vibe_cli_hint1b')}</div>
+        <div><strong style={{ color: 'var(--text2)' }}>{tr('vibe_cli_hint2')}</strong>{tr('vibe_cli_hint2b')}</div>
+        <div><strong style={{ color: 'var(--text2)' }}>{tr('vibe_cli_hint3')}</strong>{tr('vibe_cli_hint3b')}</div>
       </div>
     </div>
   );
@@ -347,6 +357,9 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const { data: agentGroups, loading: lg, error: eg, reload: rg } = useFetch(`${API}/agents/groups`);
   const { data: sessListData, loading: ls, error: es, reload: rs } = useFetch(`${API}/vibe/sessions`);
   const { data: termAllow } = useFetch(`${API}/vibe/terminal/allowlist`);
+
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
 
   const [sessionId, setSessionId] = React.useState(null);
   const [sessionQuery, setSessionQuery] = React.useState('');
@@ -454,13 +467,13 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     rg();
   };
 
-  const availableTools = (tools || []).filter((t) => t.available);
+  const availableTools = (tools || []).filter((tool) => tool.available);
   const allModels = [...((models && models.builtin) || []), ...((models && models.custom) || [])];
   const sessions = (sessListData && sessListData.sessions) || [];
   const sessionsFiltered = sessions.filter((s) => {
     if (!sessionQuery.trim()) return true;
-    const t = `${s.title || ''} ${s.id}`.toLowerCase();
-    return t.includes(sessionQuery.trim().toLowerCase());
+    const line = `${s.title || ''} ${s.id}`.toLowerCase();
+    return line.includes(sessionQuery.trim().toLowerCase());
   });
 
   React.useEffect(() => {
@@ -484,7 +497,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     fetch(`${API}/vibe/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: '默认会话' }),
+      body: JSON.stringify({ title: tr('vibe_default_session') }),
     })
       .then((r) => r.json())
       .then((d) => {
@@ -512,7 +525,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
         if (lastA && lastA.text) setOutput({ ok: true, content: lastA.text });
         else setOutput(null);
       })
-      .catch(() => showToast('加载会话失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_load_fail'), 'err'));
   }, []);
 
   React.useEffect(() => {
@@ -541,7 +554,11 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
   const selectedGroup = (agentGroups || []).find((g) => g.id === form.expertGroupId);
   const expertSystem = selectedGroup
-    ? `专家组「${selectedGroup.name}」说明：${selectedGroup.description || ''}\n成员 Agent ID：${(selectedGroup.agents || []).join(', ')}。请按该协作视角回答。`
+    ? tr('vibe_expert_system', {
+        name: selectedGroup.name,
+        desc: selectedGroup.description || '',
+        agents: (selectedGroup.agents || []).join(', '),
+      })
     : '';
 
   const uploadPaths = attachments.map((a) => a.path).filter(Boolean);
@@ -563,12 +580,12 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const run = () => {
     if (!form.prompt.trim()) return;
     if (!sessionId) {
-      showToast('请先创建或选择会话', 'err');
+      showToast(tr('vibe_toast_need_session'), 'err');
       return;
     }
     setRunning(true);
     setOutput(null);
-    const modeSystem = VIBE_MODE_HINTS[form.mode] || VIBE_MODE_HINTS.chat;
+    const modeSystem = tr('vibe_mode_hint_' + form.mode) || tr('vibe_mode_hint_chat');
     const endpoint = form.tool === 'direct-llm' ? `${API}/vibe/llm` : `${API}/vibe/run`;
     const mem = memory.trim() || null;
     const body =
@@ -598,10 +615,10 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
         setOutput(d);
         setRunning(false);
         if (!ok || d.ok === false) {
-          showToast(d.detail || d.error || '执行失败', 'err');
+          showToast(d.detail || d.error || tr('vibe_toast_run_fail'), 'err');
           return;
         }
-        showToast('执行完成', 'ok');
+        showToast(tr('vibe_toast_run_ok'), 'ok');
         const textOut = d.content || d.output || '';
         const now = new Date().toISOString();
         const nextMsgs = [
@@ -621,12 +638,12 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
       })
       .catch(() => {
         setRunning(false);
-        showToast('网络或服务器错误', 'err');
+        showToast(tr('vibe_toast_network_err'), 'err');
       });
   };
 
   const newSession = () => {
-    const title = window.prompt('会话标题', '新会话') || '新会话';
+    const title = window.prompt(tr('vibe_sess_create_title_prompt'), tr('vibe_new_session')) || tr('vibe_new_session');
     fetch(`${API}/vibe/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -639,28 +656,28 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           setAttachments([]);
           setOutput(null);
           rs();
-          showToast('已创建会话', 'ok');
+          showToast(tr('vibe_toast_created'), 'ok');
         }
       })
-      .catch(() => showToast('创建失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_create_fail'), 'err'));
   };
 
   const renameCurrentSession = () => {
     if (!sessionId) return;
     const cur = sessions.find((s) => s.id === sessionId);
-    const t = window.prompt('新标题', (cur && cur.title) || sessionId);
-    if (t == null || !t.trim()) return;
+    const titleIn = window.prompt(tr('vibe_rename_new_title'), (cur && cur.title) || sessionId);
+    if (titleIn == null || !titleIn.trim()) return;
     fetch(`${API}/vibe/sessions/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: t.trim() }),
+      body: JSON.stringify({ title: titleIn.trim() }),
     })
       .then((r) => {
         if (!r.ok) throw new Error();
         rs();
-        showToast('已重命名', 'ok');
+        showToast(tr('vibe_prompt_ok'), 'ok');
       })
-      .catch(() => showToast('失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_op_fail'), 'err'));
   };
 
   const exportCurrentSession = () => {
@@ -679,11 +696,11 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     a.download = `vibe-session-${sessionId}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    showToast('已导出', 'ok');
+    showToast(tr('vibe_toast_exported'), 'ok');
   };
 
   const deleteCurrentSession = () => {
-    if (!sessionId || !confirm('删除当前会话？')) return;
+    if (!sessionId || !confirm(tr('vibe_del_session_confirm'))) return;
     fetch(`${API}/vibe/sessions/${sessionId}`, { method: 'DELETE' })
       .then(() => {
         setSessionId(null);
@@ -693,9 +710,9 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
         setAttachments([]);
         setOutput(null);
         rs();
-        showToast('已删除', 'ok');
+        showToast(tr('vibe_toast_deleted'), 'ok');
       })
-      .catch(() => showToast('删除失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_del_fail'), 'err'));
   };
 
   const onPickFiles = (e) => {
@@ -715,9 +732,9 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           persistSession({ attachments: next });
           return next;
         });
-        showToast(`已上传 ${add.length} 个文件`, 'ok');
+        showToast(tr('vibe_toast_uploaded', { n: add.length }), 'ok');
       })
-      .catch(() => showToast('上传失败', 'err'));
+      .catch(() => showToast(tr('vibe_toast_upload_fail'), 'err'));
   };
 
   const extractDocToPrompt = (e) => {
@@ -726,19 +743,22 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     if (!file) return;
     const fd = new FormData();
     fd.append('file', file);
-    showToast('正在抽取文本…', 'ok');
+    showToast(tr('vibe_doc_extracting'), 'ok');
     fetch(`${API}/knowledge/extract-text`, { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((d) => {
-        const t = d.text || d.content || '';
-        if (!t) {
-          showToast('未能抽取文本', 'err');
+        const extracted = d.text || d.content || '';
+        if (!extracted) {
+          showToast(tr('vibe_doc_no_text'), 'err');
           return;
         }
-        setForm((f) => ({ ...f, prompt: f.prompt + (f.prompt ? '\n\n' : '') + '【文档摘录】\n' + t.slice(0, 50000) }));
-        showToast('已插入到提示词', 'ok');
+        setForm((f) => ({
+          ...f,
+          prompt: f.prompt + (f.prompt ? '\n\n' : '') + tr('vibe_doc_snippet_prefix') + '\n' + extracted.slice(0, 50000),
+        }));
+        showToast(tr('vibe_doc_inserted'), 'ok');
       })
-      .catch(() => showToast('抽取失败', 'err'));
+      .catch(() => showToast(tr('vibe_doc_extract_fail'), 'err'));
   };
 
   const openWorkspaceFile = (relPath, name) => {
@@ -750,7 +770,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
       })
       .catch(() => {
         setWorkspaceFile(null);
-        showToast('无法读取文件', 'err');
+        showToast(tr('vibe_file_read_fail'), 'err');
       });
   };
 
@@ -759,7 +779,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
       key={id}
       type="button"
       className={`btn btn-sm ${rightTab === id ? 'btn-primary' : ''}`}
-      style={rightTab !== id ? { background: '#334155', color: '#94a3b8' } : {}}
+      style={rightTab !== id ? { background: 'var(--btn-muted-bg)', color: 'var(--btn-muted-fg2)' } : {}}
       onClick={() => setRightTab(id)}
     >
       {label}
@@ -769,7 +789,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const execTerminal = () => {
     const cmd = (termCommand || '').trim();
     if (!cmd) {
-      showToast('请输入命令', 'err');
+      showToast(tr('vibe_term_need_cmd'), 'err');
       return;
     }
     setTermBusy(true);
@@ -788,22 +808,22 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
         if (!httpOk) {
           const msg = typeof d.detail === 'string' ? d.detail : Array.isArray(d.detail) ? d.detail.map((x) => x.msg || x).join('; ') : JSON.stringify(d.detail || d);
           setTermResult({ ok: false, returncode: -1, stdout: '', stderr: msg, argv: [], cwd_display: '' });
-          showToast('执行被拒绝或参数错误', 'err');
+          showToast(tr('vibe_term_rejected'), 'err');
           return;
         }
         setTermResult(d);
-        if (!d.ok) showToast(d.stderr ? '命令失败（见 stderr）' : '命令非零退出', 'err');
+        if (!d.ok) showToast(d.stderr ? tr('vibe_term_stderr_fail') : tr('vibe_term_nonzero'), 'err');
       })
       .catch(() => {
         setTermBusy(false);
-        showToast('请求失败', 'err');
+        showToast(tr('vibe_term_req_fail'), 'err');
       });
   };
 
   if (panelLoading) {
     return (
       <div>
-        <div className="section-title">🎯 Vibe Coding</div>
+        <div className="section-title">{tr('vibe_ide_loading')}</div>
         <PageSkeleton cards={2} />
       </div>
     );
@@ -811,36 +831,37 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   if (panelError) {
     return (
       <div>
-        <div className="section-title">🎯 Vibe Coding</div>
+        <div className="section-title">{tr('vibe_ide_loading')}</div>
         <LoadError message={panelError} onRetry={reloadDeps} />
       </div>
     );
   }
 
+  void langTick;
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <div className="section-title">🎯 Vibe Coding — AI 开发 IDE</div>
+        <div className="section-title">{tr('vibe_ide_title')}</div>
         <RefreshBtn onClick={reloadDeps} />
       </div>
 
       <div className="card vibe-ide-toolbar" style={{ marginBottom: 12, padding: '10px 12px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>工作台</span>
-        <span style={{ fontSize: 11, color: '#64748b' }}>缩放</span>
-        <button type="button" className="btn btn-sm" title="缩小" onClick={() => setIdeZoom((z) => Math.max(0.72, Math.round((z - 0.06) * 100) / 100))}>
+        <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>{tr('vibe_toolbar_workspace')}</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{tr('vibe_toolbar_zoom')}</span>
+        <button type="button" className="btn btn-sm" title={tr('vibe_zoom_out_title')} onClick={() => setIdeZoom((z) => Math.max(0.72, Math.round((z - 0.06) * 100) / 100))}>
           −
         </button>
-        <span style={{ fontSize: 12, color: '#e2e8f0', minWidth: 44, textAlign: 'center' }}>{Math.round(ideZoom * 100)}%</span>
-        <button type="button" className="btn btn-sm" title="放大" onClick={() => setIdeZoom((z) => Math.min(1.6, Math.round((z + 0.06) * 100) / 100))}>
+        <span style={{ fontSize: 12, color: 'var(--text)', minWidth: 44, textAlign: 'center' }}>{Math.round(ideZoom * 100)}%</span>
+        <button type="button" className="btn btn-sm" title={tr('vibe_zoom_in_title')} onClick={() => setIdeZoom((z) => Math.min(1.6, Math.round((z + 0.06) * 100) / 100))}>
           +
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => setIdeZoom(1)}>
-          重置缩放
+        <button type="button" className="btn btn-sm btn-muted" onClick={() => setIdeZoom(1)}>
+          {tr('vibe_toolbar_zoom_reset')}
         </button>
         <button
           type="button"
-          className="btn btn-sm"
-          style={{ background: '#334155', color: '#94a3b8' }}
+          className="btn btn-sm btn-muted"
           onClick={() => {
             setColLeft(250);
             setColRight(380);
@@ -850,22 +871,22 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             } catch (_) {}
           }}
         >
-          重置分栏
+          {tr('vibe_toolbar_cols_reset')}
         </button>
         <span style={{ flex: 1, minWidth: 8 }} />
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} title="浏览器全屏 API" onClick={() => { const el = leftCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
-          左栏全屏
+        <button type="button" className="btn btn-sm btn-muted" title={tr('vibe_fs_browser_api')} onClick={() => { const el = leftCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
+          {tr('vibe_toolbar_fs_left')}
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => { const el = midWrapRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
-          中栏全屏
+        <button type="button" className="btn btn-sm btn-muted" onClick={() => { const el = midWrapRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
+          {tr('vibe_toolbar_fs_mid')}
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => { const el = rightCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
-          右栏全屏
+        <button type="button" className="btn btn-sm btn-muted" onClick={() => { const el = rightCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
+          {tr('vibe_toolbar_fs_right')}
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#1e3a5f', color: '#93c5fd' }} onClick={() => document.fullscreenElement && document.exitFullscreen && document.exitFullscreen()}>
-          退出全屏
+        <button type="button" className="btn btn-sm btn-muted" style={{ background: 'var(--list-select-bg)', color: 'var(--text)' }} onClick={() => document.fullscreenElement && document.exitFullscreen && document.exitFullscreen()}>
+          {tr('vibe_toolbar_fs_exit')}
         </button>
-        <span style={{ fontSize: 11, color: '#64748b' }}>拖拽竖条调宽度 · Esc 退出全屏 · 布局/缩放本地保存</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{tr('vibe_toolbar_hint')}</span>
       </div>
 
       <div
@@ -883,63 +904,62 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           className="card scroll-slim"
           style={{ maxHeight: '82vh', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}
         >
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>历史会话</div>
+          <div style={{ fontSize: 12, color: 'var(--text2)' }}>{tr('vibe_hist_sess')}</div>
           <input
             value={sessionQuery}
             onChange={(e) => setSessionQuery(e.target.value)}
-            placeholder="筛选会话…"
-            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', fontSize: 12 }}
+            placeholder={tr('vibe_hist_filter_ph')}
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid var(--vibe-divider)', background: 'var(--surface-input)', color: 'var(--text)', fontSize: 12 }}
           />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             <button type="button" className="btn btn-primary btn-sm" onClick={newSession}>
-              + 新建
+              {tr('vibe_new')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={renameCurrentSession} disabled={!sessionId}>
-              重命名
+            <button type="button" className="btn btn-sm btn-muted" onClick={renameCurrentSession} disabled={!sessionId}>
+              {tr('vibe_rename')}
             </button>
-            <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={exportCurrentSession} disabled={!sessionId}>
-              导出
+            <button type="button" className="btn btn-sm btn-muted" onClick={exportCurrentSession} disabled={!sessionId}>
+              {tr('vibe_export')}
             </button>
           </div>
           <div className="scroll-slim" style={{ maxHeight: 200, overflowY: 'auto', minHeight: 0 }}>
             {sessionsFiltered.length === 0 ? (
               <div className="empty" style={{ fontSize: 11, padding: 12 }}>
-                无匹配
+                {tr('vibe_no_match')}
               </div>
             ) : (
               sessionsFiltered.map((s) => (
                 <div
                   key={s.id}
-                  className="list-item"
+                  className={'list-item' + (s.id === sessionId ? ' vibe-list-selected' : '')}
                   style={{
                     cursor: 'pointer',
                     padding: '6px 8px',
-                    background: s.id === sessionId ? '#1e3a5f' : '',
                     flexDirection: 'column',
                     alignItems: 'stretch',
                   }}
                   onClick={() => setSessionId(s.id)}
                 >
-                  <div style={{ fontSize: 12, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || s.id}</div>
-                  <div style={{ fontSize: 10, color: '#64748b' }}>{(s.updated_at || '').slice(0, 16)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title || s.id}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{(s.updated_at || '').slice(0, 16)}</div>
                 </div>
               ))
             )}
           </div>
 
-          <div style={{ borderTop: '1px solid #334155', paddingTop: 10 }}>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>持久记忆</div>
+          <div style={{ borderTop: '1px solid var(--vibe-divider)', paddingTop: 10 }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>{tr('vibe_memory')}</div>
             <textarea
               value={memory}
               onChange={(e) => scheduleMemorySave(e.target.value)}
-              placeholder="跨轮次约束、技术栈、路径约定…"
+              placeholder={tr('vibe_memory_ph')}
               disabled={!sessionId}
-              style={{ width: '100%', minHeight: 88, fontSize: 11, background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', borderRadius: 6, padding: 8 }}
+              style={{ width: '100%', minHeight: 88, fontSize: 11, background: 'var(--surface-input)', border: '1px solid var(--vibe-divider)', color: 'var(--text)', borderRadius: 6, padding: 8 }}
             />
           </div>
 
-          <div style={{ borderTop: '1px solid #334155', paddingTop: 10, flexShrink: 0 }}>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>项目目录浏览</div>
+          <div style={{ borderTop: '1px solid var(--vibe-divider)', paddingTop: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 6 }}>{tr('vibe_files')}</div>
             <VibeWorkspaceTree
               onOpenFile={(rel, name) => {
                 openWorkspaceFile(rel, name);
@@ -947,8 +967,8 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             />
           </div>
 
-          <button type="button" className="btn btn-sm" style={{ width: '100%', background: '#451a1a', color: '#fca5a5' }} onClick={deleteCurrentSession} disabled={!sessionId}>
-            删除当前会话
+          <button type="button" className="btn btn-sm btn-danger" style={{ width: '100%' }} onClick={deleteCurrentSession} disabled={!sessionId}>
+            {tr('vibe_del_session')}
           </button>
         </div>
 
@@ -956,29 +976,29 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           className="vibe-ide-split"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整左栏宽度"
+          aria-label={tr('vibe_split_left')}
           onMouseDown={(e) => beginResize('left', e)}
-          title="拖拽调整左栏"
+          title={tr('vibe_split_left_title')}
         />
 
         <div ref={midWrapRef} style={{ minWidth: 0, zoom: ideZoom }} className="vibe-ide-midscale">
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>开发工具</label>
+                <label>{tr('vibe_label_tool')}</label>
                 <select value={form.tool} onChange={(e) => setForm({ ...form, tool: e.target.value })}>
-                  <option value="direct-llm">🤖 直接调用 LLM（支持图片）</option>
-                  {availableTools.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
+                  <option value="direct-llm">{tr('vibe_opt_direct_llm')}</option>
+                  {availableTools.map((tool) => (
+                    <option key={tool.id} value={tool.id}>
+                      {tool.name}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>专家组</label>
+                <label>{tr('vibe_label_group')}</label>
                 <select value={form.expertGroupId} onChange={(e) => setForm({ ...form, expertGroupId: e.target.value })}>
-                  <option value="">（不启用）</option>
+                  <option value="">{tr('vibe_opt_no_group')}</option>
                   {(agentGroups || []).map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name}
@@ -987,9 +1007,9 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 </select>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>模型</label>
+                <label>{tr('vibe_label_model')}</label>
                 <select value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}>
-                  <option value="">默认 ({(models && models.default) || '-'})</option>
+                  <option value="">{tr('vibe_label_model_def', { d: (models && models.default) || '-' })}</option>
                   {allModels.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
@@ -998,13 +1018,13 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 </select>
               </div>
               <div className="form-group" style={{ margin: 0 }}>
-                <label>模式</label>
+                <label>{tr('vibe_label_mode')}</label>
                 <select value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })}>
                   {[
-                    ['chat', '💬 对话'],
-                    ['code', '💻 编码'],
-                    ['review', '🔍 审查'],
-                    ['plan', '📋 规划'],
+                    ['chat', tr('vibe_mode_chat')],
+                    ['code', tr('vibe_mode_code')],
+                    ['review', tr('vibe_mode_review')],
+                    ['plan', tr('vibe_mode_plan')],
                   ].map(([v, l]) => (
                     <option key={v} value={v}>
                       {l}
@@ -1015,12 +1035,12 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-              <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => fileRef.current && fileRef.current.click()} disabled={!sessionId}>
-                📎 图片 / 文件
+              <button type="button" className="btn btn-sm btn-muted" onClick={() => fileRef.current && fileRef.current.click()} disabled={!sessionId}>
+                {tr('vibe_attach_img')}
               </button>
               <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={onPickFiles} accept="image/*,.pdf,.txt,.md,.json,.yaml,.yml,.xml,.csv" />
-              <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => docRef.current && docRef.current.click()}>
-                📄 文档抽取
+              <button type="button" className="btn btn-sm btn-muted" onClick={() => docRef.current && docRef.current.click()}>
+                {tr('vibe_attach_doc')}
               </button>
               <input ref={docRef} type="file" style={{ display: 'none' }} onChange={extractDocToPrompt} accept=".pdf,.txt,.md,.markdown" />
             </div>
@@ -1028,7 +1048,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             {attachments.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {attachments.map((a) => (
-                  <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#1e293b', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
+                  <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'var(--surface-muted)', borderRadius: 6, padding: '4px 8px', fontSize: 11 }}>
                     {a.mime && a.mime.startsWith('image/') ? (
                       <button
                         type="button"
@@ -1037,14 +1057,14 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                           setDocPickPath(a.path);
                           setRightTab('gallery');
                         }}
-                        title="大图查看"
+                        title={tr('vibe_img_view')}
                       >
                         <img src={uploadFileUrl(a.path)} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
                       </button>
                     ) : (
                       <span>📎</span>
                     )}
-                    <span style={{ color: '#94a3b8', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
+                    <span style={{ color: 'var(--text2)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</span>
                     <button
                       type="button"
                       className="btn btn-sm"
@@ -1065,33 +1085,33 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             )}
 
             <div className="form-group" style={{ margin: 0 }}>
-              <label>提示词</label>
+              <label>{tr('vibe_prompt_label')}</label>
               <textarea
                 value={form.prompt}
                 onChange={(e) => setForm({ ...form, prompt: e.target.value })}
                 style={{ minHeight: 100, fontFamily: 'monospace', fontSize: 13 }}
-                placeholder="任务描述、代码、上下文。直接 LLM 可带图片附件。"
+                placeholder={tr('vibe_prompt_ph')}
               />
             </div>
             <button type="button" className="btn btn-primary" onClick={run} disabled={running || !form.prompt.trim() || !sessionId} style={{ width: '100%', marginTop: 8, padding: '10px', fontSize: 14 }}>
-              {running ? '⏳ 执行中…' : '▶ 执行'}
+              {running ? tr('vibe_running') : tr('vibe_run')}
             </button>
-            {!sessionId && <div style={{ fontSize: 11, color: '#f97316', marginTop: 6 }}>正在准备会话…</div>}
+            {!sessionId && <div style={{ fontSize: 11, color: '#f97316', marginTop: 6 }}>{tr('vibe_preparing')}</div>}
             {form.tool !== 'direct-llm' && attachments.length > 0 && (
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>CLI 无法传图；路径已写入提示词。看图请用「直接调用 LLM」。</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>{tr('vibe_cli_img_warn')}</div>
             )}
           </div>
 
           {messages.length > 0 && (
             <div className="card scroll-slim" style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 12 }}>
               <div className="section-title" style={{ fontSize: 13, marginBottom: 8 }}>
-                会话消息（完整）
+                {tr('vibe_msgs_title')}
               </div>
               {messages.map((m, i) => (
                 <div key={i} style={{ marginBottom: 12, borderBottom: i < messages.length - 1 ? '1px solid #1e293b' : 'none', paddingBottom: 10 }}>
                   <div style={{ fontSize: 11, marginBottom: 6 }}>
-                    <span style={{ color: m.role === 'user' ? '#38bdf8' : '#86efac', fontWeight: 700 }}>{m.role === 'user' ? '你' : 'AI'}</span>
-                    <span style={{ color: '#64748b', marginLeft: 8 }}>{(m.ts || '').replace('T', ' ').slice(0, 19)}</span>
+                    <span style={{ color: m.role === 'user' ? '#38bdf8' : '#86efac', fontWeight: 700 }}>{m.role === 'user' ? tr('vibe_role_user') : tr('vibe_role_ai')}</span>
+                    <span style={{ color: 'var(--text3)', marginLeft: 8 }}>{(m.ts || '').replace('T', ' ').slice(0, 19)}</span>
                   </div>
                   {m.role === 'assistant' ? (
                     <div className="scroll-slim" style={{ maxHeight: 240, overflow: 'auto' }}>
@@ -1110,71 +1130,70 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           className="vibe-ide-split"
           role="separator"
           aria-orientation="vertical"
-          aria-label="调整右栏宽度"
+          aria-label={tr('vibe_split_right')}
           onMouseDown={(e) => beginResize('right', e)}
-          title="拖拽调整右栏"
+          title={tr('vibe_split_right_title')}
         />
 
         <div ref={rightCardRef} className="card scroll-slim" style={{ maxHeight: '82vh', overflowY: 'auto', minHeight: 0 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
-            {rightTabBtn('out', '输出')}
-            {rightTabBtn('term', '终端')}
-            {rightTabBtn('md', 'Markdown')}
-            {rightTabBtn('code', '代码块')}
-            {rightTabBtn('gallery', '图片')}
-            {rightTabBtn('doc', '文档')}
-            {rightTabBtn('preview', '页面')}
-            {rightTabBtn('wfile', '项目文件')}
+            {rightTabBtn('out', tr('vibe_rt_out'))}
+            {rightTabBtn('term', tr('vibe_rt_term'))}
+            {rightTabBtn('md', tr('vibe_rt_md'))}
+            {rightTabBtn('code', tr('vibe_rt_code'))}
+            {rightTabBtn('gallery', tr('vibe_rt_gallery'))}
+            {rightTabBtn('doc', tr('vibe_rt_doc'))}
+            {rightTabBtn('preview', tr('vibe_rt_preview'))}
+            {rightTabBtn('wfile', tr('vibe_rt_wfile'))}
           </div>
 
           {rightTab === 'out' && (
             <>
               {!output ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  执行后查看原始输出
+                  {tr('vibe_out_empty')}
                 </div>
               ) : (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div className="section-title" style={{ color: output.ok ? '#86efac' : '#fca5a5', margin: 0, fontSize: 13 }}>
-                      {output.ok ? '✅ 成功' : '❌ 失败'}
+                      {output.ok ? tr('vibe_out_ok') : tr('vibe_out_fail')}
                       {output.usage && (
-                        <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>
                           tokens: {output.usage.input}↑ {output.usage.output}↓
                         </span>
                       )}
                     </div>
                     <button
                       type="button"
-                      className="btn btn-sm"
-                      style={{ background: '#334155', color: '#94a3b8' }}
+                      className="btn btn-sm btn-muted"
                       onClick={() => {
-                        const t = output.output || output.content || output.error || '';
-                        navigator.clipboard.writeText(t).then(() => showToast('已复制', 'ok')).catch(() => showToast('复制失败', 'err'));
+                        const outTxt = output.output || output.content || output.error || '';
+                        navigator.clipboard.writeText(outTxt).then(() => showToast(tr('vibe_toast_copy_ok'), 'ok')).catch(() => showToast(tr('vibe_toast_copy_fail'), 'err'));
                       }}
                     >
-                      复制
+                      {tr('vibe_copy')}
                     </button>
                   </div>
-                  <pre style={{ fontSize: 11, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, maxHeight: '62vh', overflowY: 'auto' }}>{output.content || output.output || output.error}</pre>
+                  <pre style={{ fontSize: 11, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, maxHeight: '62vh', overflowY: 'auto' }}>{output.content || output.output || output.error}</pre>
                   <button
                     type="button"
-                    className="btn btn-sm"
-                    style={{ marginTop: 8, width: '100%', background: '#1e3a5f', color: '#93c5fd' }}
+                    className="btn btn-sm btn-muted"
+                    style={{ marginTop: 8, width: '100%', background: 'var(--list-select-bg)', color: 'var(--text)' }}
                     onClick={() => {
                       const t = String(output.content || output.output || '');
                       const html = vibeExtractHtmlFromOutput(t);
                       if (!html) {
-                        showToast('未检测到 HTML 代码块', 'err');
+                        showToast(tr('vibe_toast_no_html'), 'err');
                         return;
                       }
                       setPreviewHtml(html);
                       persistSession({ preview_html: html });
                       setRightTab('preview');
-                      showToast('已更新预览', 'ok');
+                      showToast(tr('vibe_toast_preview_up'), 'ok');
                     }}
                   >
-                    提取 HTML → 页面
+                    {tr('vibe_extract_html')}
                   </button>
                 </>
               )}
@@ -1183,10 +1202,8 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
           {rightTab === 'term' && (
             <div>
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
-                在服务端 <code style={{ color: '#93c5fd' }}>PROJECT_PATH</code> 下执行；首段可执行文件须在白名单（与「环境 / Docker」自定义检查相同）。扩展白名单：{' '}
-                <code style={{ color: '#93c5fd' }}>.ai-memory/env_exec_allowlist_extra.json</code>。支持{' '}
-                <code style={{ color: '#93c5fd' }}>bash sop/tools/xxx.sh</code>（脚本须在项目内且扩展名为 .sh）。
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8, lineHeight: 1.5 }}>
+                {tr('vibe_term_intro', { p: 'PROJECT_PATH', f: '.ai-memory/env_exec_allowlist_extra.json', b: 'bash sop/tools/xxx.sh' })}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {[
@@ -1196,22 +1213,22 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                   ['node -v', 'node --version'],
                   ['npm -v', 'npm --version'],
                 ].map(([label, c]) => (
-                  <button key={label} type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => setTermCommand(c)}>
+                  <button key={label} type="button" className="btn btn-sm btn-muted" onClick={() => setTermCommand(c)}>
                     {label}
                   </button>
                 ))}
               </div>
               <div className="form-group" style={{ marginBottom: 6 }}>
-                <label>工作目录（相对项目根，留空为根）</label>
+                <label>{tr('vibe_term_cwd_label')}</label>
                 <input
                   value={termCwd}
                   onChange={(e) => setTermCwd(e.target.value)}
-                  placeholder="例如 sop 或留空"
+                  placeholder={tr('vibe_term_cwd_ph')}
                   style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
                 />
               </div>
               <div className="form-group" style={{ marginBottom: 6 }}>
-                <label>超时（秒，3–600）</label>
+                <label>{tr('vibe_term_timeout_label')}</label>
                 <input
                   type="number"
                   min={3}
@@ -1222,33 +1239,32 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 />
               </div>
               <div className="form-group" style={{ marginBottom: 8 }}>
-                <label>命令（shell 风格，由服务端 shlex 解析）</label>
+                <label>{tr('vibe_term_cmd_label')}</label>
                 <textarea
                   value={termCommand}
                   onChange={(e) => setTermCommand(e.target.value)}
-                  style={{ width: '100%', minHeight: 72, fontFamily: 'monospace', fontSize: 12, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: 8 }}
+                  style={{ width: '100%', minHeight: 72, fontFamily: 'monospace', fontSize: 12, background: 'var(--surface-input)', color: 'var(--text)', border: '1px solid var(--vibe-divider)', borderRadius: 6, padding: 8 }}
                 />
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 <button type="button" className="btn btn-sm btn-primary" disabled={termBusy} onClick={execTerminal}>
-                  {termBusy ? '执行中…' : '▶ 执行'}
+                  {termBusy ? tr('vibe_running') : tr('vibe_run')}
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm"
-                  style={{ background: '#334155', color: '#94a3b8' }}
+                  className="btn btn-sm btn-muted"
                   disabled={!termResult}
                   onClick={() => {
-                    const t = [termResult.argv && termResult.argv.join(' '), termResult.stdout, termResult.stderr].filter(Boolean).join('\n---\n');
-                    navigator.clipboard.writeText(t).then(() => showToast('已复制', 'ok')).catch(() => showToast('复制失败', 'err'));
+                    const clip = [termResult.argv && termResult.argv.join(' '), termResult.stdout, termResult.stderr].filter(Boolean).join('\n---\n');
+                    navigator.clipboard.writeText(clip).then(() => showToast(tr('vibe_toast_copy_ok'), 'ok')).catch(() => showToast(tr('vibe_toast_copy_fail'), 'err'));
                   }}
                 >
-                  复制输出
+                  {tr('vibe_term_copy_out')}
                 </button>
               </div>
               {termAllow && termAllow.programs && (
-                <details style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
-                  <summary style={{ cursor: 'pointer', color: '#94a3b8' }}>可执行白名单（{termAllow.programs.length}）</summary>
+                <details style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                  <summary style={{ cursor: 'pointer', color: 'var(--text2)' }}>{tr('vibe_term_allowlist_title', { n: termAllow.programs.length })}</summary>
                   <div className="scroll-slim" style={{ maxHeight: 120, overflow: 'auto', marginTop: 6, fontFamily: 'monospace' }}>
                     {termAllow.programs.join(', ')}
                   </div>
@@ -1256,27 +1272,27 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
               )}
               {!termResult ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  输入命令后点击执行；stdout/stderr 将显示在下方。
+                  {tr('vibe_term_run_hint')}
                 </div>
               ) : (
                 <div>
                   <div style={{ fontSize: 12, marginBottom: 6, color: termResult.ok ? '#86efac' : '#fca5a5' }}>
                     exit {termResult.returncode != null ? termResult.returncode : '?'} · cwd {termResult.cwd_display != null && termResult.cwd_display !== '' ? termResult.cwd_display : '.'}
                     {termResult.argv && termResult.argv.length > 0 && (
-                      <span style={{ color: '#94a3b8', marginLeft: 8 }}>
+                      <span style={{ color: 'var(--text2)', marginLeft: 8 }}>
                         argv: <code style={{ color: '#cbd5e1' }}>{termResult.argv.join(' ')}</code>
                       </span>
                     )}
                   </div>
                   {termResult.stdout ? (
                     <div style={{ marginBottom: 8 }}>
-                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>stdout</div>
-                      <pre style={{ fontSize: 11, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '36vh', overflow: 'auto', background: '#0f172a', padding: 8, borderRadius: 6, border: '1px solid #334155', margin: 0 }}>{termResult.stdout}</pre>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{tr('vibe_term_stdout')}</div>
+                      <pre style={{ fontSize: 11, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '36vh', overflow: 'auto', background: 'var(--surface-input)', padding: 8, borderRadius: 6, border: '1px solid var(--vibe-divider)', margin: 0 }}>{termResult.stdout}</pre>
                     </div>
                   ) : null}
                   {termResult.stderr ? (
                     <div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>stderr</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{tr('vibe_term_stderr')}</div>
                       <pre style={{ fontSize: 11, color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '28vh', overflow: 'auto', background: '#1c1917', padding: 8, borderRadius: 6, border: '1px solid #451a1a', margin: 0 }}>{termResult.stderr}</pre>
                     </div>
                   ) : null}
@@ -1289,7 +1305,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             <div>
               {!rawOutputText ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  暂无输出；执行后将按 Markdown 渲染
+                  {tr('vibe_md_empty')}
                 </div>
               ) : (
                 <div className="scroll-slim" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
@@ -1303,12 +1319,12 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             <div>
               {codeBlocks.length === 0 ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  输出中未解析到 ``` 代码块
+                  {tr('vibe_code_empty')}
                 </div>
               ) : (
                 <>
                   <div className="form-group" style={{ marginBottom: 8 }}>
-                    <label>选择代码块 ({codeBlocks.length})</label>
+                    <label>{tr('vibe_code_select', { n: codeBlocks.length })}</label>
                     <select value={codeBlockIdx} onChange={(e) => setCodeBlockIdx(Number(e.target.value))}>
                       {codeBlocks.map((b, i) => (
                         <option key={i} value={i}>
@@ -1320,13 +1336,13 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                   <VibeHighlightedCode lang={codeBlocks[codeBlockIdx].lang} code={codeBlocks[codeBlockIdx].code} />
                   <button
                     type="button"
-                    className="btn btn-sm"
-                    style={{ marginTop: 8, width: '100%', background: '#334155', color: '#94a3b8' }}
+                    className="btn btn-sm btn-muted"
+                    style={{ marginTop: 8, width: '100%' }}
                     onClick={() => {
-                      navigator.clipboard.writeText(codeBlocks[codeBlockIdx].code).then(() => showToast('已复制', 'ok')).catch(() => {});
+                      navigator.clipboard.writeText(codeBlocks[codeBlockIdx].code).then(() => showToast(tr('vibe_toast_copy_ok'), 'ok')).catch(() => {});
                     }}
                   >
-                    复制本块
+                    {tr('vibe_code_copy_block')}
                   </button>
                 </>
               )}
@@ -1337,14 +1353,14 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             <div>
               {imageAttachments.length === 0 ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  无图片附件；上传图片后在此大图查看
+                  {tr('vibe_gallery_empty')}
                 </div>
               ) : (
                 <div className="scroll-slim" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
                   {imageAttachments.map((a) => (
                     <div key={a.path} style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{a.name}</div>
-                      <img src={uploadFileUrl(a.path)} alt={a.name} style={{ maxWidth: '100%', borderRadius: 8, border: docPickPath === a.path ? '2px solid #3b82f6' : '1px solid #334155', cursor: 'pointer' }} onClick={() => setDocPickPath(a.path)} />
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{a.name}</div>
+                      <img src={uploadFileUrl(a.path)} alt={a.name} style={{ maxWidth: '100%', borderRadius: 8, border: docPickPath === a.path ? '2px solid var(--accent)' : '1px solid var(--vibe-divider)', cursor: 'pointer' }} onClick={() => setDocPickPath(a.path)} />
                     </div>
                   ))}
                 </div>
@@ -1356,12 +1372,12 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             <div>
               {docAttachments.length === 0 ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  无 PDF/Markdown/文本附件
+                  {tr('vibe_doc_empty')}
                 </div>
               ) : (
                 <>
                   <div className="form-group" style={{ marginBottom: 8 }}>
-                    <label>选择附件</label>
+                    <label>{tr('vibe_doc_select')}</label>
                     <select value={docPickPath || (docAttachments[0] && docAttachments[0].path) || ''} onChange={(e) => setDocPickPath(e.target.value)}>
                       {docAttachments.map((a) => (
                         <option key={a.path} value={a.path}>
@@ -1377,8 +1393,8 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                     const low = (att.name || '').toLowerCase();
                     if (low.endsWith('.pdf')) {
                       return (
-                        <object data={uploadFileUrl(att.path)} type="application/pdf" width="100%" height="520" style={{ borderRadius: 8, border: '1px solid #334155' }}>
-                          <div style={{ fontSize: 12, color: '#94a3b8' }}>浏览器无法内嵌 PDF 时，请在新标签打开文件 URL。</div>
+                        <object data={uploadFileUrl(att.path)} type="application/pdf" width="100%" height="520" style={{ borderRadius: 8, border: '1px solid var(--vibe-divider)' }}>
+                          <div style={{ fontSize: 12, color: 'var(--text2)' }}>{tr('vibe_doc_pdf_fallback')}</div>
                         </object>
                       );
                     }
@@ -1391,25 +1407,25 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
           {rightTab === 'preview' && (
             <div>
-              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>沙箱 iframe，不执行脚本。</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>{tr('vibe_preview_sandbox')}</div>
               {previewHtml ? (
-                <iframe title="preview" sandbox="" srcDoc={previewHtml} style={{ width: '100%', minHeight: 380, border: '1px solid #334155', borderRadius: 6, background: '#fff' }} />
+                <iframe title="preview" sandbox="" srcDoc={previewHtml} style={{ width: '100%', minHeight: 380, border: '1px solid var(--vibe-divider)', borderRadius: 6, background: 'var(--iframe-preview-bg)' }} />
               ) : (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  尚无 HTML 预览
+                  {tr('vibe_preview_empty')}
                 </div>
               )}
               <button
                 type="button"
-                className="btn btn-sm"
-                style={{ marginTop: 8, width: '100%', background: '#334155', color: '#94a3b8' }}
+                className="btn btn-sm btn-muted"
+                style={{ marginTop: 8, width: '100%' }}
                 onClick={() => {
                   persistSession({ preview_html: '' });
                   setPreviewHtml('');
-                  showToast('已清空', 'ok');
+                  showToast(tr('vibe_toast_cleared'), 'ok');
                 }}
               >
-                清空预览
+                {tr('vibe_preview_clear')}
               </button>
             </div>
           )}
@@ -1418,21 +1434,21 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             <div>
               {!workspaceFile || !workspaceFile.ok ? (
                 <div className="empty" style={{ fontSize: 12 }}>
-                  在左侧目录树中点击文件打开
+                  {tr('vibe_wfile_open_hint')}
                 </div>
               ) : workspaceFile.binary ? (
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>{workspaceFile.hint || '无法在 IDE 内预览该文件'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)' }}>{workspaceFile.hint || tr('vibe_wfile_hint')}</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, wordBreak: 'break-all' }}>
-                    {workspaceFile.path} {workspaceFile.truncated ? '（已截断）' : ''}
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8, wordBreak: 'break-all' }}>
+                    {workspaceFile.path} {workspaceFile.truncated ? tr('vibe_truncated_suffix') : ''}
                   </div>
                   {(workspaceFile.path || '').toLowerCase().endsWith('.md') ? (
                     <div className="scroll-slim" style={{ maxHeight: '64vh', overflow: 'auto' }}>
                       <VibeMarkdownView markdown={workspaceFile.content || ''} />
                     </div>
                   ) : (
-                    <pre className="scroll-slim" style={{ maxHeight: '64vh', overflow: 'auto', fontSize: 12, lineHeight: 1.45, background: '#0f172a', border: '1px solid #334155', borderRadius: 8, padding: 10, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <pre className="scroll-slim" style={{ maxHeight: '64vh', overflow: 'auto', fontSize: 12, lineHeight: 1.45, background: 'var(--surface-input)', border: '1px solid var(--vibe-divider)', borderRadius: 8, padding: 10, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {workspaceFile.content}
                     </pre>
                   )}
@@ -1484,6 +1500,9 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 }
 
 function VibeDocTextPreview({ url, isMd }) {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
   const [text, setText] = React.useState('');
   const [err, setErr] = React.useState(null);
   React.useEffect(() => {
@@ -1492,19 +1511,22 @@ function VibeDocTextPreview({ url, isMd }) {
     fetch(url)
       .then((r) => (r.ok ? r.text() : Promise.reject()))
       .then(setText)
-      .catch(() => setErr('无法加载（可能跨域或需登录）'));
+      .catch(() => setErr(typeof window.t === 'function' ? window.t('vibe_fetch_err') : 'vibe_fetch_err'));
   }, [url]);
   if (err) return <div style={{ fontSize: 12, color: '#fca5a5' }}>{err}</div>;
-  if (!text) return <div style={{ fontSize: 12, color: '#64748b' }}>加载中…</div>;
+  if (!text) return <div style={{ fontSize: 12, color: 'var(--text3)' }}>{tr('vibe_loading')}</div>;
   if (isMd) return <VibeMarkdownView markdown={text} />;
   return (
-    <pre className="scroll-slim" style={{ maxHeight: '62vh', overflow: 'auto', fontSize: 12, lineHeight: 1.45, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+    <pre className="scroll-slim" style={{ maxHeight: '62vh', overflow: 'auto', fontSize: 12, lineHeight: 1.45, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
       {text}
     </pre>
   );
 }
 
 function VibeTemplatesPanel() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
   const { data, loading, error, reload } = useFetch(`${API}/vibe/templates`);
   const [selected, setSelected] = React.useState(null);
   const [filled, setFilled] = React.useState('');
@@ -1517,7 +1539,7 @@ function VibeTemplatesPanel() {
   if (loading) {
     return (
       <div>
-        <div className="section-title">提示词模板库</div>
+        <div className="section-title">{tr('vibe_tpl_title')}</div>
         <PageSkeleton cards={2} />
       </div>
     );
@@ -1525,7 +1547,7 @@ function VibeTemplatesPanel() {
   if (error) {
     return (
       <div>
-        <div className="section-title">提示词模板库</div>
+        <div className="section-title">{tr('vibe_tpl_title')}</div>
         <LoadError message={error} onRetry={reload} />
       </div>
     );
@@ -1534,18 +1556,23 @@ function VibeTemplatesPanel() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="section-title">提示词模板库</div>
+        <div className="section-title">{tr('vibe_tpl_title')}</div>
         <RefreshBtn onClick={reload} />
       </div>
       <div className="grid-2">
         <div className="card scroll-slim" style={{ maxHeight: 420, overflowY: 'auto' }}>
           {(data || []).length === 0 ? (
-            <div className="empty">暂无模板</div>
+            <div className="empty">{tr('vibe_tpl_empty')}</div>
           ) : (
-            (data || []).map((t) => (
-              <div key={t.id} className="list-item" style={{ cursor: 'pointer', background: selected && selected.id === t.id ? '#1e3a5f' : '' }} onClick={() => fill(t)}>
+            (data || []).map((tpl) => (
+              <div
+                key={tpl.id}
+                className={'list-item' + (selected && selected.id === tpl.id ? ' vibe-list-selected' : '')}
+                style={{ cursor: 'pointer' }}
+                onClick={() => fill(tpl)}
+              >
                 <div style={{ flex: 1 }}>
-                  <div className="title">{t.name}</div>
+                  <div className="title">{tpl.name}</div>
                 </div>
               </div>
             ))
@@ -1553,26 +1580,26 @@ function VibeTemplatesPanel() {
         </div>
         <div className="card">
           {!selected ? (
-            <div className="empty">← 选择模板</div>
+            <div className="empty">{tr('vibe_tpl_pick')}</div>
           ) : (
             <>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>{selected.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{selected.name}</div>
               <textarea
                 value={filled}
                 onChange={(e) => setFilled(e.target.value)}
-                style={{ width: '100%', minHeight: 200, background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', padding: 8, borderRadius: 6, fontSize: 12, fontFamily: 'monospace', resize: 'vertical' }}
+                style={{ width: '100%', minHeight: 200, background: 'var(--surface-input)', border: '1px solid var(--vibe-divider)', color: 'var(--text)', padding: 8, borderRadius: 6, fontSize: 12, fontFamily: 'monospace', resize: 'vertical' }}
               />
               <button
                 type="button"
                 className="btn btn-primary"
                 style={{ width: '100%', marginTop: 8 }}
                 onClick={() => {
-                  navigator.clipboard.writeText(filled).then(() => showToast('已复制到剪贴板', 'ok')).catch(() => showToast('复制失败', 'err'));
+                  navigator.clipboard.writeText(filled).then(() => showToast(tr('vibe_tpl_copy_ok'), 'ok')).catch(() => showToast(tr('vibe_toast_copy_fail'), 'err'));
                 }}
               >
-                📋 复制
+                {tr('vibe_tpl_copy')}
               </button>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>复制后到「AI 开发 IDE」粘贴即可。</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>{tr('vibe_tpl_footer')}</div>
             </>
           )}
         </div>
@@ -1582,23 +1609,26 @@ function VibeTemplatesPanel() {
 }
 
 function VibeHistoryPanel() {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  void langTick;
   const { data, loading, error, reload } = useFetch(`${API}/vibe/history`);
   const clear = () => {
-    if (!confirm('清空历史？')) return;
+    if (!confirm(tr('vibe_hist_clear_confirm'))) return;
     fetch(`${API}/vibe/history`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
       .then(() => {
         reload();
-        showToast('历史已清空', 'ok');
+        showToast(tr('vibe_hist_cleared'), 'ok');
       })
-      .catch(() => showToast('清空失败', 'err'));
+      .catch(() => showToast(tr('vibe_hist_clear_fail'), 'err'));
   };
   if (loading) {
     return (
       <div>
-        <div className="section-title">执行历史</div>
+        <div className="section-title">{tr('vibe_hist_panel')}</div>
         <PageSkeleton cards={1} />
       </div>
     );
@@ -1606,7 +1636,7 @@ function VibeHistoryPanel() {
   if (error) {
     return (
       <div>
-        <div className="section-title">执行历史</div>
+        <div className="section-title">{tr('vibe_hist_panel')}</div>
         <LoadError message={error} onRetry={reload} />
       </div>
     );
@@ -1614,26 +1644,26 @@ function VibeHistoryPanel() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="section-title">执行历史（全局摘要）</div>
+        <div className="section-title">{tr('vibe_hist_panel_sub')}</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <RefreshBtn onClick={reload} />
-          <button type="button" className="btn btn-sm" style={{ background: '#7f1d1d', color: '#fca5a5' }} onClick={clear}>
-            清空
+          <button type="button" className="btn btn-sm btn-danger" onClick={clear}>
+            {tr('vibe_hist_clear')}
           </button>
         </div>
       </div>
       <div className="card scroll-slim" style={{ maxHeight: 560, overflowY: 'auto' }}>
         {(data || []).length === 0 ? (
-          <div className="empty">暂无历史记录</div>
+          <div className="empty">{tr('vibe_hist_empty')}</div>
         ) : (
           [...(data || [])].reverse().map((h, i) => (
             <div key={i} className="list-item" style={{ flexDirection: 'column', gap: 4 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
-                <span style={{ fontSize: 11, color: '#64748b' }}>{h.ts && h.ts.slice(0, 16)}</span>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>{h.ts && h.ts.slice(0, 16)}</span>
                 <span className={`tag ${h.ok ? 'tag-done' : 'tag-p0'}`}>{h.tool}</span>
-                <span style={{ flex: 1, fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.prompt}</span>
+                <span style={{ flex: 1, fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.prompt}</span>
               </div>
-              {h.output && <div style={{ fontSize: 11, color: '#64748b', background: '#0f172a', padding: '4px 8px', borderRadius: 4, maxHeight: 60, overflow: 'hidden' }}>{h.output}</div>}
+              {h.output && <div style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--surface-input)', padding: '4px 8px', borderRadius: 4, maxHeight: 60, overflow: 'hidden' }}>{h.output}</div>}
             </div>
           ))
         )}

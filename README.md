@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](ROADMAP.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Tools](https://img.shields.io/badge/tools-Claude%20Code%20%7C%20opencode%20%7C%20Cursor%20%7C%20Trae-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
+[![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
 
 [快速开始](#快速开始) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
@@ -17,7 +17,7 @@
 
 ## 项目目标
 
-AI 编码工具（Claude Code、Cursor、opencode 等）正在改变软件开发方式，但面临三个核心挑战：
+AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变软件开发方式，但面临三个核心挑战：
 
 | 挑战 | ai-team-devops 的解法 |
 |------|----------------------|
@@ -66,15 +66,20 @@ AI 编码工具（Claude Code、Cursor、opencode 等）正在改变软件开发
 
 ```bash
 bash sop/tools/init-ai-project.sh my-app
-# 生成：CLAUDE.md / opencode.json / .cursorrules / .windsurfrules / .trae/rules.md
+# 生成：AGENTS.md / .codex/config.toml / .codex/hooks.json / CLAUDE.md / opencode.json / .cursorrules / .windsurfrules / .trae/rules.md
 ```
 
-支持：Claude Code · opencode · Cursor · Trae · Qoder · Windsurf
+支持：Codex CLI · Claude Code · opencode · Cursor · Trae · Qoder · Windsurf
+
+### 🎛️ 统一 AI 能力控制平面
+- **统一能力注册**：`.ai-memory/ai_capabilities.json` 描述上下文加载、工具守卫、权限决策、审计、状态持久化等标准能力
+- **统一 Hook 引擎**：`sop/tools/sop_ai_hook.py` 承载策略，各工具只做 adapter 映射
+- **统一调度优化**：Web / Vibe / Agent 编排 / MCP / A2A 共享状态、规则、知识和质量信号
 
 ### 🔌 MCP & 技能体系
 - **MCP Server**：LanceDB 语义搜索直接暴露为 MCP 工具
-- **自定义命令**：`/plan` `/review` `/test` `/commit` `/debug` `/standup` `/evolve`
-- **Hooks**：工具调用前安全检查、调用后状态更新、会话结束快照
+- **自定义命令 / Skills**：`/plan` `/review` `/test` `/commit` `/debug` `/standup` `/evolve`
+- **Hooks**：Codex/Claude 工具调用前安全检查、权限请求拦截、调用后状态更新、会话结束快照
 
 ---
 
@@ -112,6 +117,15 @@ claude  # 自动读取 CLAUDE.md 和 .claude/settings.json
 
 可用命令：`/plan` · `/review` · `/test` · `/commit` · `/debug` · `/standup` · `/evolve`
 
+### 在 Codex CLI 中使用
+
+```bash
+npm install -g @openai/codex
+codex  # 自动读取 AGENTS.md、.codex/config.toml 和 .codex/hooks.json
+```
+
+Codex hooks 首次出现时需要在 Codex 界面中审查并信任。项目默认 hook 只做 sop 上下文注入、危险命令拦截、活动审计和 `memory/current_state.json` 更新时间同步。
+
 ### 在 opencode 中使用
 
 ```bash
@@ -136,6 +150,10 @@ ai-team-devops/
 ├── .claude/                   # Claude Code 配置
 │   ├── commands/              # 自定义命令
 │   └── hooks/                 # 自动化 hooks
+├── .codex/                    # Codex CLI 配置
+│   ├── config.toml            # 模型 / 沙箱 / approval / feature flags
+│   ├── hooks.json             # SessionStart / PreToolUse / PermissionRequest / PostToolUse / Stop
+│   └── hooks/                 # sop hook 脚本
 ├── ARCHITECTURE.md            # 系统架构设计
 ├── docs/                      # 人类可读文档索引与使用手册
 │   ├── README.md

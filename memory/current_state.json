@@ -1,0 +1,21 @@
+{
+  "project_id": "sop-dev",
+  "created_at": "2026-05-13T03:07:07Z",
+  "updated_at": "2026-05-13T08:04:05Z",
+  "phase": "INIT",
+  "sprint": null,
+  "tasks": {
+    "completed": [
+      "T-codex-cli-hooks: \u652f\u6301 Codex CLI\u3001AGENTS.md\u3001.codex hooks \u4e0e Web CLI/Vibe \u96c6\u6210",
+      "T-ai-control-plane: \u5728 sop \u5185\u7edf\u4e00\u7ef4\u62a4 AI \u80fd\u529b\u6ce8\u518c\u8868\u3001Hook \u5f15\u64ce\u4e0e\u5de5\u5177\u9002\u914d\u89c4\u8303"
+    ],
+    "in_progress": [],
+    "blocked": [],
+    "pending": []
+  },
+  "metrics": {
+    "completion_rate": 0,
+    "velocity": 0,
+    "blockers_count": 0
+  }
+}

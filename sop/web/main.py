@@ -3,6 +3,7 @@ ai-team-devops 项目管理后台 - 模块化入口
 每个路由模块独立，按需加载，AI 修改时只需读取对应模块文件
 """
 import os
+from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 from routers import requirements, tasks, issues, agents, skills, mcp_mgr, auth, system, dev_flow
 from routers import models, orchestration, docker_env, skill_repo, vibe, design_docs
 from routers.db import rows, table, now, PROJECT_PATH
+
+_APP_BOOT_AT = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
 
 app.include_router(requirements.router)
 app.include_router(tasks.router)
@@ -35,7 +38,6 @@ app.include_router(dev_flow.router)
 # ── 保留原有接口（向后兼容） ──────────────────────────────────────
 import json
 import re
-from datetime import datetime
 from typing import Optional, List
 from fastapi import HTTPException, Query, File, UploadFile
 from fastapi.responses import JSONResponse
@@ -375,8 +377,35 @@ def search_knowledge(q: str = Query(...), category: Optional[str] = None):
 
 @app.get("/api/health")
 def health():
-    """探活与版本信息（监控 / 网关健康检查）。"""
-    return {"ok": True, "service": "ai-team-devops-manager", "version": "2.0"}
+    """探活与版本信息（监控 / 网关健康检查）；展示版本可读自 .ai-memory/admin_release.json 或环境变量 ADMIN_RELEASE_VERSION。"""
+    display_version = "2.0"
+    notes_val: Optional[str] = None
+    updated_at: Optional[str] = None
+    rp = PROJECT_PATH / ".ai-memory" / "admin_release.json"
+    if rp.is_file():
+        try:
+            d = json.loads(rp.read_text(encoding="utf-8"))
+            display_version = str(d.get("displayVersion") or d.get("display_version") or display_version)[:64]
+            raw_notes = d.get("notes")
+            if raw_notes is not None and str(raw_notes).strip():
+                notes_val = str(raw_notes)[:800]
+            updated_at = d.get("updatedAt") or d.get("updated_at")
+            if updated_at is not None:
+                updated_at = str(updated_at)[:40]
+        except Exception:
+            pass
+    envv = (os.getenv("ADMIN_RELEASE_VERSION") or "").strip()
+    if envv:
+        display_version = envv[:64]
+    return {
+        "ok": True,
+        "service": "ai-team-devops-manager",
+        "version": display_version,
+        "notes": notes_val,
+        "updatedAt": updated_at,
+        "startedAt": _APP_BOOT_AT,
+        "pid": os.getpid(),
+    }
 
 # ── v1 版本化路由（新接口统一用 /api/v1/） ────────────────────────
 from routers import notify, cli_wrapper

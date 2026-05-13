@@ -90,6 +90,9 @@ def _ui_merge_row(r: Dict[str, Any], st: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(r)
     fd = (st.get("fields") or {}).get(r.get("id")) or {}
     out["dev_tool"] = str(fd.get("dev_tool") or "")
+    for k in ("artifact_url", "artifact_path", "debug_notes", "branch"):
+        if k in fd and fd.get(k) is not None:
+            out[k] = str(fd.get(k) or "")
     return out
 
 
@@ -124,6 +127,10 @@ class TaskCreate(BaseModel):
     req_id: Optional[str] = ""
     sprint_id: Optional[str] = ""
     dev_tool: Optional[str] = ""
+    artifact_url: Optional[str] = ""
+    artifact_path: Optional[str] = ""
+    debug_notes: Optional[str] = ""
+    branch: Optional[str] = ""
 
 
 class TaskUpdate(BaseModel):
@@ -139,6 +146,10 @@ class TaskUpdate(BaseModel):
     human_notes: Optional[str] = None
     req_id: Optional[str] = None
     dev_tool: Optional[str] = None
+    artifact_url: Optional[str] = None
+    artifact_path: Optional[str] = None
+    debug_notes: Optional[str] = None
+    branch: Optional[str] = None
 
 
 class ReorderTasksBody(BaseModel):
@@ -183,8 +194,19 @@ def create_task(body: TaskCreate):
     t.add([row])
     st = _ui_load()
     _ui_append_to_column(st, tid, body.priority)
+    fld: Dict[str, Any] = {}
     if (body.dev_tool or "").strip():
-        st.setdefault("fields", {})[tid] = {"dev_tool": (body.dev_tool or "").strip()}
+        fld["dev_tool"] = (body.dev_tool or "").strip()
+    if (body.artifact_url or "").strip():
+        fld["artifact_url"] = (body.artifact_url or "").strip()[:800]
+    if (body.artifact_path or "").strip():
+        fld["artifact_path"] = (body.artifact_path or "").strip()[:400]
+    if (body.debug_notes or "").strip():
+        fld["debug_notes"] = (body.debug_notes or "").strip()[:2000]
+    if (body.branch or "").strip():
+        fld["branch"] = (body.branch or "").strip()[:120]
+    if fld:
+        st.setdefault("fields", {})[tid] = fld
     _ui_save(st)
     return {"ok": True, "id": tid}
 
@@ -248,9 +270,13 @@ def update_task(task_id: str, body: TaskUpdate):
         raw = body.model_dump(exclude_unset=True)
     except AttributeError:
         raw = body.dict(exclude_unset=True)
-    ui_tool = raw.pop("dev_tool", None) if "dev_tool" in raw else None
+    ui_keys = ("dev_tool", "artifact_url", "artifact_path", "debug_notes", "branch")
+    ui_patch: Dict[str, Any] = {}
+    for uk in ui_keys:
+        if uk in raw:
+            ui_patch[uk] = raw.pop(uk)
     vals = {k: v for k, v in raw.items() if v is not None}
-    if not vals and ui_tool is None:
+    if not vals and not ui_patch:
         return {"ok": True}
     if vals:
         vals["updated_at"] = now()
@@ -258,10 +284,24 @@ def update_task(task_id: str, body: TaskUpdate):
     st = _ui_load()
     if "priority" in vals:
         _ui_append_to_column(st, task_id, str(vals["priority"]))
-    if ui_tool is not None:
+    if ui_patch:
         fld = st.setdefault("fields", {}).setdefault(task_id, {})
-        fld["dev_tool"] = ui_tool or ""
-    if "priority" in vals or ui_tool is not None:
+        for k, v in ui_patch.items():
+            if v is None or (isinstance(v, str) and not str(v).strip()):
+                fld.pop(k, None)
+                continue
+            s = str(v).strip()
+            if k == "artifact_url":
+                fld[k] = s[:800]
+            elif k == "artifact_path":
+                fld[k] = s[:400]
+            elif k == "debug_notes":
+                fld[k] = s[:2000]
+            elif k == "branch":
+                fld[k] = s[:120]
+            elif k == "dev_tool":
+                fld[k] = s[:80]
+    if "priority" in vals or ui_patch:
         _ui_save(st)
     return {"ok": True}
 

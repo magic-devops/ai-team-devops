@@ -1,12 +1,13 @@
 # AI 开发工具集成规范
 
-> 版本: v1.0 | 更新: 2026-05-12
+> 版本: v1.1 | 更新: 2026-05-13
 > 本规范适用于所有主流 AI 编码工具，确保 sop 体系在任何工具中均可高效运行。
 
 ## 支持的工具
 
 | 工具 | 类型 | 配置文件 | 规则/上下文机制 |
 |------|------|---------|----------------|
+| **Codex CLI** | CLI / App / IDE | `AGENTS.md` + `.codex/config.toml` + `.codex/hooks.json` | AGENTS.md 自动注入上下文，hooks 执行生命周期守卫 |
 | **Claude Code** | CLI | `.claude/settings.json` + `CLAUDE.md` | CLAUDE.md 自动注入上下文 |
 | **opencode** | TUI/CLI | `opencode.json` | system prompt + rules |
 | **Cursor** | IDE | `.cursorrules` / `.cursor/rules/` | Rules for AI |
@@ -21,12 +22,70 @@
 ```
 项目根目录
 ├── CLAUDE.md              # Claude Code 主入口
+├── AGENTS.md              # Codex 主入口
+├── .codex/
+│   ├── config.toml        # Codex 模型 / 沙箱 / approval / hooks feature
+│   └── hooks.json         # Codex 生命周期 hooks
 ├── opencode.json          # opencode 配置
 ├── .cursorrules           # Cursor 规则（软链或复制）
 ├── .trae/rules.md         # Trae 规则
 ├── .ai-memory/            # 共享记忆（所有工具共用）
 └── memory/                # 共享状态（所有工具共用）
 ```
+
+## 统一控制平面
+
+sop 是统一 AI 能力控制平面，不把策略散落在每个工具配置里：
+
+- 标准能力定义在 `sop/tools/AI_CAPABILITY_CONTROL_PLANE.md`。
+- 标准能力注册模板在 `sop/tools/AI_CAPABILITY_REGISTRY.json`，初始化后复制为 `.ai-memory/ai_capabilities.json`。
+- Hook 策略集中在 `sop/tools/sop_ai_hook.py`，Codex / Claude / CLI wrapper / IDE 降级适配只负责事件映射。
+- Web 后台、Vibe Coding、Agent 编排、MCP、A2A 都应读取同一份状态、规则和能力注册表。
+
+新增 AI 开发工具时，先判断它支持哪些原生能力：规则入口、hooks、MCP、非交互 CLI、审批流、沙箱。然后只写 adapter，不复制策略。
+
+## Codex CLI 配置
+
+Codex CLI 是 OpenAI 本地编码 Agent，推荐与 sop 的 `AGENTS.md`、共享记忆和 hook 审计一起使用：
+
+```bash
+npm install -g @openai/codex
+# 或
+brew install --cask codex
+
+codex
+codex exec "按 AGENTS.md 规约完成一次健康检查"
+```
+
+`.codex/config.toml` 推荐最小配置：
+
+```toml
+model = "gpt-5.5"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[features]
+hooks = true
+codex_hooks = true
+
+[sandbox_workspace_write]
+network_access = false
+```
+
+`AGENTS.md` 保持与 `CLAUDE.md` 同源，至少包含启动检查、核心原则、构建命令和安全约束。`init-ai-project.sh` 会在缺失时生成，不覆盖已有人工维护版本。Codex 0.130.0 本地 feature 列表中 `hooks` 已为 stable；官方 hooks 文档仍展示 `codex_hooks`，模板同时写入两项以兼容新旧命名。
+
+### Codex hooks 能力映射
+
+| 事件 | sop 用法 | 注意事项 |
+|------|---------|----------|
+| `SessionStart` | 注入启动检查上下文，提醒读取 `memory/current_state.json` 与规则库 | matcher 可匹配 `startup` / `resume` / `clear` |
+| `UserPromptSubmit` | 记录用户回合审计，后续可扩展 prompt 分类与任务绑定 | matcher 当前不生效 |
+| `PreToolUse` | 在工具执行前拦截危险 Bash / 写入类动作 | 作为守卫，不替代最小权限和人工 review |
+| `PermissionRequest` | Codex 请求权限时二次策略判断 | 用于外部审批 UI 或团队安全策略 |
+| `PostToolUse` | 记录工具执行，后续可追加 lint/test 摘要 | 可对 `Bash`、`apply_patch`、MCP 工具名做 matcher |
+| `Stop` | 会话结束时更新 `memory/current_state.json.updated_at` | 适合快照、交接、演进提醒 |
+
+Hook 命令会收到 JSON stdin；脚本输出 JSON 可影响上下文、警告或拒绝执行。Codex 会提示审查新安装或修改过的 hook，因为 hook 可在沙箱外运行，团队必须只信任仓库内可读、可审计、无外部下载执行的脚本。
 
 ## opencode 配置
 
@@ -102,6 +161,6 @@
 ## 跨工具共享记忆
 
 所有工具共用 `.ai-memory/` 和 `memory/` 目录，实现状态共享：
-- 在 Claude Code 中开始的任务，可以在 Cursor 中继续
+- 在 Codex CLI / Claude Code 中开始的任务，可以在 Cursor 中继续
 - 规则库 `.ai-memory/rules/RULES.md` 对所有工具可见
 - `memory/current_state.json` 记录最新项目状态

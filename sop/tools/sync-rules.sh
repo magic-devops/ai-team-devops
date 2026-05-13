@@ -8,6 +8,27 @@ SOP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "🔄 同步规范到: $PROJECT"
 
+# 同步 AGENTS.md（Codex）
+if [ ! -f "$PROJECT/AGENTS.md" ]; then
+cat > "$PROJECT/AGENTS.md" << 'AGENTS'
+# AI 开发规约（Codex）
+
+## 启动检查
+
+1. 读取 `memory/current_state.json` 了解当前状态
+2. 读取 `.ai-memory/rules/RULES.md` 加载项目规则
+3. 按需加载 `sop/` 下对应规范
+
+## 核心规则
+
+- 只写解决问题所需的最少代码
+- 失败时分析根因并换思路，最多重试 3 次
+- commit 格式: `type(scope): desc [T-id]`
+- 禁止硬编码密钥，所有敏感配置从环境变量读取
+- Codex hooks 只做校验、审计和状态同步；高风险命令必须人工确认
+AGENTS
+fi
+
 # 同步 .cursorrules
 cat > "$PROJECT/.cursorrules" << 'CURSOR'
 # AI 开发规约（Cursor）
@@ -40,4 +61,4 @@ cp "$PROJECT/.cursorrules" "$PROJECT/.trae/rules.md"
 # 同步 .windsurfrules
 cp "$PROJECT/.cursorrules" "$PROJECT/.windsurfrules"
 
-echo "✅ 已同步: .cursorrules / .trae/rules.md / .windsurfrules"
+echo "✅ 已同步: AGENTS.md（若缺失）/ .cursorrules / .trae/rules.md / .windsurfrules"

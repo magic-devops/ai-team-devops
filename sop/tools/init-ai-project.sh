@@ -134,12 +134,16 @@ backup_before_reinit() {
   [ -d memory ] && paths+=(memory)
   [ -d .ai-memory ] && paths+=(.ai-memory)
   [ -f .claude/settings.json ] && paths+=(.claude/settings.json)
+  [ -f .codex/config.toml ] && paths+=(.codex/config.toml)
+  [ -f .codex/hooks.json ] && paths+=(.codex/hooks.json)
+  [ -f .codex/hooks/sop_hook.py ] && paths+=(.codex/hooks/sop_hook.py)
   [ -f opencode.json ] && paths+=(opencode.json)
   [ -f .cursorrules ] && paths+=(.cursorrules)
   [ -f .windsurfrules ] && paths+=(.windsurfrules)
   [ -f .trae/rules.md ] && paths+=(.trae/rules.md)
   [ -f .qoder/context.md ] && paths+=(.qoder/context.md)
   [ -f CLAUDE.md ] && paths+=(CLAUDE.md)
+  [ -f AGENTS.md ] && paths+=(AGENTS.md)
 
   n="${#paths[@]}"
   if [ "${n}" -eq 0 ]; then
@@ -159,6 +163,7 @@ clean_for_reinit() {
   rm -f opencode.json .cursorrules .windsurfrules
   rm -f .trae/rules.md .qoder/context.md
   rm -f .claude/settings.json
+  rm -f .codex/config.toml .codex/hooks.json .codex/hooks/sop_hook.py
 
   if [ "${KEEP_CLAUDE_MD}" -eq 0 ]; then
     rm -f CLAUDE.md
@@ -166,6 +171,164 @@ clean_for_reinit() {
   else
     step "保留现有 CLAUDE.md（--keep-claude-md）"
   fi
+}
+
+write_agents_md() {
+  if [ -f AGENTS.md ]; then
+    step "跳过 AGENTS.md（已存在，init/reinit 不覆盖）"
+    return 0
+  fi
+  cat > AGENTS.md << EOF
+# ${PROJECT_NAME}
+
+## AI 开发规约
+
+本项目使用 sop 规约体系，Codex CLI / Codex IDE / Codex App 启动时优先读取本文件。
+
+### 启动检查清单
+
+1. 读取 \`memory/current_state.json\` 了解当前状态
+2. 读取 \`.ai-memory/rules/RULES.md\` 加载项目规则
+3. 确认当前阶段和待处理任务
+
+### 核心原则
+
+- 最小化：只写解决问题所需的最少代码
+- 状态外化：进度持久化到 memory/ 目录
+- 可追溯：commit 格式 \`type(scope): desc [T-id]\`
+- 安全优先：用户输入必须验证，禁止硬编码密钥
+- Hook 可审计：Codex hooks 只做校验、审计和状态同步；涉及外部网络或写入高风险路径必须人工确认
+
+### 技术栈
+
+（在此填写项目技术栈）
+
+### 构建命令
+
+\`\`\`bash
+# 构建
+# npm run build
+
+# 测试
+# npm test
+
+# 代码检查
+# npm run lint
+\`\`\`
+EOF
+}
+
+write_codex_config() {
+  mkdir -p .codex/hooks
+  cat > .codex/config.toml << 'EOF'
+model = "gpt-5.5"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[features]
+hooks = true
+codex_hooks = true
+
+[sandbox_workspace_write]
+network_access = false
+EOF
+
+  cat > .codex/hooks.json << 'EOF'
+{
+  "description": "sop project hooks for Codex CLI: startup context, guarded tool use, audit log, and state persistence.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" SessionStart",
+            "timeout": 10,
+            "statusMessage": "Loading sop context"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" UserPromptSubmit",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PreToolUse",
+            "timeout": 10,
+            "statusMessage": "Checking sop guardrails"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PermissionRequest",
+            "timeout": 10,
+            "statusMessage": "Checking approval policy"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" PostToolUse",
+            "timeout": 10,
+            "statusMessage": "Recording tool activity"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/sop_hook.py\" Stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+  cat > .codex/hooks/sop_hook.py << 'EOF'
+#!/usr/bin/env python3
+"""Codex adapter shim for the central sop AI hook engine."""
+from __future__ import annotations
+
+import runpy
+import sys
+from pathlib import Path
+
+event = sys.argv[1] if len(sys.argv) > 1 else ""
+engine = Path(__file__).resolve().parents[2] / "sop" / "tools" / "sop_ai_hook.py"
+sys.argv = [str(engine), "codex", event]
+runpy.run_path(str(engine), run_name="__main__")
+EOF
 }
 
 confirm_reinit() {
@@ -229,6 +392,22 @@ AI 智能体每次启动时读取此文件，加载适用规则。
 - 活跃规则: 0
 - 废弃规则: 0
 EOF
+}
+
+write_ai_capability_registry() {
+  mkdir -p .ai-memory
+  if [ -f "${SCRIPT_DIR}/AI_CAPABILITY_REGISTRY.json" ]; then
+    cp "${SCRIPT_DIR}/AI_CAPABILITY_REGISTRY.json" .ai-memory/ai_capabilities.json
+  else
+    cat > .ai-memory/ai_capabilities.json << 'EOF'
+{
+  "version": "1.0",
+  "control_plane": "sop",
+  "capabilities": [],
+  "adapters": {}
+}
+EOF
+  fi
 }
 
 patch_gitignore() {
@@ -428,29 +607,36 @@ OEOF
 }
 
 run_init() {
-  step "1/8 创建目录 .ai-memory、memory 子结构…"
+  step "1/10 创建目录 .ai-memory、memory 子结构…"
   mkdir -p .ai-memory/{lancedb,snapshots,rules/{coding,testing,security,workflow}}
   mkdir -p memory/{decisions,incidents,sprints}
 
-  step "2/8 写入 memory/current_state.json…"
+  step "2/10 写入 memory/current_state.json…"
   write_current_state
 
-  step "3/8 写入 .ai-memory/rules/RULES.md…"
+  step "3/10 写入 .ai-memory/rules/RULES.md…"
   write_rules_md
 
-  step "4/8 合并 .gitignore…"
+  step "4/10 写入统一 AI 能力注册表…"
+  write_ai_capability_registry
+
+  step "5/10 合并 .gitignore…"
   patch_gitignore
 
-  step "5/8 写入 .claude/settings.json…"
+  step "6/10 写入 .claude/settings.json…"
   write_claude_settings
 
-  step "6/8 写入 CLAUDE.md（若允许）…"
+  step "7/10 写入 CLAUDE.md / AGENTS.md（若允许）…"
   write_claude_md
+  write_agents_md
 
-  step "7/8 可选 LanceDB 初始化…"
+  step "8/10 写入 Codex CLI 配置与 hooks…"
+  write_codex_config
+
+  step "9/10 可选 LanceDB 初始化…"
   init_lancedb_optional
 
-  step "8/8 写入 opencode / IDE 规则与 sop/custom…"
+  step "10/10 写入 opencode / IDE 规则与 sop/custom…"
   write_tool_configs
 }
 
@@ -485,7 +671,11 @@ log "完成。目录与文件说明:"
 log "  memory/current_state.json  - 项目状态"
 log "  .ai-memory/lancedb/        - 向量记忆库"
 log "  .ai-memory/rules/          - 规则库"
+log "  .ai-memory/ai_capabilities.json - 统一 AI 能力注册表"
 log "  CLAUDE.md                  - Claude Code 规约"
+log "  AGENTS.md                  - Codex CLI / App 规约"
+log "  .codex/config.toml         - Codex CLI 配置"
+log "  .codex/hooks.json          - Codex hook 声明（需在 Codex 中审查信任）"
 log "  opencode.json              - opencode 配置"
 log "  .cursorrules               - Cursor 规则"
 log "  .windsurfrules             - Windsurf 规则"

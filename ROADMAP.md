@@ -6,7 +6,7 @@
 - Hermes 增强（CoT 推理、自我反思、置信度自评）
 - LanceDB 语义记忆（任务/规则/知识库）
 - Web 管理后台（需求/任务/问题/Sprint/搜索）
-- 多工具支持（Claude Code/opencode/Cursor/Trae/Windsurf）
+- 多工具支持（Codex CLI/Claude Code/opencode/Cursor/Trae/Windsurf）
 - 完整规范库（Java/前端/数据库/安全/CI-CD/测试）
 - A2A 协议集成、MCP Server
 - 自我进化机制（规则提取 + 知识蒸馏）
@@ -18,9 +18,10 @@
 - Agent 编排（工作流定义、工具选择、版本管理）
 - Docker 环境管理（环境检查、预设组件一键启动）
 - 技能仓库（Git 仓库同步、安装/卸载/版本管理）
-- Vibe Coding（界面化调用 claude/opencode/aider）
+- Vibe Coding（界面化调用 codex/claude/opencode/aider）
 - 消息通知（钉钉/企业微信/Slack Webhook）
-- CLI 工具管理（openclaw/workbuddy/Hermes-agent 封装）
+- CLI 工具管理（Codex CLI/openclaw/workbuddy/Hermes-agent 封装）
+- Codex hooks（SessionStart/UserPromptSubmit/PreToolUse/PermissionRequest/PostToolUse/Stop）与 AGENTS.md 集成
 - API 版本化（/api/v1/，向后兼容）
 - 模块化单元化约定（P9 原则，文件行数上限）
 
