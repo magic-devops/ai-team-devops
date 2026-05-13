@@ -3,6 +3,7 @@
 | 文档 | 说明 |
 |------|------|
 | [USER_MANUAL.md](USER_MANUAL.md) | Web 管理后台使用手册（操作者） |
+| [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与新特性 |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构（含 Web、Vibe、研发流 API） |
 | [../README.md](../README.md) | 仓库总览与快速开始 |
 | [../TUTORIAL.md](../TUTORIAL.md) | 详细教程 |

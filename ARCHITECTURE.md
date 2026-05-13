@@ -151,6 +151,11 @@ FastAPI main:app（/api/*）
 
 - `GET /api/dev-flow/summary`：需求/任务/问题/Sprint/技术方案数/Agent 与仓库线索聚合，供可视化驾驶舱与规则建议  
 
+**Agent 编排与开发工具（`/api/orchestration`）**
+
+- Web 侧：开发工具 **分类与搜索**、默认工具、内置覆盖/隐藏、自定义工具、**AI 安装方案**（Markdown + 白名单 `actions` 与 `argv_shell`）、**受控一键安装**、安装控制台与 JSONL 历史、本机 **环境检查**（与 `docker_env` 同源，支持缺失项 **AI 方案** 与 **定位工具**）。  
+- 数据目录：`PROJECT_PATH/.ai-memory/orchestration/`（详见 [docs/ORCHESTRATION_DEV_TOOLS.md](../docs/ORCHESTRATION_DEV_TOOLS.md)）。
+
 **人工介入点**：调整需求优先级、解除任务阻塞、关闭问题、新建 Sprint、维护技术方案版本、配置 Agent/专家组、在 Vibe 中发起实现/审查类对话
 
 ## 数据流
@@ -178,7 +183,8 @@ Reviewer 审查（置信度 < 0.85 时触发）
 ├── ARCHITECTURE.md            # 本架构说明
 ├── TUTORIAL.md                # 详细教程（含 Web）
 ├── docs/
-│   └── USER_MANUAL.md         # Web 管理后台使用手册（操作者向）
+│   ├── USER_MANUAL.md         # Web 管理后台使用手册（操作者向）
+│   └── ORCHESTRATION_DEV_TOOLS.md  # 编排、开发工具、受控安装 API
 ├── CLAUDE.md.template
 ├── .claude/                   # Claude Code：settings / hooks / commands
 ├── sop/

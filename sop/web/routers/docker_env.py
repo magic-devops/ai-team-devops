@@ -304,6 +304,8 @@ def _builtin_checks_dict() -> Dict[str, Any]:
         "jq": ["jq", "--version"],
         "curl": ["curl", "--version"],
         "codex": ["codex", "--version"],
+        "pre_commit": ["pre-commit", "--version"],
+        "tsx": ["tsx", "--version"],
         "claude": ["claude", "--version"],
         "opencode": ["opencode", "--version"],
     }
@@ -705,6 +707,128 @@ def remediate_run(body: RemediateRunBody):
             raise HTTPException(404, "未找到 sop/tools/health-check.sh")
         return _run(["bash", str(script)], cwd=str(PROJECT_PATH), timeout=120)
     raise HTTPException(400, "action 仅支持 install_integrations | health_check")
+
+
+_TOOL_INSTALL_CMDS: Dict[str, str] = {
+    "python3": "brew install python3 2>/dev/null || (apt-get update -qq && apt-get install -y python3) 2>/dev/null || yum install -y python3",
+    "java": "brew install openjdk 2>/dev/null || (apt-get update -qq && apt-get install -y default-jdk) 2>/dev/null || yum install -y java-11-openjdk",
+    "mvn": "brew install maven 2>/dev/null || (apt-get update -qq && apt-get install -y maven) 2>/dev/null || yum install -y maven",
+    "gradle": "brew install gradle 2>/dev/null || (apt-get update -qq && apt-get install -y gradle) 2>/dev/null || yum install -y gradle",
+    "node": "brew install node 2>/dev/null || (curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && apt-get install -y nodejs) 2>/dev/null || yum install -y nodejs",
+    "npm": "brew install node 2>/dev/null || (apt-get update -qq && apt-get install -y npm) 2>/dev/null || yum install -y npm",
+    "pnpm": "npm install -g pnpm",
+    "go": "brew install go 2>/dev/null || (apt-get update -qq && apt-get install -y golang) 2>/dev/null || yum install -y golang",
+    "uv": "pip3 install uv",
+    "bun": "curl -fsSL https://bun.sh/install | bash",
+    "deno": "curl -fsSL https://deno.land/install.sh | sh",
+    "kubectl": "brew install kubectl 2>/dev/null || (curl -LO https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/)",
+    "docker": "curl -fsSL https://get.docker.com | sh",
+    "git": "brew install git 2>/dev/null || (apt-get update -qq && apt-get install -y git) 2>/dev/null || yum install -y git",
+}
+
+_TOOL_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,47}$")
+
+
+class ToolInstallBody(BaseModel):
+    tool: str = Field(..., min_length=1, max_length=48)
+
+
+@router.post("/tool/install")
+def tool_install(body: ToolInstallBody):
+    """AI-assisted one-click install for a missing tool."""
+    tool = (body.tool or "").strip()
+    if not _TOOL_NAME_RE.match(tool):
+        raise HTTPException(400, "非法工具名")
+    cmd = _TOOL_INSTALL_CMDS.get(tool)
+    if not cmd:
+        raise HTTPException(400, f"暂不支持自动安装 {tool}，请手动安装")
+    r = _run(["sh", "-c", cmd], timeout=600)
+    return r
+
+
+@router.get("/tool/install-cmd")
+def tool_install_cmd(tool: str = Query(..., max_length=48)):
+    """Return the install command for a tool without executing it."""
+    t = (tool or "").strip()
+    if not _TOOL_NAME_RE.match(t):
+        raise HTTPException(400, "非法工具名")
+    cmd = _TOOL_INSTALL_CMDS.get(t)
+    if not cmd:
+        raise HTTPException(404, f"暂无 {t} 的安装命令")
+    return {"tool": t, "cmd": cmd}
+
+
+@router.websocket("/tool/install/ws")
+async def tool_install_ws(websocket: WebSocket, tool: str = Query(..., max_length=48)):
+    """流式安装：WebSocket 推送 stdout/stderr，支持交互输入。"""
+    await websocket.accept()
+    t = (tool or "").strip()
+    if not _TOOL_NAME_RE.match(t):
+        await websocket.send_json({"type": "error", "message": f"非法工具名: {t}"})
+        await websocket.close(code=4400)
+        return
+    cmd = _TOOL_INSTALL_CMDS.get(t)
+    if not cmd:
+        await websocket.send_json({"type": "error", "message": f"暂无 {t} 的安装命令"})
+        await websocket.close(code=4400)
+        return
+    await websocket.send_json({"type": "cmd", "cmd": cmd})
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sh", "-c", cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(PROJECT_PATH),
+        )
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close(code=4500)
+        return
+    try:
+        while True:
+            recv_task = asyncio.create_task(websocket.receive_text())
+            read_task = asyncio.create_task(proc.stdout.read(2048))
+            done, pend = await asyncio.wait({recv_task, read_task}, return_when=asyncio.FIRST_COMPLETED, timeout=600.0)
+            for task in pend:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            if not done:
+                break
+            if read_task in done:
+                chunk = read_task.result()
+                if not chunk:
+                    break
+                await websocket.send_json({"type": "stdout", "data": chunk.decode(errors="replace")})
+            elif recv_task in done:
+                try:
+                    raw = recv_task.result()
+                except WebSocketDisconnect:
+                    break
+                try:
+                    msg = json.loads(raw)
+                    stdin_data = msg.get("stdin", "")
+                except Exception:
+                    stdin_data = raw
+                if proc.stdin and not proc.stdin.is_closing():
+                    proc.stdin.write((stdin_data + "\n").encode())
+                    await proc.stdin.drain()
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    rc = await proc.wait()
+    try:
+        await websocket.send_json({"type": "exit", "code": rc})
+        await websocket.close()
+    except Exception:
+        pass
 
 
 PRESETS: Dict[str, Dict[str, Any]] = {

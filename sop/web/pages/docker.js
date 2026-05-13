@@ -234,18 +234,97 @@ function EnvCheckPanel() {
       .catch(() => showToast(dockerTr('gen_req_fail'), 'err'));
   };
 
+  const [installState, setInstallState] = React.useState({});
+  const [collapsedGroups, setCollapsedGroups] = React.useState({});
+  const [installModal, setInstallModal] = React.useState(null); // {tool, logs, done, rc, ws}
+  const installInputRef = React.useRef(null);
+  const installLogsRef = React.useRef(null);
+
   const bi = (full && full.builtin) || {};
   const groups = full
     ? [
-        [dockerTr('docker_grp_dev'), ['claude', 'opencode', 'git']],
-        [dockerTr('docker_grp_py'), Object.keys(bi).filter((k) => k.startsWith('py:'))],
-        [dockerTr('docker_grp_rt'), ['python3', 'java', 'mvn', 'gradle', 'node', 'npm', 'pnpm', 'go', 'uv', 'bun', 'deno', 'kubectl']],
-        [dockerTr('docker_grp_docker'), ['docker', 'docker-compose']],
+        [dockerTr('docker_grp_dev'), 'dev', ['claude', 'opencode', 'git', 'gh', 'make', 'jq', 'curl', 'rg']],
+        [dockerTr('docker_grp_rt'), 'rt', ['python3', 'java', 'mvn', 'gradle', 'node', 'npm', 'pnpm', 'go', 'uv', 'bun', 'deno', 'kubectl']],
+        [dockerTr('docker_grp_py'), 'py', Object.keys(bi).filter((k) => k.startsWith('py:'))],
+        [dockerTr('docker_grp_docker'), 'docker', ['docker', 'docker-compose']],
       ]
     : [];
 
+  const toggleGroup = (id) => setCollapsedGroups((p) => ({ ...p, [id]: !p[id] }));
+
+  const aiInstall = (tool) => {
+    const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsBase = API.replace(/^https?/, wsProto);
+    const ws = new WebSocket(`${wsBase}/env/tool/install/ws?tool=${encodeURIComponent(tool)}`);
+    setInstallModal({ tool, logs: [], done: false, rc: null, ws });
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      setInstallModal((prev) => {
+        if (!prev) return prev;
+        const logs = [...prev.logs];
+        if (msg.type === 'cmd') logs.push({ type: 'info', text: dockerTr('docker_install_cmd') + ' ' + msg.cmd });
+        else if (msg.type === 'stdout') logs.push({ type: 'out', text: msg.data });
+        else if (msg.type === 'error') logs.push({ type: 'err', text: msg.message });
+        else if (msg.type === 'exit') {
+          logs.push({ type: msg.code === 0 ? 'ok' : 'err', text: `exit ${msg.code}` });
+          if (msg.code === 0) { showToast(dockerTr('docker_install_ok', { tool }), 'ok'); run(); }
+          return { ...prev, logs, done: true, rc: msg.code };
+        }
+        return { ...prev, logs };
+      });
+      setTimeout(() => { if (installLogsRef.current) installLogsRef.current.scrollTop = installLogsRef.current.scrollHeight; }, 30);
+    };
+    ws.onerror = () => setInstallModal((p) => p ? { ...p, logs: [...p.logs, { type: 'err', text: 'WebSocket error' }], done: true } : p);
+    ws.onclose = () => setInstallModal((p) => p && !p.done ? { ...p, done: true } : p);
+  };
+
+  const sendInstallInput = (text) => {
+    if (!text.trim() || !installModal || !installModal.ws || installModal.ws.readyState !== 1) return;
+    installModal.ws.send(JSON.stringify({ stdin: text }));
+    setInstallModal((p) => p ? { ...p, logs: [...p.logs, { type: 'in', text: '> ' + text }] } : p);
+    setTimeout(() => { if (installLogsRef.current) installLogsRef.current.scrollTop = installLogsRef.current.scrollHeight; }, 30);
+  };
+
+  const closeInstallModal = () => {
+    if (installModal && installModal.ws) try { installModal.ws.close(); } catch (_) {}
+    setInstallModal(null);
+  };
+
   return (
     <div>
+      {installModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, width: '90%', maxWidth: 640, display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{dockerTr('docker_ai_install')} · {installModal.tool}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {!installModal.done && <span style={{ fontSize: 11, color: 'var(--text3)' }}>{dockerTr('docker_installing')}</span>}
+                {installModal.done && <span style={{ fontSize: 11, color: installModal.rc === 0 ? '#86efac' : '#fca5a5' }}>exit {installModal.rc}</span>}
+                <button type="button" className="btn btn-sm btn-muted" onClick={closeInstallModal}>×</button>
+              </div>
+            </div>
+            <pre ref={installLogsRef} style={{ flex: 1, overflowY: 'auto', padding: '10px 14px', fontSize: 11, fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: '#0f172a', color: '#e2e8f0', margin: 0, minHeight: 200 }}>
+              {installModal.logs.map((l, i) => (
+                <span key={i} style={{ color: l.type === 'err' ? '#fca5a5' : l.type === 'ok' ? '#86efac' : l.type === 'info' ? '#93c5fd' : l.type === 'in' ? '#fde68a' : '#e2e8f0' }}>{l.text}</span>
+              ))}
+              {!installModal.done && '▌'}
+            </pre>
+            {!installModal.done && (
+              <div style={{ display: 'flex', gap: 6, padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+                <input
+                  ref={installInputRef}
+                  placeholder={dockerTr('docker_install_input_ph')}
+                  style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, background: 'var(--surface-input)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px' }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { sendInstallInput(e.target.value); e.target.value = ''; } }}
+                />
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => { sendInstallInput(installInputRef.current.value); installInputRef.current.value = ''; }}>
+                  {dockerTr('vibe_run')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div className="section-title">{dockerTr('docker_check_title')}</div>
@@ -281,22 +360,51 @@ function EnvCheckPanel() {
       )}
 
       {full &&
-        groups.map(([g, keys]) => (
-          <div key={g} className="card" style={{ marginBottom: 10 }}>
-            <div className="section-title">{g}</div>
-            {keys
-              .filter((k) => bi[k])
-              .map((k) => (
-                <div key={k} className="list-item">
-                  <div style={{flex: 1}}>
-                    <div className="title">{k.replace('py:', '')}</div>
-                    <div className="meta">{bi[k].version || '-'}</div>
-                  </div>
-                  <span className={`tag ${bi[k].available ? 'tag-done' : 'tag-p0'}`}>{bi[k].available ? dockerTr('docker_avail') : dockerTr('docker_missing')}</span>
+        groups.map(([g, gid, keys]) => {
+          const collapsed = collapsedGroups[gid];
+          const visibleKeys = keys.filter((k) => bi[k]);
+          const missingCount = visibleKeys.filter((k) => !bi[k]?.available).length;
+          return (
+            <div key={gid} className="card" style={{ marginBottom: 10 }}>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => toggleGroup(gid)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{collapsed ? '▶' : '▼'}</span>
+                  <div className="section-title" style={{ margin: 0 }}>{g}</div>
+                  {missingCount > 0 && (
+                    <span className="tag tag-p0" style={{ fontSize: 10 }}>{missingCount} {dockerTr('docker_missing_count')}</span>
+                  )}
                 </div>
-              ))}
-          </div>
-        ))}
+              </div>
+              {!collapsed && visibleKeys.map((k) => {
+                const info = bi[k];
+                return (
+                  <div key={k} className="list-item">
+                    <div style={{ flex: 1 }}>
+                      <div className="title">{k.replace('py:', '')}</div>
+                      <div className="meta">{info.version || '-'}</div>
+                    </div>
+                    <span className={`tag ${info.available ? 'tag-done' : 'tag-p0'}`}>
+                      {info.available ? dockerTr('docker_avail') : dockerTr('docker_missing')}
+                    </span>
+                    {!info.available && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ background: '#4f46e5', color: '#fff', marginLeft: 4 }}
+                        onClick={(e) => { e.stopPropagation(); aiInstall(k); }}
+                      >
+                        {dockerTr('docker_ai_install')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
 
       {full && (full.custom_catalog || []).length > 0 && (
         <div className="card" style={{ marginBottom: 10 }}>

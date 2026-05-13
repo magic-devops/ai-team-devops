@@ -59,7 +59,7 @@ AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变
 - **Vibe Coding**：会话/记忆/附件、多模态 LLM、Markdown·代码·HTML 预览、项目目录只读浏览
 - 需求看板、执行计划、迭代与 Sprint、问题中心、全局搜索、数据导出
 - 技术方案管理、知识库（含文档抽取 / AI 润色）、规范与规则库
-- Agent / 专家组 / 技能 / MCP / 模型 / 编排工作流、Docker 环境、CLI 配置、消息通知
+- Agent / 专家组 / 技能 / MCP / 模型 / **编排（开发工具目录、环境检查、AI 安装与受控一键安装）**、Docker 环境、CLI 配置、消息通知
 
 ### 🔧 多工具支持
 一次初始化，自动生成所有工具配置：

@@ -376,6 +376,10 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const [termTimeout, setTermTimeout] = React.useState(120);
   const [termResult, setTermResult] = React.useState(null);
   const [termBusy, setTermBusy] = React.useState(false);
+  const [savedCmds, setSavedCmds] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('vibe-saved-cmds') || '[]'); } catch (_) { return []; }
+  });
+  const [savedCmdLabel, setSavedCmdLabel] = React.useState('');
   const [codeBlockIdx, setCodeBlockIdx] = React.useState(0);
   const [docPickPath, setDocPickPath] = React.useState(null);
   const [workspaceFile, setWorkspaceFile] = React.useState(null);
@@ -467,7 +471,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     rg();
   };
 
-  const availableTools = (tools || []).filter((tool) => tool.available);
+  const availableTools = (tools || []).filter((tool) => ['agent_cli', 'ide', 'assistant'].includes(tool.category));
   const allModels = [...((models && models.builtin) || []), ...((models && models.custom) || [])];
   const sessions = (sessListData && sessListData.sessions) || [];
   const sessionsFiltered = sessions.filter((s) => {
@@ -1209,15 +1213,36 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 {[
                   ['git status', 'git status'],
                   ['git diff --stat', 'git diff --stat'],
+                  ['git log --oneline -10', 'git log --oneline -10'],
                   ['python3 -V', 'python3 --version'],
                   ['node -v', 'node --version'],
                   ['npm -v', 'npm --version'],
+                  ['ls -la', 'ls -la'],
                 ].map(([label, c]) => (
                   <button key={label} type="button" className="btn btn-sm btn-muted" onClick={() => setTermCommand(c)}>
                     {label}
                   </button>
                 ))}
               </div>
+              {savedCmds.length > 0 && (
+                <details style={{ marginBottom: 8 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 11, color: 'var(--text2)', marginBottom: 4 }}>{tr('vibe_term_saved_title', { n: savedCmds.length })}</summary>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                    {savedCmds.map((sc, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button type="button" className="btn btn-sm btn-muted" style={{ flex: 1, textAlign: 'left', fontFamily: 'monospace', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setTermCommand(sc.cmd)} title={sc.cmd}>
+                          {sc.label || sc.cmd}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-danger" style={{ padding: '2px 6px' }} onClick={() => {
+                          const next = savedCmds.filter((_, j) => j !== i);
+                          setSavedCmds(next);
+                          try { localStorage.setItem('vibe-saved-cmds', JSON.stringify(next)); } catch (_) {}
+                        }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               <div className="form-group" style={{ marginBottom: 6 }}>
                 <label>{tr('vibe_term_cwd_label')}</label>
                 <input
@@ -1245,6 +1270,22 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                   onChange={(e) => setTermCommand(e.target.value)}
                   style={{ width: '100%', minHeight: 72, fontFamily: 'monospace', fontSize: 12, background: 'var(--surface-input)', color: 'var(--text)', border: '1px solid var(--vibe-divider)', borderRadius: 6, padding: 8 }}
                 />
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  value={savedCmdLabel}
+                  onChange={(e) => setSavedCmdLabel(e.target.value)}
+                  placeholder={tr('vibe_term_save_ph')}
+                  style={{ flex: 1, minWidth: 80, fontSize: 11, fontFamily: 'monospace', background: 'var(--surface-input)', color: 'var(--text)', border: '1px solid var(--vibe-divider)', borderRadius: 4, padding: '4px 6px' }}
+                />
+                <button type="button" className="btn btn-sm btn-muted" disabled={!termCommand.trim()} onClick={() => {
+                  const entry = { label: savedCmdLabel.trim() || termCommand.trim().slice(0, 32), cmd: termCommand.trim() };
+                  const next = [...savedCmds, entry];
+                  setSavedCmds(next);
+                  setSavedCmdLabel('');
+                  try { localStorage.setItem('vibe-saved-cmds', JSON.stringify(next)); } catch (_) {}
+                  showToast(tr('vibe_term_save_ok'), 'ok');
+                }}>{tr('vibe_term_save_btn')}</button>
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 <button type="button" className="btn btn-sm btn-primary" disabled={termBusy} onClick={execTerminal}>

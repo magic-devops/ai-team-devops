@@ -470,7 +470,7 @@ def _terminal_cwd_display(cwd_p: Path) -> str:
 @router.get("/terminal/allowlist")
 def vibe_terminal_allowlist():
     """返回可与「环境 / Docker」页相同的 argv[0] 白名单，便于 IDE 终端自检。"""
-    from sop.web.routers.docker_env import _exec_allowlist
+    from .docker_env import _exec_allowlist
 
     return {"programs": sorted(_exec_allowlist())}
 
@@ -478,7 +478,7 @@ def vibe_terminal_allowlist():
 @router.post("/terminal/exec")
 def vibe_terminal_exec(body: VibeTerminalExecBody):
     """在仓库根或子目录下执行命令；argv 由 shlex 解析，首段受白名单约束（见 docker_env._validate_argv）。"""
-    from sop.web.routers.docker_env import _validate_argv
+    from .docker_env import _validate_argv
 
     raw = (body.command or "").strip()
     if not raw:

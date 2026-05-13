@@ -36,7 +36,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 | 开发工具 | **Vibe Coding** | 会话与记忆、附件与多模态 LLM、Markdown/代码/页面预览、项目目录只读浏览 |
 | 开发工具 | 规范编辑、环境管理（Docker）、CLI 工具 | 本地规范、容器与 CLI 配置；CLI 工具包含 Codex CLI |
 | 知识与规范 | 技术方案、知识库、规范文档、规则库 | 方案版本、文档导入与 AI 润色、规范只读 |
-| AI 能力 | Agent / 技能 / 编排 / MCP / 模型 | 多 Agent、专家组、工作流与模型选择 |
+| AI 能力 | Agent / 技能 / **编排** / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具目录、环境检查、AI 安装方案与受控一键安装（详见 §4.5） |
 | 系统设置 | 通知、配置、系统、账号 | 运维与账号 |
 
 ## 3. 推荐工作流（省 Token）
@@ -71,6 +71,30 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 
 - 环境检查、`docker ps` / `images` 等（以 `docker_env` 路由为准）；与「研发全流程」中的 Dockerfile 线索互补。
 
+### 4.5 Agent 编排与开发工具
+
+入口：**AI 能力 → Agent / 编排 / MCP / 模型**（编排模块内再选子页：开发工具、工作流、质量配置、版本管理）。
+
+**开发工具**
+
+- **宽屏**：编排左侧为子模块导航；「开发工具」页左侧为 **分类**（Agent CLI / IDE / 助手 / 链路与运行时），右侧为工具列表。  
+- **搜索**：列表上方可按名称、命令、说明过滤。  
+- **默认工具**：每条可「设为默认」，供工作流等读取（存于 `.ai-memory/orchestration/config.json`）。  
+- **内置工具**：可改显示名/命令/说明（覆盖配置）、**隐藏**；已隐藏区可单条恢复或 **恢复全部内置工具**。  
+- **自定义工具**：添加 / 编辑 / 删除（仅自定义可删）。  
+- **补充说明**：参与 AI 安装上下文，自动保存在本机浏览器（`localStorage` 键 `sop_orch_ai_goal`）。  
+- **AI 安装说明**：打开弹窗展示 Markdown 步骤；若有 **白名单配方**，列出可点击的「执行此步骤」（实际调用受控安装 API，仅允许服务端固定 npm/pip 等命令）。弹窗内展示 **`argv_shell`** 便于核对后再执行。  
+- **受控一键安装**：仅对部分带 `guard_install_recipe` 且未检测到 PATH 的工具显示；需确认后执行。  
+- **安装控制台与历史**：查看完整输出、复制、打开弹窗；历史来自 `.ai-memory/orchestration/install_logs.jsonl`。
+
+**本机环境检查（编排页底部）**
+
+- 与 Docker 页 **同源** 内置检查（`python3`、`node`、`java`、`mvn`、`docker compose` 等）。  
+- **仅刷新检查**：不整页重载。  
+- 状态为 **Missing** 时：**AI 方案** 会预填目标并请求安装说明；若检查项 id 与内置工具 id 一致（如 `java`），可 **定位工具** 跳转到列表对应行。
+
+**API 与持久化、白名单安全** 见 **[ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md)**。
+
 ## 5. 常见问题
 
 **Q：数据存在哪里？**  
@@ -90,4 +114,5 @@ A：生产入口须保证 **`StaticFiles` 挂载在 API 路由之后**，否则 
 | [sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查与 Token 策略 |
 | [TUTORIAL.md](../TUTORIAL.md) | 全流程教程含 Web 章节 |
 | [sop/web/README.md](../sop/web/README.md) | 路由、页面模块、开发约定 |
+| [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与持久化 |
 | [sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |

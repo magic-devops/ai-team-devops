@@ -80,9 +80,16 @@ web/
 | `/api/design-docs` | 技术方案索引与内容 |
 | `/api/vibe` | 模板、运行、LLM、**sessions**、**upload**、**workspace**、history |
 | `/api/dev-flow` | **`GET /summary`** 聚合驾驶舱数据 |
-| `/api/env` | Docker / 环境检查 |
+| `/api/orchestration` | **Agent 编排**：开发工具 CRUD/隐藏、默认工具、`/environment-checks`、AI 安装方案 v1/v2、**受控安装**、安装日志；详见 [docs/ORCHESTRATION_DEV_TOOLS.md](../../docs/ORCHESTRATION_DEV_TOOLS.md) |
+| `/api/env` | Docker / 环境检查（编排页环境区委托同源内置检查） |
 | `/api/knowledge` | 知识库、**extract-text**（PDF 需 pypdf）、ai-polish |
 | `/api/dashboard` 等 | 见 `main.py` 保留接口 |
+
+## Agent 编排（`routers/orchestration.py` + `pages/orchestration.js`）
+
+- **前端**：宽屏下编排左侧为子模块导航（开发工具 / 工作流 / 质量 / 版本）；开发工具页内 **分类 + 搜索**；环境区 **仅刷新 / AI 方案 / 定位工具**；AI 弹窗展示白名单步骤的 **`argv_shell`**；文案在 `pages/i18n.js` 的 `orch_*`。  
+- **后端**：`/api/orchestration/*`；状态在 **`PROJECT_PATH/.ai-memory/orchestration/`**（`dev_tools_state.json`、`config.json`、`install_logs.jsonl` 等）。  
+- **API 表、安全约束、新特性列表**：[docs/ORCHESTRATION_DEV_TOOLS.md](../../docs/ORCHESTRATION_DEV_TOOLS.md)。
 
 ## 静态资源与路由顺序
 
@@ -102,6 +109,7 @@ web/
 
 ## 相关文档
 
-- 操作者向：[docs/USER_MANUAL.md](../../docs/USER_MANUAL.md)  
+- 操作者向：[docs/USER_MANUAL.md](../../docs/USER_MANUAL.md)（含编排 §4.5）  
+- **编排与受控安装**：[docs/ORCHESTRATION_DEV_TOOLS.md](../../docs/ORCHESTRATION_DEV_TOOLS.md)  
 - 架构：[ARCHITECTURE.md](../../ARCHITECTURE.md)  
 - 脚本：[sop/tools/SCRIPTS.md](../tools/SCRIPTS.md)、[install-integrations.sh](../tools/install-integrations.sh)

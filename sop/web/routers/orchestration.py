@@ -111,6 +111,52 @@ TOOL_TO_RECIPE: Dict[str, str] = {
     "tsx": "npm_tsx",
 }
 
+# 不能仅用 cmd 首段判断是否在 PATH（须与子命令一致时）
+TOOL_AVAILABILITY_ARGV: Dict[str, List[str]] = {
+    "docker-compose": ["docker", "compose", "version"],
+}
+
+
+def _tool_available(tool_id: str, cmd: str) -> bool:
+    cmd = (cmd or "").strip()
+    if not cmd:
+        return False
+    argv = TOOL_AVAILABILITY_ARGV.get(tool_id)
+    if argv:
+        try:
+            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(REPO_ROOT))
+            return r.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return False
+    exe = cmd.split()[0]
+    return shutil.which(exe) is not None
+
+
+def _tool_availability_hint(tool_id: str, cmd: str) -> str:
+    """供 AI 规划上下文：简述当前机器上该工具是否可执行。"""
+    cmd = (cmd or "").strip()
+    if not cmd:
+        return "未配置命令"
+    argv = TOOL_AVAILABILITY_ARGV.get(tool_id)
+    if argv:
+        try:
+            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(REPO_ROOT))
+            line = ((r.stdout or r.stderr or "").split("\n")[0] or "").strip()[:200]
+            if r.returncode == 0:
+                return f"docker compose 检查: 可用 — {line}"
+            return f"docker compose 检查: 不可用(rc={r.returncode}) — {line}"
+        except FileNotFoundError:
+            return "docker compose 检查: 未找到 docker 可执行文件"
+        except subprocess.TimeoutExpired:
+            return "docker compose 检查: 超时"
+        except OSError as e:
+            return f"docker compose 检查: 错误 {e}"
+    exe = cmd.split()[0]
+    w = shutil.which(exe)
+    if w:
+        return f"PATH 可执行: {exe} -> {w}"
+    return f"PATH 未找到: {exe}"
+
 
 def _default_state() -> Dict[str, Any]:
     return {"custom": [], "hidden": [], "overrides": {}}
@@ -421,7 +467,8 @@ def list_tools():
     result = []
     for t in _merged_tools():
         cmd = t.get("cmd") or ""
-        available = bool(cmd) and shutil.which(cmd.split()[0]) is not None
+        tid = str(t.get("id") or "")
+        available = _tool_available(tid, cmd)
         row = {**t, "available": available}
         result.append(row)
     return result
@@ -517,6 +564,20 @@ def hide_builtin_tool(body: DevToolHideBody):
     return {"ok": True}
 
 
+@router.post("/tools/unhide")
+def unhide_one_builtin_tool(body: DevToolHideBody):
+    """从 hidden 列表移除单个内置工具 id，恢复列表显示。"""
+    tid = (body.id or "").strip()
+    if tid not in _builtin_ids():
+        raise HTTPException(400, "仅可恢复内置工具 id")
+    st = _load_dev_tools_state()
+    h = st.setdefault("hidden", [])
+    st["hidden"] = [x for x in h if str(x) != tid]
+    _save_dev_tools_state(st)
+    _fix_config_default_tool()
+    return {"ok": True}
+
+
 @router.post("/tools/unhide-all")
 def unhide_all_builtin_tools():
     """恢复显示所有内置开发工具（清空 hidden 列表）。"""
@@ -534,8 +595,10 @@ def ai_tool_install_plan(body: AiToolInstallPlanBody):
         merged = {t["id"]: t for t in _merged_tools()}
         info = merged.get(body.tool_id.strip())
         if info:
-            lines.append(f"工具 id: {info['id']}\n名称: {info.get('name')}\n命令: {info.get('cmd')}\n说明: {info.get('description')}")
-            lines.append(f"当前 PATH 可执行: {shutil.which((info.get('cmd') or '').split()[0]) or '未找到'}")
+            lines.append(
+                f"工具 id: {info['id']}\n名称: {info.get('name')}\n命令: {info.get('cmd')}\n说明: {info.get('description')}"
+            )
+            lines.append(_tool_availability_hint(info["id"], str(info.get("cmd") or "")))
     if body.goal:
         lines.append("用户目标:\n" + (body.goal or "").strip())
     if not lines:
@@ -563,7 +626,7 @@ def ai_tool_install_plan_v2(body: AiToolInstallPlanBody):
             lines.append(
                 f"工具 id: {info['id']}\n名称: {info.get('name')}\n命令: {info.get('cmd')}\n说明: {info.get('description')}"
             )
-            lines.append(f"当前 PATH 可执行: {shutil.which((info.get('cmd') or '').split()[0]) or '未找到'}")
+            lines.append(_tool_availability_hint(info["id"], str(info.get("cmd") or "")))
             rid = TOOL_TO_RECIPE.get(info["id"])
             if rid:
                 lines.append(f"服务端白名单配方 id: {rid}（若适用可在 actions 中引用）")
@@ -678,13 +741,19 @@ def list_workflows():
 
 @router.post("/workflows")
 def create_workflow(body: WorkflowDef):
-    f = ORCH_DIR / f"wf_{body.id}.json"
+    wid = (body.id or "").strip()
+    if not re.match(r"^[a-z][a-z0-9_-]{1,40}$", wid):
+        raise HTTPException(400, "工作流 id 须为小写字母开头，仅含 a-z0-9_-，长度 2–41")
+    f = ORCH_DIR / f"wf_{wid}.json"
+    if f.is_file():
+        raise HTTPException(409, "该工作流 id 已存在，请更换 id 或先删除已有工作流")
     try:
         payload = body.model_dump()
     except AttributeError:
         payload = body.dict()
+    payload["id"] = wid
     f.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
-    return {"ok": True, "id": body.id}
+    return {"ok": True, "id": wid}
 
 
 @router.delete("/workflows/{wf_id}")

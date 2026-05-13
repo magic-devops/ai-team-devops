@@ -272,7 +272,7 @@ PORT=9000 bash sop/tools/start-manager.sh
 | 🗄️ 知识库 | 文档、抽取、AI 润色（依赖见 `install-integrations.sh`） |
 | 🎯 Vibe Coding | 会话与记忆、附件与多模态 LLM、Markdown/代码/HTML 预览、项目目录只读浏览 |
 | 🐳 环境管理 | Docker 检查与镜像相关能力 |
-| 🤖 Agent / 编排 / MCP / 模型 | 多 Agent、专家组、工作流与模型配置 |
+| 🤖 Agent / 编排 / MCP / 模型 | 多 Agent、专家组；**编排**含开发工具（分类/搜索/默认）、环境检查联动、AI 安装方案 v2 与白名单受控执行（详见 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md)） |
 | 其余 | 规范、规则、CLI、通知、系统与账号等 |
 
 更细操作步骤见 **[docs/USER_MANUAL.md](docs/USER_MANUAL.md)**。
@@ -508,7 +508,7 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 | 🖥️ 系统 | 脚本/配置/记忆管理 |
 | 👤 账号 | 用户管理 |
 | 🤖 模型 | 多模型配置、角色模型 |
-| 🔄 编排 | 工作流、工具选择、版本管理 |
+| 🔄 编排 | 开发工具（分类/搜索/环境联动/AI 受控安装）、工作流、质量配置、版本管理；参考 [docs/ORCHESTRATION_DEV_TOOLS.md](docs/ORCHESTRATION_DEV_TOOLS.md) |
 | 🐳 环境 | 环境检查、Docker 管理 |
 | 📦 技能仓库 | 自定义仓库、安装/卸载 |
 | 🎯 Vibe Coding | 界面化 AI 开发 |

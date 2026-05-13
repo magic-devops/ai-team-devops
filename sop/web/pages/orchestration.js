@@ -578,6 +578,11 @@ function DevToolsPanel() {
               <span className="text-tertiary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
                 {t('orch_tool_search_count', { n: filtered.length })}
               </span>
+              {toolSearch ? (
+                <button type="button" className="btn btn-sm input-surface" onClick={() => setToolSearch('')}>
+                  {t('orch_tool_search_clear')}
+                </button>
+              ) : null}
             </div>
             {filtered.length === 0 ? (
               <div className="empty" style={{ fontSize: 12 }}>
@@ -924,7 +929,22 @@ function DevToolsPanel() {
                         <code style={{ fontSize: 10, color: 'var(--link-inline)' }}>{act.recipe_id}</code>
                         {act.argv_shell ? (
                           <div style={{ marginTop: 6 }}>
-                            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>{t('orch_argv_caption')}</div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{t('orch_argv_caption')}</div>
+                              <button
+                                type="button"
+                                className="btn btn-sm input-surface"
+                                style={{ fontSize: 10, padding: '2px 8px' }}
+                                onClick={() =>
+                                  navigator.clipboard
+                                    .writeText(act.argv_shell)
+                                    .then(() => showToast(t('vibe_toast_copy_ok'), 'ok'))
+                                    .catch(() => showToast(t('vibe_toast_copy_fail'), 'err'))
+                                }
+                              >
+                                {t('orch_argv_copy')}
+                              </button>
+                            </div>
                             <pre
                               style={{
                                 whiteSpace: 'pre-wrap',
@@ -1042,11 +1062,23 @@ function WorkflowPanel() {
   const [form, setForm] = React.useState({ id: '', name: '', description: '', dev_tool: 'claude', steps: [] });
 
   const save = () => {
-    fetch(`${API}/orchestration/workflows`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      .then((r) => {
-        if (!r.ok) throw new Error();
-      })
-      .then(() => {
+    var wid = (form.id || '').trim();
+    if (!/^[a-z][a-z0-9_-]{1,40}$/.test(wid)) {
+      showToast(t('orch_wf_id_invalid'), 'err');
+      return;
+    }
+    fetch(`${API}/orchestration/workflows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, id: wid }),
+    })
+      .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
+      .then(({ httpOk, d }) => {
+        if (!httpOk) {
+          var msg = (d && (typeof d.detail === 'string' ? d.detail : Array.isArray(d.detail) ? JSON.stringify(d.detail) : d.detail)) || t('orch_wf_toast_save_fail');
+          showToast(String(msg), 'err');
+          return;
+        }
         setModal(false);
         reload();
         showToast(t('orch_wf_toast_ok'), 'ok');
@@ -1054,6 +1086,7 @@ function WorkflowPanel() {
       .catch(() => showToast(t('orch_wf_toast_save_fail'), 'err'));
   };
   const del = (id) => {
+    if (!confirm(t('orch_wf_confirm_del', { id }))) return;
     fetch(`${API}/orchestration/workflows/${id}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
@@ -1098,6 +1131,9 @@ function WorkflowPanel() {
             <div key={w.id} className="list-item">
               <div style={{ flex: 1 }}>
                 <div className="title">{w.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 2 }}>
+                  <code>{w.id}</code>
+                </div>
                 <div className="meta">
                   {t('orch_wf_meta', {
                     desc: w.description || '—',
@@ -1280,7 +1316,10 @@ function QualityConfigPanel() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div className="section-title">{t('orch_qc_title')}</div>
+        <div>
+          <div className="section-title">{t('orch_qc_title')}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{t('orch_qc_sub')}</div>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <RefreshBtn onClick={reload} />
           <button type="button" className="btn btn-primary btn-sm" onClick={save}>
@@ -1325,13 +1364,18 @@ function VersionPanel() {
   const [form, setForm] = React.useState({ tag: '', message: '' });
   const create = () => {
     fetch(`${API}/orchestration/versions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.ok) {
+      .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
+      .then(({ httpOk, d }) => {
+        if (!httpOk) {
+          var msg = (d && (typeof d.detail === 'string' ? d.detail : d.message)) || t('orch_ver_toast_fail');
+          showToast(String(msg), 'err');
+          return;
+        }
+        if (d && d.ok) {
           setModal(false);
           reload();
           showToast(t('orch_ver_toast_ok'), 'ok');
-        } else showToast(d.detail || t('orch_ver_toast_fail'), 'err');
+        } else showToast((d && d.detail) || t('orch_ver_toast_fail'), 'err');
       })
       .catch(() => showToast(t('orch_ver_toast_req_fail'), 'err'));
   };
