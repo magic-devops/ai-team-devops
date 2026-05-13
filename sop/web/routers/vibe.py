@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import re
+import shlex
 import subprocess
 import uuid
 from pathlib import Path
@@ -12,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/vibe", tags=["vibe"])
 PROJECT_PATH = Path(os.getenv("PROJECT_PATH", "."))
@@ -130,6 +131,14 @@ class VibeSessionPatch(BaseModel):
     memory: Optional[str] = None
     preview_html: Optional[str] = None
     attachments: Optional[List[dict]] = None
+
+
+class VibeTerminalExecBody(BaseModel):
+    """在 PROJECT_PATH 下受控执行 shell 命令（首段可执行文件须在环境白名单内）。"""
+
+    command: str = Field("", max_length=8000)
+    cwd: str = Field("", max_length=500)
+    timeout_sec: int = Field(120, ge=3, le=600)
 
 
 @router.get("/history")
@@ -430,6 +439,89 @@ def _workspace_resolve(rel: str) -> Path:
     except ValueError as e:
         raise HTTPException(400, "路径越界") from e
     return target
+
+
+def _terminal_cwd(rel: str) -> Path:
+    rel = (rel or "").strip().replace("\\", "/")
+    if not rel:
+        return PROJECT_PATH.resolve()
+    p = _workspace_resolve(rel)
+    if not p.is_dir():
+        raise HTTPException(400, "cwd 不是有效目录")
+    return p
+
+
+def _terminal_cwd_display(cwd_p: Path) -> str:
+    root = PROJECT_PATH.resolve()
+    try:
+        if cwd_p.resolve() == root:
+            return "."
+        return str(cwd_p.resolve().relative_to(root))
+    except ValueError:
+        return str(cwd_p.resolve())
+
+
+@router.get("/terminal/allowlist")
+def vibe_terminal_allowlist():
+    """返回可与「环境 / Docker」页相同的 argv[0] 白名单，便于 IDE 终端自检。"""
+    from sop.web.routers.docker_env import _exec_allowlist
+
+    return {"programs": sorted(_exec_allowlist())}
+
+
+@router.post("/terminal/exec")
+def vibe_terminal_exec(body: VibeTerminalExecBody):
+    """在仓库根或子目录下执行命令；argv 由 shlex 解析，首段受白名单约束（见 docker_env._validate_argv）。"""
+    from sop.web.routers.docker_env import _validate_argv
+
+    raw = (body.command or "").strip()
+    if not raw:
+        raise HTTPException(400, "command 不能为空")
+    try:
+        argv = shlex.split(raw, posix=os.name != "nt")
+    except ValueError as e:
+        raise HTTPException(400, f"无法解析命令: {e}") from e
+    if not argv:
+        raise HTTPException(400, "解析后 argv 为空")
+    cwd_p = _terminal_cwd(body.cwd or "")
+    timeout = max(3, min(int(body.timeout_sec), 600))
+    argv2 = _validate_argv([str(x) for x in argv])
+    try:
+        result = subprocess.run(
+            argv2,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(cwd_p),
+        )
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "returncode": -1, "stdout": "", "stderr": f"执行超时（{timeout}s）", "argv": argv2, "cwd_display": _terminal_cwd_display(cwd_p)}
+    except FileNotFoundError:
+        return {"ok": False, "returncode": -1, "stdout": "", "stderr": f"命令未找到: {argv2[0]}", "argv": argv2, "cwd_display": _terminal_cwd_display(cwd_p)}
+    except Exception as e:
+        return {"ok": False, "returncode": -1, "stdout": "", "stderr": str(e), "argv": argv2, "cwd_display": _terminal_cwd_display(cwd_p)}
+
+    out = (result.stdout or "")[-48000:]
+    err = (result.stderr or "")[-24000:]
+    h = _load_history()
+    h.append(
+        {
+            "ts": datetime.datetime.utcnow().isoformat(),
+            "tool": "terminal",
+            "prompt": raw[:400],
+            "output": ((out or "") + "\n" + (err or ""))[:500],
+            "ok": result.returncode == 0,
+        }
+    )
+    _save_history(h)
+    return {
+        "ok": result.returncode == 0,
+        "returncode": result.returncode,
+        "stdout": out,
+        "stderr": err,
+        "argv": argv2,
+        "cwd_display": _terminal_cwd_display(cwd_p),
+    }
 
 
 _MAX_WORKSPACE_FILE = 600_000

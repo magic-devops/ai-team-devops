@@ -51,7 +51,7 @@ function ScriptManager() {
         <div className="section-title" style={{margin:0}}>脚本列表</div>
         <RefreshBtn onClick={reload} />
       </div>
-      {(data||[]).map(f=><div key={f.name} className="list-item" style={{cursor:'pointer',background:selected?.name===f.name?'#1e3a5f':'',padding:'6px 8px',borderRadius:4}} onClick={()=>open(f)}>
+      {(data||[]).map(f=><div key={f.name} className="list-item" style={{cursor:'pointer',background:selected&&selected.name===f.name?'#1e3a5f':'',padding:'6px 8px',borderRadius:4}} onClick={()=>open(f)}>
         <div style={{flex:1}}><div className="title" style={{fontSize:12}}>{f.name}</div><div className="meta">{(f.size/1024).toFixed(1)}KB {f.executable&&'· 可执行'}</div></div>
       </div>)}
     </div>
@@ -89,11 +89,11 @@ function ConfigManager() {
         <div className="section-title" style={{margin:0}}>Claude Code 配置</div>
         <RefreshBtn onClick={reload} />
       </div>
-      <pre className="scroll-slim" style={{fontSize:11,color:'#e2e8f0',whiteSpace:'pre-wrap',maxHeight:400,overflowY:'auto'}}>{JSON.stringify(data?.claude_settings||{},null,2)}</pre>
+      <pre className="scroll-slim" style={{fontSize:11,color:'#e2e8f0',whiteSpace:'pre-wrap',maxHeight:400,overflowY:'auto'}}>{JSON.stringify((data&&data.claude_settings)||{},null,2)}</pre>
     </div>
     <div className="card">
       <div className="section-title">opencode 配置</div>
-      <pre className="scroll-slim" style={{fontSize:11,color:'#e2e8f0',whiteSpace:'pre-wrap',maxHeight:400,overflowY:'auto'}}>{JSON.stringify(data?.opencode||{},null,2)}</pre>
+      <pre className="scroll-slim" style={{fontSize:11,color:'#e2e8f0',whiteSpace:'pre-wrap',maxHeight:400,overflowY:'auto'}}>{JSON.stringify((data&&data.opencode)||{},null,2)}</pre>
     </div>
   </div>;
 }
@@ -115,12 +115,12 @@ function MemoryManager() {
     <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}><RefreshBtn onClick={reload} /></div>
     <div className="grid-2" style={{marginBottom:12}}>
       <div className="card">
-        <div className="section-title">规则文件 ({(data?.rules||[]).length})</div>
-        {(data?.rules||[]).map(f=><div key={f} className="list-item"><div className="title" style={{fontSize:12}}>{f}</div></div>)}
+        <div className="section-title">规则文件 ({((data&&data.rules)||[]).length})</div>
+        {((data&&data.rules)||[]).map(f=><div key={f} className="list-item"><div className="title" style={{fontSize:12}}>{f}</div></div>)}
       </div>
       <div className="card">
-        <div className="section-title">快照 ({(data?.snapshots||[]).length})</div>
-        {(data?.snapshots||[]).map(f=><div key={f} className="list-item">
+        <div className="section-title">快照 ({((data&&data.snapshots)||[]).length})</div>
+        {((data&&data.snapshots)||[]).map(f=><div key={f} className="list-item">
           <div className="title" style={{fontSize:12,flex:1}}>{f}</div>
           <button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5',padding:'2px 6px'}}
             onClick={()=>fetch(`${API}/system/memory/snapshots/${f}`,{method:'DELETE'})
@@ -132,10 +132,10 @@ function MemoryManager() {
     </div>
     <div className="card">
       <div className="section-title">LanceDB 表</div>
-      {(data?.lancedb_tables||[]).map(tbl=><div key={tbl} className="list-item">
+      {((data&&data.lancedb_tables)||[]).map(tbl=><div key={tbl} className="list-item">
         <div style={{flex:1}}>
           <div className="title" style={{fontSize:12}}>{tbl}</div>
-          {tableStats[tbl]&&<div className="meta">{tableStats[tbl].rows} 行 · {tableStats[tbl].columns?.length} 列</div>}
+          {tableStats[tbl]&&<div className="meta">{tableStats[tbl].rows} 行 · {(tableStats[tbl].columns && tableStats[tbl].columns.length)} 列</div>}
         </div>
         <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={()=>loadStats(tbl)}>查看统计</button>
       </div>)}

@@ -25,7 +25,7 @@ function CliManager() {
     fetch(`${API}/cli/run`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({tool:selected.id,args:args.split(' ').filter(Boolean)})})
       .then(r=>r.json())
-      .then(d=>{setOutput(d);setRunning(false);if(d&&d.ok)showToast('运行完成','ok');else showToast(d?.error||'命令失败','err');})
+      .then(d=>{setOutput(d);setRunning(false);if(d&&d.ok)showToast('运行完成','ok');else showToast((d&&d.error)||'命令失败','err');})
       .catch(()=>{setRunning(false);showToast('请求失败','err');});
   };
 
@@ -75,7 +75,7 @@ function CliManager() {
       .then(({ok,d})=>{
         if(!ok){showToast(d.detail||'操作失败','err');return;}
         reloadAll();
-        if(selected?.id===t.id)setSelected(null);
+        if(selected && selected.id===t.id)setSelected(null);
         showToast(t.is_builtin?'已从列表移除':'已删除','ok');
       }).catch(()=>showToast('请求失败','err'));
   };
@@ -88,7 +88,7 @@ function CliManager() {
 
   const available = (data||[]).filter(t=>t.available);
   const unavailable = (data||[]).filter(t=>!t.available);
-  const hidden = meta?.hidden_builtin||[];
+  const hidden = (meta && meta.hidden_builtin)||[];
 
   if (panelLoading) return <div><div className="section-title">🛠️ CLI 工具管理</div><PageSkeleton cards={2}/></div>;
   if (panelError) return <div><div className="section-title">🛠️ CLI 工具管理</div><LoadError message={panelError} onRetry={reloadAll}/></div>;
@@ -106,7 +106,7 @@ function CliManager() {
         <div className="card scroll-slim" style={{marginBottom:10,maxHeight:320,overflowY:'auto'}}>
           <div className="section-title">已安装 ({available.length})</div>
           {available.length===0?<div className="empty">暂无已安装 CLI</div>:
-            available.map(t=><div key={t.id} className="list-item" style={{cursor:'pointer',background:selected?.id===t.id?'#1e3a5f':'',alignItems:'center'}} onClick={()=>setSelected(t)}>
+            available.map(t=><div key={t.id} className="list-item" style={{cursor:'pointer',background:selected&&selected.id===t.id?'#1e3a5f':'',alignItems:'center'}} onClick={()=>setSelected(t)}>
             <div style={{flex:1,minWidth:0}}><div className="title">{t.name}</div><div className="meta">{t.description} · <code style={{color:'#93c5fd'}}>{t.cmd}</code></div></div>
             <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button type="button" className="btn btn-sm" style={{background:'#334155',color:'#94a3b8'}} onClick={(e)=>openEdit(t,e)}>编辑</button>
@@ -172,7 +172,7 @@ function CliManager() {
           <textarea value={form.install_hint} onChange={e=>setForm({...form,install_hint:e.target.value})} style={{minHeight:72,fontSize:12}} placeholder="留空则内置工具使用默认提示"/>
         </div>
         {modal!=='create'&&<p style={{fontSize:11,color:'#64748b',marginBottom:10}}>
-          {form.id&&data&&data.find(x=>x.id===form.id)?.is_builtin?'内置工具：保存后写入覆盖配置；「移除」可隐藏并清除覆盖。':'自定义工具：可随时删除。'}
+          {form.id&&data&&(data.find(x=>x.id===form.id)||{}).is_builtin?'内置工具：保存后写入覆盖配置；「移除」可隐藏并清除覆盖。':'自定义工具：可随时删除。'}
         </p>}
         <div className="modal-actions">
           <button type="button" className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>

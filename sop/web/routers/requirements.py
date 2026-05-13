@@ -16,6 +16,101 @@ from .db import PROJECT_PATH, now, rows, table
 router = APIRouter(prefix="/api/requirements", tags=["requirements"])
 
 _DOC_MAX = 120_000
+_PRIOS = ("P0", "P1", "P2", "P3")
+_UI_STATE_PATH = PROJECT_PATH / ".ai-memory" / "requirements_ui_state.json"
+
+
+def _ui_default_state() -> Dict[str, Any]:
+    return {"version": 1, "columns": {p: [] for p in _PRIOS}, "fields": {}}
+
+
+def _ui_load() -> Dict[str, Any]:
+    if not _UI_STATE_PATH.exists():
+        return _ui_default_state()
+    try:
+        d = json.loads(_UI_STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(d, dict):
+            return _ui_default_state()
+        d.setdefault("columns", {p: [] for p in _PRIOS})
+        d.setdefault("fields", {})
+        for p in _PRIOS:
+            d["columns"].setdefault(p, [])
+        return d
+    except Exception:
+        return _ui_default_state()
+
+
+def _ui_save(d: Dict[str, Any]) -> None:
+    _UI_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UI_STATE_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _ui_rebuild_columns(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> None:
+    by_p: Dict[str, List[str]] = {p: [] for p in _PRIOS}
+
+    def _ts(r: Dict[str, Any]) -> str:
+        return str(r.get("created_at") or "")
+
+    for r in rows_all:
+        rid = r.get("id")
+        if not rid:
+            continue
+        pr = (r.get("priority") or "P3").upper()
+        if pr not in _PRIOS:
+            pr = "P3"
+        by_p[pr].append(rid)
+    for p in _PRIOS:
+        by_p[p].sort(key=lambda i: _ts(next((x for x in rows_all if x.get("id") == i), {})))
+    st["columns"] = by_p
+
+
+def _ui_remove_from_columns(st: Dict[str, Any], req_id: str) -> None:
+    for p in _PRIOS:
+        st["columns"][p] = [x for x in st["columns"].get(p, []) if x != req_id]
+
+
+def _ui_delete_id(st: Dict[str, Any], req_id: str) -> None:
+    _ui_remove_from_columns(st, req_id)
+    st.get("fields", {}).pop(req_id, None)
+
+
+def _ui_append_to_column(st: Dict[str, Any], req_id: str, priority: str) -> None:
+    pr = (priority or "P3").upper()
+    if pr not in _PRIOS:
+        pr = "P3"
+    _ui_remove_from_columns(st, req_id)
+    st.setdefault("columns", {p: [] for p in _PRIOS})
+    st["columns"].setdefault(pr, []).append(req_id)
+
+
+def _ui_merge_row(r: Dict[str, Any], st: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(r)
+    fd = (st.get("fields") or {}).get(r.get("id")) or {}
+    out["assigned_agent"] = str(fd.get("assigned_agent") or "")
+    out["dev_tool"] = str(fd.get("dev_tool") or "")
+    return out
+
+
+def _ui_ordered_list(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> List[Dict[str, Any]]:
+    row_by_id = {r["id"]: r for r in rows_all if r.get("id")}
+    if not any(st.get("columns", {}).get(p) for p in _PRIOS) and rows_all:
+        _ui_rebuild_columns(rows_all, st)
+        _ui_save(st)
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for p in _PRIOS:
+        for rid in st.get("columns", {}).get(p, []):
+            if rid in row_by_id and rid not in seen:
+                rr = dict(row_by_id[rid])
+                rr["priority"] = p
+                out.append(_ui_merge_row(rr, st))
+                seen.add(rid)
+    for r in sorted(rows_all, key=lambda x: str(x.get("created_at") or "")):
+        rid = r.get("id")
+        if rid and rid not in seen:
+            out.append(_ui_merge_row(r, st))
+            seen.add(rid)
+    return out
 
 
 def _safe_req_id(rid: str) -> str:
@@ -31,6 +126,8 @@ class ReqCreate(BaseModel):
     priority: str = "P1"
     acceptance_criteria: Optional[List[str]] = []
     tags: Optional[List[str]] = []
+    assigned_agent: Optional[str] = ""
+    dev_tool: Optional[str] = ""
 
 
 class ReqUpdate(BaseModel):
@@ -41,6 +138,14 @@ class ReqUpdate(BaseModel):
     story_points: Optional[int] = None
     acceptance_criteria: Optional[List[str]] = None
     human_notes: Optional[str] = None
+    assigned_agent: Optional[str] = None
+    dev_tool: Optional[str] = None
+
+
+class ReorderBoardBody(BaseModel):
+    """各优先级列自上而下需求 ID；须与当前库中需求 ID 全集一致、无重复。"""
+
+    groups: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 class PriorityBody(BaseModel):
@@ -184,12 +289,15 @@ def _openai_image_url(prompt: str) -> Optional[str]:
 
 @router.get("")
 def list_reqs(status: Optional[str] = None, priority: Optional[str] = None):
-    r = rows("requirements")
+    raw = rows("requirements", 500)
     if status:
-        r = [x for x in r if x.get("status") == status]
-    if priority:
-        r = [x for x in r if x.get("priority") == priority]
-    return sorted(r, key=lambda x: (x.get("priority", "P9"), x.get("created_at", "")))
+        raw = [x for x in raw if x.get("status") == status]
+    st = _ui_load()
+    ordered = _ui_ordered_list(raw, st)
+    if priority and str(priority).upper() in _PRIOS:
+        pu = str(priority).upper()
+        ordered = [x for x in ordered if (x.get("priority") or "").upper() == pu]
+    return ordered
 
 
 @router.post("")
@@ -214,6 +322,14 @@ def create_req(body: ReqCreate):
         "updated_at": now(),
     }
     t.add([row])
+    st = _ui_load()
+    _ui_append_to_column(st, row["id"], body.priority)
+    if (body.assigned_agent or "").strip() or (body.dev_tool or "").strip():
+        st.setdefault("fields", {})[row["id"]] = {
+            "assigned_agent": (body.assigned_agent or "").strip(),
+            "dev_tool": (body.dev_tool or "").strip(),
+        }
+    _ui_save(st)
     return {"ok": True, "id": row["id"]}
 
 
@@ -246,6 +362,15 @@ def batch_create(body: BatchCreateBody):
             }
         )
     t.add(rows_add)
+    st = _ui_load()
+    for row, it in zip(rows_add, body.items):
+        _ui_append_to_column(st, row["id"], row["priority"])
+        if (it.assigned_agent or "").strip() or (it.dev_tool or "").strip():
+            st.setdefault("fields", {})[row["id"]] = {
+                "assigned_agent": (it.assigned_agent or "").strip(),
+                "dev_tool": (it.dev_tool or "").strip(),
+            }
+    _ui_save(st)
     return {"ok": True, "ids": ids, "count": len(ids)}
 
 
@@ -274,6 +399,40 @@ def parse_document(body: ParseDocumentBody):
         raise
     except Exception as e:
         raise HTTPException(502, f"文档解析失败: {e}") from e
+
+
+class ReorderBoardBody(BaseModel):
+    groups: Dict[str, List[str]] = Field(default_factory=dict)
+
+
+@router.post("/reorder-board")
+def reorder_board(body: ReorderBoardBody):
+    raw = rows("requirements", 500)
+    all_ids = {r["id"] for r in raw if r.get("id")}
+    groups: Dict[str, List[str]] = {p: [] for p in _PRIOS}
+    combined: List[str] = []
+    for p in _PRIOS:
+        for rid in body.groups.get(p) or []:
+            rid = _safe_req_id(str(rid).strip())
+            if rid not in all_ids:
+                raise HTTPException(400, f"未知需求 ID: {rid}")
+            groups[p].append(rid)
+            combined.append(rid)
+    if len(combined) != len(set(combined)):
+        raise HTTPException(400, "需求 ID 重复")
+    if set(combined) != all_ids:
+        raise HTTPException(400, "各列 ID 须覆盖当前全部需求且无多余项（拖拽后请提交完整四列顺序）")
+    t = table("requirements")
+    if t is None:
+        raise HTTPException(503, "LanceDB not available")
+    ts = now()
+    for p in _PRIOS:
+        for rid in groups[p]:
+            t.update(where=f"id = '{rid}'", values={"priority": p, "updated_at": ts})
+    st = _ui_load()
+    st["columns"] = groups
+    _ui_save(st)
+    return {"ok": True}
 
 
 @router.get("/{req_id}/prototype")
@@ -349,6 +508,9 @@ def update_priority(req_id: str, body: PriorityBody):
         where=f"id = '{req_id}'",
         values={"priority": body.priority, "human_notes": body.human_notes or "", "updated_at": now()},
     )
+    st = _ui_load()
+    _ui_append_to_column(st, req_id, body.priority)
+    _ui_save(st)
     return {"ok": True}
 
 
@@ -358,11 +520,29 @@ def update_req(req_id: str, body: ReqUpdate):
     t = table("requirements")
     if t is None:
         raise HTTPException(503, "LanceDB not available")
-    vals = _dump_vals(body)
-    if not vals:
+    try:
+        raw = body.model_dump(exclude_unset=True)
+    except AttributeError:
+        raw = body.dict(exclude_unset=True)
+    ui_a = raw.pop("assigned_agent", None) if "assigned_agent" in raw else None
+    ui_t = raw.pop("dev_tool", None) if "dev_tool" in raw else None
+    vals = {k: v for k, v in raw.items() if v is not None}
+    if not vals and ui_a is None and ui_t is None:
         return {"ok": True}
-    vals["updated_at"] = now()
-    t.update(where=f"id = '{req_id}'", values=vals)
+    if vals:
+        vals["updated_at"] = now()
+        t.update(where=f"id = '{req_id}'", values=vals)
+    st = _ui_load()
+    if "priority" in vals:
+        _ui_append_to_column(st, req_id, str(vals["priority"]))
+    if ui_a is not None or ui_t is not None:
+        fld = st.setdefault("fields", {}).setdefault(req_id, {})
+        if ui_a is not None:
+            fld["assigned_agent"] = ui_a or ""
+        if ui_t is not None:
+            fld["dev_tool"] = ui_t or ""
+    if "priority" in vals or ui_a is not None or ui_t is not None:
+        _ui_save(st)
     return {"ok": True}
 
 
@@ -373,6 +553,9 @@ def delete_req(req_id: str):
     if t is None:
         raise HTTPException(503, "LanceDB not available")
     t.delete(f"id = '{req_id}'")
+    st = _ui_load()
+    _ui_delete_id(st, req_id)
+    _ui_save(st)
     p = _prototype_path(req_id)
     if p.exists():
         try:

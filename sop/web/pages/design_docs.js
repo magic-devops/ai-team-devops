@@ -191,8 +191,8 @@ function DesignDocsManager() {
         <>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10,flexWrap:'wrap',gap:8}}>
             <div>
-              <div className="section-title" style={{margin:0}}>{meta?.title||sel}</div>
-              <div style={{fontSize:11,color:'#64748b'}}>{sel} · {meta?.category} · 当前 v{meta?.current_version}</div>
+              <div className="section-title" style={{margin:0}}>{(meta && meta.title) || sel}</div>
+              <div style={{fontSize:11,color:'#64748b'}}>{sel} · {meta && meta.category} · 当前 v{meta && meta.current_version}</div>
             </div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <button type="button" className="btn btn-sm btn-primary" disabled={saving} onClick={saveVersion}>{saving?'保存中...':'保存为新版本'}</button>
@@ -203,7 +203,7 @@ function DesignDocsManager() {
           <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
             <span style={{fontSize:11,color:'#94a3b8'}}>版本:</span>
             {(versions||[]).slice().reverse().slice(0,12).map(v=>
-              <button key={v.v} type="button" className="btn btn-sm" style={{background:v.v===meta?.current_version?'#1e3a5f':'#334155',color:'#e2e8f0',padding:'2px 8px'}}
+              <button key={v.v} type="button" className="btn btn-sm" style={{background:v.v===(meta && meta.current_version)?'#1e3a5f':'#334155',color:'#e2e8f0',padding:'2px 8px'}}
                 onClick={()=>viewVersion(v.v)} title={v.note}>v{v.v}</button>)}
           </div>
           <textarea value={content} onChange={e=>setContent(e.target.value)} title="⌘/Ctrl+S 保存为新版本（须已选中文档）"

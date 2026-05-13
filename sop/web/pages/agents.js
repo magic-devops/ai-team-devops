@@ -12,7 +12,7 @@ function AgentManager() {
   const reloadAll = () => { reloadAgents(); reloadBuiltin(); reloadGroups(); };
 
   const save = () => {
-    const isEdit = modal?.id && modal !== 'create';
+    const isEdit = modal && modal.id && modal !== 'create';
     const url = isEdit ? `${API}/agents/${modal.id}` : `${API}/agents`;
     fetch(url,{method:isEdit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{ if(!r.ok) throw new Error(); })
@@ -151,7 +151,7 @@ function GroupManager({groups,reload,allAgents}) {
         <div style={{flex:1}}>
           <div className="title">{g.name}</div>
           <div className="meta">{g.description}</div>
-          <div className="meta">成员: {g.agents?.join(', ')}</div>
+          <div className="meta">成员: {(g.agents && g.agents.join(', ')) || ''}</div>
         </div>
       </div>)}
     </div>

@@ -17,13 +17,13 @@
 <script type="text/babel" src="pages/auth.js"></script>
 <script type="text/babel" src="pages/models.js"></script>
 <script type="text/babel" src="pages/orchestration.js"></script>
-<script type="text/babel" src="pages/docker.js"></script>
+<script type="text/babel" src="pages/docker.js?v=20260512a"></script>
 <script type="text/babel" src="pages/skill_repo.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script type="text/babel" src="pages/vibe.js?v=20260512d"></script>
+<script type="text/babel" src="pages/vibe.js?v=20260512e"></script>
 <script type="text/babel" src="pages/notify.js"></script>
 <script type="text/babel" src="pages/cli.js"></script>
 <script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
@@ -361,7 +361,7 @@ function Dashboard() {
   const {sprint, tasks, requirements, issues, velocity} = data;
   const pct = tasks.total ? Math.round(tasks.completed/tasks.total*100) : 0;
   return <>
-    {issues.critical?.length > 0 && <div className="alert">⚠ {issues.critical.length} 个 P0/P1 问题待处理：{issues.critical.map(i=>i.title).join('、')}</div>}
+    {(issues.critical && issues.critical.length) > 0 && <div className="alert">⚠ {issues.critical.length} 个 P0/P1 问题待处理：{issues.critical.map(i=>i.title).join('、')}</div>}
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
       <div className="section-title">📊 项目总览 {sprint && <span style={{color:'#64748b',fontWeight:400}}>· {sprint.id} · {sprint.goal}</span>}</div>
       <RefreshBtn onClick={reload} />
@@ -372,23 +372,23 @@ function Dashboard() {
     </div>
     <div className="grid-4">
       <div className="card"><h3>迭代完成率</h3><div className="stat-val">{pct}%</div><div className="progress-bar"><div className="progress-fill" style={{width:pct+'%'}}/></div><div className="stat-sub">{tasks.completed}/{tasks.total} 任务</div></div>
-      <div className="card"><h3>阻塞任务</h3><div className="stat-val" style={{color:tasks.blocked?.length?'#fca5a5':'#86efac'}}>{tasks.blocked?.length||0}</div><div className="stat-sub">需要人工介入</div></div>
-      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:issues.open?.length?'#fdba74':'#86efac'}}>{issues.open?.length||0}</div><div className="stat-sub">P0/P1: {issues.critical?.length||0}</div></div>
-      <div className="card"><h3>需求总数</h3><div className="stat-val">{requirements.total||0}</div><div className="stat-sub">P0: {requirements.by_priority?.P0||0} · P1: {requirements.by_priority?.P1||0}</div></div>
+      <div className="card"><h3>阻塞任务</h3><div className="stat-val" style={{color:(tasks.blocked && tasks.blocked.length)?'#fca5a5':'#86efac'}}>{(tasks.blocked && tasks.blocked.length)||0}</div><div className="stat-sub">需要人工介入</div></div>
+      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:(issues.open && issues.open.length)?'#fdba74':'#86efac'}}>{(issues.open && issues.open.length)||0}</div><div className="stat-sub">P0/P1: {(issues.critical && issues.critical.length)||0}</div></div>
+      <div className="card"><h3>需求总数</h3><div className="stat-val">{requirements.total||0}</div><div className="stat-sub">P0: {(requirements.by_priority && requirements.by_priority.P0)||0} · P1: {(requirements.by_priority && requirements.by_priority.P1)||0}</div></div>
     </div>
-    {tasks.blocked?.length > 0 && <div className="card" style={{marginBottom:16}}>
+    {(tasks.blocked && tasks.blocked.length) > 0 && <div className="card" style={{marginBottom:16}}>
       <div className="section-title">🚧 阻塞任务（需人工介入）</div>
       {tasks.blocked.map(t=><div key={t.id} className="list-item">
         <div style={{flex:1}}><div className="title">{t.title}</div><div className="meta">{t.id} · {t.assigned_to}</div><div className="meta" style={{color:'#fca5a5'}}>{t.blocked_reason||'原因未记录'}</div></div>
         <Tag type="blocked" label="阻塞"/>
       </div>)}
     </div>}
-    {velocity?.length > 0 && <div className="card">
+    {(velocity && velocity.length) > 0 && <div className="card">
       <div className="section-title">📈 速度趋势（近5迭代）</div>
       <div style={{display:'flex',gap:8,alignItems:'flex-end',height:80}}>
         {velocity.map(s=>{const h=Math.max(8,Math.round((s.velocity/(Math.max(...velocity.map(x=>x.planned||1))))*70));return <div key={s.id} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
           <div style={{width:'100%',background:'#3b82f6',borderRadius:'3px 3px 0 0',height:h+'px'}}/>
-          <div style={{fontSize:10,color:'#64748b'}}>{s.id?.replace('SPRINT-','S')}</div>
+          <div style={{fontSize:10,color:'#64748b'}}>{(s.id && s.id.replace('SPRINT-','S'))}</div>
         </div>;})}
       </div>
     </div>}
@@ -396,6 +396,8 @@ function Dashboard() {
 }
 
 // ── 需求看板（手动录入 / AI 文档拆解 / 编辑 / 原型说明与配图） ───────────────────
+const DEV_TOOL_PRESETS = ['', 'claude-code', 'cursor', 'windsurf', 'opencode', 'direct-llm', 'trae', 'vscode', 'custom'];
+
 function Requirements() {
   const {data, loading, error, reload} = useFetch(`${API}/requirements`);
   const [detail, setDetail] = React.useState(null);
@@ -403,12 +405,101 @@ function Requirements() {
   const [proto, setProto] = React.useState('');
   const [protoBusy, setProtoBusy] = React.useState(false);
   const [manualOpen, setManualOpen] = React.useState(false);
-  const [manualForm, setManualForm] = React.useState({title:'',description:'',priority:'P1',acceptance:'',tags:''});
+  const [manualForm, setManualForm] = React.useState({title:'',description:'',priority:'P1',acceptance:'',tags:'',assigned_agent:'',dev_tool:''});
   const [docOpen, setDocOpen] = React.useState(false);
   const [docText, setDocText] = React.useState('');
   const [docBusy, setDocBusy] = React.useState(false);
   const [previewItems, setPreviewItems] = React.useState(null);
   const [selPreview, setSelPreview] = React.useState(() => new Set());
+  const {data: agentsBuiltin} = useFetch(`${API}/agents/builtin`);
+  const {data: agentsCustom} = useFetch(`${API}/agents`);
+
+  const agentOptions = React.useMemo(() => {
+    const defs = Array.isArray(agentsBuiltin) ? agentsBuiltin : [];
+    const cus = Array.isArray(agentsCustom) ? agentsCustom : [];
+    const ids = [];
+    defs.forEach((a) => { if (a && a.id) ids.push(a.id); });
+    cus.forEach((a) => { if (a && a.id) ids.push(a.id); });
+    if (!ids.length) return ['', 'orchestrator', 'planner', 'coder-backend', 'coder-frontend', 'reviewer', 'tester', 'debugger'];
+    return ['', ...ids.filter((x, i) => ids.indexOf(x) === i)];
+  }, [agentsBuiltin, agentsCustom]);
+
+  const groupByPriorityOrdered = React.useCallback((reqs) => {
+    const g = {P0: [], P1: [], P2: [], P3: []};
+    (reqs || []).forEach((r) => {
+      const p = (r.priority || 'P3').toUpperCase();
+      const k = g[p] ? p : 'P3';
+      g[k].push(r);
+    });
+    return g;
+  }, []);
+
+  const commitReorderBoard = (gObj) => {
+    const body = {
+      groups: {
+        P0: (gObj.P0 || []).map((r) => r.id),
+        P1: (gObj.P1 || []).map((r) => r.id),
+        P2: (gObj.P2 || []).map((r) => r.id),
+        P3: (gObj.P3 || []).map((r) => r.id),
+      },
+    };
+    fetch(`${API}/requirements/reorder-board`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    })
+      .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+      .then(({ok, d}) => {
+        if (!ok) {
+          const msg = typeof d.detail === 'string' ? d.detail : '排序保存失败';
+          showToast(msg, 'err');
+          return;
+        }
+        reload();
+        showToast('看板顺序与优先级已保存', 'ok');
+      })
+      .catch(() => showToast('请求失败', 'err'));
+  };
+
+  const moveReq = (id, targetP, insertBeforeId) => {
+    const reqs = data || [];
+    const g = groupByPriorityOrdered(reqs);
+    let row = null;
+    for (const p of ['P0', 'P1', 'P2', 'P3']) {
+      const idx = g[p].findIndex((x) => x.id === id);
+      if (idx >= 0) {
+        row = g[p][idx];
+        g[p].splice(idx, 1);
+        break;
+      }
+    }
+    if (!row) return;
+    const tp = ['P0', 'P1', 'P2', 'P3'].includes(targetP) ? targetP : 'P3';
+    if (!insertBeforeId) {
+      g[tp].push({...row, priority: tp});
+    } else {
+      const at = g[tp].findIndex((x) => x.id === insertBeforeId);
+      if (at < 0) g[tp].push({...row, priority: tp});
+      else g[tp].splice(at, 0, {...row, priority: tp});
+    }
+    commitReorderBoard(g);
+  };
+
+  const patchReqMeta = (id, partial) => {
+    fetch(`${API}/requirements/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(partial),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        reload();
+        showToast('已更新', 'ok');
+      })
+      .catch(() => showToast('更新失败', 'err'));
+  };
 
   React.useEffect(() => {
     if (!detail) { setProto(''); return; }
@@ -416,7 +507,7 @@ function Requirements() {
       .then((r) => r.json())
       .then((d) => setProto(d.content || ''))
       .catch(() => setProto(''));
-  }, [detail?.id]);
+  }, [detail && detail.id]);
 
   const openDetail = (r) => {
     setDetail(r);
@@ -427,6 +518,8 @@ function Requirements() {
       status: r.status || 'pending',
       acceptance: Array.isArray(r.acceptance_criteria) ? r.acceptance_criteria.join('\n') : '',
       human_notes: r.human_notes || '',
+      assigned_agent: r.assigned_agent || '',
+      dev_tool: r.dev_tool || '',
     });
   };
 
@@ -443,12 +536,14 @@ function Requirements() {
         status: editForm.status,
         acceptance_criteria: ac,
         human_notes: editForm.human_notes,
+        assigned_agent: editForm.assigned_agent || '',
+        dev_tool: editForm.dev_tool || '',
       }),
     })
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(() => {
         reload();
-        setDetail((d) => (d ? {...d, title: editForm.title, description: editForm.description, priority: editForm.priority, status: editForm.status, acceptance_criteria: ac, human_notes: editForm.human_notes} : null));
+        setDetail((d) => (d ? {...d, title: editForm.title, description: editForm.description, priority: editForm.priority, status: editForm.status, acceptance_criteria: ac, human_notes: editForm.human_notes, assigned_agent: editForm.assigned_agent, dev_tool: editForm.dev_tool} : null));
         showToast('需求已保存', 'ok');
       })
       .catch(() => showToast('保存失败', 'err'));
@@ -491,19 +586,21 @@ function Requirements() {
     fetch(`${API}/requirements`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
+        body: JSON.stringify({
         title: manualForm.title.trim(),
         description: manualForm.description.trim(),
         priority: manualForm.priority,
         acceptance_criteria: ac,
         tags,
+        assigned_agent: manualForm.assigned_agent || '',
+        dev_tool: manualForm.dev_tool || '',
       }),
     })
       .then((r) => r.json().then((d) => ({ok: r.ok, d})))
       .then(({ok, d}) => {
         if (!ok) { showToast(d.detail || '创建失败', 'err'); return; }
         setManualOpen(false);
-        setManualForm({title:'',description:'',priority:'P1',acceptance:'',tags:''});
+        setManualForm({title:'',description:'',priority:'P1',acceptance:'',tags:'',assigned_agent:'',dev_tool:''});
         reload();
         showToast('需求已创建', 'ok');
       })
@@ -568,12 +665,14 @@ function Requirements() {
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
   const reqs = data || [];
-  const groups = {P0: [], P1: [], P2: [], P3: []};
-  reqs.forEach((r) => { const p = r.priority || 'P3'; (groups[p] || groups.P3).push(r); });
+  const groups = groupByPriorityOrdered(reqs);
 
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
-      <div className="section-title">📋 需求看板</div>
+      <div>
+        <div className="section-title">📋 需求看板</div>
+        <div style={{fontSize:11,color:'#64748b',marginTop:4}}>拖拽卡片调整优先级与顺序；卡片上可指定 Agent / 开发工具；拖到卡片前可插队。</div>
+      </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button type="button" className="btn btn-primary btn-sm" onClick={()=>setManualOpen(true)}>＋ 手动录入</button>
         <button type="button" className="btn btn-sm" style={{background:'#4f46e5',color:'#fff'}} onClick={()=>{setDocOpen(true);setPreviewItems(null);setDocText('');}}>AI 读文档生成</button>
@@ -581,16 +680,44 @@ function Requirements() {
       </div>
     </div>
     <div className="grid-2">
-      {Object.entries(groups).map(([p, items]) => <div key={p} className="card scroll-slim" style={{maxHeight:480,overflowY:'auto'}}>
+      {Object.entries(groups).map(([p, items]) => <div key={p} className="card scroll-slim" style={{maxHeight:520,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}
+        onDragOver={(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';}}
+      >
         <div className="section-title"><Tag type={p}/> <span style={{color:'#64748b',fontWeight:400}}>({items.length})</span></div>
-        {items.length === 0 ? <div className="empty">暂无</div> : items.map((r) => <div key={r.id} className="list-item" style={{alignItems:'flex-start'}}>
-          <div style={{flex:1,cursor:'pointer'}} onClick={() => openDetail(r)}>
-            <div className="title">{r.title}</div>
-            <div className="meta">{r.id} · <Tag type={r.status === 'done' ? 'done' : (r.status || 'pending')}/></div>
-            {r.human_notes && <div className="meta" style={{color:'#fbbf24'}}>💬 {r.human_notes}</div>}
+        {items.length === 0 ? <div className="empty">暂无</div> : items.map((r) => <div key={r.id}
+          draggable
+          onDragStart={(e)=>{e.dataTransfer.setData('text/req-id', r.id);e.dataTransfer.effectAllowed='move';}}
+          className="list-item"
+          style={{alignItems:'stretch',flexDirection:'column',gap:8,cursor:'grab',border:'1px solid var(--border)',borderRadius:10,padding:10,marginBottom:2}}
+          onDragOver={(e)=>{e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';}}
+          onDrop={(e)=>{e.preventDefault();e.stopPropagation();const dragId=e.dataTransfer.getData('text/req-id');if(!dragId||dragId===r.id)return;moveReq(dragId,p,r.id);}}
+        >
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8}}>
+            <div style={{flex:1,cursor:'pointer',minWidth:0}} onClick={() => openDetail(r)}>
+              <div className="title">{r.title}</div>
+              <div className="meta">{r.id} · <Tag type={r.status === 'done' ? 'done' : (r.status || 'pending')}/></div>
+              {r.description && <div className="meta" style={{color:'#94a3b8',marginTop:4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{r.description}</div>}
+              {r.human_notes && <div className="meta" style={{color:'#fbbf24'}}>💬 {r.human_notes}</div>}
+            </div>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => openDetail(r)}>编辑</button>
           </div>
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => openDetail(r)}>编辑</button>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center',fontSize:11}}>
+            <span style={{color:'#64748b'}}>Agent</span>
+            <select value={r.assigned_agent || ''} onChange={(e)=>patchReqMeta(r.id,{assigned_agent:e.target.value})} onClick={(e)=>e.stopPropagation()} style={{padding:'4px 8px',borderRadius:6,background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border)',fontSize:11,maxWidth:160}}>
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+            </select>
+            <span style={{color:'#64748b'}}>工具</span>
+            <select value={r.dev_tool || ''} onChange={(e)=>patchReqMeta(r.id,{dev_tool:e.target.value})} onClick={(e)=>e.stopPropagation()} style={{padding:'4px 8px',borderRadius:6,background:'var(--bg3)',color:'var(--text)',border:'1px solid var(--border)',fontSize:11,maxWidth:140}}>
+              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+            </select>
+            <span style={{marginLeft:'auto',color:'#475569',fontSize:10}}>⋮⋮ 拖拽排序</span>
+          </div>
         </div>)}
+        <div
+          style={{minHeight:32,border:'1px dashed var(--border)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'var(--text3)',marginTop:4}}
+          onDragOver={(e)=>{e.preventDefault();e.dataTransfer.dropEffect='move';}}
+          onDrop={(e)=>{e.preventDefault();const dragId=e.dataTransfer.getData('text/req-id');if(!dragId)return;moveReq(dragId,p,null);}}
+        >拖放到此 · 置于{p}列末尾</div>
       </div>)}
     </div>
 
@@ -609,6 +736,16 @@ function Requirements() {
           <textarea value={manualForm.acceptance} onChange={(e)=>setManualForm({...manualForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}} placeholder="可测、可交付"/></div>
         <div className="form-group"><label>标签（逗号分隔）</label>
           <input value={manualForm.tags} onChange={(e)=>setManualForm({...manualForm,tags:e.target.value})} placeholder="backend,api"/></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div className="form-group"><label>开发 Agent（可选）</label>
+            <select value={manualForm.assigned_agent} onChange={(e)=>setManualForm({...manualForm,assigned_agent:e.target.value})}>
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+            </select></div>
+          <div className="form-group"><label>开发工具（可选）</label>
+            <select value={manualForm.dev_tool} onChange={(e)=>setManualForm({...manualForm,dev_tool:e.target.value})}>
+              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+            </select></div>
+        </div>
         <div className="modal-actions">
           <button type="button" className="btn btn-cancel" onClick={()=>setManualOpen(false)}>取消</button>
           <button type="button" className="btn btn-primary" onClick={saveManual}>创建</button>
@@ -691,6 +828,16 @@ function Requirements() {
           <textarea value={editForm.acceptance} onChange={(e)=>setEditForm({...editForm,acceptance:e.target.value})} style={{minHeight:72,fontSize:12}}/></div>
         <div className="form-group"><label>人工备注</label>
           <textarea value={editForm.human_notes} onChange={(e)=>setEditForm({...editForm,human_notes:e.target.value})} style={{minHeight:48,fontSize:12}}/></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+          <div className="form-group"><label>开发 Agent</label>
+            <select value={editForm.assigned_agent || ''} onChange={(e)=>setEditForm({...editForm,assigned_agent:e.target.value})}>
+              {agentOptions.map((aid)=><option key={String(aid)} value={aid}>{aid || '（未指定）'}</option>)}
+            </select></div>
+          <div className="form-group"><label>开发工具</label>
+            <select value={editForm.dev_tool || ''} onChange={(e)=>setEditForm({...editForm,dev_tool:e.target.value})}>
+              {DEV_TOOL_PRESETS.map((t)=><option key={String(t)} value={t}>{t || '（未指定）'}</option>)}
+            </select></div>
+        </div>
         <div className="section-title" style={{fontSize:12,marginTop:12}}>产品原型（AI）</div>
         <p style={{fontSize:11,color:'#64748b',marginBottom:8}}>生成 Markdown 线框/旅程说明，保存在本地 .ai-memory/requirement_prototypes/。可选生成概念配图（需 OPENAI_API_KEY）。</p>
         <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
@@ -962,7 +1109,7 @@ function Custom() {
         {Object.keys(cats).length===0?<div className="empty">custom/ 目录为空，请添加规范/样例/设计文件</div>:
           Object.entries(cats).map(([cat,items])=><div key={cat}>
             <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'8px 0 4px',fontWeight:700}}>{cat}</div>
-            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:selected?.path===f.path?'#1e3a5f':'',borderRadius:4}} onClick={()=>open(f)}>
+            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',borderRadius:4}} onClick={()=>open(f)}>
               <div style={{flex:1}}>
                 <div className="title" style={{fontSize:12}}>{f.name}</div>
                 <div className="meta">{f.ext} · {(f.size/1024).toFixed(1)}KB</div>
@@ -972,8 +1119,8 @@ function Custom() {
       </div>
       <div className="card" style={{maxHeight:600,overflowY:'auto'}}>
         {!selected?<div className="empty">点击左侧文件查看内容</div>:
-          content?.type==='text'?<pre style={{fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{content.content}</pre>:
-          <div className="empty">二进制文件 ({content?.size} bytes)，请在本地打开</div>}
+          (content && content.type)==='text'?<pre style={{fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word'}}>{content.content}</pre>:
+          <div className="empty">二进制文件 ({(content && content.size)} bytes)，请在本地打开</div>}
       </div>
     </div>
   </>;
@@ -1049,7 +1196,7 @@ function Specs() {
         {Object.keys(cats).length===0?<div className="empty">暂无文件（请检查 sop/specs 与 custom/）</div>:
           Object.entries(cats).map(([cat,items])=><div key={cat}>
             <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'8px 0 4px',fontWeight:700,borderBottom:'1px solid #1e293b'}}>{cat}</div>
-            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:selected?.path===f.path?'#1e3a5f':'',borderRadius:4,padding:'6px 8px'}} onClick={()=>open(f,f.source==='规范')}>
+            {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',borderRadius:4,padding:'6px 8px'}} onClick={()=>open(f,f.source==='规范')}>
               <div style={{flex:1}}>
                 <div className="title" style={{fontSize:12}}>{f.name}</div>
                 <div className="meta">{f.ext} · {(f.size/1024).toFixed(1)}KB</div>
@@ -1059,7 +1206,7 @@ function Specs() {
       </div>
       <div className="card" style={{maxHeight:620,overflowY:'auto'}}>
         {!selected?<div className="empty">← 点击左侧文件查看内容</div>:
-          content?.type==='text'?
+          (content && content.type)==='text'?
           <div>
             <div style={{fontSize:11,color:'#64748b',marginBottom:8,padding:'4px 0',borderBottom:'1px solid #334155'}}>{selected.path}</div>
             <pre style={{fontSize:12,color:'#e2e8f0',whiteSpace:'pre-wrap',wordBreak:'break-word',lineHeight:1.6}}>{content.content}</pre>
@@ -1102,7 +1249,7 @@ function Rules() {
     {['active','testing','deprecated'].map(s=><div key={s} className="card" style={{marginBottom:12}}>
       <div className="section-title">
         <span className={`tag ${statusColor[s]}`}>{s}</span>
-        <span style={{color:'#64748b',fontWeight:400,marginLeft:8}}>({byStatus[s]?.length||0})</span>
+        <span style={{color:'#64748b',fontWeight:400,marginLeft:8}}>({(byStatus[s] && byStatus[s].length)||0})</span>
       </div>
       {(byStatus[s]||[]).length===0?<div className="empty">暂无</div>:(byStatus[s]||[]).map(r=><div key={r.id} className="list-item">
         <div style={{flex:1}}>
@@ -1174,10 +1321,10 @@ function Knowledge() {
     <div className="card">
       <div className="section-title">文档列表</div>
       {items.length===0?<div className="empty">知识库为空，点击「重新索引」将 custom/ 目录文档加入知识库</div>:
-        items.slice(0,50).map(i=><div key={i.id} className="list-item" style={{cursor:'pointer',background:selected?.id===i.id?'#1e3a5f':''}} onClick={()=>setSelected(selected?.id===i.id?null:i)}>
+        items.slice(0,50).map(i=><div key={i.id} className="list-item" style={{cursor:'pointer',background:(selected && selected.id)===i.id?'#1e3a5f':''}} onClick={()=>setSelected((selected && selected.id)===i.id?null:i)}>
           <div style={{flex:1}}>
             <div className="title" style={{fontSize:12}}>{i.path}</div>
-            <div className="meta">{i.category} · {i.content?.slice(0,80)}...</div>
+            <div className="meta">{i.category} · {(i.content && i.content.slice(0,80))}...</div>
           </div>
           <span className="tag tag-p2">{i.category}</span>
         </div>)}
@@ -1212,7 +1359,7 @@ function AgentLogs() {
     <div className="card">
       {items.length===0?<div className="empty">暂无日志</div>:items.map(r=><div key={r.id} className="list-item" style={{flexDirection:'column',gap:6}}>
         <div style={{display:'flex',alignItems:'center',gap:8,width:'100%'}}>
-          <span style={{fontSize:12,color:'#94a3b8',minWidth:160}}>{r.created_at?.slice?.(0,16)||''}</span>
+          <span style={{fontSize:12,color:'#94a3b8',minWidth:160}}>{(r.created_at && r.created_at.slice && r.created_at.slice(0,16))||''}</span>
           <span style={{flex:1,fontSize:13,fontWeight:600}}>{r.task_id} · {r.agent_role}</span>
           <span className={`tag ${r.outcome==='success'?'tag-done':r.outcome==='escalated'?'tag-p1':'tag-p0'}`}>{r.outcome}</span>
           <span style={{fontSize:11,color:'#64748b'}}>重试:{r.retry_count||0}</span>
@@ -1245,7 +1392,7 @@ function Config() {
 
   if(loading) return <PageSkeleton cards={2} />;
   if(error && !state) return <LoadError message={error} onRetry={reload} />;
-  if(state?.error) return <div className="card page-enter" style={{borderLeft:'4px solid #f59e0b',padding:24}}>
+  if((state && state.error)) return <div className="card page-enter" style={{borderLeft:'4px solid #f59e0b',padding:24}}>
     <div className="section-title">⚠️ 尚未初始化</div>
     <p style={{color:'var(--text2)',fontSize:14,lineHeight:1.6}}>{state.error}<br/>请先运行 init-ai-project.sh 初始化项目</p>
     <RefreshBtn onClick={reload} />
@@ -1276,16 +1423,16 @@ function Config() {
         </>:<>
           <div className="list-item"><div className="title">项目 ID</div><div style={{color:'#94a3b8'}}>{state.project_id}</div></div>
           <div className="list-item"><div className="title">当前阶段</div><Tag type={state.phase==='DEVELOPMENT'?'in_progress':'pending'} label={state.phase}/></div>
-          <div className="list-item"><div className="title">最后更新</div><div style={{color:'#94a3b8',fontSize:12}}>{state.updated_at?.slice?.(0,16)||'-'}</div></div>
+          <div className="list-item"><div className="title">最后更新</div><div style={{color:'#94a3b8',fontSize:12}}>{(state.updated_at && state.updated_at.slice && state.updated_at.slice(0,16))||'-'}</div></div>
         </>}
       </div>
       <div className="card">
         <div className="section-title">任务统计</div>
         {state.tasks&&<>
-          <div className="list-item"><div className="title">已完成</div><span className="tag tag-done">{state.tasks.completed?.length||0}</span></div>
-          <div className="list-item"><div className="title">进行中</div><span className="tag tag-progress">{state.tasks.in_progress?.length||0}</span></div>
-          <div className="list-item"><div className="title">阻塞</div><span className="tag tag-blocked">{state.tasks.blocked?.length||0}</span></div>
-          <div className="list-item"><div className="title">待处理</div><span className="tag tag-pending">{state.tasks.pending?.length||0}</span></div>
+          <div className="list-item"><div className="title">已完成</div><span className="tag tag-done">{(state.tasks.completed && state.tasks.completed.length)||0}</span></div>
+          <div className="list-item"><div className="title">进行中</div><span className="tag tag-progress">{(state.tasks.in_progress && state.tasks.in_progress.length)||0}</span></div>
+          <div className="list-item"><div className="title">阻塞</div><span className="tag tag-blocked">{(state.tasks.blocked && state.tasks.blocked.length) || 0}</span></div>
+          <div className="list-item"><div className="title">待处理</div><span className="tag tag-pending">{(state.tasks.pending && state.tasks.pending.length)||0}</span></div>
         </>}
       </div>
     </div>
@@ -1297,95 +1444,277 @@ function Config() {
 }
 
 
-// ── 执行计划（任务 CRUD） ─────────────────────────────────────────
+// ── 执行计划（任务 CRUD + 优先级看板 / 排序 / Agent / 工具） ─────────────────
 function ExecutionPlan() {
-  const {data,loading,error,reload} = useFetch(`${API}/tasks`);
-  const [modal,setModal] = React.useState(null); // null | 'create' | task
-  const [form,setForm] = React.useState({title:'',description:'',priority:'P1',estimate:'M',assigned_to:'Coder',req_id:'',sprint_id:''});
-  const [filter,setFilter] = React.useState('all');
+  const {data, loading, error, reload} = useFetch(`${API}/tasks`);
+  const {data: agentsBuiltin} = useFetch(`${API}/agents/builtin`);
+  const {data: agentsCustom} = useFetch(`${API}/agents`);
+  const [modal, setModal] = React.useState(null);
+  const [form, setForm] = React.useState({title: '', description: '', priority: 'P1', estimate: 'M', assigned_to: 'Coder', req_id: '', sprint_id: '', dev_tool: ''});
+  const [filter, setFilter] = React.useState('all');
+
+  const agentOptions = React.useMemo(() => {
+    const defs = Array.isArray(agentsBuiltin) ? agentsBuiltin : [];
+    const cus = Array.isArray(agentsCustom) ? agentsCustom : [];
+    const ids = [];
+    defs.forEach((a) => { if (a && a.id) ids.push(a.id); });
+    cus.forEach((a) => { if (a && a.id) ids.push(a.id); });
+    const base = ['Coder', 'orchestrator', 'planner', 'coder-backend', 'coder-frontend', 'reviewer', 'tester', 'debugger'];
+    if (!ids.length) return base;
+    return [...new Set([...base, ...ids])];
+  }, [agentsBuiltin, agentsCustom]);
+
+  const groupByPriority = React.useCallback((items) => {
+    const g = {P0: [], P1: [], P2: [], P3: []};
+    (items || []).forEach((t) => {
+      const p = (t.priority || 'P3').toUpperCase();
+      const k = g[p] ? p : 'P3';
+      g[k].push(t);
+    });
+    return g;
+  }, []);
+
+  const commitTaskReorder = (gObj) => {
+    fetch(`${API}/tasks/reorder-board`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        groups: {
+          P0: (gObj.P0 || []).map((x) => x.id),
+          P1: (gObj.P1 || []).map((x) => x.id),
+          P2: (gObj.P2 || []).map((x) => x.id),
+          P3: (gObj.P3 || []).map((x) => x.id),
+        },
+      }),
+    })
+      .then((r) => r.json().then((d) => ({ok: r.ok, d})))
+      .then(({ok, d}) => {
+        if (!ok) {
+          showToast(typeof d.detail === 'string' ? d.detail : '排序保存失败', 'err');
+          return;
+        }
+        reload();
+        showToast('执行顺序与优先级已保存', 'ok');
+      })
+      .catch(() => showToast('请求失败', 'err'));
+  };
+
+  const moveTask = (id, targetP, insertBeforeId) => {
+    const all = data || [];
+    const g = groupByPriority(all);
+    let row = null;
+    for (const p of ['P0', 'P1', 'P2', 'P3']) {
+      const idx = g[p].findIndex((x) => x.id === id);
+      if (idx >= 0) {
+        row = g[p][idx];
+        g[p].splice(idx, 1);
+        break;
+      }
+    }
+    if (!row) return;
+    const tp = ['P0', 'P1', 'P2', 'P3'].includes(targetP) ? targetP : 'P3';
+    if (!insertBeforeId) g[tp].push({...row, priority: tp});
+    else {
+      const at = g[tp].findIndex((x) => x.id === insertBeforeId);
+      if (at < 0) g[tp].push({...row, priority: tp});
+      else g[tp].splice(at, 0, {...row, priority: tp});
+    }
+    commitTaskReorder(g);
+  };
+
+  const patchTask = (id, partial) => {
+    fetch(`${API}/tasks/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(partial),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        reload();
+        showToast('已更新', 'ok');
+      })
+      .catch(() => showToast('更新失败', 'err'));
+  };
 
   const save = () => {
     const isEdit = modal && modal.id;
     const url = isEdit ? `${API}/tasks/${modal.id}` : `${API}/tasks`;
     const method = isEdit ? 'PATCH' : 'POST';
-    fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
-      .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{setModal(null);reload();showToast(isEdit?'任务已更新':'任务已创建','ok');})
-      .catch(()=>showToast('保存失败','err'));
+    fetch(url, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(form)})
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        setModal(null);
+        reload();
+        showToast(isEdit ? '任务已更新' : '任务已创建', 'ok');
+      })
+      .catch(() => showToast('保存失败', 'err'));
   };
   const del = (id) => {
-    if(!confirm('确认删除？')) return;
-    fetch(`${API}/tasks/${id}`,{method:'DELETE'})
-      .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{reload();showToast('已删除','ok');})
-      .catch(()=>showToast('删除失败','err'));
+    if (!confirm('确认删除？')) return;
+    fetch(`${API}/tasks/${id}`, {method: 'DELETE'})
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        reload();
+        showToast('已删除', 'ok');
+      })
+      .catch(() => showToast('删除失败', 'err'));
   };
-  const changeStatus = (id,status) => {
-    fetch(`${API}/tasks/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})})
-      .then((r) => { if (!r.ok) throw new Error(); })
-      .then(()=>{reload();showToast('状态已更新','ok');})
-      .catch(()=>showToast('更新失败','err'));
+  const changeStatus = (id, status) => {
+    fetch(`${API}/tasks/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})})
+      .then((r) => {
+        if (!r.ok) throw new Error();
+      })
+      .then(() => {
+        reload();
+        showToast('状态已更新', 'ok');
+      })
+      .catch(() => showToast('更新失败', 'err'));
   };
 
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
 
-  const tasks = (data||[]).filter(t=>filter==='all'||t.status===filter);
-  const statusOpts = ['pending','in_progress','completed','blocked'];
-  const priorityOpts = ['P0','P1','P2','P3'];
-  const estimateOpts = ['S','M','L'];
+  const tasks = (data || []).filter((t) => filter === 'all' || t.status === filter);
+  const statusOpts = ['pending', 'in_progress', 'completed', 'blocked'];
+  const priorityOpts = ['P0', 'P1', 'P2', 'P3'];
+  const estimateOpts = ['S', 'M', 'L'];
+  const groups = groupByPriority(tasks);
 
   return <>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-      <div className="section-title">📋 执行计划</div>
-      <div style={{display:'flex',gap:8,alignItems:'center'}}>
-        <select style={{background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'4px 8px',borderRadius:6,fontSize:12}}
-          value={filter} onChange={e=>setFilter(e.target.value)}>
+    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8}}>
+      <div>
+        <div className="section-title">📋 执行计划</div>
+        <div style={{fontSize: 11, color: '#64748b', marginTop: 4}}>
+          {filter === 'all' ? '按优先级 P0–P3 看板；拖拽调整顺序与优先级；卡片可改状态 / Agent / 工具。' : '筛选模式下为列表视图；调整顺序请切回「全部」。'}
+        </div>
+      </div>
+      <div style={{display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap'}}>
+        <select style={{background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0', padding: '4px 8px', borderRadius: 6, fontSize: 12}}
+          value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">全部</option>
-          {statusOpts.map(s=><option key={s} value={s}>{s}</option>)}
+          {statusOpts.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <RefreshBtn onClick={reload}>{''}</RefreshBtn>
-        <button className="btn btn-primary btn-sm" onClick={()=>{setModal('create');setForm({title:'',description:'',priority:'P1',estimate:'M',assigned_to:'Coder',req_id:'',sprint_id:''});}}>+ 新建任务</button>
+        <button className="btn btn-primary btn-sm" onClick={() => {
+          setModal('create');
+          setForm({title: '', description: '', priority: 'P1', estimate: 'M', assigned_to: 'Coder', req_id: '', sprint_id: '', dev_tool: ''});
+        }}>+ 新建任务</button>
       </div>
     </div>
-    <div className="card">
-      {tasks.length===0?<div className="empty">暂无任务</div>:tasks.map(t=><div key={t.id} className="list-item">
-        <div style={{flex:1}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span className="title">{t.title}</span>
-            <Tag type={t.status||'pending'}/>
-            <Tag type={t.priority||'P2'}/>
-            <span style={{fontSize:11,color:'#64748b'}}>{t.estimate||'-'}</span>
+    {filter === 'all' ? (
+      <div className="grid-2">
+        {Object.entries(groups).map(([p, items]) => <div key={p} className="card scroll-slim" style={{maxHeight: 520, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8}}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+        >
+          <div className="section-title"><Tag type={p}/> <span style={{color: '#64748b', fontWeight: 400}}>({items.length})</span></div>
+          {items.length === 0 ? <div className="empty">暂无</div> : items.map((t) => <div key={t.id}
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData('text/task-id', t.id); e.dataTransfer.effectAllowed = 'move'; }}
+            className="list-item"
+            style={{alignItems: 'stretch', flexDirection: 'column', gap: 8, cursor: 'grab', border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 2}}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; }}
+            onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const dragId = e.dataTransfer.getData('text/task-id'); if (!dragId || dragId === t.id) return; moveTask(dragId, p, t.id); }}
+          >
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8}}>
+              <div style={{flex: 1, minWidth: 0}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap'}}>
+                  <span className="title">{t.title}</span>
+                  <Tag type={t.status || 'pending'}/>
+                  <span style={{fontSize: 11, color: '#64748b'}}>{t.estimate || '-'}</span>
+                </div>
+                <div className="meta">{t.id} {t.req_id && `· 需求:${t.req_id}`}</div>
+                {t.description && <div className="meta" style={{color: '#94a3b8', marginTop: 4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{t.description}</div>}
+                {Number(t.confidence) > 0 && <ConfBar val={t.confidence}/>}
+              </div>
+              <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+                <select style={{background: '#0f172a', border: '1px solid #334155', color: '#94a3b8', padding: '2px 4px', borderRadius: 4, fontSize: 11}}
+                  value={t.status || 'pending'} onChange={(e) => changeStatus(t.id, e.target.value)} onClick={(e) => e.stopPropagation()}>
+                  {statusOpts.map((s) => <option key={s}>{s}</option>)}
+                </select>
+                <button className="btn btn-sm btn-primary" onClick={() => {
+                  setModal(t);
+                  setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || ''});
+                }}>编辑</button>
+                <button className="btn btn-sm" style={{background: '#7f1d1d', color: '#fca5a5'}} onClick={() => del(t.id)}>删除</button>
+              </div>
+            </div>
+            <div style={{display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 11}}>
+              <span style={{color: '#64748b'}}>Agent</span>
+              <select value={t.assigned_to || ''} onChange={(e) => patchTask(t.id, {assigned_to: e.target.value})} onClick={(e) => e.stopPropagation()}
+                style={{padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', fontSize: 11, maxWidth: 160}}>
+                {agentOptions.map((aid) => <option key={String(aid)} value={aid}>{aid}</option>)}
+              </select>
+              <span style={{color: '#64748b'}}>工具</span>
+              <select value={t.dev_tool || ''} onChange={(e) => patchTask(t.id, {dev_tool: e.target.value})} onClick={(e) => e.stopPropagation()}
+                style={{padding: '4px 8px', borderRadius: 6, background: 'var(--bg3)', color: 'var(--text)', border: '1px solid var(--border)', fontSize: 11, maxWidth: 140}}>
+                {DEV_TOOL_PRESETS.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
+              </select>
+              <span style={{marginLeft: 'auto', color: '#475569', fontSize: 10}}>拖拽排序</span>
+            </div>
+          </div>)}
+          <div
+            style={{minHeight: 32, border: '1px dashed var(--border)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text3)', marginTop: 4}}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+            onDrop={(e) => { e.preventDefault(); const dragId = e.dataTransfer.getData('text/task-id'); if (!dragId) return; moveTask(dragId, p, null); }}
+          >拖放到此 · {p} 列末尾</div>
+        </div>)}
+      </div>
+    ) : (
+      <div className="card">
+        {tasks.length === 0 ? <div className="empty">暂无任务</div> : tasks.map((t) => <div key={t.id} className="list-item">
+          <div style={{flex: 1}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+              <span className="title">{t.title}</span>
+              <Tag type={t.status || 'pending'}/>
+              <Tag type={t.priority || 'P2'}/>
+              <span style={{fontSize: 11, color: '#64748b'}}>{t.estimate || '-'}</span>
+            </div>
+            <div className="meta">{t.id} · {t.assigned_to || '-'} · 工具:{t.dev_tool || '-'} {t.req_id && `· 需求:${t.req_id}`}</div>
+            {Number(t.confidence) > 0 && <ConfBar val={t.confidence}/>}
           </div>
-          <div className="meta">{t.id} · {t.assigned_to||'-'} {t.req_id&&`· 需求:${t.req_id}`}</div>
-          {t.confidence>0&&<ConfBar val={t.confidence}/>}
+          <div style={{display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end'}}>
+            <select style={{background: '#0f172a', border: '1px solid #334155', color: '#94a3b8', padding: '2px 4px', borderRadius: 4, fontSize: 11}}
+              value={t.status || 'pending'} onChange={(e) => changeStatus(t.id, e.target.value)}>
+              {statusOpts.map((s) => <option key={s}>{s}</option>)}
+            </select>
+            <button className="btn btn-sm btn-primary" onClick={() => {
+              setModal(t);
+              setForm({title: t.title, description: t.description || '', priority: t.priority || 'P1', estimate: t.estimate || 'M', assigned_to: t.assigned_to || 'Coder', req_id: t.req_id || '', sprint_id: t.sprint_id || '', dev_tool: t.dev_tool || ''});
+            }}>编辑</button>
+            <button className="btn btn-sm" style={{background: '#7f1d1d', color: '#fca5a5'}} onClick={() => del(t.id)}>删除</button>
+          </div>
+        </div>)}
+      </div>
+    )}
+    {modal && <div className="modal-bg" onClick={() => setModal(null)}>
+      <div className="modal" style={{width: 480}} onClick={(e) => e.stopPropagation()}>
+        <h3>{modal === 'create' ? '新建任务' : '编辑任务'}</h3>
+        <div className="form-group"><label>标题</label><input value={form.title} onChange={(e) => setForm({...form, title: e.target.value})} placeholder="任务标题"/></div>
+        <div className="form-group"><label>描述</label><textarea value={form.description} onChange={(e) => setForm({...form, description: e.target.value})} placeholder="任务描述"/></div>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8}}>
+          <div className="form-group"><label>优先级</label><select value={form.priority} onChange={(e) => setForm({...form, priority: e.target.value})}>{priorityOpts.map((p) => <option key={p}>{p}</option>)}</select></div>
+          <div className="form-group"><label>估算</label><select value={form.estimate} onChange={(e) => setForm({...form, estimate: e.target.value})}>{estimateOpts.map((p) => <option key={p}>{p}</option>)}</select></div>
+          <div className="form-group"><label>开发 Agent</label>
+            <select value={form.assigned_to} onChange={(e) => setForm({...form, assigned_to: e.target.value})}>
+              {agentOptions.map((aid) => <option key={String(aid)} value={aid}>{aid}</option>)}
+            </select></div>
         </div>
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
-          <select style={{background:'#0f172a',border:'1px solid #334155',color:'#94a3b8',padding:'2px 4px',borderRadius:4,fontSize:11}}
-            value={t.status||'pending'} onChange={e=>changeStatus(t.id,e.target.value)}>
-            {statusOpts.map(s=><option key={s}>{s}</option>)}
-          </select>
-          <button className="btn btn-sm btn-primary" onClick={()=>{setModal(t);setForm({title:t.title,description:t.description||'',priority:t.priority||'P1',estimate:t.estimate||'M',assigned_to:t.assigned_to||'Coder',req_id:t.req_id||'',sprint_id:t.sprint_id||''});}}>编辑</button>
-          <button className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5'}} onClick={()=>del(t.id)}>删除</button>
-        </div>
-      </div>)}
-    </div>
-    {modal&&<div className="modal-bg" onClick={()=>setModal(null)}>
-      <div className="modal" style={{width:480}} onClick={e=>e.stopPropagation()}>
-        <h3>{modal==='create'?'新建任务':'编辑任务'}</h3>
-        <div className="form-group"><label>标题</label><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="任务标题"/></div>
-        <div className="form-group"><label>描述</label><textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="任务描述"/></div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-          <div className="form-group"><label>优先级</label><select value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>{priorityOpts.map(p=><option key={p}>{p}</option>)}</select></div>
-          <div className="form-group"><label>估算</label><select value={form.estimate} onChange={e=>setForm({...form,estimate:e.target.value})}>{estimateOpts.map(p=><option key={p}>{p}</option>)}</select></div>
-          <div className="form-group"><label>负责人</label><input value={form.assigned_to} onChange={e=>setForm({...form,assigned_to:e.target.value})}/></div>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <div className="form-group"><label>关联需求 ID</label><input value={form.req_id} onChange={e=>setForm({...form,req_id:e.target.value})} placeholder="REQ-xxx"/></div>
-          <div className="form-group"><label>Sprint ID</label><input value={form.sprint_id} onChange={e=>setForm({...form,sprint_id:e.target.value})} placeholder="SPRINT-1"/></div>
+        <div className="form-group"><label>开发工具</label>
+          <select value={form.dev_tool || ''} onChange={(e) => setForm({...form, dev_tool: e.target.value})}>
+            {DEV_TOOL_PRESETS.map((x) => <option key={String(x)} value={x}>{x || '（未指定）'}</option>)}
+          </select></div>
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8}}>
+          <div className="form-group"><label>关联需求 ID</label><input value={form.req_id} onChange={(e) => setForm({...form, req_id: e.target.value})} placeholder="REQ-xxx"/></div>
+          <div className="form-group"><label>Sprint ID</label><input value={form.sprint_id} onChange={(e) => setForm({...form, sprint_id: e.target.value})} placeholder="SPRINT-1"/></div>
         </div>
         <div className="modal-actions">
-          <button className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>
+          <button className="btn btn-cancel" onClick={() => setModal(null)}>取消</button>
           <button className="btn btn-primary" onClick={save}>保存</button>
         </div>
       </div>
@@ -1405,7 +1734,7 @@ function IterationProgress() {
   };
 
   const active = (sprints||[]).find(s=>s.status==='active');
-  React.useEffect(()=>{ if(active&&!selected) loadProgress(active.id); },[active?.id]);
+  React.useEffect(()=>{ if(active&&!selected) loadProgress(active.id); },[(active && active.id)]);
 
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
@@ -1421,7 +1750,7 @@ function IterationProgress() {
         {(sprints||[]).length===0?<div className="empty">暂无迭代</div>:(sprints||[]).map(s=><div key={s.id} className="list-item" style={{cursor:'pointer',background:selected===s.id?'#1e3a5f':''}} onClick={()=>loadProgress(s.id)}>
           <div style={{flex:1}}>
             <div className="title">{s.id}</div>
-            <div className="meta">{s.goal?.slice(0,40)}</div>
+            <div className="meta">{(s.goal && s.goal.slice(0,40))}</div>
           </div>
           <span className={`tag ${s.status==='active'?'tag-progress':s.status==='completed'?'tag-done':'tag-pending'}`}>{s.status}</span>
         </div>)}
@@ -1431,17 +1760,17 @@ function IterationProgress() {
           <div className="grid-4" style={{marginBottom:12}}>
             <div className="card"><h3>完成率</h3><div className="stat-val">{progress.completion_rate}%</div><div className="progress-bar"><div className="progress-fill" style={{width:progress.completion_rate+'%'}}/></div></div>
             <div className="card"><h3>任务总数</h3><div className="stat-val">{progress.total_tasks}</div><div className="stat-sub">完成 {progress.completed}</div></div>
-            <div className="card"><h3>阻塞</h3><div className="stat-val" style={{color:progress.blocked?.length?'#fca5a5':'#86efac'}}>{progress.blocked?.length||0}</div></div>
+            <div className="card"><h3>阻塞</h3><div className="stat-val" style={{color:(progress.blocked && progress.blocked.length)?'#fca5a5':'#86efac'}}>{(progress.blocked && progress.blocked.length)||0}</div></div>
             <div className="card"><h3>平均置信度</h3><div className="stat-val" style={{fontSize:20}}>{Math.round((progress.avg_confidence||0)*100)}%</div></div>
           </div>
-          {progress.blocked?.length>0&&<div className="card" style={{marginBottom:12}}>
+          {(progress.blocked && progress.blocked.length)>0&&<div className="card" style={{marginBottom:12}}>
             <div className="section-title">🚧 阻塞任务</div>
             {progress.blocked.map(t=><div key={t.id} className="list-item">
               <div style={{flex:1}}><div className="title">{t.title}</div><div className="meta">{t.id} · {t.assigned_to}</div></div>
               <Tag type="blocked"/>
             </div>)}
           </div>}
-          {progress.open_issues?.length>0&&<div className="card">
+          {(progress.open_issues && progress.open_issues.length)>0&&<div className="card">
             <div className="section-title">🐛 本迭代问题</div>
             {progress.open_issues.map(i=><div key={i.id} className="list-item">
               <div style={{flex:1}}><div className="title">{i.title}</div></div>
@@ -1581,7 +1910,7 @@ function KnowledgeManager() {
         items.slice(0,100).map(i=><div key={i.id} className="list-item">
           <div style={{flex:1}}>
             <div className="title" style={{fontSize:12}}>{i.path||i.id}</div>
-            <div className="meta">{i.content?.slice?.(0,100)}...</div>
+            <div className="meta">{(i.content && i.content.slice && i.content.slice(0,100))}...</div>
           </div>
           <div style={{display:'flex',gap:4,alignItems:'center'}}>
             <span className="tag tag-p2">{i.category}</span>
@@ -1662,7 +1991,7 @@ function SpecEditor() {
       <div className="card" style={{maxHeight:640,overflowY:'auto'}}>
         {Object.entries(cats).map(([cat,items])=><div key={cat}>
           <div style={{fontSize:11,color:'#64748b',textTransform:'uppercase',padding:'6px 0 3px',fontWeight:700,borderBottom:'1px solid #1e293b'}}>{cat}</div>
-          {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:selected?.path===f.path?'#1e3a5f':'',padding:'5px 8px',borderRadius:4}} onClick={()=>open(f)}>
+          {items.map(f=><div key={f.path} className="list-item" style={{cursor:'pointer',background:(selected && selected.path)===f.path?'#1e3a5f':'',padding:'5px 8px',borderRadius:4}} onClick={()=>open(f)}>
             <div style={{flex:1}}><div className="title" style={{fontSize:12}}>{f.name}</div><div className="meta">{(f.size/1024).toFixed(1)}KB</div></div>
           </div>)}
         </div>)}
@@ -1704,24 +2033,24 @@ function Analytics() {
       <RefreshBtn onClick={reload} />
     </div>
     <div className="grid-4" style={{marginBottom:16}}>
-      <div className="card"><h3>任务总数</h3><div className="stat-val">{tasks?.total||0}</div><div className="stat-sub">完成 {tasks?.by_status?.completed||0}</div></div>
-      <div className="card"><h3>需求总数</h3><div className="stat-val">{requirements?.total||0}</div><div className="stat-sub">完成 {requirements?.by_status?.done||0}</div></div>
-      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:issues?.open?'#fdba74':'#86efac'}}>{issues?.open||0}</div></div>
+      <div className="card"><h3>任务总数</h3><div className="stat-val">{(tasks && tasks.total)||0}</div><div className="stat-sub">完成 {(tasks && tasks.by_status && tasks.by_status.completed)||0}</div></div>
+      <div className="card"><h3>需求总数</h3><div className="stat-val">{(requirements && requirements.total)||0}</div><div className="stat-sub">完成 {(requirements && requirements.by_status && requirements.by_status.done)||0}</div></div>
+      <div className="card"><h3>待处理问题</h3><div className="stat-val" style={{color:(issues && issues.open)?'#fdba74':'#86efac'}}>{(issues && issues.open)||0}</div></div>
       <div className="card"><h3>平均置信度</h3><div className="stat-val">{Math.round((avg_confidence||0)*100)}%</div><ConfBar val={avg_confidence||0}/></div>
     </div>
     <div className="grid-2">
       <div className="card">
         <div className="section-title">任务状态分布</div>
-        {Object.entries(tasks?.by_status||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={tasks?.total||1} color={k==='completed'?'#22c55e':k==='blocked'?'#ef4444':'#3b82f6'}/>)}
+        {Object.entries((tasks && tasks.by_status)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(tasks && tasks.total)||1} color={k==='completed'?'#22c55e':k==='blocked'?'#ef4444':'#3b82f6'}/>)}
       </div>
       <div className="card">
         <div className="section-title">问题类型分布</div>
-        {Object.entries(issues?.by_type||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={issues?.total||1} color='#f59e0b'/>)}
+        {Object.entries((issues && issues.by_type)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(issues && issues.total)||1} color='#f59e0b'/>)}
         <div className="section-title" style={{marginTop:12}}>需求优先级分布</div>
-        {Object.entries(requirements?.by_priority||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={requirements?.total||1} color={k==='P0'?'#ef4444':k==='P1'?'#f59e0b':'#3b82f6'}/>)}
+        {Object.entries((requirements && requirements.by_priority)||{}).map(([k,v])=><Bar key={k} label={k} val={v} max={(requirements && requirements.total)||1} color={k==='P0'?'#ef4444':k==='P1'?'#f59e0b':'#3b82f6'}/>)}
       </div>
     </div>
-    {velocity_trend?.length>0&&<div className="card" style={{marginTop:12}}>
+    {(velocity_trend && velocity_trend.length)>0&&<div className="card" style={{marginTop:12}}>
       <div className="section-title">速度趋势（近5迭代）</div>
       <div style={{display:'flex',gap:8,alignItems:'flex-end',height:80,padding:'0 8px'}}>
         {velocity_trend.map(s=>{
@@ -1733,7 +2062,7 @@ function Analytics() {
               <div style={{flex:1,background:'#3b82f6',borderRadius:'2px 2px 0 0',height:h+'px'}} title={`实际:${s.velocity}`}/>
               <div style={{flex:1,background:'#334155',borderRadius:'2px 2px 0 0',height:hp+'px'}} title={`计划:${s.planned}`}/>
             </div>
-            <div style={{fontSize:10,color:'#64748b'}}>{s.id?.replace('SPRINT-','S')}</div>
+            <div style={{fontSize:10,color:'#64748b'}}>{(s.id && s.id.replace('SPRINT-','S'))}</div>
           </div>;
         })}
       </div>

@@ -52,7 +52,7 @@ function NotifyManager() {
               <span className="tag tag-p2">{ch.type}</span>
               <span className={`tag ${ch.enabled?'tag-done':'tag-p3'}`}>{ch.enabled?'启用':'禁用'}</span>
             </div>
-            <div className="meta">事件: {ch.events?.join(', ')}</div>
+            <div className="meta">事件: {(ch.events && ch.events.join(', ')) || ''}</div>
           </div>
           <div style={{display:'flex',gap:4}}>
             <button type="button" className="btn btn-sm btn-primary" onClick={()=>test(ch.name)} disabled={testing[ch.name]}>{testing[ch.name]?'发送中...':'测试'}</button>

@@ -314,9 +314,9 @@ function VibeCliShortcutPanel() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div className="section-title">CLI 快捷参考</div>
       </div>
-      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
-          在终端中执行（需已安装对应 CLI）。也可在 IDE 页选择「开发工具」由服务端代为调用。
+          在本地终端执行（需已安装对应 CLI）。在「AI 开发 IDE」右栏「终端」可在服务端 PROJECT_PATH 下受控执行白名单命令（脚本见 bash path/to/script.sh）。
         </div>
         <textarea
           value={cmd}
@@ -346,6 +346,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const { data: models, loading: lm, error: em, reload: rm } = useFetch(`${API}/models`);
   const { data: agentGroups, loading: lg, error: eg, reload: rg } = useFetch(`${API}/agents/groups`);
   const { data: sessListData, loading: ls, error: es, reload: rs } = useFetch(`${API}/vibe/sessions`);
+  const { data: termAllow } = useFetch(`${API}/vibe/terminal/allowlist`);
 
   const [sessionId, setSessionId] = React.useState(null);
   const [sessionQuery, setSessionQuery] = React.useState('');
@@ -357,6 +358,11 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const [running, setRunning] = React.useState(false);
   const [output, setOutput] = React.useState(null);
   const [rightTab, setRightTab] = React.useState('out');
+  const [termCommand, setTermCommand] = React.useState('git status');
+  const [termCwd, setTermCwd] = React.useState('');
+  const [termTimeout, setTermTimeout] = React.useState(120);
+  const [termResult, setTermResult] = React.useState(null);
+  const [termBusy, setTermBusy] = React.useState(false);
   const [codeBlockIdx, setCodeBlockIdx] = React.useState(0);
   const [docPickPath, setDocPickPath] = React.useState(null);
   const [workspaceFile, setWorkspaceFile] = React.useState(null);
@@ -449,8 +455,8 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   };
 
   const availableTools = (tools || []).filter((t) => t.available);
-  const allModels = [...(models?.builtin || []), ...(models?.custom || [])];
-  const sessions = sessListData?.sessions || [];
+  const allModels = [...((models && models.builtin) || []), ...((models && models.custom) || [])];
+  const sessions = (sessListData && sessListData.sessions) || [];
   const sessionsFiltered = sessions.filter((s) => {
     if (!sessionQuery.trim()) return true;
     const t = `${s.title || ''} ${s.id}`.toLowerCase();
@@ -472,7 +478,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
   React.useEffect(() => {
     if (ls || es || vibeDefaultSessionBootstrapStarted) return;
-    const list = sessListData?.sessions;
+    const list = sessListData && sessListData.sessions;
     if (!Array.isArray(list) || list.length > 0) return;
     vibeDefaultSessionBootstrapStarted = true;
     fetch(`${API}/vibe/sessions`, {
@@ -482,7 +488,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     })
       .then((r) => r.json())
       .then((d) => {
-        if (d.session?.id) {
+        if (d.session && d.session.id) {
           setSessionId(d.session.id);
           rs();
         } else vibeDefaultSessionBootstrapStarted = false;
@@ -569,7 +575,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
       form.tool === 'direct-llm'
         ? {
             prompt: form.prompt,
-            model: form.model || models?.default || 'claude-opus-4-7',
+            model: form.model || (models && models.default) || 'claude-opus-4-7',
             max_tokens: 8192,
             system: modeSystem,
             memory_context: mem,
@@ -642,7 +648,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const renameCurrentSession = () => {
     if (!sessionId) return;
     const cur = sessions.find((s) => s.id === sessionId);
-    const t = window.prompt('新标题', cur?.title || sessionId);
+    const t = window.prompt('新标题', (cur && cur.title) || sessionId);
     if (t == null || !t.trim()) return;
     fetch(`${API}/vibe/sessions/${sessionId}`, {
       method: 'PATCH',
@@ -660,7 +666,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const exportCurrentSession = () => {
     const payload = {
       id: sessionId,
-      title: sessions.find((s) => s.id === sessionId)?.title,
+      title: (sessions.find((s) => s.id === sessionId) || {}).title,
       memory,
       messages,
       preview_html: previewHtml,
@@ -760,6 +766,40 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     </button>
   );
 
+  const execTerminal = () => {
+    const cmd = (termCommand || '').trim();
+    if (!cmd) {
+      showToast('请输入命令', 'err');
+      return;
+    }
+    setTermBusy(true);
+    fetch(`${API}/vibe/terminal/exec`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: cmd,
+        cwd: (termCwd || '').trim(),
+        timeout_sec: Math.min(600, Math.max(3, Number(termTimeout) || 120)),
+      }),
+    })
+      .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
+      .then(({ httpOk, d }) => {
+        setTermBusy(false);
+        if (!httpOk) {
+          const msg = typeof d.detail === 'string' ? d.detail : Array.isArray(d.detail) ? d.detail.map((x) => x.msg || x).join('; ') : JSON.stringify(d.detail || d);
+          setTermResult({ ok: false, returncode: -1, stdout: '', stderr: msg, argv: [], cwd_display: '' });
+          showToast('执行被拒绝或参数错误', 'err');
+          return;
+        }
+        setTermResult(d);
+        if (!d.ok) showToast(d.stderr ? '命令失败（见 stderr）' : '命令非零退出', 'err');
+      })
+      .catch(() => {
+        setTermBusy(false);
+        showToast('请求失败', 'err');
+      });
+  };
+
   if (panelLoading) {
     return (
       <div>
@@ -813,16 +853,16 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           重置分栏
         </button>
         <span style={{ flex: 1, minWidth: 8 }} />
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} title="浏览器全屏 API" onClick={() => leftCardRef.current?.requestFullscreen?.()}>
+        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} title="浏览器全屏 API" onClick={() => { const el = leftCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
           左栏全屏
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => midWrapRef.current?.requestFullscreen?.()}>
+        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => { const el = midWrapRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
           中栏全屏
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => rightCardRef.current?.requestFullscreen?.()}>
+        <button type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => { const el = rightCardRef.current; if (el && el.requestFullscreen) el.requestFullscreen(); }}>
           右栏全屏
         </button>
-        <button type="button" className="btn btn-sm" style={{ background: '#1e3a5f', color: '#93c5fd' }} onClick={() => document.fullscreenElement && document.exitFullscreen?.()}>
+        <button type="button" className="btn btn-sm" style={{ background: '#1e3a5f', color: '#93c5fd' }} onClick={() => document.fullscreenElement && document.exitFullscreen && document.exitFullscreen()}>
           退出全屏
         </button>
         <span style={{ fontSize: 11, color: '#64748b' }}>拖拽竖条调宽度 · Esc 退出全屏 · 布局/缩放本地保存</span>
@@ -949,7 +989,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
               <div className="form-group" style={{ margin: 0 }}>
                 <label>模型</label>
                 <select value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}>
-                  <option value="">默认 ({models?.default || '-'})</option>
+                  <option value="">默认 ({(models && models.default) || '-'})</option>
                   {allModels.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name}
@@ -1078,6 +1118,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
         <div ref={rightCardRef} className="card scroll-slim" style={{ maxHeight: '82vh', overflowY: 'auto', minHeight: 0 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
             {rightTabBtn('out', '输出')}
+            {rightTabBtn('term', '终端')}
             {rightTabBtn('md', 'Markdown')}
             {rightTabBtn('code', '代码块')}
             {rightTabBtn('gallery', '图片')}
@@ -1138,6 +1179,110 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 </>
               )}
             </>
+          )}
+
+          {rightTab === 'term' && (
+            <div>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8, lineHeight: 1.5 }}>
+                在服务端 <code style={{ color: '#93c5fd' }}>PROJECT_PATH</code> 下执行；首段可执行文件须在白名单（与「环境 / Docker」自定义检查相同）。扩展白名单：{' '}
+                <code style={{ color: '#93c5fd' }}>.ai-memory/env_exec_allowlist_extra.json</code>。支持{' '}
+                <code style={{ color: '#93c5fd' }}>bash sop/tools/xxx.sh</code>（脚本须在项目内且扩展名为 .sh）。
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {[
+                  ['git status', 'git status'],
+                  ['git diff --stat', 'git diff --stat'],
+                  ['python3 -V', 'python3 --version'],
+                  ['node -v', 'node --version'],
+                  ['npm -v', 'npm --version'],
+                ].map(([label, c]) => (
+                  <button key={label} type="button" className="btn btn-sm" style={{ background: '#334155', color: '#94a3b8' }} onClick={() => setTermCommand(c)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="form-group" style={{ marginBottom: 6 }}>
+                <label>工作目录（相对项目根，留空为根）</label>
+                <input
+                  value={termCwd}
+                  onChange={(e) => setTermCwd(e.target.value)}
+                  placeholder="例如 sop 或留空"
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 6 }}>
+                <label>超时（秒，3–600）</label>
+                <input
+                  type="number"
+                  min={3}
+                  max={600}
+                  value={termTimeout}
+                  onChange={(e) => setTermTimeout(Number(e.target.value))}
+                  style={{ width: 100 }}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 8 }}>
+                <label>命令（shell 风格，由服务端 shlex 解析）</label>
+                <textarea
+                  value={termCommand}
+                  onChange={(e) => setTermCommand(e.target.value)}
+                  style={{ width: '100%', minHeight: 72, fontFamily: 'monospace', fontSize: 12, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6, padding: 8 }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-sm btn-primary" disabled={termBusy} onClick={execTerminal}>
+                  {termBusy ? '执行中…' : '▶ 执行'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: '#334155', color: '#94a3b8' }}
+                  disabled={!termResult}
+                  onClick={() => {
+                    const t = [termResult.argv && termResult.argv.join(' '), termResult.stdout, termResult.stderr].filter(Boolean).join('\n---\n');
+                    navigator.clipboard.writeText(t).then(() => showToast('已复制', 'ok')).catch(() => showToast('复制失败', 'err'));
+                  }}
+                >
+                  复制输出
+                </button>
+              </div>
+              {termAllow && termAllow.programs && (
+                <details style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+                  <summary style={{ cursor: 'pointer', color: '#94a3b8' }}>可执行白名单（{termAllow.programs.length}）</summary>
+                  <div className="scroll-slim" style={{ maxHeight: 120, overflow: 'auto', marginTop: 6, fontFamily: 'monospace' }}>
+                    {termAllow.programs.join(', ')}
+                  </div>
+                </details>
+              )}
+              {!termResult ? (
+                <div className="empty" style={{ fontSize: 12 }}>
+                  输入命令后点击执行；stdout/stderr 将显示在下方。
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: 12, marginBottom: 6, color: termResult.ok ? '#86efac' : '#fca5a5' }}>
+                    exit {termResult.returncode != null ? termResult.returncode : '?'} · cwd {termResult.cwd_display != null && termResult.cwd_display !== '' ? termResult.cwd_display : '.'}
+                    {termResult.argv && termResult.argv.length > 0 && (
+                      <span style={{ color: '#94a3b8', marginLeft: 8 }}>
+                        argv: <code style={{ color: '#cbd5e1' }}>{termResult.argv.join(' ')}</code>
+                      </span>
+                    )}
+                  </div>
+                  {termResult.stdout ? (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>stdout</div>
+                      <pre style={{ fontSize: 11, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '36vh', overflow: 'auto', background: '#0f172a', padding: 8, borderRadius: 6, border: '1px solid #334155', margin: 0 }}>{termResult.stdout}</pre>
+                    </div>
+                  ) : null}
+                  {termResult.stderr ? (
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>stderr</div>
+                      <pre style={{ fontSize: 11, color: '#fca5a5', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '28vh', overflow: 'auto', background: '#1c1917', padding: 8, borderRadius: 6, border: '1px solid #451a1a', margin: 0 }}>{termResult.stderr}</pre>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           )}
 
           {rightTab === 'md' && (
@@ -1217,7 +1362,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                 <>
                   <div className="form-group" style={{ marginBottom: 8 }}>
                     <label>选择附件</label>
-                    <select value={docPickPath || docAttachments[0]?.path || ''} onChange={(e) => setDocPickPath(e.target.value)}>
+                    <select value={docPickPath || (docAttachments[0] && docAttachments[0].path) || ''} onChange={(e) => setDocPickPath(e.target.value)}>
                       {docAttachments.map((a) => (
                         <option key={a.path} value={a.path}>
                           {a.name}
@@ -1226,7 +1371,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
                     </select>
                   </div>
                   {(() => {
-                    const p = docPickPath || docAttachments[0]?.path;
+                    const p = docPickPath || (docAttachments[0] && docAttachments[0].path);
                     const att = docAttachments.find((x) => x.path === p) || docAttachments[0];
                     if (!att) return null;
                     const low = (att.name || '').toLowerCase();
@@ -1398,7 +1543,7 @@ function VibeTemplatesPanel() {
             <div className="empty">暂无模板</div>
           ) : (
             (data || []).map((t) => (
-              <div key={t.id} className="list-item" style={{ cursor: 'pointer', background: selected?.id === t.id ? '#1e3a5f' : '' }} onClick={() => fill(t)}>
+              <div key={t.id} className="list-item" style={{ cursor: 'pointer', background: selected && selected.id === t.id ? '#1e3a5f' : '' }} onClick={() => fill(t)}>
                 <div style={{ flex: 1 }}>
                   <div className="title">{t.name}</div>
                 </div>
@@ -1484,7 +1629,7 @@ function VibeHistoryPanel() {
           [...(data || [])].reverse().map((h, i) => (
             <div key={i} className="list-item" style={{ flexDirection: 'column', gap: 4 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
-                <span style={{ fontSize: 11, color: '#64748b' }}>{h.ts?.slice(0, 16)}</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>{h.ts && h.ts.slice(0, 16)}</span>
                 <span className={`tag ${h.ok ? 'tag-done' : 'tag-p0'}`}>{h.tool}</span>
                 <span style={{ flex: 1, fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.prompt}</span>
               </div>

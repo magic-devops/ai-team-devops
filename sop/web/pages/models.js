@@ -29,7 +29,7 @@ function ModelManager() {
       .catch(()=>showToast('删除失败','err'));
   };
 
-  const allModels = [...(data?.builtin||[]), ...(data?.custom||[])];
+  const allModels = [...((data&&data.builtin)||[]), ...((data&&data.custom)||[])];
   const ROLES = ['Orchestrator','Planner','Coder-Backend','Coder-Frontend','Reviewer','Tester','Debugger'];
   const PROVIDERS = ['anthropic','openai','google','deepseek','ollama','custom'];
 
@@ -47,7 +47,7 @@ function ModelManager() {
 
     {tab==='models'&&<div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-        <div className="section-title">模型列表 · 默认: <span style={{color:'#3b82f6'}}>{data?.default||'-'}</span></div>
+        <div className="section-title">模型列表 · 默认: <span style={{color:'#3b82f6'}}>{(data&&data.default)||'-'}</span></div>
         <button type="button" className="btn btn-primary btn-sm" onClick={()=>{setModal('custom');setForm({id:'',provider:'custom',name:'',context:32000});}}>+ 自定义模型</button>
       </div>
       <div className="card scroll-slim" style={{maxHeight:520,overflowY:'auto'}}>
@@ -81,8 +81,8 @@ function ModelManager() {
         <button type="button" className="btn btn-primary btn-sm" onClick={()=>{setModal('provider');setForm({name:'anthropic',api_key:'',base_url:'',enabled:true});}}>+ 配置提供商</button>
       </div>
       <div className="card">
-        {Object.entries(data?.providers||{}).length===0?<div className="empty">暂无配置，点击「配置提供商」添加 API Key</div>:
-          Object.entries(data?.providers||{}).map(([name,cfg])=><div key={name} className="list-item">
+        {Object.entries((data&&data.providers)||{}).length===0?<div className="empty">暂无配置，点击「配置提供商」添加 API Key</div>:
+          Object.entries((data&&data.providers)||{}).map(([name,cfg])=><div key={name} className="list-item">
             <div style={{flex:1}}>
               <div className="title">{name}</div>
               <div className="meta">API Key: {cfg.api_key?'已配置':'未配置'} {cfg.base_url&&`· URL: ${cfg.base_url}`}</div>
@@ -102,8 +102,8 @@ function ModelManager() {
         {ROLES.map(role=><div key={role} className="list-item">
           <div style={{flex:1}}><div className="title">{role}</div></div>
           <select style={{background:'#0f172a',border:'1px solid #334155',color:'#e2e8f0',padding:'4px 8px',borderRadius:6,fontSize:12}}
-            value={data?.role_models?.[role]||data?.default||''} onChange={e=>setRoleModel(role,e.target.value)}>
-            <option value="">使用默认 ({data?.default})</option>
+            value={(data&&data.role_models&&data.role_models[role])||(data&&data.default)||''} onChange={e=>setRoleModel(role,e.target.value)}>
+            <option value="">使用默认 ({data&&data.default})</option>
             {allModels.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>)}

@@ -73,15 +73,15 @@ function DevFlowHub() {
   const hints = React.useMemo(() => {
     const h = [];
     if (!data) return h;
-    if (!data.requirements?.total) h.push({ type: 'warn', text: '尚无需求入库：从「需求管理」录入或导入。' });
-    else if (data.requirements?.p0 > 0) h.push({ type: 'info', text: `存在 P0 需求 ${data.requirements.p0} 条，建议优先闭环验收标准。` });
-    if (data.tasks?.total_all && data.tasks.linked_to_requirement / data.tasks.total_all < 0.25) {
+    if (!(data.requirements && data.requirements.total)) h.push({ type: 'warn', text: '尚无需求入库：从「需求管理」录入或导入。' });
+    else if (data.requirements && data.requirements.p0 > 0) h.push({ type: 'info', text: `存在 P0 需求 ${data.requirements.p0} 条，建议优先闭环验收标准。` });
+    if (data.tasks && data.tasks.total_all && data.tasks.linked_to_requirement / data.tasks.total_all < 0.25) {
       h.push({ type: 'warn', text: '任务与需求关联度偏低：拆解时在任务上绑定 requirement_id，便于追溯。' });
     }
-    if (!data.design_docs?.count) h.push({ type: 'info', text: '技术方案文档数为 0：关键变更前先落「技术方案」再开发，降低返工。' });
-    if (data.issues?.critical_open > 0) h.push({ type: 'err', text: `有 ${data.issues.critical_open} 个高优未关闭问题，建议先处理再扩功能。` });
-    if (!data.repo_hints?.dockerfile && !data.repo_hints?.compose) h.push({ type: 'info', text: '未发现 Dockerfile/compose：环境管理可从模板初始化。' });
-    if ((data.agents?.definitions || 0) >= 1 && (data.agents?.groups || 0) === 0) {
+    if (!(data.design_docs && data.design_docs.count)) h.push({ type: 'info', text: '技术方案文档数为 0：关键变更前先落「技术方案」再开发，降低返工。' });
+    if (data.issues && data.issues.critical_open > 0) h.push({ type: 'err', text: `有 ${data.issues.critical_open} 个高优未关闭问题，建议先处理再扩功能。` });
+    if (!(data.repo_hints && data.repo_hints.dockerfile) && !(data.repo_hints && data.repo_hints.compose)) h.push({ type: 'info', text: '未发现 Dockerfile/compose：环境管理可从模板初始化。' });
+    if (((data.agents && data.agents.definitions) || 0) >= 1 && ((data.agents && data.agents.groups) || 0) === 0) {
       h.push({ type: 'info', text: '已定义 Agent 但未建专家组：可在 Agent 管理创建 group 供 Vibe 与编排复用。' });
     }
     return h;
@@ -122,24 +122,24 @@ function DevFlowHub() {
       <div className="grid-4" style={{ marginBottom: 16 }}>
         <div className="card">
           <h3>需求</h3>
-          <div className="stat-val">{R.total ?? 0}</div>
-          <div className="stat-sub">P0 {R.p0 ?? 0}</div>
+          <div className="stat-val">{R.total != null ? R.total : 0}</div>
+          <div className="stat-sub">P0 {R.p0 != null ? R.p0 : 0}</div>
         </div>
         <div className="card">
           <h3>任务(Sprint)</h3>
-          <div className="stat-val">{T.sprint_scope ?? 0}</div>
-          <div className="stat-sub">完成 {T.done_sprint ?? 0} · 已关联需求 {T.linked_to_requirement ?? 0}/{T.total_all ?? 0}</div>
+          <div className="stat-val">{T.sprint_scope != null ? T.sprint_scope : 0}</div>
+          <div className="stat-sub">完成 {T.done_sprint != null ? T.done_sprint : 0} · 已关联需求 {T.linked_to_requirement != null ? T.linked_to_requirement : 0}/{T.total_all != null ? T.total_all : 0}</div>
         </div>
         <div className="card">
           <h3>问题(未关闭)</h3>
-          <div className="stat-val">{I.open ?? 0}</div>
-          <div className="stat-sub">高优 {I.critical_open ?? 0}</div>
+          <div className="stat-val">{I.open != null ? I.open : 0}</div>
+          <div className="stat-sub">高优 {I.critical_open != null ? I.critical_open : 0}</div>
         </div>
         <div className="card">
           <h3>方案 / Agent</h3>
-          <div className="stat-val">{data.design_docs?.count ?? 0}</div>
+          <div className="stat-val">{data.design_docs && data.design_docs.count != null ? data.design_docs.count : 0}</div>
           <div className="stat-sub">
-            Agent {data.agents?.definitions ?? 0} · 组 {data.agents?.groups ?? 0}
+            Agent {data.agents && data.agents.definitions != null ? data.agents.definitions : 0} · 组 {data.agents && data.agents.groups != null ? data.agents.groups : 0}
           </div>
         </div>
       </div>
@@ -233,9 +233,9 @@ function DevFlowHub() {
             <li>
               项目路径：<code style={{ color: '#e2e8f0' }}>{data.project_path}</code>
             </li>
-            <li>specs/ 目录：{data.repo_hints?.specs_dir ? '✅ 已存在' : '— 未检测到'}</li>
-            <li>Dockerfile：{data.repo_hints?.dockerfile ? '✅' : '—'}</li>
-            <li>Compose：{data.repo_hints?.compose ? '✅' : '—'}</li>
+            <li>specs/ 目录：{data.repo_hints && data.repo_hints.specs_dir ? '✅ 已存在' : '— 未检测到'}</li>
+            <li>Dockerfile：{data.repo_hints && data.repo_hints.dockerfile ? '✅' : '—'}</li>
+            <li>Compose：{data.repo_hints && data.repo_hints.compose ? '✅' : '—'}</li>
           </ul>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             <button type="button" className="btn btn-sm btn-primary" onClick={() => devFlowNavigate('knowledge-mgr')}>
