@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/design-docs", tags=["design-docs"])
+router = APIRouter(prefix="/api/v1/design-docs", tags=["design-docs"])
 
 _ID_RE = re.compile(r"^TDS-[a-f0-9]{12}$")
 _CONTENT_MAX = 500_000

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .sql_models import get_session, WebhookConfig
 from .auth_sql import current_user, require_role, User
 
-router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
 SUPPORTED_EVENTS = [
     "task.created", "task.status_changed", "task.deleted",

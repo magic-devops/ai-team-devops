@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "dashboard": "驾驶舱",
+    "projects": "项目",
+    "tasks": "任务",
+    "workflows": "工作流",
+    "marketplace": "市场",
+    "audit": "审计",
+    "copilot": "AI 助手",
+    "settings": "设置"
+  },
+  "page": {
+    "dashboard": { "title": "跨项目驾驶舱" },
+    "projects": { "title": "项目管理" },
+    "tasks": { "title": "任务" },
+    "workflows": { "title": "工作流" },
+    "marketplace": { "title": "规约/技能市场" },
+    "audit": { "title": "审计哈希链" },
+    "copilot": { "title": "AI 助手" },
+    "settings": { "title": "设置" }
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "出错了：{{msg}}",
+    "refresh": "刷新",
+    "search": "搜索",
+    "save": "保存",
+    "cancel": "取消"
+  }
+}

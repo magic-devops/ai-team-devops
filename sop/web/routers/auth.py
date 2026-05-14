@@ -6,7 +6,7 @@ import json, hashlib, os, secrets
 
 from path_config import ai_memory_root
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 AUTH_FILE = ai_memory_root() / "auth.json"
 security = HTTPBearer(auto_error=False)
 

@@ -7,7 +7,7 @@ import json, os, subprocess
 
 from path_config import resolved_project_path
 
-router = APIRouter(prefix="/api/mcp", tags=["mcp"])
+router = APIRouter(prefix="/api/v1/mcp", tags=["mcp"])
 
 
 def _settings_file() -> Path:

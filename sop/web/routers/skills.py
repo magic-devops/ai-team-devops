@@ -6,7 +6,7 @@ from pathlib import Path
 import json, os
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/skills", tags=["skills"])
+router = APIRouter(prefix="/api/v1/skills", tags=["skills"])
 
 
 def _skills_dir() -> Path:

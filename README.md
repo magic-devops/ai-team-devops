@@ -5,11 +5,11 @@
 **AI 多 Agent 开发规约体系** — 让 AI 像资深工程师团队一样协作开发，持续自我进化
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-green.svg)](ROADMAP.md)
+[![Version](https://img.shields.io/badge/version-2.0--dev-green.svg)](ROADMAP.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
 
-[快速开始](#快速开始) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [v2 架构](docs/architecture/OVERVIEW.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
 </div>
 
@@ -99,7 +99,7 @@ cd ai-team-devops
 # 2. 安装依赖（FastAPI / LanceDB / 可选 PDF 等，推荐虚拟环境）
 bash sop/tools/install-integrations.sh
 
-# 3. 初始化你的项目
+# 3. 初始化你的项目（v1 方式）
 bash sop/tools/init-ai-project.sh my-app
 
 # 4. 启动 Web 管理后台（默认 PROJECT_PATH=当前目录）
@@ -109,6 +109,29 @@ bash sop/tools/start-manager.sh
 # 5. 健康检查
 bash sop/tools/health-check.sh
 ```
+
+### 🚀 推荐：v2 方式（统一 CLI + sop-agentd）
+
+```bash
+# 一键拉起开发环境（装 SDK/CLI，构建 sop-agentd）
+bash sop/tools/bootstrap-dev.sh
+
+# 在你的业务项目里：
+cd /path/to/your-project
+sop init my-app --manager https://mgr.example.com    # 初始化 + 配对 Manager
+sop agentd install && sop agentd start                # 装上守护进程（macOS launchd / Linux systemd）
+sop doctor                                            # 端到端自检
+sop status                                            # 一屏式总览
+sop task list --status pending                        # 拉任务
+sop llm chat "总结本 Sprint" --task-type summarize --cache-ttl 600   # 走 LLM Gateway
+
+# Manager 部署（生产 SaaS）：
+docker compose -f apps/manager/docker-compose.saas.yml up -d
+# 或 PyPI：pip install sop-manager && sop-manager start
+```
+
+新增端点：`/api/v1/llm/{chat,embeddings,models}` · `/api/v1/rag/{search,index}` · `/api/v1/copilot/{ask,classify,summarize,suggest}` · `/api/v1/events:ingest` · `/ws/events` · `/metrics`
+完整契约：[`apis/openapi/openapi.yaml`](apis/openapi/openapi.yaml)。
 
 **脚本完整清单**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)。若需重置或创建管理员账号：`python3 sop/tools/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `sop/tools/manager_client.py`。
 
@@ -137,35 +160,48 @@ opencode  # 自动读取 opencode.json
 
 ---
 
-## 项目结构
+## 项目结构（v2 monorepo）
 
 ```
 ai-team-devops/
-├── sop/                       # 核心规约体系
+├── apps/
+│   ├── manager/               # 🆕 SaaS Manager 打包/部署入口（FastAPI），独立可发版
+│   │   ├── sop_manager/       #   Python 包；目前透传 sop/web/，M6 渐进迁入 domains/
+│   │   ├── Dockerfile
+│   │   ├── docker-compose.single.yml
+│   │   ├── docker-compose.saas.yml   #   Postgres + Qdrant + Redis + Centrifugo + OTel
+│   │   └── pyproject.toml
+│   └── agent-runtime/         # 🆕 sop-agentd Go 守护进程（单二进制，跨平台）
+│       ├── cmd/sop-agentd/
+│       ├── internal/{daemon,outbox,transport,mcp,a2a,ipc,security,config,logging}
+│       └── Makefile  go.mod
+├── packages/
+│   ├── sop-cli/               # 🆕 统一 CLI `sop`（init / login / agentd / task / rule / sync / doctor / llm）
+│   └── sop-sdk-python/        # 🆕 项目侧 Python SDK（HTTP 客户端 + 本地 agentd IPC + keyring 解析）
+├── apis/                      # 🆕 Schema-First 单一事实源
+│   ├── openapi/openapi.yaml
+│   ├── proto/sop/agent/v1/agent.proto
+│   ├── asyncapi/asyncapi.yaml
+│   ├── buf.yaml  buf.gen.yaml
+│   └── README.md
+├── plugins/                   # 🆕 第三方插件示例 + 内置插件
+├── sop/                       # 既有规约 + 工具（不破坏）
 │   ├── QUICK_REF.md           # ★ AI 启动必读速查卡（~2K tokens）
-│   ├── agents/                # Agent 规范（含 Hermes/A2A）
-│   ├── specs/                 # 开发规范（按技术栈）
-│   ├── custom/                # 自定义模块（人工输入，AI 自我进化）
-│   ├── knowledge/             # LanceDB 操作库
-│   ├── integrations/          # 外部工具集成（MCP/A2A）
-│   ├── web/                   # Web 管理后台
-│   └── tools/                 # 工具脚本
-├── .claude/                   # Claude Code 配置
-│   ├── commands/              # 自定义命令
-│   └── hooks/                 # 自动化 hooks
-├── .codex/                    # Codex CLI 配置
-│   ├── config.toml            # 模型 / 沙箱 / approval / feature flags
-│   ├── hooks.json             # SessionStart / PreToolUse / PermissionRequest / PostToolUse / Stop
-│   └── hooks/                 # sop hook 脚本
-├── ARCHITECTURE.md            # 系统架构设计
-├── docs/                      # 人类可读文档索引与使用手册
-│   ├── README.md
-│   └── USER_MANUAL.md         # Web 后台操作说明
-├── TUTORIAL.md                # 详细使用教程
-├── ROADMAP.md                 # 路线图
-├── CONTRIBUTING.md            # 贡献指南
-└── LICENSE                    # MIT 协议
+│   ├── agents/ specs/ knowledge/ skills/ templates/ custom/ ...
+│   ├── integrations/mcp/      # MCP server：lancedb / tasks / llm
+│   ├── web/                   # Manager 当前源码（兼容期内继续在此维护）
+│   └── tools/                 # Shell / Python 工具脚本（bootstrap-dev / init-ai-project / start-manager / health-check / ...）
+├── docs/
+│   ├── architecture/          # 🆕 OVERVIEW · MODULES · AI_FIRST · PROTOCOLS · SECURITY · DEPLOY · EVOLUTION
+│   ├── USER_MANUAL.md         # Web 后台手册
+│   └── ORCHESTRATION_DEV_TOOLS.md
+├── ARCHITECTURE.md            # 顶层架构（指向 docs/architecture/）
+├── TUTORIAL.md  ROADMAP.md  CONTRIBUTING.md
+├── pyproject.toml             # 🆕 workspace 元包
+└── LICENSE
 ```
+
+> v2 与 v1 兼容：`sop/web` 仍是 Manager 源码所在地；`apps/manager` 是面向部署的外壳。所有旧脚本继续可用。
 
 ---
 

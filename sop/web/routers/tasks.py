@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from path_config import resolved_ai_memory_root, resolved_project_id
 from .db_sql_compat import rows, table, now
 
-router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 _PRIOS = ("P0", "P1", "P2", "P3")
 

@@ -11,7 +11,7 @@ import jwt
 from .sql_models import get_session, AuditLog
 from .auth_sql import SECRET_KEY, ALGORITHM
 
-router = APIRouter(prefix="/api/audit", tags=["audit"])
+router = APIRouter(prefix="/api/v1/audit-legacy", tags=["audit"])
 
 
 def _extract_identity(request: Request) -> tuple[str, str, str]:
@@ -46,21 +46,29 @@ def _write_audit(db: Session, tenant_id: str, user_id: str, username: str,
 
 # ── 审计中间件 ────────────────────────────────────────────────────
 _AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
-_SKIP_PATHS = {"/api/health", "/api/metrics", "/.well-known"}
+_SKIP_PREFIXES = (
+    "/api/v1/health",
+    "/metrics",
+    "/.well-known",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+)
+
 
 def _resource_from_path(path: str) -> tuple[str, str]:
-    """从路径推断 resource_type 和 resource_id"""
+    """从路径推断 resource_type 和 resource_id（/api/v1/{resource}/…）。"""
     parts = [p for p in path.split("/") if p]
-    # /api/{resource}/{id}
-    if len(parts) >= 3 and parts[0] == "api":
-        return parts[1], parts[2] if len(parts) > 2 else ""
-    if len(parts) >= 2 and parts[0] == "api":
-        return parts[1], ""
+    if len(parts) >= 4 and parts[0] == "api" and parts[1] == "v1":
+        return parts[2], parts[3] if len(parts) > 3 else ""
+    if len(parts) >= 3 and parts[0] == "api" and parts[1] == "v1":
+        return parts[2], ""
     return "", ""
 
 
 async def audit_middleware(request: Request, call_next):
-    if request.method not in _AUDIT_METHODS or any(request.url.path.startswith(p) for p in _SKIP_PATHS):
+    path = request.url.path
+    if request.method not in _AUDIT_METHODS or path.startswith(_SKIP_PREFIXES):
         return await call_next(request)
 
     response: Response = await call_next(request)

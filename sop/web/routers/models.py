@@ -6,7 +6,7 @@ from pathlib import Path
 import json, os
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/models", tags=["models"])
+router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
 
 def _models_file() -> Path:

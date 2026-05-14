@@ -1,4 +1,7 @@
-"""JWT + X-Project-Id → path_config 请求级作用域（single / saas 共用）。"""
+"""JWT + X-Project-Id → path_config 请求级作用域（single / saas 共用）。
+
+无需项目作用域解析的「公开路径」使用前缀白名单，与 /api/v1 单一 API 面对齐。
+"""
 from __future__ import annotations
 
 import os
@@ -11,16 +14,37 @@ from starlette.responses import JSONResponse, Response
 
 from path_config import project_path, reset_request_scope, set_request_scope
 
-# 无需解析项目上下文的 API（探活、OpenAPI 等）。/api/auth/* 一律走前缀跳过。
-_NO_SCOPE_PATHS: frozenset[str] = frozenset(
-    {
-        "/api/health",
-        "/health",
-        "/openapi.json",
-        "/docs",
-        "/redoc",
-    }
-)
+
+def _skip_project_scope(path: str) -> bool:
+    """无需绑定项目根路径的请求（探活、鉴权、部分只读子系统）。"""
+    if path.startswith("/docs") or path in ("/openapi.json", "/redoc", "/docs", "/redoc"):
+        return True
+    if path.startswith("/.well-known"):
+        return True
+    if path == "/metrics" or path.startswith("/metrics"):
+        return True
+    if path.startswith("/ws"):
+        return True
+    if path.startswith("/api/v1/auth"):
+        return True
+    if path.startswith("/api/v1/health"):
+        return True
+    if path.startswith("/api/v1/sso/"):
+        if "/login" in path or "/callback" in path or "/saml/" in path:
+            return True
+    if path.startswith("/api/v1/llm/health"):
+        return True
+    if path.startswith("/api/v1/rag/health"):
+        return True
+    if path.startswith("/api/v1/copilot/health"):
+        return True
+    if path.startswith("/api/v1/workflows/_health"):
+        return True
+    if path.startswith("/api/v1/marketplace/registries"):
+        return True
+    if path.startswith("/api/v1/data-exchange/export"):
+        return True
+    return False
 
 
 def _admin_mode() -> str:
@@ -39,9 +63,7 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
     from routers.sql_models import Project, ProjectMember, SessionLocal, User
 
     path = request.url.path
-    if request.method == "OPTIONS" or path.startswith("/docs/"):
-        return await call_next(request)
-    if path in _NO_SCOPE_PATHS or path.startswith("/api/auth"):
+    if request.method == "OPTIONS" or _skip_project_scope(path):
         return await call_next(request)
 
     scope_tokens: Optional[Tuple[object, object, object]] = None
@@ -52,6 +74,7 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
             raw = auth[7:].strip()
             if raw:
                 payload = jwt.decode(raw, SECRET_KEY, algorithms=[ALGORITHM])
+                request.state.jwt_payload = payload
                 uid = payload.get("sub")
                 if uid:
                     db = SessionLocal()
@@ -111,7 +134,6 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
     except jwt.InvalidTokenError:
         pass
     except Exception:
-        # 不因作用域解析失败阻断请求（回退到进程级 PROJECT_PATH）
         pass
 
     try:

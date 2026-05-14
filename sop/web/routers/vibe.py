@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from path_config import resolved_ai_memory_root, resolved_project_path
 
-router = APIRouter(prefix="/api/vibe", tags=["vibe"])
+router = APIRouter(prefix="/api/v1/vibe", tags=["vibe"])
 
 
 def _history_file() -> Path:

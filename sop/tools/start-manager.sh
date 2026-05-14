@@ -129,6 +129,8 @@ fi
 log ""
 log "✅ 启动 uvicorn（Ctrl+C 停止）"
 log "   手册: 仓库根 docs/USER_MANUAL.md · sop/web/README.md"
+log "   新版入口（推荐 SaaS 部署）: sop-manager start  或  docker compose -f apps/manager/docker-compose.saas.yml up -d"
+log "   端点速查: /api/v1/health · /api/v1/llm/chat · /api/v1/rag/search · /ws/events · /metrics"
 log ""
 
 export PROJECT_PATH

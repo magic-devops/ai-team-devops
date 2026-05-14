@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "projects": "プロジェクト",
+    "tasks": "タスク",
+    "workflows": "ワークフロー",
+    "marketplace": "マーケット",
+    "audit": "監査",
+    "copilot": "AI コパイロット",
+    "settings": "設定"
+  },
+  "page": {
+    "dashboard": { "title": "クロスプロジェクト ダッシュボード" },
+    "projects": { "title": "プロジェクト管理" },
+    "tasks": { "title": "タスク" },
+    "workflows": { "title": "ワークフロー" },
+    "marketplace": { "title": "規約 / スキル マーケット" },
+    "audit": { "title": "監査ハッシュチェーン" },
+    "copilot": { "title": "AI コパイロット" },
+    "settings": { "title": "設定" }
+  },
+  "common": {
+    "loading": "読み込み中…",
+    "error": "エラー: {{msg}}",
+    "refresh": "更新",
+    "search": "検索",
+    "save": "保存",
+    "cancel": "キャンセル"
+  }
+}

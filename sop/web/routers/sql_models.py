@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM 模型 — 支持 SQLite / MySQL 8"""
+"""SQLAlchemy ORM 模型 — 支持 SQLite / MySQL 8 / OceanBase MySQL 模式"""
 from __future__ import annotations
 import os
 from datetime import datetime
@@ -26,6 +26,7 @@ def make_engine():
         )
         event.listen(engine, "connect", _configure_sqlite)
     else:
+        # mysql / oceanbase：OceanBase MySQL 模式使用同一套连接池参数
         engine = create_engine(_DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
     return engine
 
@@ -101,7 +102,7 @@ class Project(Base):
     name         = Column(String(128), nullable=False)
     description  = Column(Text, default="")
     project_path = Column(String(512), default="")  # 本地路径（单项目模式）
-    vector_db    = Column(String(32), default="lance")  # lance | milvus | oceanbase
+    vector_db    = Column(String(32), default="lance")  # lance | milvus | qdrant | oceanbase
     vector_db_config = Column(JSON, default=dict)
     is_template  = Column(Boolean, default=False)        # 是否作为模板
     template_id  = Column(String(64), default="")        # 从哪个模板克隆

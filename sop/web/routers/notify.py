@@ -6,7 +6,7 @@ from pathlib import Path
 import json, os
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/notify", tags=["notify"])
+router = APIRouter(prefix="/api/v1/notify", tags=["notify"])
 
 
 def _notify_file() -> Path:

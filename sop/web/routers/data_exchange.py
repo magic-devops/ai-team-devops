@@ -16,7 +16,7 @@ from .auth_sql import User, require_data_hub_import
 from .db_sql_compat import rows
 from .sql_models import get_session, Requirement, Task, Sprint, Issue
 
-router = APIRouter(prefix="/api", tags=["data-exchange"])
+router = APIRouter(prefix="/api/v1/data-exchange", tags=["data-exchange"])
 
 _SQL_TABLES = ("requirements", "tasks", "issues", "sprints")
 _MODEL_MAP = {

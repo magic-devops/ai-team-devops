@@ -1,0 +1,111 @@
+// sop-agentd ↔ Manager gRPC 契约
+// 编译：buf generate（详见 ../../buf.gen.yaml）
+syntax = "proto3";
+
+package sop.agent.v1;
+
+option go_package = "github.com/magic-devops/ai-team-devops/apps/agent-runtime/gen/sop/agent/v1;agentv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Manager-side service：agentd 作为客户端连接
+service AgentControl {
+  // 单向心跳
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // 双向流：agentd 推事件、Manager 推任务/规则更新
+  rpc Stream(stream AgentMessage) returns (stream ManagerMessage);
+
+  // 批量拉取待办（轮询备份通道）
+  rpc FetchTasks(FetchTasksRequest) returns (FetchTasksResponse);
+
+  // 任务状态 ack（确保 exactly-once）
+  rpc AckTaskStatus(AckTaskStatusRequest) returns (AckTaskStatusResponse);
+}
+
+message HeartbeatRequest {
+  string agent_id   = 1;
+  string project_id = 2;
+  string tenant_id  = 3;
+  string version    = 4;   // sop-agentd 版本
+  google.protobuf.Timestamp now = 5;
+  Telemetry telemetry = 6;
+}
+
+message HeartbeatResponse {
+  bool ok = 1;
+  string min_agentd_version = 2;   // 低于此版本应升级
+  google.protobuf.Struct policy = 3;  // 下发动态策略（命令黑名单等）
+}
+
+message Telemetry {
+  uint32 outbox_depth = 1;
+  uint32 dlq_size     = 2;
+  uint32 active_hooks = 3;
+  uint64 events_sent  = 4;
+}
+
+message AgentMessage {
+  oneof body {
+    Event       event        = 1;
+    TaskUpdate  task_update  = 2;
+    Reflection  reflection   = 3;
+    RuleProposal rule_proposal = 4;
+  }
+}
+
+message ManagerMessage {
+  oneof body {
+    TaskAssigned   task_assigned   = 1;
+    RuleUpdated    rule_updated    = 2;
+    SpecUpdated    spec_updated    = 3;
+    PolicyUpdated  policy_updated  = 4;
+    VibeMessage    vibe_message    = 5;
+  }
+}
+
+message Event {
+  string id        = 1;   // uuidv7
+  string type      = 2;   // "sop.tool.pre" 等
+  google.protobuf.Timestamp ts = 3;
+  string subject   = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message TaskUpdate {
+  string task_id   = 1;
+  string status    = 2;
+  float  confidence = 3;
+  string notes     = 4;
+}
+
+message Reflection {
+  string task_id  = 1;
+  string content  = 2;
+  float  confidence = 3;
+  string category = 4;
+}
+
+message RuleProposal {
+  string rule = 1;
+  string category = 2;
+  string source = 3;
+  float  confidence = 4;
+}
+
+message TaskAssigned {
+  string task_id  = 1;
+  string title    = 2;
+  string priority = 3;
+}
+
+message RuleUpdated   { string rule_id = 1; string action = 2; string content = 3; }
+message SpecUpdated   { string spec_path = 1; string version = 2; }
+message PolicyUpdated { google.protobuf.Struct policy = 1; }
+message VibeMessage   { string session_id = 1; string role = 2; string content = 3; }
+
+message FetchTasksRequest  { uint32 max = 1; }
+message FetchTasksResponse { repeated TaskAssigned tasks = 1; }
+message AckTaskStatusRequest  { string event_id = 1; }
+message AckTaskStatusResponse { bool ok = 1; }

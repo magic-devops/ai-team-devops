@@ -1,0 +1,238 @@
+asyncapi: 3.0.0
+info:
+  title: ai-team-devops Event Contracts
+  version: 2.0.0
+  description: |
+    内部事件总线 + WebSocket 推送 + Webhook 出站统一事件契约（CloudEvents 1.0）。
+    - 内部 EventBus：Redis Streams（saas）/ in-memory（single）
+    - WebSocket `/ws/events`：服务端 → 客户端
+    - Webhook 出站：服务端 → 第三方
+  contact: { name: superhero, email: zyc2012518@gmail.com }
+  license: { name: MIT }
+
+defaultContentType: application/cloudevents+json
+
+servers:
+  internal-redis:
+    host: redis:6379
+    protocol: redis
+    description: 内部事件总线（saas 模式）
+  websocket:
+    host: manager.example.com
+    pathname: /ws/events
+    protocol: wss
+    description: WebSocket 推送
+
+channels:
+  task-events:
+    address: sop.events.task
+    messages:
+      taskCreated: { $ref: "#/components/messages/TaskCreated" }
+      taskStatusChanged: { $ref: "#/components/messages/TaskStatusChanged" }
+      taskAssigned: { $ref: "#/components/messages/TaskAssigned" }
+  requirement-events:
+    address: sop.events.requirement
+    messages:
+      requirementCreated: { $ref: "#/components/messages/RequirementCreated" }
+      requirementUpdated: { $ref: "#/components/messages/RequirementUpdated" }
+  issue-events:
+    address: sop.events.issue
+    messages:
+      issueOpened:   { $ref: "#/components/messages/IssueOpened" }
+      issueResolved: { $ref: "#/components/messages/IssueResolved" }
+  sprint-events:
+    address: sop.events.sprint
+    messages:
+      sprintStarted:   { $ref: "#/components/messages/SprintStarted" }
+      sprintCompleted: { $ref: "#/components/messages/SprintCompleted" }
+  agent-events:
+    address: sop.events.agent
+    messages:
+      agentOnline:  { $ref: "#/components/messages/AgentOnline" }
+      agentOffline: { $ref: "#/components/messages/AgentOffline" }
+      toolBlocked:  { $ref: "#/components/messages/ToolBlocked" }
+  reflection-events:
+    address: sop.events.reflection
+    messages:
+      reflectionAdded: { $ref: "#/components/messages/ReflectionAdded" }
+      ruleProposed:    { $ref: "#/components/messages/RuleProposed" }
+  llm-events:
+    address: sop.events.llm
+    messages:
+      llmCalled: { $ref: "#/components/messages/LlmCalled" }
+  alert-events:
+    address: sop.events.alert
+    messages:
+      alertRaised: { $ref: "#/components/messages/AlertRaised" }
+
+components:
+  schemas:
+    CloudEventBase:
+      type: object
+      required: [specversion, id, source, type, time]
+      properties:
+        specversion: { const: "1.0" }
+        id:    { type: string, description: uuidv7 }
+        source: { type: string }
+        type:  { type: string }
+        subject: { type: string }
+        time:  { type: string, format: date-time }
+        datacontenttype: { const: application/json }
+        tenant_id:  { type: string }
+        project_id: { type: string }
+        schema_version: { type: string, default: "1.0" }
+
+  messages:
+    TaskCreated:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.task.created }
+              data:
+                type: object
+                properties:
+                  task_id: { type: string }
+                  title: { type: string }
+                  priority: { type: string }
+                  assigned_to: { type: string }
+
+    TaskStatusChanged:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.task.status_changed }
+              data:
+                type: object
+                properties:
+                  task_id: { type: string }
+                  from: { type: string }
+                  to: { type: string }
+                  confidence: { type: number }
+                  notes: { type: string }
+
+    TaskAssigned:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.task.assigned }
+              data:
+                type: object
+                properties:
+                  task_id: { type: string }
+                  assigned_to: { type: string }
+                  title: { type: string }
+
+    RequirementCreated:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+    RequirementUpdated:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+
+    IssueOpened:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+    IssueResolved:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+
+    SprintStarted:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+    SprintCompleted:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+
+    AgentOnline:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.agent.online }
+              data:
+                type: object
+                properties:
+                  agent_id: { type: string }
+                  hostname: { type: string }
+                  version: { type: string }
+    AgentOffline:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.agent.offline }
+
+    ToolBlocked:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.tool.blocked }
+              data:
+                type: object
+                properties:
+                  tool: { type: string }
+                  command: { type: string }
+                  reason: { type: string }
+
+    ReflectionAdded:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+    RuleProposed:
+      contentType: application/cloudevents+json
+      payload:
+        allOf: [{ $ref: "#/components/schemas/CloudEventBase" }]
+
+    LlmCalled:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.llm.called }
+              data:
+                type: object
+                properties:
+                  model: { type: string }
+                  prompt_tokens: { type: integer }
+                  completion_tokens: { type: integer }
+                  cost_usd: { type: number }
+                  task_type: { type: string }
+
+    AlertRaised:
+      contentType: application/cloudevents+json
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/CloudEventBase"
+          - type: object
+            properties:
+              type: { const: sop.alert.raised }
+              data:
+                type: object
+                properties:
+                  severity: { type: string, enum: [info, warn, error] }
+                  title: { type: string }
+                  detail: { type: string }

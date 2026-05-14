@@ -7,7 +7,7 @@ from pathlib import Path
 
 from path_config import resolved_project_path
 
-router = APIRouter(prefix="/api/cli", tags=["cli"])
+router = APIRouter(prefix="/api/v1/cli", tags=["cli"])
 
 CLI_TOOLS: Dict[str, Dict[str, str]] = {
     "codex":        {"cmd": "codex",       "description": "OpenAI Codex CLI"},

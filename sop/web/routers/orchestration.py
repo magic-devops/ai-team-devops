@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from path_config import resolved_ai_memory_root, resolved_project_path
 
-router = APIRouter(prefix="/api/orchestration", tags=["orchestration"])
+router = APIRouter(prefix="/api/v1/orchestration", tags=["orchestration"])
 
 
 def _orch_dir() -> Path:

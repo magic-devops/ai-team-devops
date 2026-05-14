@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from path_config import resolved_ai_memory_root, resolved_project_id
 from .db_sql_compat import now, rows, table
 
-router = APIRouter(prefix="/api/requirements", tags=["requirements"])
+router = APIRouter(prefix="/api/v1/requirements", tags=["requirements"])
 
 _DOC_MAX = 120_000
 _PRIOS = ("P0", "P1", "P2", "P3")

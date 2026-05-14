@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from path_config import resolved_ai_memory_root, resolved_project_path
 from .db_sql_compat import rows
 
-router = APIRouter(prefix="/api/dev-flow", tags=["dev-flow"])
+router = APIRouter(prefix="/api/v1/dev-flow", tags=["dev-flow"])
 
 
 def _design_docs_count() -> int:

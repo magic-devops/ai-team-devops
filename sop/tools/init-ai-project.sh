@@ -618,6 +618,86 @@ OEOF
   mkdir -p sop/custom/{specs,examples,design,interaction,daily}
 }
 
+write_agent_toml() {
+  # sop-agentd 守护进程配置（与 packages/sop-sdk-python/sop_sdk/config.py 字段一致）
+  local target="${SOP_RUNTIME_DIR}/agent.toml"
+  if [[ -f "${target}" ]]; then
+    log "  保留已存在的 agent.toml（如需重置请手动删除：${target}）"
+    return 0
+  fi
+  cat > "${target}" << ATOML
+# @module: sop-agentd configuration
+# @purpose: 项目侧 sop-agentd 与 Manager 通信配置
+# @ai_safe_edit: 修改字段后重启 agentd；旧字段缺失给默认值
+
+[manager]
+url = "${MANAGER_URL:-http://localhost:8765}"
+project_id = ""    # 由 \`sop login --pair\` 自动填充
+tenant_id  = "${TENANT_ID:-t-default}"
+
+[auth]
+method = "apikey"
+api_key_ref = "keyring://sop/manager"
+verify_ssl = true
+
+[transport]
+ws = true
+grpc = false
+mcp_servers = ["lancedb", "knowledge", "tasks", "files"]
+a2a_port = 7741
+
+[reliability]
+outbox_path = ".sop-runtime/outbox.sqlite"
+batch_size = 50
+max_retries = 6
+dlq_path = ".sop-runtime/dlq/"
+timeout_seconds = 30
+
+[security]
+nonce_window_seconds = 300
+sign_body = true
+ATOML
+}
+
+write_mcp_configs() {
+  # 让 Claude Code / Codex 通过本地 sop-agentd 走 MCP（M9 完成时 agentd 内置全部 server）
+  mkdir -p .claude .codex
+  if [[ ! -f .claude/mcp.json ]]; then
+    cat > .claude/mcp.json << 'MEOF'
+{
+  "mcpServers": {
+    "sop.tasks": {
+      "command": "python3",
+      "args": ["sop/integrations/mcp/tasks_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    },
+    "sop.lancedb": {
+      "command": "python3",
+      "args": ["sop/integrations/mcp/lancedb_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    },
+    "sop.llm": {
+      "command": "python3",
+      "args": ["sop/integrations/mcp/llm_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    }
+  }
+}
+MEOF
+  fi
+  if [[ ! -f .codex/mcp.json ]]; then
+    cat > .codex/mcp.json << 'MEOF'
+{
+  "mcpServers": {
+    "sop.tasks":   { "command": "python3", "args": ["sop/integrations/mcp/tasks_server.py"] },
+    "sop.lancedb": { "command": "python3", "args": ["sop/integrations/mcp/lancedb_server.py"] },
+    "sop.llm":     { "command": "python3", "args": ["sop/integrations/mcp/llm_server.py"] }
+  }
+}
+MEOF
+  fi
+}
+
 run_init() {
   export SOP_RUNTIME_DIR="${SOP_RUNTIME_DIR:-${PWD}/.sop-runtime}"
   export SOP_AI_MEM_ROOT="${SOP_RUNTIME_DIR}/ai-memory"
@@ -652,8 +732,14 @@ run_init() {
   step "9/10 可选 LanceDB 初始化…"
   init_lancedb_optional
 
-  step "10/10 写入 opencode / IDE 规则与 sop/custom…"
+  step "10/12 写入 opencode / IDE 规则与 sop/custom…"
   write_tool_configs
+
+  step "11/12 写入 sop-agentd 配置（.sop-runtime/agent.toml）…"
+  write_agent_toml
+
+  step "12/12 写入 .claude/.codex MCP 配置…"
+  write_mcp_configs
 
   if [[ ! -e .ai-memory ]]; then
     rel="$(python3 -c "import os.path; print(os.path.relpath('${SOP_AI_MEM_ROOT}', os.getcwd()))")"
@@ -706,6 +792,19 @@ log "reinit 备份目录: \${SOP_RUNTIME_DIR:-.sop-runtime}/reinit-backups/（�
 log ""
 log "下一步:"
 log "  1. 编辑 CLAUDE.md，填写项目技术栈和构建命令"
-log "  2. 启动 Dashboard: bash sop/tools/start-manager.sh"
-log "  3. 健康检查: bash sop/tools/health-check.sh"
+log "  2. （推荐）使用统一 CLI:"
+log "       pip install -e packages/sop-sdk-python -e packages/sop-cli"
+log "       sop doctor                              # 端到端自检"
+log "       sop login --pair --manager <URL>        # 与 Manager 配对，自动填 project_id + API Key"
+log "       sop agentd install && sop agentd start  # 装上 sop-agentd 守护进程"
+log "  3. 启动 Manager Dashboard: bash sop/tools/start-manager.sh"
+log "  4. 健康检查（传统方式）:  bash sop/tools/health-check.sh"
+log ""
+log "新版架构入口:"
+log "  apps/manager        - SaaS 后端打包入口（独立部署）"
+log "  apps/agent-runtime  - sop-agentd 守护进程（Go 单二进制）"
+log "  packages/sop-cli    - 统一 CLI \`sop\`"
+log "  packages/sop-sdk-python - 项目侧 Python SDK"
+log "  apis/                - Schema-First 契约源（OpenAPI/Proto/AsyncAPI）"
+log "  docs/architecture/   - 全套架构文档（OVERVIEW/MODULES/PROTOCOLS/...）"
 log "──────────────────────────────────────────────────────────────"

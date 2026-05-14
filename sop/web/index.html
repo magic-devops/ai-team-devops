@@ -485,8 +485,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="root"></div>
 <script type="text/babel">
 const API = (typeof window !== 'undefined' && window.location && (window.location.protocol === 'http:' || window.location.protocol === 'https:'))
-  ? (window.location.origin.replace(/\/$/, '') + '/api')
-  : 'http://localhost:8765/api';
+  ? (window.location.origin.replace(/\/$/, '') + '/api/v1')
+  : 'http://localhost:8765/api/v1';
 
 // ── 认证：token 检查 + 自动跳转登录 ─────────────────────────────
 (function(){
@@ -517,7 +517,7 @@ window.__CURRENT_USER__ = (function() {
   try { return JSON.parse(localStorage.getItem('sop-user') || 'null'); } catch(e) { return null; }
 })();
 
-/** 将根相对路径解析到 API 基址：/foo -> ${API}/foo；/api/foo -> origin + /api/foo（避免重复拼接） */
+/** 将根相对路径解析到 API 基址：/foo -> ${API}/foo；/api/... -> origin + 该绝对路径（避免重复拼接） */
 function resolveApiInput(input) {
   if (typeof input !== 'string') return input;
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(input) || input.startsWith('//')) return input;
@@ -1344,7 +1344,7 @@ function Reflections() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
-  const {data, loading, error, reload} = useFetch(`${API}/reflections`);
+  const {data, loading, error, reload} = useFetch(`${API}/agent-reflections`);
   if (loading) return <PageSkeleton cards={1} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
   const items = data||[];
@@ -1546,7 +1546,7 @@ function App() {
     {id:'reflections',label:'🧠 反思'},
   ];
   const pages = {dashboard:<Dashboard/>,requirements:<Requirements/>,tasks:<Tasks/>,issues:<Issues/>,sprints:<Sprints/>,search:<Search/>,custom:<Custom/>,reflections:<Reflections/>};
-  const exportAll = () => { window.open(`${API}/export`,'_blank'); };
+  const exportAll = () => { window.open(`${API}/data-exchange/export`,'_blank'); };
   return <div className="app">
     <div className="header">
       <h1>AI Dev Dashboard</h1>
@@ -1779,7 +1779,7 @@ function AgentLogs() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
-  const {data,loading,error,reload} = useFetch(`${API}/reflections?limit=100`);
+  const {data,loading,error,reload} = useFetch(`${API}/agent-reflections?limit=100`);
   const [filter,setFilter] = React.useState('all');
 
   const items = (data||[]).filter(r=>filter==='all'||r.outcome===filter);
@@ -3248,7 +3248,7 @@ function AppV3() {
       var mods = ['requirements', 'tasks', 'issues', 'sprints', 'agent_reflections'].filter(function (k) { return expSel[k]; });
       if (mods.length) qs = '?modules=' + encodeURIComponent(mods.join(','));
     }
-    apiFetch(API + '/export' + qs, { timeoutMs: 120000 })
+    apiFetch(API + '/data-exchange/export' + qs, { timeoutMs: 120000 })
       .then(function (r) {
         if (!r.ok) return r.text().then(function (t) { throw new Error(t || 'HTTP ' + r.status); });
         return r.blob();
@@ -3298,7 +3298,7 @@ function AppV3() {
     ['requirements', 'tasks', 'issues', 'sprints'].forEach(function (k) {
       if (Array.isArray(importPayload[k])) body[k] = importPayload[k];
     });
-    apiFetch(API + '/import', {
+    apiFetch(API + '/data-exchange/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -3318,7 +3318,7 @@ function AppV3() {
       .catch(function () { showToast(tk('dh_toast_import_fail'), 'err'); });
   };
 
-  const apiOrigin = () => String(API).replace(/\/api\/?$/, '');
+  const apiOrigin = () => String(API).replace(/\/api\/v1\/?$/, '');
   const doLogout = () => {
     var token = '';
     try { token = localStorage.getItem('sop-token') || ''; } catch (e) {}
@@ -3431,7 +3431,7 @@ function AppV3() {
       ) : projectId ? (
         <span className="topbar-project" title={tk('topbar_project_hint')}>📁 {projects[0] ? (projects[0].name || projectId) : projectId}</span>
       ) : null}
-      <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/health">
+      <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/v1/health">
         <span className="health-dot" aria-hidden="true"/>
         {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}
       </div>

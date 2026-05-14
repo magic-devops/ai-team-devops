@@ -94,13 +94,13 @@ fi
 echo ""
 echo "【管理后台连通性】"
 PORT="${PORT:-8765}"
-if curl -sf "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
+if curl -sf "http://127.0.0.1:${PORT}/api/v1/health" >/dev/null 2>&1; then
   pass "管理后台运行中 (http://127.0.0.1:${PORT})"
 else
   warn "管理后台未运行（可执行: bash sop/tools/start-manager.sh）"
 fi
 if [[ -n "${HEALTH_CHECK_TOKEN:-}" && -n "${HEALTH_CHECK_PROJECT_ID:-}" ]]; then
-  if curl -sf "http://127.0.0.1:${PORT}/api/health/detail" \
+  if curl -sf "http://127.0.0.1:${PORT}/api/v1/health/detail" \
     -H "Authorization: Bearer ${HEALTH_CHECK_TOKEN}" \
     -H "X-Project-Id: ${HEALTH_CHECK_PROJECT_ID}" >/dev/null 2>&1; then
     pass "已鉴权健康详情可访问 (X-Project-Id=${HEALTH_CHECK_PROJECT_ID})"
@@ -110,6 +110,57 @@ if [[ -n "${HEALTH_CHECK_TOKEN:-}" && -n "${HEALTH_CHECK_PROJECT_ID:-}" ]]; then
 elif [[ -n "${HEALTH_CHECK_TOKEN:-}" || -n "${HEALTH_CHECK_PROJECT_ID:-}" ]]; then
   warn "HEALTH_CHECK_TOKEN 与 HEALTH_CHECK_PROJECT_ID 需同时设置才会探测鉴权接口"
 fi
+
+echo ""
+echo "【新版子系统】"
+PORT="${PORT:-8765}"
+BASE="http://127.0.0.1:${PORT}"
+# sop-agentd 进程 / socket
+PID_FILE="${PP%/}/.sop-runtime/agentd.pid"
+SOCK="${PP%/}/.sop-runtime/agentd.sock"
+if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  pass "sop-agentd 进程运行中 pid=$(cat "$PID_FILE")"
+else
+  warn "sop-agentd 未运行（sop agentd start 或参见 apps/agent-runtime/README.md）"
+fi
+if [ -S "$SOCK" ]; then
+  pass "sop-agentd IPC socket 可用：$SOCK"
+else
+  warn "sop-agentd IPC socket 不存在：$SOCK"
+fi
+# Manager 新端点（含 M7-M12 新增）
+for path in \
+  "/api/v1/health" \
+  "/api/v1/llm/health" \
+  "/api/v1/rag/health" \
+  "/api/v1/copilot/health" \
+  "/api/v1/audit/chain/state" \
+  "/api/v1/audit/worm/status" \
+  "/api/v1/crypto/status" \
+  "/api/v1/workflows/_health" \
+  "/api/v1/marketplace/registries" \
+  "/api/v1/sso/providers" \
+  "/metrics"; do
+  if curl -sf "${BASE}${path}" >/dev/null 2>&1; then
+    pass "${path} 200"
+  else
+    warn "${path} 不可达"
+  fi
+done
+# 审计链完整性快速校验
+if curl -sf "${BASE}/api/v1/audit/chain/verify" 2>/dev/null | grep -q '"ok":true'; then
+  pass "审计哈希链完整"
+elif curl -sf "${BASE}/api/v1/audit/chain/verify" >/dev/null 2>&1; then
+  fail "审计哈希链发现异常（请查 /api/v1/audit/chain/verify 详情）"
+fi
+# sop CLI
+if command -v sop >/dev/null 2>&1; then
+  pass "sop CLI 可用（$(sop --version 2>/dev/null || echo unknown)）"
+else
+  warn "sop CLI 未安装（pip install -e packages/sop-cli -e packages/sop-sdk-python）"
+fi
+# agent.toml
+[ -f "${RT}/agent.toml" ] && pass ".sop-runtime/agent.toml 存在" || warn ".sop-runtime/agent.toml 缺失（sop init 已自动写入）"
 
 echo ""
 echo "────────────────────────────────"

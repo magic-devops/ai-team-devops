@@ -6,7 +6,7 @@ from pathlib import Path
 import json, os
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/agents", tags=["agents"])
+router = APIRouter(prefix="/api/v1/agents", tags=["agents"])
 
 
 def _agents_dir() -> Path:

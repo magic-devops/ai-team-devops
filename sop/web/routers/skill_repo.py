@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from path_config import resolved_ai_memory_root
 
-router = APIRouter(prefix="/api/skill-repo", tags=["skill-repo"])
+router = APIRouter(prefix="/api/v1/skill-repo", tags=["skill-repo"])
 
 
 def _repo_dir() -> Path:

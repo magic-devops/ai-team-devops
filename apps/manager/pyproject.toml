@@ -1,0 +1,69 @@
+[project]
+name = "sop-manager"
+version = "2.0.0-dev"
+description = "ai-team-devops Manager — SaaS-ready FastAPI 多租户管理后台"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "sqlalchemy>=2.0.25",
+  "alembic>=1.13",
+  "pyjwt>=2.8",
+  "pydantic>=2.5",
+  "pydantic-settings>=2.2",
+  "python-multipart>=0.0.9",
+  "httpx>=0.27",
+  "anyio>=4.3",
+  "slowapi>=0.1.9",
+  "psutil>=5.9",
+  "prometheus-client>=0.20",
+  "structlog>=24.1",
+  "tenacity>=8.2",
+  "casbin>=1.36",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1", "pgvector>=0.2"]
+mysql = ["pymysql>=1.1", "cryptography>=42.0"]  # OceanBase MySQL 模式同用此 extra
+vector-lance = ["lancedb>=0.5", "pyarrow>=15"]
+vector-qdrant = ["qdrant-client>=1.9"]
+vector-milvus = ["pymilvus>=2.3"]
+llm = ["anthropic>=0.18", "openai>=1.30", "litellm>=1.40"]
+otel = [
+  "opentelemetry-api>=1.24",
+  "opentelemetry-sdk>=1.24",
+  "opentelemetry-instrumentation-fastapi>=0.45b0",
+  "opentelemetry-exporter-otlp>=1.24",
+]
+redis = ["redis>=5.0"]
+workflow = ["temporalio>=1.5"]
+pdf = ["pypdf>=4.0"]
+embeddings = ["sentence-transformers>=2.0"]
+all = [
+  "psycopg[binary]>=3.1", "pgvector>=0.2",
+  "lancedb>=0.5", "pyarrow>=15", "qdrant-client>=1.9", "pymilvus>=2.3",
+  "pymysql>=1.1", "cryptography>=42.0",
+  "anthropic>=0.18", "openai>=1.30", "litellm>=1.40",
+  "opentelemetry-api>=1.24", "opentelemetry-sdk>=1.24",
+  "opentelemetry-instrumentation-fastapi>=0.45b0",
+  "opentelemetry-exporter-otlp>=1.24",
+  "redis>=5.0", "temporalio>=1.5",
+  "pypdf>=4.0", "sentence-transformers>=2.0",
+]
+
+[project.entry-points."sop.plugins"]
+# 第三方插件在此声明，例：
+# my_plugin = "my_plugin:Plugin"
+
+[project.scripts]
+sop-manager = "sop_manager.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sop_manager"]

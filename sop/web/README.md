@@ -19,7 +19,7 @@ PROJECT_PATH=/path/to/your-app bash sop/tools/start-manager.sh
 # 访问 http://localhost:8765/login.html
 
 # 4. 初始化管理员账号（首次，只能执行一次）
-curl -X POST http://localhost:8765/api/auth/init \
+curl -X POST http://localhost:8765/api/v1/auth/init \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"your-password-min-8-chars"}'
 # 返回 {"ok":true,...} 即成功，之后用此账号登录
@@ -35,10 +35,13 @@ curl -X POST http://localhost:8765/api/auth/init \
 | `SOP_RUNTIME_DIR` | `PROJECT_PATH/.sop-runtime` | 统一运行时根：SQLite、日志、ai-memory 物理目录 |
 | `AI_MEMORY_ROOT` | `SOP_RUNTIME_DIR/ai-memory` | 覆盖默认 AI 数据根时使用 |
 | `PORT` | `8765` | 监听端口 |
-| `DB_TYPE` | `sqlite` | `sqlite` 或 `mysql` |
+| `DB_TYPE` | `sqlite` | `sqlite`、`mysql` 或 **`oceanbase`**（OceanBase MySQL 模式，连接串同 mysql） |
 | `DATABASE_URL` | （自动） | 留空或旧默认时自动指向 `SOP_RUNTIME_DIR/db/sop.db` |
-| `VECTOR_DB_TYPE` | `lance` | `lance` 或 `milvus` |
+| `VECTOR_DB_TYPE` | `lance` | **`lance`** / **`qdrant`** / **`milvus`** / **`oceanbase`**（RAG；见 `sop/tools/DATA_AND_VECTOR.md`） |
 | `LANCE_DB_PATH` | （自动） | 留空时默认 `SOP_RUNTIME_DIR/ai-memory/lancedb` |
+| `QDRANT_URL` | `http://localhost:6333` | `VECTOR_DB_TYPE=qdrant` 时使用 |
+| `OCEANBASE_VECTOR_URL` | — | 可选；`VECTOR_DB_TYPE=oceanbase` 时优先；否则使用非 sqlite 的 `DATABASE_URL` |
+| `OCEANBASE_VECTOR_SCAN_CAP` | `2500` | OB/MySQL JSON 向量检索单 collection 最大扫描行数 |
 | `ADMIN_MODE` | `single` | `single`（单项目）或 `saas`（多租户） |
 | `SECRET_KEY` | — | JWT 签名密钥，**生产必须修改** |
 | `TENANT_ID` | `t-default` | 单项目模式下的租户 ID |
@@ -61,23 +64,23 @@ docker compose up admin -d
 DB_TYPE=mysql DATABASE_URL="mysql+pymysql://sop:sopdev@mysql:3306/sopdb" \
   docker compose up mysql admin -d
 
-# 启用 Milvus 向量库
+# 启用 Milvus 向量库（RAG 与管理面）
 docker compose --profile milvus up -d
 ```
 
 ## 数据库架构
 
 ```
-SQL (SQLite/MySQL)          ← 结构化业务数据
+SQL (SQLite / MySQL / OceanBase MySQL)   ← 结构化业务数据
 ├── tenants / users / projects / members
 ├── requirements / tasks / issues / sprints
 ├── audit_logs / webhook_configs / api_keys
 └── 租户+项目隔离 (tenant_id + project_id)
 
-LanceDB / Milvus            ← 向量/知识库数据
-├── {project_id}_knowledge
-├── {project_id}_rules
-└── agent_reflections
+向量层（由 VECTOR_DB_TYPE 选择；RAG 与管理面克隆）
+├── lance：本地 LanceDB 目录
+├── qdrant / milvus：独立向量服务
+└── oceanbase：表 sop_rag_chunks（JSON 向量 + 可配置扫描上限）
 ```
 
 ## 目录结构

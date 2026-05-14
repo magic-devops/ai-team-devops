@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from .sql_models import get_session, Tenant, Business, Project, ProjectMember, User, Requirement, Task
 from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role
 
-router = APIRouter(prefix="/api/tenants", tags=["tenants"])
-proj_router = APIRouter(prefix="/api/projects", tags=["projects"])
+router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
+proj_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 
 # ── 租户管理 (super_admin only, saas 模式) ────────────────────────
@@ -63,7 +63,7 @@ def delete_tenant(tenant_id: str, user: User = Depends(require_role("super_admin
 
 
 # ── 业务线管理 ────────────────────────────────────────────────────
-biz_router = APIRouter(prefix="/api/businesses", tags=["businesses"])
+biz_router = APIRouter(prefix="/api/v1/businesses", tags=["businesses"])
 
 class BizCreate(BaseModel):
     name: str

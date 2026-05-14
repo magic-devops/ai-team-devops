@@ -1,5 +1,8 @@
 # 路线图
 
+> 详细架构演进见 [`docs/architecture/EVOLUTION.md`](docs/architecture/EVOLUTION.md)
+> v2 总体架构见 [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
+
 ## ✅ v1.0 — 已完成
 
 - 多 Agent 协作规范（Orchestrator/Planner/Worker/Reviewer）
@@ -21,27 +24,64 @@
 - Vibe Coding（界面化调用 codex/claude/opencode/aider）
 - 消息通知（钉钉/企业微信/Slack Webhook）
 - CLI 工具管理（Codex CLI/openclaw/workbuddy/Hermes-agent 封装）
-- Codex hooks（SessionStart/UserPromptSubmit/PreToolUse/PermissionRequest/PostToolUse/Stop）与 AGENTS.md 集成
-- API 版本化（/api/v1/，向后兼容）
-- 模块化单元化约定（P9 原则，文件行数上限）
+- Codex hooks 完整集成 + API 版本化（`/api/v1/`）
+- P9 模块化单元化约定
 
-## 📅 v1.2 — 计划中
+## 🚧 v2.0-dev — 进行中（2026 H1）
 
-- [ ] VS Code 插件（规范快速查阅、任务状态同步）
-- [ ] GitHub Actions 工作流模板（一键集成 CI/CD）
-- [ ] 规范版本管理（diff 对比、变更追踪）
-- [ ] 多项目规范继承（基础规范 + 项目覆盖）
-- [ ] Web 后台实时推送（WebSocket，任务状态实时更新）
+### ✅ 已落地（本仓库当前状态）
 
-## 🔮 v2.0 — 远期目标
+- **M1 目录骨架**：`apps/manager`、`apps/agent-runtime`、`packages/sop-cli`、`packages/sop-sdk-python`、`apis/`、`plugins/`、`docs/architecture/` 全部就位
+- **M1 兼容外壳**：`apps/manager` 透传 `sop/web/`；新增 Dockerfile / Compose（single + saas）
+- **M1 架构文档**（7 份）：OVERVIEW / MODULES / AI_FIRST / PROTOCOLS / SECURITY / DEPLOY / EVOLUTION
+- **M2 Schema-First**：OpenAPI 3.1（`apis/openapi/openapi.yaml`）+ gRPC proto + AsyncAPI 3 + buf 配置
+- **M3 统一 CLI** `sop`：init / login / status / agentd / task / rule / sync / doctor / llm
+- **M3 项目 SDK** `sop-sdk`：HTTP 客户端 + HMAC/Bearer 鉴权 + keyring 解析 + 本地 agentd IPC
+- **M4 sop-agentd Go 骨架**：心跳 + outbox（SQLite WAL）+ DLQ + HMAC 签名 HTTP + Unix socket IPC
+- **M5 LLM Gateway**：`/api/v1/llm/{chat,embeddings,models,routing,health}`，Anthropic/OpenAI/Ollama 多 Provider，提示缓存，Fallback，按 task_type 自动路由
+- **M5 RAG 流水线**：`/api/v1/rag/{search,index,health}`，VectorStore 抽象 + Lance/Qdrant adapter + chunk + hybrid 检索
+- **M7 可观测**：`/metrics`（Prometheus）+ 指标中间件 + LLM 调用结构化日志
+- **M9 协议**：`/ws/events`（WebSocket 推送，CloudEvents 1.0）+ `/api/v1/events:ingest`（agentd outbox 终点）
+- **M10 安全**：HMAC + ts + nonce 服务端中间件（默认宽松，`SOP_HMAC_ENFORCE=1` 强制）
+- **M11 Copilot**：`/api/v1/copilot/{ask,classify,summarize,suggest}` — ⌘K 命令面板 / 自动分类 / 周报摘要 / 行动建议
+- **M11 插件系统**：基于 Python `entry_points` 的 `sop.plugins` 加载器（routers + lifecycle）
+- **新 MCP server**：`sop.tasks` / `sop.llm` 与已有 `sop.lancedb` 协同
+- **工具脚本同步**：`bootstrap-dev.sh`（一键 v2 环境）/ `init-ai-project.sh` 新增 agent.toml + mcp.json / `health-check.sh` 覆盖新端点 / `manager_client.py` 走 SDK + 升级签名为 ts+nonce 模式
+- **M6 治理框架**：`docs/architecture/REFACTOR_PLAN.md` + `routers/env/` 子包（新增功能落点）+ `docker_env.py` 顶部 @ai_safe_edit 拆分指引
+- **M7 进阶**：`routers/observability.py`（OTel Trace/Metric/Log + 结构化 JSON 日志 + traceparent header）
+- **M7 审计链**：`routers/audit_chain.py`（SHA-256 哈希链 + 日级 anchor + `/verify`）
+- **M8 工作流**：`routers/workflow.py`（Engine 抽象，内存退化 + Temporal 适配器；内置 Sprint/Review/Bug 三个长流程）
+- **M10 列加密**：`routers/crypto_box.py`（AES-256-GCM + KEK 抽象：env/file/AWS-KMS + token 化 + lookup hash）
+- **M10 Key 轮换**：`routers/key_rotation.py`（create/list/rotate/revoke/expiring/_cron/expire）
+- **M10 WORM**：`routers/audit_worm.py`（本地 append-only + chattr +a + S3 Object Lock 后端）
+- **M11 市场**：`routers/marketplace.py`（多 registry 索引 + 签名校验安装 + 评分聚合）
+- **M11 反思蒸馏**：`routers/reflection_distill.py`（按 category 分组 → LLM 提案规则 → 阈值自动入库）
+- **M12 SSO**：`routers/sso.py`（OIDC PKCE + JIT provisioning + 多 IdP + SAML 元数据 + Casbin ABAC + fallback ABAC）
+- **M12 新前端**：`apps/web-next`（Vite + React 18 + TS + Tailwind + i18next 中/英/日 + TanStack Query；8 个页面：驾驶舱/项目/任务/工作流/市场/审计/Copilot/设置）
+- **生产编排**：`docker-compose.saas.yml` 增加 Prometheus + Grafana + Loki + Tempo + Temporal + Temporal-UI（按 profile 启停）
 
-- [ ] 规范自动生成（从代码库反向提取规范）
-- [ ] 跨团队规范共享市场
-- [ ] AI 规范合规性自动检测
-- [ ] 与 Jira/Linear/GitHub Issues 深度集成
+### 🚀 剩余里程碑
+
+- **M6 切薄第二阶段**：执行 `docker_env.py` 6 文件物理拆分（按 `REFACTOR_PLAN.md` 表格）；`orchestration.py` / `vibe.py` 同步
+- **M7 链路深化**：自动注入 trace context 到 LLM 调用；Tempo dashboards
+- **M8 真正部署 Temporal**：把 docker-compose `workflow` profile 实测；把内置 Sprint/Review/Bug 流改写为 Temporal `@workflow.defn` 类
+- **M9 MCP Hub**：内置 `sop.workflows` / `sop.marketplace` / `sop.audit` MCP server
+- **M11 蒸馏闭环**：定时任务调 `/api/v1/reflections/distill?dry_run=false`；UI 显示待审核提案
+- **M12 SSO 实战**：联通 Okta / Azure AD / Auth0 至少 1 家做 E2E；前端登录页对接
+- **M12 SAML 完整**：装 `python3-saml` 并实现签名验证
+
+## 🔮 v3.0 — 远期（2027 H2）
+
+- v1 deprecated 接口全部下线
+- 旧 Babel-standalone 前端退役
+- gRPC 默认开启
+- 规范自动生成（代码库逆向）
+- 跨团队规范共享市场（联邦）
+- AI 规范合规自动检测
+- 深度集成 Jira / Linear / GitHub Issues / Notion
 
 ## 参与贡献
 
-欢迎认领任何 `📅 计划中` 的功能！在 [Issues](https://github.com/magic-devops/ai-team-devops/issues) 中留言。
+欢迎认领任何 **🚀 剩余里程碑** 或 **🔮 远期** 的功能！在 [Issues](https://github.com/magic-devops/ai-team-devops/issues) 中留言。
 
 **联系作者**：superhero · zyc2012518@gmail.com · 微信: super_hero_88

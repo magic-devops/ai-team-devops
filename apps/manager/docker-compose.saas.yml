@@ -1,0 +1,179 @@
+version: "3.9"
+
+# SaaS / 生产部署：Postgres + Qdrant + Redis + Manager + Centrifugo + OTel
+# 单机最小 4 GiB 内存可起；生产建议 8 GiB+。
+#
+# 用法：
+#   cp ../../sop/web/.env.example apps/manager/.env  # 然后编辑
+#   docker compose -f apps/manager/docker-compose.saas.yml up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sop-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-please-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-sop}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sop}"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: sop-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: sop-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  manager:
+    build:
+      context: ../..
+      dockerfile: apps/manager/Dockerfile
+    container_name: sop-manager
+    env_file:
+      - ../../sop/web/.env
+    environment:
+      ADMIN_MODE: saas
+      DB_TYPE: postgres
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-sop}:${POSTGRES_PASSWORD:-please-change-me}@postgres:5432/${POSTGRES_DB:-sop}
+      VECTOR_DB_TYPE: qdrant
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+      PROJECT_PATH: /workspace
+      LOG_DIR: /var/lib/sop-runtime/logs
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY 必须设置}
+    ports:
+      - "${PORT:-8765}:8765"
+    volumes:
+      - workspace:/workspace
+      - sop_runtime:/var/lib/sop-runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  centrifugo:
+    image: centrifugo/centrifugo:v5
+    container_name: sop-centrifugo
+    command: centrifugo --admin
+    environment:
+      CENTRIFUGO_TOKEN_HMAC_SECRET_KEY: ${SECRET_KEY:?SECRET_KEY 必须设置}
+      CENTRIFUGO_ADMIN_PASSWORD: ${CENTRIFUGO_ADMIN_PASSWORD:-please-change-me}
+      CENTRIFUGO_ADMIN_SECRET: ${CENTRIFUGO_ADMIN_SECRET:-please-change-me}
+      CENTRIFUGO_API_KEY: ${CENTRIFUGO_API_KEY:-please-change-me}
+      CENTRIFUGO_ALLOWED_ORIGINS: "*"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    profiles: ["realtime"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.99.0
+    container_name: sop-otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    profiles: ["observability"]
+
+  # ── 可观测性栈：Grafana + Loki + Tempo + Prometheus ──
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: sop-prometheus
+    volumes:
+      - prom_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    ports:
+      - "9090:9090"
+    profiles: ["observability"]
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: sop-loki
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "3100:3100"
+    profiles: ["observability"]
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: sop-tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    profiles: ["observability"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: sop-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    profiles: ["observability"]
+
+  # ── Temporal 工作流（用 SOP 长流程） ──
+  temporal-postgres:
+    image: postgres:16-alpine
+    container_name: sop-temporal-pg
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_PG_PASSWORD:-temporal}
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal_pg:/var/lib/postgresql/data
+    profiles: ["workflow"]
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: sop-temporal
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_PG_PASSWORD:-temporal}
+      POSTGRES_SEEDS: temporal-postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      - temporal-postgres
+    profiles: ["workflow"]
+
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    container_name: sop-temporal-ui
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: "*"
+    ports:
+      - "8233:8080"
+    depends_on:
+      - temporal
+    profiles: ["workflow"]
+
+volumes:
+  pg_data:
+  qdrant_data:
+  redis_data:
+  workspace:
+  sop_runtime:
+  prom_data:
+  grafana_data:
+  temporal_pg:

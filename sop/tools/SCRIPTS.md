@@ -30,15 +30,15 @@
 **HTTP 请求级项目作用域（Web 与脚本共用后端约定）**
 
 - 已登录请求：`Authorization: Bearer <JWT>` + `X-Project-Id: <projects.id>`，由 `routers/project_scope_middleware.py` 解析并写入 `path_config` 的 ContextVar（`resolved_project_path` 等）；无效项目 / 无成员权限在 SaaS 下返回 **403/404**，不再静默落盘到错误目录。
-- 浏览器控制台统一经 **`apiFetch`**（`index.html`）：自动注入上述头、超时、`/foo` → `…/api/foo` 路径解析；403 会 Toast。
-- 公开接口（无需项目上下文）：`/api/auth/*`、`/api/health` 等；详见中间件源码中 `_NO_SCOPE_PATHS` 与 `path.startswith("/api/auth")`。
+- 浏览器控制台统一经 **`apiFetch`**（`index.html`）：自动注入上述头、超时、根相对路径拼到 **`/api/v1`**；403 会 Toast。
+- 公开接口（无需项目上下文）：`/api/v1/auth/*`、`/api/v1/health*` 等；详见 `routers/project_scope_middleware.py` 中 `_skip_project_scope`。
 
 **health-check.sh 可选变量**
 
 | 变量 | 说明 |
 |------|------|
 | `PORT` | Manager 端口，默认 8765 |
-| `HEALTH_CHECK_TOKEN` | 若设置：额外 `curl` `GET /api/health/detail`，带 `Authorization: Bearer` 与 `X-Project-Id`（需同时设 `HEALTH_CHECK_PROJECT_ID`） |
+| `HEALTH_CHECK_TOKEN` | 若设置：额外 `curl` `GET /api/v1/health/detail`，带 `Authorization: Bearer` 与 `X-Project-Id`（需同时设 `HEALTH_CHECK_PROJECT_ID`） |
 | `HEALTH_CHECK_PROJECT_ID` | 与 `HEALTH_CHECK_TOKEN` 配对，作为 `X-Project-Id` |
 
 ### Python
@@ -56,20 +56,19 @@
 | `integrations-requirements.txt` | Web / LanceDB 等 Python 依赖清单（由 `install-integrations.sh` 消费） |
 | `AI_CAPABILITY_REGISTRY.json` | 标准能力与工具适配注册表模板 |
 
-### 规范与集成文档（只读）
+### 规范与数据平面（只读）
 
 | 文件 | 说明 |
 |------|------|
+| `DATA_AND_VECTOR.md` | **SQL / 向量 / RAG 权威**：OceanBase、Milvus、Qdrant、Lance 与性能说明 |
 | `AI_CAPABILITY_CONTROL_PLANE.md` | 统一 AI 能力控制平面 |
-| `TOOL_INTEGRATION.md` | 多工具（Codex / Cursor / Claude 等）集成总览 |
-| `CODEX_CLI.md` | Codex CLI、AGENTS.md、hooks |
+| `TOOL_INTEGRATION.md` | 多工具集成总览 |
 | `MCP_INTEGRATION.md` | MCP 接入说明 |
-| `LANCEDB_SETUP.md` | LanceDB 与向量相关 |
+| `LANCEDB_SETUP.md` | 已合并到 `DATA_AND_VECTOR.md`（指针） |
 | `AUTOMATION_TRIGGERS.md` | 自动化触发约定 |
-| `CI_CD.md` | CI/CD 相关 |
-| `GIT_WORKFLOW.md` | Git 工作流 |
+| `CI_CD.md` / `GIT_WORKFLOW.md` | CI/CD 与 Git |
 
-入口索引另见 [README.md](README.md)。
+其它零散说明尽量并入上表；避免重复维护。
 
 ---
 

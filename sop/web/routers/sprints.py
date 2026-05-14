@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .sql_models import get_session, Sprint, Task, Issue
 from .auth_sql import current_user, User, check_project_access
 
-router = APIRouter(prefix="/api/sprints", tags=["sprints"])
+router = APIRouter(prefix="/api/v1/sprints", tags=["sprints"])
 
 
 def _row(s: Sprint) -> dict:

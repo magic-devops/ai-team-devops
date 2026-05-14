@@ -2,6 +2,22 @@
 
 > sop — AI 多 Agent 开发规约体系
 
+> ## v2 入口
+>
+> v2 架构（SaaS Manager + sop-agentd 守护进程 + 五通道协议 + LLM Gateway + 插件市场）已全面拆分文档：
+>
+> | 主题 | 文档 |
+> |------|------|
+> | 总体架构 + 三层 + 五通道 + 12 个里程碑 | [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md) |
+> | 模块边界 / `@ai_safe_edit` 注释 / 命名约定 | [`docs/architecture/MODULES.md`](docs/architecture/MODULES.md) |
+> | AI-First 设计手册（高效 / 学习 / 护栏） | [`docs/architecture/AI_FIRST.md`](docs/architecture/AI_FIRST.md) |
+> | 协议契约：REST / WS / MCP / A2A / gRPC / Webhook / EventBus | [`docs/architecture/PROTOCOLS.md`](docs/architecture/PROTOCOLS.md) |
+> | 安全模型 STRIDE / 鉴权 / 列加密 / 合规 | [`docs/architecture/SECURITY.md`](docs/architecture/SECURITY.md) |
+> | 三档部署（single / saas / enterprise） + K8s | [`docs/architecture/DEPLOY.md`](docs/architecture/DEPLOY.md) |
+> | 长期演进 + 兼容承诺 + 弃用流程 | [`docs/architecture/EVOLUTION.md`](docs/architecture/EVOLUTION.md) |
+>
+> 下方为 v1 的概念性章节，作为背景保留；具体当前实现以新版文档为准。
+
 ## 设计理念
 
 **三个核心问题**：

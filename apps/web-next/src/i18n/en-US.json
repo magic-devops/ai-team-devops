@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "tasks": "Tasks",
+    "workflows": "Workflows",
+    "marketplace": "Marketplace",
+    "audit": "Audit",
+    "copilot": "AI Copilot",
+    "settings": "Settings"
+  },
+  "page": {
+    "dashboard": { "title": "Cross-Project Dashboard" },
+    "projects": { "title": "Projects" },
+    "tasks": { "title": "Tasks" },
+    "workflows": { "title": "Workflows" },
+    "marketplace": { "title": "Spec / Skill Marketplace" },
+    "audit": { "title": "Audit Hash Chain" },
+    "copilot": { "title": "AI Copilot" },
+    "settings": { "title": "Settings" }
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Error: {{msg}}",
+    "refresh": "Refresh",
+    "search": "Search",
+    "save": "Save",
+    "cancel": "Cancel"
+  }
+}

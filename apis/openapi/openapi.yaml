@@ -1,0 +1,576 @@
+openapi: 3.1.0
+info:
+  title: ai-team-devops Manager API
+  summary: Schema-First 单一事实源（v1）
+  description: |
+    所有 `/api/v1/*` REST 接口的权威契约。
+    - 生成 Python Pydantic / TypeScript SDK 都源于此文件
+    - 修改本文件 = 触发 CI 重新生成代码 + 文档
+    - 命名规范见 `docs/architecture/MODULES.md`
+  version: 2.0.0
+  contact:
+    name: superhero
+    email: zyc2012518@gmail.com
+  license:
+    name: MIT
+
+servers:
+  - url: https://manager.example.com
+    description: 生产
+  - url: http://localhost:8765
+    description: 本地
+
+tags:
+  - { name: auth,         description: 认证与会话 }
+  - { name: tenants,      description: 租户管理（super_admin） }
+  - { name: projects,     description: 项目管理 }
+  - { name: requirements, description: 需求 }
+  - { name: tasks,        description: 任务 }
+  - { name: issues,       description: 问题 }
+  - { name: sprints,      description: Sprint }
+  - { name: agents,       description: Agent 配置 }
+  - { name: skills,       description: 技能库 }
+  - { name: llm,          description: LLM 网关 }
+  - { name: rag,          description: 检索 / 知识库 }
+  - { name: workflow,     description: 工作流 }
+  - { name: vibe,         description: Vibe Coding 会话 }
+  - { name: webhooks,     description: Webhook 出站 }
+  - { name: audit,        description: 审计 }
+  - { name: plugins,      description: 插件管理 }
+  - { name: marketplace,  description: 规约 / 技能市场 }
+  - { name: copilot,      description: 内嵌 AI 助手 }
+  - { name: health,       description: 探活 }
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      tags: [health]
+      summary: 服务探活
+      security: []
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthOut" }
+
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: 用户名密码登录，返回 JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginIn" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenOut" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties: { refresh_token: { type: string } }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/TokenOut" } }
+
+  /api/v1/auth/pair:
+    post:
+      operationId: pairProject
+      tags: [auth]
+      summary: 项目初始化配对（OAuth-style）
+      description: |
+        项目侧 `sop init` 调用：用一次性 code 换 project_id / tenant_id / API Key。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pair_code]
+              properties:
+                pair_code: { type: string, description: 浏览器配对页生成的 code }
+                hostname: { type: string }
+                local_path: { type: string }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairOut" }
+
+  /api/v1/projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      parameters:
+        - { name: tenant_id, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/SizeParam" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Project" } }
+                  total: { type: integer }
+    post:
+      operationId: createProject
+      tags: [projects]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/ProjectCreate" } }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Project" } }
+
+  /api/v1/tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      parameters:
+        - { $ref: "#/components/parameters/XProjectId" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/TaskStatus" } }
+        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
+        - { $ref: "#/components/parameters/PageParam" }
+        - { $ref: "#/components/parameters/SizeParam" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Task" } }
+                  total: { type: integer }
+    post:
+      operationId: createTask
+      tags: [tasks]
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/TaskCreate" } }
+      responses:
+        "201":
+          description: created
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/Task" } }
+
+  /api/v1/tasks/{task_id}:
+    parameters:
+      - { $ref: "#/components/parameters/XProjectId" }
+      - { name: task_id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getTask
+      tags: [tasks]
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/TaskUpdate" } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      responses:
+        "204": { description: deleted }
+
+  /api/v1/tasks/{task_id}:pull:
+    parameters:
+      - { $ref: "#/components/parameters/XProjectId" }
+      - { name: task_id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: pullTask
+      tags: [tasks]
+      summary: Agent 主动拉任务（认领）
+      responses:
+        "200":
+          description: ok
+          content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/llm/chat:
+    post:
+      operationId: llmChat
+      tags: [llm]
+      summary: 统一 LLM 入口（路由 + 缓存 + 计费 + 审计）
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/LlmChatIn" } }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/LlmChatOut" } }
+
+  /api/v1/llm/embeddings:
+    post:
+      operationId: llmEmbeddings
+      tags: [llm]
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/EmbeddingsIn" } }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/EmbeddingsOut" } }
+
+  /api/v1/rag/search:
+    post:
+      operationId: ragSearch
+      tags: [rag]
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/RagSearchIn" } }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/RagSearchOut" } }
+
+  /api/v1/console/overview:
+    get:
+      operationId: consoleOverview
+      tags: [copilot]
+      summary: 跨项目驾驶舱聚合
+      responses:
+        "200":
+          description: ok
+          content: { application/json: { schema: { $ref: "#/components/schemas/ConsoleOverview" } } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: 配合 X-Sop-Timestamp / X-Sop-Nonce / X-Sop-Signature 头使用
+
+  parameters:
+    XProjectId:
+      name: X-Project-Id
+      in: header
+      required: false
+      schema: { type: string }
+      description: 多项目作用域；登录后由前端自动注入
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    SizeParam:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    Unauthorized:
+      description: 未认证
+      content:
+        application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+    Forbidden:
+      description: 无权限
+      content:
+        application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+    NotFound:
+      description: 不存在
+      content:
+        application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+    Conflict:
+      description: 冲突
+      content:
+        application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
+
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details
+      required: [type, title, status]
+      properties:
+        type:     { type: string, format: uri }
+        title:    { type: string }
+        status:   { type: integer }
+        detail:   { type: string }
+        instance: { type: string }
+        request_id: { type: string }
+        errors:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    HealthOut:
+      type: object
+      required: [ok, service, version]
+      properties:
+        ok: { type: boolean }
+        service: { type: string }
+        version: { type: string }
+        startedAt: { type: string, format: date-time }
+        scopedTenantId: { type: string }
+        scopedProjectId: { type: string }
+        admin_mode: { type: string, enum: [single, saas] }
+        min_agentd_version: { type: string, description: 最低 sop-agentd 版本（升级提示） }
+
+    LoginIn:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        tenant_slug: { type: string, description: saas 模式下可选 }
+
+    TokenOut:
+      type: object
+      required: [access_token, token_type]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer }
+        user: { $ref: "#/components/schemas/UserOut" }
+
+    PairOut:
+      type: object
+      required: [project_id, tenant_id, api_key]
+      properties:
+        project_id: { type: string }
+        tenant_id: { type: string }
+        api_key: { type: string, description: 一次性返回，立即写入 keyring }
+        manager_url: { type: string }
+        a2a_port: { type: integer, default: 7741 }
+
+    UserOut:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        tenant_id: { type: string }
+        role: { type: string, $ref: "#/components/schemas/UserRole" }
+        locale: { type: string, default: zh-CN }
+
+    UserRole:
+      type: string
+      enum: [super_admin, tenant_admin, project_admin, developer, devops, product_manager, analyst, viewer]
+
+    Priority:
+      type: string
+      enum: [P0, P1, P2, P3]
+
+    TaskStatus:
+      type: string
+      enum: [pending, in_progress, blocked, completed, cancelled, review]
+
+    Project:
+      type: object
+      required: [id, tenant_id, name, status]
+      properties:
+        id: { type: string }
+        tenant_id: { type: string }
+        business_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        project_path: { type: string }
+        vector_db: { type: string, enum: [lance, qdrant, milvus, pgvector] }
+        is_template: { type: boolean, default: false }
+        status: { type: string, enum: [active, archived] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProjectCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        business_id: { type: string }
+        project_path: { type: string }
+        template_id: { type: string }
+
+    Task:
+      type: object
+      required: [id, project_id, title, status, priority]
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        req_id: { type: string }
+        sprint_id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        priority: { $ref: "#/components/schemas/Priority" }
+        estimate: { type: string, enum: [XS, S, M, L, XL] }
+        assigned_to: { type: string }
+        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
+        human_notes: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TaskCreate:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        priority: { $ref: "#/components/schemas/Priority" }
+        estimate: { type: string }
+        req_id: { type: string }
+        sprint_id: { type: string }
+        assigned_to: { type: string }
+
+    TaskUpdate:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        priority: { $ref: "#/components/schemas/Priority" }
+        estimate: { type: string }
+        sprint_id: { type: string }
+        assigned_to: { type: string }
+        confidence: { type: number }
+        human_notes: { type: string }
+
+    LlmChatIn:
+      type: object
+      required: [messages]
+      properties:
+        model: { type: string, description: 不传则按 task_type 自动路由 }
+        task_type: { type: string, enum: [plan, code, review, summarize, classify], description: 用于路由 }
+        messages:
+          type: array
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [system, user, assistant, tool] }
+              content: { type: string }
+        temperature: { type: number, default: 0.2 }
+        max_tokens: { type: integer }
+        cache_ttl: { type: integer, description: 提示缓存秒数；0 关闭 }
+        stream: { type: boolean, default: false }
+
+    LlmChatOut:
+      type: object
+      required: [model, content, usage]
+      properties:
+        model: { type: string }
+        content: { type: string }
+        finish_reason: { type: string }
+        usage:
+          type: object
+          properties:
+            prompt_tokens: { type: integer }
+            completion_tokens: { type: integer }
+            total_tokens: { type: integer }
+            cost_usd: { type: number, format: double }
+        provider: { type: string }
+        cached: { type: boolean }
+
+    EmbeddingsIn:
+      type: object
+      required: [input]
+      properties:
+        input:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+        model: { type: string, default: bge-m3 }
+
+    EmbeddingsOut:
+      type: object
+      properties:
+        model: { type: string }
+        vectors: { type: array, items: { type: array, items: { type: number } } }
+        usage:
+          type: object
+          properties:
+            prompt_tokens: { type: integer }
+            cost_usd: { type: number }
+
+    RagSearchIn:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+        collections: { type: array, items: { type: string }, default: [tasks, knowledge, rules] }
+        limit: { type: integer, default: 8 }
+        hybrid: { type: boolean, default: true }
+        rerank: { type: boolean, default: true }
+
+    RagSearchOut:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              collection: { type: string }
+              id: { type: string }
+              score: { type: number }
+              title: { type: string }
+              snippet: { type: string }
+              source: { type: string }
+
+    ConsoleOverview:
+      type: object
+      properties:
+        projects_total: { type: integer }
+        projects_active: { type: integer }
+        agents_online: { type: integer }
+        tasks_in_progress: { type: integer }
+        tasks_blocked: { type: integer }
+        sprints_active: { type: integer }
+        llm_cost_30d_usd: { type: number }
+        confidence_30d_avg: { type: number }
+        alerts:
+          type: array
+          items:
+            type: object
+            properties:
+              severity: { type: string, enum: [info, warn, error] }
+              title: { type: string }
+              project_id: { type: string }
+              created_at: { type: string, format: date-time }

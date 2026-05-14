@@ -1,0 +1,22 @@
+version: "3.9"
+
+# 单机 / 开发部署：SQLite + LanceDB（嵌入式），仅一个 Manager 容器
+# 用法：docker compose -f apps/manager/docker-compose.single.yml up -d
+
+services:
+  manager:
+    build:
+      context: ../..
+      dockerfile: apps/manager/Dockerfile
+    container_name: sop-manager
+    environment:
+      ADMIN_MODE: single
+      DB_TYPE: sqlite
+      VECTOR_DB_TYPE: lance
+      PROJECT_PATH: /workspace
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+    ports:
+      - "${PORT:-8765}:8765"
+    volumes:
+      - ${PROJECT_PATH:-./workspace}:/workspace
+    restart: unless-stopped

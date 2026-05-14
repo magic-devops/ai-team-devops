@@ -1,4 +1,41 @@
-"""环境检查、Docker 开发验证、基础组件部署、自定义检查 / 版本约束 / AI 诊断与受控修复"""
+"""环境检查、Docker 开发验证、基础组件部署、自定义检查 / 版本约束 / AI 诊断与受控修复。
+
+@module: routers.docker_env
+@purpose: 环境/Docker/Compose/受管模板 全套路由（1660 行；过大，TODO 拆分）
+@stable: 所有 /api/env/** 路由前缀稳定
+@ai_safe_edit: 见下方"拆分计划"；新增功能请去 routers.env.* 子包，避免本文件继续膨胀
+@deps_in: subprocess, fastapi, path_config
+
+────────────────────────────── 拆分计划（M6） ──────────────────────────────
+本文件应拆为以下子模块，目标：每个文件 < 400 行；保持现有路由 prefix 与签名不变。
+
+  routers/env/_paths.py            — _path_* 常量与目录创建
+  routers/env/_exec.py             — _run / _exec_allowlist / _validate_argv 等通用工具
+  routers/env/env_checks.py        — /check, /check/full, /custom-checks, /version-pins,
+                                     /exec-allowlist, /ai-plan, /remediate-run, /tool/install*
+  routers/env/docker_ops.py        — /docker/ps, /docker/images, /docker/run, /docker/stop,
+                                     /docker/remove, /docker/start, /docker/build
+  routers/env/docker_compose_ops.py — /docker/compose/*  +  /docker/logs/*
+  routers/env/docker_managed.py    — /docker/managed-*  +  /docker/presets/*  +  /docker/exec
+
+拆分原则：
+  1. 保持 router prefix=/api/env 不变；docker_env.py 退化为 facade，仅 include 子 router
+  2. 共享辅助函数下沉到 routers/env/_exec.py
+  3. 拆完后此 facade 文件应 < 60 行
+  4. 拆分过程中每完成一个子模块即跑一次 `uvicorn main:app` 启动验证
+
+新增功能不要再加入本文件！请直接去 routers/env/ 子包：
+
+  示例：
+    # routers/env/security_scan.py
+    from fastapi import APIRouter
+    router = APIRouter(prefix="/api/env/security", tags=["env"])
+    @router.get("/scan") ...
+
+  然后在 main.py 加：
+    from routers.env import security_scan
+    app.include_router(security_scan.router)
+"""
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +54,7 @@ from pydantic import BaseModel, Field
 
 from path_config import resolved_ai_memory_root, resolved_project_path
 
-router = APIRouter(prefix="/api/env", tags=["env"])
+router = APIRouter(prefix="/api/v1/env", tags=["env"])
 
 _COMPOSE_MAX_BYTES = 512 * 1024
 

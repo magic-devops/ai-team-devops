@@ -1,0 +1,46 @@
+[project]
+name = "ai-team-devops"
+version = "2.0.0-dev"
+description = "AI 多 Agent 开发规约体系（Manager + Agent Runtime + 规约库 + SDK + CLI）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "superhero", email = "zyc2012518@gmail.com" }]
+
+# 顶层 meta 包，不直接安装运行依赖；各子包独立 pyproject 管理
+dependencies = []
+
+[project.optional-dependencies]
+manager = ["sop-manager"]
+sdk = ["sop-sdk"]
+cli = ["sop-cli"]
+all = ["sop-manager", "sop-sdk", "sop-cli"]
+
+# 用 uv / pip / hatch workspace 都能识别
+[tool.uv.workspace]
+members = [
+  "apps/manager",
+  "packages/sop-cli",
+  "packages/sop-sdk-python",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = [
+  "sop/web/__pycache__",
+  ".sop-runtime",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "C90"]
+ignore = ["S101", "E501"]  # 允许 assert；行长由 formatter 控制
+mccabe = { max-complexity = 12 }
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "apps/manager/tests", "packages/*/tests"]
+addopts = "-ra --strict-markers"
+markers = [
+  "integration: 需要外部服务的集成测试",
+  "slow: 慢测试",
+]

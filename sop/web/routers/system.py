@@ -9,7 +9,7 @@ from datetime import datetime as dt
 
 from path_config import resolved_ai_memory_root, resolved_project_path, resolved_runtime_dir
 
-router = APIRouter(prefix="/api/system", tags=["system"])
+router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
 SOP_DIR = Path(__file__).parent.parent.parent  # sop/
 

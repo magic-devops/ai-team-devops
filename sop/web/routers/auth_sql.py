@@ -12,7 +12,7 @@ import jwt
 
 from .sql_models import get_session, User, Tenant, Project, ProjectMember, ApiKey
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
