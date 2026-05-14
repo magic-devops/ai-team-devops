@@ -1,30 +1,93 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git *)", "Bash(grep *)", "Bash(find *)", "Bash(cat *)", "Bash(ls *)",
-      "Bash(npm run *)", "Bash(mvn *)", "Bash(python3 *)", "Bash(pytest *)",
-      "Bash(bash sop/tools/*)", "Bash(curl http://localhost:*)"
-    ],
-    "deny": ["Bash(rm -rf /*)", "Bash(git push --force*)"]
-  },
-  "mcpServers": {
-    "lancedb": {
-      "command": "python3",
-      "args": ["sop/integrations/mcp/lancedb_server.py"],
-      "description": "LanceDB 语义搜索：semantic_search / get_task_context / add_rule"
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
-    },
-    "git": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-git", "--repository", "."]
-    }
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(npm run *)",
+      "Bash(python *)",
+      "Bash(pytest *)"
+    ]
   },
   "hooks": {
-    "PreToolCall": [{"matcher":"","hooks":[{"type":"command","command":"bash .claude/hooks/pre-tool-call.sh"}]}],
-    "PostToolCall": [{"matcher":"","hooks":[{"type":"command","command":"bash .claude/hooks/post-tool-call.sh"}]}],
-    "Stop": [{"hooks":[{"type":"command","command":"bash .claude/hooks/stop.sh"}]}]
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude SessionStart",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude UserPromptSubmit",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Task|WebFetch|WebSearch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PreToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Task|WebFetch|WebSearch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PermissionRequest",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Glob|Grep|Read|Task|WebFetch|WebSearch|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PostToolUse",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude Stop",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/hooks/stop.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

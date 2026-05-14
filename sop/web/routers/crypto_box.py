@@ -68,8 +68,15 @@ class EnvKEK(KEK):
             hx = os.getenv("SOP_MASTER_KEY_HEX", "").strip()
             self._key = bytes.fromhex(hx) if hx else b""
         if len(self._key) != 32:
-            # 退化到 dev 模式：用 SECRET_KEY 衍生（绝不要在生产用）
-            secret = os.getenv("SECRET_KEY", "change-me-in-production").encode()
+            # 退化到 dev 模式：与 JWT 使用同一规范化后的 SECRET_KEY 衍生（绝不要在生产用）
+            try:
+                from routers.auth_sql import SECRET_KEY as _jwt_secret  # type: ignore[import-not-found]
+
+                secret = str(_jwt_secret).encode("utf-8")
+            except Exception:  # pragma: no cover
+                secret = os.getenv("SECRET_KEY", "sop-default-insecure-use-env-secret-key").encode(
+                    "utf-8"
+                )
             self._key = hashlib.sha256(b"sop-derive-kek/v1|" + secret).digest()
             self.kid = "derived-v1"
 

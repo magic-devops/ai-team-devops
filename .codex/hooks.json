@@ -27,7 +27,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",
@@ -40,7 +40,7 @@
     ],
     "PermissionRequest": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",
@@ -53,7 +53,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",

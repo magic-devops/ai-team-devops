@@ -1,6 +1,6 @@
 # Codex CLI 集成规范
 
-> 版本: v1.0 | 更新: 2026-05-13
+> 版本: v1.0 | 更新: 2026-05-14
 
 ## 目标
 
@@ -50,6 +50,12 @@ Codex 0.130.0 本地 feature 列表中 `hooks` 已为 stable；官方 hooks 文�
 | `PermissionRequest` | 对审批请求二次策略判断 | 接入企业审批或 ChatOps |
 | `PostToolUse` | 记录工具执行 | 触发 lint/test 摘要、规则提取 |
 | `Stop` | 更新时间状态 | 生成交接摘要、快照、演进建议 |
+
+## 团队策略文件（借鉴 Codex「可组合 hook」思路）
+
+- 模板：`sop/tools/hook_policy.example.json` → 复制到项目 **`.ai-memory/hook_policy.json`**（与 `.codex/hooks.json` 并存：前者管策略数据，后者管事件绑定）。
+- 支持字段：`bash_deny_regex_extra`、`write_path_deny_substrings`、`patch_deny_substrings`、`warn_secrets_in_prompt`、`block_secrets_in_prompt`（后两项默认关闭，避免误伤正常讨论）。
+- 内置规则仍在 `sop_ai_hook.py`：与团队 JSON **合并**（bash 为追加正则；路径/补丁为追加子串）。
 
 ## 安全要求
 

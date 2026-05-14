@@ -51,6 +51,8 @@ manager.example.com {
 }
 ```
 
+其中 **`/api/*`** 覆盖 Manager 的 **`/api/v1/*`** 等业务路径；**`/metrics`** 等根路径由同块中最后的 `reverse_proxy *` 一并转发到 Manager（与 `main.py` 挂载顺序一致即可）。
+
 ### 备份
 
 ```bash

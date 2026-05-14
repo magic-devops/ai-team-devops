@@ -59,7 +59,7 @@ tasks:
     done_when: "迁移文件创建，本地 migrate 成功"
 
   - id: T002
-    title: "实现 POST /api/auth/register 端点"
+    title: "实现 POST /api/v1/auth/register 端点"
     type: code
     estimate: M
     depends_on: [T001]

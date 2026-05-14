@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Tenant, Business, Project, ProjectMember, User, Requirement, Task
 from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role
+from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 proj_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
@@ -127,6 +128,12 @@ def create_project(body: ProjectCreate, user: User = Depends(require_role("proje
     # 创建者自动成为 project_admin
     db.add(ProjectMember(project_id=p.id, user_id=user.id, role="project_admin"))
     db.commit()
+    notify_webhook(
+        "project.created",
+        {"project_id": p.id, "name": p.name, "vector_db": p.vector_db},
+        tenant_id=user.tenant_id,
+        project_id=p.id,
+    )
     return {"ok": True, "id": p.id}
 
 @proj_router.patch("/{project_id}")
@@ -140,6 +147,12 @@ def update_project(project_id: str, body: dict,
             setattr(p, k, body[k])
     p.updated_at = datetime.utcnow()
     db.commit()
+    notify_webhook(
+        "project.updated",
+        {"project_id": project_id, "fields": list(body.keys())},
+        tenant_id=user.tenant_id,
+        project_id=project_id,
+    )
     return {"ok": True}
 
 @proj_router.delete("/{project_id}")
@@ -172,6 +185,12 @@ def add_member(project_id: str, body: MemberAdd,
     mrole = assert_project_member_role(body.role)
     db.add(ProjectMember(project_id=project_id, user_id=body.user_id, role=mrole))
     db.commit()
+    notify_webhook(
+        "project.member_added",
+        {"project_id": project_id, "user_id": body.user_id, "role": mrole},
+        tenant_id=user.tenant_id,
+        project_id=project_id,
+    )
     return {"ok": True}
 
 @proj_router.delete("/{project_id}/members/{user_id}")
@@ -182,6 +201,12 @@ def remove_member(project_id: str, user_id: str,
     if not m:
         raise HTTPException(404, "成员不存在")
     db.delete(m); db.commit()
+    notify_webhook(
+        "project.member_removed",
+        {"project_id": project_id, "user_id": user_id},
+        tenant_id=user.tenant_id,
+        project_id=project_id,
+    )
     return {"ok": True}
 
 

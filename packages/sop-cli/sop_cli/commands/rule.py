@@ -35,9 +35,16 @@ def propose(rule: str, category: str = typer.Option("coding"), source: str = typ
             confidence: float = typer.Option(0.75)) -> None:
     cli = get_client()
     try:
-        out = cli._request("POST", "/api/v1/rules", params={
-            "rule": rule, "category": category, "source": source, "confidence": confidence,
-        })
+        out = cli._request(
+            "POST",
+            "/api/v1/rules",
+            json_body={
+                "rule": rule,
+                "category": category,
+                "source": source,
+                "confidence": confidence,
+            },
+        )
     except Exception as e:
         err(str(e)); raise typer.Exit(1)
     ok(f"rule proposed: {out.get('id', '-')}")

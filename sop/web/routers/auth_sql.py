@@ -15,8 +15,34 @@ from .sql_models import get_session, User, Tenant, Project, ProjectMember, ApiKe
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+# HS256：RFC 7518 建议密钥长度 ≥ 256 bit；过短会触发 PyJWT 警告且不符合最佳实践。
+# 未设置时使用固定 32+ ASCII 字符默认（仅本地开发）；生产务必设置长随机串（如 openssl rand -hex 32）。
+_DEFAULT_JWT_SECRET = "sop-default-insecure-use-env-secret-key"
+
+_RAW_JWT_SECRET = os.getenv("SECRET_KEY", _DEFAULT_JWT_SECRET)
+
+
+def _normalize_hs256_secret(raw: str) -> str:
+    raw_b = raw.encode("utf-8")
+    if len(raw_b) >= 32:
+        return raw
+    # 确定性扩展：同一段短口令得到同一签名密钥；升级后旧 JWT 需重新登录
+    return hashlib.sha256(raw_b).hexdigest()
+
+
+SECRET_KEY = _normalize_hs256_secret(_RAW_JWT_SECRET)
 ALGORITHM = "HS256"
+# SSO 等模块复用同一签名材料
+JWT_SECRET = SECRET_KEY
+JWT_ALG = ALGORITHM
+
+if _RAW_JWT_SECRET != SECRET_KEY:
+    import logging
+
+    logging.getLogger("sop.auth").warning(
+        "SECRET_KEY 的 UTF-8 长度不足 32 字节，已使用 SHA-256 十六进制派生为 HS256 签名密钥；"
+        "已有 JWT 将失效，请重新登录。生产环境请设置至少 32 字节的随机 SECRET_KEY（例如 openssl rand -hex 32）。"
+    )
 TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "72"))
 ADMIN_MODE = os.getenv("ADMIN_MODE", "single")
 

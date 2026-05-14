@@ -264,18 +264,20 @@ def get_knowledge() -> Any:
         return []
 
 
+class RuleCreateBody(BaseModel):
+    rule: str
+    category: str = "coding"
+    source: str = "human"
+    confidence: float = 0.75
+
+
 @router.post("/rules")
-def create_rule(
-    rule: str,
-    category: str = "coding",
-    source: str = "human",
-    confidence: float = 0.75,
-) -> dict[str, Any]:
+def create_rule(body: RuleCreateBody) -> dict[str, Any]:
     try:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
         from knowledge.lancedb_ops import LanceOps
 
-        rid = LanceOps().add_rule(rule, category, source, confidence)
+        rid = LanceOps().add_rule(body.rule, body.category, body.source, body.confidence)
         return {"ok": True, "id": rid}
     except Exception as e:
         raise HTTPException(500, str(e)) from e

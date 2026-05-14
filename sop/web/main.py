@@ -73,7 +73,12 @@ except Exception as _e:
 
 app.middleware("http")(project_scope_middleware)
 
-# ── 按需注册路由模块（全部挂载在 /api/v1/* 下，无旧版 /api/* 重复面）────────
+# 最外层之一：将旧客户端的 /api/* 308 到 /api/v1/*（须注册在 project_scope 之后，以便先于其作用域解析）
+from routers.legacy_unversioned_api_redirect import legacy_unversioned_api_redirect_middleware
+
+app.middleware("http")(legacy_unversioned_api_redirect_middleware)
+
+# ── 按需注册路由模块（业务 REST 挂载在 /api/v1/*；未版本化 /api/* 由上方中间件重定向）────────
 from routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
 from routers import models, orchestration, docker_env, skill_repo, vibe, design_docs, workspace
 from routers import notify, cli_wrapper

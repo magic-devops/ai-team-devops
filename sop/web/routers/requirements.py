@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from path_config import resolved_ai_memory_root, resolved_project_id
+from path_config import resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
 from .db_sql_compat import now, rows, table
+from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/requirements", tags=["requirements"])
 
@@ -340,6 +341,12 @@ def create_req(body: ReqCreate):
             "dev_tool": (body.dev_tool or "").strip(),
         }
     _ui_save(st)
+    notify_webhook(
+        "requirement.created",
+        {"requirement_id": row["id"], "title": body.title, "priority": body.priority},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True, "id": row["id"]}
 
 
@@ -381,6 +388,12 @@ def batch_create(body: BatchCreateBody):
                 "dev_tool": (it.dev_tool or "").strip(),
             }
     _ui_save(st)
+    notify_webhook(
+        "requirement.batch_created",
+        {"count": len(ids), "ids": ids},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True, "ids": ids, "count": len(ids)}
 
 
@@ -521,11 +534,16 @@ def update_priority(req_id: str, body: PriorityBody):
     st = _ui_load()
     _ui_append_to_column(st, req_id, body.priority)
     _ui_save(st)
+    notify_webhook(
+        "requirement.updated",
+        {"requirement_id": req_id, "fields": ["priority", "human_notes"]},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True}
 
 
 @router.patch("/{req_id}")
-def update_req(req_id: str, body: ReqUpdate):
     req_id = _safe_req_id(req_id)
     t = table("requirements")
     if t is None:
@@ -553,6 +571,12 @@ def update_req(req_id: str, body: ReqUpdate):
             fld["dev_tool"] = ui_t or ""
     if "priority" in vals or ui_a is not None or ui_t is not None:
         _ui_save(st)
+    notify_webhook(
+        "requirement.updated",
+        {"requirement_id": req_id, "fields": list(vals.keys()) if vals else []},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True}
 
 
@@ -572,4 +596,10 @@ def delete_req(req_id: str):
             p.unlink()
         except OSError:
             pass
+    notify_webhook(
+        "requirement.deleted",
+        {"requirement_id": req_id},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True}

@@ -1,6 +1,6 @@
 # AI 能力控制平面规范
 
-> 版本: v1.0 | 更新: 2026-05-13
+> 版本: v1.0 | 更新: 2026-05-14
 
 ## 定位
 
@@ -12,7 +12,7 @@
 sop 控制平面
 ├── 规约层：AGENTS.md / CLAUDE.md / .cursorrules 等工具入口
 ├── 能力注册层：.ai-memory/ai_capabilities.json
-├── Hook 策略层：sop/tools/sop_ai_hook.py
+├── Hook 策略层：sop/tools/sop_ai_hook.py + 可选 .ai-memory/hook_policy.json（模板 sop/tools/hook_policy.example.json）
 ├── 适配层：.codex/hooks.json / .claude/settings.json / CLI wrapper / IDE rules
 ├── 调度层：Agent 编排、Vibe Coding、MCP、A2A
 └── 优化层：activity.log、规则提取、知识蒸馏、质量门禁

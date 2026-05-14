@@ -326,13 +326,20 @@ input:focus{
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent);
 }
 .pw-wrap{position:relative;z-index:1}
-.pw-wrap input{padding-right:44px}
+.pw-wrap.pw-has-value input{padding-right:44px}
+.pw-wrap:not(.pw-has-value) input{padding-right:14px}
 .pw-eye{
   position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
   background:color-mix(in srgb,var(--accent) 10%,transparent);border:1px solid var(--border);border-radius:9px;
-  cursor:pointer;color:var(--text2);font-size:14px;padding:6px 8px;line-height:1;transition:background .15s,color .15s;
+  cursor:pointer;color:var(--text2);transition:background .15s,color .15s,opacity .15s,visibility .15s;
+}
+.pw-wrap:not(.pw-has-value) .pw-eye{
+  visibility:hidden;pointer-events:none;opacity:0;
 }
 .pw-eye:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--text)}
+.pw-eye:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pw-eye-ic{display:block;flex-shrink:0}
 
 .btn{
   width:100%;margin-top:24px;padding:13px 16px;border-radius:12px;border:none;position:relative;overflow:hidden;
@@ -465,9 +472,9 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
         <label data-i18n="field_username">用户名</label>
         <input id="init-username" type="text" placeholder="admin" required>
         <label data-i18n="field_password_min">密码（至少 8 位）</label>
-        <input id="init-password" type="password" placeholder="••••••••" required minlength="8">
+        <input id="init-password" type="password" data-i18n="ph_password_min" placeholder="" required minlength="8">
         <label data-i18n="field_password_confirm">确认密码</label>
-        <input id="init-password2" type="password" placeholder="••••••••" required minlength="8">
+        <input id="init-password2" type="password" data-i18n="ph_password_confirm" placeholder="" required minlength="8">
         <label data-i18n="field_tenant">租户名称（可选）</label>
         <input id="init-tenant" type="text" placeholder="default">
         <button class="btn btn-init" type="submit" id="init-btn" data-i18n="init_btn">创建账号并登录</button>
@@ -486,7 +493,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
         <label data-i18n="field_username">用户名</label>
         <input id="username" type="text" placeholder="admin" required autocomplete="username">
         <label data-i18n="field_password">密码</label>
-        <div class="pw-wrap"><input id="password" type="password" placeholder="••••••••" required autocomplete="current-password"><button type="button" class="pw-eye" onclick="togglePw('password',this)">👁</button></div>
+        <div class="pw-wrap"><input id="password" type="password" data-i18n="ph_password" placeholder="" required autocomplete="current-password"><button type="button" class="pw-eye" data-pw-for="password" aria-pressed="false"></button></div>
         <button class="btn" type="submit" id="login-btn" data-i18n="login_btn">登录</button>
       </form>
       <div class="msg" id="login-msg"></div>
@@ -503,13 +510,13 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
         <label data-i18n="reset_admin_user">管理员用户名</label>
         <input id="reset-admin-user" type="text" placeholder="admin" required>
         <label data-i18n="reset_admin_pw">管理员密码</label>
-        <input id="reset-admin-pw" type="password" placeholder="••••••••" required>
+        <input id="reset-admin-pw" type="password" data-i18n="ph_password" placeholder="" required>
         <label data-i18n="reset_target_user">要重置的用户名</label>
         <input id="reset-target-user" type="text" placeholder="admin" required>
         <label data-i18n="reset_new_pw">新密码（至少 8 位）</label>
-        <input id="reset-new-pw" type="password" placeholder="••••••••" required minlength="8">
+        <input id="reset-new-pw" type="password" data-i18n="ph_password_min" placeholder="" required minlength="8">
         <label data-i18n="reset_new_pw2">确认新密码</label>
-        <input id="reset-new-pw2" type="password" placeholder="••••••••" required minlength="8">
+        <input id="reset-new-pw2" type="password" data-i18n="ph_password_confirm" placeholder="" required minlength="8">
         <button class="btn" type="submit" id="reset-btn" data-i18n="reset_btn">重置密码</button>
       </form>
       <div class="msg" id="reset-msg"></div>
@@ -552,6 +559,8 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       login_btn:'登录', login_loading:'登录中...', login_fail:'登录失败',
       field_username:'用户名', field_password:'密码',
       field_password_min:'密码（至少 8 位）', field_password_confirm:'确认密码',
+      ph_password:'请输入密码', ph_password_min:'不少于 8 个字符', ph_password_confirm:'请再次输入以确认',
+      a11y_pw_show:'显示密码', a11y_pw_hide:'隐藏密码',
       field_tenant:'租户名称（可选）', field_tenant_slug:'租户 Slug',
       saas_hint:'多租户模式：请填写您所在的租户 Slug',
       net_err:'网络错误：',
@@ -590,6 +599,8 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       login_btn:'Sign in', login_loading:'Signing in...', login_fail:'Sign-in failed',
       field_username:'Username', field_password:'Password',
       field_password_min:'Password (min 8 chars)', field_password_confirm:'Confirm password',
+      ph_password:'Enter password', ph_password_min:'At least 8 characters', ph_password_confirm:'Re-enter to confirm',
+      a11y_pw_show:'Show password', a11y_pw_hide:'Hide password',
       field_tenant:'Tenant name (optional)', field_tenant_slug:'Tenant Slug',
       saas_hint:'Multi-tenant mode: enter your tenant slug',
       net_err:'Network error: ',
@@ -628,22 +639,75 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     });
   }
 
-  window.togglePw = function(id, btn) {
-    var el = document.getElementById(id);
-    var show = el.type === 'password';
-    el.type = show ? 'text' : 'password';
-    btn.textContent = show ? '🙈' : '👁';
+  var SVG_PW_SHOW = '<svg class="pw-eye-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  var SVG_PW_HIDE = '<svg class="pw-eye-ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+  function pwInputForBtn(btn) {
+    var id = btn.getAttribute('data-pw-for');
+    if (id) return document.getElementById(id);
+    var wrap = btn.closest('.pw-wrap');
+    return wrap ? wrap.querySelector('input') : null;
+  }
+
+  function setPwEyeVisual(btn, plain) {
+    btn.innerHTML = plain ? SVG_PW_HIDE : SVG_PW_SHOW;
+    btn.setAttribute('aria-pressed', plain ? 'true' : 'false');
+    btn.setAttribute('aria-label', plain ? t('a11y_pw_hide') : t('a11y_pw_show'));
+  }
+
+  function syncPwWrap(wrap) {
+    var input = wrap.querySelector('input');
+    var btn = wrap.querySelector('.pw-eye');
+    if (!input || !btn) return;
+    var has = input.value.length > 0;
+    wrap.classList.toggle('pw-has-value', has);
+    if (!has) {
+      input.type = 'password';
+      setPwEyeVisual(btn, false);
+      return;
+    }
+    setPwEyeVisual(btn, input.type === 'text');
+  }
+
+  function bindPwWrap(wrap) {
+    var input = wrap.querySelector('input');
+    if (!input || input._pwBound) return;
+    input._pwBound = true;
+    var run = function () { syncPwWrap(wrap); };
+    input.addEventListener('input', run);
+    input.addEventListener('change', run);
+  }
+
+  function syncAllPwWraps() {
+    document.querySelectorAll('.pw-eye').forEach(function (btn) {
+      if (btn._pwClickBound) return;
+      btn._pwClickBound = true;
+      btn.addEventListener('click', function () { window.togglePw(btn); });
+    });
+    document.querySelectorAll('.pw-wrap').forEach(function (wrap) {
+      bindPwWrap(wrap);
+      syncPwWrap(wrap);
+    });
+  }
+
+  window.togglePw = function (btn) {
+    var input = pwInputForBtn(btn);
+    if (!input || !input.value.length) return;
+    var plain = input.type !== 'text';
+    input.type = plain ? 'text' : 'password';
+    setPwEyeVisual(btn, plain);
   };
 
-  document.querySelectorAll('input[type=password]').forEach(function(el){
-    if(el.parentElement.classList.contains('pw-wrap')) return;
+  document.querySelectorAll('input[type=password]').forEach(function (el) {
+    if (el.parentElement && el.parentElement.classList.contains('pw-wrap')) return;
     var wrap = document.createElement('div');
     wrap.className = 'pw-wrap';
     el.parentNode.insertBefore(wrap, el);
     wrap.appendChild(el);
     var btn = document.createElement('button');
-    btn.type = 'button'; btn.className = 'pw-eye'; btn.textContent = '👁';
-    btn.onclick = function(){ window.togglePw(el.id, btn); };
+    btn.type = 'button';
+    btn.className = 'pw-eye';
+    if (el.id) btn.setAttribute('data-pw-for', el.id);
     wrap.appendChild(btn);
   });
 
@@ -655,6 +719,8 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     });
     document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
     try { localStorage.setItem('devdash-lang', lang); } catch (e) {}
+    syncAllPwWraps();
+    setTimeout(syncAllPwWraps, 160);
   }
 
   function themeColorHex() {
@@ -674,6 +740,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     if(meta) meta.setAttribute('content', themeColorHex());
   }
 
+  window.addEventListener('pageshow', function () { syncAllPwWraps(); });
   document.getElementById('theme-sel').value = theme;
   document.getElementById('lang-sel').value = lang;
   applyTheme(); applyLang();

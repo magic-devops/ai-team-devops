@@ -131,20 +131,21 @@ python sop/knowledge/lancedb_ops.py search tasks "JWT 认证"
 
 ```bash
 # 广播进度（须带有效 JWT 与 X-Project-Id；示例用 curl 多行头）
-curl -sS -X POST "http://localhost:8765/api/notify/broadcast?title=任务完成&content=T003已完成&level=success" \
+curl -sS -X POST "http://localhost:8765/api/v1/notify/broadcast?title=任务完成&content=T003已完成&level=success" \
   -H "Authorization: Bearer $SOP_TOKEN" \
   -H "X-Project-Id: $PROJECT_ID"
 ```
 
 ## API 版本
 
-- `/api/v1/` — 新版本（推荐）
-- `/api/` — 旧版本（向后兼容）
+- **`/api/v1/*`** — Manager 业务 REST 唯一前缀（见 `sop/web/main.py` 路由注册）
+- **`/metrics`** — Prometheus 文本（根路径，不在 `/api/v1` 下）
 
 ## Web 管理后台（人机协同）
 
-- 启动：`bash sop/tools/start-manager.sh`（可选 `--port 9000`、`--no-reload`、`--help`）；数据根目录由 **`PROJECT_PATH`** 与（已登录时）**`X-Project-Id` 解析出的项目路径** 决定。前端 **`API` 自动跟随当前页面 origin**；业务请求走 **`apiFetch`**（JWT + `X-Project-Id` + 超时）。顶栏有 **/api/health** 延迟与 **`Ctrl+/` 开发者帮助**（含 OpenAPI / ReDoc 链接）。  
-- **研发全流程**：人读 `GET /api/dev-flow/summary` 与页面建议，再决定是否调用模型；勿让模型重复拉取全表。  
+- **统一 Shell 管控**：`bash sop/tools/sop-ctl.sh help`（`--json`、`wait-health`、`self-check`、`commands`；init / backup / start-bg / repair --strict 等；见 **`docs/USER_MANUAL.md` §1.3**）
+- 启动：`bash sop/tools/start-manager.sh`（可选 `--port 9000`、`--no-reload`、`--help`）；数据根目录由 **`PROJECT_PATH`** 与（已登录时）**`X-Project-Id` 解析出的项目路径** 决定。前端 **`API` 自动跟随当前页面 origin**；业务请求走 **`apiFetch`**（JWT + `X-Project-Id` + 超时）。顶栏有 **`GET /api/v1/health`** 延迟与 **`Ctrl+/` 开发者帮助**（含 OpenAPI / ReDoc 链接）。  
+- **研发全流程**：人读 `GET /api/v1/dev-flow/summary` 与页面建议，再决定是否调用模型；勿让模型重复拉取全表。  
 - **Vibe Coding**：会话/记忆外化在 `.ai-memory/vibe_*.json`；提示词用 **ID + 规范相对路径**，长文打开「规范文档 / 技术方案」页而非粘贴。  
 - **Agent 编排**：开发工具与环境检查、AI 安装 v2、白名单受控安装；API 与路径见 **`docs/ORCHESTRATION_DEV_TOOLS.md`**。  
 - 操作手册（人类）：仓库根 **`docs/USER_MANUAL.md`**（§4.5 编排）；开发与路由：**`sop/web/README.md`**。

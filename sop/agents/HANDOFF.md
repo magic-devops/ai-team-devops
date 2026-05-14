@@ -19,7 +19,7 @@
   
   "completed_steps": [
     "读取相关文件",
-    "实现 POST /api/auth/login 端点",
+    "实现 POST /api/v1/auth/login 端点",
     "添加输入校验"
   ],
   

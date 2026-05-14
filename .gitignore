@@ -1,41 +1,62 @@
-# AI runtime data (local only, do not commit)
+# ── AI / SOP 运行时（勿提交）────────────────────────────────────────
+# 物理数据默认在 PROJECT_PATH/.sop-runtime/；根目录 .ai-memory 多为指向其下 ai-memory 的符号链接
 .sop-runtime/
+
+# .ai-memory：忽略向量库、会话、编排状态、日志等；若团队要将规则入库，可跟踪 .ai-memory/rules/**
+.ai-memory/**
+!.ai-memory/rules/
+!.ai-memory/rules/**
+
+# 兼容：无 rules 白名单时仍忽略的零散路径（已由 .ai-memory/** 覆盖时可删，保留无妨）
 .ai-memory/activity.log
 .ai-memory/tool-audit.log
-.ai-memory/lancedb/
-.ai-memory/admin_backups/
-.ai-memory/vibe_uploads/
-.ai-memory/vibe_sessions.json
-.ai-memory/orchestration/
-.ai-memory/managed_dockerfiles/
+
+# 本地备份与重初始化打包
+.ai-reinit-backups/
+.sop-backups/
+
+# LanceDB / 状态快照（体积大）
 memory/snapshots/
 
-# Keep these project-level AI control-plane files committed when present:
-#   AGENTS.md
-#   CLAUDE.md / CLAUDE.md.template
-#   .codex/config.toml
-#   .codex/hooks.json
-#   .codex/hooks/sop_hook.py
-#   .claude/settings.json
-#   .claude/commands/
-#   .claude/hooks/
-# Do not commit user/global Codex or Claude config from $CODEX_HOME or home dirs.
+# 全局日志目录（若生成在仓库根）
+logs/
 
-# AI tool generated local project configs (usually per downstream business repo)
+# Web Manager 日志与本地 SQLite（遗留路径）
+sop/web/logs/
+sop/web/sop.db
+sop/web/sop.db-shm
+sop/web/sop.db-wal
+
+# 环境变量与密钥（示例文件可提交）
+.env
+.env.*.local
+sop/web/.env
+sop/web/.env.local
+!.env.example
+!sop/web/.env.example
+
+# Claude / Cursor 本地覆盖（若存在）
+.claude/settings.local.json
+
+# ── 工具生成的项目级配置（下游业务仓常见；本规约仓可不跟踪）────────
 opencode.json
 .cursorrules
 .windsurfrules
 .trae/
 .qoder/
 
-# Codex local/session artifacts. Project hook adapter files above remain tracked.
+# 可提交：AGENTS.md、CLAUDE.md、.codex/README.md、.codex/config.toml、.codex/hooks.json、
+# .codex/hooks/sop_hook.py、.claude/README.md、.claude/settings.json、.claude/commands/、.claude/hooks/
+# 勿提交用户主目录或 $CODEX_HOME 下的全局配置副本；个人覆盖用 .claude/settings.local.json（已忽略）。
+
+# Codex 本地会话与缓存
 .codex/log/
 .codex/sessions/
 .codex/history*
 .codex/auth*
 .codex/**/.DS_Store
 
-# Claude local/session artifacts. Project settings/commands/hooks above remain tracked.
+# Claude Code 本地会话与缓存
 .claude/logs/
 .claude/sessions/
 .claude/cache/
@@ -43,27 +64,44 @@ opencode.json
 .claude/statsig/
 .claude/**/.DS_Store
 
-# Python
+# ── Python ───────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
 .venv/
-.venv-integrations/
+.venv-*/
+.eggs/
+*.egg-info/
+dist/
+build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+.tox/
+.nox/
 
 # install-integrations.sh 可选 MCP npm 预装目录
 sop/tools/.mcp-npm-smoke/
 
-# Node
+# ── Node / 前端构建 ─────────────────────────────────────────────────
 node_modules/
+**/node_modules/
 
-# OS
+# ── IDE / OS ─────────────────────────────────────────────────────────
 .DS_Store
 *.swp
+*.swo
+.idea/
+*.sublime-*
 
-# init-ai-project.sh reinit 备份
-.ai-reinit-backups/
-
-.ai-memory/admin_backups/
-
-logs/
-
-.sop-runtime/
+# 本地覆盖型编辑器配置
+.vscode/*.local.*
+*.code-workspace

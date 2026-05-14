@@ -6,6 +6,7 @@
 
 | 入口 | 说明 |
 |------|------|
+| **`sop-ctl.sh`** | **推荐**：`bash sop/tools/sop-ctl.sh help` — 全局 `--project-path`/`--port`/`-y`/`--json`；`commands`/`self-check`/`wait-health`/`url`/`open`；初始化、备份、`logs -f`、`repair --strict`、`stop` 别名等（见 [SCRIPTS.md](SCRIPTS.md)） |
 | [install-integrations.sh](install-integrations.sh) | **推荐先执行**：按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持虚拟环境与 `--help` |
 | [start-manager.sh](start-manager.sh) | 启动 Web 后台：`uvicorn main:app`（`PROJECT_PATH`、`PORT`） |
 | [start-dashboard.sh](start-dashboard.sh) | 与 `start-manager.sh` 等价，同样启动 **`main:app`** |

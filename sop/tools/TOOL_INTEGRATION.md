@@ -1,6 +1,6 @@
 # AI 开发工具集成规范
 
-> 版本: v1.1 | 更新: 2026-05-13
+> 版本: v1.1 | 更新: 2026-05-14
 > 本规范适用于所有主流 AI 编码工具，确保 sop 体系在任何工具中均可高效运行。
 
 ## 支持的工具
@@ -164,3 +164,7 @@ Hook 命令会收到 JSON stdin；脚本输出 JSON 可影响上下文、警告�
 - 在 Codex CLI / Claude Code 中开始的任务，可以在 Cursor 中继续
 - 规则库 `.ai-memory/rules/RULES.md` 对所有工具可见
 - `memory/current_state.json` 记录最新项目状态
+
+## 运维侧：统一管控入口
+
+不只想配 AI 工具、还要**一键初始化 / 备份 / 启停 Manager / 健康检查**时，使用仓库内 **`bash sop/tools/sop-ctl.sh help`**（封装 `init-ai-project.sh`、`start-manager.sh`、`health-check.sh`、`install-integrations.sh` 等；另含 `sync`、`reset-admin`、`manager`、`bootstrap`、**`wait-health`** / **`self-check`** / **`commands`**、全局 **`--json`**、`complete bash` 与 `sop-ctl.completion.bash` Tab 补全）。已安装 **`pip install -e packages/sop-cli`** 时，可并行使用 **`sop init`**、**`sop doctor`**、**`sop agentd`** 等 Python CLI。详见 [SCRIPTS.md](SCRIPTS.md) 与仓库根 [docs/USER_MANUAL.md](../../docs/USER_MANUAL.md) §1.3。

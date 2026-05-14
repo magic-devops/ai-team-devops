@@ -155,9 +155,9 @@ spring:
 
 | 项 | 约定 |
 |----|------|
-| 用户登录 | `POST /api/auth/login` → JWT；SPA 存 `localStorage['sop-token']`（实现以仓库代码为准） |
+| 用户登录 | `POST /api/v1/auth/login` → JWT；SPA 存 `localStorage['sop-token']`（实现以仓库代码为准） |
 | 业务请求 | `Authorization: Bearer <JWT>` + **`X-Project-Id: <projects.id>`**；由 `project_scope_middleware` 解析 `path_config.resolved_project_path` |
-| 公开路径 | `/api/auth/*`、`/api/health` 等不参与项目作用域注入 |
+| 公开路径 | `/api/v1/auth/*`、`/api/v1/health*` 等（见 `project_scope_middleware._skip_project_scope`）不参与项目作用域注入 |
 | 自动化脚本 | `sop/tools/manager_client.py`：环境变量 **`MANAGER_SOP_TOKEN`**（JWT）+ **`PROJECT_ID`**；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 配合 `health-check.sh` |
 | 失败语义 | SaaS 下无效项目或无权访问：**403/404** JSON `detail`，勿假定静默回退到 `PROJECT_PATH` |
 

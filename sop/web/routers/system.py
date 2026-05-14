@@ -150,19 +150,20 @@ def workspace_context(request: Request):
     public = (os.getenv("ADMIN_PUBLIC_BASE_URL") or os.getenv("WEB_PUBLIC_BASE_URL") or "").strip().rstrip("/")
     ui_base = public or base
     api_base = f"{base}/api" if not base.endswith("/api") else base
+    # 仅 id + hash；展示文案由前端 i18n（page_<id 下划线化>）统一，避免中英混杂。
     nav = [
-        {"id": "dashboard", "label": "总览", "hash": "#dashboard"},
-        {"id": "dev-flow", "label": "研发全流程", "hash": "#dev-flow"},
-        {"id": "requirements", "label": "需求管理", "hash": "#requirements"},
-        {"id": "plan", "label": "执行计划", "hash": "#plan"},
-        {"id": "iteration", "label": "迭代进度", "hash": "#iteration"},
-        {"id": "vibe", "label": "Vibe Coding", "hash": "#vibe"},
-        {"id": "docker", "label": "环境 / Docker", "hash": "#docker"},
-        {"id": "orchestration", "label": "编排工作流", "hash": "#orchestration"},
-        {"id": "design-docs", "label": "技术方案", "hash": "#design-docs"},
-        {"id": "issues", "label": "问题中心", "hash": "#issues"},
-        {"id": "agents", "label": "Agent 管理", "hash": "#agents"},
-        {"id": "system", "label": "系统管理", "hash": "#system"},
+        {"id": "dashboard", "hash": "#dashboard"},
+        {"id": "dev-flow", "hash": "#dev-flow"},
+        {"id": "requirements", "hash": "#requirements"},
+        {"id": "plan", "hash": "#plan"},
+        {"id": "iteration", "hash": "#iteration"},
+        {"id": "vibe", "hash": "#vibe"},
+        {"id": "docker", "hash": "#docker"},
+        {"id": "orchestration", "hash": "#orchestration"},
+        {"id": "design-docs", "hash": "#design-docs"},
+        {"id": "issues", "hash": "#issues"},
+        {"id": "agents", "hash": "#agents"},
+        {"id": "system", "hash": "#system"},
     ]
     arts = _load_workspace_artifacts()
     enriched = []

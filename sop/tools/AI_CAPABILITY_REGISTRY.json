@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updated_at": "2026-05-13",
+  "updated_at": "2026-05-14",
   "control_plane": "sop",
   "capabilities": [
     {
@@ -51,6 +51,8 @@
       "entry": "AGENTS.md",
       "config": ".codex/config.toml",
       "hooks": ".codex/hooks.json",
+      "hook_policy": ".ai-memory/hook_policy.json",
+      "hook_policy_template": "sop/tools/hook_policy.example.json",
       "native_events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop"]
     },
     "claude": {

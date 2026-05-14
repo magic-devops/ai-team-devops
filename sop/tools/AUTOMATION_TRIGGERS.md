@@ -101,7 +101,7 @@ Codex CLI 支持 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Permissio
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",
@@ -113,7 +113,7 @@ Codex CLI 支持 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Permissio
     ],
     "PermissionRequest": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",
@@ -125,7 +125,7 @@ Codex CLI 支持 `SessionStart`、`UserPromptSubmit`、`PreToolUse`、`Permissio
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write",
+        "matcher": "Bash|apply_patch|Edit|Write|run_terminal_cmd|Patch|Shell|shell",
         "hooks": [
           {
             "type": "command",

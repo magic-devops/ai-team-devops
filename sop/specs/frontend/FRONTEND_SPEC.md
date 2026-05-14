@@ -120,7 +120,7 @@ const { data, loading } = useQuery(() => userApi.getList(params));
 
 // ❌ 禁止在组件中直接使用 axios
 import axios from 'axios';
-axios.get('/api/users');  // 禁止
+axios.get('/api/v1/users');  // 禁止：绕过统一 request 封装
 ```
 
 ## 8. 错误处理规范

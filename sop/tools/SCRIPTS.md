@@ -11,6 +11,8 @@
 | 文件 | 用途 |
 |------|------|
 | `install-integrations.sh` | 创建/使用虚拟环境，按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持 `SOP_PYTHON`、`INSTALL_INTEGRATIONS_RECREATE`、`WRITE_INTEGRATIONS_LOCK` 等；`--help` 查看变量 |
+| **`sop-ctl.sh`** | **统一管控入口**：全局 `-y`/`--yes`、`--json`（`status`/`env`/`version`/`wait-health`/`self-check` 等 JSON 行输出）、`--project-path`、`--port`（须写在子命令前）；子命令含 `init` / `reinit` / `backup` / `clean` / `start` / `start-bg` / `restart-bg` / `stop-bg` 与别名 **`stop`** / `status` / `health` / `install` / `repair`（`--strict`）/ `deploy` / `register` / `doctor` / `sync` / `reset-admin` / `manager` / `bootstrap` / `complete` / `version` / `env` / `logs`（`-f`）/ **`url`** / **`open`** / **`wait-health`** / **`self-check`** / **`commands`**；详见脚本内 `help` |
+| **`sop-ctl.completion.bash`** | Bash Tab 补全：配合 `alias sopctl='bash <仓库绝对路径>/sop/tools/sop-ctl.sh'` 后 `source` 本文件；或 `eval "$(bash …/sop-ctl.sh complete bash)"` |
 | `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`；环境变量 `PROJECT_PATH`（被管理仓库根）、`PORT`（默认 8765）、`ADMIN_MODE`（`single` / `saas`）；启动前会执行 `path_config.apply_startup_defaults()` 创建/迁移 `.sop-runtime/` |
 | `start-dashboard.sh` | 与 `start-manager.sh` 等价入口，同样启动 **`main:app`**（历史命名保留） |
 | `health-check.sh` | 仓库与依赖健康检查；可选探测带鉴权的 API（见脚本头环境变量） |

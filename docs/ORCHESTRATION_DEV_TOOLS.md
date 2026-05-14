@@ -55,7 +55,9 @@
 
 ---
 
-## 4. API 一览（前缀 `/api/orchestration`）
+## 4. API 一览（前缀 **`/api/v1/orchestration`**）
+
+下列路径均接在该前缀之后（完整 URL 示例：`GET /api/v1/orchestration/tools`）。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|

@@ -1,9 +1,42 @@
-// 审计日志页面
+// Audit log page
 window.i18nExtend && window.i18nExtend({
-  zh: { page_audit: '审计日志', audit_total: '共 {n} 条', audit_all: '全部', audit_loading: '加载中...', audit_prev: '上一页', audit_next: '下一页', audit_page: '第 {n} 页' },
-  en: { page_audit: 'Audit Log', audit_total: '{n} records', audit_all: 'All', audit_loading: 'Loading...', audit_prev: 'Prev', audit_next: 'Next', audit_page: 'Page {n}' },
+  zh: {
+    page_audit: '审计日志',
+    audit_total: '共 {n} 条',
+    audit_all: '全部',
+    audit_loading: '加载中...',
+    audit_prev: '上一页',
+    audit_next: '下一页',
+    audit_page: '第 {n} 页',
+    audit_ph_user: '用户ID过滤',
+    audit_th_time: '时间',
+    audit_th_user: '用户',
+    audit_th_action: '操作',
+    audit_th_resource: '资源',
+    audit_th_path: '路径',
+    audit_th_status: '状态',
+  },
+  en: {
+    page_audit: 'Audit log',
+    audit_total: '{n} records',
+    audit_all: 'All',
+    audit_loading: 'Loading...',
+    audit_prev: 'Previous',
+    audit_next: 'Next',
+    audit_page: 'Page {n}',
+    audit_ph_user: 'Filter by user id',
+    audit_th_time: 'Time',
+    audit_th_user: 'User',
+    audit_th_action: 'Action',
+    audit_th_resource: 'Resource',
+    audit_th_path: 'Path',
+    audit_th_status: 'Status',
+  },
 });
 const AuditPage = () => {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
+  const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
   const [items, setItems] = React.useState([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
@@ -27,10 +60,9 @@ const AuditPage = () => {
 
   return React.createElement('div', { style: { padding: '24px 32px' } },
     React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 } },
-      React.createElement('h2', { style: { color: 'var(--text)', fontSize: 20 } }, '审计日志'),
-      React.createElement('span', { style: { fontSize: 13, color: 'var(--text3)' } }, `共 ${total} 条`)
+      React.createElement('h2', { style: { color: 'var(--text)', fontSize: 20 } }, t('page_audit')),
+      React.createElement('span', { style: { fontSize: 13, color: 'var(--text3)' } }, t('audit_total', { n: total }))
     ),
-    // 过滤栏
     React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' } },
       ['create', 'update', 'delete', 'login', ''].map(a =>
         React.createElement('button', {
@@ -40,20 +72,20 @@ const AuditPage = () => {
             background: filter.action === a ? (ACTION_COLOR[a] || 'var(--accent)') : 'var(--btn-muted-bg)',
             color: filter.action === a ? '#fff' : 'var(--text2)'
           }
-        }, a || '全部')
+        }, a || t('audit_all'))
       ),
       React.createElement('input', {
-        placeholder: '用户ID过滤', value: filter.user_id,
+        placeholder: t('audit_ph_user'), value: filter.user_id,
         onChange: e => setFilter(f => ({ ...f, user_id: e.target.value })),
         style: { padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-input)', color: 'var(--text)', fontSize: 12, width: 140 }
       })
     ),
-    loading ? React.createElement('div', { style: { color: 'var(--text3)', padding: 20 } }, '加载中...') :
+    loading ? React.createElement('div', { style: { color: 'var(--text3)', padding: 20 } }, t('audit_loading')) :
     React.createElement('div', { style: { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' } },
       React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: 12 } },
         React.createElement('thead', null,
           React.createElement('tr', null,
-            ['时间', '用户', '操作', '资源', '路径', '状态'].map(h =>
+            [t('audit_th_time'), t('audit_th_user'), t('audit_th_action'), t('audit_th_resource'), t('audit_th_path'), t('audit_th_status')].map(h =>
               React.createElement('th', { key: h, style: { padding: '8px 12px', color: 'var(--text3)', textAlign: 'left', borderBottom: '1px solid var(--border)', fontWeight: 500 } }, h)
             )
           )
@@ -75,9 +107,9 @@ const AuditPage = () => {
       )
     ),
     total > 50 && React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 } },
-      page > 1 && React.createElement('button', { onClick: () => load(page - 1), style: btnStyle() }, '上一页'),
-      React.createElement('span', { style: { fontSize: 13, color: 'var(--text3)', alignSelf: 'center' } }, `第 ${page} 页`),
-      items.length === 50 && React.createElement('button', { onClick: () => load(page + 1), style: btnStyle() }, '下一页')
+      page > 1 && React.createElement('button', { onClick: () => load(page - 1), style: btnStyle() }, t('audit_prev')),
+      React.createElement('span', { style: { fontSize: 13, color: 'var(--text3)', alignSelf: 'center' } }, t('audit_page', { n: page })),
+      items.length === 50 && React.createElement('button', { onClick: () => load(page + 1), style: btnStyle() }, t('audit_next'))
     )
   );
 };

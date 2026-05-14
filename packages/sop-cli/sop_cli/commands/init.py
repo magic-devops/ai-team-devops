@@ -68,9 +68,9 @@ def init(
     console.print(textwrap.dedent(f"""
         下一步建议：
           1. 启动 agentd:    [bold]sop agentd install && sop agentd start[/bold]
-          2. 健康自检:       [bold]sop doctor[/bold]
+          2. 健康自检:       [bold]sop doctor[/bold] 或 [bold]bash sop/tools/sop-ctl.sh doctor[/bold]
           3. 状态总览:       [bold]sop status[/bold]
-          4. 启动 Manager:   [bold]bash sop/tools/start-manager.sh[/bold]
+          4. 启动 Manager:   [bold]bash sop/tools/sop-ctl.sh start[/bold] 或 [bold]bash sop/tools/start-manager.sh[/bold]
     """).strip())
 
 

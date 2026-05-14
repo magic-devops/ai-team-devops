@@ -66,7 +66,7 @@ def _decode_token(token: str) -> dict | None:
     try:
         from routers.auth_sql import ALGORITHM, SECRET_KEY  # type: ignore[import-not-found]
     except Exception:  # pragma: no cover
-        SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+        SECRET_KEY = os.getenv("SECRET_KEY", "sop-default-insecure-use-env-secret-key")
         ALGORITHM = "HS256"
     try:
         return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

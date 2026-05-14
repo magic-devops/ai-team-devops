@@ -1,9 +1,23 @@
 window.i18nExtend && window.i18nExtend({
-  zh: { page_sprints_mgr: 'Sprint 管理', sprint_new: '+ 新建 Sprint', sprint_active: '进行中', sprint_completed: '已完成', sprint_goal: '目标', sprint_points: '计划点数', sprint_ends: '截止日期', sprint_progress: '进度', sprint_retro: '回顾', sprint_close: '关闭 Sprint', sprint_no_active: '当前无活跃 Sprint', sprint_tasks: '任务', sprint_issues: '问题', sprint_blocked: '阻塞', sprint_velocity: '速度', sprint_conf: '平均置信度' },
-  en: { page_sprints_mgr: 'Sprint Mgmt', sprint_new: '+ New Sprint', sprint_active: 'Active', sprint_completed: 'Completed', sprint_goal: 'Goal', sprint_points: 'Points', sprint_ends: 'Ends', sprint_progress: 'Progress', sprint_retro: 'Retrospective', sprint_close: 'Close Sprint', sprint_no_active: 'No active sprint', sprint_tasks: 'Tasks', sprint_issues: 'Issues', sprint_blocked: 'Blocked', sprint_velocity: 'Velocity', sprint_conf: 'Avg Confidence' },
+  zh: {
+    page_sprints_mgr: 'Sprint 管理', sprint_new: '+ 新建 Sprint', sprint_active: '进行中', sprint_completed: '已完成', sprint_planning: '规划中',
+    sprint_goal: '目标', sprint_points: '计划点数', sprint_ends: '截止日期', sprint_progress: '进度', sprint_retro: '回顾', sprint_close: '关闭 Sprint',
+    sprint_no_active: '当前无活跃 Sprint', sprint_tasks: '任务', sprint_issues: '问题', sprint_blocked: '阻塞', sprint_velocity: '速度', sprint_conf: '平均置信度',
+    sprint_pick_hint: '← 选择一个 Sprint 查看详情', sprint_loading: '加载中...', sprint_cancel: '取消', sprint_creating: '创建中...', sprint_create: '创建',
+    sprint_op_fail: '操作失败', sprint_op_ok: '操作成功', sprint_in_progress: '进行中', sprint_pending: '待处理',
+  },
+  en: {
+    page_sprints_mgr: 'Sprints', sprint_new: '+ New sprint', sprint_active: 'Active', sprint_completed: 'Done', sprint_planning: 'Planning',
+    sprint_goal: 'Goal', sprint_points: 'Points', sprint_ends: 'Ends', sprint_progress: 'Progress', sprint_retro: 'Retrospective', sprint_close: 'Close sprint',
+    sprint_no_active: 'No active sprint', sprint_tasks: 'Tasks', sprint_issues: 'Issues', sprint_blocked: 'Blocked', sprint_velocity: 'Velocity', sprint_conf: 'Avg confidence',
+    sprint_pick_hint: '← Select a sprint for details', sprint_loading: 'Loading...', sprint_cancel: 'Cancel', sprint_creating: 'Creating...', sprint_create: 'Create',
+    sprint_op_fail: 'Operation failed', sprint_op_ok: 'Success', sprint_in_progress: 'In progress', sprint_pending: 'Pending',
+  },
 });
 
 const SprintManager = () => {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
   const tr = k => (typeof window.t === 'function' ? window.t(k) : k);
   const [sprints, setSprints] = React.useState([]);
   const [selected, setSelected] = React.useState(null);
@@ -31,8 +45,8 @@ const SprintManager = () => {
     try {
       const r = await apiFetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || '操作失败');
-      setMsg({ ok: true, text: '操作成功' }); load(); setModal(false); setForm({ goal: '', planned_points: 0, ends_at: '' });
+      if (!r.ok) throw new Error(d.detail || tr('sprint_op_fail'));
+      setMsg({ ok: true, text: tr('sprint_op_ok') }); load(); setModal(false); setForm({ goal: '', planned_points: 0, ends_at: '' });
     } catch (e) { setMsg({ ok: false, text: e.message }); }
     setSaving(false);
   };
@@ -66,7 +80,7 @@ const SprintManager = () => {
     // 右侧详情
     React.createElement('div', null,
       !selected
-        ? React.createElement('div', { style: { color: 'var(--text3)', padding: 32, textAlign: 'center' } }, '← 选择一个 Sprint 查看详情')
+        ? React.createElement('div', { style: { color: 'var(--text3)', padding: 32, textAlign: 'center' } }, tr('sprint_pick_hint'))
         : progress
           ? React.createElement('div', null,
               // Sprint 头部
@@ -128,7 +142,7 @@ const SprintManager = () => {
                 })
               )
             )
-          : React.createElement('div', { style: { color: 'var(--text3)', padding: 20 } }, '加载中...')
+          : React.createElement('div', { style: { color: 'var(--text3)', padding: 20 } }, tr('sprint_loading'))
     ),
 
     // 新建 Sprint 模态框
@@ -148,8 +162,8 @@ const SprintManager = () => {
           )
         ),
         React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 } },
-          React.createElement('button', { onClick: () => setModal(false), style: btnStyle('muted') }, '取消'),
-          React.createElement('button', { disabled: saving || !form.goal, onClick: () => api(`${API}/sprints`, 'POST', form), style: btnStyle('accent') }, saving ? '创建中...' : '创建')
+          React.createElement('button', { onClick: () => setModal(false), style: btnStyle('muted') }, tr('sprint_cancel')),
+          React.createElement('button', { disabled: saving || !form.goal, onClick: () => api(`${API}/sprints`, 'POST', form), style: btnStyle('accent') }, saving ? tr('sprint_creating') : tr('sprint_create'))
         )
       )
     )

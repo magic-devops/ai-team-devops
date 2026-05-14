@@ -15,12 +15,12 @@
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ai-team-devops 管理后台</title>
+<title>ai-team-devops</title>
 <link rel="icon" type="image/png" href="/assets/brand-mark.png"/>
 <link rel="apple-touch-icon" href="/assets/brand-mark.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="pages/i18n.js?v=20260514a"></script>
+<script src="pages/i18n.js?v=20260514b"></script>
 <script src="pages/i18n-extend.js?v=20260513c"></script>
 <script>
 (function () {
@@ -127,11 +127,11 @@
 <script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
 <script type="text/babel" src="pages/dev_flow.js?v=20260512g"></script>
 <script type="text/babel" src="pages/sprints_mgr.js?v=20260513e"></script>
-<script type="text/babel" src="pages/db_config.js?v=20260513e"></script>
+<script type="text/babel" src="pages/db_config.js?v=20260514b"></script>
 <script type="text/babel" src="pages/tenants.js?v=20260513e"></script>
 <script type="text/babel" src="pages/health.js?v=20260513e"></script>
 <script type="text/babel" src="pages/audit.js?v=20260513c"></script>
-<script type="text/babel" src="pages/webhook.js?v=20260513e"></script>
+<script type="text/babel" src="pages/webhook.js?v=20260514c"></script>
 <script type="text/babel" src="pages/logs_viewer.js?v=20260513d"></script>
 <style>
 /* ── CSS 变量（多主题 + 语义色，供页面内联样式改为 var / class） ── */
@@ -663,6 +663,14 @@ function useFetch(url) {
   }, [load]);
   React.useEffect(function () { load().catch(function () {}); }, [load]);
   return { data, loading, error, reload: load };
+}
+
+/** 兼容：部分列表接口返回 { items, total, page }，UI 仍用数组 */
+function normalizeListPayload(d) {
+  if (d == null) return [];
+  if (Array.isArray(d)) return d;
+  if (typeof d === 'object' && d.items != null && Array.isArray(d.items)) return d.items;
+  return [];
 }
 
 /** 拉取 specs/custom 文件内容 JSON（带超时与非 2xx 解析） */
@@ -1279,7 +1287,7 @@ function Issues() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
-  const {data, loading, error, reload} = useFetch(`${API}/issues`);
+  const {data, loading, error, reload} = useFetch(`${API}/issues?size=200`);
   const [modal, setModal] = React.useState(null);
   const [resolution, setResolution] = React.useState('');
 
@@ -1292,7 +1300,7 @@ function Issues() {
 
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
-  const issues = data||[];
+  const issues = normalizeListPayload(data);
   const open = issues.filter(i=>i.status==='open');
   const resolved = issues.filter(i=>i.status==='resolved');
 
@@ -1381,18 +1389,20 @@ function Sprints() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   void langTick;
   const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
-  const {data, loading, error, reload} = useFetch(`${API}/sprints`);
+  const {data, loading, error, reload} = useFetch(`${API}/sprints?size=100`);
   const [modal, setModal] = React.useState(false);
   const [form, setForm] = React.useState({goal:'',planned_points:0,ends_at:''});
   const save = () => {
-    apiFetch(`/sprints`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    var pid = '';
+    try { pid = (localStorage.getItem('sop-current-project-id') || '').trim(); } catch (e) {}
+    apiFetch(`/sprints`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({}, form, { project_id: pid }))})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(false);reload();showToast(tr('sprint_toast_created'),'ok');})
       .catch(()=>showToast(tr('gen_create_fail'),'err'));
   };
   if (loading) return <PageSkeleton cards={1} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
-  const sprints = data||[];
+  const sprints = normalizeListPayload(data);
   return <>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
       <div className="section-title">{tr('sprint_title')}</div>
@@ -2491,7 +2501,7 @@ function ExecutionPlan() {
 
 // ── 迭代进度 ─────────────────────────────────────────────────────
 function IterationProgress() {
-  const {data:sprints,loading,error,reload} = useFetch(`${API}/sprints`);
+  const {data:sprints,loading,error,reload} = useFetch(`${API}/sprints?size=100`);
   const [selected,setSelected] = React.useState(null);
   const [progress,setProgress] = React.useState(null);
 
@@ -2500,7 +2510,8 @@ function IterationProgress() {
     apiFetch(`/sprints/${id}/progress`).then(r=>r.json()).then(setProgress);
   };
 
-  const active = (sprints||[]).find(s=>s.status==='active');
+  const sprintList = normalizeListPayload(sprints);
+  const active = sprintList.find(s=>s.status==='active');
   React.useEffect(()=>{ if(active&&!selected) loadProgress(active.id); },[(active && active.id)]);
 
   if (loading) return <PageSkeleton cards={2} />;
@@ -2514,7 +2525,7 @@ function IterationProgress() {
     <div className="grid-2">
       <div className="card">
         <div className="section-title">迭代列表</div>
-        {(sprints||[]).length===0?<div className="empty">暂无迭代</div>:(sprints||[]).map(s=><div key={s.id} className={'list-item file-browser-row' + (selected===s.id?' vibe-list-selected':'')} onClick={()=>loadProgress(s.id)}>
+        {sprintList.length===0?<div className="empty">暂无迭代</div>:sprintList.map(s=><div key={s.id} className={'list-item file-browser-row' + (selected===s.id?' vibe-list-selected':'')} onClick={()=>loadProgress(s.id)}>
           <div style={{flex:1}}>
             <div className="title">{s.id}</div>
             <div className="meta">{(s.goal && s.goal.slice(0,40))}</div>
@@ -3011,7 +3022,7 @@ function AppV3() {
         {id:'plan',icon:'✅',label:tk('page_plan')},
         {id:'iteration',icon:'🔄',label:tk('page_iteration')},
         {id:'sprints',icon:'🏃',label:tk('page_sprints')},
-        {id:'sprints-mgr',icon:'📅',label:tk('page_sprints_mgr') || 'Sprint 管理'},
+        {id:'sprints-mgr',icon:'📅',label:tk('page_sprints_mgr')},
         {id:'issues',icon:'🐛',label:tk('page_issues')},
         {id:'search',icon:'🔍',label:tk('page_search')},
       ]},
@@ -3036,18 +3047,18 @@ function AppV3() {
         {id:'orchestration',icon:'🔀',label:tk('page_orchestration')},
         {id:'mcp',icon:'🔌',label:tk('page_mcp')},
         {id:'logs',icon:'📡',label:tk('page_logs')},
-        {id:'logs-viewer',icon:'📜',label:tk('page_logs_viewer') || '日志查看'},
+        {id:'logs-viewer',icon:'📜',label:tk('page_logs_viewer')},
       ]},
       { id: 'g_sys', label: tk('nav_sys'), items: [
         {id:'notify',icon:'📣',label:tk('page_notify')},
         {id:'config',icon:'⚙️',label:tk('page_config')},
         {id:'system',icon:'🖥️',label:tk('page_system')},
         {id:'auth',icon:'👤',label:tk('page_auth')},
-        {id:'tenants',icon:'🏢',label:tk('page_tenants') || '组织管理'},
-        {id:'db-config',icon:'🗃️',label:tk('page_db_config') || '数据库配置'},
-        {id:'health',icon:'💚',label:tk('page_health') || '健康监控'},
-        {id:'audit',icon:'📋',label:tk('page_audit') || '审计日志'},
-        {id:'webhook',icon:'🔔',label:tk('page_webhook') || 'Webhook'},
+        {id:'tenants',icon:'🏢',label:tk('page_tenants')},
+        {id:'db-config',icon:'🗃️',label:tk('page_db_config')},
+        {id:'health',icon:'💚',label:tk('page_health')},
+        {id:'audit',icon:'📋',label:tk('page_audit')},
+        {id:'webhook',icon:'🔔',label:tk('page_webhook')},
       ]},
     ];
   }, [tk]);
@@ -3061,6 +3072,12 @@ function AppV3() {
     }
     return tab;
   }, [MENU_GROUPS, tab]);
+
+  React.useEffect(function () {
+    try {
+      document.title = tk('app_doc_title').replace(/\{page\}/g, currentTabLabel);
+    } catch (e) {}
+  }, [tk, currentTabLabel]);
 
   const goTab = React.useCallback(function (id, opts) {
     opts = opts || {};
@@ -3349,15 +3366,15 @@ function AppV3() {
     {helpOpen && <div className="modal-bg" onClick={() => setHelpOpen(false)}>
       <div className="modal" style={{width:520,maxWidth:'94vw'}} onClick={(e) => e.stopPropagation()}>
         <h3>{tk('help_title')}</h3>
-        <p style={{fontSize:12,color:'var(--text2)',lineHeight:1.6}}>本页为 <strong>无构建</strong> 模式（Babel Standalone + React UMD）。API 基址当前为 <code style={{fontSize:11}}>{API}</code>；从本后台同源打开时会自动跟随端口。</p>
+        <p style={{fontSize:12,color:'var(--text2)',lineHeight:1.6}}>{tk('help_intro_p1')}<strong>{tk('help_intro_no_build')}</strong>{tk('help_intro_p2')}<code style={{fontSize:11}}>{API}</code>{tk('help_intro_p3')}</p>
         <ul style={{fontSize:13,color:'var(--text)',lineHeight:1.85,margin:'8px 0 0 18px',padding:0}}>
-          <li><span className="help-kbd">Ctrl / ⌘ + /</span> 打开或关闭本帮助（在输入框内不触发）</li>
-          <li><span className="help-kbd">Esc</span> 关闭本帮助</li>
-          <li>侧栏按模块分组，可点击分组标题<strong>展开 / 收起</strong>（状态写入 localStorage）；顶栏 <span className="help-kbd">←</span> 与浏览器<strong>后退</strong>可回到上一页签（使用路由历史，不再每次覆盖地址栏）</li>
-          <li>支持浏览器地址 <span className="help-kbd">#页签</span> 直达（如 <code style={{fontSize:11}}>#vibe</code>、<code style={{fontSize:11}}>#plan</code>），便于分享与书签</li>
-          <li>顶栏 <strong>数据港</strong>：导出 JSON 任意登录用户可用；<strong>合并导入</strong>仅限超级管理员、租户管理员、项目管理员或运维角色</li>
-          <li>多项目 / SaaS：登录后顶栏可选「项目」；请求自动带 <code style={{fontSize:11}}>X-Project-Id</code>，后端按项目绑定磁盘路径与 SQL 数据；单项目模式仍可用环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> / <code style={{fontSize:11}}>PROJECT_ID</code></li>
-          <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录（未在 DB 填写 project_path 时的回退）</li>
+          <li><span className="help-kbd">Ctrl / ⌘ + /</span>{tk('help_li_ctrl_rest')}</li>
+          <li><span className="help-kbd">Esc</span>{tk('help_li_esc_rest')}</li>
+          <li>{tk('help_li_sidebar')}</li>
+          <li>{tk('help_hash_a')}<span className="help-kbd">{tk('help_hash_tag')}</span>{tk('help_hash_b')}<code style={{fontSize:11}}>#vibe</code>{tk('help_hash_sep')}<code style={{fontSize:11}}>#plan</code>{tk('help_hash_c')}</li>
+          <li>{tk('help_li_datahub_short')}</li>
+          <li>{tk('help_mp_1')}<code style={{fontSize:11}}>X-Project-Id</code>{tk('help_mp_2')}<code style={{fontSize:11}}>PROJECT_PATH</code>{tk('help_mp_3')}<code style={{fontSize:11}}>PROJECT_ID</code>{tk('help_mp_4')}</li>
+          <li>{tk('help_backend_pre')}<code style={{fontSize:11}}>PROJECT_PATH</code>{tk('help_backend_post')}</li>
         </ul>
         <div className="modal-actions" style={{flexWrap:'wrap',gap:8}}>
           <button type="button" className="btn btn-cancel" onClick={() => setHelpOpen(false)}>{tk('help_close')}</button>
@@ -3393,7 +3410,7 @@ function AppV3() {
           <button type="button" className="btn btn-sm btn-muted" disabled={!canDataHubImport} title={!canDataHubImport ? tk('dh_import_forbidden') : ''} onClick={() => importFileRef.current && importFileRef.current.click()}>{tk('dh_pick_file')}</button>
           <button type="button" className="btn btn-primary btn-sm" disabled={!canDataHubImport || !importPayload} title={!canDataHubImport ? tk('dh_import_forbidden') : ''} onClick={runImportMerge}>{tk('dh_btn_import')}</button>
         </div>
-        {importPreview && <div className="datahub-preview"><strong>{tk('dh_preview')}</strong> · requirements {importPreview.requirements} · tasks {importPreview.tasks} · issues {importPreview.issues} · sprints {importPreview.sprints}</div>}
+        {importPreview && <div className="datahub-preview"><strong>{tk('dh_preview')}</strong> · {tk('dh_preview_counts').replace('{rq}', String(importPreview.requirements)).replace('{tq}', String(importPreview.tasks)).replace('{iq}', String(importPreview.issues)).replace('{sq}', String(importPreview.sprints))}</div>}
         <div className="modal-actions" style={{ marginTop: 16 }}>
           <button type="button" className="btn btn-cancel" onClick={closeDataHub}>{tk('dh_close')}</button>
         </div>
@@ -3404,9 +3421,9 @@ function AppV3() {
       <button type="button" className="btn-icon" onClick={toggleCollapsed} title={tk('topbar_toggle_sidebar')}>☰</button>
       <button type="button" className="btn-icon" onClick={() => { try { window.history.back(); } catch (e) {} }} title={tk('nav_back')}>←</button>
       <span className="topbar-crumb" aria-current="page">{currentTabLabel}</span>
-      <div className="topbar-brand" title="ai-team-devops">
+      <div className="topbar-brand" title={tk('topbar_brand_title')}>
         <img className="topbar-logo-img" src="/assets/brand-mark.png" width="32" height="32" alt="" decoding="async" fetchPriority="high"/>
-        <span className="topbar-logo">ai-team-devops</span>
+        <span className="topbar-logo">{tk('topbar_brand_title')}</span>
       </div>
       <span className="topbar-badge">{tk('badge_admin')}</span>
       {projects.length > 1 ? (
@@ -3431,7 +3448,7 @@ function AppV3() {
       ) : projectId ? (
         <span className="topbar-project" title={tk('topbar_project_hint')}>📁 {projects[0] ? (projects[0].name || projectId) : projectId}</span>
       ) : null}
-      <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/v1/health">
+      <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title={tk('topbar_health_tip')}>
         <span className="health-dot" aria-hidden="true"/>
         {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}
       </div>

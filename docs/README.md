@@ -24,7 +24,7 @@
 
 | 文档 | 说明 |
 |------|------|
-| [USER_MANUAL.md](USER_MANUAL.md) | Web 管理后台使用手册（含 §1.2 鉴权与 `X-Project-Id`） |
+| [USER_MANUAL.md](USER_MANUAL.md) | Web 使用手册（§1.2 鉴权 / §1.3 `sop-ctl`） |
 | [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与新特性 |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构（v1 背景） |
 | [../README.md](../README.md) | 仓库总览与快速开始 |

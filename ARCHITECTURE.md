@@ -142,7 +142,7 @@ Windsurf     → .windsurfrules
     ↓ 加载 pages/*.js 全局组件
 React 主应用（侧栏 + ALL_PAGES）
     ↓ apiFetch（自动 Authorization + X-Project-Id + 超时）
-FastAPI main:app（/api/*）
+FastAPI main:app（业务 REST **`/api/v1/*`**；探活 **`/api/v1/health*`**；指标 **`/metrics`**）
     ├─ project_scope_middleware（JWT 解析后按 X-Project-Id 注入 path_config）
     ├─ routers/*  按域拆分（需求、任务、问题、Agent、技能、MCP、模型、编排、Docker、CLI、Vibe、技术方案、研发流…）
     └─ LanceDB / 文件索引（resolved_project_path 下的 .sop-runtime/ai-memory/）
@@ -154,22 +154,22 @@ FastAPI main:app（/api/*）
 |----|------|
 | `PROJECT_PATH` | 环境变量，指向被管理的业务仓库根；无 JWT 作用域时的默认磁盘根 |
 | 请求级作用域 | 已登录请求：`Bearer` + `X-Project-Id` → `path_config.resolved_project_path`（多项目/SaaS） |
-| 静态资源 | `StaticFiles` 须注册在 **所有 `/api` 路由之后**，避免吞掉 API |
+| 静态资源 | `StaticFiles` 须注册在 **所有 `/api/v1` 等业务路由之后**，避免吞掉 API |
 | 跨页导航 | 自定义事件 `app-set-tab`，便于「研发全流程」等模块跳转到既有菜单页 |
-| 低 Token | `GET /api/dev-flow/summary` 一次返回聚合指标；Vibe 提供短提示模板与引用路径，避免贴全文规范 |
+| 低 Token | `GET /api/v1/dev-flow/summary` 一次返回聚合指标；Vibe 提供短提示模板与引用路径，避免贴全文规范 |
 
 **Vibe Coding（IDE 化能力摘要）**
 
 - 会话与持久记忆、附件上传、多模态 LLM（Anthropic）、专家组 system 注入  
 - 会话/附件 JSON 持久化：`.ai-memory/vibe_sessions.json`、`vibe_uploads/`  
 - 右侧：Markdown（marked+DOMPurify）、代码块（highlight.js）、HTML 沙箱预览、项目文件只读预览  
-- 工作区 API：`/api/vibe/workspace/list|file`（路径校验，防穿越）
+- 工作区 API：`/api/v1/vibe/workspace/list|file`（路径校验，防穿越）
 
 **研发全流程枢纽**
 
-- `GET /api/dev-flow/summary`：需求/任务/问题/Sprint/技术方案数/Agent 与仓库线索聚合，供可视化驾驶舱与规则建议  
+- `GET /api/v1/dev-flow/summary`：需求/任务/问题/Sprint/技术方案数/Agent 与仓库线索聚合，供可视化驾驶舱与规则建议  
 
-**Agent 编排与开发工具（`/api/orchestration`）**
+**Agent 编排与开发工具（`/api/v1/orchestration`）**
 
 - Web 侧：开发工具 **分类与搜索**、默认工具、内置覆盖/隐藏、自定义工具、**AI 安装方案**（Markdown + 白名单 `actions` 与 `argv_shell`）、**受控一键安装**、安装控制台与 JSONL 历史、本机 **环境检查**（与 `docker_env` 同源，支持缺失项 **AI 方案** 与 **定位工具**）。  
 - 数据目录：`PROJECT_PATH/.sop-runtime/ai-memory/orchestration/`（Unix 上项目根 `.ai-memory` 多为符号链接；详见 [docs/ORCHESTRATION_DEV_TOOLS.md](../docs/ORCHESTRATION_DEV_TOOLS.md)）。

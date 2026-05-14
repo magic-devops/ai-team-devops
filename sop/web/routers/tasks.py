@@ -4,11 +4,12 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel, Field
 
-from path_config import resolved_ai_memory_root, resolved_project_id
+from path_config import resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
 from .db_sql_compat import rows, table, now
+from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
@@ -213,6 +214,12 @@ def create_task(body: TaskCreate):
     if fld:
         st.setdefault("fields", {})[tid] = fld
     _ui_save(st)
+    notify_webhook(
+        "task.created",
+        {"task_id": tid, "title": body.title, "priority": body.priority, "status": "pending"},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True, "id": tid}
 
 
@@ -253,14 +260,20 @@ def reorder_tasks_board(body: ReorderTasksBody):
 
 
 @router.patch("/{task_id}/unblock")
-def unblock_task(task_id: str, human_notes: str = ""):
+def unblock_task(task_id: str, human_notes: str = Body("", embed=True)):
     _safe_task_id(task_id)
     t = table("tasks")
     if t is None:
         raise HTTPException(503, "数据库不可用")
     t.update(
         where=f"id = '{task_id}'",
-        values={"status": "pending", "human_notes": human_notes, "updated_at": now()},
+        values={"status": "pending", "human_notes": human_notes or "", "updated_at": now()},
+    )
+    notify_webhook(
+        "task.status_changed",
+        {"task_id": task_id, "status": "pending", "via": "unblock"},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
     )
     return {"ok": True}
 
@@ -308,6 +321,20 @@ def update_task(task_id: str, body: TaskUpdate):
                 fld[k] = s[:80]
     if "priority" in vals or ui_patch:
         _ui_save(st)
+    if vals or ui_patch:
+        notify_webhook(
+            "task.updated",
+            {"task_id": task_id, "fields": list(vals.keys()) if vals else []},
+            tenant_id=resolved_tenant_id(),
+            project_id=resolved_project_id(),
+        )
+    if "status" in vals:
+        notify_webhook(
+            "task.status_changed",
+            {"task_id": task_id, "status": vals["status"]},
+            tenant_id=resolved_tenant_id(),
+            project_id=resolved_project_id(),
+        )
     return {"ok": True}
 
 
@@ -321,4 +348,10 @@ def delete_task(task_id: str):
     st = _ui_load()
     _ui_delete_id(st, task_id)
     _ui_save(st)
+    notify_webhook(
+        "task.deleted",
+        {"task_id": task_id},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
     return {"ok": True}

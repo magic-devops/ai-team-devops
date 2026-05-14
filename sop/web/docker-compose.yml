@@ -69,7 +69,7 @@ services:
       - VECTOR_DB_TYPE=${VECTOR_DB_TYPE:-lance}
       - ADMIN_MODE=${ADMIN_MODE:-single}
       - PROJECT_PATH=/workspace
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY:-sop-default-insecure-use-env-secret-key}
       - TENANT_ID=${TENANT_ID:-t-default}
       - PROJECT_ID=${PROJECT_ID:-proj-default}
       - LOG_DIR=/workspace/.sop-runtime/logs

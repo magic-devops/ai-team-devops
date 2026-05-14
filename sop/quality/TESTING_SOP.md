@@ -79,7 +79,7 @@ def test_create_user(db_session):
 ### API 测试
 ```python
 def test_register_endpoint(client, db_session):
-    response = client.post("/api/auth/register", json={
+    response = client.post("/api/v1/auth/register", json={
         "email": "new@example.com",
         "password": "SecurePass123!",
         "name": "New User"

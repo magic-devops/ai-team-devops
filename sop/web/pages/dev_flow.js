@@ -5,6 +5,15 @@ function devFlowNavigate(tabId) {
   window.dispatchEvent(new CustomEvent('app-set-tab', { detail: { tab: tabId } }));
 }
 
+/** workspace/context.nav 项：与侧栏 page_* 键一致（id 中 - 转为 _） */
+function workspaceNavLabel(navId, t) {
+  const id = String(navId || '').trim();
+  if (!id) return '';
+  const key = 'page_' + id.replace(/-/g, '_');
+  const s = t(key);
+  return s && s !== key ? s : id;
+}
+
 function DevFlowHub() {
   const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
   const t = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
@@ -150,7 +159,7 @@ function DevFlowHub() {
               {t('df_copy_api')}
             </button>
             <button type="button" className="btn btn-sm btn-muted" onClick={() => window.open(wsCtx.docs && wsCtx.docs.openapi, '_blank')}>
-              OpenAPI
+              {t('df_openapi')}
             </button>
           </div>
           {(wsCtx.nav || []).length > 0 && (
@@ -164,7 +173,7 @@ function DevFlowHub() {
                   style={{ marginRight: 6, marginBottom: 6, background: 'var(--surface-muted)', color: 'var(--text2)' }}
                   onClick={() => devFlowNavigate(n.id)}
                 >
-                  {n.label}
+                  {workspaceNavLabel(n.id, t)}
                 </button>
               ))}
             </div>
@@ -210,7 +219,7 @@ function DevFlowHub() {
             {artForm.kind === 'url' ? (
               <div className="form-group" style={{ marginBottom: 8 }}>
                 <label style={{ fontSize: 11 }}>{t('df_bm_url')}</label>
-                <input value={artForm.url} onChange={(e) => setArtForm({ ...artForm, url: e.target.value })} placeholder="https://..." style={{ fontSize: 12, fontFamily: 'monospace' }} />
+                <input value={artForm.url} onChange={(e) => setArtForm({ ...artForm, url: e.target.value })} placeholder={t('df_bm_url_ph')} style={{ fontSize: 12, fontFamily: 'monospace' }} />
               </div>
             ) : (
               <div className="form-group" style={{ marginBottom: 8 }}>

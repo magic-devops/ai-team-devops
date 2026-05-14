@@ -493,6 +493,7 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 
 - 首次访问打开 **`login.html`** 完成初始化或登录；JWT 存入浏览器 **`sop-token`**。
 - 多项目 / SaaS 场景：顶栏选择项目后写入 **`sop-current-project-id`**，后续 API 自动带 **`X-Project-Id`**（与 `index.html` 内 **`apiFetch`** 一致）。脚本调用请使用 **`MANAGER_SOP_TOKEN` + `PROJECT_ID`**（`sop/tools/manager_client.py`），详见 [USER_MANUAL.md §1.2](USER_MANUAL.md) 与 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)。
+- **运维统一入口**：`bash sop/tools/sop-ctl.sh help`（`--json`、`wait-health`、`self-check`、`commands`、`url`/`open` 等；Bash 补全见 `sop-ctl.completion.bash`，手册 §1.3）。
 
 ### 10.1 全部页面（23个）
 

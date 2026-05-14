@@ -63,7 +63,7 @@ pending ──► in_progress ──► completed
 当前任务：T004 - 实现用户登录 API
 步骤：
   [x] 读取相关文件
-  [x] 实现 POST /api/auth/login
+  [x] 实现 POST /api/v1/auth/login
   [ ] 编写测试
   [ ] 运行验证
 ```

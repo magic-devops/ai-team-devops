@@ -25,7 +25,7 @@ curl -X POST http://localhost:8765/api/v1/auth/init \
 # 返回 {"ok":true,...} 即成功，之后用此账号登录
 ```
 
-> **注意**：系统没有预设账号密码。首次启动后必须调用 `/api/auth/init` 自行设置管理员账号（密码至少 8 位）。该接口只在数据库为空时有效，之后调用会返回 400 错误。也可以直接访问 `http://localhost:8765/login.html`，页面会提示初始化入口。若**已有账号但遗忘密码**，可在仓库根执行 `python3 sop/tools/reset-admin.py`（见 [sop/tools/SCRIPTS.md](../tools/SCRIPTS.md)）。
+> **注意**：系统没有预设账号密码。首次启动后必须调用 **`POST /api/v1/auth/init`** 自行设置管理员账号（密码至少 8 位）。该接口只在数据库为空时有效，之后调用会返回 400 错误。也可以直接访问 `http://localhost:8765/login.html`，页面会提示初始化入口。若**已有账号但遗忘密码**，可在仓库根执行 `python3 sop/tools/reset-admin.py`（见 [sop/tools/SCRIPTS.md](../tools/SCRIPTS.md)）。
 
 ## 环境变量
 
@@ -87,7 +87,7 @@ SQL (SQLite / MySQL / OceanBase MySQL)   ← 结构化业务数据
 
 ```
 web/
-├── main.py              # 主入口：路由注册、中间件、兼容接口
+├── main.py              # 主入口：路由注册、中间件（业务 API 统一 `/api/v1/*`）
 ├── login.html           # 独立登录页（支持 single/saas 模式）
 ├── index.html           # 主应用 Shell（React + 侧栏菜单）
 ├── migrate.py           # LanceDB → SQL 数据迁移工具
@@ -129,11 +129,11 @@ web/
 
 1. 访问 `login.html` → 输入用户名/密码 → 获取 JWT token
 2. token 存入 `localStorage['sop-token']`
-3. 所有业务 API 经 **`apiFetch`**（`index.html`）发起：自动附带 `Authorization`、`X-Project-Id`（来自 `localStorage` 的 `sop-current-project-id`）、默认超时；根相对路径 `/tasks/...` 会解析为 `当前 origin + /api + /tasks/...`。
+3. 所有业务 API 经 **`apiFetch`**（`index.html`）发起：自动附带 `Authorization`、`X-Project-Id`（来自 `localStorage` 的 `sop-current-project-id`）、默认超时；根相对路径（如 `/tasks/...`）会拼到 **`API` 基址**（默认 `当前 origin + /api/v1`）；若以 **`/api/...`** 开头的绝对路径传入，则按「同源 + 该路径」请求（不重复拼接）。
 4. 401 自动清除 token 并跳转 `login.html`；403 会 Toast 提示（含后端 `detail`），并派发 `devdash-api-forbidden`。
 5. 顶栏切换项目会写入 `sop-current-project-id` 并广播 `devdash-project-change`，各页 `useFetch` 等会重新拉数。
 
-**项目作用域（后端）**：`routers/project_scope_middleware.py` 在 Bearer JWT 有效时根据 `X-Project-Id` 与 `projects` 表解析 `path_config.resolved_project_path`；`/api/auth/*` 与 `/api/health` 等不参与作用域注入。SaaS 下非法项目或无权访问返回 **403/404**。
+**项目作用域（后端）**：`routers/project_scope_middleware.py` 在 Bearer JWT 有效时根据 `X-Project-Id` 与 `projects` 表解析 `path_config.resolved_project_path`；**`/api/v1/auth/*`**、**`/api/v1/health*`** 等白名单路径不参与作用域注入。SaaS 下非法项目或无权访问返回 **403/404**。
 
 **角色权限**：`super_admin > tenant_admin > project_admin > developer > viewer`
 
@@ -161,23 +161,23 @@ python sop/tools/manager_client.py issue "登录接口 500" P1
 
 | 前缀 | 说明 |
 |------|------|
-| `POST /api/auth/init` | 首次初始化管理员 |
-| `POST /api/auth/login` | 登录获取 token |
-| `GET /api/auth/me` | 当前用户信息 |
-| `POST /api/auth/api-keys` | 创建 API Key |
-| `/api/projects` | 项目 CRUD + 成员管理 |
-| `POST /api/projects/{id}/clone` | 从模板克隆项目 |
-| `/api/requirements` | 需求 CRUD + AI 解析 |
-| `/api/tasks` | 任务 CRUD + 看板 |
-| `/api/issues` | 问题 CRUD |
-| `/api/sprints` | Sprint CRUD + 进度 |
-| `/api/audit` | 审计日志查询 |
-| `/api/webhooks` | Webhook 配置 |
-| `GET /api/health/detail` | 详细健康检查 |
-| `GET /api/metrics` | Prometheus 指标 |
-| `GET /api/logs` | 日志 tail 查看 |
-| `/api/knowledge` | 知识库（向量） |
-| `/api/vibe` | Vibe Coding 会话 |
+| `POST /api/v1/auth/init` | 首次初始化管理员 |
+| `POST /api/v1/auth/login` | 登录获取 token |
+| `GET /api/v1/auth/me` | 当前用户信息 |
+| `POST /api/v1/auth/api-keys` | 创建 API Key |
+| `/api/v1/projects` | 项目 CRUD + 成员管理 |
+| `POST /api/v1/projects/{id}/clone` | 从模板克隆项目 |
+| `/api/v1/requirements` | 需求 CRUD + AI 解析 |
+| `/api/v1/tasks` | 任务 CRUD + 看板 |
+| `/api/v1/issues` | 问题 CRUD |
+| `/api/v1/sprints` | Sprint CRUD + 进度 |
+| `GET /api/v1/audit-legacy` | 审计日志查询（SQL 审计表） |
+| `/api/v1/webhooks` | Webhook 配置 |
+| `GET /api/v1/health/detail` | 详细健康检查 |
+| `GET /metrics` | Prometheus 指标（根路径，非 `/api/v1`） |
+| `GET /api/v1/logs` | 日志 tail 查看 |
+| `/api/v1/knowledge` | 知识库（向量，`workspace` 路由） |
+| `/api/v1/vibe` | Vibe Coding 会话 |
 
 ## 数据迁移（LanceDB → SQL）
 
@@ -196,7 +196,7 @@ python migrate.py t-default proj-default
 
 ## 相关文档
 
-- 操作手册：[docs/USER_MANUAL.md](../../docs/USER_MANUAL.md)
+- 操作手册：[docs/USER_MANUAL.md](../../docs/USER_MANUAL.md)（含 **§1.3 `sop-ctl.sh`** 统一运维入口）
 - 编排工具：[docs/ORCHESTRATION_DEV_TOOLS.md](../../docs/ORCHESTRATION_DEV_TOOLS.md)
 - 架构设计：[ARCHITECTURE.md](../../ARCHITECTURE.md)
 - 脚本说明：[sop/tools/SCRIPTS.md](../tools/SCRIPTS.md)

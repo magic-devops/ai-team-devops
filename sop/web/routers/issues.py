@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Issue
 from .auth_sql import current_user, User, check_project_access
+from path_config import resolved_project_id as _resolved_project_id
+from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/issues", tags=["issues"])
 
@@ -32,10 +34,11 @@ def list_issues(
     user: User = Depends(current_user),
     db: Session = Depends(get_session),
 ):
+    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
     q = db.query(Issue).filter(Issue.tenant_id == user.tenant_id)
-    if project_id:
-        check_project_access(user, project_id, db)
-        q = q.filter(Issue.project_id == project_id)
+    if eff_pid:
+        check_project_access(user, eff_pid, db)
+        q = q.filter(Issue.project_id == eff_pid)
     if status: q = q.filter(Issue.status == status)
     if severity: q = q.filter(Issue.severity == severity)
     total = q.count()
@@ -65,6 +68,12 @@ def create_issue(body: IssueCreate, user: User = Depends(current_user),
         severity=body.severity, status="open", reported_by=user.username,
     )
     db.add(i); db.commit()
+    notify_webhook(
+        "issue.opened",
+        {"issue_id": i.id, "title": i.title, "severity": i.severity, "type": i.type},
+        tenant_id=user.tenant_id,
+        project_id=i.project_id or "",
+    )
     return {"ok": True, "id": i.id}
 
 
@@ -82,20 +91,46 @@ def update_issue(issue_id: str, body: IssueUpdate, user: User = Depends(current_
                  db: Session = Depends(get_session)):
     i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
     if not i: raise HTTPException(404, "问题不存在")
-    for k, v in body.dict(exclude_none=True).items():
+    patch = body.dict(exclude_none=True)
+    if not patch:
+        return {"ok": True}
+    for k, v in patch.items():
         setattr(i, k, v)
     db.commit()
+    notify_webhook(
+        "issue.updated",
+        {"issue_id": issue_id, "fields": list(patch.keys())},
+        tenant_id=user.tenant_id,
+        project_id=i.project_id or "",
+    )
     return {"ok": True}
 
 
+class IssueResolveBody(BaseModel):
+    resolution: str = ""
+
+
 @router.patch("/{issue_id}/resolve")
-def resolve_issue(issue_id: str, resolution: str = "", user: User = Depends(current_user),
-                  db: Session = Depends(get_session)):
+def resolve_issue(
+    issue_id: str,
+    body: IssueResolveBody,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_session),
+):
     i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
-    if not i: raise HTTPException(404, "问题不存在")
-    i.status = "resolved"; i.resolution = resolution
-    i.resolved_by = user.username; i.resolved_at = datetime.utcnow()
+    if not i:
+        raise HTTPException(404, "问题不存在")
+    i.status = "resolved"
+    i.resolution = body.resolution or ""
+    i.resolved_by = user.username
+    i.resolved_at = datetime.utcnow()
     db.commit()
+    notify_webhook(
+        "issue.resolved",
+        {"issue_id": issue_id, "resolution": body.resolution or "", "resolved_by": user.username},
+        tenant_id=user.tenant_id,
+        project_id=i.project_id or "",
+    )
     return {"ok": True}
 
 
@@ -104,5 +139,12 @@ def delete_issue(issue_id: str, user: User = Depends(current_user),
                  db: Session = Depends(get_session)):
     i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
     if not i: raise HTTPException(404, "问题不存在")
+    pid = i.project_id or ""
     db.delete(i); db.commit()
+    notify_webhook(
+        "issue.deleted",
+        {"issue_id": issue_id},
+        tenant_id=user.tenant_id,
+        project_id=pid,
+    )
     return {"ok": True}

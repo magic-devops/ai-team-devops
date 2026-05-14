@@ -44,11 +44,13 @@ superpowers 提供 Claude Code hooks 和 commands 增强模式，本项目已完
 
 ```
 .claude/
+├── README.md          # 哪些文件应提交、与 sop_ai_hook 的关系
+├── settings.json      # 权限白名单 + SessionStart/UserPromptSubmit/PreToolUse/… → sop/tools/sop_ai_hook.py claude <事件>
 ├── commands/          # /plan /review /test /commit /debug /standup /evolve
 └── hooks/
-    ├── pre-tool-call.sh   # 安全检查（阻止危险命令、检测硬编码密钥）
-    ├── post-tool-call.sh  # 状态更新（自动更新 updated_at、审计日志）
-    └── stop.sh            # 会话结束快照 + 提示 /evolve
+    ├── pre-tool-call.sh   # 可选壳层示例（主策略以 settings.json 调用的 sop_ai_hook 为准）
+    ├── post-tool-call.sh  # 同上
+    └── stop.sh            # Stop 链第二段：memory/snapshots 与 /evolve 提示（第一段为 sop_ai_hook Stop）
 ```
 
 **扩展 superpowers 命令**：

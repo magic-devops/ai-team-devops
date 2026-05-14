@@ -4,6 +4,8 @@ window.i18nExtend && window.i18nExtend({
 });
 
 const LogsViewer = () => {
+  const langTick = typeof window.useLangTick === 'function' ? window.useLangTick() : 0;
+  void langTick;
   const tr = k => typeof window.t === 'function' ? window.t(k) : k;
   const [files, setFiles] = React.useState([]);
   const [selected, setSelected] = React.useState('sop.app');
