@@ -1,11 +1,11 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-13T03:07:07Z",
-  "updated_at": "2026-05-14T14:58:05Z",
+  "updated_at": "2026-05-14T16:30:00Z",
   "phase": "PLANNING",
   "sprint": null,
   "tasks": {
-    "completed": [],
+    "completed": ["ai-sop: OVERVIEW + integrations/design/specs index refresh"],
     "in_progress": [],
     "blocked": [],
     "pending": []
