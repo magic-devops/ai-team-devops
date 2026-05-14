@@ -1,7 +1,7 @@
 # OpenAI Codex CLI — 项目级配置（可提交到仓库）。
 # 个人偏好（模型、审批策略）也可用环境变量或 Codex 全局配置覆盖；勿在此文件存放密钥。
 #
-# 与 Claude Code 对齐：生命周期 hook 见 .codex/hooks.json，统一策略在 sop/tools/sop_ai_hook.py。
+# 与 Claude Code 对齐：生命周期 hook 见 .codex/hooks.json，统一策略在 ai-sop-ops/sop_ai_hook.py。
 
 model = "gpt-5.5"
 approval_policy = "on-request"

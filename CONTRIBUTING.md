@@ -13,12 +13,12 @@
 ### 💡 提交规范改进
 1. Fork 本仓库
 2. 创建分支：`git checkout -b feat/improve-java-spec`
-3. 修改规范文件（`sop/specs/` 目录）
+3. 修改规范文件（`ai-sop/specs/` 目录，Git submodule）
 4. 提交：`git commit -m "docs(java-spec): 增加事务管理最佳实践"`
 5. 发起 Pull Request
 
 ### 🔧 贡献代码
-Web 后台（`apps/manager/sop_manager/`）和工具脚本（`sop/tools/`）欢迎 PR。
+Web 后台（`apps/manager/sop_manager/`）与 **`ai-sop-ops/`**（submodule）欢迎 PR。
 
 ## 规范文件贡献原则
 

@@ -94,6 +94,9 @@ class LanceStore(VectorStore):
 
     def search(self, name: str, query: str, limit: int = 10) -> list:
         try:
+            from sop_manager.path_config import ensure_lance_ops_import_path
+
+            ensure_lance_ops_import_path()
             from knowledge.lancedb_ops import LanceOps
             return LanceOps().search(name, query, limit=limit)
         except Exception:

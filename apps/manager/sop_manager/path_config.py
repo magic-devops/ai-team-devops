@@ -80,14 +80,65 @@ _WEB_DIR = Path(__file__).resolve().parent
 
 
 def repo_root() -> Path:
-    """本 monorepo 根目录（含 `apps/`、`sop/`）。"""
+    """本 monorepo 根目录（含 `apps/`、`ai-sop/`、`ai-sop-ops/` 等）。"""
     # path_config.py → sop_manager → manager → apps → repo
     return Path(__file__).resolve().parents[3]
 
 
 def sop_dir() -> Path:
-    """规约与工具文档树 `sop/`（非本 Python 包）。"""
-    return repo_root() / "sop"
+    """规约 Markdown 树（``magic-devops/ai-sop``）：仅解析 ``<repo>/ai-sop`` 或环境变量显式路径。
+
+    可用环境变量 ``SOP_SPEC_ROOT`` 或 ``SOP_SOP_DIR`` 显式覆盖（须指向含 ``specs/`` 的目录）。
+    不再回退内嵌 ``sop/``（已移除）；未找到时抛出 ``FileNotFoundError`` 并提示初始化 submodule。
+    """
+    raw = os.environ.get("SOP_SPEC_ROOT", "").strip() or os.environ.get("SOP_SOP_DIR", "").strip()
+    if raw:
+        p = Path(raw).expanduser().resolve()
+        if not (p / "specs").is_dir():
+            raise FileNotFoundError(
+                f"SOP_SPEC_ROOT / SOP_SOP_DIR 指向的目录缺少 specs/: {p}"
+            )
+        return p
+    root = repo_root()
+    cand = root / "ai-sop"
+    if cand.is_dir() and (cand / "specs").is_dir():
+        return cand
+    raise FileNotFoundError(
+        "未找到规约目录（需要 <repo>/ai-sop/specs）。请执行: git submodule update --init --recursive，"
+        "或设置 SOP_SPEC_ROOT / SOP_SOP_DIR 指向含 specs/ 的规约根（通常为 ai-sop 检出目录）。"
+    )
+
+
+_lance_ops_path_prepared = False
+
+
+def ensure_lance_ops_import_path() -> None:
+    """将 ``ai-sop-ops`` 根加入 ``sys.path``，以便 ``from knowledge.lancedb_ops import LanceOps`` 等导入。"""
+    global _lance_ops_path_prepared
+    if _lance_ops_path_prepared:
+        return
+    root = str(sop_ops_dir())
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    _lance_ops_path_prepared = True
+
+
+def sop_ops_dir() -> Path:
+    """可执行运维工具根（``magic-devops/ai-sop-ops``；本 monorepo 内为 ``ai-sop-ops/`` submodule）。
+
+    解析顺序：环境变量 ``SOP_OPS_ROOT``；否则 ``<repo>/ai-sop-ops``（须含 ``include/sop-platform-root.sh``）。
+    """
+    raw = os.environ.get("SOP_OPS_ROOT", "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    root = repo_root()
+    cand = root / "ai-sop-ops"
+    if cand.is_dir() and (cand / "include" / "sop-platform-root.sh").is_file():
+        return cand
+    raise FileNotFoundError(
+        "未找到 ai-sop-ops（缺少 ai-sop-ops/include/sop-platform-root.sh）。"
+        "请执行: git submodule update --init --recursive，或设置 SOP_OPS_ROOT。"
+    )
 
 
 def project_path() -> Path:

@@ -42,7 +42,7 @@ sop llm search "JWT 鉴权" -k 8
 ## 数据平面与向量后端
 
 CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECTOR_DB_TYPE`、`DATABASE_URL` 等）。  
-完整说明见 **[`sop/tools/DATA_AND_VECTOR.md`](../../sop/tools/DATA_AND_VECTOR.md)**（仓库根相对路径）与 **[`docs/architecture/DATA_PLANE.md`](../../docs/architecture/DATA_PLANE.md)**。
+完整说明见 **[`ai-sop-ops/DATA_AND_VECTOR.md`](../../ai-sop-ops/DATA_AND_VECTOR.md)**（仓库根相对路径）与 **[`docs/architecture/DATA_PLANE.md`](../../docs/architecture/DATA_PLANE.md)**。
 
 ## 子命令一览
 

@@ -88,7 +88,7 @@ memory/
 
 ### 5. AI Capability Control Plane
 
-`sop/tools/AI_CAPABILITY_CONTROL_PLANE.md` 规约：
+`ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md` 规约：
 - 工具适配统一调 `sop_ai_hook.py`（已存在）
 - 决策点：上下文加载、工具守卫、权限请求、审计、状态持久化
 - 工具新增 = 写 adapter，不动核心策略

@@ -59,7 +59,7 @@ if ipc.available():
 
 ## 兼容旧脚本
 
-`sop/tools/manager_client.py` 在 M3 完成后会改为 SDK 的薄包装；保持函数式 API：
+`ai-sop-ops/manager_client.py` 在 M3 完成后会改为 SDK 的薄包装；保持函数式 API：
 
 ```python
 from sop_tools.manager_client import report_task_status  # 现状写法不变

@@ -1,3 +1,6 @@
 [submodule "ai-sop-ops"]
 	path = ai-sop-ops
 	url = git@github.com:magic-devops/ai-sop-ops.git
+[submodule "ai-sop"]
+	path = ai-sop
+	url = git@github.com:magic-devops/ai-sop.git

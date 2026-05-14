@@ -101,6 +101,6 @@
 | [USER_MANUAL.md](USER_MANUAL.md) | Web 操作手册（含 §4.5） |
 | [../apps/manager/README.md](../apps/manager/README.md) | Web 工程与路由总览 |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构与 Web 扩展 |
-| [../sop/tools/TOOL_INTEGRATION.md](../sop/tools/TOOL_INTEGRATION.md) | 多工具适配与共享状态 |
-| [../sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | 本仓库 `sop/tools` 脚本与工具完整索引 |
-| [../sop/tools/README.md](../sop/tools/README.md) | 常用脚本入口摘要 |
+| [../ai-sop-ops/TOOL_INTEGRATION.md](../ai-sop-ops/TOOL_INTEGRATION.md) | 多工具适配与共享状态 |
+| [../ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md) | **`ai-sop-ops/`**（submodule）脚本与工具完整索引 |
+| [../ai-sop-ops/README.md](../ai-sop-ops/README.md) | 常用脚本入口摘要 |

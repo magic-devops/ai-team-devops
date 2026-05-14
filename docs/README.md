@@ -15,7 +15,7 @@
 | [architecture/EVOLUTION.md](architecture/EVOLUTION.md) | 长期演进 + 兼容承诺 + 弃用流程 |
 | [architecture/REFACTOR_PLAN.md](architecture/REFACTOR_PLAN.md) | **大文件治理 + 新功能落点指引（AI 必读）** |
 | [../apis/README.md](../apis/README.md) | OpenAPI / Proto / AsyncAPI 单一事实源说明 |
-| [MIGRATE_AI_SOP_SUBMODULES.md](MIGRATE_AI_SOP_SUBMODULES.md) | **将 `sop/`、`sop/tools` 迁为 `ai-sop` / `ai-sop-ops` submodule** |
+| [MIGRATE_AI_SOP_SUBMODULES.md](MIGRATE_AI_SOP_SUBMODULES.md) | **`ai-sop` / `ai-sop-ops` submodule**、克隆与遗留 `sop/` 说明 |
 | [../apps/manager-web/README.md](../apps/manager-web/README.md) | **新前端 Vite + React 18 + TS 骨架** |
 | [../apps/agent-runtime/README.md](../apps/agent-runtime/README.md) | sop-agentd 守护进程 |
 | [../packages/sop-cli/README.md](../packages/sop-cli/README.md) | 统一 CLI `sop` 命令 |
@@ -31,11 +31,11 @@
 | [../README.md](../README.md) | 仓库总览与快速开始 |
 | [../TUTORIAL.md](../TUTORIAL.md) | 详细教程 |
 | [../ROADMAP.md](../ROADMAP.md) | 路线图（含 v2 里程碑状态） |
-| [../sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查卡 |
-| [MIGRATE_AI_SOP_SUBMODULES.md](MIGRATE_AI_SOP_SUBMODULES.md) | **规约/运维拆仓**：`ai-sop` + `ai-sop-ops` submodule 步骤 |
+| [../ai-sop/QUICK_REF.md](../ai-sop/QUICK_REF.md) | AI 速查卡 |
+| [../ai-sop/README.md](../ai-sop/README.md) | 规约仓说明（`magic-devops/ai-sop`） |
 | [../apps/manager/README.md](../apps/manager/README.md) | Web 开发与 API 模块说明 |
-| [../sop/tools/README.md](../sop/tools/README.md) | 脚本入口索引 |
-| [../sop/tools/DATA_AND_VECTOR.md](../sop/tools/DATA_AND_VECTOR.md) | **数据平面权威**：DB_TYPE、VECTOR_DB_TYPE、OceanBase/Milvus/Qdrant |
-| [../sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | **完整清单**：Shell / Python / 配置与规范文档 |
-| [../sop/tools/AI_CAPABILITY_CONTROL_PLANE.md](../sop/tools/AI_CAPABILITY_CONTROL_PLANE.md) | 统一 AI 能力控制平面规范 |
-| [../sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI、AGENTS.md 与 hooks 集成规范 |
+| [../ai-sop-ops/README.md](../ai-sop-ops/README.md) | 脚本入口索引 |
+| [../ai-sop-ops/DATA_AND_VECTOR.md](../ai-sop-ops/DATA_AND_VECTOR.md) | **数据平面权威**：DB_TYPE、VECTOR_DB_TYPE、OceanBase/Milvus/Qdrant |
+| [../ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md) | **完整清单**：Shell / Python / 配置与规范文档 |
+| [../ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md](../ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md) | 统一 AI 能力控制平面规范 |
+| [../ai-sop-ops/CODEX_CLI.md](../ai-sop-ops/CODEX_CLI.md) | Codex CLI、AGENTS.md 与 hooks 集成规范 |

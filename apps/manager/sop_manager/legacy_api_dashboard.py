@@ -431,7 +431,7 @@ def update_state(body: dict):
     state_file.write_text(json.dumps(state, indent=2, ensure_ascii=False))
     return {"ok": True}
 
-# ── 规范文档列表（sop/specs/） ────────────────────────────────────
+# ── 规范文档列表（ai-sop/specs/，或 SOP_SPEC_ROOT） ────────────────────────────────────
 @app.get("/api/specs")
 def list_specs():
     specs_dir = Path(__file__).parent.parent / "specs"
@@ -473,8 +473,9 @@ class RuleCreate(BaseModel):
 @app.post("/api/rules")
 def create_rule(body: RuleCreate):
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from sop_manager.path_config import ensure_lance_ops_import_path
+
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
         rid = LanceOps().add_rule(body.rule, body.category, body.source, body.confidence)
         return {"ok": True, "id": rid}
@@ -489,8 +490,9 @@ def get_knowledge():
 @app.post("/api/knowledge/index")
 def index_knowledge():
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from sop_manager.path_config import ensure_lance_ops_import_path
+
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
         n = LanceOps().index_custom_dir()
         return {"ok": True, "count": n}
@@ -653,8 +655,9 @@ class KnowledgeCreate(BaseModel):
 @app.post("/api/knowledge")
 def create_knowledge(body: KnowledgeCreate):
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from sop_manager.path_config import ensure_lance_ops_import_path
+
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
         doc_id = LanceOps().index_document(
             path=f"manual/{body.category}/{body.title}",
@@ -680,8 +683,9 @@ def delete_knowledge(doc_id: str):
 @app.get("/api/knowledge/search")
 def search_knowledge(q: str = Query(...), category: Optional[str] = None):
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from sop_manager.path_config import ensure_lance_ops_import_path
+
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
         results = LanceOps().search_knowledge(q, category=category, limit=10)
         return [{"id": r.get("id"), "path": r.get("path"), "category": r.get("category"),
@@ -713,8 +717,9 @@ def update_spec(path: str = Query(...), body: SpecUpdate = None):
 @app.get("/api/semantic-search")
 def semantic_search(q: str = Query(...), tables: str = "tasks,requirements,issues,knowledge"):
     try:
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent))
+        from sop_manager.path_config import ensure_lance_ops_import_path
+
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
         ops = LanceOps()
         results = []

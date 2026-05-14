@@ -10,7 +10,7 @@
 # 终端 1：API（默认 8765）
 pip install -e "apps/manager[all]"
 cp apps/manager/.env.example apps/manager/.env   # 首次；编辑 SECRET_KEY 等
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 
 # 终端 2：前端（5173，反代 /api → 8765）
 cd apps/manager-web && pnpm i && pnpm dev

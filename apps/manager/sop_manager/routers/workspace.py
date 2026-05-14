@@ -9,7 +9,6 @@ import io
 import json
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -17,7 +16,12 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path, sop_dir
+from sop_manager.path_config import (
+    ensure_lance_ops_import_path,
+    resolved_ai_memory_root,
+    resolved_project_path,
+    sop_dir,
+)
 from sop_manager.routers.db_sql_compat import rows, table, now
 
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
@@ -136,7 +140,7 @@ def semantic_search(
     tables: str = "tasks,requirements,issues,knowledge",
 ) -> list[dict[str, Any]]:
     try:
-        sys.path.insert(0, str(sop_dir()))
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         ops = LanceOps()
@@ -274,7 +278,7 @@ class RuleCreateBody(BaseModel):
 @router.post("/rules")
 def create_rule(body: RuleCreateBody) -> dict[str, Any]:
     try:
-        sys.path.insert(0, str(sop_dir()))
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         rid = LanceOps().add_rule(body.rule, body.category, body.source, body.confidence)
@@ -356,7 +360,7 @@ def _knowledge_ai_polish(body: KnowledgeAiPolish) -> dict[str, Any]:
 @router.post("/knowledge")
 def create_knowledge(body: KnowledgeCreate) -> dict[str, Any]:
     try:
-        sys.path.insert(0, str(sop_dir()))
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         doc_id = LanceOps().index_document(
@@ -429,7 +433,7 @@ def delete_knowledge(doc_id: str) -> dict[str, str]:
 @router.post("/knowledge/index")
 def index_knowledge() -> dict[str, Any]:
     try:
-        sys.path.insert(0, str(sop_dir()))
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         n = LanceOps().index_custom_dir()
@@ -441,7 +445,7 @@ def index_knowledge() -> dict[str, Any]:
 @router.get("/knowledge/search")
 def search_knowledge(q: str = Query(...), category: Optional[str] = None) -> list[dict[str, Any]]:
     try:
-        sys.path.insert(0, str(sop_dir()))
+        ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         return [

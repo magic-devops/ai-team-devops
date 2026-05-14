@@ -37,7 +37,7 @@ DEV_TOOLS: List[Dict[str, str]] = [
     {"id": "gemini", "name": "Gemini CLI", "cmd": "gemini", "description": "Google Gemini CLI（若已安装）", "category": "agent_cli"},
     {"id": "cursor", "name": "Cursor", "cmd": "cursor", "description": "IDE，读取 .cursorrules", "category": "ide"},
     {"id": "trae", "name": "Trae", "cmd": "trae", "description": "字节跳动 AI IDE", "category": "ide"},
-    {"id": "qcoder", "name": "Qoder", "cmd": "qcoder", "description": "读取 .qoder/context.md", "category": "ide"},
+    {"id": "qoder", "name": "Qoder", "cmd": "qoder", "description": "读取 .qoder/context.md（CLI 名因环境可能为 qcoder）", "category": "ide"},
     {"id": "windsurf", "name": "Windsurf", "cmd": "windsurf", "description": "Codeium IDE", "category": "ide"},
     {"id": "vscode", "name": "VS Code", "cmd": "code", "description": "VS Code 命令行（code）", "category": "ide"},
     {"id": "aider", "name": "Aider", "cmd": "aider", "description": "终端 AI 编码助手", "category": "assistant"},

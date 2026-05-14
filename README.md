@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.0--dev-green.svg)](ROADMAP.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
+[![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](ai-sop-ops/TOOL_INTEGRATION.md)
 
 [快速开始](#快速开始) · [v2 架构](docs/architecture/OVERVIEW.md) · [多仓库与 Manager 拆分](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
@@ -46,13 +46,13 @@ AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变
 ### 📋 完整规范库
 | 技术栈 | 规范文件 |
 |--------|---------|
-| Java/Spring Boot | `sop/specs/backend/JAVA_SPEC.md` |
-| 前端（Vue3/React） | `sop/specs/frontend/` |
-| 数据库（MySQL） | `sop/specs/database/` |
-| 安全（OWASP） | `sop/specs/security/` |
-| CI/CD | `sop/specs/cicd/CICD_SPEC.md` |
-| 测试 | `sop/specs/testing/` |
-| 多 Agent | `sop/specs/agents-collab/` |
+| Java/Spring Boot | `ai-sop/specs/backend/JAVA_SPEC.md` |
+| 前端（Vue3/React） | `ai-sop/specs/frontend/` |
+| 数据库（MySQL） | `ai-sop/specs/database/` |
+| 安全（OWASP） | `ai-sop/specs/security/` |
+| CI/CD | `ai-sop/specs/cicd/CICD_SPEC.md` |
+| 测试 | `ai-sop/specs/testing/` |
+| 多 Agent | `ai-sop/specs/agents-collab/` |
 
 ### 🖥️ Web 管理后台
 - **研发全流程**：`GET /api/v1/dev-flow/summary` 聚合指标 + 阶段导航 + 低 Token 提示模板（[使用手册](docs/USER_MANUAL.md)）
@@ -66,15 +66,15 @@ AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变
 一次初始化，自动生成所有工具配置：
 
 ```bash
-bash sop/tools/init-ai-project.sh my-app
-# 生成：AGENTS.md / .codex/config.toml / .codex/hooks.json / CLAUDE.md / opencode.json / .cursorrules / .windsurfrules / .trae/rules.md
+bash ai-sop-ops/init-ai-project.sh my-app
+# 生成：AGENTS.md / .codex/config.toml / .codex/hooks.json / CLAUDE.md / opencode.json / .cursorrules / .windsurfrules / .trae/rules.md / .qoder/context.md
 ```
 
 支持：Codex CLI · Claude Code · opencode · Cursor · Trae · Qoder · Windsurf
 
 ### 🎛️ 统一 AI 能力控制平面
 - **统一能力注册**：`.ai-memory/ai_capabilities.json` 描述上下文加载、工具守卫、权限决策、审计、状态持久化等标准能力
-- **统一 Hook 引擎**：`sop/tools/sop_ai_hook.py` 承载策略，各工具只做 adapter 映射
+- **统一 Hook 引擎**：`ai-sop-ops/sop_ai_hook.py` 承载策略，各工具只做 adapter 映射
 - **统一调度优化**：Web / Vibe / Agent 编排 / MCP / A2A 共享状态、规则、知识和质量信号
 
 ### 🔌 MCP & 技能体系
@@ -97,25 +97,25 @@ git clone https://github.com/magic-devops/ai-team-devops.git
 cd ai-team-devops
 
 # 2. 安装依赖（FastAPI / LanceDB / 可选 PDF 等，推荐虚拟环境）
-bash sop/tools/install-integrations.sh
+bash ai-sop-ops/install-integrations.sh
 
 # 3. 初始化你的项目（v1 方式）
-bash sop/tools/init-ai-project.sh my-app
+bash ai-sop-ops/init-ai-project.sh my-app
 
 # 4. 启动 Manager API（默认 8765）+ 可选前端（5173）
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 # 打开 http://localhost:8765/docs
 # 管理 UI：另开终端 cd apps/manager-web && pnpm i && pnpm dev → http://localhost:5173
 
 # 5. 健康检查
-bash sop/tools/health-check.sh
+bash ai-sop-ops/health-check.sh
 ```
 
 ### 🚀 推荐：v2 方式（统一 CLI + sop-agentd）
 
 ```bash
 # 一键拉起开发环境（装 SDK/CLI，构建 sop-agentd）
-bash sop/tools/bootstrap-dev.sh
+bash ai-sop-ops/bootstrap-dev.sh
 
 # 在你的业务项目里：
 cd /path/to/your-project
@@ -134,7 +134,7 @@ docker compose -f apps/manager/docker-compose.saas.yml up -d
 新增端点：`/api/v1/llm/{chat,embeddings,models}` · `/api/v1/rag/{search,index}` · `/api/v1/copilot/{ask,classify,summarize,suggest}` · `/api/v1/events:ingest` · `/ws/events` · `/metrics`
 完整契约：[`apis/openapi/openapi.yaml`](apis/openapi/openapi.yaml)。
 
-**脚本完整清单**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)。**日常运维推荐**：`bash sop/tools/sop-ctl.sh help`（`--json status`、`wait-health`、`self-check`、`commands` 等见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md) §1.3）。亦可用 `bash sop/tools/sop-ctl.sh reset-admin` / `complete bash` 安装 Tab 补全。若需重置或创建管理员账号：`python3 sop/tools/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `sop/tools/manager_client.py`。
+**脚本完整清单**：[ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md)。**日常运维推荐**：`bash ai-sop-ops/sop-ctl.sh help`（`--json status`、`wait-health`、`self-check`、`commands` 等见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md) §1.3）。亦可用 `bash ai-sop-ops/sop-ctl.sh reset-admin` / `complete bash` 安装 Tab 补全。若需重置或创建管理员账号：`python3 ai-sop-ops/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `ai-sop-ops/manager_client.py`。
 
 ### 在 Claude Code 中使用
 
@@ -204,7 +204,7 @@ ai-team-devops/
 └── LICENSE
 ```
 
-> **前后端分离**：`apps/manager` 仅提供 REST/WebSocket API；浏览器界面在 `apps/manager-web`。本地典型流程：`bash sop/tools/start-manager.sh`（8765）+ `cd apps/manager-web && pnpm dev`（5173）。
+> **前后端分离**：`apps/manager` 仅提供 REST/WebSocket API；浏览器界面在 `apps/manager-web`。本地典型流程：`bash ai-sop-ops/start-manager.sh`（8765）+ `cd apps/manager-web && pnpm dev`（5173）。
 
 ---
 
@@ -215,7 +215,7 @@ ai-team-devops/
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 使用 Web 后台的同事 | 启动、菜单、研发流、Vibe、常见问题 |
 | [TUTORIAL.md](TUTORIAL.md) | 全员 | 初始化、日常工作流、多 Agent、Web、自定义模块、`/evolve`、多工具 |
 | [apps/manager/README.md](apps/manager/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
-| [sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md) | 运维 / 集成 | `sop/tools` 下 Shell、Python、配置与规范文档索引 |
+| [ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md) | 运维 / 集成 | `ai-sop-ops` 下 Shell、Python、配置与规范文档索引 |
 
 详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：项目初始化与配置、日常开发工作流、多 Agent 协作、Web 后台、自定义模块、自我进化、多工具切换与状态共享。
 

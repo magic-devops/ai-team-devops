@@ -5,8 +5,8 @@
 **应提交**
 
 - `config.toml`：模型、沙箱、审批策略（勿写 API Key）。
-- `hooks.json`：事件 → `hooks/sop_hook.py` → `sop/tools/sop_ai_hook.py`。
-- `hooks/sop_hook.py`：薄适配层，保持路径稳定。
+- `hooks.json`：事件 → `hooks/sop_hook.py` → **`ai-sop-ops/sop_ai_hook.py`**（`sop_hook.py` 内解析仓库根）。
+- `hooks/sop_hook.py`：薄适配层。
 
 **勿提交**
 
@@ -16,4 +16,4 @@
 
 ## 延伸阅读
 
-`sop/tools/AI_CAPABILITY_CONTROL_PLANE.md`、`sop/integrations/INTEGRATIONS.md` 第 1 节。
+`ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md`、`ai-sop/integrations/INTEGRATIONS.md` 第 1 节。

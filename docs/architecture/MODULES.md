@@ -15,7 +15,7 @@
 | `apps/agent-runtime` | 项目侧守护 | Go 1.22 | 单文件 < 400 |
 | `packages/sop-cli` | 统一 CLI（开发者向） | Python Typer + Rich/Textual | 单文件 < 400 |
 | `packages/sop-sdk-python` | 项目侧 SDK | Python 3.10 + httpx | 单文件 < 400 |
-| `sop/`（本仓过渡） | 规约树 + 工具脚本，**迁移后**以 submodule 指向 ai-sop；脚本迁 ai-sop-ops | Markdown + Bash + Python | — |
+| **`ai-sop/`**（submodule） | 规约 Markdown（`specs/`、`agents/`、`workflow/` 等），`sop_dir()` **仅**指向此目录 | Markdown | — |
 | `apis/` | 契约源 | YAML/Proto | — |
 | `plugins/` | 第三方扩展 | 各包独立 | — |
 

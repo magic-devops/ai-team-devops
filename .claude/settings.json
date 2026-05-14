@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude SessionStart",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude SessionStart",
             "timeout": 15
           }
         ]
@@ -31,7 +31,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude UserPromptSubmit",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude UserPromptSubmit",
             "timeout": 15
           }
         ]
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PreToolUse",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PreToolUse",
             "timeout": 15
           }
         ]
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PermissionRequest",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PermissionRequest",
             "timeout": 15
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude PostToolUse",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PostToolUse",
             "timeout": 15
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/sop/tools/sop_ai_hook.py\" claude Stop",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude Stop",
             "timeout": 30
           },
           {

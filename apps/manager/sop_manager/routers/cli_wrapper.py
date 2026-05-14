@@ -18,7 +18,8 @@ CLI_TOOLS: Dict[str, Dict[str, str]] = {
     "opencode":     {"cmd": "opencode",    "description": "opencode TUI"},
     "aider":        {"cmd": "aider",       "description": "Aider AI 编码"},
     "cursor":       {"cmd": "cursor",      "description": "Cursor IDE"},
-    "trae":         {"cmd": "trae",        "description": "Trae AI IDE"},
+    "trae":         {"cmd": "trae",        "description": "Trae AI IDE，读取 .trae/rules.md"},
+    "qoder":        {"cmd": "qoder",     "description": "Qoder，读取 .qoder/context.md"},
 }
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")

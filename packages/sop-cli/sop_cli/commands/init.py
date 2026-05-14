@@ -2,7 +2,7 @@
 @module: sop_cli.commands.init
 @purpose: `sop init <project>` —— 取代 init-ai-project.sh 的可编程入口
 @ai_safe_edit:
-  - 初始化逻辑沿用 sop/tools/init-ai-project.sh，CLI 仅做编排 + 配对 + agent.toml
+  - 初始化逻辑沿用 ai-sop-ops/init-ai-project.sh，CLI 仅做编排 + 配对 + agent.toml
   - 任何流程变更需同步 docs/playbooks/PROJECT_ONBOARDING.md
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ def init(
 ) -> None:
     repo_tools = _locate_repo_tools()
     if not repo_tools:
-        err("未找到 sop/tools 目录；请在仓库根或本机已安装 sop 的项目中执行。")
+        err("未找到 ai-sop-ops（缺少 init-ai-project.sh）；请在 monorepo 根执行 git submodule update --init，或设置 SOP_OPS_ROOT。")
         raise typer.Exit(1)
 
     cmd = ["bash", str(repo_tools / "init-ai-project.sh")]
@@ -68,16 +68,16 @@ def init(
     console.print(textwrap.dedent(f"""
         下一步建议：
           1. 启动 agentd:    [bold]sop agentd install && sop agentd start[/bold]
-          2. 健康自检:       [bold]sop doctor[/bold] 或 [bold]bash sop/tools/sop-ctl.sh doctor[/bold]
+          2. 健康自检:       [bold]sop doctor[/bold] 或 [bold]bash ai-sop-ops/sop-ctl.sh doctor[/bold]
           3. 状态总览:       [bold]sop status[/bold]
-          4. 启动 Manager:   [bold]bash sop/tools/sop-ctl.sh start[/bold] 或 [bold]bash sop/tools/start-manager.sh[/bold]
+          4. 启动 Manager:   [bold]bash ai-sop-ops/sop-ctl.sh start[/bold] 或 [bold]bash ai-sop-ops/start-manager.sh[/bold]
     """).strip())
 
 
 def _locate_repo_tools() -> Path | None:
     cur = Path.cwd().resolve()
     for p in (cur, *cur.parents):
-        cand = p / "sop" / "tools" / "init-ai-project.sh"
+        cand = p / "ai-sop-ops" / "init-ai-project.sh"
         if cand.is_file():
             return cand.parent
     home_cand = Path.home() / ".local" / "share" / "sop" / "tools" / "init-ai-project.sh"

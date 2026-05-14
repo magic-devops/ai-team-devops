@@ -136,7 +136,7 @@ Windsurf     → .windsurfrules
 
 ### 6. 管理后台（前后端分离）
 
-- **API**：`apps/manager`（`sop_manager`），FastAPI，`/api/v1/*`，由 `sop/tools/start-manager.sh` 或 `sop-manager start` 启动。
+- **API**：`apps/manager`（`sop_manager`），FastAPI，`/api/v1/*`，由 `ai-sop-ops/start-manager.sh` 或 `sop-manager start` 启动。
 - **UI**：`apps/manager-web`（Vite + React + TS），开发期 `pnpm dev` 将 `/api`、`/ws` 反代到本机 Manager 端口。
 
 ```

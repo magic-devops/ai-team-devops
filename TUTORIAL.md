@@ -32,10 +32,10 @@ git clone https://github.com/your-org/ai-team-devops.git
 cd ai-team-devops
 
 # 2. 初始化你的项目
-bash sop/tools/init-ai-project.sh my-app
+bash ai-sop-ops/init-ai-project.sh my-app
 
 # 3. 启动 Web 后台（可选）
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 
 # 4. 打开 AI 工具，开始开发
 # Claude Code: claude
@@ -57,7 +57,7 @@ bash sop/tools/start-manager.sh
 ### 2.1 运行初始化脚本
 
 ```bash
-bash sop/tools/init-ai-project.sh <project-name>
+bash ai-sop-ops/init-ai-project.sh <project-name>
 ```
 
 **参数说明**：
@@ -100,7 +100,7 @@ cd frontend && npm test
 ### 2.3 健康检查
 
 ```bash
-bash sop/tools/health-check.sh
+bash ai-sop-ops/health-check.sh
 ```
 
 输出示例：
@@ -250,22 +250,22 @@ Reviewer（审查模式）
 
 ```bash
 # 一键启动
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 
 # 指定项目路径
-PROJECT_PATH=/path/to/project bash sop/tools/start-manager.sh
+PROJECT_PATH=/path/to/project bash ai-sop-ops/start-manager.sh
 
 # 指定端口
-PORT=9000 bash sop/tools/start-manager.sh
+PORT=9000 bash ai-sop-ops/start-manager.sh
 ```
 
 浏览器自动打开 `http://localhost:8765`
 
 ### 5.1.1 脚本索引与管理员
 
-- **Shell / Python / 文档完整表**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)  
-- **常用入口摘要**：[sop/tools/README.md](sop/tools/README.md)  
-- **管理员密码**：`python3 sop/tools/reset-admin.py`（交互）或 `reset` / `create` 子命令，详见脚本文件头。
+- **Shell / Python / 文档完整表**：[ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md)  
+- **常用入口摘要**：[ai-sop-ops/README.md](ai-sop-ops/README.md)  
+- **管理员密码**：`python3 ai-sop-ops/reset-admin.py`（交互）或 `reset` / `create` 子命令，详见脚本文件头。
 
 ### 5.2 功能页面（菜单摘要）
 
@@ -441,7 +441,7 @@ opencode
 ### 8.5 同步规范到所有工具
 
 ```bash
-bash sop/tools/sync-rules.sh
+bash ai-sop-ops/sync-rules.sh
 ```
 
 ### 8.6 跨工具状态共享
@@ -460,11 +460,11 @@ pip install lancedb pyarrow --break-system-packages
 ```
 
 **Q: Dashboard 无法连接 API？**
-确认后端已启动：`bash sop/tools/start-manager.sh`
+确认后端已启动：`bash ai-sop-ops/start-manager.sh`
 
 **Q: AI 不遵守规范怎么办？**
 1. 检查 `CLAUDE.md` 是否正确配置
-2. 运行 `bash sop/tools/health-check.sh`
+2. 运行 `bash ai-sop-ops/health-check.sh`
 3. 确认规范文件路径正确
 
 **Q: 如何重置项目状态？**
@@ -475,7 +475,7 @@ echo '{"project_id":"my-app","phase":"INIT","tasks":{"completed":[],"in_progress
 
 **Q: 如何备份 AI 记忆？**
 ```bash
-bash sop/tools/snapshot.sh
+bash ai-sop-ops/snapshot.sh
 # 快照保存到 memory/snapshots/YYYY-MM-DD.json
 ```
 
@@ -492,8 +492,8 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 ### 10.0 登录与项目上下文
 
 - 首次访问打开 **`login.html`** 完成初始化或登录；JWT 存入浏览器 **`sop-token`**。
-- 多项目 / SaaS 场景：顶栏选择项目后写入 **`sop-current-project-id`**，后续 API 自动带 **`X-Project-Id`**（与 `index.html` 内 **`apiFetch`** 一致）。脚本调用请使用 **`MANAGER_SOP_TOKEN` + `PROJECT_ID`**（`sop/tools/manager_client.py`），详见 [USER_MANUAL.md §1.2](USER_MANUAL.md) 与 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)。
-- **运维统一入口**：`bash sop/tools/sop-ctl.sh help`（`--json`、`wait-health`、`self-check`、`commands`、`url`/`open` 等；Bash 补全见 `sop-ctl.completion.bash`，手册 §1.3）。
+- 多项目 / SaaS 场景：顶栏选择项目后写入 **`sop-current-project-id`**，后续 API 自动带 **`X-Project-Id`**（与 `index.html` 内 **`apiFetch`** 一致）。脚本调用请使用 **`MANAGER_SOP_TOKEN` + `PROJECT_ID`**（`ai-sop-ops/manager_client.py`），详见 [USER_MANUAL.md §1.2](USER_MANUAL.md) 与 [ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md)。
+- **运维统一入口**：`bash ai-sop-ops/sop-ctl.sh help`（`--json`、`wait-health`、`self-check`、`commands`、`url`/`open` 等；Bash 补全见 `sop-ctl.completion.bash`，手册 §1.3）。
 
 ### 10.1 全部页面（23个）
 
@@ -529,7 +529,7 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 
 ```bash
 # 启动管理后台
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 
 # 进入「🎯 Vibe Coding」页面
 # 选择开发工具（claude/opencode/aider）

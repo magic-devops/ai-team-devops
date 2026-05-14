@@ -5,7 +5,7 @@
 ## 执行步骤
 
 1. 运行 `git diff HEAD` 获取变更内容
-2. 对照 `sop/quality/CODE_REVIEW.md` 检查清单逐项检查
+2. 对照 `ai-sop/quality/CODE_REVIEW.md` 检查清单逐项检查
 3. 检查安全漏洞（OWASP Top 10）
 4. 检查性能问题（N+1、全量查询、缺少索引）
 5. 输出结构化审查报告

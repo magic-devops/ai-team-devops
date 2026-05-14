@@ -52,7 +52,7 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path
+from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path, sop_ops_dir
 
 router = APIRouter(prefix="/api/v1/env", tags=["env"])
 
@@ -533,7 +533,7 @@ def _env_llm(user: str, max_tokens: int = 4096) -> str:
     client = anthropic.Anthropic(api_key=key)
     system = """你是资深 DevOps / 平台工程师。根据用户提供的「环境检查结果」JSON，输出：
 1) 简短结论（Markdown）
-2) 分步修复清单（编号列表），每步给出可在项目根目录执行的 shell 命令；优先使用仓库内已有脚本（如 sop/tools/install-integrations.sh、sop/tools/health-check.sh、sop/tools/init-ai-project.sh）。
+2) 分步修复清单（编号列表），每步给出可在项目根目录执行的 shell 命令；优先使用仓库内已有脚本（如 ai-sop-ops/install-integrations.sh、ai-sop-ops/health-check.sh、ai-sop-ops/init-ai-project.sh）。
 3) 标注风险等级（低/中/高）与是否需人工确认。
 4) 不要编造不存在的路径；若信息不足写「需补充」。
 只输出 Markdown，不要 JSON。"""
@@ -622,6 +622,18 @@ def _script_path(rel: str) -> Optional[Path]:
     p = (resolved_project_path() / rel).resolve()
     root = resolved_project_path().resolve()
     if not str(p).startswith(str(root) + os.sep):
+        return None
+    return p if p.is_file() else None
+
+
+def _platform_ops_script(name: str) -> Optional[Path]:
+    """平台 monorepo 内 ``ai-sop-ops/`` 下的脚本（非 PROJECT_PATH 相对路径）。"""
+    try:
+        base = sop_ops_dir().resolve()
+    except FileNotFoundError:
+        return None
+    p = (base / name).resolve()
+    if not str(p).startswith(str(base) + os.sep):
         return None
     return p if p.is_file() else None
 
@@ -753,14 +765,14 @@ def ai_env_plan(body: AiEnvPlanBody):
 def remediate_run(body: RemediateRunBody):
     action = (body.action or "").strip()
     if action == "install_integrations":
-        script = _script_path("sop/tools/install-integrations.sh")
+        script = _platform_ops_script("install-integrations.sh")
         if not script:
-            raise HTTPException(404, "未找到 sop/tools/install-integrations.sh（请确认 PROJECT_PATH 为仓库根）")
+            raise HTTPException(404, "未找到 ai-sop-ops/install-integrations.sh（请 git submodule update --init --recursive）")
         return _run(["bash", str(script)], cwd=str(resolved_project_path()), timeout=900)
     if action == "health_check":
-        script = _script_path("sop/tools/health-check.sh")
+        script = _platform_ops_script("health-check.sh")
         if not script:
-            raise HTTPException(404, "未找到 sop/tools/health-check.sh")
+            raise HTTPException(404, "未找到 ai-sop-ops/health-check.sh")
         return _run(["bash", str(script)], cwd=str(resolved_project_path()), timeout=120)
     raise HTTPException(400, "action 仅支持 install_integrations | health_check")
 

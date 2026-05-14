@@ -169,7 +169,7 @@ manager-worker → 同上 + Temporal Frontend + 外网 LLM（经 Egress 白名�
 
 - 当前 **`apps/manager` + `sop_manager`**：在 M-A4 之前继续作为 **单体 API** 真源；新目录 `apps/manager-api` 可先以 **文档占位**，避免双真源。  
 - **`apps/manager-web`**：不变，仅对接 `manager-api` 的 OpenAPI。  
-- **`sop/` 在本仓**：可与远程 **`magic-devops/ai-sop`** 同步；推荐用 **Git submodule** 替换内嵌目录，步骤见 [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md)。运维脚本见 **`magic-devops/ai-sop-ops`**（已推送 `main`）。
+- **`ai-sop/`、`ai-sop-ops/` 在本仓**：已以 **Git submodule** 引入（`magic-devops/ai-sop`、`magic-devops/ai-sop-ops`）。**规约仅 `ai-sop/`**；可执行与 Python 工具在 **`ai-sop-ops/`**；操作说明见 [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md)。
 
 ---
 
@@ -190,7 +190,7 @@ manager-worker → 同上 + Temporal Frontend + 外网 LLM（经 Egress 白名�
 - [MODULES.md](MODULES.md) — 模块表含 `manager-api` / `manager-worker`  
 - [DATA_PLANE.md](DATA_PLANE.md) — SQL/向量分层  
 - [DEPLOY.md](DEPLOY.md) — 部署档位  
-- [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md) — **将本仓 `sop/` 改为 submodule 的操作步骤**
+- [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md) — **`ai-sop` / `ai-sop-ops` submodule** 与历史 fork 迁移说明
 
 ---
 

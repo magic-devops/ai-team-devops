@@ -31,4 +31,4 @@ flowchart LR
 ## 配置权威
 
 环境变量模板：`apps/manager/.env.example`。  
-运维与脚本索引：`sop/tools/SCRIPTS.md` → **数据与向量**：`sop/tools/DATA_AND_VECTOR.md`。
+运维与脚本索引：`ai-sop-ops/SCRIPTS.md` → **数据与向量**：`ai-sop-ops/DATA_AND_VECTOR.md`。

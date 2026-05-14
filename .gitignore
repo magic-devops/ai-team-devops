@@ -42,12 +42,8 @@ apps/manager/.env.local
 # Claude / Cursor 本地覆盖（若存在）
 .claude/settings.local.json
 
-# ── 工具生成的项目级配置（下游业务仓常见；本规约仓可不跟踪）────────
-opencode.json
-.cursorrules
-.windsurfrules
-.trae/
-.qoder/
+# ── 与 Cursor/Trae/Qoder/Windsurf/opencode 对齐的仓库根模板（本 monorepo 跟踪）────────
+# 个人覆盖请用各工具支持的 local 文件（如 .claude/settings.local.json），勿提交密钥。
 
 # 可提交：AGENTS.md、CLAUDE.md、.codex/README.md、.codex/config.toml、.codex/hooks.json、
 # .codex/hooks/sop_hook.py、.claude/README.md、.claude/settings.json、.claude/commands/、.claude/hooks/
@@ -93,7 +89,7 @@ coverage.xml
 .nox/
 
 # install-integrations.sh 可选 MCP npm 预装目录
-sop/tools/.mcp-npm-smoke/
+ai-sop-ops/.mcp-npm-smoke/
 
 # ── Node / 前端构建 ─────────────────────────────────────────────────
 node_modules/

@@ -1207,7 +1207,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
           {rightTab === 'term' && (
             <div>
               <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8, lineHeight: 1.5 }}>
-                {tr('vibe_term_intro', { p: 'PROJECT_PATH', f: '.ai-memory/env_exec_allowlist_extra.json', b: 'bash sop/tools/xxx.sh' })}
+                {tr('vibe_term_intro', { p: 'PROJECT_PATH', f: '.ai-memory/env_exec_allowlist_extra.json', b: 'bash ai-sop-ops/xxx.sh' })}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {[

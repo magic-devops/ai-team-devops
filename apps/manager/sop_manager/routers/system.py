@@ -7,29 +7,47 @@ from pathlib import Path
 import json, os, re, subprocess, uuid, sys, tarfile
 from datetime import datetime as dt
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path, resolved_runtime_dir, sop_dir
+from sop_manager.path_config import (
+    repo_root,
+    resolved_ai_memory_root,
+    resolved_project_path,
+    resolved_runtime_dir,
+    sop_ops_dir,
+)
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
-SOP_DIR = sop_dir()
+
+def _try_sop_ops() -> Optional[Path]:
+    try:
+        return sop_ops_dir()
+    except FileNotFoundError:
+        return None
+
+
+def _init_script() -> Path:
+    return sop_ops_dir() / "init-ai-project.sh"
 
 
 def _workspace_artifacts_path() -> Path:
     return resolved_ai_memory_root() / "workspace_artifacts.json"
-
-# ── 脚本管理 ──────────────────────────────────────────────────────
 @router.get("/scripts")
 def list_scripts():
-    tools_dir = SOP_DIR / "tools"
-    if not tools_dir.exists(): return []
+    tools_dir = _try_sop_ops()
+    if tools_dir is None or not tools_dir.exists():
+        return []
     return [{"name": f.name, "size": f.stat().st_size,
              "executable": os.access(f, os.X_OK)}
             for f in sorted(tools_dir.iterdir()) if f.is_file()]
 
 @router.get("/scripts/{name}/content")
 def get_script(name: str):
-    f = (SOP_DIR / "tools" / name).resolve()
-    if not str(f).startswith(str(SOP_DIR / "tools")): raise HTTPException(403, "Access denied")
+    tools_dir = _try_sop_ops()
+    if tools_dir is None:
+        raise HTTPException(503, "ai-sop-ops 未就绪（git submodule update --init）")
+    f = (tools_dir / name).resolve()
+    if not str(f).startswith(str(tools_dir.resolve())):
+        raise HTTPException(403, "Access denied")
     if not f.exists(): raise HTTPException(404, "Not found")
     return {"content": f.read_text(errors="replace")}
 
@@ -38,13 +56,20 @@ class ScriptUpdate(BaseModel):
 
 @router.put("/scripts/{name}")
 def update_script(name: str, body: ScriptUpdate):
-    f = (SOP_DIR / "tools" / name).resolve()
-    if not str(f).startswith(str(SOP_DIR / "tools")): raise HTTPException(403, "Access denied")
+    tools_dir = _try_sop_ops()
+    if tools_dir is None:
+        raise HTTPException(503, "ai-sop-ops 未就绪")
+    f = (tools_dir / name).resolve()
+    if not str(f).startswith(str(tools_dir.resolve())):
+        raise HTTPException(403, "Access denied")
     f.write_text(body.content); return {"ok": True}
 
 @router.post("/scripts/{name}/run")
 def run_script(name: str):
-    f = SOP_DIR / "tools" / name
+    tools_dir = _try_sop_ops()
+    if tools_dir is None:
+        raise HTTPException(503, "ai-sop-ops 未就绪")
+    f = tools_dir / name
     if not f.exists(): raise HTTPException(404, "Not found")
     if not f.suffix == ".sh": raise HTTPException(400, "Only .sh scripts allowed")
     try:
@@ -393,7 +418,7 @@ def backup_create(body: BackupCreateBody):
                     except OSError:
                         pass
         else:
-            root = SOP_DIR.parent
+            root = repo_root()
             mw = root / "apps" / "manager-web"
             if mw.is_dir():
                 added += _tar_add_filtered(tf, mw, "apps/manager-web")
@@ -458,8 +483,7 @@ def ops_upgrade_hint():
     }
 
 
-# ── 项目初始化 / 重置（封装 sop/tools/init-ai-project.sh）────────────────
-_INIT_SCRIPT = (SOP_DIR / "tools" / "init-ai-project.sh").resolve()
+# ── 项目初始化 / 重置（封装 ai-sop-ops/init-ai-project.sh）────────────────
 
 
 def _state_file() -> Path:
@@ -471,9 +495,13 @@ _PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$")
 
 
 def _run_init_script(argv: List[str], timeout: int) -> Dict[str, Any]:
-    if not _INIT_SCRIPT.is_file():
-        raise HTTPException(404, "未找到 sop/tools/init-ai-project.sh（请确认在含 sop/ 的仓库根下运行管理后台）")
-    cmd = ["bash", str(_INIT_SCRIPT)] + argv
+    init_sh = _init_script()
+    if not init_sh.is_file():
+        raise HTTPException(
+            404,
+            "未找到 ai-sop-ops/init-ai-project.sh（请 git submodule update --init --recursive 或设置 SOP_OPS_ROOT）",
+        )
+    cmd = ["bash", str(init_sh)] + argv
     try:
         r = subprocess.run(cmd, cwd=str(resolved_project_path()), capture_output=True, text=True, timeout=timeout)
         return {
@@ -498,10 +526,11 @@ def project_bootstrap_status():
     n_reinit = 0
     if _reinit_backup_dir().is_dir():
         n_reinit = len([x for x in _reinit_backup_dir().glob("reinit-*.tar.gz") if x.is_file()])
+    init_sh = _init_script()
     try:
-        rel_script = str(_INIT_SCRIPT.relative_to(resolved_project_path().resolve()))
+        rel_script = str(init_sh.relative_to(resolved_project_path().resolve()))
     except ValueError:
-        rel_script = str(_INIT_SCRIPT)
+        rel_script = str(init_sh)
     try:
         reinit_dir_rel = str(_reinit_backup_dir().relative_to(resolved_project_path()))
     except ValueError:
@@ -509,7 +538,7 @@ def project_bootstrap_status():
     return {
         "initialized": _state_file().is_file(),
         "statePath": "memory/current_state.json",
-        "initScriptReady": _INIT_SCRIPT.is_file(),
+        "initScriptReady": _init_script().is_file(),
         "initScriptPath": rel_script,
         "adminBackupsCount": n_admin,
         "reinitBackupsCount": n_reinit,
@@ -563,7 +592,7 @@ class ProjectInitBody(BaseModel):
 
 @router.post("/project/init")
 def project_init_run(body: ProjectInitBody):
-    """首次初始化：等价于 bash sop/tools/init-ai-project.sh <project_id>（工作目录为项目根）。"""
+    """首次初始化：等价于 bash ai-sop-ops/init-ai-project.sh <project_id>（工作目录为项目根）。"""
     pid = body.project_id.strip()
     if not _PROJECT_ID_RE.match(pid):
         raise HTTPException(400, "project_id 须为 2–64 位：字母或数字开头，仅含字母、数字、下划线、连字符")

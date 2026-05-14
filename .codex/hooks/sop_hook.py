@@ -7,6 +7,12 @@ import sys
 from pathlib import Path
 
 event = sys.argv[1] if len(sys.argv) > 1 else ""
-engine = Path(__file__).resolve().parents[2] / "sop" / "tools" / "sop_ai_hook.py"
-sys.argv = [str(engine), "codex", event]
-runpy.run_path(str(engine), run_name="__main__")
+_root = Path(__file__).resolve().parents[2]
+_engine = _root / "ai-sop-ops" / "sop_ai_hook.py"
+if not _engine.is_file():
+    sys.stderr.write(
+        "SOP: missing ai-sop-ops/sop_ai_hook.py — run: git submodule update --init --recursive\n"
+    )
+    sys.exit(0)
+sys.argv = [str(_engine), "codex", event]
+runpy.run_path(str(_engine), run_name="__main__")

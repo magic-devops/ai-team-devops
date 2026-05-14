@@ -48,7 +48,7 @@ def remove_mcp(name: str):
 @router.get("/builtin")
 def builtin_mcp():
     return [
-        {"name":"lancedb","command":"python3","args":["sop/integrations/mcp/lancedb_server.py"],"description":"LanceDB 语义搜索"},
+        {"name":"lancedb","command":"python3","args":["ai-sop-ops/integrations/mcp/lancedb_server.py"],"description":"LanceDB 语义搜索"},
         {"name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."],"description":"文件系统操作"},
         {"name":"git","command":"npx","args":["-y","@modelcontextprotocol/server-git","--repository","."],"description":"Git 操作"},
         {"name":"github","command":"npx","args":["-y","@modelcontextprotocol/server-github"],"description":"GitHub API","env":{"GITHUB_TOKEN":"${GITHUB_TOKEN}"}},

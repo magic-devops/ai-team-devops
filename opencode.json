@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-opus-4-7",
+  "providers": {
+    "anthropic": { "apiKey": "${ANTHROPIC_API_KEY}" }
+  },
+  "system": "读取 CLAUDE.md、AGENTS.md。规约在 monorepo 的 ai-sop/（Git submodule magic-devops/ai-sop）；运维脚本在 ai-sop-ops/。包名 com.magic.sop。失败时 <reflect> 分析，最多重试 3 次。",
+  "rules": [
+    "memory/current_state.json 存在时，启动前先读取了解当前状态",
+    "commit 格式: type(scope): desc [T-id]",
+    "禁止硬编码密钥",
+    "完成任务后输出置信度 0-1",
+    "按需查阅 ai-sop/specs/、ai-sop/quality/、ai-sop/agents/ 下 Markdown；控制平面见 ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md"
+  ],
+  "context": [
+    { "type": "file", "path": "CLAUDE.md" },
+    { "type": "file", "path": "AGENTS.md", "optional": true },
+    { "type": "file", "path": ".cursorrules", "optional": true },
+    { "type": "file", "path": ".trae/rules.md", "optional": true },
+    { "type": "file", "path": ".qoder/context.md", "optional": true },
+    { "type": "file", "path": "memory/current_state.json", "optional": true },
+    { "type": "file", "path": "ai-sop/QUICK_REF.md", "optional": true }
+  ]
+}

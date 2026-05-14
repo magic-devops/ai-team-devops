@@ -6,15 +6,15 @@
 
 ```bash
 # 推荐：先安装 Python 依赖（含 FastAPI / LanceDB / 可选 pypdf 等）
-bash sop/tools/install-integrations.sh
+bash ai-sop-ops/install-integrations.sh
 
 # 启动后台（默认端口 8765）
-bash sop/tools/start-manager.sh
+bash ai-sop-ops/start-manager.sh
 
 # 管理「业务代码仓库」而非本规约仓库时，指定路径：
-PROJECT_PATH=/path/to/your-app bash sop/tools/start-manager.sh
+PROJECT_PATH=/path/to/your-app bash ai-sop-ops/start-manager.sh
 
-PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
+PORT=9000 PROJECT_PATH=/path/to/app bash ai-sop-ops/start-manager.sh
 ```
 
 浏览器访问：`http://localhost:8765`（若 `index.html` 内 `API` 与端口不一致，请改为当前端口）。
@@ -29,55 +29,59 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 
 ### 1.1 脚本与运维工具
 
-**完整索引**（含环境变量与只读规范文档）：[sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)；常用入口摘要：[sop/tools/README.md](../sop/tools/README.md)。
+运维脚本位于 monorepo 根目录 **`ai-sop-ops/`**（Git submodule）；**规约 Markdown** 位于 **`ai-sop/`**（`magic-devops/ai-sop`）。克隆后须 **`git submodule update --init --recursive`**。可选 **`SOP_SPEC_ROOT` / `SOP_SOP_DIR`** 覆盖规约根；**`SOP_OPS_ROOT`** 覆盖运维根。
+
+**多 IDE 规则文件（与 `.cursorrules` 对齐）**：**`.trae/rules.md`**（Trae）、**`.qoder/context.md`**（Qoder）、**`.windsurfrules`**（Windsurf）。刷新模板可执行：`bash ai-sop-ops/sync-rules.sh`（默认以脚本内嵌模板写入目标项目根；本仓库已提交与 `.cursorrules` 一致的副本）。
+
+**完整索引**（含环境变量与只读规范文档）：[ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md)；常用入口摘要：[ai-sop-ops/README.md](../ai-sop-ops/README.md)。
 
 | 场景 | 命令 |
 |------|------|
-| **统一管控（推荐）** | `bash sop/tools/sop-ctl.sh help`（`--json` / `wait-health` / `url` / `self-check` / `commands` 等，见 §1.3） |
-| 健康检查 | `bash sop/tools/health-check.sh` |
-| 忘记管理员密码 / 新建管理员 | `python3 sop/tools/reset-admin.py`（交互式）或 `python3 sop/tools/reset-admin.py reset <用户> <新密码>`（见脚本头说明，密码长度等校验） |
-| 脚本或 CI 调 Manager API | 配置 `MANAGER_URL`、`PROJECT_ID`（`X-Project-Id`）、**`MANAGER_SOP_TOKEN`**（登录 JWT，推荐）与可选 `MANAGER_API_KEY` 后执行 `python3 sop/tools/manager_client.py`（见文件内用法） |
-| 与 `start-manager` 等价的备用入口 | `bash sop/tools/start-dashboard.sh` |
+| **统一管控（推荐）** | `bash ai-sop-ops/sop-ctl.sh help`（`--json` / `wait-health` / `url` / `self-check` / `commands` 等，见 §1.3） |
+| 健康检查 | `bash ai-sop-ops/health-check.sh` |
+| 忘记管理员密码 / 新建管理员 | `python3 ai-sop-ops/reset-admin.py`（交互式）或 `python3 ai-sop-ops/reset-admin.py reset <用户> <新密码>`（见脚本头说明，密码长度等校验） |
+| 脚本或 CI 调 Manager API | 配置 `MANAGER_URL`、`PROJECT_ID`（`X-Project-Id`）、**`MANAGER_SOP_TOKEN`**（登录 JWT，推荐）与可选 `MANAGER_API_KEY` 后执行 `python3 ai-sop-ops/manager_client.py`（见文件内用法） |
+| 与 `start-manager` 等价的备用入口 | `bash ai-sop-ops/start-dashboard.sh` |
 
 ### 1.2 鉴权与多项目（SaaS / 顶栏项目）
 
 - 登录后浏览器保存 **`sop-token`**（JWT）与 **`sop-current-project-id`**（当前项目）。业务请求须同时携带 **`Authorization`** 与 **`X-Project-Id`**，后端中间件才能把数据与文件路径落到正确项目（见 `apps/manager/sop_manager/routers/project_scope_middleware.py`）。
 - **单项目模式**（`ADMIN_MODE=single`）：未选项目时服务端可用环境变量 `PROJECT_ID` 作为默认项目上下文。
-- **脚本 / CI**：推荐 `MANAGER_SOP_TOKEN` + `PROJECT_ID` 调用 `sop/tools/manager_client.py`；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 跑 `health-check.sh` 验证鉴权链路（见 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)）。
+- **脚本 / CI**：推荐 `MANAGER_SOP_TOKEN` + `PROJECT_ID` 调用 `ai-sop-ops/manager_client.py`；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 跑 `health-check.sh` 验证鉴权链路（见 [ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md)）。
 
 ### 1.3 统一管控（`sop-ctl.sh` + 可选 `sop` Python CLI）
 
-不依赖 `pip install` 时，用仓库内 **`bash sop/tools/sop-ctl.sh`** 作为统一入口（与零散脚本等价，便于记忆）。
+不依赖 `pip install` 时，用仓库内 **`bash ai-sop-ops/sop-ctl.sh`** 作为统一入口（与零散脚本等价，便于记忆）。
 
-**全局参数**（必须写在子命令之前）：`-y` / `--yes`（与 `reinit` 联用时若子命令未带 `-y` 会自动注入）、`--json`（在 `status`、`env`、`version`、`wait-health`、`self-check` 等子命令上输出**单行 JSON**，便于 CI/`jq`；需可用的 `python3`）、`--project-path`（或 `=DIR`）、`--port`（或 `=N`，默认 8765）、`-h` / `--help`（仅单独使用时打印帮助）。示例：`bash sop/tools/sop-ctl.sh --project-path /path/to/app --port 9000 start-bg`；`bash sop/tools/sop-ctl.sh --json status`。
+**全局参数**（必须写在子命令之前）：`-y` / `--yes`（与 `reinit` 联用时若子命令未带 `-y` 会自动注入）、`--json`（在 `status`、`env`、`version`、`wait-health`、`self-check` 等子命令上输出**单行 JSON**，便于 CI/`jq`；需可用的 `python3`）、`--project-path`（或 `=DIR`）、`--port`（或 `=N`，默认 8765）、`-h` / `--help`（仅单独使用时打印帮助）。示例：`bash ai-sop-ops/sop-ctl.sh --project-path /path/to/app --port 9000 start-bg`；`bash ai-sop-ops/sop-ctl.sh --json status`。
 
 | 场景 | 命令 |
 |------|------|
-| 查看子命令 | `bash sop/tools/sop-ctl.sh help` |
-| Bash Tab 补全 | 先 `alias sopctl='bash <本仓库绝对路径>/sop/tools/sop-ctl.sh'`，再 `source <本仓库绝对路径>/sop/tools/sop-ctl.completion.bash`；或一次性：`eval "$(bash <路径>/sop-ctl.sh complete bash)"`（Zsh 可先 `autoload bashcompinit; bashcompinit` 再 `source` 同上补全文件，见 `complete zsh` 说明） |
-| 快速初始化 | `bash sop/tools/sop-ctl.sh init <项目名>` |
-| 备份 | `bash sop/tools/sop-ctl.sh backup`（LanceDB 快照）；`backup --full` 另打包 `memory/` + `.sop-runtime/` 到 `PROJECT_PATH/.sop-backups/` |
-| 重新初始化 | `bash sop/tools/sop-ctl.sh reinit [与 init-ai-project.sh 相同选项]`；非交互可 `bash sop/tools/sop-ctl.sh -y reinit …` |
-| 清理遗留运行时文件 | `bash sop/tools/sop-ctl.sh clean` / `clean --apply` |
-| 前台启动 Manager | `bash sop/tools/sop-ctl.sh start`（参数同 `start-manager.sh`，如 `--port 9000`） |
+| 查看子命令 | `bash ai-sop-ops/sop-ctl.sh help` |
+| Bash Tab 补全 | 先 `alias sopctl='bash <本仓库绝对路径>/ai-sop-ops/sop-ctl.sh'`，再 `source <本仓库绝对路径>/ai-sop-ops/sop-ctl.completion.bash`；或一次性：`eval "$(bash <路径>/ai-sop-ops/sop-ctl.sh complete bash)"`（Zsh 可先 `autoload bashcompinit; bashcompinit` 再 `source` 同上补全文件，见 `complete zsh` 说明） |
+| 快速初始化 | `bash ai-sop-ops/sop-ctl.sh init <项目名>` |
+| 备份 | `bash ai-sop-ops/sop-ctl.sh backup`（LanceDB 快照）；`backup --full` 另打包 `memory/` + `.sop-runtime/` 到 `PROJECT_PATH/.sop-backups/` |
+| 重新初始化 | `bash ai-sop-ops/sop-ctl.sh reinit [与 init-ai-project.sh 相同选项]`；非交互可 `bash ai-sop-ops/sop-ctl.sh -y reinit …` |
+| 清理遗留运行时文件 | `bash ai-sop-ops/sop-ctl.sh clean` / `clean --apply` |
+| 前台启动 Manager | `bash ai-sop-ops/sop-ctl.sh start`（参数同 `start-manager.sh`，如 `--port 9000`） |
 | 后台启动 / 重启 / 停止 / 状态 | `start-bg`（可选 `--port N`、`--no-reload`）· **`restart-bg`**（先 `stop-bg --force` 再 `start-bg`）· `stop-bg` 或别名 **`stop`**（可加 `--force`）· `status`（人类可读；加 **`--json`** 输出 PID/健康等 JSON）；环境变量 `PORT` 仍可与全局 `--port` 配合使用 |
-| 安装依赖 | `bash sop/tools/sop-ctl.sh install` |
-| 健康检查 | `bash sop/tools/sop-ctl.sh health`（支持 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID`，见 [SCRIPTS.md](../sop/tools/SCRIPTS.md)） |
-| 智能修复 | `bash sop/tools/sop-ctl.sh repair`（依次 `install-integrations` + `health-check`）；CI 若要 **install 失败即失败** 用 **`repair --strict`** |
-| 部署提示 | `bash sop/tools/sop-ctl.sh deploy single` 或 `deploy saas`（打印 `docker compose` 示例） |
-| systemd 单元模板 | `bash sop/tools/sop-ctl.sh register > /tmp/sop-manager.service`（再按需修改 User/ExecStart） |
-| 深度自检 | `bash sop/tools/sop-ctl.sh doctor`（若 PATH 中已有 `sop` 则执行 `sop doctor`；否则尝试源码树 `sop_cli`；再否则降级为 `health-check.sh`） |
-| 规约同步到各工具可读位置 | `bash sop/tools/sop-ctl.sh sync` |
-| 管理员账号（SQLite 等） | `bash sop/tools/sop-ctl.sh reset-admin`（透传 `reset-admin.py` 子命令，见 [SCRIPTS.md](../sop/tools/SCRIPTS.md)） |
-| 程序化调 Manager API | `bash sop/tools/sop-ctl.sh manager`（`manager_client.py`，需 `MANAGER_URL` / `MANAGER_SOP_TOKEN` 等） |
-| 全量开发环境引导 | `bash sop/tools/sop-ctl.sh bootstrap`（`bootstrap-dev.sh`） |
+| 安装依赖 | `bash ai-sop-ops/sop-ctl.sh install` |
+| 健康检查 | `bash ai-sop-ops/sop-ctl.sh health`（支持 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID`，见 [SCRIPTS.md](../ai-sop-ops/SCRIPTS.md)） |
+| 智能修复 | `bash ai-sop-ops/sop-ctl.sh repair`（依次 `install-integrations` + `health-check`）；CI 若要 **install 失败即失败** 用 **`repair --strict`** |
+| 部署提示 | `bash ai-sop-ops/sop-ctl.sh deploy single` 或 `deploy saas`（打印 `docker compose` 示例） |
+| systemd 单元模板 | `bash ai-sop-ops/sop-ctl.sh register > /tmp/sop-manager.service`（再按需修改 User/ExecStart） |
+| 深度自检 | `bash ai-sop-ops/sop-ctl.sh doctor`（若 PATH 中已有 `sop` 则执行 `sop doctor`；否则尝试源码树 `sop_cli`；再否则降级为 `health-check.sh`） |
+| 规约同步到各工具可读位置 | `bash ai-sop-ops/sop-ctl.sh sync` |
+| 管理员账号（SQLite 等） | `bash ai-sop-ops/sop-ctl.sh reset-admin`（透传 `reset-admin.py` 子命令，见 [SCRIPTS.md](../ai-sop-ops/SCRIPTS.md)） |
+| 程序化调 Manager API | `bash ai-sop-ops/sop-ctl.sh manager`（`manager_client.py`，需 `MANAGER_URL` / `MANAGER_SOP_TOKEN` 等） |
+| 全量开发环境引导 | `bash ai-sop-ops/sop-ctl.sh bootstrap`（`bootstrap-dev.sh`） |
 | 版本与路径快照 | `version` · `env`（可加 **`--json`** 输出结构化字段） |
 | 查看后台 Manager 日志 | `logs` / `logs 200` / **`logs -f`**（`tail -f` `start-bg` 的 `manager-nohup.log`） |
 | 本机 URL / 打开浏览器 | **`url`** 打印根地址与 `/api/health`；**`open`** 在 macOS `open` / Linux `xdg-open` 打开根 URL |
 | 等待服务就绪 | **`wait-health`**（默认 60s 轮询 `GET /api/health`；**`--timeout SEC`**；可与 **`--json`** 联用输出 `{ok,waitedSec,port}`） |
 | 脚本自检 / 子命令列表 | **`self-check`**（`bash -n` + 补全文件存在；支持 **`--json`**）；**`commands`** 每行一条子命令，供 shell 脚本枚举 |
 
-已安装 **`pip install -e "packages/sop-cli[all]"`**（及 `sop-sdk`）时，推荐使用 Typer 命令：`sop init`、`sop doctor`、`sop agentd`、`sop task` 等；全量开发环境可执行 `bash sop/tools/bootstrap-dev.sh`。详见 `packages/sop-cli` 与 [sop/tools/bootstrap-dev.sh](../sop/tools/bootstrap-dev.sh)。
+已安装 **`pip install -e "packages/sop-cli[all]"`**（及 `sop-sdk`）时，推荐使用 Typer 命令：`sop init`、`sop doctor`、`sop agentd`、`sop task` 等；全量开发环境可执行 `bash ai-sop-ops/bootstrap-dev.sh`。详见 `packages/sop-cli` 与 [ai-sop-ops/bootstrap-dev.sh](../ai-sop-ops/bootstrap-dev.sh)。
 
 ## 2. 菜单与职责速览
 
@@ -164,9 +168,9 @@ A：生产入口须保证 **`StaticFiles` 挂载在 API 路由之后**，否则 
 | 文档 | 内容 |
 |------|------|
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 体系架构与 Web 扩展 |
-| [sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查与 Token 策略 |
+| [ai-sop/QUICK_REF.md](../ai-sop/QUICK_REF.md) | AI 速查与 Token 策略 |
 | [TUTORIAL.md](../TUTORIAL.md) | 全流程教程含 Web 章节 |
 | [apps/manager/README.md](../apps/manager/README.md) | 路由、页面模块、开发约定 |
 | [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与持久化 |
-| [sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |
-| [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | 本目录脚本与工具完整清单 |
+| [ai-sop-ops/CODEX_CLI.md](../ai-sop-ops/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |
+| [ai-sop-ops/SCRIPTS.md](../ai-sop-ops/SCRIPTS.md) | 本目录脚本与工具完整清单 |

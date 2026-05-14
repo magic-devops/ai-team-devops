@@ -1,8 +1,8 @@
-# 将本仓 `sop/` 与 `sop/tools` 迁移为 Git Submodule
+# 本仓 `ai-sop-ops` Submodule 与规约迁移说明
 
-> **前置条件**：远程已有  
-> - `git@github.com:magic-devops/ai-sop.git`（规约，已推送 `main`）  
-> - `git@github.com:magic-devops/ai-sop-ops.git`（运维脚本，已推送 `main`）
+> **当前状态（monorepo）**：根目录仅保留 **`ai-sop/`**（规约 Markdown，`magic-devops/ai-sop`）与 **`ai-sop-ops/`**（可执行运维）两个 Git submodule；**`path_config.sop_dir()` 只解析 `ai-sop/`**（或 `SOP_SPEC_ROOT` / `SOP_SOP_DIR`）。内嵌 **`sop/` 目录已删除**，Python 工具（`knowledge/lancedb_ops`、MCP 等）在 **`ai-sop-ops/`**。克隆后务必 **`git submodule update --init --recursive`**。**`SOP_OPS_ROOT`** 可覆盖运维根。
+
+> **说明**：下列「用 submodule 替换内嵌 `sop/`」步骤仅适用于**仍保留旧内嵌 `sop/` 树**的历史 fork；本 upstream 已完成迁移，新克隆无需执行 §2 的 `git rm -rf sop` + `submodule add sop`。
 
 ## 1. 备份当前 `sop/`（可选）
 
@@ -19,7 +19,7 @@ git submodule add git@github.com:magic-devops/ai-sop.git sop
 git submodule update --init --recursive
 ```
 
-## 3. 增加 `ai-sop-ops`（与 `sop` 并列）
+## 3. 增加 `ai-sop-ops`（与 `ai-sop` 并列于仓库根）
 
 ```bash
 git submodule add git@github.com:magic-devops/ai-sop-ops.git ai-sop-ops
