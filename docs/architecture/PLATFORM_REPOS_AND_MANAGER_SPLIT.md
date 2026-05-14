@@ -46,6 +46,9 @@ flowchart TB
 |------|-------------|------|----------------|
 | **ai-sop** | `git@github.com:magic-devops/ai-sop.git`（**已建库并推送 `main`**） | `specs/`、`agents/`、`knowledge/`、`skills/`、`templates/`、`workflow/*.md`、`quality/*.md`、`memory/*.md`、`core/*.md`、`custom/` 说明等 | 业务密钥、客户数据、与某产品绑死的 Python 服务代码 |
 | **ai-sop-ops** | `git@github.com:magic-devops/ai-sop-ops.git`（**已建库并推送 `main`**） | 原 `sop/tools` 中 **可执行** 能力：`start-manager`、`health-check`、`cleanup-legacy-runtime`、`sop-ctl`、`reset-admin`、hook 安装脚本、与本地文件系统强绑定的脚本；可选发布 **OCI 镜像 `ghcr.io/.../sop-ops`** | 大段领域业务规约正文（应引用 ai-sop） |
+
+**`ai-sop-ops` 仓内设计**（目录契约、环境变量、`make check`、版本策略）：见 [docs/ARCHITECTURE.md](https://github.com/magic-devops/ai-sop-ops/blob/main/docs/ARCHITECTURE.md) · [docs/ENVIRONMENT.md](https://github.com/magic-devops/ai-sop-ops/blob/main/docs/ENVIRONMENT.md) · [CONTRIBUTING.md](https://github.com/magic-devops/ai-sop-ops/blob/main/CONTRIBUTING.md)。
+
 | **ai-team-devops**（本仓） | 现有 remote | `apis/`、`apps/manager-api`、`apps/manager-worker`、`apps/manager-web`、`apps/agent-runtime`、`packages/*`、`plugins/`、**薄引用** ai-sop | 重复维护一份与 ai-sop 分叉的长期规约 |
 
 > **命名说明**：`ai-sop-ops` 与 `packages/sop-cli` 区分：`sop-cli` 面向 **开发者日常**（`sop task` / `sop login`）；`ai-sop-ops` 面向 **平台运维与本地编排**（起 Manager、自检、清理、备份）。二者可互相调用，但 **依赖方向** 应为 `sop-cli` →（可选）`sop-ops-core` 库，避免循环。
