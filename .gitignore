@@ -21,19 +21,23 @@ memory/snapshots/
 # 全局日志目录（若生成在仓库根）
 logs/
 
-# Web Manager 日志与本地 SQLite（遗留路径）
+# Web Manager 日志与本地 SQLite（遗留路径 + 当前包目录）
 sop/web/logs/
 sop/web/sop.db
 sop/web/sop.db-shm
 sop/web/sop.db-wal
+apps/manager/sop_manager/logs/
+apps/manager/sop_manager/sop.db
+apps/manager/sop_manager/sop.db-shm
+apps/manager/sop_manager/sop.db-wal
 
 # 环境变量与密钥（示例文件可提交）
 .env
 .env.*.local
-sop/web/.env
-sop/web/.env.local
+apps/manager/.env
+apps/manager/.env.local
 !.env.example
-!sop/web/.env.example
+!apps/manager/.env.example
 
 # Claude / Cursor 本地覆盖（若存在）
 .claude/settings.local.json

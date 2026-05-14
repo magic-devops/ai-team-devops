@@ -2,6 +2,8 @@
 
 > 面向 AI 智能体的完整开发规约体系，支持多智能体协作、进度追踪、记忆管理、质量控制。
 
+> **平台演进（与目录解耦）**：本目录长期将迁入独立仓库 **`git@github.com:magic-devops/ai-sop.git`**，由业务仓以 submodule / 固定 tag 依赖；可执行脚本迁入 **`ai-sop-ops`**。权威说明见仓库根 **[`docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md`](../docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md)**。
+
 ## 目录结构
 
 ```

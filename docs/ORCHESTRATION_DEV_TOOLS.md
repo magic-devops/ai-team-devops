@@ -1,6 +1,6 @@
 # Agent 编排 · 开发工具与受控安装
 
-说明 **Web 管理后台** 中「AI 能力 → Agent / 编排 / MCP / 模型」里的 **编排** 模块：开发工具管理、本机环境检查、AI 安装方案与 **白名单受控执行**。实现代码：`sop/web/routers/orchestration.py`、`sop/web/pages/orchestration.js`；环境检查委托 `sop/web/routers/docker_env.py` 的 `env_check()`。
+说明 **Web 管理后台** 中「AI 能力 → Agent / 编排 / MCP / 模型」里的 **编排** 模块：开发工具管理、本机环境检查、AI 安装方案与 **白名单受控执行**。实现代码：`apps/manager/sop_manager/routers/orchestration.py`、`apps/manager/sop_manager/pages/orchestration.js`；环境检查委托 `apps/manager/sop_manager/routers/docker_env.py` 的 `env_check()`。
 
 操作速览仍见 [USER_MANUAL.md §4.5](USER_MANUAL.md)。
 
@@ -20,7 +20,7 @@
 | **本机环境**（独立子页） | 与 Docker 页同源；可 **仅刷新检查**；缺失项可 **AI 方案**；若检查名与内置工具 id 一致可 **定位工具**（切换到「开发工具」并滚动到对应行）；受控安装仍从开发工具页发起。 |
 | **已隐藏的内置工具** | 单条恢复或 **恢复全部内置工具显示**。 |
 
-界面语言：`sop/web/pages/i18n.js` 中 `orch_*` 词条（中/英切换随全局语言）。
+界面语言：`apps/manager/sop_manager/pages/i18n.js` 中 `orch_*` 词条（中/英切换随全局语言）。
 
 ---
 
@@ -99,7 +99,7 @@
 | 文档 | 内容 |
 |------|------|
 | [USER_MANUAL.md](USER_MANUAL.md) | Web 操作手册（含 §4.5） |
-| [../sop/web/README.md](../sop/web/README.md) | Web 工程与路由总览 |
+| [../apps/manager/README.md](../apps/manager/README.md) | Web 工程与路由总览 |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构与 Web 扩展 |
 | [../sop/tools/TOOL_INTEGRATION.md](../sop/tools/TOOL_INTEGRATION.md) | 多工具适配与共享状态 |
 | [../sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | 本仓库 `sop/tools` 脚本与工具完整索引 |

@@ -1,6 +1,6 @@
 # Web 管理后台 · 使用手册
 
-面向**项目经理、开发、AI 辅助工作流**的操作说明。技术实现细节见 [sop/web/README.md](../sop/web/README.md)。
+面向**项目经理、开发、AI 辅助工作流**的操作说明。技术实现细节见 [apps/manager/README.md](../apps/manager/README.md)。
 
 ## 1. 启动与环境
 
@@ -41,7 +41,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 
 ### 1.2 鉴权与多项目（SaaS / 顶栏项目）
 
-- 登录后浏览器保存 **`sop-token`**（JWT）与 **`sop-current-project-id`**（当前项目）。业务请求须同时携带 **`Authorization`** 与 **`X-Project-Id`**，后端中间件才能把数据与文件路径落到正确项目（见 `sop/web/routers/project_scope_middleware.py`）。
+- 登录后浏览器保存 **`sop-token`**（JWT）与 **`sop-current-project-id`**（当前项目）。业务请求须同时携带 **`Authorization`** 与 **`X-Project-Id`**，后端中间件才能把数据与文件路径落到正确项目（见 `apps/manager/sop_manager/routers/project_scope_middleware.py`）。
 - **单项目模式**（`ADMIN_MODE=single`）：未选项目时服务端可用环境变量 `PROJECT_ID` 作为默认项目上下文。
 - **脚本 / CI**：推荐 `MANAGER_SOP_TOKEN` + `PROJECT_ID` 调用 `sop/tools/manager_client.py`；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 跑 `health-check.sh` 验证鉴权链路（见 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)）。
 
@@ -166,7 +166,7 @@ A：生产入口须保证 **`StaticFiles` 挂载在 API 路由之后**，否则 
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | 体系架构与 Web 扩展 |
 | [sop/QUICK_REF.md](../sop/QUICK_REF.md) | AI 速查与 Token 策略 |
 | [TUTORIAL.md](../TUTORIAL.md) | 全流程教程含 Web 章节 |
-| [sop/web/README.md](../sop/web/README.md) | 路由、页面模块、开发约定 |
+| [apps/manager/README.md](../apps/manager/README.md) | 路由、页面模块、开发约定 |
 | [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与持久化 |
 | [sop/tools/CODEX_CLI.md](../sop/tools/CODEX_CLI.md) | Codex CLI / hooks 集成规范 |
 | [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md) | 本目录脚本与工具完整清单 |

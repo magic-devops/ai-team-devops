@@ -18,7 +18,7 @@
 5. 发起 Pull Request
 
 ### 🔧 贡献代码
-Web 后台（`sop/web/`）和工具脚本（`sop/tools/`）欢迎 PR。
+Web 后台（`apps/manager/sop_manager/`）和工具脚本（`sop/tools/`）欢迎 PR。
 
 ## 规范文件贡献原则
 

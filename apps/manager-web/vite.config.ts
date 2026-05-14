@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-// 开发期：把 /api 和 /ws 反代到本地 Manager（8000）
+// 开发期：把 /api 和 /ws 反代到本地 Manager API（与 start-manager.sh 默认端口一致）
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -12,9 +12,9 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     proxy: {
-      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
-      "/ws": { target: "ws://127.0.0.1:8000", ws: true },
-      "/metrics": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/api": { target: "http://127.0.0.1:8765", changeOrigin: true },
+      "/ws": { target: "ws://127.0.0.1:8765", ws: true },
+      "/metrics": { target: "http://127.0.0.1:8765", changeOrigin: true },
     },
   },
   build: {

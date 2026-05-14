@@ -1,14 +1,14 @@
-# `@sop/web-next` — SOP Manager 新前端
+# `@sop/manager-web` — SOP Manager 浏览器端
 
-Vite + React 18 + TypeScript + Tailwind + shadcn 风格 + i18next + TanStack Query。
+Vite + React 18 + TypeScript + Tailwind + i18next + TanStack Query。通过 dev server **反代** `/api`、`/ws` 到本机 Manager（默认 **8765**，与 `start-manager.sh` 一致）。
 
 ## 快速开始
 
 ```bash
-cd apps/web-next
+cd apps/manager-web
 pnpm i           # 或 npm i
-pnpm dev         # 启动 http://localhost:5173；自动反代 /api 到 http://127.0.0.1:8000
-pnpm build       # 产出 dist/，由 Manager 静态托管 / CDN 分发
+pnpm dev         # http://localhost:5173 → /api 代理到 http://127.0.0.1:8765
+pnpm build       # 产出 dist/，由 Nginx / CDN / 任意静态站托管；与 API 域名分离部署
 ```
 
 ## 目录

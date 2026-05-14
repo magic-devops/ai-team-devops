@@ -6,13 +6,20 @@
 
 | 包 | 角色 | 主要技术 | 行数上限 |
 |----|------|---------|---------|
-| `apps/manager` | SaaS 后端 | FastAPI / SQLAlchemy / Pydantic | 单文件 < 500 |
+| **magic-devops/ai-sop**（外仓） | AI 规约、模板、协作 Markdown **单一真源** | Git + SemVer tag | — |
+| **magic-devops/ai-sop-ops**（外仓，建议） | 运维脚本、`bin`、本地起服与健康检查 | Bash / Python Typer / OCI | 单脚本 < 800 |
+| `apps/manager-api` | 管理面 **同步 API**（目标部署单元） | FastAPI / SQLAlchemy / Pydantic | 单文件 < 500 |
+| `apps/manager-worker` | **异步任务、工作流、批处理**（目标部署单元） | Redis Streams / Temporal / httpx | 单文件 < 500 |
+| `apps/manager` | **当前** API 实现载体（`sop_manager`），迁移后收敛或删除 | 同 manager-api | 单文件 < 500 |
+| `apps/manager-web` | Manager **UI** | Vite / React 18 / TS / Tailwind | 单文件 < 400 |
 | `apps/agent-runtime` | 项目侧守护 | Go 1.22 | 单文件 < 400 |
-| `packages/sop-cli` | 统一 CLI | Python Typer + Rich/Textual | 单文件 < 400 |
+| `packages/sop-cli` | 统一 CLI（开发者向） | Python Typer + Rich/Textual | 单文件 < 400 |
 | `packages/sop-sdk-python` | 项目侧 SDK | Python 3.10 + httpx | 单文件 < 400 |
-| `sop/` | 规约 + 工具脚本 | Markdown + Bash + Python | — |
+| `sop/`（本仓过渡） | 规约树 + 工具脚本，**迁移后**以 submodule 指向 ai-sop；脚本迁 ai-sop-ops | Markdown + Bash + Python | — |
 | `apis/` | 契约源 | YAML/Proto | — |
 | `plugins/` | 第三方扩展 | 各包独立 | — |
+
+**多仓库与 API/Worker 拆分权威说明**：[PLATFORM_REPOS_AND_MANAGER_SPLIT.md](PLATFORM_REPOS_AND_MANAGER_SPLIT.md)。
 
 ## Manager 内部 domains（M6 目标结构）
 

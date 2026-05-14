@@ -22,7 +22,7 @@ docker compose -f apps/manager/docker-compose.single.yml up -d
 ## 2. saas（生产推荐）
 
 ```bash
-cp sop/web/.env.example sop/web/.env
+cp apps/manager/.env.example apps/manager/.env
 # 编辑 .env：SECRET_KEY / DB_TYPE=postgres / VECTOR_DB_TYPE=qdrant / REDIS_URL ...
 
 docker compose -f apps/manager/docker-compose.saas.yml \

@@ -9,7 +9,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](sop/tools/TOOL_INTEGRATION.md)
 
-[快速开始](#快速开始) · [v2 架构](docs/architecture/OVERVIEW.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [v2 架构](docs/architecture/OVERVIEW.md) · [多仓库与 Manager 拆分](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
 </div>
 
@@ -102,9 +102,10 @@ bash sop/tools/install-integrations.sh
 # 3. 初始化你的项目（v1 方式）
 bash sop/tools/init-ai-project.sh my-app
 
-# 4. 启动 Web 管理后台（默认 PROJECT_PATH=当前目录）
+# 4. 启动 Manager API（默认 8765）+ 可选前端（5173）
 bash sop/tools/start-manager.sh
-# 打开 http://localhost:8765 — 详见 docs/USER_MANUAL.md 与 sop/web/README.md
+# 打开 http://localhost:8765/docs
+# 管理 UI：另开终端 cd apps/manager-web && pnpm i && pnpm dev → http://localhost:5173
 
 # 5. 健康检查
 bash sop/tools/health-check.sh
@@ -165,12 +166,15 @@ opencode  # 自动读取 opencode.json
 ```
 ai-team-devops/
 ├── apps/
-│   ├── manager/               # 🆕 SaaS Manager 打包/部署入口（FastAPI），独立可发版
-│   │   ├── sop_manager/       #   Python 包；目前透传 sop/web/，M6 渐进迁入 domains/
+│   ├── manager/               # 🆕 SaaS Manager（FastAPI API），独立可发版
+│   │   ├── sop_manager/       #   Python 包：路由与领域逻辑（未来按 domains/ 拆分）
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.single.yml
 │   │   ├── docker-compose.saas.yml   #   Postgres + Qdrant + Redis + Centrifugo + OTel
 │   │   └── pyproject.toml
+│   ├── manager-web/           #   管理 UI（Vite + React + TS）；`pnpm dev` 反代 API → 8765
+│   ├── manager-api/           #   目标：仅同步 API 进程（README；实现渐进自 sop_manager 迁出）
+│   ├── manager-worker/        #   目标：异步任务与工作流（README）
 │   └── agent-runtime/         # 🆕 sop-agentd Go 守护进程（单二进制，跨平台）
 │       ├── cmd/sop-agentd/
 │       ├── internal/{daemon,outbox,transport,mcp,a2a,ipc,security,config,logging}
@@ -185,11 +189,10 @@ ai-team-devops/
 │   ├── buf.yaml  buf.gen.yaml
 │   └── README.md
 ├── plugins/                   # 🆕 第三方插件示例 + 内置插件
-├── sop/                       # 既有规约 + 工具（不破坏）
+├── sop/                       # 规约树（长期迁入 magic-devops/ai-sop，见 docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md）
 │   ├── QUICK_REF.md           # ★ AI 启动必读速查卡（~2K tokens）
 │   ├── agents/ specs/ knowledge/ skills/ templates/ custom/ ...
 │   ├── integrations/mcp/      # MCP server：lancedb / tasks / llm
-│   ├── web/                   # Manager 当前源码（兼容期内继续在此维护）
 │   └── tools/                 # Shell / Python 工具脚本（bootstrap-dev / init-ai-project / start-manager / health-check / ...）
 ├── docs/
 │   ├── architecture/          # 🆕 OVERVIEW · MODULES · AI_FIRST · PROTOCOLS · SECURITY · DEPLOY · EVOLUTION
@@ -201,7 +204,7 @@ ai-team-devops/
 └── LICENSE
 ```
 
-> v2 与 v1 兼容：`sop/web` 仍是 Manager 源码所在地；`apps/manager` 是面向部署的外壳。所有旧脚本继续可用。
+> **前后端分离**：`apps/manager` 仅提供 REST/WebSocket API；浏览器界面在 `apps/manager-web`。本地典型流程：`bash sop/tools/start-manager.sh`（8765）+ `cd apps/manager-web && pnpm dev`（5173）。
 
 ---
 
@@ -211,7 +214,7 @@ ai-team-devops/
 |------|------|------|
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 使用 Web 后台的同事 | 启动、菜单、研发流、Vibe、常见问题 |
 | [TUTORIAL.md](TUTORIAL.md) | 全员 | 初始化、日常工作流、多 Agent、Web、自定义模块、`/evolve`、多工具 |
-| [sop/web/README.md](sop/web/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
+| [apps/manager/README.md](apps/manager/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
 | [sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md) | 运维 / 集成 | `sop/tools` 下 Shell、Python、配置与规范文档索引 |
 
 详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：项目初始化与配置、日常开发工作流、多 Agent 协作、Web 后台、自定义模块、自我进化、多工具切换与状态共享。

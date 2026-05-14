@@ -138,7 +138,7 @@ curl -sS -X POST "http://localhost:8765/api/v1/notify/broadcast?title=任务完�
 
 ## API 版本
 
-- **`/api/v1/*`** — Manager 业务 REST 唯一前缀（见 `sop/web/main.py` 路由注册）
+- **`/api/v1/*`** — Manager 业务 REST 唯一前缀（见 `apps/manager/sop_manager/main.py` 路由注册）
 - **`/metrics`** — Prometheus 文本（根路径，不在 `/api/v1` 下）
 
 ## Web 管理后台（人机协同）
@@ -148,7 +148,7 @@ curl -sS -X POST "http://localhost:8765/api/v1/notify/broadcast?title=任务完�
 - **研发全流程**：人读 `GET /api/v1/dev-flow/summary` 与页面建议，再决定是否调用模型；勿让模型重复拉取全表。  
 - **Vibe Coding**：会话/记忆外化在 `.ai-memory/vibe_*.json`；提示词用 **ID + 规范相对路径**，长文打开「规范文档 / 技术方案」页而非粘贴。  
 - **Agent 编排**：开发工具与环境检查、AI 安装 v2、白名单受控安装；API 与路径见 **`docs/ORCHESTRATION_DEV_TOOLS.md`**。  
-- 操作手册（人类）：仓库根 **`docs/USER_MANUAL.md`**（§4.5 编排）；开发与路由：**`sop/web/README.md`**。
+- 操作手册（人类）：仓库根 **`docs/USER_MANUAL.md`**（§4.5 编排）；开发与路由：**`apps/manager/README.md`**。
 
 ## 与架构文档同步
 

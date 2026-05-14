@@ -12,7 +12,7 @@ def _start(host: str, port: int, reload: bool) -> int:
     except ImportError:  # pragma: no cover
         print("缺少 uvicorn。请: pip install 'sop-manager'", file=sys.stderr)
         return 1
-    # 透传 sop_manager:get_app 工厂；它在内部完成 sop/web 路径注入
+    # sop_manager:get_app 工厂加载 FastAPI app
     uvicorn.run(
         "sop_manager:get_app",
         factory=True,

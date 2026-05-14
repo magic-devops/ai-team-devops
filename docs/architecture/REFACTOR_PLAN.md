@@ -6,11 +6,11 @@
 
 | 文件 | 当前行数 | 目标 | 拆分动作 |
 |------|----------|------|----------|
-| `sop/web/routers/docker_env.py` | 1660 | < 60 行 facade | 拆 6 个子模块入 `routers/env/` |
-| `sop/web/routers/orchestration.py` | 820 | < 400 | 抽 `_workflow.py`、`_sprint.py` 子模块 |
-| `sop/web/routers/vibe.py` | 605 | < 350 | 抽 `_vibe_codegen.py` |
-| `sop/web/routers/system.py` | 594 | < 350 | 抽 `_health.py`、`_diag.py` |
-| `sop/web/routers/requirements.py` | 575 | < 350 | 抽 `_parser.py` |
+| `apps/manager/sop_manager/routers/docker_env.py` | 1660 | < 60 行 facade | 拆 6 个子模块入 `routers/env/` |
+| `apps/manager/sop_manager/routers/orchestration.py` | 820 | < 400 | 抽 `_workflow.py`、`_sprint.py` 子模块 |
+| `apps/manager/sop_manager/routers/vibe.py` | 605 | < 350 | 抽 `_vibe_codegen.py` |
+| `apps/manager/sop_manager/routers/system.py` | 594 | < 350 | 抽 `_health.py`、`_diag.py` |
+| `apps/manager/sop_manager/routers/requirements.py` | 575 | < 350 | 抽 `_parser.py` |
 
 ## 2. 通用拆分规则
 
@@ -40,17 +40,17 @@
 
 | 想加什么功能 | 放哪儿 |
 |--------------|--------|
-| 新的 LLM 提供商 | `sop/web/routers/llm_gateway.py` 的 `_PROVIDERS` 字典 |
-| 新的向量库 | `sop/web/routers/vector_store_iface.py` 新加 Class 实现 `VectorStore` |
-| 新的工作流类型 | `sop/web/routers/workflow.py` 加 `@register("...")` 协程 |
+| 新的 LLM 提供商 | `apps/manager/sop_manager/routers/llm_gateway.py` 的 `_PROVIDERS` 字典 |
+| 新的向量库 | `apps/manager/sop_manager/routers/vector_store_iface.py` 新加 Class 实现 `VectorStore` |
+| 新的工作流类型 | `apps/manager/sop_manager/routers/workflow.py` 加 `@register("...")` 协程 |
 | 新的市场源 | `SOP_MARKETPLACE_REGISTRIES` 环境变量追加 |
 | 新的 SSO IdP | `SOP_SSO_PROVIDERS` 环境变量 + IdP 端配置 |
-| 新的 env 路由 | `sop/web/routers/env/<topic>.py`（**不要塞 docker_env.py**） |
-| 新的前端页面 | `apps/web-next/src/pages/<X>.tsx` + `App.tsx` NAV 数组 |
+| 新的 env 路由 | `apps/manager/sop_manager/routers/env/<topic>.py`（**不要塞 docker_env.py**） |
+| 新的前端页面 | `apps/manager-web/src/pages/<X>.tsx` + `App.tsx` NAV 数组 |
 | 新的 CLI 子命令 | `packages/sop-cli/sop_cli/commands/<x>.py` + `__main__.py` 注册 |
 
 ## 5. 持续度量
 
-- 每周跑：`wc -l sop/web/routers/*.py | sort -rn | head -10`
+- 每周跑：`wc -l apps/manager/sop_manager/routers/*.py | sort -rn | head -10`
 - 单文件 > 500 行触发 issue 自动建单（M11 反思蒸馏后台任务）
 - CI 上跑 ruff + mypy + pyright + tsc，超阈值阻止合并

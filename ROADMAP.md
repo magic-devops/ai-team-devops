@@ -29,10 +29,15 @@
 
 ## 🚧 v2.0-dev — 进行中（2026 H1）
 
+### 📌 平台化（多仓库 + Manager API/Worker）
+
+- **设计定稿**：[docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md)（`ai-sop`、`ai-sop-ops`、`manager-api`、`manager-worker`）
+- **占位目录**：`apps/manager-api`、`apps/manager-worker`（README）；实现渐进从 `apps/manager/sop_manager` 迁出
+
 ### ✅ 已落地（本仓库当前状态）
 
 - **M1 目录骨架**：`apps/manager`、`apps/agent-runtime`、`packages/sop-cli`、`packages/sop-sdk-python`、`apis/`、`plugins/`、`docs/architecture/` 全部就位
-- **M1 兼容外壳**：`apps/manager` 透传 `sop/web/`；新增 Dockerfile / Compose（single + saas）
+- **M1 兼容外壳**：`apps/manager` 承载 **`sop_manager`** Python 包（FastAPI）；Dockerfile / Compose（single + saas）
 - **M1 架构文档**（7 份）：OVERVIEW / MODULES / AI_FIRST / PROTOCOLS / SECURITY / DEPLOY / EVOLUTION
 - **M2 Schema-First**：OpenAPI 3.1（`apis/openapi/openapi.yaml`）+ gRPC proto + AsyncAPI 3 + buf 配置
 - **M3 统一 CLI** `sop`：init / login / status / agentd / task / rule / sync / doctor / llm
@@ -57,7 +62,7 @@
 - **M11 市场**：`routers/marketplace.py`（多 registry 索引 + 签名校验安装 + 评分聚合）
 - **M11 反思蒸馏**：`routers/reflection_distill.py`（按 category 分组 → LLM 提案规则 → 阈值自动入库）
 - **M12 SSO**：`routers/sso.py`（OIDC PKCE + JIT provisioning + 多 IdP + SAML 元数据 + Casbin ABAC + fallback ABAC）
-- **M12 新前端**：`apps/web-next`（Vite + React 18 + TS + Tailwind + i18next 中/英/日 + TanStack Query；8 个页面：驾驶舱/项目/任务/工作流/市场/审计/Copilot/设置）
+- **M12 新前端**：`apps/manager-web`（Vite + React 18 + TS + Tailwind + i18next 中/英/日 + TanStack Query；8 个页面：驾驶舱/项目/任务/工作流/市场/审计/Copilot/设置）
 - **生产编排**：`docker-compose.saas.yml` 增加 Prometheus + Grafana + Loki + Tempo + Temporal + Temporal-UI（按 profile 启停）
 
 ### 🚀 剩余里程碑

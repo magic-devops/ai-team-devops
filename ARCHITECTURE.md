@@ -9,6 +9,7 @@
 > | 主题 | 文档 |
 > |------|------|
 > | 总体架构 + 三层 + 五通道 + 12 个里程碑 | [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md) |
+> | **多仓库（ai-sop / ai-sop-ops）+ manager-api / manager-worker** | [`docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md`](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md) |
 > | 模块边界 / `@ai_safe_edit` 注释 / 命名约定 | [`docs/architecture/MODULES.md`](docs/architecture/MODULES.md) |
 > | AI-First 设计手册（高效 / 学习 / 护栏） | [`docs/architecture/AI_FIRST.md`](docs/architecture/AI_FIRST.md) |
 > | 协议契约：REST / WS / MCP / A2A / gRPC / Webhook / EventBus | [`docs/architecture/PROTOCOLS.md`](docs/architecture/PROTOCOLS.md) |
@@ -133,30 +134,21 @@ Windsurf     → .windsurfrules
 共享状态：memory/ + .ai-memory/（所有工具共用）
 ```
 
-### 6. Web 管理后台（sop/web/）
+### 6. 管理后台（前后端分离）
 
-人机协同入口：**模块化 FastAPI + Babel/React（无构建步骤）**，默认由 `sop/tools/start-manager.sh` 启动。
+- **API**：`apps/manager`（`sop_manager`），FastAPI，`/api/v1/*`，由 `sop/tools/start-manager.sh` 或 `sop-manager start` 启动。
+- **UI**：`apps/manager-web`（Vite + React + TS），开发期 `pnpm dev` 将 `/api`、`/ws` 反代到本机 Manager 端口。
 
 ```
-浏览器 index.html（shell）
-    ↓ 加载 pages/*.js 全局组件
-React 主应用（侧栏 + ALL_PAGES）
-    ↓ apiFetch（自动 Authorization + X-Project-Id + 超时）
-FastAPI main:app（业务 REST **`/api/v1/*`**；探活 **`/api/v1/health*`**；指标 **`/metrics`**）
-    ├─ project_scope_middleware（JWT 解析后按 X-Project-Id 注入 path_config）
-    ├─ routers/*  按域拆分（需求、任务、问题、Agent、技能、MCP、模型、编排、Docker、CLI、Vibe、技术方案、研发流…）
-    └─ LanceDB / 文件索引（resolved_project_path 下的 .sop-runtime/ai-memory/）
+apps/manager-web (浏览器)
+    ↓ HTTP /api/v1…
+sop_manager.main:app
+    ├─ project_scope_middleware（JWT + X-Project-Id → path_config）
+    ├─ sop_manager/routers/*  按域路由
+    └─ SQL + 向量存储（见环境变量与 docs/architecture/DATA_PLANE.md）
 ```
 
-**关键约定**
-
-| 项 | 说明 |
-|----|------|
-| `PROJECT_PATH` | 环境变量，指向被管理的业务仓库根；无 JWT 作用域时的默认磁盘根 |
-| 请求级作用域 | 已登录请求：`Bearer` + `X-Project-Id` → `path_config.resolved_project_path`（多项目/SaaS） |
-| 静态资源 | `StaticFiles` 须注册在 **所有 `/api/v1` 等业务路由之后**，避免吞掉 API |
-| 跨页导航 | 自定义事件 `app-set-tab`，便于「研发全流程」等模块跳转到既有菜单页 |
-| 低 Token | `GET /api/v1/dev-flow/summary` 一次返回聚合指标；Vibe 提供短提示模板与引用路径，避免贴全文规范 |
+**约定**：`PROJECT_PATH` 指向被管理业务仓根；已登录请求携带 `Authorization` + `X-Project-Id`。生产环境 API 与静态 UI **分域名**部署，由网关配置 CORS 与 TLS。
 
 **Vibe Coding（IDE 化能力摘要）**
 
@@ -205,13 +197,15 @@ Reviewer 审查（置信度 < 0.85 时触发）
 │   └── ORCHESTRATION_DEV_TOOLS.md  # 编排、开发工具、受控安装 API
 ├── CLAUDE.md.template
 ├── .claude/                   # Claude Code：settings / hooks / commands
+├── apps/
+│   ├── manager/               # FastAPI API（sop_manager）
+│   └── manager-web/         # 管理 UI（Vite + React）
 ├── sop/
 │   ├── QUICK_REF.md           # ★ AI 速查卡
 │   ├── README.md              # SOP 包内导航
 │   ├── agents/ core/ memory/ workflow/ quality/ skills/
 │   ├── specs/ custom/ templates/ knowledge/
-│   ├── tools/                 # Shell/Python 脚本与集成文档
-│   └── web/                   # FastAPI + 前端 SPA（main.py / routers/ / pages/）
+│   └── tools/                 # Shell/Python 脚本与集成文档
 └── ai-docs/                   # 可选参考文档
 ```
 

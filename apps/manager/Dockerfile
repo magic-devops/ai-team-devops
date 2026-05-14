@@ -7,7 +7,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# 拷入完整仓库（monorepo），让 sop_manager 能找到 sop/web/
+# 拷入完整仓库（monorepo）；Manager 实现在 apps/manager/sop_manager/
 COPY . /build
 
 # 安装 manager + 常用可选项（生产推荐 postgres/redis/otel/llm）

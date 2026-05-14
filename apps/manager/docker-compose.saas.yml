@@ -4,7 +4,7 @@ version: "3.9"
 # 单机最小 4 GiB 内存可起；生产建议 8 GiB+。
 #
 # 用法：
-#   cp ../../sop/web/.env.example apps/manager/.env  # 然后编辑
+#   cp apps/manager/.env.example apps/manager/.env  # 在仓库根执行；然后编辑
 #   docker compose -f apps/manager/docker-compose.saas.yml up -d
 
 services:
@@ -46,7 +46,7 @@ services:
       dockerfile: apps/manager/Dockerfile
     container_name: sop-manager
     env_file:
-      - ../../sop/web/.env
+      - .env
     environment:
       ADMIN_MODE: saas
       DB_TYPE: postgres

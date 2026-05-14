@@ -1,6 +1,6 @@
 # 总体架构（v2）
 
-> 版本: 2.0 · 状态: 草案已落地 M1 骨架 · 日期: 2026-05-14
+> 版本: 2.1 · 状态: 多仓库与 Manager 拆分设计已定稿（见 [PLATFORM_REPOS_AND_MANAGER_SPLIT.md](PLATFORM_REPOS_AND_MANAGER_SPLIT.md)） · 日期: 2026-05-14
 
 ## 设计目标
 
@@ -25,11 +25,9 @@
 └────────────────┬───────────────────────────────────────────────┬────────────────┘
                  │  HTTPS REST  WSS  gRPC  Webhook  ...           │ stdio MCP
                  ▼                                                ▼
-┌────────────────────────────── Manager（apps/manager, FastAPI） ─────────────────┐
-│  domains/{tenant,project,task,agent,llm,workflow,vibe,plugin,marketplace,...}   │
-│  core/{security,observability,db,events,casbin}                                 │
-│  存储：Postgres + Qdrant/pgvector + Redis Streams + 对象存储                     │
-│  外接：Temporal · LiteLLM · Centrifugo · OTel Collector                          │
+┌────────────────────────────── Manager 管理面（manager-api + manager-worker） ────┐
+│  API：同步 REST/WS；Worker：队列 + Temporal/批处理 + 外呼 LLM/向量                 │
+│  详见 docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,30 +43,39 @@
 | Webhook 出站 | 通知外部 | HMAC-SHA256 | ✅ |
 | Event Bus（Redis Streams） | 内部事件广播 | Redis | ⚪ saas 模式 |
 
-## 仓库布局（monorepo）
+## 仓库布局
+
+### 目标形态（多仓库 + 本仓运行时）
+
+| 仓库 | 说明 |
+|------|------|
+| **magic-devops/ai-sop** | AI 规约、模板、Agent 协作 Markdown **独立发版**；本仓通过 submodule / Release / `SOP_SPEC_ROOT` 消费 |
+| **magic-devops/ai-sop-ops**（建议） | 原 `sop/tools` 中 **可执行运维与本地编排**；`pipx` / OCI 镜像交付 |
+| **本仓 ai-team-devops** | `apis/`、`apps/manager-api`（规划）、`apps/manager-worker`（规划）、`apps/manager`（当前 API 实现）、`apps/manager-web`、`apps/agent-runtime`、`packages/*`、`plugins/` |
+
+详见 **[PLATFORM_REPOS_AND_MANAGER_SPLIT.md](PLATFORM_REPOS_AND_MANAGER_SPLIT.md)**。
+
+### 当前 monorepo 目录（过渡）
 
 ```
 ai-team-devops/
 ├── apps/
-│   ├── manager/              ← SaaS 后端（FastAPI）独立可部署
-│   └── agent-runtime/        ← 项目侧 Go 守护进程 sop-agentd
+│   ├── manager/               ← 当前：FastAPI 实现（sop_manager），将演进为 manager-api 真源
+│   ├── manager-api/           ← 目标：仅 API 进程（README 占位）
+│   ├── manager-worker/        ← 目标：异步任务 / 工作流（README 占位）
+│   ├── manager-web/           ← 管理 UI（Vite + React）
+│   └── agent-runtime/         ← sop-agentd（Go）
 ├── packages/
-│   ├── sop-cli/              ← 统一 CLI（Python Typer）
-│   └── sop-sdk-python/       ← 项目侧 Python SDK（manager_client 升级）
+│   ├── sop-cli/
+│   └── sop-sdk-python/
 ├── apis/
-│   ├── openapi/openapi.yaml  ← 单一事实源：REST 契约（生成 SDK/文档）
-│   ├── proto/                ← gRPC 契约
-│   └── asyncapi/             ← 事件契约（CloudEvents 1.0）
-├── plugins/                  ← 第三方插件示例 + 内置插件
-├── sop/                      ← 规约 + 知识 + 模板 + 工具脚本（保持兼容路径）
-│   ├── web/                  ← Manager 当前源码（兼容期内不动）
-│   ├── tools/                ← Shell/Python 工具脚本
+├── plugins/
+├── sop/                       ← 过渡：规约树；长期迁移至 ai-sop 后以 submodule 替换
+│   ├── tools/                 ← 过渡：运维脚本；长期迁移至 ai-sop-ops
 │   ├── specs/ agents/ knowledge/ skills/ templates/ custom/ ...
 ├── docs/
-│   ├── architecture/         ← OVERVIEW · MODULES · PROTOCOLS · SECURITY · DEPLOY · AI_FIRST · EVOLUTION
-│   ├── playbooks/            ← 运维/SRE 手册
-│   └── ...
-└── pyproject.toml            ← 顶层 workspace 元包
+│   └── architecture/          ← 含 PLATFORM_REPOS_AND_MANAGER_SPLIT.md
+└── pyproject.toml
 ```
 
 ## 关键设计原则（强制）

@@ -149,7 +149,7 @@ spring:
 - [ ] OAuth 2.0 state 参数防 CSRF
 ```
 
-## 8. 附录：SOP Web 管理后台（FastAPI / `sop/web`）
+## 8. 附录：SOP Web 管理后台（FastAPI / `apps/manager`（Python 包 `sop_manager`））
 
 本仓库自带管理后台，认证与项目作用域约定如下（与业务线 Java 规范独立，供脚本与前端对齐）：
 
@@ -161,4 +161,4 @@ spring:
 | 自动化脚本 | `sop/tools/manager_client.py`：环境变量 **`MANAGER_SOP_TOKEN`**（JWT）+ **`PROJECT_ID`**；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 配合 `health-check.sh` |
 | 失败语义 | SaaS 下无效项目或无权访问：**403/404** JSON `detail`，勿假定静默回退到 `PROJECT_PATH` |
 
-详细环境变量与路由见 **`sop/web/README.md`**、**`sop/tools/SCRIPTS.md`**。
+详细环境变量与路由见 **`apps/manager/README.md`**、**`sop/tools/SCRIPTS.md`**。
