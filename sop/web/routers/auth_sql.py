@@ -145,7 +145,14 @@ def require_role(min_role: str):
 
 
 def check_project_access(user: User, project_id: str, db: Session, min_role: str = "viewer"):
-    if user.role in ("super_admin", "tenant_admin"):
+    proj = db.query(Project).filter_by(id=project_id).first()
+    if not proj:
+        raise HTTPException(404, "项目不存在")
+    if user.role == "super_admin":
+        return
+    if proj.tenant_id != user.tenant_id:
+        raise HTTPException(403, "无项目访问权限")
+    if user.role == "tenant_admin":
         return
     member = db.query(ProjectMember).filter_by(project_id=project_id, user_id=user.id).first()
     if not member:
@@ -172,8 +179,30 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
     if not user or user.status != "active":
         raise HTTPException(401, "用户名或密码错误")
     token = _make_token(user.id, user.tenant_id, user.role, user.username)
-    return {"token": token, "user_id": user.id, "username": user.username,
-            "role": user.role, "tenant_id": user.tenant_id}
+    default_project_id = ""
+    try:
+        m = db.query(ProjectMember).filter_by(user_id=user.id).order_by(ProjectMember.project_id).first()
+        if m:
+            default_project_id = m.project_id
+        elif user.role in ("tenant_admin", "super_admin"):
+            p0 = (
+                db.query(Project)
+                .filter_by(tenant_id=user.tenant_id)
+                .order_by(Project.created_at.asc())
+                .first()
+            )
+            if p0:
+                default_project_id = p0.id
+    except Exception:
+        default_project_id = ""
+    return {
+        "token": token,
+        "user_id": user.id,
+        "username": user.username,
+        "role": user.role,
+        "tenant_id": user.tenant_id,
+        "default_project_id": default_project_id,
+    }
 
 
 @router.get("/me")

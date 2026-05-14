@@ -7,15 +7,15 @@ from pathlib import Path
 import json, os, re, subprocess, uuid, sys, tarfile
 from datetime import datetime as dt
 
-from path_config import ai_memory_root, project_path, runtime_dir
+from path_config import resolved_ai_memory_root, resolved_project_path, resolved_runtime_dir
 
 router = APIRouter(prefix="/api/system", tags=["system"])
 
-PROJECT_PATH = project_path()
-RUNTIME_DIR = runtime_dir()
-AI_MEMORY_ROOT = ai_memory_root()
 SOP_DIR = Path(__file__).parent.parent.parent  # sop/
-_WORKSPACE_ARTIFACTS_PATH = AI_MEMORY_ROOT / "workspace_artifacts.json"
+
+
+def _workspace_artifacts_path() -> Path:
+    return resolved_ai_memory_root() / "workspace_artifacts.json"
 
 # ── 脚本管理 ──────────────────────────────────────────────────────
 @router.get("/scripts")
@@ -49,7 +49,7 @@ def run_script(name: str):
     if not f.suffix == ".sh": raise HTTPException(400, "Only .sh scripts allowed")
     try:
         result = subprocess.run(["bash", str(f)], capture_output=True, text=True, timeout=30,
-                                cwd=str(PROJECT_PATH))
+                                cwd=str(resolved_project_path()))
         return {"stdout": result.stdout[-2000:], "stderr": result.stderr[-500:], "returncode": result.returncode}
     except subprocess.TimeoutExpired:
         return {"stdout": "", "stderr": "超时（30s）", "returncode": -1}
@@ -57,10 +57,10 @@ def run_script(name: str):
 # ── 配置管理 ──────────────────────────────────────────────────────
 @router.get("/config")
 def get_config():
-    settings = PROJECT_PATH / ".claude" / "settings.json"
-    opencode = PROJECT_PATH / "opencode.json"
-    codex_config = PROJECT_PATH / ".codex" / "config.toml"
-    codex_hooks = PROJECT_PATH / ".codex" / "hooks.json"
+    settings = resolved_project_path() / ".claude" / "settings.json"
+    opencode = resolved_project_path() / "opencode.json"
+    codex_config = resolved_project_path() / ".codex" / "config.toml"
+    codex_hooks = resolved_project_path() / ".codex" / "hooks.json"
     return {
         "claude_settings": json.loads(settings.read_text()) if settings.exists() else {},
         "opencode": json.loads(opencode.read_text()) if opencode.exists() else {},
@@ -70,7 +70,7 @@ def get_config():
 
 @router.patch("/config/claude")
 def update_claude_config(body: dict):
-    f = PROJECT_PATH / ".claude" / "settings.json"
+    f = resolved_project_path() / ".claude" / "settings.json"
     if not f.exists(): raise HTTPException(404, "settings.json not found")
     cfg = json.loads(f.read_text()); cfg.update(body)
     f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False)); return {"ok": True}
@@ -78,10 +78,10 @@ def update_claude_config(body: dict):
 # ── 记忆管理 ──────────────────────────────────────────────────────
 @router.get("/memory")
 def list_memory():
-    mem_dir = AI_MEMORY_ROOT
+    mem_dir = resolved_ai_memory_root()
     if not mem_dir.exists(): return {"rules": [], "snapshots": [], "lancedb_tables": []}
     rules = [f.name for f in sorted((mem_dir / "rules").glob("*.md"))] if (mem_dir / "rules").exists() else []
-    snaps = [f.name for f in sorted((PROJECT_PATH / "memory" / "snapshots").glob("*.json"))] if (PROJECT_PATH / "memory" / "snapshots").exists() else []
+    snaps = [f.name for f in sorted((resolved_project_path() / "memory" / "snapshots").glob("*.json"))] if (resolved_project_path() / "memory" / "snapshots").exists() else []
     try:
         import lancedb
         db = lancedb.connect(str(mem_dir / "lancedb"))
@@ -92,13 +92,13 @@ def list_memory():
 
 @router.get("/memory/rules/{filename}")
 def get_rule_file(filename: str):
-    f = (AI_MEMORY_ROOT / "rules" / filename).resolve()
+    f = (resolved_ai_memory_root() / "rules" / filename).resolve()
     if not f.exists(): raise HTTPException(404, "Not found")
     return {"content": f.read_text(errors="replace")}
 
 @router.delete("/memory/snapshots/{filename}")
 def delete_snapshot(filename: str):
-    f = PROJECT_PATH / "memory" / "snapshots" / filename
+    f = resolved_project_path() / "memory" / "snapshots" / filename
     if f.exists(): f.unlink()
     return {"ok": True}
 
@@ -106,7 +106,7 @@ def delete_snapshot(filename: str):
 def table_stats(table: str):
     try:
         import lancedb
-        db = lancedb.connect(str(AI_MEMORY_ROOT / "lancedb"))
+        db = lancedb.connect(str(resolved_ai_memory_root() / "lancedb"))
         t = db.open_table(table)
         df = t.to_pandas()
         return {"table": table, "rows": len(df), "columns": list(df.columns)}
@@ -115,10 +115,10 @@ def table_stats(table: str):
 
 
 def _load_workspace_artifacts() -> List[Dict[str, Any]]:
-    if not _WORKSPACE_ARTIFACTS_PATH.exists():
+    if not _workspace_artifacts_path().exists():
         return []
     try:
-        d = json.loads(_WORKSPACE_ARTIFACTS_PATH.read_text(encoding="utf-8"))
+        d = json.loads(_workspace_artifacts_path().read_text(encoding="utf-8"))
         arr = d.get("items") if isinstance(d, dict) else d
         return arr if isinstance(arr, list) else []
     except Exception:
@@ -126,8 +126,8 @@ def _load_workspace_artifacts() -> List[Dict[str, Any]]:
 
 
 def _save_workspace_artifacts(items: List[Dict[str, Any]]) -> None:
-    _WORKSPACE_ARTIFACTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _WORKSPACE_ARTIFACTS_PATH.write_text(
+    _workspace_artifacts_path().parent.mkdir(parents=True, exist_ok=True)
+    _workspace_artifacts_path().write_text(
         json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
@@ -136,8 +136,8 @@ def _safe_rel_under_project(rel: str) -> Path:
     rel = (rel or "").replace("\\", "/").strip("/")
     if not rel or ".." in rel or rel.startswith("/"):
         raise HTTPException(400, "path 须为仓库相对路径，禁止 ..")
-    target = (PROJECT_PATH / rel).resolve()
-    root = PROJECT_PATH.resolve()
+    target = (resolved_project_path() / rel).resolve()
+    root = resolved_project_path().resolve()
     if not str(target).startswith(str(root) + os.sep) and target != root:
         raise HTTPException(400, "path 越界")
     return target
@@ -179,7 +179,7 @@ def workspace_context(request: Request):
         enriched.append(row)
     scripts = list_scripts()[:40]
     return {
-        "project_path": str(PROJECT_PATH),
+        "project_path": str(resolved_project_path()),
         "api_base": api_base,
         "admin_ui_base": ui_base,
         "nav": nav,
@@ -243,8 +243,18 @@ def workspace_artifacts_delete(artifact_id: str):
 
 
 # ── 发布版本 / 备份 / 运维提示（管理后台自身）────────────────────────
-_ADMIN_RELEASE_PATH = AI_MEMORY_ROOT / "admin_release.json"
-_BACKUP_DIR = AI_MEMORY_ROOT / "admin_backups"
+def _admin_release_path() -> Path:
+    return resolved_ai_memory_root() / "admin_release.json"
+
+
+def _backup_dir() -> Path:
+    return resolved_ai_memory_root() / "admin_backups"
+
+
+def _reinit_backup_dir() -> Path:
+    return resolved_runtime_dir() / "reinit-backups"
+
+
 _BACKUP_SKIP_DIRS = frozenset(
     {"lancedb", "node_modules", "__pycache__", ".pytest_cache", ".git", "venv", ".venv", "dist", "build", ".mypy_cache"}
 )
@@ -256,10 +266,10 @@ def _utc_iso() -> str:
 
 
 def _load_release() -> Dict[str, Any]:
-    if not _ADMIN_RELEASE_PATH.is_file():
+    if not _admin_release_path().is_file():
         return {"displayVersion": "2.0", "notes": "", "updatedAt": None}
     try:
-        d = json.loads(_ADMIN_RELEASE_PATH.read_text(encoding="utf-8"))
+        d = json.loads(_admin_release_path().read_text(encoding="utf-8"))
         return {
             "displayVersion": str(d.get("displayVersion") or d.get("display_version") or "2.0")[:64],
             "notes": str(d.get("notes") or "")[:2000],
@@ -275,8 +285,8 @@ def _save_release(display_version: str, notes: str) -> Dict[str, Any]:
         "notes": (notes or "")[:2000],
         "updatedAt": _utc_iso(),
     }
-    _ADMIN_RELEASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _ADMIN_RELEASE_PATH.write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
+    _admin_release_path().parent.mkdir(parents=True, exist_ok=True)
+    _admin_release_path().write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
     return row
 
 
@@ -333,10 +343,10 @@ class BackupCreateBody(BaseModel):
 @router.get("/backups")
 def backups_list():
     """列出运行时 ai-memory/admin_backups 下由本接口生成的 tar.gz。"""
-    _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    _backup_dir().mkdir(parents=True, exist_ok=True)
     items: List[Dict[str, Any]] = []
-    root = _BACKUP_DIR.resolve()
-    for f in sorted(_BACKUP_DIR.glob("backup-*.tar.gz"), key=lambda x: x.stat().st_mtime, reverse=True):
+    root = _backup_dir().resolve()
+    for f in sorted(_backup_dir().glob("backup-*.tar.gz"), key=lambda x: x.stat().st_mtime, reverse=True):
         if not _backup_safe_name(f.name):
             continue
         fp = f.resolve()
@@ -359,21 +369,21 @@ def backup_create(body: BackupCreateBody):
     prof = (body.profile or "admin_state").strip().lower()
     if prof not in ("admin_state", "sop_web"):
         raise HTTPException(400, "profile 仅支持 admin_state | sop_web")
-    _BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    _backup_dir().mkdir(parents=True, exist_ok=True)
     ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
     name = f"backup-{prof}-{ts}.tar.gz"
-    out = (_BACKUP_DIR / name).resolve()
-    root_b = _BACKUP_DIR.resolve()
+    out = (_backup_dir() / name).resolve()
+    root_b = _backup_dir().resolve()
     if not str(out).startswith(str(root_b) + os.sep):
         raise HTTPException(500, "备份路径异常")
     added = 0
     with tarfile.open(out, "w:gz") as tf:
         if prof == "admin_state":
-            mem = AI_MEMORY_ROOT
+            mem = resolved_ai_memory_root()
             if mem.is_dir():
                 added += _tar_add_filtered(tf, mem, "ai-memory")
             for extra in (".cursorrules", "ARCHITECTURE.md", "README.md"):
-                p = PROJECT_PATH / extra
+                p = resolved_project_path() / extra
                 if p.is_file():
                     try:
                         if p.stat().st_size <= _BACKUP_MAX_FILE_BYTES:
@@ -394,8 +404,8 @@ def backup_download(name: str = Query(..., max_length=120)):
     fn = (name or "").strip()
     if not _backup_safe_name(fn):
         raise HTTPException(400, "非法文件名")
-    p = (_BACKUP_DIR / fn).resolve()
-    if not str(p).startswith(str(_BACKUP_DIR.resolve()) + os.sep) or not p.is_file():
+    p = (_backup_dir() / fn).resolve()
+    if not str(p).startswith(str(_backup_dir().resolve()) + os.sep) or not p.is_file():
         raise HTTPException(404, "不存在")
     return FileResponse(str(p), filename=fn, media_type="application/gzip")
 
@@ -405,8 +415,8 @@ def backup_delete(filename: str):
     fn = (filename or "").strip()
     if not _backup_safe_name(fn):
         raise HTTPException(400, "非法文件名")
-    p = (_BACKUP_DIR / fn).resolve()
-    if not str(p).startswith(str(_BACKUP_DIR.resolve()) + os.sep) or not p.is_file():
+    p = (_backup_dir() / fn).resolve()
+    if not str(p).startswith(str(_backup_dir().resolve()) + os.sep) or not p.is_file():
         raise HTTPException(404, "不存在")
     p.unlink()
     return {"ok": True}
@@ -418,7 +428,7 @@ def ops_process():
     return {
         "pid": os.getpid(),
         "cwd": str(Path.cwd()),
-        "projectPath": str(PROJECT_PATH),
+        "projectPath": str(resolved_project_path()),
         "executable": sys.executable,
     }
 
@@ -448,8 +458,12 @@ def ops_upgrade_hint():
 
 # ── 项目初始化 / 重置（封装 sop/tools/init-ai-project.sh）────────────────
 _INIT_SCRIPT = (SOP_DIR / "tools" / "init-ai-project.sh").resolve()
-_STATE_FILE = PROJECT_PATH / "memory" / "current_state.json"
-_REINIT_BACKUP_DIR = RUNTIME_DIR / "reinit-backups"
+
+
+def _state_file() -> Path:
+    return resolved_project_path() / "memory" / "current_state.json"
+
+
 _REINIT_TAR_RE = re.compile(r"^reinit-\d{8}-\d{6}\.tar\.gz$")
 _PROJECT_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$")
 
@@ -459,7 +473,7 @@ def _run_init_script(argv: List[str], timeout: int) -> Dict[str, Any]:
         raise HTTPException(404, "未找到 sop/tools/init-ai-project.sh（请确认在含 sop/ 的仓库根下运行管理后台）")
     cmd = ["bash", str(_INIT_SCRIPT)] + argv
     try:
-        r = subprocess.run(cmd, cwd=str(PROJECT_PATH), capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=str(resolved_project_path()), capture_output=True, text=True, timeout=timeout)
         return {
             "ok": r.returncode == 0,
             "returncode": r.returncode,
@@ -475,23 +489,23 @@ def _run_init_script(argv: List[str], timeout: int) -> Dict[str, Any]:
 @router.get("/project/bootstrap-status")
 def project_bootstrap_status():
     """未初始化页用：脚本是否存在、是否已有状态文件、两类备份数量与安全提示。"""
-    admin_bak = AI_MEMORY_ROOT / "admin_backups"
+    admin_bak = resolved_ai_memory_root() / "admin_backups"
     n_admin = 0
     if admin_bak.is_dir():
         n_admin = len([x for x in admin_bak.glob("backup-*.tar.gz") if x.is_file()])
     n_reinit = 0
-    if _REINIT_BACKUP_DIR.is_dir():
-        n_reinit = len([x for x in _REINIT_BACKUP_DIR.glob("reinit-*.tar.gz") if x.is_file()])
+    if _reinit_backup_dir().is_dir():
+        n_reinit = len([x for x in _reinit_backup_dir().glob("reinit-*.tar.gz") if x.is_file()])
     try:
-        rel_script = str(_INIT_SCRIPT.relative_to(PROJECT_PATH.resolve()))
+        rel_script = str(_INIT_SCRIPT.relative_to(resolved_project_path().resolve()))
     except ValueError:
         rel_script = str(_INIT_SCRIPT)
     try:
-        reinit_dir_rel = str(_REINIT_BACKUP_DIR.relative_to(PROJECT_PATH))
+        reinit_dir_rel = str(_reinit_backup_dir().relative_to(resolved_project_path()))
     except ValueError:
-        reinit_dir_rel = str(_REINIT_BACKUP_DIR)
+        reinit_dir_rel = str(_reinit_backup_dir())
     return {
-        "initialized": _STATE_FILE.is_file(),
+        "initialized": _state_file().is_file(),
         "statePath": "memory/current_state.json",
         "initScriptReady": _INIT_SCRIPT.is_file(),
         "initScriptPath": rel_script,
@@ -499,7 +513,7 @@ def project_bootstrap_status():
         "reinitBackupsCount": n_reinit,
         "reinitBackupDir": reinit_dir_rel,
         "safetyReminders": [
-            "初始化与重置会在服务器上对当前 PROJECT_PATH 执行 shell 脚本，请仅在可信环境使用。",
+            "初始化与重置会在服务器上对当前项目根目录执行 shell 脚本，请仅在可信环境使用。",
             "重置（reinit）默认会先打包 memory、运行时 ai-memory（及项目根 .ai-memory 符号链接若存在）、CLAUDE.md 等至运行时 reinit-backups/，再删除并重建；仍建议先在「系统管理 → 运维/版本」创建 admin_state 备份。",
             "重置需手动在确认框输入 REINIT；无法撤销，请确认无未提交的重要改动。",
         ],
@@ -510,10 +524,10 @@ def project_bootstrap_status():
 def project_reinit_backups_list():
     """列出 init-ai-project.sh reinit 生成的 tar 包。"""
     items: List[Dict[str, Any]] = []
-    if not _REINIT_BACKUP_DIR.is_dir():
+    if not _reinit_backup_dir().is_dir():
         return {"items": []}
-    root = _REINIT_BACKUP_DIR.resolve()
-    for f in sorted(_REINIT_BACKUP_DIR.glob("reinit-*.tar.gz"), key=lambda x: x.stat().st_mtime, reverse=True):
+    root = _reinit_backup_dir().resolve()
+    for f in sorted(_reinit_backup_dir().glob("reinit-*.tar.gz"), key=lambda x: x.stat().st_mtime, reverse=True):
         if not f.is_file() or not _REINIT_TAR_RE.match(f.name):
             continue
         fp = f.resolve()
@@ -535,8 +549,8 @@ def project_reinit_backup_download(name: str = Query(..., max_length=120)):
     fn = (name or "").strip()
     if not _REINIT_TAR_RE.match(fn):
         raise HTTPException(400, "非法文件名")
-    p = (_REINIT_BACKUP_DIR / fn).resolve()
-    if not str(p).startswith(str(_REINIT_BACKUP_DIR.resolve()) + os.sep) or not p.is_file():
+    p = (_reinit_backup_dir() / fn).resolve()
+    if not str(p).startswith(str(_reinit_backup_dir().resolve()) + os.sep) or not p.is_file():
         raise HTTPException(404, "不存在")
     return FileResponse(str(p), filename=fn, media_type="application/gzip")
 
@@ -547,7 +561,7 @@ class ProjectInitBody(BaseModel):
 
 @router.post("/project/init")
 def project_init_run(body: ProjectInitBody):
-    """首次初始化：等价于 bash sop/tools/init-ai-project.sh <project_id>（工作目录为 PROJECT_PATH）。"""
+    """首次初始化：等价于 bash sop/tools/init-ai-project.sh <project_id>（工作目录为项目根）。"""
     pid = body.project_id.strip()
     if not _PROJECT_ID_RE.match(pid):
         raise HTTPException(400, "project_id 须为 2–64 位：字母或数字开头，仅含字母、数字、下划线、连字符")
@@ -575,6 +589,6 @@ def project_reinit_run(body: ProjectReinitBody):
         if not _PROJECT_ID_RE.match(pid):
             raise HTTPException(400, "非法 project_id")
         args.append(pid)
-    elif not _STATE_FILE.is_file():
+    elif not _state_file().is_file():
         raise HTTPException(400, "未填写 project_id 且不存在 memory/current_state.json，无法推断项目名")
     return _run_init_script(args, timeout=900)

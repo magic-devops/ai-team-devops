@@ -116,7 +116,7 @@ cat .ai-memory/rules/RULES.md
 | 配置工具 | `tools/MCP_INTEGRATION.md` + `tools/AUTOMATION_TRIGGERS.md` |
 | Hermes 工具调用/CoT/反思 | `agents/HERMES_AGENT.md` |
 | Agent 自进化 | `agents/SELF_EVOLUTION.md` + `agents/HERMES_AGENT.md#反思驱动进化` |
-| 查看项目进展（人工） | `web/README.md` → `bash sop/tools/start-manager.sh`；操作说明见仓库根 `docs/USER_MANUAL.md` |
+| 查看项目进展（人工） | `web/README.md` → `bash sop/tools/start-manager.sh`；JWT + 顶栏 **`X-Project-Id`**；手册见仓库根 `docs/USER_MANUAL.md`（§1.2） |
 
 ## 核心设计理念
 

@@ -4,10 +4,13 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 from pathlib import Path
 import json, os
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/models", tags=["models"])
-MODELS_FILE = ai_memory_root() / "models.json"
+
+
+def _models_file() -> Path:
+    return resolved_ai_memory_root() / "models.json"
 
 BUILTIN_MODELS = [
     {"id":"claude-opus-4-7","provider":"anthropic","name":"Claude Opus 4.7","context":200000,"recommended":True},
@@ -20,11 +23,11 @@ BUILTIN_MODELS = [
 ]
 
 def _load():
-    if MODELS_FILE.exists(): return json.loads(MODELS_FILE.read_text())
+    if _models_file().exists(): return json.loads(_models_file().read_text())
     return {"providers": {}, "custom_models": [], "default_model": "claude-opus-4-7",
             "role_models": {}}  # role -> model_id
 
-def _save(d): MODELS_FILE.parent.mkdir(parents=True, exist_ok=True); MODELS_FILE.write_text(json.dumps(d, indent=2))
+def _save(d): _models_file().parent.mkdir(parents=True, exist_ok=True); _models_file().write_text(json.dumps(d, indent=2))
 
 class ProviderConfig(BaseModel):
     name: str; api_key: str = ""; base_url: Optional[str] = None; enabled: bool = True

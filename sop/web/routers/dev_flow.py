@@ -10,13 +10,14 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
-from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, rows
+from path_config import resolved_ai_memory_root, resolved_project_path
+from .db_sql_compat import rows
 
 router = APIRouter(prefix="/api/dev-flow", tags=["dev-flow"])
 
 
 def _design_docs_count() -> int:
-    p = AI_MEMORY_ROOT / "tech_design" / "index.json"
+    p = resolved_ai_memory_root() / "tech_design" / "index.json"
     if not p.exists():
         return 0
     try:
@@ -27,14 +28,14 @@ def _design_docs_count() -> int:
 
 
 def _count_agents() -> int:
-    d = AI_MEMORY_ROOT / "agents"
+    d = resolved_ai_memory_root() / "agents"
     if not d.is_dir():
         return 0
     return len(list(d.glob("agent_*.json")))
 
 
 def _count_groups() -> int:
-    d = AI_MEMORY_ROOT / "agents"
+    d = resolved_ai_memory_root() / "agents"
     if not d.is_dir():
         return 0
     return len(list(d.glob("group_*.json")))
@@ -65,7 +66,7 @@ def dev_flow_summary() -> Dict[str, Any]:
     open_issues = [i for i in issues if (i.get("status") or "").lower() in ("open", "reopened", "new")]
 
     return {
-        "project_path": str(PROJECT_PATH.resolve()),
+        "project_path": str(resolved_project_path().resolve()),
         "requirements": {
             "total": len(reqs),
             "by_status": req_by_status,
@@ -91,9 +92,9 @@ def dev_flow_summary() -> Dict[str, Any]:
         "design_docs": {"count": _design_docs_count()},
         "agents": {"definitions": _count_agents(), "groups": _count_groups()},
         "repo_hints": {
-            "dockerfile": (PROJECT_PATH / "Dockerfile").exists(),
-            "compose": (PROJECT_PATH / "docker-compose.yml").exists()
-            or (PROJECT_PATH / "compose.yaml").exists(),
-            "specs_dir": (PROJECT_PATH / "specs").is_dir(),
+            "dockerfile": (resolved_project_path() / "Dockerfile").exists(),
+            "compose": (resolved_project_path() / "docker-compose.yml").exists()
+            or (resolved_project_path() / "compose.yaml").exists(),
+            "specs_dir": (resolved_project_path() / "specs").is_dir(),
         },
     }

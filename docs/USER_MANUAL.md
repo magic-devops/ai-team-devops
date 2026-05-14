@@ -35,8 +35,14 @@ PORT=9000 PROJECT_PATH=/path/to/app bash sop/tools/start-manager.sh
 |------|------|
 | 健康检查 | `bash sop/tools/health-check.sh` |
 | 忘记管理员密码 / 新建管理员 | `python3 sop/tools/reset-admin.py`（交互式）或 `python3 sop/tools/reset-admin.py reset <用户> <新密码>`（见脚本头说明，密码长度等校验） |
-| 脚本或 CI 调 Manager API | 配置 `MANAGER_URL`、`MANAGER_API_KEY` 等后 `python3 sop/tools/manager_client.py`（见文件内用法） |
+| 脚本或 CI 调 Manager API | 配置 `MANAGER_URL`、`PROJECT_ID`（`X-Project-Id`）、**`MANAGER_SOP_TOKEN`**（登录 JWT，推荐）与可选 `MANAGER_API_KEY` 后执行 `python3 sop/tools/manager_client.py`（见文件内用法） |
 | 与 `start-manager` 等价的备用入口 | `bash sop/tools/start-dashboard.sh` |
+
+### 1.2 鉴权与多项目（SaaS / 顶栏项目）
+
+- 登录后浏览器保存 **`sop-token`**（JWT）与 **`sop-current-project-id`**（当前项目）。业务请求须同时携带 **`Authorization`** 与 **`X-Project-Id`**，后端中间件才能把数据与文件路径落到正确项目（见 `sop/web/routers/project_scope_middleware.py`）。
+- **单项目模式**（`ADMIN_MODE=single`）：未选项目时服务端可用环境变量 `PROJECT_ID` 作为默认项目上下文。
+- **脚本 / CI**：推荐 `MANAGER_SOP_TOKEN` + `PROJECT_ID` 调用 `sop/tools/manager_client.py`；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 跑 `health-check.sh` 验证鉴权链路（见 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)）。
 
 ## 2. 菜单与职责速览
 

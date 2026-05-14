@@ -16,7 +16,7 @@ const AuditPage = () => {
     if (filter.action) q.set('action', filter.action);
     if (filter.resource_type) q.set('resource_type', filter.resource_type);
     if (filter.user_id) q.set('user_id', filter.user_id);
-    fetch(`${API}/audit?${q}`, { headers: authHeaders() })
+    apiFetch(`/audit?${q}`, { headers: authHeaders() })
       .then(r => r.json()).then(d => { setItems(d.items || []); setTotal(d.total || 0); setPage(p); })
       .catch(() => {}).finally(() => setLoading(false));
   };

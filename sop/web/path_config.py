@@ -8,7 +8,73 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from contextvars import ContextVar, Token
 from pathlib import Path
+from typing import Optional, Tuple
+
+# ── 请求级项目作用域（SaaS / 多项目：由中间件在 JWT 解析后注入）──────────────
+_ctx_project_path: ContextVar[Optional[Path]] = ContextVar("sop_ctx_project_path", default=None)
+_ctx_tenant_id: ContextVar[Optional[str]] = ContextVar("sop_ctx_tenant_id", default=None)
+_ctx_project_id: ContextVar[Optional[str]] = ContextVar("sop_ctx_project_id", default=None)
+
+
+def set_request_scope(tenant_id: str, project_id: str, project_path: Path) -> Tuple[Token, Token, Token]:
+    """返回三个 reset token，须在请求结束时 reset_request_scope。"""
+    pp = Path(project_path).expanduser().resolve()
+    return (
+        _ctx_tenant_id.set(str(tenant_id)),
+        _ctx_project_id.set(str(project_id)),
+        _ctx_project_path.set(pp),
+    )
+
+
+def reset_request_scope(tokens: Tuple[Token, Token, Token]) -> None:
+    _ctx_tenant_id.reset(tokens[0])
+    _ctx_project_id.reset(tokens[1])
+    _ctx_project_path.reset(tokens[2])
+
+
+def request_scope_active() -> bool:
+    return _ctx_project_path.get() is not None
+
+
+def resolved_tenant_id() -> str:
+    t = _ctx_tenant_id.get()
+    if t:
+        return str(t)
+    return (os.environ.get("TENANT_ID", "t-default") or "t-default").strip()
+
+
+def resolved_project_id() -> str:
+    t = _ctx_project_id.get()
+    if t:
+        return str(t)
+    return (os.environ.get("PROJECT_ID", "default") or "default").strip()
+
+
+def resolved_project_path() -> Path:
+    """有请求作用域时用 DB 中的 project_path；否则用环境变量 PROJECT_PATH。"""
+    p = _ctx_project_path.get()
+    if p is not None:
+        return p
+    return project_path()
+
+
+def resolved_runtime_dir() -> Path:
+    """有请求作用域时固定为 {项目根}/.sop-runtime（忽略全局 SOP_RUNTIME_DIR，避免多租串路径）。"""
+    if _ctx_project_path.get() is not None:
+        return resolved_project_path() / ".sop-runtime"
+    raw = os.environ.get("SOP_RUNTIME_DIR", "").strip()
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return project_path() / ".sop-runtime"
+
+
+def resolved_ai_memory_root() -> Path:
+    """有请求作用域时用该项目 runtime 下 ai-memory；否则沿用原 env / 默认逻辑。"""
+    if _ctx_project_path.get() is not None:
+        return resolved_runtime_dir() / "ai-memory"
+    return ai_memory_root()
 
 _WEB_DIR = Path(__file__).resolve().parent
 
@@ -157,10 +223,17 @@ def apply_startup_defaults() -> None:
 
 
 def runtime_paths_summary() -> dict:
-    """供健康检查或调试 API 使用。"""
-    return {
-        "projectPath": str(project_path()),
-        "runtimeDir": str(runtime_dir()),
-        "aiMemoryRoot": str(ai_memory_root()),
+    """供健康检查或调试 API 使用（请求内若有作用域则反映当前项目）。"""
+    out = {
+        "projectPath": str(resolved_project_path()),
+        "runtimeDir": str(resolved_runtime_dir()),
+        "aiMemoryRoot": str(resolved_ai_memory_root()),
         "logDir": os.getenv("LOG_DIR", ""),
     }
+    if request_scope_active():
+        out["scope"] = "request"
+        out["scopedTenantId"] = resolved_tenant_id()
+        out["scopedProjectId"] = resolved_project_id()
+    else:
+        out["scope"] = "process"
+    return out

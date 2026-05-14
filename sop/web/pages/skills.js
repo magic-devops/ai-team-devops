@@ -4,14 +4,14 @@ function SkillManager() {
   const [form,setForm] = React.useState({skill_id:'',name:'',description:'',agent_role:'All',trigger:'',execution:'',a2a_exposed:false,mcp_tool:false,lancedb_context:false,context_budget:10000});
 
   const save = () => {
-    fetch(`${API}/skills`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/skills`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(false);reload();showToast('技能已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const del = (id) => {
     if(!confirm('确认删除？')) return;
-    fetch(`${API}/skills/${id}`,{method:'DELETE'})
+    apiFetch(`/skills/${id}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已删除','ok');})
       .catch(()=>showToast('删除失败','err'));

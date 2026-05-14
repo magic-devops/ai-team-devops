@@ -1,7 +1,7 @@
 // 系统健康监控页面
 window.i18nExtend && window.i18nExtend({
-  zh: { page_health: '健康监控', health_refresh: '刷新', health_loading: '加载中...', health_fail: '健康检查失败', health_updated: '更新: {t}', health_metrics: 'Prometheus 指标端点: ' },
-  en: { page_health: 'Health Monitor', health_refresh: 'Refresh', health_loading: 'Loading...', health_fail: 'Health check failed', health_updated: 'Updated: {t}', health_metrics: 'Prometheus metrics: ' },
+  zh: { page_health: '健康监控', health_refresh: '刷新', health_loading: '加载中...', health_fail: '健康检查失败', health_updated: '更新: {t}', health_metrics: 'Prometheus 指标端点: ', health_scope: '作用域', health_scope_request: '请求级（含 X-Project-Id）', health_scope_process: '进程级', health_scoped_project: '解析项目 ID', health_scoped_tenant: '解析租户 ID', health_project_path: '项目根路径' },
+  en: { page_health: 'Health Monitor', health_refresh: 'Refresh', health_loading: 'Loading...', health_fail: 'Health check failed', health_updated: 'Updated: {t}', health_metrics: 'Prometheus metrics: ', health_scope: 'Scope', health_scope_request: 'Request (X-Project-Id)', health_scope_process: 'Process', health_scoped_project: 'Resolved project ID', health_scoped_tenant: 'Resolved tenant ID', health_project_path: 'Project root' },
 });
 const HealthPage = () => {
   const [data, setData] = React.useState(null);
@@ -10,18 +10,37 @@ const HealthPage = () => {
 
   const load = () => {
     setLoading(true);
-    fetch(`${API}/health/detail`, { headers: authHeaders() })
+    apiFetch(`/health/detail`, { headers: authHeaders() })
       .then(r => r.json()).then(d => { setData(d); setLastRefresh(new Date().toLocaleTimeString()); })
       .catch(() => {}).finally(() => setLoading(false));
   };
 
-  React.useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
+  React.useEffect(() => {
+    load();
+    const t = setInterval(load, 30000);
+    const onProj = () => load();
+    window.addEventListener('devdash-project-change', onProj);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('devdash-project-change', onProj);
+    };
+  }, []);
 
   if (loading && !data) return React.createElement('div', { style: { padding: 32, color: 'var(--text3)' } }, '加载中...');
   if (!data) return React.createElement('div', { style: { padding: 32, color: '#f87171' } }, '健康检查失败');
 
+  const tr = (k, v) => (typeof window.t === 'function' ? window.t(k, v) : k);
+  const paths = data.paths || {};
+  const scopeLabel = paths.scope === 'request' ? tr('health_scope_request') : tr('health_scope_process');
   const checks = data.checks || {};
   const statusColor = (ok) => ok ? '#22c55e' : '#ef4444';
+
+  const scopeCards = [
+    { label: tr('health_scope'), value: scopeLabel },
+    ...(paths.scopedProjectId ? [{ label: tr('health_scoped_project'), value: paths.scopedProjectId }] : []),
+    ...(paths.scopedTenantId ? [{ label: tr('health_scoped_tenant'), value: paths.scopedTenantId }] : []),
+    { label: tr('health_project_path'), value: paths.projectPath || '—' },
+  ];
 
   return React.createElement('div', { style: { padding: '24px 32px' } },
     React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 } },
@@ -40,6 +59,12 @@ const HealthPage = () => {
       ].map(item => React.createElement('div', { key: item.label, style: { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 140 } },
         React.createElement('div', { style: { fontSize: 12, color: 'var(--text3)', marginBottom: 4 } }, item.label),
         React.createElement('div', { style: { fontSize: 18, fontWeight: 700, color: item.color || 'var(--text)' } }, item.value)
+      ))
+    ),
+    React.createElement('div', { style: { display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' } },
+      scopeCards.map(item => React.createElement('div', { key: item.label, style: { background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 20px', minWidth: 160, maxWidth: 420 } },
+        React.createElement('div', { style: { fontSize: 12, color: 'var(--text3)', marginBottom: 4 } }, item.label),
+        React.createElement('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--text)', wordBreak: 'break-all', fontFamily: item.value && String(item.value).length > 40 ? 'monospace' : 'inherit' } }, item.value)
       ))
     ),
     // 各项检查

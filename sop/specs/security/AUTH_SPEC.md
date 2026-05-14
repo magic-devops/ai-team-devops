@@ -1,6 +1,6 @@
 # 认证授权规范
 
-> 版本: v1.0 | 更新: 2026-05-12
+> 版本: v1.0 | 更新: 2026-05-14
 > 覆盖: JWT · OAuth 2.0 · RBAC · 多端认证（Web/移动/小程序）
 
 ## 1. 认证方案选型
@@ -148,3 +148,17 @@ spring:
 - [ ] openid 只在后端存储，不传给前端
 - [ ] OAuth 2.0 state 参数防 CSRF
 ```
+
+## 8. 附录：SOP Web 管理后台（FastAPI / `sop/web`）
+
+本仓库自带管理后台，认证与项目作用域约定如下（与业务线 Java 规范独立，供脚本与前端对齐）：
+
+| 项 | 约定 |
+|----|------|
+| 用户登录 | `POST /api/auth/login` → JWT；SPA 存 `localStorage['sop-token']`（实现以仓库代码为准） |
+| 业务请求 | `Authorization: Bearer <JWT>` + **`X-Project-Id: <projects.id>`**；由 `project_scope_middleware` 解析 `path_config.resolved_project_path` |
+| 公开路径 | `/api/auth/*`、`/api/health` 等不参与项目作用域注入 |
+| 自动化脚本 | `sop/tools/manager_client.py`：环境变量 **`MANAGER_SOP_TOKEN`**（JWT）+ **`PROJECT_ID`**；可选 `HEALTH_CHECK_TOKEN` + `HEALTH_CHECK_PROJECT_ID` 配合 `health-check.sh` |
+| 失败语义 | SaaS 下无效项目或无权访问：**403/404** JSON `detail`，勿假定静默回退到 `PROJECT_PATH` |
+
+详细环境变量与路由见 **`sop/web/README.md`**、**`sop/tools/SCRIPTS.md`**。

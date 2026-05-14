@@ -20,7 +20,7 @@
 <link rel="apple-touch-icon" href="/assets/brand-mark.png"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="pages/i18n.js?v=20260513orchui2"></script>
+<script src="pages/i18n.js?v=20260514a"></script>
 <script src="pages/i18n-extend.js?v=20260513c"></script>
 <script>
 (function () {
@@ -29,6 +29,8 @@
       zh: {
         topbar_logout: '退出',
         topbar_data_hub: '数据港',
+        topbar_project: '项目',
+        topbar_project_hint: '切换后 API 将带上 X-Project-Id；看板与任务等数据随项目变化',
         dh_title: '项目数据导出 / 导入',
         dh_intro: '导出为 JSON 备份或迁移；导入仅处理需求、任务、缺陷、Sprint 四表，按记录 id 与当前租户/项目合并（同 id 覆盖，新 id 新增）。Agent 反思仅支持导出。',
         dh_sec_export: '导出范围',
@@ -65,6 +67,8 @@
       en: {
         topbar_logout: 'Sign out',
         topbar_data_hub: 'Data hub',
+        topbar_project: 'Project',
+        topbar_project_hint: 'Switches X-Project-Id on API calls; dashboard and tasks follow the selected project',
         dh_title: 'Export / import project data',
         dh_intro: 'Export JSON for backup or migration. Import merges requirements, tasks, issues and sprints by id into the current tenant/project (same id updates, new ids insert). Agent reflections are export-only.',
         dh_sec_export: 'Export scope',
@@ -104,30 +108,30 @@
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <!-- 模块化页面文件（每个文件独立，AI 按需修改） -->
-<script type="text/babel" src="pages/agents.js"></script>
+<script type="text/babel" src="pages/agents.js?v=20260513e"></script>
 <script type="text/babel" src="pages/skills.js"></script>
 <script type="text/babel" src="pages/mcp.js"></script>
 <script type="text/babel" src="pages/system.js?v=20260512c"></script>
 <script type="text/babel" src="pages/auth.js?v=20260513roles"></script>
 <script type="text/babel" src="pages/models.js?v=20260512h"></script>
 <script type="text/babel" src="pages/orchestration.js?v=20260513orchui2"></script>
-<script type="text/babel" src="pages/docker.js?v=20260513a"></script>
+<script type="text/babel" src="pages/docker.js?v=20260513e"></script>
 <script type="text/babel" src="pages/skill_repo.js?v=20260512d"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script type="text/babel" src="pages/vibe.js?v=20260513a"></script>
+<script type="text/babel" src="pages/vibe.js?v=20260513e"></script>
 <script type="text/babel" src="pages/notify.js"></script>
 <script type="text/babel" src="pages/cli.js?v=20260512i"></script>
 <script type="text/babel" src="pages/design_docs.js?v=20260512c"></script>
 <script type="text/babel" src="pages/dev_flow.js?v=20260512g"></script>
-<script type="text/babel" src="pages/sprints_mgr.js?v=20260513d"></script>
-<script type="text/babel" src="pages/db_config.js?v=20260513b"></script>
-<script type="text/babel" src="pages/tenants.js?v=20260513b"></script>
-<script type="text/babel" src="pages/health.js?v=20260513c"></script>
+<script type="text/babel" src="pages/sprints_mgr.js?v=20260513e"></script>
+<script type="text/babel" src="pages/db_config.js?v=20260513e"></script>
+<script type="text/babel" src="pages/tenants.js?v=20260513e"></script>
+<script type="text/babel" src="pages/health.js?v=20260513e"></script>
 <script type="text/babel" src="pages/audit.js?v=20260513c"></script>
-<script type="text/babel" src="pages/webhook.js?v=20260513c"></script>
+<script type="text/babel" src="pages/webhook.js?v=20260513e"></script>
 <script type="text/babel" src="pages/logs_viewer.js?v=20260513d"></script>
 <style>
 /* ── CSS 变量（多主题 + 语义色，供页面内联样式改为 var / class） ── */
@@ -497,9 +501,14 @@ const API = (typeof window !== 'undefined' && window.location && (window.locatio
 
 // ── 全局认证工具 ──────────────────────────────────────────────────
 window.authHeaders = function() {
-  var token = '';
-  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
-  return token ? { 'Authorization': 'Bearer ' + token } : {};
+  var h = {};
+  try {
+    var token = localStorage.getItem('sop-token') || '';
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    var pid = (localStorage.getItem('sop-current-project-id') || '').trim();
+    if (pid) h['X-Project-Id'] = pid;
+  } catch (e) {}
+  return h;
 };
 window.__ADMIN_MODE__ = (function() {
   try { return localStorage.getItem('sop-admin-mode') || 'single'; } catch(e) { return 'single'; }
@@ -508,7 +517,19 @@ window.__CURRENT_USER__ = (function() {
   try { return JSON.parse(localStorage.getItem('sop-user') || 'null'); } catch(e) { return null; }
 })();
 
-/** 统一超时与 Abort，自动注入 Authorization header */
+/** 将根相对路径解析到 API 基址：/foo -> ${API}/foo；/api/foo -> origin + /api/foo（避免重复拼接） */
+function resolveApiInput(input) {
+  if (typeof input !== 'string') return input;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(input) || input.startsWith('//')) return input;
+  if (input.startsWith('/api/')) {
+    var o = (typeof window !== 'undefined' && window.location && window.location.origin) ? String(window.location.origin).replace(/\/$/, '') : '';
+    return o ? (o + input) : input;
+  }
+  if (input.charAt(0) === '/') return API.replace(/\/$/, '') + input;
+  return input;
+}
+
+/** 统一超时与 Abort，自动注入 Authorization + X-Project-Id */
 function apiFetch(input, init) {
   const opts = init || {};
   const timeoutMs = opts.timeoutMs != null ? opts.timeoutMs : 32000;
@@ -523,8 +544,24 @@ function apiFetch(input, init) {
   if (token) {
     next.headers = Object.assign({ 'Authorization': 'Bearer ' + token }, next.headers || {});
   }
-  return fetch(input, next).then(function(r) {
+  var projId = '';
+  try { projId = (localStorage.getItem('sop-current-project-id') || '').trim(); } catch (e) {}
+  if (projId) {
+    next.headers = Object.assign({ 'X-Project-Id': projId }, next.headers || {});
+  }
+  var resolved = typeof input === 'string' ? resolveApiInput(input) : input;
+  return fetch(resolved, next).then(function(r) {
     if (r.status === 401) { localStorage.removeItem('sop-token'); window.location.replace('login.html'); }
+    if (r.status === 403) {
+      var tr403 = (typeof window.t === 'function' ? window.t : function (k) { return k; });
+      r.clone().json().then(function (j) {
+        var msg = (j && j.detail != null) ? String(j.detail) : tr403('idx_api_forbidden');
+        showToast(msg, 'err');
+        try { window.dispatchEvent(new CustomEvent('devdash-api-forbidden', { detail: { message: msg } })); } catch (e2) {}
+      }).catch(function () {
+        showToast(tr403('idx_api_forbidden'), 'err');
+      });
+    }
     clearTimeout(tid);
     return r;
   }).catch(function(e) { clearTimeout(tid); throw e; });
@@ -615,6 +652,15 @@ function useFetch(url) {
         throw err;
       });
   }, [url]);
+  React.useEffect(function () {
+    function onProj() {
+      load().catch(function () {});
+    }
+    window.addEventListener('devdash-project-change', onProj);
+    return function () {
+      window.removeEventListener('devdash-project-change', onProj);
+    };
+  }, [load]);
   React.useEffect(function () { load().catch(function () {}); }, [load]);
   return { data, loading, error, reload: load };
 }
@@ -759,7 +805,7 @@ function Requirements() {
         P3: (gObj.P3 || []).map((r) => r.id),
       },
     };
-    fetch(`${API}/requirements/reorder-board`, {
+    apiFetch(`/requirements/reorder-board`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -802,7 +848,7 @@ function Requirements() {
   };
 
   const patchReqMeta = (id, partial) => {
-    fetch(`${API}/requirements/${encodeURIComponent(id)}`, {
+    apiFetch(`/requirements/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(partial),
@@ -819,7 +865,7 @@ function Requirements() {
 
   React.useEffect(() => {
     if (!detail) { setProto(''); return; }
-    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}/prototype`)
+    apiFetch(`/requirements/${encodeURIComponent(detail.id)}/prototype`)
       .then((r) => r.json())
       .then((d) => setProto(d.content || ''))
       .catch(() => setProto(''));
@@ -842,7 +888,7 @@ function Requirements() {
   const saveDetail = () => {
     if (!detail || !editForm) return;
     const ac = editForm.acceptance.split('\n').map((s) => s.trim()).filter(Boolean);
-    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}`, {
+    apiFetch(`/requirements/${encodeURIComponent(detail.id)}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -867,7 +913,7 @@ function Requirements() {
 
   const deleteDetail = () => {
     if (!detail || !confirm(tr('req_confirm_del', { id: detail.id }))) return;
-    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}`, {method: 'DELETE'})
+    apiFetch(`/requirements/${encodeURIComponent(detail.id)}`, {method: 'DELETE'})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(() => { setDetail(null); reload(); showToast(tr('req_toast_deleted'), 'ok'); })
       .catch(() => showToast(tr('req_toast_delete_fail'), 'err'));
@@ -876,7 +922,7 @@ function Requirements() {
   const runPrototype = (mode, genImage) => {
     if (!detail) return;
     setProtoBusy(true);
-    fetch(`${API}/requirements/${encodeURIComponent(detail.id)}/prototype`, {
+    apiFetch(`/requirements/${encodeURIComponent(detail.id)}/prototype`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode, gen_image: !!genImage, extra_context: ''}),
@@ -899,7 +945,7 @@ function Requirements() {
     const ac = manualForm.acceptance.split('\n').map((s) => s.trim()).filter(Boolean);
     const tags = manualForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     if (!manualForm.title.trim()) { showToast(tr('req_toast_title_required'), 'err'); return; }
-    fetch(`${API}/requirements`, {
+    apiFetch(`/requirements`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
@@ -926,7 +972,7 @@ function Requirements() {
   const parseDoc = () => {
     if (docText.trim().length < 20) { showToast(tr('req_toast_doc_short'), 'err'); return; }
     setDocBusy(true);
-    fetch(`${API}/requirements/parse-document`, {
+    apiFetch(`/requirements/parse-document`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({text: docText, filename: 'upload.txt'}),
@@ -952,7 +998,7 @@ function Requirements() {
       tags: it.tags || [],
     }));
     if (!items.length) { showToast(tr('req_toast_select_one'), 'err'); return; }
-    fetch(`${API}/requirements/batch`, {
+    apiFetch(`/requirements/batch`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({items}),
@@ -1183,7 +1229,7 @@ function Tasks() {
   const [note, setNote] = React.useState('');
 
   const unblock = () => {
-    fetch(`${API}/tasks/${modal.id}/unblock`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({human_notes:note})})
+    apiFetch(`/tasks/${modal.id}/unblock`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({human_notes:note})})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(null);reload();showToast(tr('task_toast_unblocked'),'ok');})
       .catch(()=>showToast(tr('task_toast_op_fail'),'err'));
@@ -1238,7 +1284,7 @@ function Issues() {
   const [resolution, setResolution] = React.useState('');
 
   const resolve = () => {
-    fetch(`${API}/issues/${modal.id}/resolve`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolution})})
+    apiFetch(`/issues/${modal.id}/resolve`, {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolution})})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(null);reload();showToast(tr('issue_toast_resolved'),'ok');})
       .catch(()=>showToast(tr('task_toast_op_fail'),'err'));
@@ -1339,7 +1385,7 @@ function Sprints() {
   const [modal, setModal] = React.useState(false);
   const [form, setForm] = React.useState({goal:'',planned_points:0,ends_at:''});
   const save = () => {
-    fetch(`${API}/sprints`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/sprints`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(false);reload();showToast(tr('sprint_toast_created'),'ok');})
       .catch(()=>showToast(tr('gen_create_fail'),'err'));
@@ -1389,7 +1435,7 @@ function Search() {
   const doSearch = () => {
     if (!q.trim()) return;
     setLoading(true);
-    fetch(`${API}/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(d=>{setResults(d);setLoading(false);});
+    apiFetch(`/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(d=>{setResults(d);setLoading(false);});
   };
   const typeLabel = {
     requirements: t('search_type_req'),
@@ -1617,7 +1663,7 @@ function Rules() {
   const [form,setForm] = React.useState({rule:'',category:'coding',source:'human',confidence:0.75});
 
   const save = () => {
-    fetch(`${API}/rules`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/rules`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(false);reload();setForm({rule:'',category:'coding',source:'human',confidence:0.75});showToast(tr('rules_toast_added'),'ok');})
       .catch(()=>showToast(tr('rules_toast_add_fail'),'err'));
@@ -1686,7 +1732,7 @@ function Knowledge() {
 
   const indexCustom = () => {
     setIndexing(true);
-    fetch(`${API}/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
+    apiFetch(`/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
       setIndexing(false);reload();
       showToast(tr('kb_toast_indexed', { n: d.count||0 }),'ok');
     }).catch(()=>{setIndexing(false);showToast(tr('kb_toast_index_fail'),'err');});
@@ -2054,7 +2100,7 @@ function Config() {
   React.useEffect(()=>{if(state&&!state.error)setForm(state);},[state]);
 
   const save = () => {
-    fetch(`${API}/state`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/state`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setEditing(false);reload();showToast('配置已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
@@ -2165,7 +2211,7 @@ function ExecutionPlan() {
   }, []);
 
   const commitTaskReorder = (gObj) => {
-    fetch(`${API}/tasks/reorder-board`, {
+    apiFetch(`/tasks/reorder-board`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -2213,7 +2259,7 @@ function ExecutionPlan() {
   };
 
   const patchTask = (id, partial) => {
-    fetch(`${API}/tasks/${encodeURIComponent(id)}`, {
+    apiFetch(`/tasks/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(partial),
@@ -2232,7 +2278,7 @@ function ExecutionPlan() {
     const isEdit = modal && modal.id;
     const url = isEdit ? `${API}/tasks/${modal.id}` : `${API}/tasks`;
     const method = isEdit ? 'PATCH' : 'POST';
-    fetch(url, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(form)})
+    apiFetch(url, {method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(form)})
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -2245,7 +2291,7 @@ function ExecutionPlan() {
   };
   const del = (id) => {
     if (!confirm('确认删除？')) return;
-    fetch(`${API}/tasks/${id}`, {method: 'DELETE'})
+    apiFetch(`/tasks/${id}`, {method: 'DELETE'})
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -2256,7 +2302,7 @@ function ExecutionPlan() {
       .catch(() => showToast('删除失败', 'err'));
   };
   const changeStatus = (id, status) => {
-    fetch(`${API}/tasks/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})})
+    apiFetch(`/tasks/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})})
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -2451,7 +2497,7 @@ function IterationProgress() {
 
   const loadProgress = (id) => {
     setSelected(id);
-    fetch(`${API}/sprints/${id}/progress`).then(r=>r.json()).then(setProgress);
+    apiFetch(`/sprints/${id}/progress`).then(r=>r.json()).then(setProgress);
   };
 
   const active = (sprints||[]).find(s=>s.status==='active');
@@ -2519,7 +2565,7 @@ function KnowledgeManager() {
   const [fileBusy,setFileBusy] = React.useState(false);
 
   const save = () => {
-    fetch(`${API}/knowledge`,{method:'POST',headers:{'Content-Type':'application/json'},
+    apiFetch(`/knowledge`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...form,tags:form.tags.split(/[,，]/).map(t=>t.trim()).filter(Boolean)})})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{setModal(false);reload();setForm({title:'',content:'',category:'general',tags:''});showToast(tr('kbm_toast_entry_added'),'ok');})
@@ -2527,21 +2573,21 @@ function KnowledgeManager() {
   };
   const del = (id) => {
     if(!confirm(tr('kbm_confirm_del'))) return;
-    fetch(`${API}/knowledge/${id}`,{method:'DELETE'})
+    apiFetch(`/knowledge/${id}`,{method:'DELETE'})
       .then((r) => { if (!r.ok) throw new Error(); })
       .then(()=>{reload();showToast(tr('req_toast_deleted'),'ok');})
       .catch(()=>showToast(tr('req_toast_delete_fail'),'err'));
   };
   const indexCustom = () => {
     setIndexing(true);
-    fetch(`${API}/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
+    apiFetch(`/knowledge/index`,{method:'POST'}).then(r=>r.json()).then(d=>{
       setIndexing(false);reload();showToast(tr('kb_toast_indexed', { n: d.count||0 }),'ok');
     }).catch(()=>{setIndexing(false);showToast(tr('kb_toast_index_fail'),'err');});
   };
   const doSearch = () => {
     if(!searchQ.trim()) return;
     setSearchResults(null);
-    fetch(`${API}/knowledge/search?q=${encodeURIComponent(searchQ)}`).then(r=>r.json()).then(setSearchResults);
+    apiFetch(`/knowledge/search?q=${encodeURIComponent(searchQ)}`).then(r=>r.json()).then(setSearchResults);
   };
 
   const importFile = (e) => {
@@ -2551,7 +2597,7 @@ function KnowledgeManager() {
     setFileBusy(true);
     const fd = new FormData();
     fd.append('file', f);
-    fetch(`${API}/knowledge/extract-text`,{method:'POST',body:fd})
+    apiFetch(`/knowledge/extract-text`,{method:'POST',body:fd})
       .then(r=>r.json().then(d=>({ok:r.ok,d})))
       .then(({ok,d})=>{
         setFileBusy(false);
@@ -2572,7 +2618,7 @@ function KnowledgeManager() {
     const raw = (form.content||'').trim();
     if(raw.length < 30){showToast(tr('kbm_toast_material'),'err');return;}
     setAiBusy(true);
-    fetch(`${API}/knowledge/ai-polish`,{
+    apiFetch(`/knowledge/ai-polish`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -2851,9 +2897,14 @@ function waitForPageModules(done) {
 // ── 新版主应用（左侧菜单 + 多主题 + i18n） ────────────────────────────
 // 全局认证工具函数
 window.authHeaders = function() {
-  var token = '';
-  try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
-  return token ? { 'Authorization': 'Bearer ' + token } : {};
+  var h = {};
+  try {
+    var token = localStorage.getItem('sop-token') || '';
+    if (token) h['Authorization'] = 'Bearer ' + token;
+    var pid = (localStorage.getItem('sop-current-project-id') || '').trim();
+    if (pid) h['X-Project-Id'] = pid;
+  } catch (e) {}
+  return h;
 };
 window.__ADMIN_MODE__ = (function() {
   try {
@@ -2906,6 +2957,7 @@ function AppV3() {
     return Object.assign({}, def);
   });
   const [projectId, setProjectId] = React.useState('');
+  const [projects, setProjects] = React.useState([]);
   const [toasts, setToasts] = React.useState([]);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [apiHealth, setApiHealth] = React.useState('checking');
@@ -3048,6 +3100,9 @@ function AppV3() {
       .then(function (j) {
         setApiHealth('ok');
         setApiVer((j && j.version) ? String(j.version) : '');
+        try {
+          if (j && j.admin_mode) localStorage.setItem('sop-admin-mode', String(j.admin_mode));
+        } catch (e) {}
       })
       .catch(function () {
         setApiHealth('down');
@@ -3094,11 +3149,30 @@ function AppV3() {
     return function () { window.removeEventListener('keydown', onKey); };
   }, []);
 
-  React.useEffect(() => {
-    apiFetch(`${API}/state`, { timeoutMs: 12000 })
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((d) => { if (d.project_id) setProjectId(d.project_id); })
-      .catch(() => {});
+  React.useEffect(function () {
+    Promise.all([
+      apiFetch(API + '/projects', { timeoutMs: 15000 }).then(function (r) { return r.ok ? r.json() : []; }),
+      apiFetch(API + '/state', { timeoutMs: 12000 }).then(function (r) { return r.ok ? r.json() : {}; }),
+    ])
+      .then(function (results) {
+        var list = Array.isArray(results[0]) ? results[0] : [];
+        setProjects(list);
+        var state = results[1] || {};
+        var stored = '';
+        try { stored = (localStorage.getItem('sop-current-project-id') || '').trim(); } catch (e) {}
+        var fromState = state.project_id ? String(state.project_id) : '';
+        var ids = {};
+        list.forEach(function (x) { if (x && x.id) ids[x.id] = 1; });
+        var pick = '';
+        if (fromState && ids[fromState]) pick = fromState;
+        else if (stored && ids[stored]) pick = stored;
+        else if (list[0] && list[0].id) pick = list[0].id;
+        if (pick) {
+          try { localStorage.setItem('sop-current-project-id', pick); } catch (e2) {}
+          setProjectId(pick);
+        }
+      })
+      .catch(function () {});
   }, []);
 
   React.useEffect(function () {
@@ -3250,7 +3324,7 @@ function AppV3() {
     try { token = localStorage.getItem('sop-token') || ''; } catch (e) {}
     var headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = 'Bearer ' + token;
-    fetch(API + '/auth/logout', { method: 'POST', headers: headers })
+    apiFetch(API + '/auth/logout', { method: 'POST', headers: headers })
       .catch(function () {})
       .finally(function () {
         try {
@@ -3282,7 +3356,8 @@ function AppV3() {
           <li>侧栏按模块分组，可点击分组标题<strong>展开 / 收起</strong>（状态写入 localStorage）；顶栏 <span className="help-kbd">←</span> 与浏览器<strong>后退</strong>可回到上一页签（使用路由历史，不再每次覆盖地址栏）</li>
           <li>支持浏览器地址 <span className="help-kbd">#页签</span> 直达（如 <code style={{fontSize:11}}>#vibe</code>、<code style={{fontSize:11}}>#plan</code>），便于分享与书签</li>
           <li>顶栏 <strong>数据港</strong>：导出 JSON 任意登录用户可用；<strong>合并导入</strong>仅限超级管理员、租户管理员、项目管理员或运维角色</li>
-          <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录</li>
+          <li>多项目 / SaaS：登录后顶栏可选「项目」；请求自动带 <code style={{fontSize:11}}>X-Project-Id</code>，后端按项目绑定磁盘路径与 SQL 数据；单项目模式仍可用环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> / <code style={{fontSize:11}}>PROJECT_ID</code></li>
+          <li>后端由环境变量 <code style={{fontSize:11}}>PROJECT_PATH</code> 指向被管理仓库根目录（未在 DB 填写 project_path 时的回退）</li>
         </ul>
         <div className="modal-actions" style={{flexWrap:'wrap',gap:8}}>
           <button type="button" className="btn btn-cancel" onClick={() => setHelpOpen(false)}>{tk('help_close')}</button>
@@ -3334,7 +3409,28 @@ function AppV3() {
         <span className="topbar-logo">ai-team-devops</span>
       </div>
       <span className="topbar-badge">{tk('badge_admin')}</span>
-      {projectId && <span className="topbar-project">📁 {projectId}</span>}
+      {projects.length > 1 ? (
+        <label className="text-tertiary" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, maxWidth: 'min(280px, 36vw)' }} title={tk('topbar_project_hint')}>
+          <span style={{ flexShrink: 0 }}>{tk('topbar_project')}</span>
+          <select
+            className="topbar-select"
+            value={projectId}
+            onChange={(e) => {
+              var v = e.target.value;
+              try { localStorage.setItem('sop-current-project-id', v); } catch (_) {}
+              setProjectId(v);
+              window.dispatchEvent(new CustomEvent('devdash-project-change', { detail: { projectId: v } }));
+            }}
+            aria-label={tk('topbar_project')}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name || p.id}</option>
+            ))}
+          </select>
+        </label>
+      ) : projectId ? (
+        <span className="topbar-project" title={tk('topbar_project_hint')}>📁 {projects[0] ? (projects[0].name || projectId) : projectId}</span>
+      ) : null}
       <div className={'topbar-health ' + (apiHealth === 'ok' ? 'ok' : apiHealth === 'down' ? 'down' : 'checking')} title="定时探测 /api/health">
         <span className="health-dot" aria-hidden="true"/>
         {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}

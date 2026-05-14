@@ -35,7 +35,7 @@ function DevFlowHub() {
       artForm.kind === 'path'
         ? { title, kind: 'path', path: (artForm.path || '').trim(), notes: (artForm.notes || '').trim() }
         : { title, kind: 'url', url: (artForm.url || '').trim(), notes: (artForm.notes || '').trim() };
-    fetch(`${API}/system/workspace/artifacts`, {
+    apiFetch(`/system/workspace/artifacts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -59,7 +59,7 @@ function DevFlowHub() {
 
   const delWorkspaceArtifact = (id) => {
     if (!confirm(t('df_confirm_del_bm'))) return;
-    fetch(`${API}/system/workspace/artifacts/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    apiFetch(`/system/workspace/artifacts/${encodeURIComponent(id)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })

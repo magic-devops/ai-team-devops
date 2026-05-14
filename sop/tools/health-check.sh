@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # health-check.sh - 项目健康检查
+#
+# 可选：带 JWT 验证「请求级项目作用域」是否可达（需已登录 token + 合法项目 ID）
+#   HEALTH_CHECK_TOKEN=eyJ... HEALTH_CHECK_PROJECT_ID=my-proj-id bash sop/tools/health-check.sh
+#
 set -euo pipefail
 
 OK=0; WARN=0; FAIL=0
@@ -94,6 +98,17 @@ if curl -sf "http://127.0.0.1:${PORT}/api/health" >/dev/null 2>&1; then
   pass "管理后台运行中 (http://127.0.0.1:${PORT})"
 else
   warn "管理后台未运行（可执行: bash sop/tools/start-manager.sh）"
+fi
+if [[ -n "${HEALTH_CHECK_TOKEN:-}" && -n "${HEALTH_CHECK_PROJECT_ID:-}" ]]; then
+  if curl -sf "http://127.0.0.1:${PORT}/api/health/detail" \
+    -H "Authorization: Bearer ${HEALTH_CHECK_TOKEN}" \
+    -H "X-Project-Id: ${HEALTH_CHECK_PROJECT_ID}" >/dev/null 2>&1; then
+    pass "已鉴权健康详情可访问 (X-Project-Id=${HEALTH_CHECK_PROJECT_ID})"
+  else
+    warn "已鉴权健康详情失败（检查 token、项目 ID 或成员权限）"
+  fi
+elif [[ -n "${HEALTH_CHECK_TOKEN:-}" || -n "${HEALTH_CHECK_PROJECT_ID:-}" ]]; then
+  warn "HEALTH_CHECK_TOKEN 与 HEALTH_CHECK_PROJECT_ID 需同时设置才会探测鉴权接口"
 fi
 
 echo ""

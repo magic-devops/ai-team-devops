@@ -14,12 +14,12 @@ const LogsViewer = () => {
   const bottomRef = React.useRef(null);
 
   const loadFiles = () =>
-    fetch(`${API}/logs/list`, { headers: authHeaders() })
+    apiFetch(`/logs/list`, { headers: authHeaders() })
       .then(r => r.json()).then(d => setFiles(d.files || [])).catch(() => {});
 
   const loadLogs = () => {
     setLoading(true);
-    fetch(`${API}/logs?name=${encodeURIComponent(selected)}&lines=${lines}`, { headers: authHeaders() })
+    apiFetch(`/logs?name=${encodeURIComponent(selected)}&lines=${lines}`, { headers: authHeaders() })
       .then(r => r.text()).then(t => { setContent(t); setLoading(false); })
       .catch(() => setLoading(false));
   };

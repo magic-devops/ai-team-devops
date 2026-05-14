@@ -125,17 +125,19 @@ Windsurf     → .windsurfrules
 浏览器 index.html（shell）
     ↓ 加载 pages/*.js 全局组件
 React 主应用（侧栏 + ALL_PAGES）
-    ↓ fetch
+    ↓ apiFetch（自动 Authorization + X-Project-Id + 超时）
 FastAPI main:app（/api/*）
+    ├─ project_scope_middleware（JWT 解析后按 X-Project-Id 注入 path_config）
     ├─ routers/*  按域拆分（需求、任务、问题、Agent、技能、MCP、模型、编排、Docker、CLI、Vibe、技术方案、研发流…）
-    └─ LanceDB / 文件索引（PROJECT_PATH 下的 .ai-memory/）
+    └─ LanceDB / 文件索引（resolved_project_path 下的 .sop-runtime/ai-memory/）
 ```
 
 **关键约定**
 
 | 项 | 说明 |
 |----|------|
-| `PROJECT_PATH` | 环境变量，指向被管理的业务仓库根；LanceDB、会话、上传、工作区浏览均相对此路径 |
+| `PROJECT_PATH` | 环境变量，指向被管理的业务仓库根；无 JWT 作用域时的默认磁盘根 |
+| 请求级作用域 | 已登录请求：`Bearer` + `X-Project-Id` → `path_config.resolved_project_path`（多项目/SaaS） |
 | 静态资源 | `StaticFiles` 须注册在 **所有 `/api` 路由之后**，避免吞掉 API |
 | 跨页导航 | 自定义事件 `app-set-tab`，便于「研发全流程」等模块跳转到既有菜单页 |
 | 低 Token | `GET /api/dev-flow/summary` 一次返回聚合指标；Vibe 提供短提示模板与引用路径，避免贴全文规范 |

@@ -555,6 +555,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       field_tenant:'租户名称（可选）', field_tenant_slug:'租户 Slug',
       saas_hint:'多租户模式：请填写您所在的租户 Slug',
       net_err:'网络错误：',
+      net_timeout:'请求超时，请检查网络或后端是否可达',
       forgot_link:'忘记密码？',
       reset_title:'重置密码', reset_subtitle:'需要管理员账号验证身份',
       reset_admin_user:'管理员用户名', reset_admin_pw:'管理员密码',
@@ -592,6 +593,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       field_tenant:'Tenant name (optional)', field_tenant_slug:'Tenant Slug',
       saas_hint:'Multi-tenant mode: enter your tenant slug',
       net_err:'Network error: ',
+      net_timeout:'Request timed out. Check network or whether the API is reachable.',
       forgot_link:'Forgot password?',
       reset_title:'Reset Password', reset_subtitle:'Verify with an admin account',
       reset_admin_user:'Admin username', reset_admin_pw:'Admin password',
@@ -607,6 +609,24 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   if (theme !== 'light' && theme !== 'dim' && theme !== 'contrast' && theme !== 'dark') theme = 'dark';
 
   function t(k){ return (I18N[lang]||I18N.zh)[k] || k; }
+
+  /** 公开接口请求（无 token）：Abort 超时，避免长时间挂起 */
+  function loginPublicFetch(url, init) {
+    var o = init || {};
+    var ms = o.timeoutMs != null ? o.timeoutMs : 45000;
+    var c = new AbortController();
+    var tid = setTimeout(function () { c.abort(); }, ms);
+    var next = Object.assign({}, o);
+    delete next.timeoutMs;
+    next.signal = c.signal;
+    return fetch(url, next).then(function (r) {
+      clearTimeout(tid);
+      return r;
+    }).catch(function (e) {
+      clearTimeout(tid);
+      throw e;
+    });
+  }
 
   window.togglePw = function(id, btn) {
     var el = document.getElementById(id);
@@ -678,27 +698,35 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     el.textContent = text; el.className = 'msg '+type; el.style.display = 'block';
   }
 
+  function netErrMsg(e) {
+    if (e && e.name === 'AbortError') return t('net_timeout');
+    return t('net_err') + (e && e.message ? e.message : '');
+  }
+
   function doLogin(username, password, tenant_slug){
     var body = {username:username, password:password};
     if(tenant_slug) body.tenant_slug = tenant_slug;
-    return fetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    return loginPublicFetch(API+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});});
   }
 
   function saveAndRedirect(d){
     localStorage.setItem('sop-token', d.token);
     localStorage.setItem('sop-user', JSON.stringify({id:d.user_id,username:d.username,role:d.role,tenant_id:d.tenant_id}));
+    try {
+      if (d.default_project_id) localStorage.setItem('sop-current-project-id', d.default_project_id);
+    } catch (e) {}
     window.location.replace('index.html');
   }
 
   var token = localStorage.getItem('sop-token');
   if(token){
-    fetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
+    loginPublicFetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
       .then(function(r){if(r.ok) window.location.replace('index.html');})
       .catch(function(){});
   }
 
-  fetch(API+'/health').then(function(r){return r.json();}).then(function(d){
+  loginPublicFetch(API+'/health').then(function(r){return r.json();}).then(function(d){
     var mode = d.admin_mode||'single';
     var badge = document.getElementById('mode-badge');
     badge.textContent = mode==='saas' ? t('mode_saas') : t('mode_single');
@@ -713,7 +741,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     document.getElementById('mode-badge').textContent = t('mode_single');
   });
 
-  fetch(API+'/auth/init/status')
+  loginPublicFetch(API+'/auth/init/status')
     .then(function(r){
       if(!r.ok){ show('login-section'); return; }
       return r.json().then(function(d){ show(d.initialized ? 'login-section' : 'init-section'); });
@@ -731,7 +759,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     if(pw!==pw2){ showMsg(msgEl, t('init_pw_mismatch'), 'err'); return; }
     if(pw.length<8){ showMsg(msgEl, t('init_pw_short'), 'err'); return; }
     btn.disabled=true; btn.textContent=t('init_creating');
-    fetch(API+'/auth/init',{method:'POST',headers:{'Content-Type':'application/json'},
+    loginPublicFetch(API+'/auth/init',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username:username,password:pw,tenant_name:tenant})})
       .then(function(r){return r.json().then(function(d){return{ok:r.ok,d:d};});})
       .then(function(res){
@@ -743,7 +771,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
           document.getElementById('login-section').style.display='block';
           document.getElementById('username').value = username;
         });
-      }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('init_btn'); });
+      }).catch(function(e){ showMsg(msgEl, netErrMsg(e), 'err'); btn.disabled=false; btn.textContent=t('init_btn'); });
   });
 
   document.getElementById('login-form').addEventListener('submit', function(e){
@@ -756,7 +784,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       .then(function(res){
         if(!res.ok){ showMsg(msgEl, res.d.detail||t('login_fail'), 'err'); btn.disabled=false; btn.textContent=t('login_btn'); return; }
         saveAndRedirect(res.d);
-      }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('login_btn'); });
+      }).catch(function(e){ showMsg(msgEl, netErrMsg(e), 'err'); btn.disabled=false; btn.textContent=t('login_btn'); });
   });
 
   function switchTo(id) {
@@ -776,7 +804,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     if(newPw !== newPw2){ showMsg(msgEl, t('init_pw_mismatch'), 'err'); return; }
     if(newPw.length < 8){ showMsg(msgEl, t('init_pw_short'), 'err'); return; }
     btn.disabled=true; btn.textContent=t('reset_loading');
-    fetch(API+'/auth/reset-password', {method:'POST', headers:{'Content-Type':'application/json'},
+    loginPublicFetch(API+'/auth/reset-password', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         admin_username: document.getElementById('reset-admin-user').value.trim(),
         admin_password: document.getElementById('reset-admin-pw').value,
@@ -788,7 +816,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       if(!res.ok){ showMsg(msgEl, res.d.detail||t('reset_fail'), 'err'); btn.disabled=false; btn.textContent=t('reset_btn'); return; }
       showMsg(msgEl, t('reset_ok'), 'ok');
       setTimeout(function(){ switchTo('login-section'); }, 1500);
-    }).catch(function(e){ showMsg(msgEl, t('net_err')+e.message, 'err'); btn.disabled=false; btn.textContent=t('reset_btn'); });
+    }).catch(function(e){ showMsg(msgEl, netErrMsg(e), 'err'); btn.disabled=false; btn.textContent=t('reset_btn'); });
   });
 })();
 </script>

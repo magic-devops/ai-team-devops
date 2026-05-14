@@ -8,7 +8,7 @@ from typing import Optional
 from .auth_sql import require_role, ADMIN_MODE
 from .sql_models import User
 
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/db-config", tags=["db-config"])
 
@@ -25,7 +25,7 @@ def get_db_config(user: User = Depends(require_role("tenant_admin"))):
         },
         "vector": {
             "type": os.getenv("VECTOR_DB_TYPE", "lance"),
-            "lance_path": os.getenv("LANCE_DB_PATH", str(ai_memory_root() / "lancedb")),
+            "lance_path": os.getenv("LANCE_DB_PATH", str(resolved_ai_memory_root() / "lancedb")),
             "milvus_uri": os.getenv("MILVUS_URI", "http://localhost:19530"),
         },
         "admin_mode": os.getenv("ADMIN_MODE", "single"),
@@ -53,7 +53,7 @@ def test_vector_connection(body: VectorDbTest,
             return {"ok": True, "message": "Milvus 连接成功"}
         else:
             import lancedb
-            path = body.path or str(ai_memory_root() / "lancedb")
+            path = body.path or str(resolved_ai_memory_root() / "lancedb")
             db = lancedb.connect(path)
             tables = db.table_names()
             return {"ok": True, "message": f"LanceDB 连接成功，{len(tables)} 个表"}

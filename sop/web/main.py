@@ -39,10 +39,15 @@ async def _access_log(request: _Req, call_next):
     access_logger.info("%s %s %d %dms", request.method, request.url.path, resp.status_code, ms)
     return resp
 
+from routers.project_scope_middleware import project_scope_middleware
+
+app.middleware("http")(project_scope_middleware)
+
 # ── 按需注册路由模块 ──────────────────────────────────────────────
 from routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
 from routers import models, orchestration, docker_env, skill_repo, vibe, design_docs
-from routers.db_sql_compat import rows, table, now, PROJECT_PATH, AI_MEMORY_ROOT
+from path_config import resolved_ai_memory_root, resolved_project_id, resolved_project_path
+from routers.db_sql_compat import rows, table, now
 
 # ── 新增：SQL 认证 + 租户/项目/数据库配置 ─────────────────────────
 from routers import auth_sql, db_config, audit, webhook
@@ -122,7 +127,7 @@ def create_sprint(goal: str, planned_points: int = 0, ends_at: Optional[str] = N
     for s in existing:
         if s.get("status") == "active":
             t.update(where=f"id = '{s['id']}'", values={"status": "completed"})
-    row = {"id": f"SPRINT-{len(existing)+1}", "project_id": os.getenv("PROJECT_ID","default"),
+    row = {"id": f"SPRINT-{len(existing)+1}", "project_id": resolved_project_id(),
            "goal": goal, "status": "active", "started_at": now(), "ends_at": None,
            "velocity": 0.0, "planned_points": planned_points, "completion_rate": 0.0, "retrospective": ""}
     t.add([row]); return {"ok": True, "id": row["id"]}
@@ -160,12 +165,12 @@ def search(q: str = Query(..., min_length=1)):
 
 @app.get("/api/state")
 def get_state():
-    f = PROJECT_PATH / "memory" / "current_state.json"
+    f = resolved_project_path() / "memory" / "current_state.json"
     return json.loads(f.read_text()) if f.exists() else {"error": "current_state.json not found"}
 
 @app.patch("/api/state")
 def update_state(body: dict):
-    f = PROJECT_PATH / "memory" / "current_state.json"
+    f = resolved_project_path() / "memory" / "current_state.json"
     if not f.exists(): raise HTTPException(404, "Not found")
     state = json.loads(f.read_text()); state.update(body)
     state["updated_at"] = now().isoformat() + "Z"
@@ -227,7 +232,7 @@ def update_spec(path: str = Query(...), content: str = ""):
 
 @app.get("/api/custom")
 def list_custom():
-    custom_dir = PROJECT_PATH / "sop" / "custom"
+    custom_dir = resolved_project_path() / "sop" / "custom"
     if not custom_dir.exists(): return []
     return [{"path": str(f.relative_to(custom_dir)), "category": str(f.relative_to(custom_dir)).split("/")[0] if "/" in str(f.relative_to(custom_dir)) else "root",
              "name": f.name, "size": f.stat().st_size, "ext": f.suffix.lstrip(".")}
@@ -235,7 +240,7 @@ def list_custom():
 
 @app.get("/api/custom/content")
 def get_custom_content(path: str = Query(...)):
-    custom_dir = (PROJECT_PATH / "sop" / "custom").resolve()
+    custom_dir = (resolved_project_path() / "sop" / "custom").resolve()
     target = (custom_dir / path).resolve()
     if not str(target).startswith(str(custom_dir)): raise HTTPException(403, "Access denied")
     if not target.exists(): raise HTTPException(404, "Not found")
@@ -428,10 +433,12 @@ def search_knowledge(q: str = Query(...), category: Optional[str] = None):
 @app.get("/api/health")
 def health():
     """探活与版本信息；展示版本可读自运行时 ai-memory/admin_release.json 或环境变量 ADMIN_RELEASE_VERSION。"""
+    from path_config import request_scope_active, resolved_project_id, resolved_tenant_id
+
     display_version = "2.0"
     notes_val: Optional[str] = None
     updated_at: Optional[str] = None
-    rp = AI_MEMORY_ROOT / "admin_release.json"
+    rp = resolved_ai_memory_root() / "admin_release.json"
     if rp.is_file():
         try:
             d = json.loads(rp.read_text(encoding="utf-8"))
@@ -447,7 +454,7 @@ def health():
     envv = (os.getenv("ADMIN_RELEASE_VERSION") or "").strip()
     if envv:
         display_version = envv[:64]
-    return {
+    out = {
         "ok": True,
         "service": "ai-team-devops-manager",
         "version": display_version,
@@ -455,7 +462,12 @@ def health():
         "updatedAt": updated_at,
         "startedAt": _APP_BOOT_AT,
         "pid": os.getpid(),
+        "admin_mode": os.getenv("ADMIN_MODE", "single"),
     }
+    if request_scope_active():
+        out["scopedTenantId"] = resolved_tenant_id()
+        out["scopedProjectId"] = resolved_project_id()
+    return out
 
 # ── v1 版本化路由（新接口统一用 /api/v1/） ────────────────────────
 from routers import notify, cli_wrapper

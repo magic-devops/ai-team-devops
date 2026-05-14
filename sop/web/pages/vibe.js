@@ -150,7 +150,7 @@ function VibeSessionsManager({ onOpenInIde }) {
 
   const del = (id) => {
     if (!confirm(tr('vibe_sess_del_confirm'))) return;
-    fetch(`${API}/vibe/sessions/${id}`, { method: 'DELETE' })
+    apiFetch(`/vibe/sessions/${id}`, { method: 'DELETE' })
       .then(() => {
         reload();
         showToast(tr('vibe_toast_deleted'), 'ok');
@@ -161,7 +161,7 @@ function VibeSessionsManager({ onOpenInIde }) {
   const rename = (s) => {
     const titleIn = window.prompt(tr('vibe_sess_rename_prompt'), s.title || s.id);
     if (titleIn == null || !titleIn.trim()) return;
-    fetch(`${API}/vibe/sessions/${s.id}`, {
+    apiFetch(`/vibe/sessions/${s.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: titleIn.trim() }),
@@ -254,7 +254,7 @@ function VibeWorkspaceTree({ onOpenFile }) {
   const [err, setErr] = React.useState(null);
 
   const load = React.useCallback(() => {
-    fetch(`${API}/vibe/workspace/list?path=${encodeURIComponent(path)}`)
+    apiFetch(`/vibe/workspace/list?path=${encodeURIComponent(path)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
         setItems(d.items || []);
@@ -498,7 +498,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     const list = sessListData && sessListData.sessions;
     if (!Array.isArray(list) || list.length > 0) return;
     vibeDefaultSessionBootstrapStarted = true;
-    fetch(`${API}/vibe/sessions`, {
+    apiFetch(`/vibe/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: tr('vibe_default_session') }),
@@ -517,7 +517,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
   const loadSession = React.useCallback((id) => {
     if (!id) return;
-    fetch(`${API}/vibe/sessions/${id}`)
+    apiFetch(`/vibe/sessions/${id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((s) => {
         setMemory(s.memory || '');
@@ -539,7 +539,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   const persistSession = React.useCallback(
     (patch) => {
       if (!sessionId) return;
-      fetch(`${API}/vibe/sessions/${sessionId}`, {
+      apiFetch(`/vibe/sessions/${sessionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -613,7 +613,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
             attachment_paths: uploadPaths,
             context_files: [],
           };
-    fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    apiFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         setOutput(d);
@@ -648,7 +648,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
   const newSession = () => {
     const title = window.prompt(tr('vibe_sess_create_title_prompt'), tr('vibe_new_session')) || tr('vibe_new_session');
-    fetch(`${API}/vibe/sessions`, {
+    apiFetch(`/vibe/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title }),
@@ -671,7 +671,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     const cur = sessions.find((s) => s.id === sessionId);
     const titleIn = window.prompt(tr('vibe_rename_new_title'), (cur && cur.title) || sessionId);
     if (titleIn == null || !titleIn.trim()) return;
-    fetch(`${API}/vibe/sessions/${sessionId}`, {
+    apiFetch(`/vibe/sessions/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: titleIn.trim() }),
@@ -705,7 +705,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
 
   const deleteCurrentSession = () => {
     if (!sessionId || !confirm(tr('vibe_del_session_confirm'))) return;
-    fetch(`${API}/vibe/sessions/${sessionId}`, { method: 'DELETE' })
+    apiFetch(`/vibe/sessions/${sessionId}`, { method: 'DELETE' })
       .then(() => {
         setSessionId(null);
         setMessages([]);
@@ -726,7 +726,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     const fd = new FormData();
     fd.append('session', sessionId);
     files.forEach((f) => fd.append('files', f));
-    fetch(`${API}/vibe/upload`, { method: 'POST', body: fd })
+    apiFetch(`/vibe/upload`, { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((d) => {
         if (!d.ok && d.detail) throw new Error();
@@ -748,7 +748,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
     const fd = new FormData();
     fd.append('file', file);
     showToast(tr('vibe_doc_extracting'), 'ok');
-    fetch(`${API}/knowledge/extract-text`, { method: 'POST', body: fd })
+    apiFetch(`/knowledge/extract-text`, { method: 'POST', body: fd })
       .then((r) => r.json())
       .then((d) => {
         const extracted = d.text || d.content || '';
@@ -766,7 +766,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
   };
 
   const openWorkspaceFile = (relPath, name) => {
-    fetch(`${API}/vibe/workspace/file?path=${encodeURIComponent(relPath)}`)
+    apiFetch(`/vibe/workspace/file?path=${encodeURIComponent(relPath)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
         setWorkspaceFile({ ...d, name: name || relPath });
@@ -797,7 +797,7 @@ function VibeIdePanel({ focusSessionId, onConsumedFocus }) {
       return;
     }
     setTermBusy(true);
-    fetch(`${API}/vibe/terminal/exec`, {
+    apiFetch(`/vibe/terminal/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1549,7 +1549,7 @@ function VibeDocTextPreview({ url, isMd }) {
   React.useEffect(() => {
     setText('');
     setErr(null);
-    fetch(url)
+    apiFetch(url)
       .then((r) => (r.ok ? r.text() : Promise.reject()))
       .then(setText)
       .catch(() => setErr(typeof window.t === 'function' ? window.t('vibe_fetch_err') : 'vibe_fetch_err'));
@@ -1656,7 +1656,7 @@ function VibeHistoryPanel() {
   const { data, loading, error, reload } = useFetch(`${API}/vibe/history`);
   const clear = () => {
     if (!confirm(tr('vibe_hist_clear_confirm'))) return;
-    fetch(`${API}/vibe/history`, { method: 'DELETE' })
+    apiFetch(`/vibe/history`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })

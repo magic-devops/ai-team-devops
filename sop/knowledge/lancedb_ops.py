@@ -9,8 +9,13 @@ from typing import Optional
 
 
 def _lancedb_dir() -> Path:
-    """与 Web path_config 对齐：LANCE_DB_PATH → .ai-memory/lancedb（可符号链接）→ .sop-runtime/ai-memory/lancedb。"""
-    pp = Path(os.getenv("PROJECT_PATH", ".")).expanduser().resolve()
+    """与 Web path_config 对齐；请求内若有项目作用域则用 resolved_*。"""
+    try:
+        from path_config import resolved_ai_memory_root, resolved_project_path
+
+        pp = resolved_project_path()
+    except ImportError:
+        pp = Path(os.getenv("PROJECT_PATH", ".")).expanduser().resolve()
     raw = os.getenv("LANCE_DB_PATH", "").strip()
     if raw:
         p = Path(raw)
@@ -18,15 +23,20 @@ def _lancedb_dir() -> Path:
     leg = pp / ".ai-memory" / "lancedb"
     if leg.exists():
         return leg.resolve()
-    return (pp / ".sop-runtime" / "ai-memory" / "lancedb").resolve()
+    try:
+        from path_config import resolved_ai_memory_root
 
+        return (resolved_ai_memory_root() / "lancedb").resolve()
+    except ImportError:
+        return (pp / ".sop-runtime" / "ai-memory" / "lancedb").resolve()
 
-DB_PATH = _lancedb_dir()
 
 class LanceOps:
     def __init__(self, db_path: str = None):
         import lancedb
-        self.db = lancedb.connect(str(db_path or DB_PATH))
+
+        path = db_path or str(_lancedb_dir())
+        self.db = lancedb.connect(path)
         self._embed = None
 
     def _embedder(self):

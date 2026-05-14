@@ -16,9 +16,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from path_config import ai_memory_root, project_path
-
-PROJECT_PATH = project_path()
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/design-docs", tags=["design-docs"])
 
@@ -27,7 +25,7 @@ _CONTENT_MAX = 500_000
 
 
 def _root() -> Path:
-    d = ai_memory_root() / "tech_design"
+    d = resolved_ai_memory_root() / "tech_design"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

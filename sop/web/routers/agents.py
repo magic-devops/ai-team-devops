@@ -4,12 +4,15 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import json, os
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
-AGENTS_DIR = ai_memory_root() / "agents"
-AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+def _agents_dir() -> Path:
+    d = resolved_ai_memory_root() / "agents"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 class AgentDef(BaseModel):
     id: str; name: str; role: str; description: str
@@ -23,40 +26,40 @@ class AgentGroup(BaseModel):
 @router.get("")
 def list_agents():
     agents = []
-    for f in sorted(AGENTS_DIR.glob("agent_*.json")):
+    for f in sorted(_agents_dir().glob("agent_*.json")):
         try: agents.append(json.loads(f.read_text()))
         except Exception: pass
     return agents
 
 @router.post("")
 def create_agent(body: AgentDef):
-    f = AGENTS_DIR / f"agent_{body.id}.json"
+    f = _agents_dir() / f"agent_{body.id}.json"
     f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
     return {"ok": True, "id": body.id}
 
 @router.put("/{agent_id}")
 def update_agent(agent_id: str, body: AgentDef):
-    f = AGENTS_DIR / f"agent_{agent_id}.json"
+    f = _agents_dir() / f"agent_{agent_id}.json"
     f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
     return {"ok": True}
 
 @router.delete("/{agent_id}")
 def delete_agent(agent_id: str):
-    f = AGENTS_DIR / f"agent_{agent_id}.json"
+    f = _agents_dir() / f"agent_{agent_id}.json"
     if f.exists(): f.unlink()
     return {"ok": True}
 
 @router.get("/groups")
 def list_groups():
     groups = []
-    for f in sorted(AGENTS_DIR.glob("group_*.json")):
+    for f in sorted(_agents_dir().glob("group_*.json")):
         try: groups.append(json.loads(f.read_text()))
         except Exception: pass
     return groups
 
 @router.post("/groups")
 def create_group(body: AgentGroup):
-    f = AGENTS_DIR / f"group_{body.id}.json"
+    f = _agents_dir() / f"group_{body.id}.json"
     f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
     return {"ok": True, "id": body.id}
 

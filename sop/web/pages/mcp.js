@@ -9,7 +9,7 @@ function McpManager() {
   const reloadAll = () => { reload(); reloadBuiltin(); };
 
   const save = () => {
-    fetch(`${API}/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},
+    apiFetch(`/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({...form,args:form.args.split(' ').filter(Boolean)})})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(false);reload();showToast('已添加 MCP','ok');})
@@ -17,13 +17,13 @@ function McpManager() {
   };
   const del = (name) => {
     if(!confirm(`删除 MCP Server: ${name}？`)) return;
-    fetch(`${API}/mcp/${name}`,{method:'DELETE'})
+    apiFetch(`/mcp/${name}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已移除','ok');})
       .catch(()=>showToast('删除失败','err'));
   };
   const addBuiltin = (s) => {
-    fetch(`${API}/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)})
+    apiFetch(`/mcp`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已从模板添加','ok');})
       .catch(()=>showToast('添加失败','err'));

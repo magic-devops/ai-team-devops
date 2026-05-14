@@ -5,25 +5,25 @@ function ModelManager() {
   const [form,setForm] = React.useState({});
 
   const setDefault = (id) => {
-    fetch(`${API}/models/default?model_id=${id}`,{method:'PUT'})
+    apiFetch(`/models/default?model_id=${id}`,{method:'PUT'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已设为默认模型','ok');})
       .catch(()=>showToast('设置失败','err'));
   };
   const setRoleModel = (role,model_id) => {
-    fetch(`${API}/models/role-model`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,model_id})})
+    apiFetch(`/models/role-model`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,model_id})})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('角色模型已更新','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const saveProvider = () => {
-    fetch(`${API}/models/providers/${form.name}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/models/providers/${form.name}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(null);reload();showToast('提供商已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const delProvider = (name) => {
-    fetch(`${API}/models/providers/${name}`,{method:'DELETE'})
+    apiFetch(`/models/providers/${name}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已删除','ok');})
       .catch(()=>showToast('删除失败','err'));
@@ -65,7 +65,7 @@ function ModelManager() {
           <div style={{display:'flex',gap:4}}>
             <button type="button" className="btn btn-sm" style={{background:'#14532d',color:'#86efac'}} onClick={()=>setDefault(m.id)}>设为默认</button>
             {!m.recommended&&<button type="button" className="btn btn-sm" style={{background:'#7f1d1d',color:'#fca5a5'}} onClick={()=>{
-              fetch(`${API}/models/custom/${m.id}`,{method:'DELETE'})
+              apiFetch(`/models/custom/${m.id}`,{method:'DELETE'})
                 .then((r)=>{if(!r.ok)throw new Error();})
                 .then(()=>{reload();showToast('已删除','ok');})
                 .catch(()=>showToast('删除失败','err'));
@@ -131,7 +131,7 @@ function ModelManager() {
         <div className="modal-actions">
           <button type="button" className="btn btn-cancel" onClick={()=>setModal(null)}>取消</button>
           <button type="button" className="btn btn-primary" onClick={modal==='provider'?saveProvider:()=>{
-            fetch(`${API}/models/custom`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+            apiFetch(`/models/custom`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
               .then((r)=>{if(!r.ok)throw new Error();})
               .then(()=>{setModal(null);reload();showToast('自定义模型已添加','ok');})
               .catch(()=>showToast('保存失败','err'));

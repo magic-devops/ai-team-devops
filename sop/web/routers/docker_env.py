@@ -15,19 +15,35 @@ from typing import Any, Dict, List, Optional, Set
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from path_config import ai_memory_root, project_path
+from path_config import resolved_ai_memory_root, resolved_project_path
 
 router = APIRouter(prefix="/api/env", tags=["env"])
-PROJECT_PATH = project_path()
-_AI = ai_memory_root()
 
-_CUSTOM_CHECKS_PATH = _AI / "env_custom_checks.json"
-_VERSION_PINS_PATH = _AI / "env_version_pins.json"
-_EXEC_ALLOWLIST_EXTRA_PATH = _AI / "env_exec_allowlist_extra.json"
-_DOCKER_CUSTOM_PRESETS_PATH = _AI / "docker_custom_presets.json"
-_DOCKER_MANAGED_ROOT = _AI / "managed_dockerfiles"
-_COMPOSE_MANAGED_ROOT = _AI / "managed_compose"
 _COMPOSE_MAX_BYTES = 512 * 1024
+
+
+def _path_env_custom_checks() -> Path:
+    return resolved_ai_memory_root() / "env_custom_checks.json"
+
+
+def _path_version_pins() -> Path:
+    return resolved_ai_memory_root() / "env_version_pins.json"
+
+
+def _path_exec_allow_extra() -> Path:
+    return resolved_ai_memory_root() / "env_exec_allowlist_extra.json"
+
+
+def _path_docker_custom_presets() -> Path:
+    return resolved_ai_memory_root() / "docker_custom_presets.json"
+
+
+def _path_docker_managed_root() -> Path:
+    return resolved_ai_memory_root() / "managed_dockerfiles"
+
+
+def _path_compose_managed_root() -> Path:
+    return resolved_ai_memory_root() / "managed_compose"
 
 _DEFAULT_EXEC_ALLOW: Set[str] = {
     "python3",
@@ -61,7 +77,7 @@ _DEFAULT_EXEC_ALLOW: Set[str] = {
 
 def _run(cmd: list, cwd=None, timeout=30) -> dict:
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd or str(PROJECT_PATH))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd or str(resolved_project_path()))
         return {"stdout": r.stdout[-3000:], "stderr": r.stderr[-500:], "returncode": r.returncode, "ok": r.returncode == 0}
     except subprocess.TimeoutExpired:
         return {
@@ -86,9 +102,9 @@ def _run(cmd: list, cwd=None, timeout=30) -> dict:
 
 def _exec_allowlist() -> Set[str]:
     s = set(_DEFAULT_EXEC_ALLOW)
-    if _EXEC_ALLOWLIST_EXTRA_PATH.exists():
+    if _path_exec_allow_extra().exists():
         try:
-            extra = json.loads(_EXEC_ALLOWLIST_EXTRA_PATH.read_text(encoding="utf-8"))
+            extra = json.loads(_path_exec_allow_extra().read_text(encoding="utf-8"))
             if isinstance(extra, list):
                 for x in extra:
                     if isinstance(x, str) and re.match(r"^[a-zA-Z0-9._-]{1,48}$", x):
@@ -106,9 +122,9 @@ def _validate_argv(argv: List[str]) -> List[str]:
         raise HTTPException(400, f"可执行文件「{argv[0]}」不在允许列表；可在运行时目录 ai-memory 下 env_exec_allowlist_extra.json 追加白名单")
     if argv[0] in ("bash", "sh") and len(argv) == 2:
         sp = Path(argv[1]).resolve()
-        root = PROJECT_PATH.resolve()
+        root = resolved_project_path().resolve()
         if not str(sp).startswith(str(root) + os.sep) or not str(sp).endswith(".sh"):
-            raise HTTPException(400, "bash/sh 仅允许执行 PROJECT_PATH 下的 .sh 脚本路径")
+            raise HTTPException(400, "bash/sh 仅允许执行项目根目录下的 .sh 脚本路径")
     if argv[0] in ("bash", "sh") and len(argv) >= 2 and argv[1] == "-c" and len(argv) >= 3:
         script = argv[2]
         if len(script) > 4000 or re.search(r"[;&|`$()<>]", script):
@@ -122,12 +138,12 @@ def _safe_path_under_project(rel_or_abs: str) -> Path:
         raise HTTPException(400, "path 不能为空")
     p = Path(raw)
     if not p.is_absolute():
-        target = (PROJECT_PATH / p).resolve()
+        target = (resolved_project_path() / p).resolve()
     else:
         target = p.resolve()
-    root = PROJECT_PATH.resolve()
+    root = resolved_project_path().resolve()
     if not str(target).startswith(str(root) + os.sep) and target != root:
-        raise HTTPException(400, "path 必须位于 PROJECT_PATH 目录内")
+        raise HTTPException(400, "path 必须位于项目根目录内")
     return target
 
 
@@ -137,7 +153,7 @@ _MANAGED_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,40}$")
 
 
 def _compose_manifest_load() -> Dict[str, Any]:
-    mf = _COMPOSE_MANAGED_ROOT / "manifest.json"
+    mf = _path_compose_managed_root() / "manifest.json"
     if not mf.exists():
         return {"stores": []}
     try:
@@ -148,15 +164,15 @@ def _compose_manifest_load() -> Dict[str, Any]:
 
 
 def _compose_manifest_save(data: Dict[str, Any]) -> None:
-    _COMPOSE_MANAGED_ROOT.mkdir(parents=True, exist_ok=True)
-    (_COMPOSE_MANAGED_ROOT / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path_compose_managed_root().mkdir(parents=True, exist_ok=True)
+    (_path_compose_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _compose_store_dir(sid: str) -> Path:
     if not _COMPOSE_STORE_RE.match((sid or "").strip()):
         raise HTTPException(400, "非法 Compose 托管 id")
-    d = (_COMPOSE_MANAGED_ROOT / sid.strip()).resolve()
-    root = _COMPOSE_MANAGED_ROOT.resolve()
+    d = (_path_compose_managed_root() / sid.strip()).resolve()
+    root = _path_compose_managed_root().resolve()
     if not str(d).startswith(str(root) + os.sep):
         raise HTTPException(400, "路径越界")
     return d
@@ -203,8 +219,8 @@ def _compose_yaml_path(rel: str) -> Path:
         return p
     if ".." in rel or rel.startswith("/"):
         raise HTTPException(400, "非法 compose 文件路径")
-    p = (PROJECT_PATH / rel).resolve()
-    root = PROJECT_PATH.resolve()
+    p = (resolved_project_path() / rel).resolve()
+    root = resolved_project_path().resolve()
     if not str(p).startswith(str(root) + os.sep):
         raise HTTPException(400, "compose 文件须位于项目根下")
     if p.suffix.lower() not in (".yml", ".yaml"):
@@ -221,7 +237,7 @@ def _compose_cmd(file_rel: str, parts: List[str], timeout: int = 120) -> dict:
 
 
 def _managed_manifest_load() -> Dict[str, Any]:
-    mf = _DOCKER_MANAGED_ROOT / "manifest.json"
+    mf = _path_docker_managed_root() / "manifest.json"
     if not mf.exists():
         return {"stores": []}
     try:
@@ -232,15 +248,15 @@ def _managed_manifest_load() -> Dict[str, Any]:
 
 
 def _managed_manifest_save(data: Dict[str, Any]) -> None:
-    _DOCKER_MANAGED_ROOT.mkdir(parents=True, exist_ok=True)
-    (_DOCKER_MANAGED_ROOT / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path_docker_managed_root().mkdir(parents=True, exist_ok=True)
+    (_path_docker_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _managed_store_dir(sid: str) -> Path:
     if not _MANAGED_STORE_RE.match((sid or "").strip()):
         raise HTTPException(400, "非法 Dockerfile 仓库 id")
-    d = (_DOCKER_MANAGED_ROOT / sid.strip()).resolve()
-    root = _DOCKER_MANAGED_ROOT.resolve()
+    d = (_path_docker_managed_root() / sid.strip()).resolve()
+    root = _path_docker_managed_root().resolve()
     if not str(d).startswith(str(root) + os.sep):
         raise HTTPException(400, "路径越界")
     return d
@@ -339,10 +355,10 @@ def _default_pins() -> Dict[str, Any]:
 
 
 def _load_pins() -> Dict[str, Any]:
-    if not _VERSION_PINS_PATH.exists():
+    if not _path_version_pins().exists():
         return _default_pins()
     try:
-        d = json.loads(_VERSION_PINS_PATH.read_text(encoding="utf-8"))
+        d = json.loads(_path_version_pins().read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             return _default_pins()
         d.setdefault("runtime", _default_pins()["runtime"])
@@ -354,30 +370,30 @@ def _load_pins() -> Dict[str, Any]:
 
 
 def _save_pins(d: Dict[str, Any]) -> None:
-    _VERSION_PINS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _VERSION_PINS_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path_version_pins().parent.mkdir(parents=True, exist_ok=True)
+    _path_version_pins().write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_custom_catalog() -> List[Dict[str, Any]]:
-    if not _CUSTOM_CHECKS_PATH.exists():
+    if not _path_env_custom_checks().exists():
         return []
     try:
-        d = json.loads(_CUSTOM_CHECKS_PATH.read_text(encoding="utf-8"))
+        d = json.loads(_path_env_custom_checks().read_text(encoding="utf-8"))
         return d if isinstance(d, list) else []
     except Exception:
         return []
 
 
 def _save_custom_catalog(items: List[Dict[str, Any]]) -> None:
-    _CUSTOM_CHECKS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _CUSTOM_CHECKS_PATH.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path_env_custom_checks().parent.mkdir(parents=True, exist_ok=True)
+    _path_env_custom_checks().write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_docker_custom_presets() -> List[Dict[str, Any]]:
-    if not _DOCKER_CUSTOM_PRESETS_PATH.exists():
+    if not _path_docker_custom_presets().exists():
         return []
     try:
-        d = json.loads(_DOCKER_CUSTOM_PRESETS_PATH.read_text(encoding="utf-8"))
+        d = json.loads(_path_docker_custom_presets().read_text(encoding="utf-8"))
         arr = d.get("presets") if isinstance(d, dict) else d
         return arr if isinstance(arr, list) else []
     except Exception:
@@ -385,8 +401,8 @@ def _load_docker_custom_presets() -> List[Dict[str, Any]]:
 
 
 def _save_docker_custom_presets(items: List[Dict[str, Any]]) -> None:
-    _DOCKER_CUSTOM_PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _DOCKER_CUSTOM_PRESETS_PATH.write_text(
+    _path_docker_custom_presets().parent.mkdir(parents=True, exist_ok=True)
+    _path_docker_custom_presets().write_text(
         json.dumps({"presets": items}, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
@@ -566,8 +582,8 @@ class ExecAllowlistAppendBody(BaseModel):
 
 
 def _script_path(rel: str) -> Optional[Path]:
-    p = (PROJECT_PATH / rel).resolve()
-    root = PROJECT_PATH.resolve()
+    p = (resolved_project_path() / rel).resolve()
+    root = resolved_project_path().resolve()
     if not str(p).startswith(str(root) + os.sep):
         return None
     return p if p.is_file() else None
@@ -663,17 +679,17 @@ def append_exec_allowlist(body: ExecAllowlistAppendBody):
     if not re.match(r"^[a-zA-Z0-9._-]{1,48}$", b):
         raise HTTPException(400, "binary 格式非法")
     extra: List[str] = []
-    if _EXEC_ALLOWLIST_EXTRA_PATH.exists():
+    if _path_exec_allow_extra().exists():
         try:
-            x = json.loads(_EXEC_ALLOWLIST_EXTRA_PATH.read_text(encoding="utf-8"))
+            x = json.loads(_path_exec_allow_extra().read_text(encoding="utf-8"))
             if isinstance(x, list):
                 extra = [str(s) for s in x if isinstance(s, str)]
         except Exception:
             extra = []
     if b not in extra:
         extra.append(b)
-    _EXEC_ALLOWLIST_EXTRA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _EXEC_ALLOWLIST_EXTRA_PATH.write_text(json.dumps(extra, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path_exec_allow_extra().parent.mkdir(parents=True, exist_ok=True)
+    _path_exec_allow_extra().write_text(json.dumps(extra, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "extra": extra}
 
 
@@ -703,12 +719,12 @@ def remediate_run(body: RemediateRunBody):
         script = _script_path("sop/tools/install-integrations.sh")
         if not script:
             raise HTTPException(404, "未找到 sop/tools/install-integrations.sh（请确认 PROJECT_PATH 为仓库根）")
-        return _run(["bash", str(script)], cwd=str(PROJECT_PATH), timeout=900)
+        return _run(["bash", str(script)], cwd=str(resolved_project_path()), timeout=900)
     if action == "health_check":
         script = _script_path("sop/tools/health-check.sh")
         if not script:
             raise HTTPException(404, "未找到 sop/tools/health-check.sh")
-        return _run(["bash", str(script)], cwd=str(PROJECT_PATH), timeout=120)
+        return _run(["bash", str(script)], cwd=str(resolved_project_path()), timeout=120)
     raise HTTPException(400, "action 仅支持 install_integrations | health_check")
 
 
@@ -782,7 +798,7 @@ async def tool_install_ws(websocket: WebSocket, tool: str = Query(..., max_lengt
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd=str(PROJECT_PATH),
+            cwd=str(resolved_project_path()),
         )
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})
@@ -1109,19 +1125,19 @@ def compose_files_list():
     found: List[Dict[str, Any]] = []
     seen: set[str] = set()
     for pattern in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
-        p = PROJECT_PATH / pattern
+        p = resolved_project_path() / pattern
         if p.is_file():
             found.append({"path": pattern, "size": p.stat().st_size, "kind": "project"})
             seen.add(pattern)
     for p in (
-        sorted(PROJECT_PATH.glob("docker-compose*.yml"))
-        + sorted(PROJECT_PATH.glob("docker-compose*.yaml"))
-        + sorted(PROJECT_PATH.glob("compose*.yml"))
-        + sorted(PROJECT_PATH.glob("compose*.yaml"))
+        sorted(resolved_project_path().glob("docker-compose*.yml"))
+        + sorted(resolved_project_path().glob("docker-compose*.yaml"))
+        + sorted(resolved_project_path().glob("compose*.yml"))
+        + sorted(resolved_project_path().glob("compose*.yaml"))
     ):
         if not p.is_file():
             continue
-        rel = p.relative_to(PROJECT_PATH).as_posix()
+        rel = p.relative_to(resolved_project_path()).as_posix()
         if rel in seen or "node_modules" in rel.split("/"):
             continue
         found.append({"path": rel, "size": p.stat().st_size, "kind": "project"})
@@ -1371,7 +1387,7 @@ async def docker_ws_exec(websocket: WebSocket, name: str):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            cwd=str(PROJECT_PATH),
+            cwd=str(resolved_project_path()),
         )
     except Exception as e:
         await websocket.send_json({"type": "error", "message": str(e)})

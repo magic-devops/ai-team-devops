@@ -489,6 +489,11 @@ cp .ai-memory/rules/coding/rule_*.md /new-project/.ai-memory/rules/coding/
 
 ## 10. Web 管理后台完整功能
 
+### 10.0 登录与项目上下文
+
+- 首次访问打开 **`login.html`** 完成初始化或登录；JWT 存入浏览器 **`sop-token`**。
+- 多项目 / SaaS 场景：顶栏选择项目后写入 **`sop-current-project-id`**，后续 API 自动带 **`X-Project-Id`**（与 `index.html` 内 **`apiFetch`** 一致）。脚本调用请使用 **`MANAGER_SOP_TOKEN` + `PROJECT_ID`**（`sop/tools/manager_client.py`），详见 [USER_MANUAL.md §1.2](USER_MANUAL.md) 与 [sop/tools/SCRIPTS.md](../sop/tools/SCRIPTS.md)。
+
 ### 10.1 全部页面（23个）
 
 | 页面 | 功能 |

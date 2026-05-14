@@ -21,26 +21,26 @@ const TenantsPage = () => {
   const [templates, setTemplates] = React.useState([]);
 
   const load = () => {
-    fetch('/api/projects', { headers: authHeaders() }).then(r => r.json()).then(setProjects).catch(() => {});
-    fetch('/api/projects/templates', { headers: authHeaders() }).then(r => r.json()).then(setTemplates).catch(() => {});
-    fetch('/api/businesses', { headers: authHeaders() }).then(r => r.json()).then(setBusinesses).catch(() => {});
-    fetch('/api/auth/users', { headers: authHeaders() }).then(r => r.json()).then(setUsers).catch(() => {});
+    apiFetch('/api/projects', { headers: authHeaders() }).then(r => r.json()).then(setProjects).catch(() => {});
+    apiFetch('/api/projects/templates', { headers: authHeaders() }).then(r => r.json()).then(setTemplates).catch(() => {});
+    apiFetch('/api/businesses', { headers: authHeaders() }).then(r => r.json()).then(setBusinesses).catch(() => {});
+    apiFetch('/api/auth/users', { headers: authHeaders() }).then(r => r.json()).then(setUsers).catch(() => {});
     if (mode === 'saas') {
-      fetch('/api/tenants', { headers: authHeaders() }).then(r => r.json()).then(setTenants).catch(() => {});
+      apiFetch('/api/tenants', { headers: authHeaders() }).then(r => r.json()).then(setTenants).catch(() => {});
     }
   };
 
   React.useEffect(() => { load(); }, []);
 
   const loadMembers = (pid) => {
-    fetch(`/api/projects/${pid}/members`, { headers: authHeaders() })
+    apiFetch(`/api/projects/${pid}/members`, { headers: authHeaders() })
       .then(r => r.json()).then(d => setMembers(p => ({ ...p, [pid]: d }))).catch(() => {});
   };
 
   const api = async (url, method, body) => {
     setSaving(true); setMsg(null);
     try {
-      const r = await fetch(url, {
+      const r = await apiFetch(url, {
         method, headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: body ? JSON.stringify(body) : undefined
       });

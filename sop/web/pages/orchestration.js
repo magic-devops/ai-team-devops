@@ -56,7 +56,7 @@ function OrchEnvCheckPanel(props) {
     var g = forcedGoal != null && String(forcedGoal).trim() !== '' ? String(forcedGoal).trim() : (aiGoal || '').trim();
     if (g) payload.goal = g;
     else if (!toolId) payload.goal = t('orch_ai_goal_default');
-    fetch(`${API}/orchestration/tools/ai-install-plan-v2`, {
+    apiFetch(`/orchestration/tools/ai-install-plan-v2`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -96,7 +96,7 @@ function OrchEnvCheckPanel(props) {
   const runGuardedRecipe = function (recipeId) {
     if (!recipeId || !confirm(t('orch_confirm_guard'))) return;
     setInstBusy('recipe:' + recipeId);
-    fetch(`${API}/orchestration/tools/install-guarded`, {
+    apiFetch(`/orchestration/tools/install-guarded`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipe_id: recipeId }),
@@ -467,7 +467,7 @@ function DevToolsPanel(props) {
   const errText = et || ec;
 
   const loadInstallLogs = () => {
-    fetch(`${API}/orchestration/tools/install-logs?limit=40`)
+    apiFetch(`/orchestration/tools/install-logs?limit=40`)
       .then((r) => r.json())
       .then((d) => setHistItems(d.items || []))
       .catch(() => {});
@@ -615,7 +615,7 @@ function DevToolsPanel(props) {
   };
 
   const setDefault = (id) => {
-    fetch(`${API}/orchestration/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_tool: id }) })
+    apiFetch(`/orchestration/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_tool: id }) })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -642,7 +642,7 @@ function DevToolsPanel(props) {
   };
 
   const saveNew = () => {
-    fetch(`${API}/orchestration/tools`, {
+    apiFetch(`/orchestration/tools`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -669,7 +669,7 @@ function DevToolsPanel(props) {
   const saveEdit = () => {
     const id = editOpen && editOpen.id;
     if (!id) return;
-    fetch(`${API}/orchestration/tools/${encodeURIComponent(id)}`, {
+    apiFetch(`/orchestration/tools/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -692,7 +692,7 @@ function DevToolsPanel(props) {
 
   const delCustom = (id) => {
     if (!confirm(t('orch_confirm_del_custom', { id }))) return;
-    fetch(`${API}/orchestration/tools/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    apiFetch(`/orchestration/tools/${encodeURIComponent(id)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -705,7 +705,7 @@ function DevToolsPanel(props) {
 
   const hideBuiltin = (id) => {
     if (!confirm(t('orch_confirm_hide', { id }))) return;
-    fetch(`${API}/orchestration/tools/hide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    apiFetch(`/orchestration/tools/hide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -717,7 +717,7 @@ function DevToolsPanel(props) {
   };
 
   const unhideBuiltin = (id) => {
-    fetch(`${API}/orchestration/tools/unhide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    apiFetch(`/orchestration/tools/unhide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -738,7 +738,7 @@ function DevToolsPanel(props) {
     var g = forcedGoal != null && String(forcedGoal).trim() !== '' ? String(forcedGoal).trim() : (aiGoal || '').trim();
     if (g) payload.goal = g;
     else if (!toolId) payload.goal = t('orch_ai_goal_default');
-    fetch(`${API}/orchestration/tools/ai-install-plan-v2`, {
+    apiFetch(`/orchestration/tools/ai-install-plan-v2`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -767,7 +767,7 @@ function DevToolsPanel(props) {
     if (!recipeId || !confirm(t('orch_confirm_guard'))) return;
     setInstBusy('recipe:' + recipeId);
     setConsoleText((prev) => (prev ? prev + '\n\n' : '') + t('orch_install_running') + '\nrecipe: ' + recipeId);
-    fetch(`${API}/orchestration/tools/install-guarded`, {
+    apiFetch(`/orchestration/tools/install-guarded`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipe_id: recipeId }),
@@ -792,7 +792,7 @@ function DevToolsPanel(props) {
 
   const unhideAllBuiltins = () => {
     if (!confirm(t('orch_unhide_all') + '?')) return;
-    fetch(`${API}/orchestration/tools/unhide-all`, { method: 'POST' })
+    apiFetch(`/orchestration/tools/unhide-all`, { method: 'POST' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -807,7 +807,7 @@ function DevToolsPanel(props) {
     if (!confirm(t('orch_confirm_ai_auto'))) return;
     setInstBusy('ai:' + toolId);
     setConsoleText(t('orch_install_running') + '\ntool: ' + toolId);
-    fetch(`${API}/orchestration/tools/ai-auto-install`, {
+    apiFetch(`/orchestration/tools/ai-auto-install`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool_id: toolId }),
@@ -1526,7 +1526,7 @@ function WorkflowPanel() {
       showToast(t('orch_wf_id_invalid'), 'err');
       return;
     }
-    fetch(`${API}/orchestration/workflows`, {
+    apiFetch(`/orchestration/workflows`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, id: wid }),
@@ -1546,7 +1546,7 @@ function WorkflowPanel() {
   };
   const del = (id) => {
     if (!confirm(t('orch_wf_confirm_del', { id }))) return;
-    fetch(`${API}/orchestration/workflows/${id}`, { method: 'DELETE' })
+    apiFetch(`/orchestration/workflows/${id}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -1758,7 +1758,7 @@ function QualityConfigPanel() {
     if (data) setForm(data.quality_config || {});
   }, [data]);
   const save = () => {
-    fetch(`${API}/orchestration/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quality_config: form }) })
+    apiFetch(`/orchestration/config`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quality_config: form }) })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -1822,7 +1822,7 @@ function VersionPanel() {
   const [modal, setModal] = React.useState(false);
   const [form, setForm] = React.useState({ tag: '', message: '' });
   const create = () => {
-    fetch(`${API}/orchestration/versions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+    apiFetch(`/orchestration/versions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
       .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
       .then(({ httpOk, d }) => {
         if (!httpOk) {

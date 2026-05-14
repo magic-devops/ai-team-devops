@@ -169,8 +169,8 @@ def get_vector_store(project_id: str = "",
         return MilvusStore(uri=uri, token=token)
 
     if _store is None:
-        from path_config import ai_memory_root
-        db_path = cfg.get("path") or os.getenv("LANCE_DB_PATH") or str(ai_memory_root() / "lancedb")
+        from path_config import resolved_ai_memory_root
+        db_path = cfg.get("path") or os.getenv("LANCE_DB_PATH") or str(resolved_ai_memory_root() / "lancedb")
         _store = LanceStore(db_path)
     return _store
 
@@ -340,7 +340,7 @@ def get_vector_store(project_vector_db: str | None = None,
 
     # 默认 lance
     if _store is None:
-        from path_config import ai_memory_root
-        db_path = cfg.get("path") or os.getenv("LANCE_DB_PATH") or str(ai_memory_root() / "lancedb")
+        from path_config import resolved_ai_memory_root
+        db_path = cfg.get("path") or os.getenv("LANCE_DB_PATH") or str(resolved_ai_memory_root() / "lancedb")
         _store = LanceStore(db_path)
     return _store

@@ -5,8 +5,13 @@ from typing import Optional, List, Dict
 from pathlib import Path
 import json, os, subprocess
 
+from path_config import resolved_project_path
+
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
-SETTINGS_FILE = Path(os.getenv("PROJECT_PATH", ".")) / ".claude" / "settings.json"
+
+
+def _settings_file() -> Path:
+    return resolved_project_path() / ".claude" / "settings.json"
 
 class McpServer(BaseModel):
     name: str; command: str; args: List[str] = []; description: str = ""
@@ -14,30 +19,30 @@ class McpServer(BaseModel):
 
 @router.get("")
 def list_mcp():
-    if not SETTINGS_FILE.exists(): return []
+    if not _settings_file().exists(): return []
     try:
-        cfg = json.loads(SETTINGS_FILE.read_text())
+        cfg = json.loads(_settings_file().read_text())
         servers = cfg.get("mcpServers", {})
         return [{"name": k, **v} for k, v in servers.items()]
     except Exception: return []
 
 @router.post("")
 def add_mcp(body: McpServer):
-    if not SETTINGS_FILE.exists(): raise HTTPException(404, "settings.json not found")
-    cfg = json.loads(SETTINGS_FILE.read_text())
+    if not _settings_file().exists(): raise HTTPException(404, "settings.json not found")
+    cfg = json.loads(_settings_file().read_text())
     cfg.setdefault("mcpServers", {})[body.name] = {
         "command": body.command, "args": body.args, "description": body.description
     }
     if body.env: cfg["mcpServers"][body.name]["env"] = body.env
-    SETTINGS_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    _settings_file().write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
     return {"ok": True}
 
 @router.delete("/{name}")
 def remove_mcp(name: str):
-    if not SETTINGS_FILE.exists(): raise HTTPException(404, "settings.json not found")
-    cfg = json.loads(SETTINGS_FILE.read_text())
+    if not _settings_file().exists(): raise HTTPException(404, "settings.json not found")
+    cfg = json.loads(_settings_file().read_text())
     cfg.get("mcpServers", {}).pop(name, None)
-    SETTINGS_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    _settings_file().write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
     return {"ok": True}
 
 @router.get("/builtin")

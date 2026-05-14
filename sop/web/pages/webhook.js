@@ -12,15 +12,15 @@ const WebhookPage = () => {
   const [msg, setMsg] = React.useState(null);
 
   const load = () => {
-    fetch(`${API}/webhooks`, { headers: authHeaders() }).then(r => r.json()).then(setHooks).catch(() => {});
-    fetch(`${API}/webhooks/events`, { headers: authHeaders() }).then(r => r.json()).then(d => setEvents(d.events || [])).catch(() => {});
+    apiFetch(`/webhooks`, { headers: authHeaders() }).then(r => r.json()).then(setHooks).catch(() => {});
+    apiFetch(`/webhooks/events`, { headers: authHeaders() }).then(r => r.json()).then(d => setEvents(d.events || [])).catch(() => {});
   };
   React.useEffect(() => { load(); }, []);
 
   const api = async (url, method, body) => {
     setSaving(true); setMsg(null);
     try {
-      const r = await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const r = await apiFetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || '操作失败');
       setMsg({ ok: true, text: '操作成功' }); load(); setModal(false); setForm({ name: '', url: '', secret: '', events: [] });
@@ -29,7 +29,7 @@ const WebhookPage = () => {
   };
 
   const test = async (id) => {
-    const r = await fetch(`${API}/webhooks/${id}/test`, { method: 'POST', headers: authHeaders() });
+    const r = await apiFetch(`/webhooks/${id}/test`, { method: 'POST', headers: authHeaders() });
     const d = await r.json();
     setMsg({ ok: d.ok, text: d.ok ? `测试成功 (${d.status_code})` : `测试失败: ${d.error}` });
   };

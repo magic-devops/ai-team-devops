@@ -15,14 +15,21 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from path_config import ai_memory_root, project_path
+from path_config import resolved_ai_memory_root, resolved_project_path
 
 router = APIRouter(prefix="/api/vibe", tags=["vibe"])
-PROJECT_PATH = project_path()
 
-HISTORY_FILE = ai_memory_root() / "vibe_history.json"
-UPLOAD_ROOT = ai_memory_root() / "vibe_uploads"
-SESSIONS_FILE = ai_memory_root() / "vibe_sessions.json"
+
+def _history_file() -> Path:
+    return resolved_ai_memory_root() / "vibe_history.json"
+
+
+def _upload_root() -> Path:
+    return resolved_ai_memory_root() / "vibe_uploads"
+
+
+def _sessions_file() -> Path:
+    return resolved_ai_memory_root() / "vibe_sessions.json"
 
 _MAX_FILE_SIZE = 6 * 1024 * 1024
 _MAX_SESSION_MESSAGES = 200
@@ -43,26 +50,26 @@ def _safe_filename(name: str) -> str:
 
 
 def _load_history():
-    return json.loads(HISTORY_FILE.read_text()) if HISTORY_FILE.exists() else []
+    return json.loads(_history_file().read_text()) if _history_file().exists() else []
 
 
 def _save_history(h):
-    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    HISTORY_FILE.write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2))
+    _history_file().parent.mkdir(parents=True, exist_ok=True)
+    _history_file().write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2))
 
 
 def _load_sessions() -> Dict[str, Any]:
-    if not SESSIONS_FILE.exists():
+    if not _sessions_file().exists():
         return {"sessions": []}
     try:
-        return json.loads(SESSIONS_FILE.read_text())
+        return json.loads(_sessions_file().read_text())
     except Exception:
         return {"sessions": []}
 
 
 def _save_sessions(db: Dict[str, Any]):
-    SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SESSIONS_FILE.write_text(json.dumps(db, ensure_ascii=False, indent=2))
+    _sessions_file().parent.mkdir(parents=True, exist_ok=True)
+    _sessions_file().write_text(json.dumps(db, ensure_ascii=False, indent=2))
 
 
 def _resolve_upload_path(rel: str) -> Optional[Path]:
@@ -76,9 +83,9 @@ def _resolve_upload_path(rel: str) -> Optional[Path]:
     fn = Path(parts[-1]).name
     if not fn:
         return None
-    p = (UPLOAD_ROOT / sid / fn).resolve()
+    p = (_upload_root() / sid / fn).resolve()
     try:
-        p.relative_to(UPLOAD_ROOT.resolve())
+        p.relative_to(_upload_root().resolve())
     except ValueError:
         return None
     if p.exists() and p.is_file():
@@ -136,7 +143,7 @@ class VibeSessionPatch(BaseModel):
 
 
 class VibeTerminalExecBody(BaseModel):
-    """在 PROJECT_PATH 下受控执行 shell 命令（首段可执行文件须在环境白名单内）。"""
+    """在项目根目录下受控执行 shell 命令（首段可执行文件须在环境白名单内）。"""
 
     command: str = Field("", max_length=8000)
     cwd: str = Field("", max_length=500)
@@ -232,7 +239,7 @@ async def upload_vibe(session: str = Form("default"), files: List[UploadFile] = 
     if not files:
         raise HTTPException(400, "未选择文件")
     sid = _safe_session(session)
-    dirp = UPLOAD_ROOT / sid
+    dirp = _upload_root() / sid
     dirp.mkdir(parents=True, exist_ok=True)
     out = []
     for uf in files[:12]:
@@ -279,7 +286,7 @@ def run_vibe(body: VibeRequest):
             capture_output=True,
             text=True,
             timeout=120,
-            cwd=str(PROJECT_PATH),
+            cwd=str(resolved_project_path()),
             input=full_prompt if body.tool == "aider" else None,
         )
         output = result.stdout or result.stderr
@@ -420,7 +427,7 @@ def _install_hint(tool: str) -> str:
     return hints.get(tool, f"请安装 {tool}")
 
 
-# ── 工作区浏览（PROJECT_PATH 内，防路径穿越）────────────────────────────
+# ── 工作区浏览（项目根内，防路径穿越）────────────────────────────
 _SKIP_LIST_DIR_NAMES = {
     "node_modules",
     ".git",
@@ -440,7 +447,7 @@ def _workspace_resolve(rel: str) -> Path:
     rel = (rel or "").replace("\\", "/").strip("/")
     if ".." in rel or rel.startswith("/"):
         raise HTTPException(400, "非法路径")
-    base = PROJECT_PATH.resolve()
+    base = resolved_project_path().resolve()
     target = (base / rel).resolve()
     try:
         target.relative_to(base)
@@ -452,7 +459,7 @@ def _workspace_resolve(rel: str) -> Path:
 def _terminal_cwd(rel: str) -> Path:
     rel = (rel or "").strip().replace("\\", "/")
     if not rel:
-        return PROJECT_PATH.resolve()
+        return resolved_project_path().resolve()
     p = _workspace_resolve(rel)
     if not p.is_dir():
         raise HTTPException(400, "cwd 不是有效目录")
@@ -460,7 +467,7 @@ def _terminal_cwd(rel: str) -> Path:
 
 
 def _terminal_cwd_display(cwd_p: Path) -> str:
-    root = PROJECT_PATH.resolve()
+    root = resolved_project_path().resolve()
     try:
         if cwd_p.resolve() == root:
             return "."
@@ -551,7 +558,7 @@ def workspace_list(path: str = ""):
     for c in children:
         if c.is_dir() and c.name in _SKIP_LIST_DIR_NAMES:
             continue
-        rel = str(c.relative_to(PROJECT_PATH.resolve())).replace("\\", "/")
+        rel = str(c.relative_to(resolved_project_path().resolve())).replace("\\", "/")
         items.append({"name": c.name, "path": rel, "dir": c.is_dir()})
     return {"path": path, "items": items}
 

@@ -14,14 +14,14 @@ function AgentManager() {
   const save = () => {
     const isEdit = modal && modal.id && modal !== 'create';
     const url = isEdit ? `${API}/agents/${modal.id}` : `${API}/agents`;
-    fetch(url,{method:isEdit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(url,{method:isEdit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{ if(!r.ok) throw new Error(); })
       .then(()=>{setModal(null);reloadAgents();showToast('已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const del = (id) => {
     if(!confirm('确认删除？')) return;
-    fetch(`${API}/agents/${id}`,{method:'DELETE'})
+    apiFetch(`/agents/${id}`,{method:'DELETE'})
       .then((r)=>{ if(!r.ok) throw new Error(); })
       .then(()=>{reloadAgents();showToast('已删除','ok');})
       .catch(()=>showToast('删除失败','err'));
@@ -137,7 +137,7 @@ function GroupManager({groups,reload,allAgents}) {
   const [modal,setModal] = React.useState(false);
   const [form,setForm] = React.useState({id:'',name:'',description:'',agents:[]});
   const save = () => {
-    fetch(`${API}/agents/groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/agents/groups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(false);reload();showToast('专家组已创建','ok');})
       .catch(()=>showToast('保存失败','err'));

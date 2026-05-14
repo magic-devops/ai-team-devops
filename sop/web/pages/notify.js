@@ -5,21 +5,21 @@ function NotifyManager() {
   const [testing,setTesting] = React.useState({});
 
   const save = () => {
-    fetch(`${API}/notify/channels`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/notify/channels`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(false);reload();showToast('渠道已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const del = (name) => {
     if(!confirm(`删除渠道 ${name}？`)) return;
-    fetch(`${API}/notify/channels/${name}`,{method:'DELETE'})
+    apiFetch(`/notify/channels/${name}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已删除','ok');})
       .catch(()=>showToast('删除失败','err'));
   };
   const test = (name) => {
     setTesting(p=>({...p,[name]:true}));
-    fetch(`${API}/notify/test/${name}`,{method:'POST'})
+    apiFetch(`/notify/test/${name}`,{method:'POST'})
       .then(r=>r.json())
       .then(d=>{
         setTesting(p=>({...p,[name]:false}));
@@ -98,7 +98,7 @@ function BroadcastPanel() {
   const [result,setResult] = React.useState(null);
   const send = () => {
     const p = new URLSearchParams({title:form.title,content:form.content,level:form.level,event:form.event});
-    fetch(`${API}/notify/broadcast?${p}`,{method:'POST'})
+    apiFetch(`/notify/broadcast?${p}`,{method:'POST'})
       .then(r=>r.json())
       .then(d=>{
         setResult(d);

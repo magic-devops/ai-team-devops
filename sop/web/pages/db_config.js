@@ -11,9 +11,9 @@ const DbConfigPage = () => {
   const [msg, setMsg] = React.useState(null);
 
   React.useEffect(() => {
-    fetch('/api/db-config', { headers: authHeaders() })
+    apiFetch('/api/db-config', { headers: authHeaders() })
       .then(r => r.json()).then(setCfg).catch(() => {});
-    fetch('/api/db-config/vector/tables', { headers: authHeaders() })
+    apiFetch('/api/db-config/vector/tables', { headers: authHeaders() })
       .then(r => r.json()).then(d => setTables(d.tables || [])).catch(() => {});
   }, []);
 
@@ -21,7 +21,7 @@ const DbConfigPage = () => {
     setTesting(p => ({ ...p, [type]: true }));
     setMsg(null);
     try {
-      const r = await fetch(`/api/db-config/${type}/test`, {
+      const r = await apiFetch(`/api/db-config/${type}/test`, {
         method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });

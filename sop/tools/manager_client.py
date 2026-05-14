@@ -1,7 +1,16 @@
 """本地项目 Agent 与 Manager 交互客户端
-- 安全：API Key 认证 + HMAC 签名验证
-- 稳定：连接池 + 超时 + 重试
-- 自动恢复：指数退避重试，断线重连
+
+环境变量（常用）:
+  MANAGER_URL       默认 http://localhost:8765
+  PROJECT_ID        写入 X-Project-Id；须与 SQL 中 projects.id 一致，供 project_scope_middleware 解析磁盘路径
+  MANAGER_SOP_TOKEN 可选。登录后 JWT（与浏览器 localStorage sop-token 同源）；**推荐**与 PROJECT_ID
+                    同用，否则仅 API Key 时中间件无法注入请求级项目作用域，会回退到进程 PROJECT_PATH
+  MANAGER_API_KEY   可选。账号管理页创建的 API Key；发送 X-Api-Key + X-Sop-Signature（body HMAC）
+  TENANT_ID         部分查询兼容用，默认 t-default
+  MANAGER_TIMEOUT / MANAGER_MAX_RETRIES
+
+安全: API Key + HMAC 签名（有 body 时）；或 Bearer JWT
+稳定: 超时 + 指数退避重试
 """
 from __future__ import annotations
 import os, json, time, hashlib, hmac, uuid
@@ -11,6 +20,7 @@ import urllib.request, urllib.error
 
 MANAGER_URL = os.getenv("MANAGER_URL", "http://localhost:8765")
 MANAGER_API_KEY = os.getenv("MANAGER_API_KEY", "")
+MANAGER_SOP_TOKEN = os.getenv("MANAGER_SOP_TOKEN", "").strip()
 PROJECT_ID = os.getenv("PROJECT_ID", "")
 TENANT_ID = os.getenv("TENANT_ID", "t-default")
 _TIMEOUT = int(os.getenv("MANAGER_TIMEOUT", "30"))
@@ -19,6 +29,8 @@ _MAX_RETRIES = int(os.getenv("MANAGER_MAX_RETRIES", "3"))
 
 def _headers(body: str = "") -> dict:
     h = {"Content-Type": "application/json", "X-Project-Id": PROJECT_ID}
+    if MANAGER_SOP_TOKEN:
+        h["Authorization"] = "Bearer " + MANAGER_SOP_TOKEN
     if MANAGER_API_KEY:
         h["X-Api-Key"] = MANAGER_API_KEY
         if body:

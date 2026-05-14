@@ -18,20 +18,20 @@ function ReposPanel() {
   const [syncing,setSyncing] = React.useState({});
 
   const save = () => {
-    fetch(`${API}/skill-repo/repos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
+    apiFetch(`/skill-repo/repos`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{setModal(false);reload();showToast('仓库已保存','ok');})
       .catch(()=>showToast('保存失败','err'));
   };
   const del = (id) => {
-    fetch(`${API}/skill-repo/repos/${id}`,{method:'DELETE'})
+    apiFetch(`/skill-repo/repos/${id}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已删除','ok');})
       .catch(()=>showToast('删除失败','err'));
   };
   const sync = (id) => {
     setSyncing(p=>({...p,[id]:true}));
-    fetch(`${API}/skill-repo/repos/${id}/sync`,{method:'POST'}).then(r=>r.json()).then(d=>{
+    apiFetch(`/skill-repo/repos/${id}/sync`,{method:'POST'}).then(r=>r.json()).then(d=>{
       setSyncing(p=>({...p,[id]:false}));
       reload();
       if(d.ok){showToast(`同步成功，发现 ${d.skills_found||0} 个技能`,'ok');}
@@ -86,13 +86,13 @@ function ReposPanel() {
 function InstalledPanel() {
   const {data,loading,error,reload} = useFetch(`${API}/skill-repo/installed`);
   const toggle = (key) => {
-    fetch(`${API}/skill-repo/installed/${key}/toggle`,{method:'PATCH'})
+    apiFetch(`/skill-repo/installed/${key}/toggle`,{method:'PATCH'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('状态已更新','ok');})
       .catch(()=>showToast('操作失败','err'));
   };
   const uninstall = (key) => { if(!confirm('确认卸载？')) return;
-    fetch(`${API}/skill-repo/installed/${key}`,{method:'DELETE'})
+    apiFetch(`/skill-repo/installed/${key}`,{method:'DELETE'})
       .then((r)=>{if(!r.ok)throw new Error();})
       .then(()=>{reload();showToast('已卸载','ok');})
       .catch(()=>showToast('卸载失败','err'));
@@ -168,7 +168,7 @@ function ImportPanel() {
       execution: (form.execution || '').trim(),
       npx_package: mode === 'npx' ? (form.npx_package || '').trim() : '',
     };
-    fetch(`${API}/skill-repo/import`, {
+    apiFetch(`/skill-repo/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -206,7 +206,7 @@ function ImportPanel() {
     fd.append('file', zipFile);
     setBusy(true);
     setResult(null);
-    fetch(`${API}/skill-repo/import/zip`, { method: 'POST', body: fd })
+    apiFetch(`/skill-repo/import/zip`, { method: 'POST', body: fd })
       .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
       .then(({ httpOk, d }) => {
         setBusy(false);

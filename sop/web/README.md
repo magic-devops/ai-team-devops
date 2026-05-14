@@ -43,6 +43,7 @@ curl -X POST http://localhost:8765/api/auth/init \
 | `SECRET_KEY` | — | JWT 签名密钥，**生产必须修改** |
 | `TENANT_ID` | `t-default` | 单项目模式下的租户 ID |
 | `PROJECT_ID` | `proj-default` | 单项目模式下的项目 ID |
+| （HTTP）`X-Project-Id` | — | 登录后浏览器/API 客户端携带，用于解析「当前项目」磁盘路径与 SQL 上下文（与 JWT 联动；见 `project_scope_middleware`） |
 | `LOG_DIR` | （自动） | 留空则使用 `SOP_RUNTIME_DIR/logs` |
 | `ANTHROPIC_API_KEY` | — | AI 功能（需求解析/知识库润色） |
 
@@ -125,18 +126,25 @@ web/
 
 1. 访问 `login.html` → 输入用户名/密码 → 获取 JWT token
 2. token 存入 `localStorage['sop-token']`
-3. 所有 API 请求自动携带 `Authorization: Bearer {token}`
-4. 401 响应自动跳转登录页
+3. 所有业务 API 经 **`apiFetch`**（`index.html`）发起：自动附带 `Authorization`、`X-Project-Id`（来自 `localStorage` 的 `sop-current-project-id`）、默认超时；根相对路径 `/tasks/...` 会解析为 `当前 origin + /api + /tasks/...`。
+4. 401 自动清除 token 并跳转 `login.html`；403 会 Toast 提示（含后端 `detail`），并派发 `devdash-api-forbidden`。
+5. 顶栏切换项目会写入 `sop-current-project-id` 并广播 `devdash-project-change`，各页 `useFetch` 等会重新拉数。
+
+**项目作用域（后端）**：`routers/project_scope_middleware.py` 在 Bearer JWT 有效时根据 `X-Project-Id` 与 `projects` 表解析 `path_config.resolved_project_path`；`/api/auth/*` 与 `/api/health` 等不参与作用域注入。SaaS 下非法项目或无权访问返回 **403/404**。
 
 **角色权限**：`super_admin > tenant_admin > project_admin > developer > viewer`
 
-**API Key**：在「账号管理」页创建，用于 Agent 自动化调用（`X-Api-Key` header）。
+**API Key**：在「账号管理」页创建；若路由层启用 `X-Api-Key` 校验可配合自动化（当前多数字段路由以 JWT 为主，脚本侧推荐 **`MANAGER_SOP_TOKEN` + `PROJECT_ID`**，见 `sop/tools/manager_client.py`）。
 
 ## 本地 Agent 与 Manager 交互
 
 ```bash
 # 使用 manager_client.py（sop/tools/）
-MANAGER_URL=http://localhost:8765 MANAGER_API_KEY=sop_xxx \
+MANAGER_URL=http://localhost:8765 MANAGER_SOP_TOKEN="<登录后 JWT>" PROJECT_ID=my-proj \
+  python sop/tools/manager_client.py health
+
+# 或仅 API Key（无 JWT 时中间件不注入请求级项目路径，依赖进程级 PROJECT_PATH）
+MANAGER_URL=http://localhost:8765 MANAGER_API_KEY=sop_xxx PROJECT_ID=my-proj \
   python sop/tools/manager_client.py health
 
 # 任务完成上报

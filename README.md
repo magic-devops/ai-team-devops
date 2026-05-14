@@ -56,6 +56,7 @@ AI 编码工具（Codex CLI、Claude Code、Cursor、opencode 等）正在改变
 
 ### 🖥️ Web 管理后台
 - **研发全流程**：`GET /api/dev-flow/summary` 聚合指标 + 阶段导航 + 低 Token 提示模板（[使用手册](docs/USER_MANUAL.md)）
+- **鉴权与项目作用域**：JWT + 顶栏 **`X-Project-Id`**；控制台统一 **`apiFetch`**；SaaS 下非法项目返回 403/404（见 `docs/USER_MANUAL.md` §1.2）
 - **Vibe Coding**：会话/记忆/附件、多模态 LLM、Markdown·代码·HTML 预览、项目目录只读浏览
 - 需求看板、执行计划、迭代与 Sprint、问题中心、全局搜索、数据导出
 - 技术方案管理、知识库（含文档抽取 / AI 润色）、规范与规则库
@@ -109,7 +110,7 @@ bash sop/tools/start-manager.sh
 bash sop/tools/health-check.sh
 ```
 
-**脚本完整清单**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)。若需重置或创建管理员账号：`python3 sop/tools/reset-admin.py`（见脚本说明）。
+**脚本完整清单**：[sop/tools/SCRIPTS.md](sop/tools/SCRIPTS.md)。若需重置或创建管理员账号：`python3 sop/tools/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `sop/tools/manager_client.py`。
 
 ### 在 Claude Code 中使用
 

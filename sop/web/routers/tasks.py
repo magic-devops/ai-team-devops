@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, rows, table, now
+from path_config import resolved_ai_memory_root, resolved_project_id
+from .db_sql_compat import rows, table, now
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 _PRIOS = ("P0", "P1", "P2", "P3")
-_TASK_UI_PATH = AI_MEMORY_ROOT / "tasks_plan_ui_state.json"
+
+
+def _task_ui_path():
+    return resolved_ai_memory_root() / "tasks_plan_ui_state.json"
 
 
 def _safe_task_id(tid: str) -> str:
@@ -28,10 +31,11 @@ def _ui_default() -> Dict[str, Any]:
 
 
 def _ui_load() -> Dict[str, Any]:
-    if not _TASK_UI_PATH.exists():
+    p = _task_ui_path()
+    if not p.exists():
         return _ui_default()
     try:
-        d = json.loads(_TASK_UI_PATH.read_text(encoding="utf-8"))
+        d = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             return _ui_default()
         d.setdefault("columns", {p: [] for p in _PRIOS})
@@ -44,8 +48,9 @@ def _ui_load() -> Dict[str, Any]:
 
 
 def _ui_save(d: Dict[str, Any]) -> None:
-    _TASK_UI_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _TASK_UI_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    p = _task_ui_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _ui_rebuild_columns(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> None:
@@ -177,7 +182,7 @@ def create_task(body: TaskCreate):
     tid = f"T-{int(now().timestamp() * 1000)}"
     row = {
         "id": tid,
-        "project_id": os.getenv("PROJECT_ID", "default"),
+        "project_id": resolved_project_id(),
         "req_id": body.req_id or "",
         "sprint_id": body.sprint_id or "",
         "title": body.title,

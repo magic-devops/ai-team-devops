@@ -11,9 +11,9 @@
 | 文件 | 用途 |
 |------|------|
 | `install-integrations.sh` | 创建/使用虚拟环境，按 `integrations-requirements.txt` 安装 FastAPI、LanceDB、pypdf 等；支持 `SOP_PYTHON`、`INSTALL_INTEGRATIONS_RECREATE`、`WRITE_INTEGRATIONS_LOCK` 等；`--help` 查看变量 |
-| `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`；环境变量 `PROJECT_PATH`（被管理仓库根）、`PORT`（默认 8765）；启动前会执行 `path_config.apply_startup_defaults()` 创建/迁移 `.sop-runtime/` |
+| `start-manager.sh` | 启动 Web 后台：`uvicorn main:app`；环境变量 `PROJECT_PATH`（被管理仓库根）、`PORT`（默认 8765）、`ADMIN_MODE`（`single` / `saas`）；启动前会执行 `path_config.apply_startup_defaults()` 创建/迁移 `.sop-runtime/` |
 | `start-dashboard.sh` | 与 `start-manager.sh` 等价入口，同样启动 **`main:app`**（历史命名保留） |
-| `health-check.sh` | 仓库与依赖健康检查 |
+| `health-check.sh` | 仓库与依赖健康检查；可选探测带鉴权的 API（见脚本头环境变量） |
 | `cleanup-legacy-runtime.sh` | 在数据已迁移到 `PROJECT_PATH/.sop-runtime/` 后，可选清理遗留的 `sop/web/sop.db*`、空日志目录等；默认 dry-run，`--apply` 真正删除（见脚本头） |
 | `snapshot.sh` | LanceDB / 状态快照相关导出（见脚本头注释） |
 | `sync-rules.sh` | 将规则同步到各工具可读位置 |
@@ -25,6 +25,21 @@
 | `SOP_RUNTIME_DIR` | 可选。统一运行时根；默认 `PROJECT_PATH/.sop-runtime`（内含 `db/sop.db`、`logs/`、`ai-memory/`、`reinit-backups/`） |
 | `AI_MEMORY_ROOT` | 可选。覆盖默认的 `SOP_RUNTIME_DIR/ai-memory` |
 | `SOP_RUNTIME_NO_SYMLINK` | 设为 `1` 时不在项目根创建 `.ai-memory` → `.sop-runtime/ai-memory` 符号链接（Unix） |
+| `ADMIN_MODE` | `single`（默认）或 `saas`；与 `sop/web/.env` 一致。SaaS 下须维护租户/项目/成员；请求级作用域见下 |
+
+**HTTP 请求级项目作用域（Web 与脚本共用后端约定）**
+
+- 已登录请求：`Authorization: Bearer <JWT>` + `X-Project-Id: <projects.id>`，由 `routers/project_scope_middleware.py` 解析并写入 `path_config` 的 ContextVar（`resolved_project_path` 等）；无效项目 / 无成员权限在 SaaS 下返回 **403/404**，不再静默落盘到错误目录。
+- 浏览器控制台统一经 **`apiFetch`**（`index.html`）：自动注入上述头、超时、`/foo` → `…/api/foo` 路径解析；403 会 Toast。
+- 公开接口（无需项目上下文）：`/api/auth/*`、`/api/health` 等；详见中间件源码中 `_NO_SCOPE_PATHS` 与 `path.startswith("/api/auth")`。
+
+**health-check.sh 可选变量**
+
+| 变量 | 说明 |
+|------|------|
+| `PORT` | Manager 端口，默认 8765 |
+| `HEALTH_CHECK_TOKEN` | 若设置：额外 `curl` `GET /api/health/detail`，带 `Authorization: Bearer` 与 `X-Project-Id`（需同时设 `HEALTH_CHECK_PROJECT_ID`） |
+| `HEALTH_CHECK_PROJECT_ID` | 与 `HEALTH_CHECK_TOKEN` 配对，作为 `X-Project-Id` |
 
 ### Python
 
@@ -32,7 +47,7 @@
 |------|------|
 | `sop_ai_hook.py` | 统一 AI hook 策略引擎；Codex / Claude 等 adapter 调用 |
 | `reset-admin.py` | **管理员账号**：交互式或 `create` / `reset` 子命令；默认 SQLite（读 `sop/web/.env`）；用法见文件头 docstring |
-| `manager_client.py` | 程序化调用 Manager HTTP API：`MANAGER_URL`、`MANAGER_API_KEY`、`PROJECT_ID`、`TENANT_ID` 等（见文件头） |
+| `manager_client.py` | 程序化调用 Manager HTTP API：`MANAGER_URL`、`PROJECT_ID`（`X-Project-Id`）、`MANAGER_SOP_TOKEN`（JWT，与登录 token 同源，**推荐**以启用请求级项目作用域）、`MANAGER_API_KEY`（可选 HMAC）、`TENANT_ID` 等（见文件头 docstring） |
 
 ### 数据与配置
 

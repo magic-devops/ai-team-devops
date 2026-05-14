@@ -17,20 +17,30 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/skill-repo", tags=["skill-repo"])
-REPO_DIR = ai_memory_root() / "skill-repos"
-REPO_DIR.mkdir(parents=True, exist_ok=True)
-INSTALLED_FILE = REPO_DIR / "installed.json"
+
+
+def _repo_dir() -> Path:
+    d = resolved_ai_memory_root() / "skill-repos"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _installed_file() -> Path:
+    return _repo_dir() / "installed.json"
+
 
 def _load_installed():
-    return json.loads(INSTALLED_FILE.read_text()) if INSTALLED_FILE.exists() else {}
+    p = _installed_file()
+    return json.loads(p.read_text()) if p.exists() else {}
+
 
 def _save_installed(d):
-    INSTALLED_FILE.write_text(json.dumps(d, indent=2, ensure_ascii=False))
-
-class RepoConfig(BaseModel):
+    p = _installed_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d, indent=2, ensure_ascii=False))
     id: str; name: str; url: str; description: str = ""; branch: str = "main"
 
 class SkillInstall(BaseModel):
@@ -39,30 +49,30 @@ class SkillInstall(BaseModel):
 @router.get("/repos")
 def list_repos():
     repos = []
-    for f in sorted(REPO_DIR.glob("repo_*.json")):
+    for f in sorted(_repo_dir().glob("repo_*.json")):
         try: repos.append(json.loads(f.read_text()))
         except Exception: pass
     return repos
 
 @router.post("/repos")
 def add_repo(body: RepoConfig):
-    f = REPO_DIR / f"repo_{body.id}.json"
+    f = _repo_dir() / f"repo_{body.id}.json"
     f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
     return {"ok": True, "id": body.id}
 
 @router.delete("/repos/{repo_id}")
 def remove_repo(repo_id: str):
-    f = REPO_DIR / f"repo_{repo_id}.json"
+    f = _repo_dir() / f"repo_{repo_id}.json"
     if f.exists(): f.unlink()
     return {"ok": True}
 
 @router.post("/repos/{repo_id}/sync")
 def sync_repo(repo_id: str):
     """从 git 仓库同步技能列表"""
-    f = REPO_DIR / f"repo_{repo_id}.json"
+    f = _repo_dir() / f"repo_{repo_id}.json"
     if not f.exists(): raise HTTPException(404, "Repo not found")
     repo = json.loads(f.read_text())
-    clone_dir = REPO_DIR / f"clone_{repo_id}"
+    clone_dir = _repo_dir() / f"clone_{repo_id}"
     try:
         if clone_dir.exists():
             r = subprocess.run(["git","pull"], capture_output=True, text=True, cwd=str(clone_dir), timeout=30)

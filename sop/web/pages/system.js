@@ -47,13 +47,13 @@ function ScriptManager() {
     setSelected(f);
     setEditing(false);
     setOutput(null);
-    fetch(`${API}/system/scripts/${f.name}/content`)
+    apiFetch(`/system/scripts/${f.name}/content`)
       .then((r) => r.json())
       .then((d) => setContent(d.content || ''))
       .catch(() => showToast(tr('sys_script_read_fail'), 'err'));
   };
   const save = () => {
-    fetch(`${API}/system/scripts/${selected.name}`, {
+    apiFetch(`/system/scripts/${selected.name}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
@@ -71,7 +71,7 @@ function ScriptManager() {
     if (!confirm(tr('sys_script_run_confirm', { name: selected.name }))) return;
     setRunning(true);
     setOutput(null);
-    fetch(`${API}/system/scripts/${selected.name}/run`, { method: 'POST' })
+    apiFetch(`/system/scripts/${selected.name}/run`, { method: 'POST' })
       .then((r) => r.json())
       .then((d) => {
         setOutput(d);
@@ -239,7 +239,7 @@ function MemoryManager() {
   const [tableStats, setTableStats] = React.useState({});
 
   const loadStats = (tbl) => {
-    fetch(`${API}/system/memory/lancedb/${tbl}/stats`)
+    apiFetch(`/system/memory/lancedb/${tbl}/stats`)
       .then((r) => r.json())
       .then((d) => setTableStats((p) => ({ ...p, [tbl]: d })))
       .catch(() => showToast(tr('sys_stats_load_fail'), 'err'));
@@ -275,7 +275,7 @@ function MemoryManager() {
                 className="btn btn-sm btn-danger"
                 style={{ padding: '2px 6px' }}
                 onClick={() =>
-                  fetch(`${API}/system/memory/snapshots/${f}`, { method: 'DELETE' })
+                  apiFetch(`/system/memory/snapshots/${f}`, { method: 'DELETE' })
                     .then((r) => {
                       if (!r.ok) throw new Error();
                     })
@@ -340,18 +340,18 @@ function OpsPanel() {
   }, [rel]);
 
   React.useEffect(() => {
-    fetch(`${API}/system/ops/process`)
+    apiFetch(`/system/ops/process`)
       .then((r) => r.json())
       .then(setProc)
       .catch(() => {});
-    Promise.all([fetch(`${API}/system/ops/restart-hint`).then((r) => r.json()), fetch(`${API}/system/ops/upgrade-hint`).then((r) => r.json())])
+    Promise.all([apiFetch(`/system/ops/restart-hint`).then((r) => r.json()), apiFetch(`/system/ops/upgrade-hint`).then((r) => r.json())])
       .then(([restart, upgrade]) => setHints({ restart, upgrade }))
       .catch(() => {});
   }, []);
 
   const saveRelease = () => {
     setRelSaving(true);
-    fetch(`${API}/system/release`, {
+    apiFetch(`/system/release`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ display_version: relForm.displayVersion.trim(), notes: relForm.notes }),
@@ -375,7 +375,7 @@ function OpsPanel() {
   const createBackup = () => {
     if (!confirm(tr('sys_backup_create_confirm', { profile: bkProfile }))) return;
     setBkBusy(true);
-    fetch(`${API}/system/backups`, {
+    apiFetch(`/system/backups`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profile: bkProfile }),
@@ -398,7 +398,7 @@ function OpsPanel() {
 
   const delBackup = (name) => {
     if (!confirm(tr('sys_backup_del_confirm', { name }))) return;
-    fetch(`${API}/system/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    apiFetch(`/system/backups/${encodeURIComponent(name)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })

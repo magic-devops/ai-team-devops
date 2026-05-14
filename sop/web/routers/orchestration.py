@@ -14,13 +14,19 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from path_config import ai_memory_root, project_path
+from path_config import resolved_ai_memory_root, resolved_project_path
 
 router = APIRouter(prefix="/api/orchestration", tags=["orchestration"])
-REPO_ROOT = project_path()
-ORCH_DIR = ai_memory_root() / "orchestration"
-ORCH_DIR.mkdir(parents=True, exist_ok=True)
-DEV_TOOLS_STATE = ORCH_DIR / "dev_tools_state.json"
+
+
+def _orch_dir() -> Path:
+    d = resolved_ai_memory_root() / "orchestration"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _dev_tools_state() -> Path:
+    return _orch_dir() / "dev_tools_state.json"
 
 # category: agent_cli | ide | assistant | chain（链路与运行时工具）
 DEV_TOOLS: List[Dict[str, str]] = [
@@ -126,7 +132,7 @@ def _tool_available(tool_id: str, cmd: str) -> bool:
     argv = TOOL_AVAILABILITY_ARGV.get(tool_id)
     if argv:
         try:
-            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(REPO_ROOT))
+            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(resolved_project_path()))
             return r.returncode == 0
         except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             return False
@@ -142,7 +148,7 @@ def _tool_availability_hint(tool_id: str, cmd: str) -> str:
     argv = TOOL_AVAILABILITY_ARGV.get(tool_id)
     if argv:
         try:
-            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(REPO_ROOT))
+            r = subprocess.run(list(argv), capture_output=True, text=True, timeout=10, cwd=str(resolved_project_path()))
             line = ((r.stdout or r.stderr or "").split("\n")[0] or "").strip()[:200]
             if r.returncode == 0:
                 return f"docker compose 检查: 可用 — {line}"
@@ -165,10 +171,10 @@ def _default_state() -> Dict[str, Any]:
 
 
 def _load_dev_tools_state() -> Dict[str, Any]:
-    if not DEV_TOOLS_STATE.exists():
+    if not _dev_tools_state().exists():
         return _default_state()
     try:
-        d = json.loads(DEV_TOOLS_STATE.read_text(encoding="utf-8"))
+        d = json.loads(_dev_tools_state().read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             return _default_state()
         d.setdefault("custom", [])
@@ -186,7 +192,7 @@ def _load_dev_tools_state() -> Dict[str, Any]:
 
 
 def _save_dev_tools_state(d: Dict[str, Any]) -> None:
-    DEV_TOOLS_STATE.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    _dev_tools_state().write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _builtin_ids() -> set:
@@ -235,7 +241,7 @@ def _merged_tool_ids() -> List[str]:
 
 
 def _fix_config_default_tool() -> None:
-    f = ORCH_DIR / "config.json"
+    f = _orch_dir() / "config.json"
     cfg = json.loads(f.read_text()) if f.exists() else {}
     ids = set(_merged_tool_ids())
     dt = str(cfg.get("default_tool") or "claude")
@@ -263,7 +269,7 @@ def _enrich_cmd_result(res: Dict[str, Any]) -> Dict[str, Any]:
 
 def _run_cmd(cmd: List[str], timeout: int = 600, cwd: Optional[str] = None) -> Dict[str, Any]:
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd or str(REPO_ROOT))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd or str(resolved_project_path()))
         out = (r.stdout or "")[-16000:]
         err = (r.stderr or "")[-8000:]
         log_parts: List[str] = []
@@ -292,8 +298,8 @@ def _run_cmd(cmd: List[str], timeout: int = 600, cwd: Optional[str] = None) -> D
 
 def _append_install_log(entry: Dict[str, Any]) -> None:
     """追加 JSONL 安装日志，供管理端「安装控制台」查看。"""
-    ORCH_DIR.mkdir(parents=True, exist_ok=True)
-    path = ORCH_DIR / "install_logs.jsonl"
+    _orch_dir().mkdir(parents=True, exist_ok=True)
+    path = _orch_dir() / "install_logs.jsonl"
     row = {**entry, "ts": datetime.now(timezone.utc).isoformat()}
     try:
         with path.open("a", encoding="utf-8") as fh:
@@ -671,7 +677,7 @@ def ai_auto_install_tool(body: AiToolInstallPlanBody):
     if not rid or rid not in GUARD_INSTALL_RECIPES:
         raise HTTPException(400, "该工具暂无受控一键安装配方，请使用 AI 安装说明或手动安装")
     argv = GUARD_INSTALL_RECIPES[rid]
-    result = _run_cmd(list(argv), timeout=900, cwd=str(REPO_ROOT))
+    result = _run_cmd(list(argv), timeout=900, cwd=str(resolved_project_path()))
     result["recipe_id"] = rid
     result["tool_id"] = tid
     _append_install_log(
@@ -697,7 +703,7 @@ def install_tool_guarded(body: GuardInstallBody):
     if rid not in GUARD_INSTALL_RECIPES:
         raise HTTPException(400, f"未知 recipe_id，允许: {', '.join(GUARD_INSTALL_RECIPES)}")
     argv = GUARD_INSTALL_RECIPES[rid]
-    result = _run_cmd(list(argv), timeout=900, cwd=str(REPO_ROOT))
+    result = _run_cmd(list(argv), timeout=900, cwd=str(resolved_project_path()))
     _append_install_log(
         {
             "kind": "install_guarded",
@@ -716,7 +722,7 @@ def install_tool_guarded(body: GuardInstallBody):
 
 @router.get("/tools/install-logs")
 def list_install_logs(limit: int = Query(40, ge=1, le=200)):
-    path = ORCH_DIR / "install_logs.jsonl"
+    path = _orch_dir() / "install_logs.jsonl"
     if not path.is_file():
         return {"items": []}
     try:
@@ -738,7 +744,7 @@ def list_install_logs(limit: int = Query(40, ge=1, le=200)):
 
 @router.get("/workflows")
 def list_workflows():
-    return [json.loads(f.read_text()) for f in sorted(ORCH_DIR.glob("wf_*.json"))]
+    return [json.loads(f.read_text()) for f in sorted(_orch_dir().glob("wf_*.json"))]
 
 
 @router.post("/workflows")
@@ -746,7 +752,7 @@ def create_workflow(body: WorkflowDef):
     wid = (body.id or "").strip()
     if not re.match(r"^[a-z][a-z0-9_-]{1,40}$", wid):
         raise HTTPException(400, "工作流 id 须为小写字母开头，仅含 a-z0-9_-，长度 2–41")
-    f = ORCH_DIR / f"wf_{wid}.json"
+    f = _orch_dir() / f"wf_{wid}.json"
     if f.is_file():
         raise HTTPException(409, "该工作流 id 已存在，请更换 id 或先删除已有工作流")
     try:
@@ -760,7 +766,7 @@ def create_workflow(body: WorkflowDef):
 
 @router.delete("/workflows/{wf_id}")
 def delete_workflow(wf_id: str):
-    f = ORCH_DIR / f"wf_{wf_id}.json"
+    f = _orch_dir() / f"wf_{wf_id}.json"
     if f.exists():
         f.unlink()
     return {"ok": True}
@@ -769,13 +775,13 @@ def delete_workflow(wf_id: str):
 @router.get("/config")
 def get_config():
     _fix_config_default_tool()
-    f = ORCH_DIR / "config.json"
+    f = _orch_dir() / "config.json"
     return json.loads(f.read_text()) if f.exists() else {"default_tool": "claude", "quality_config": {}, "version": "1.0.0"}
 
 
 @router.put("/config")
 def update_config(body: dict):
-    f = ORCH_DIR / "config.json"
+    f = _orch_dir() / "config.json"
     cfg = json.loads(f.read_text()) if f.exists() else {}
     cfg.update(body or {})
     ids = set(_merged_tool_ids())
@@ -793,7 +799,7 @@ def list_versions():
             ["git", "tag", "-l", "--sort=-version:refname"],
             capture_output=True,
             text=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(resolved_project_path()),
         )
         tags = [t.strip() for t in result.stdout.strip().split("\n") if t.strip()]
         return tags[:20]
@@ -807,7 +813,7 @@ def create_version(body: VersionTag):
         subprocess.run(
             ["git", "tag", "-a", body.tag, "-m", body.message or body.tag],
             check=True,
-            cwd=str(REPO_ROOT),
+            cwd=str(resolved_project_path()),
         )
         return {"ok": True, "tag": body.tag}
     except Exception as e:

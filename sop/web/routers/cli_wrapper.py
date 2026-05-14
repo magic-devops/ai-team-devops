@@ -5,8 +5,9 @@ from typing import Optional, List, Dict, Any
 import subprocess, shutil, os, json, re
 from pathlib import Path
 
+from path_config import resolved_project_path
+
 router = APIRouter(prefix="/api/cli", tags=["cli"])
-PROJECT_PATH = Path(os.getenv("PROJECT_PATH", ".")).resolve()
 
 CLI_TOOLS: Dict[str, Dict[str, str]] = {
     "codex":        {"cmd": "codex",       "description": "OpenAI Codex CLI"},
@@ -39,7 +40,7 @@ class CliToolUpsert(BaseModel):
 
 
 def _state_path() -> Path:
-    p = PROJECT_PATH / "memory" / "cli_tools_config.json"
+    p = resolved_project_path() / "memory" / "cli_tools_config.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -251,7 +252,7 @@ def run_cli(body: CliRun):
     cmd = cmd0.split() + body.args
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=body.timeout,
-                           cwd=str(PROJECT_PATH), input=body.stdin_input)
+                           cwd=str(resolved_project_path()), input=body.stdin_input)
         return {"ok": r.returncode == 0, "stdout": r.stdout[-4000:], "stderr": r.stderr[-500:], "returncode": r.returncode}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"超时 ({body.timeout}s)"}

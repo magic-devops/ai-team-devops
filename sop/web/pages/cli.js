@@ -29,7 +29,7 @@ function CliManager() {
     if (!selected) return;
     setRunning(true);
     setOutput(null);
-    fetch(`${API}/cli/run`, {
+    apiFetch(`/cli/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool: selected.id, args: args.split(' ').filter(Boolean) }),
@@ -79,7 +79,7 @@ function CliManager() {
         showToast(t('cli_toast_id'), 'err');
         return;
       }
-      fetch(`${API}/cli/tools/${encodeURIComponent(id)}`, {
+      apiFetch(`/cli/tools/${encodeURIComponent(id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -97,7 +97,7 @@ function CliManager() {
         .catch(() => showToast(t('cli_toast_req_fail'), 'err'));
       return;
     }
-    fetch(`${API}/cli/tools/${encodeURIComponent(form.id)}`, {
+    apiFetch(`/cli/tools/${encodeURIComponent(form.id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -118,7 +118,7 @@ function CliManager() {
     e.stopPropagation();
     const msg = tool.is_builtin ? t('cli_confirm_remove_builtin') : t('cli_confirm_remove_custom');
     if (!confirm(msg)) return;
-    fetch(`${API}/cli/tools/${encodeURIComponent(tool.id)}`, { method: 'DELETE' })
+    apiFetch(`/cli/tools/${encodeURIComponent(tool.id)}`, { method: 'DELETE' })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) {
@@ -132,7 +132,7 @@ function CliManager() {
       .catch(() => showToast(t('cli_toast_req_fail'), 'err'));
   };
   const restoreBuiltin = (id) => {
-    fetch(`${API}/cli/tools/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+    apiFetch(`/cli/tools/${encodeURIComponent(id)}/restore`, { method: 'POST' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })

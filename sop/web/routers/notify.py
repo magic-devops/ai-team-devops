@@ -4,13 +4,20 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import json, os
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/notify", tags=["notify"])
-NOTIFY_FILE = ai_memory_root() / "notify.json"
 
-def _load(): return json.loads(NOTIFY_FILE.read_text()) if NOTIFY_FILE.exists() else {"channels": {}, "rules": []}
-def _save(d): NOTIFY_FILE.parent.mkdir(parents=True, exist_ok=True); NOTIFY_FILE.write_text(json.dumps(d, indent=2))
+
+def _notify_file() -> Path:
+    return resolved_ai_memory_root() / "notify.json"
+
+
+def _load(): return json.loads(_notify_file().read_text()) if _notify_file().exists() else {"channels": {}, "rules": []}
+def _save(d):
+    p = _notify_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(d, indent=2))
 
 class Channel(BaseModel):
     type: str          # wechat_work | dingtalk | slack | webhook

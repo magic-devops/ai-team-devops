@@ -124,7 +124,7 @@ function DesignDocsManager() {
       return;
     }
     const tags = newForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    fetch(`${API}/design-docs`, {
+    apiFetch(`/design-docs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -155,7 +155,7 @@ function DesignDocsManager() {
       return;
     }
     const tags = impForm.tags.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    fetch(`${API}/design-docs/import`, {
+    apiFetch(`/design-docs/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -183,7 +183,7 @@ function DesignDocsManager() {
 
   const restoreVer = (v) => {
     if (!sel || !confirm(tr('dd_confirm_restore', { v }))) return;
-    fetch(`${API}/design-docs/${encodeURIComponent(sel)}/restore`, {
+    apiFetch(`/design-docs/${encodeURIComponent(sel)}/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: v }),
@@ -201,7 +201,7 @@ function DesignDocsManager() {
 
   const delDoc = () => {
     if (!sel || !confirm(tr('dd_confirm_del_doc'))) return;
-    fetch(`${API}/design-docs/${encodeURIComponent(sel)}`, { method: 'DELETE' })
+    apiFetch(`/design-docs/${encodeURIComponent(sel)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -218,7 +218,7 @@ function DesignDocsManager() {
 
   const viewVersion = (v) => {
     if (!sel) return;
-    fetch(`${API}/design-docs/${encodeURIComponent(sel)}/versions/${v}`)
+    apiFetch(`/design-docs/${encodeURIComponent(sel)}/versions/${v}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.content !== undefined) {

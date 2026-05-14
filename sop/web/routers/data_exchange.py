@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import JSON, Integer, Float
 from sqlalchemy.orm import Session
 
+from path_config import resolved_project_id
 from .auth_sql import User, require_data_hub_import
-from .db_sql_compat import rows, _PROJECT_ID
+from .db_sql_compat import rows
 from .sql_models import get_session, Requirement, Task, Sprint, Issue
 
 router = APIRouter(prefix="/api", tags=["data-exchange"])
@@ -198,7 +199,7 @@ def import_data(
     if body.mode not in ("merge",):
         raise HTTPException(400, "mode 仅支持 merge")
     tid = user.tenant_id
-    pid = _PROJECT_ID
+    pid = resolved_project_id()
     counts: Dict[str, int] = {}
     order = ("sprints", "requirements", "tasks", "issues")
     try:

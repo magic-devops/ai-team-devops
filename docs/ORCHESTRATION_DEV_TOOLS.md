@@ -4,6 +4,8 @@
 
 操作速览仍见 [USER_MANUAL.md §4.5](USER_MANUAL.md)。
 
+**鉴权**：编排相关 `fetch` 均经控制台 **`apiFetch`**，须已登录且（多项目时）顶栏选定项目，请求自动带 **`Authorization`** 与 **`X-Project-Id`**。直接 `curl` 编排 API 时请携带同上请求头。
+
 ---
 
 ## 1. 界面结构

@@ -64,7 +64,7 @@ function EnvCheckPanel() {
 
   const run = () => {
     setLoading(true);
-    fetch(`${API}/env/check/full`)
+    apiFetch(`/env/check/full`)
       .then((r) => r.json())
       .then((d) => {
         setFull(d);
@@ -83,7 +83,7 @@ function EnvCheckPanel() {
 
   const runAiPlan = () => {
     setAiBusy(true);
-    fetch(`${API}/env/ai-plan`, {
+    apiFetch(`/env/ai-plan`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({snapshot: full || undefined, extra_context: ''}),
@@ -107,7 +107,7 @@ function EnvCheckPanel() {
   const remediate = (action) => {
     if (!confirm(action === 'install_integrations' ? dockerTr('docker_confirm_install') : dockerTr('docker_confirm_health'))) return;
     setRemBusy(action);
-    fetch(`${API}/env/remediate-run`, {
+    apiFetch(`/env/remediate-run`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({action}),
@@ -142,7 +142,7 @@ function EnvCheckPanel() {
       showToast(dockerTr('docker_pins_json_err'), 'err');
       return;
     }
-    fetch(`${API}/env/version-pins`, {
+    apiFetch(`/env/version-pins`, {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -183,7 +183,7 @@ function EnvCheckPanel() {
     if (formCustom.kind === 'file_exists') body.path = formCustom.path.trim();
     else body.argv = argv;
     if (formCustom.kind === 'version_command') body.min_semver = formCustom.min_semver.trim() || undefined;
-    fetch(`${API}/env/custom-checks`, {
+    apiFetch(`/env/custom-checks`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -203,7 +203,7 @@ function EnvCheckPanel() {
 
   const delCustom = (id) => {
     if (!confirm(dockerTr('docker_custom_del_confirm', { id }))) return;
-    fetch(`${API}/env/custom-checks/${encodeURIComponent(id)}`, {method: 'DELETE'})
+    apiFetch(`/env/custom-checks/${encodeURIComponent(id)}`, {method: 'DELETE'})
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -217,7 +217,7 @@ function EnvCheckPanel() {
   const appendAllow = () => {
     const b = allowBin.trim();
     if (!b) return;
-    fetch(`${API}/env/exec-allowlist/append`, {
+    apiFetch(`/env/exec-allowlist/append`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({binary: b}),
@@ -708,7 +708,7 @@ function ContainersPanel() {
     if (!name) return;
     setLogBusy(true);
     const tail = logTailRef.current;
-    fetch(`${API}/env/docker/logs/container/${encodeURIComponent(name)}?tail=${encodeURIComponent(String(tail))}`)
+    apiFetch(`/env/docker/logs/container/${encodeURIComponent(name)}?tail=${encodeURIComponent(String(tail))}`)
       .then((r) => r.json())
       .then((d) => {
         setLogBusy(false);
@@ -800,7 +800,7 @@ function ContainersPanel() {
     }
     setExecBusy(true);
     setExecOut(null);
-    fetch(`${API}/env/docker/exec`, {
+    apiFetch(`/env/docker/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ container: execModal, argv, tty: !!execTty }),
@@ -824,7 +824,7 @@ function ContainersPanel() {
 
   const stop = (name) => {
     if (!name) return;
-    fetch(`${API}/env/docker/stop/${encodeURIComponent(name)}`, { method: 'POST' })
+    apiFetch(`/env/docker/stop/${encodeURIComponent(name)}`, { method: 'POST' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -837,7 +837,7 @@ function ContainersPanel() {
 
   const startC = (name) => {
     if (!name) return;
-    fetch(`${API}/env/docker/start/${encodeURIComponent(name)}`, { method: 'POST' })
+    apiFetch(`/env/docker/start/${encodeURIComponent(name)}`, { method: 'POST' })
       .then((r) => r.json().then((d) => ({ httpOk: r.ok, d })))
       .then(({ httpOk, d }) => {
         if (!httpOk) {
@@ -857,7 +857,7 @@ function ContainersPanel() {
   const remove = (name) => {
     if (!name) return;
     if (!confirm(dockerTr('docker_confirm_rm_container', { name }))) return;
-    fetch(`${API}/env/docker/remove/${encodeURIComponent(name)}`, { method: 'POST' })
+    apiFetch(`/env/docker/remove/${encodeURIComponent(name)}`, { method: 'POST' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -1153,7 +1153,7 @@ function ImagesPanel() {
     const image = pullImg.trim();
     if (!image) return;
     setPullBusy(true);
-    fetch(`${API}/env/docker/images/pull`, {
+    apiFetch(`/env/docker/images/pull`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image }),
@@ -1181,7 +1181,7 @@ function ImagesPanel() {
   const rmi = (ref) => {
     if (!confirm(dockerTr('docker_confirm_rm_image', { ref }))) return;
     setRmBusy(ref);
-    fetch(`${API}/env/docker/images/remove`, {
+    apiFetch(`/env/docker/images/remove`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ref }),
@@ -1298,7 +1298,7 @@ function PresetsPanel() {
 
   const start = (key) => {
     setStarting((p) => ({ ...p, [key]: true }));
-    fetch(`${API}/env/docker/presets/${encodeURIComponent(key)}/start`, { method: 'POST' })
+    apiFetch(`/env/docker/presets/${encodeURIComponent(key)}/start`, { method: 'POST' })
       .then((r) => r.json())
       .then((d) => {
         setStarting((p) => ({ ...p, [key]: false }));
@@ -1339,7 +1339,7 @@ function PresetsPanel() {
     };
     body.key = k;
     const url = isEdit ? `${API}/env/docker/custom-presets/${encodeURIComponent(form._id)}` : `${API}/env/docker/custom-presets`;
-    fetch(url, {
+    apiFetch(url, {
       method: isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1360,7 +1360,7 @@ function PresetsPanel() {
 
   const delCustom = (id) => {
     if (!confirm(dockerTr('docker_confirm_del_preset'))) return;
-    fetch(`${API}/env/docker/custom-presets/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    apiFetch(`/env/docker/custom-presets/${encodeURIComponent(id)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -1580,7 +1580,7 @@ function DockerRunPanel() {
     const env = parseLines(form.envText);
     const volumes = parseLines(form.volumesText);
     setBusy(true);
-    fetch(`${API}/env/docker/run`, {
+    apiFetch(`/env/docker/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1693,7 +1693,7 @@ function ComposePanel() {
   const [mcSaving, setMcSaving] = React.useState(false);
 
   const reloadFileList = React.useCallback(() => {
-    fetch(`${API}/env/docker/compose/files`)
+    apiFetch(`/env/docker/compose/files`)
       .then((r) => r.json())
       .then((d) => {
         const raw = d.files || [];
@@ -1712,7 +1712,7 @@ function ComposePanel() {
   }, []);
 
   const reloadMcStores = React.useCallback(() => {
-    fetch(`${API}/env/docker/managed-compose`)
+    apiFetch(`/env/docker/managed-compose`)
       .then((r) => r.json())
       .then((d) => setMcStores(d.stores || []))
       .catch(() => {});
@@ -1730,7 +1730,7 @@ function ComposePanel() {
 
   const refreshServices = React.useCallback(() => {
     const q = new URLSearchParams({ file });
-    fetch(`${API}/env/docker/compose/services?${q}`)
+    apiFetch(`/env/docker/compose/services?${q}`)
       .then((r) => r.json())
       .then(setSvcResult);
   }, [file]);
@@ -1744,7 +1744,7 @@ function ComposePanel() {
     setBusy(action);
     setLastAct(null);
     const q = new URLSearchParams({ file });
-    fetch(`${API}/env/docker/compose/${action}?${q}`, { method: 'POST' })
+    apiFetch(`/env/docker/compose/${action}?${q}`, { method: 'POST' })
       .then((r) => r.json())
       .then((d) => {
         setBusy(null);
@@ -1762,7 +1762,7 @@ function ComposePanel() {
   const fetchComposeLogs = () => {
     const q = new URLSearchParams({ file, tail: String(tail) });
     if (logSvc.trim()) q.set('service', logSvc.trim());
-    fetch(`${API}/env/docker/logs/compose?${q}`)
+    apiFetch(`/env/docker/logs/compose?${q}`)
       .then((r) => r.json())
       .then((d) => {
         const text = d.ok ? `${d.stdout || ''}${d.stderr || ''}` : JSON.stringify(d, null, 2);
@@ -1775,7 +1775,7 @@ function ComposePanel() {
     if (!id) return;
     let url = `${API}/env/docker/managed-compose/${encodeURIComponent(id)}`;
     if (explicitVer) url += `?version=${encodeURIComponent(String(explicitVer))}`;
-    fetch(url)
+    apiFetch(url)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) {
@@ -1797,7 +1797,7 @@ function ComposePanel() {
   const mcSave = () => {
     if (!mcSelId) return;
     setMcSaving(true);
-    fetch(`${API}/env/docker/managed-compose/${encodeURIComponent(mcSelId)}`, {
+    apiFetch(`/env/docker/managed-compose/${encodeURIComponent(mcSelId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: mcContent, bump_version: mcBump }),
@@ -1826,7 +1826,7 @@ function ComposePanel() {
       showToast(dockerTr('docker_fill_name'), 'err');
       return;
     }
-    fetch(`${API}/env/docker/managed-compose`, {
+    apiFetch(`/env/docker/managed-compose`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: nm, content: mcNewContent }),
@@ -1852,7 +1852,7 @@ function ComposePanel() {
 
   const mcDel = () => {
     if (!mcSelId || !confirm(dockerTr('docker_confirm_del_mc', { id: mcSelId }))) return;
-    fetch(`${API}/env/docker/managed-compose/${encodeURIComponent(mcSelId)}`, { method: 'DELETE' })
+    apiFetch(`/env/docker/managed-compose/${encodeURIComponent(mcSelId)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -1873,7 +1873,7 @@ function ComposePanel() {
     const fd = new FormData();
     fd.append('file', f);
     const q = new URLSearchParams({ bump_version: bump ? 'true' : 'false' });
-    fetch(`${API}/env/docker/managed-compose/${encodeURIComponent(mcSelId)}/upload?${q}`, {
+    apiFetch(`/env/docker/managed-compose/${encodeURIComponent(mcSelId)}/upload?${q}`, {
       method: 'POST',
       body: fd,
     })
@@ -2065,7 +2065,7 @@ function ManagedDockerfilePanel() {
     if (!id) return;
     let url = `${API}/env/docker/managed-dockerfiles/${encodeURIComponent(id)}`;
     if (explicitVer) url += `?version=${encodeURIComponent(String(explicitVer))}`;
-    fetch(url)
+    apiFetch(url)
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) {
@@ -2087,7 +2087,7 @@ function ManagedDockerfilePanel() {
   const save = () => {
     if (!selId) return;
     setSaving(true);
-    fetch(`${API}/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}`, {
+    apiFetch(`/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, bump_version: bump }),
@@ -2115,7 +2115,7 @@ function ManagedDockerfilePanel() {
       showToast(dockerTr('docker_fill_name'), 'err');
       return;
     }
-    fetch(`${API}/env/docker/managed-dockerfiles`, {
+    apiFetch(`/env/docker/managed-dockerfiles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: nm, content: newContent }),
@@ -2139,7 +2139,7 @@ function ManagedDockerfilePanel() {
 
   const del = () => {
     if (!selId || !confirm(dockerTr('docker_confirm_del_managed', { id: selId }))) return;
-    fetch(`${API}/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}`, { method: 'DELETE' })
+    apiFetch(`/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}`, { method: 'DELETE' })
       .then((r) => {
         if (!r.ok) throw new Error();
       })
@@ -2159,7 +2159,7 @@ function ManagedDockerfilePanel() {
     const fd = new FormData();
     fd.append('file', f);
     const q = new URLSearchParams({ bump_version: bump ? 'true' : 'false' });
-    fetch(`${API}/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}/upload?${q}`, { method: 'POST', body: fd })
+    apiFetch(`/env/docker/managed-dockerfiles/${encodeURIComponent(selId)}/upload?${q}`, { method: 'POST', body: fd })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) {
@@ -2276,7 +2276,7 @@ function BuildPanel() {
     setBuilding(true);
     setResult(null);
     const q = new URLSearchParams({ tag: form.tag, dockerfile: form.dockerfile, context: form.context });
-    fetch(`${API}/env/docker/build?${q.toString()}`, { method: 'POST' })
+    apiFetch(`/env/docker/build?${q.toString()}`, { method: 'POST' })
       .then((r) => r.json())
       .then((d) => {
         setBuilding(false);

@@ -4,11 +4,15 @@ from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
 import json, os
-from path_config import ai_memory_root
+from path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/skills", tags=["skills"])
-SKILLS_DIR = ai_memory_root() / "skills"
-SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _skills_dir() -> Path:
+    d = resolved_ai_memory_root() / "skills"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 class SkillDef(BaseModel):
     skill_id: str; name: str; description: str; agent_role: str = "All"
@@ -33,19 +37,19 @@ def list_skills():
         {"skill_id":"SKILL-015","name":"规则提取","agent_role":"All","builtin":True},
     ]
     custom = []
-    for f in sorted(SKILLS_DIR.glob("*.json")):
+    for f in sorted(_skills_dir().glob("*.json")):
         try: custom.append({**json.loads(f.read_text()), "builtin": False})
         except Exception: pass
     return builtin + custom
 
 @router.post("")
 def create_skill(body: SkillDef):
-    f = SKILLS_DIR / f"{body.skill_id}.json"
+    f = _skills_dir() / f"{body.skill_id}.json"
     f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
     return {"ok": True, "skill_id": body.skill_id}
 
 @router.delete("/{skill_id}")
 def delete_skill(skill_id: str):
-    f = SKILLS_DIR / f"{skill_id}.json"
+    f = _skills_dir() / f"{skill_id}.json"
     if f.exists(): f.unlink()
     return {"ok": True}

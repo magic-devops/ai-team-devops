@@ -13,7 +13,7 @@
 | [health-check.sh](health-check.sh) | 依赖与仓库健康检查 |
 | [cleanup-legacy-runtime.sh](cleanup-legacy-runtime.sh) | 迁移到 `.sop-runtime` 后可选清理遗留 `sop/web/sop.db*` 等（默认 dry-run，`--apply` 执行） |
 | [reset-admin.py](reset-admin.py) | 管理员创建 / 密码重置（SQLite，读 `sop/web/.env`） |
-| [manager_client.py](manager_client.py) | 本地脚本调用 Manager API（API Key + HMAC，见文件头环境变量） |
+| [manager_client.py](manager_client.py) | 本地脚本调用 Manager：`MANAGER_URL`、`PROJECT_ID`（`X-Project-Id`）、`MANAGER_SOP_TOKEN`（JWT，推荐）与可选 `MANAGER_API_KEY`（见文件头） |
 | [sop_ai_hook.py](sop_ai_hook.py) | 统一 AI hook 策略引擎，各工具 adapter 调用 |
 
 ## 运维与同步

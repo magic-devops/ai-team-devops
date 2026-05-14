@@ -4,6 +4,8 @@
   python reset-admin.py                          # 交互式
   python reset-admin.py create admin mypassword  # 创建管理员
   python reset-admin.py reset admin newpassword  # 重置密码
+
+重置后请在浏览器重新登录；自动化脚本请更新环境变量中的 JWT（如 MANAGER_SOP_TOKEN）。
 """
 import os, sys, hashlib, uuid
 from pathlib import Path

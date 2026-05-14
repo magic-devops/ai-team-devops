@@ -1,30 +1,45 @@
 """共享 LanceDB 工具函数"""
-import os
-from pathlib import Path
+from __future__ import annotations
+
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from path_config import ai_memory_root, project_path
-
-PROJECT_PATH = project_path()
-DB_PATH = ai_memory_root() / "lancedb"
+from path_config import resolved_ai_memory_root
 
 _db = None
+_db_key: str | None = None
+
+
+def _lance_db_dir() -> Path:
+    return resolved_ai_memory_root() / "lancedb"
+
+
 def get_db():
-    global _db
-    if _db is None:
+    """按当前请求解析的 ai-memory 路径连接 LanceDB（切换项目时重建连接）。"""
+    global _db, _db_key
+    key = str(_lance_db_dir().resolve())
+    if _db is None or _db_key != key:
+        _db_key = key
+        _db = None
         try:
             import lancedb
-            _db = lancedb.connect(str(DB_PATH))
+
+            _db = lancedb.connect(key)
         except Exception:
             _db = None
     return _db
 
+
 def table(name: str):
     db = get_db()
-    if db is None: return None
-    try: return db.open_table(name)
-    except Exception: return None
+    if db is None:
+        return None
+    try:
+        return db.open_table(name)
+    except Exception:
+        return None
+
 
 def _json_safe_value(v: Any) -> Any:
     """将 pandas / numpy / Arrow 等转为 FastAPI JSON 可序列化类型。"""
@@ -42,6 +57,7 @@ def _json_safe_value(v: Any) -> Any:
         return v.isoformat() + ("Z" if v.tzinfo is None else "")
     try:
         import numpy as np
+
         if isinstance(v, np.ndarray):
             return v.tolist()
         if isinstance(v, np.generic):
@@ -64,12 +80,17 @@ def _json_safe_value(v: Any) -> Any:
             pass
     return str(v)
 
+
 def rows(name: str, limit: int = 200) -> list:
     t = table(name)
-    if t is None: return []
+    if t is None:
+        return []
     try:
         raw = t.to_pandas().head(limit).to_dict("records")
         return [{k: _json_safe_value(v) for k, v in row.items()} for row in raw]
-    except Exception: return []
+    except Exception:
+        return []
 
-def now(): return datetime.utcnow()
+
+def now():
+    return datetime.utcnow()

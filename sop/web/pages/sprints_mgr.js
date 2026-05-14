@@ -14,12 +14,12 @@ const SprintManager = () => {
   const [msg, setMsg] = React.useState(null);
 
   const load = () => {
-    fetch(`${API}/sprints?size=30`, { headers: authHeaders() })
+    apiFetch(`/sprints?size=30`, { headers: authHeaders() })
       .then(r => r.json()).then(d => setSprints(d.items || [])).catch(() => {});
   };
 
   const loadProgress = id => {
-    fetch(`${API}/sprints/${id}/progress`, { headers: authHeaders() })
+    apiFetch(`/sprints/${id}/progress`, { headers: authHeaders() })
       .then(r => r.json()).then(setProgress).catch(() => {});
   };
 
@@ -29,7 +29,7 @@ const SprintManager = () => {
   const api = async (url, method, body) => {
     setSaving(true); setMsg(null);
     try {
-      const r = await fetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const r = await apiFetch(url, { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || '操作失败');
       setMsg({ ok: true, text: '操作成功' }); load(); setModal(false); setForm({ goal: '', planned_points: 0, ends_at: '' });

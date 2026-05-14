@@ -15,13 +15,14 @@
 #   SOP_RUNTIME_DIR   统一运行时根目录，默认 <PROJECT_PATH>/.sop-runtime（SQLite、日志、ai-memory）
 #   AI_MEMORY_ROOT    覆盖默认的 <SOP_RUNTIME_DIR>/ai-memory
 #   SOP_RUNTIME_NO_SYMLINK=1  不在项目根创建 .ai-memory 符号链接（Unix 默认会创建）
+#   ADMIN_MODE        single（默认）或 saas；与 sop/web/.env 一致，影响登录与多租户 UI
 #
 set -euo pipefail
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)
-      sed -n '1,24p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '1,25p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     --no-reload) export START_MANAGER_NO_RELOAD=1; shift ;;

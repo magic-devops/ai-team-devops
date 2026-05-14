@@ -11,13 +11,21 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from .db_sql_compat import PROJECT_PATH, AI_MEMORY_ROOT, now, rows, table
+from path_config import resolved_ai_memory_root, resolved_project_id
+from .db_sql_compat import now, rows, table
 
 router = APIRouter(prefix="/api/requirements", tags=["requirements"])
 
 _DOC_MAX = 120_000
 _PRIOS = ("P0", "P1", "P2", "P3")
-_UI_STATE_PATH = AI_MEMORY_ROOT / "requirements_ui_state.json"
+
+
+def _ui_state_path():
+    return resolved_ai_memory_root() / "requirements_ui_state.json"
+
+
+def _proto_dir():
+    return resolved_ai_memory_root() / "requirement_prototypes"
 
 
 def _ui_default_state() -> Dict[str, Any]:
@@ -25,10 +33,11 @@ def _ui_default_state() -> Dict[str, Any]:
 
 
 def _ui_load() -> Dict[str, Any]:
-    if not _UI_STATE_PATH.exists():
+    sp = _ui_state_path()
+    if not sp.exists():
         return _ui_default_state()
     try:
-        d = json.loads(_UI_STATE_PATH.read_text(encoding="utf-8"))
+        d = json.loads(sp.read_text(encoding="utf-8"))
         if not isinstance(d, dict):
             return _ui_default_state()
         d.setdefault("columns", {p: [] for p in _PRIOS})
@@ -41,8 +50,9 @@ def _ui_load() -> Dict[str, Any]:
 
 
 def _ui_save(d: Dict[str, Any]) -> None:
-    _UI_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _UI_STATE_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    sp = _ui_state_path()
+    sp.parent.mkdir(parents=True, exist_ok=True)
+    sp.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _ui_rebuild_columns(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> None:
@@ -170,7 +180,7 @@ class GeneratePrototypeBody(BaseModel):
 
 
 def _prototype_dir() -> Path:
-    d = AI_MEMORY_ROOT / "requirement_prototypes"
+    d = _proto_dir()
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -307,7 +317,7 @@ def create_req(body: ReqCreate):
         raise HTTPException(503, "数据库不可用")
     row = {
         "id": f"REQ-{uuid.uuid4().hex[:16]}",
-        "project_id": os.getenv("PROJECT_ID", "default"),
+        "project_id": resolved_project_id(),
         "title": body.title,
         "description": body.description or "",
         "status": "pending",
@@ -346,7 +356,7 @@ def batch_create(body: BatchCreateBody):
         rows_add.append(
             {
                 "id": rid,
-                "project_id": os.getenv("PROJECT_ID", "default"),
+                "project_id": resolved_project_id(),
                 "title": it.title,
                 "description": it.description or "",
                 "status": "pending",
