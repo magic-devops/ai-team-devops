@@ -18,6 +18,23 @@ from sop_manager.path_config import (
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
 
+def _load_json_object_file(path: Path) -> Dict[str, Any]:
+    """读取 JSON 对象；文件缺失、空文件、非 JSON 或非 object 时返回 {}。"""
+    if not path.is_file():
+        return {}
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    if not (raw or "").strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _try_sop_ops() -> Optional[Path]:
     try:
         return sop_ops_dir()
@@ -87,10 +104,10 @@ def get_config():
     codex_config = resolved_project_path() / ".codex" / "config.toml"
     codex_hooks = resolved_project_path() / ".codex" / "hooks.json"
     return {
-        "claude_settings": json.loads(settings.read_text()) if settings.exists() else {},
-        "opencode": json.loads(opencode.read_text()) if opencode.exists() else {},
+        "claude_settings": _load_json_object_file(settings),
+        "opencode": _load_json_object_file(opencode),
         "codex_config": codex_config.read_text(encoding="utf-8") if codex_config.exists() else "",
-        "codex_hooks": json.loads(codex_hooks.read_text()) if codex_hooks.exists() else {},
+        "codex_hooks": _load_json_object_file(codex_hooks),
     }
 
 @router.patch("/config/claude")

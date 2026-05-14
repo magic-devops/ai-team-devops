@@ -7,7 +7,19 @@
     "marketplace": "Marketplace",
     "audit": "Audit",
     "copilot": "AI Copilot",
-    "settings": "Settings"
+    "settings": "Settings",
+    "primaryProduct": "Full console (primary)",
+    "openFullConsole": "Open full console",
+    "dockSection": "Light shell",
+    "dockHint": "Subset of OpenAPI + experimental UI.",
+    "setShellHome": "Always start in light shell",
+    "consoleLogin": "Classic login"
+  },
+  "dashboard": {
+    "fullConsoleTitle": "Use the full console for day-to-day work.",
+    "fullConsoleBody": "Vibe, orchestration, MCP, and Data hub live there; this page is for health checks, summaries, or new features.",
+    "openConsoleCta": "Open full console",
+    "openLoginCta": "Classic login"
   },
   "page": {
     "dashboard": { "title": "Cross-Project Dashboard" },
@@ -17,7 +29,28 @@
     "marketplace": { "title": "Spec / Skill Marketplace" },
     "audit": { "title": "Audit Hash Chain" },
     "copilot": { "title": "AI Copilot" },
-    "settings": { "title": "Settings" }
+    "settings": { "title": "Settings", "themeCard": "Appearance" }
+  },
+  "auth": {
+    "title": "Sign in",
+    "hint": "Project APIs require a JWT (same keys as USER_MANUAL: sop-token). Use admin credentials from init / reset-admin.",
+    "username": "Username",
+    "password": "Password",
+    "tenantSlug": "Tenant slug (optional)",
+    "tenantPlaceholder": "Only when ADMIN_MODE=saas",
+    "login": "Sign in",
+    "logout": "Sign out",
+    "status": "Status",
+    "loggedIn": "Signed in",
+    "noProject": "No X-Project-Id: single-tenant mode falls back to server PROJECT_ID.",
+    "dashboardNeedLogin": "Not signed in: project data cannot load.",
+    "openSettings": "Open Settings to sign in",
+    "consoleLink": "Full UI (Vibe, orchestration, MCP, data hub) → /console.html"
+  },
+  "copilot": {
+    "intro": "Describe your intent; the API returns structured JSON (LLM gateway must be configured).",
+    "placeholder": "e.g. open the task board, check MCP health, explain the data hub…",
+    "ask": "Send"
   },
   "common": {
     "loading": "Loading…",
@@ -26,5 +59,12 @@
     "search": "Search",
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "theme": {
+    "label": "Theme",
+    "hint": "Light, dark, or match the OS. Your choice is saved locally and synced with the header control.",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
   }
 }

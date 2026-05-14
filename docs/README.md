@@ -15,7 +15,7 @@
 | [architecture/EVOLUTION.md](architecture/EVOLUTION.md) | 长期演进 + 兼容承诺 + 弃用流程 |
 | [architecture/REFACTOR_PLAN.md](architecture/REFACTOR_PLAN.md) | **大文件治理 + 新功能落点指引（AI 必读）** |
 | [../apis/README.md](../apis/README.md) | OpenAPI / Proto / AsyncAPI 单一事实源说明 |
-| [MIGRATE_AI_SOP_SUBMODULES.md](MIGRATE_AI_SOP_SUBMODULES.md) | **`ai-sop` / `ai-sop-ops` submodule**、克隆与遗留 `sop/` 说明 |
+| [MIGRATE_AI_SOP_SUBMODULES.md](MIGRATE_AI_SOP_SUBMODULES.md) | **`ai-sop` / `ai-sop-ops` submodule**、克隆与环境变量 |
 | [../apps/manager-web/README.md](../apps/manager-web/README.md) | **新前端 Vite + React 18 + TS 骨架** |
 | [../apps/agent-runtime/README.md](../apps/agent-runtime/README.md) | sop-agentd 守护进程 |
 | [../packages/sop-cli/README.md](../packages/sop-cli/README.md) | 统一 CLI `sop` 命令 |

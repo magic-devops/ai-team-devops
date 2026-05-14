@@ -20,7 +20,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 
-/* 与 index.html 四主题语义对齐（登录页独立视觉变量） */
+/* 与 console.html 四主题语义对齐（登录页独立视觉变量） */
 :root,[data-theme=dark]{
   --bg:#0f172a;--bg2:rgba(30,41,59,.78);--border:rgba(59,130,246,.22);
   --text:#e8eef7;--text2:#94a3b8;--text3:#64748b;
@@ -457,7 +457,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   <div class="login-panel-wrap">
   <div class="card">
     <div class="logo">
-      <img src="/assets/brand-mark.png" alt="" onerror="this.style.display='none'">
+      <img src="/brand-mark.svg" width="40" height="40" alt="" decoding="async"/>
       <span class="logo-text">ai-team-devops</span>
       <span class="logo-badge" id="mode-badge"></span>
     </div>
@@ -783,13 +783,13 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     try {
       if (d.default_project_id) localStorage.setItem('sop-current-project-id', d.default_project_id);
     } catch (e) {}
-    window.location.replace('index.html');
+    window.location.replace('console.html');
   }
 
   var token = localStorage.getItem('sop-token');
   if(token){
     loginPublicFetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
-      .then(function(r){if(r.ok) window.location.replace('index.html');})
+      .then(function(r){if(r.ok) window.location.replace('console.html');})
       .catch(function(){});
   }
 

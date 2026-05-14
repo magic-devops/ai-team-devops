@@ -4,6 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./i18n";
 import { App } from "./App";
 import "./index.css";
+import { maybeRedirectToPrimaryConsole } from "./lib/shellEntry";
+import { initTheme } from "./lib/theme";
+
+maybeRedirectToPrimaryConsole();
+initTheme();
 
 const qc = new QueryClient({
   defaultOptions: {

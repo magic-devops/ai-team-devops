@@ -89,7 +89,7 @@ def sop_dir() -> Path:
     """规约 Markdown 树（``magic-devops/ai-sop``）：仅解析 ``<repo>/ai-sop`` 或环境变量显式路径。
 
     可用环境变量 ``SOP_SPEC_ROOT`` 或 ``SOP_SOP_DIR`` 显式覆盖（须指向含 ``specs/`` 的目录）。
-    不再回退内嵌 ``sop/``（已移除）；未找到时抛出 ``FileNotFoundError`` 并提示初始化 submodule。
+    不再回退已删除的内嵌规约目录；未找到时抛出 ``FileNotFoundError`` 并提示初始化 submodule。
     """
     raw = os.environ.get("SOP_SPEC_ROOT", "").strip() or os.environ.get("SOP_SOP_DIR", "").strip()
     if raw:
@@ -171,8 +171,6 @@ def _is_legacy_sqlite_url(url: str) -> bool:
     if not u:
         return True
     if u in ("sqlite:///./sop.db", "sqlite:///sop.db"):
-        return True
-    if "sop/web/sop.db" in u or "apps/manager/sop_manager/sop.db" in u:
         return True
     return False
 
@@ -256,7 +254,7 @@ def _migrate_reinit(runtime: Path) -> None:
 
 
 def apply_startup_defaults() -> None:
-    """在导入 logger / sql_models 之前调用：创建目录、迁移旧路径、补全环境变量。"""
+    """在导入 logger / sql_models 之前调用：创建 `.sop-runtime`、落位 SQLite / ai-memory / 日志，并补全 `DATABASE_URL` 等环境变量。"""
     pp = Path(os.environ.get("PROJECT_PATH", ".")).expanduser().resolve()
     os.environ["PROJECT_PATH"] = str(pp)
 

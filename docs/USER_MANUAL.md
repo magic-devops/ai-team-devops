@@ -17,7 +17,11 @@ PROJECT_PATH=/path/to/your-app bash ai-sop-ops/start-manager.sh
 PORT=9000 PROJECT_PATH=/path/to/app bash ai-sop-ops/start-manager.sh
 ```
 
-浏览器访问：`http://localhost:8765`（若 `index.html` 内 `API` 与端口不一致，请改为当前端口）。
+浏览器访问：
+
+- **仅 API / OpenAPI**：`http://127.0.0.1:8765`（根路径为 JSON 说明，`/docs` 为 Swagger）。
+- **推荐：前后端分离开发**：另开终端 `cd apps/manager-web && pnpm dev`，Vite 默认在浏览器打开 **`http://127.0.0.1:5173/console.html`**（完整管理台；`/api` 反代到 8765）。轻量 React 壳为 **`http://127.0.0.1:5173/?shell=1`** 或任意带 hash 的路径（如 **`http://127.0.0.1:5173/#/settings`**）；根路径无 hash 时会自动进入完整台，详见 `apps/manager-web/README.md`。
+- **完整管理台（主产品）**：`http://127.0.0.1:5173/console.html`；顶栏含「轻量扩展坞」入口。未登录时走 **`http://127.0.0.1:5173/login.html`**（与手册中 `sop-token` / `X-Project-Id` 约定一致）。
 
 **环境变量**
 
@@ -62,7 +66,7 @@ PORT=9000 PROJECT_PATH=/path/to/app bash ai-sop-ops/start-manager.sh
 | 快速初始化 | `bash ai-sop-ops/sop-ctl.sh init <项目名>` |
 | 备份 | `bash ai-sop-ops/sop-ctl.sh backup`（LanceDB 快照）；`backup --full` 另打包 `memory/` + `.sop-runtime/` 到 `PROJECT_PATH/.sop-backups/` |
 | 重新初始化 | `bash ai-sop-ops/sop-ctl.sh reinit [与 init-ai-project.sh 相同选项]`；非交互可 `bash ai-sop-ops/sop-ctl.sh -y reinit …` |
-| 清理遗留运行时文件 | `bash ai-sop-ops/sop-ctl.sh clean` / `clean --apply` |
+| 清理旁路运行时文件 | `bash ai-sop-ops/sop-ctl.sh clean` / `clean --apply` |
 | 前台启动 Manager | `bash ai-sop-ops/sop-ctl.sh start`（参数同 `start-manager.sh`，如 `--port 9000`） |
 | 后台启动 / 重启 / 停止 / 状态 | `start-bg`（可选 `--port N`、`--no-reload`）· **`restart-bg`**（先 `stop-bg --force` 再 `start-bg`）· `stop-bg` 或别名 **`stop`**（可加 `--force`）· `status`（人类可读；加 **`--json`** 输出 PID/健康等 JSON）；环境变量 `PORT` 仍可与全局 `--port` 配合使用 |
 | 安装依赖 | `bash ai-sop-ops/sop-ctl.sh install` |

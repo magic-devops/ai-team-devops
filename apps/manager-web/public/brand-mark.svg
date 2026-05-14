@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SOP AI">
+  <defs>
+    <linearGradient id="panel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020617"/>
+      <stop offset="45%" stop-color="#0f172a"/>
+      <stop offset="78%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#082f49"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.35"/>
+      <stop offset="45%" stop-color="#c084fc" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.4"/>
+    </linearGradient>
+    <radialGradient id="core" cx="30%" cy="26%" r="68%">
+      <stop offset="0%" stop-color="#f0fdfa"/>
+      <stop offset="22%" stop-color="#5eead4"/>
+      <stop offset="50%" stop-color="#22d3ee"/>
+      <stop offset="82%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#312e81"/>
+    </radialGradient>
+    <radialGradient id="ambient" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.5"/>
+      <stop offset="55%" stop-color="#6366f1" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="orbit" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="50%" stop-color="#e879f9"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <filter id="bloom" x="-40%" y="-40%" width="180%" height="180%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="ambientBlur" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+      </feMerge>
+    </filter>
+    <clipPath id="round">
+      <rect width="64" height="64" rx="15" ry="15"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="64" height="64" rx="15" fill="url(#panel)"/>
+    <g opacity="0.12" stroke="#67e8f9" stroke-width="0.4">
+      <path d="M0 16h64M0 32h64M0 48h64M16 0v64M32 0v64M48 0v64"/>
+    </g>
+
+    <g transform="translate(32,32)">
+      <circle r="27" fill="url(#ambient)" filter="url(#ambientBlur)"/>
+
+      <circle r="23" fill="none" stroke="url(#orbit)" stroke-width="1.2" stroke-dasharray="4 6 10 6" opacity="0.92" filter="url(#bloom)">
+        <animateTransform attributeName="transform" type="rotate" from="360" to="0" dur="14s" repeatCount="indefinite" additive="sum"/>
+      </circle>
+      <circle r="18.5" fill="none" stroke="#38bdf8" stroke-width="0.55" stroke-dasharray="12 16" opacity="0.42">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="9s" repeatCount="indefinite" additive="sum"/>
+      </circle>
+
+      <g stroke="#22d3ee" stroke-width="0.7" stroke-linecap="round" opacity="0.5" fill="none">
+        <path d="M-20 -6L-10 -2M20 -6L10 -2M-14 14L-6 6M14 14L6 6"/>
+        <circle cx="-20" cy="-6" r="1.5" fill="#a5f3fc" stroke="none"/>
+        <circle cx="20" cy="-6" r="1.5" fill="#a5f3fc" stroke="none"/>
+        <circle cx="-14" cy="14" r="1.35" fill="#d8b4fe" stroke="none"/>
+        <circle cx="14" cy="14" r="1.35" fill="#d8b4fe" stroke="none"/>
+      </g>
+
+      <circle r="11" fill="url(#core)" filter="url(#bloom)"/>
+      <circle r="11" fill="none" stroke="#ecfeff" stroke-width="0.4" opacity="0.45"/>
+      <circle r="4" fill="#fff" opacity="0.28">
+        <animate attributeName="opacity" values="0.18;0.42;0.18" dur="2.6s" repeatCount="indefinite"/>
+      </circle>
+
+      <circle r="11" fill="none" stroke="#22d3ee" stroke-width="0.65" opacity="0">
+        <animate attributeName="r" values="11;21;11" dur="2.6s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.55;0;0.55" dur="2.6s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+
+    <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="url(#rim)" stroke-width="1" opacity="0.55"/>
+  </g>
+</svg>

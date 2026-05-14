@@ -7,7 +7,19 @@
     "marketplace": "マーケット",
     "audit": "監査",
     "copilot": "AI コパイロット",
-    "settings": "設定"
+    "settings": "設定",
+    "primaryProduct": "標準コンソール（主）",
+    "openFullConsole": "フルコンソールを開く",
+    "dockSection": "軽量シェル",
+    "dockHint": "一部 OpenAPI と試験 UI。",
+    "setShellHome": "常に軽量シェルから開始",
+    "consoleLogin": "クラシックログイン"
+  },
+  "dashboard": {
+    "fullConsoleTitle": "日常作業はフルコンソールで行ってください。",
+    "fullConsoleBody": "Vibe / オーケストレーション / MCP / データ港はそちらにあります。本ページはヘルス確認や要約・試験機能用です。",
+    "openConsoleCta": "フルコンソールを開く",
+    "openLoginCta": "クラシックログイン"
   },
   "page": {
     "dashboard": { "title": "クロスプロジェクト ダッシュボード" },
@@ -17,7 +29,28 @@
     "marketplace": { "title": "規約 / スキル マーケット" },
     "audit": { "title": "監査ハッシュチェーン" },
     "copilot": { "title": "AI コパイロット" },
-    "settings": { "title": "設定" }
+    "settings": { "title": "設定", "themeCard": "外観" }
+  },
+  "auth": {
+    "title": "ログイン",
+    "hint": "プロジェクト一覧などは JWT が必要です。init / reset-admin の管理者を使用。SaaS 時はテナント slug を入力。",
+    "username": "ユーザー名",
+    "password": "パスワード",
+    "tenantSlug": "テナント slug（任意）",
+    "tenantPlaceholder": "ADMIN_MODE=saas のときのみ",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "status": "状態",
+    "loggedIn": "ログイン済み",
+    "noProject": "X-Project-Id なし：単一モードではサーバの PROJECT_ID を使用します。",
+    "dashboardNeedLogin": "未ログイン：プロジェクトデータを読み込めません。",
+    "openSettings": "設定でログイン",
+    "consoleLink": "全機能（Vibe 等）→ /console.html"
+  },
+  "copilot": {
+    "intro": "自然言語で意図を書くと JSON が返ります（LLM ゲートウェイ要設定）。",
+    "placeholder": "例: タスクボードを開く、MCP の状態を…",
+    "ask": "送信"
   },
   "common": {
     "loading": "読み込み中…",
@@ -26,5 +59,12 @@
     "search": "検索",
     "save": "保存",
     "cancel": "キャンセル"
+  },
+  "theme": {
+    "label": "テーマ",
+    "hint": "ライト / ダーク / OS に合わせる。選択は端末に保存され、ヘッダーと同期します。",
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システムに合わせる"
   }
 }

@@ -41,10 +41,22 @@ def _save_installed(d):
     p = _installed_file()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(d, indent=2, ensure_ascii=False))
-    id: str; name: str; url: str; description: str = ""; branch: str = "main"
+
+
+class RepoConfig(BaseModel):
+    """Git 技能仓登记（写入 repo_<id>.json）。"""
+
+    id: str
+    name: str
+    url: str
+    description: str = ""
+    branch: str = "main"
+
 
 class SkillInstall(BaseModel):
-    repo_id: str; skill_id: str; version: str = "latest"
+    repo_id: str
+    skill_id: str
+    version: str = "latest"
 
 @router.get("/repos")
 def list_repos():
@@ -57,7 +69,7 @@ def list_repos():
 @router.post("/repos")
 def add_repo(body: RepoConfig):
     f = _repo_dir() / f"repo_{body.id}.json"
-    f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
+    f.write_text(json.dumps(body.model_dump(), ensure_ascii=False, indent=2))
     return {"ok": True, "id": body.id}
 
 @router.delete("/repos/{repo_id}")

@@ -3,8 +3,9 @@ ai-team-devops 项目管理后台 - 模块化入口
 每个路由模块独立，按需加载，AI 修改时只需读取对应模块文件
 """
 import os
+from pathlib import Path
 
-# 必须在 logger / sql_models 之前：统一运行时目录、迁移旧 sop.db 与 .ai-memory
+# 必须在 logger / sql_models 之前：统一运行时目录（.sop-runtime）、SQLite 与 .ai-memory 落位
 from sop_manager.path_config import apply_startup_defaults
 
 apply_startup_defaults()
@@ -23,6 +24,18 @@ try:
 except Exception as _e:
     setup_otel = None
     app_logger.warning("observability 初始化失败: %s", _e)
+
+def _manager_web_dist_dir() -> Path | None:
+    """若存在 Vite 构建产物（dist/index.html），则在 HTTP 根路径挂载管理 UI。"""
+    apps_dir = Path(__file__).resolve().parents[2]
+    raw = (os.getenv("MANAGER_WEB_DIST") or "").strip()
+    dist = Path(raw).expanduser().resolve() if raw else (apps_dir / "manager-web" / "dist")
+    if (dist / "index.html").is_file():
+        return dist
+    return None
+
+
+_MANAGER_WEB_DIST = _manager_web_dist_dir()
 
 app = FastAPI(title="ai-team-devops Manager", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -246,14 +259,25 @@ def chrome_devtools_appspecific():
     return JSONResponse(content={})
 
 
-@app.get("/")
-def root_info():
-    """API-only 根路径；管理 UI 见 `apps/manager-web`（Vite dev 或构建产物由反向代理挂载）。"""
-    return JSONResponse(
-        content={
-            "service": "sop-manager",
-            "apiPrefix": "/api/v1",
-            "openapi": "/docs",
-            "managerWeb": "apps/manager-web — pnpm install && pnpm dev",
-        }
+if _MANAGER_WEB_DIST is not None:
+    from starlette.staticfiles import StaticFiles
+
+    app.mount(
+        "/",
+        StaticFiles(directory=str(_MANAGER_WEB_DIST), html=True),
+        name="manager-web",
     )
+    app_logger.info("Manager Web 已挂载: %s（根路径 / 与 /assets/*）", _MANAGER_WEB_DIST)
+else:
+
+    @app.get("/")
+    def root_info():
+        """无 dist 时返回 JSON 说明；构建 UI：`cd apps/manager-web && pnpm install && pnpm build`。"""
+        return JSONResponse(
+            content={
+                "service": "sop-manager",
+                "apiPrefix": "/api/v1",
+                "openapi": "/docs",
+                "managerWeb": "apps/manager-web — pnpm install && pnpm build（生成 dist/ 后本端口根路径即管理界面）或 pnpm dev（默认 5173）",
+            }
+        )

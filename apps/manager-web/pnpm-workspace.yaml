@@ -1,0 +1,6 @@
+# pnpm ≥11：构建脚本白名单（不再使用 package.json 里的 pnpm.onlyBuiltDependencies）
+# https://pnpm.io/settings#allowbuilds
+packages:
+  - "."
+allowBuilds:
+  esbuild: true

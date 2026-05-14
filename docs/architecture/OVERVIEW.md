@@ -50,7 +50,7 @@
 | 仓库 | 说明 |
 |------|------|
 | **magic-devops/ai-sop** | AI 规约、模板、Agent 协作 Markdown **独立发版**；本仓通过 submodule / Release / `SOP_SPEC_ROOT` 消费 |
-| **magic-devops/ai-sop-ops**（建议） | 原 `sop/tools` 中 **可执行运维与本地编排**；`pipx` / OCI 镜像交付 |
+| **magic-devops/ai-sop-ops** | 可执行运维与本地编排（`ai-sop-ops/` submodule）；`pipx` / OCI 镜像交付 |
 | **本仓 ai-team-devops** | `apis/`、`apps/manager-api`（规划）、`apps/manager-worker`（规划）、`apps/manager`（当前 API 实现）、`apps/manager-web`、`apps/agent-runtime`、`packages/*`、`plugins/` |
 
 详见 **[PLATFORM_REPOS_AND_MANAGER_SPLIT.md](PLATFORM_REPOS_AND_MANAGER_SPLIT.md)**。
@@ -70,9 +70,8 @@ ai-team-devops/
 │   └── sop-sdk-python/
 ├── apis/
 ├── plugins/
-├── sop/                       ← 过渡：规约树；长期迁移至 ai-sop 后以 submodule 替换
-│   ├── tools/                 ← 过渡：运维脚本；长期迁移至 ai-sop-ops
-│   ├── specs/ agents/ knowledge/ skills/ templates/ custom/ ...
+├── ai-sop/                    ← submodule：规约 Markdown（specs / agents / workflow …）
+├── ai-sop-ops/                ← submodule：运维脚本、Hook、MCP、knowledge Python
 ├── docs/
 │   └── architecture/          ← 含 PLATFORM_REPOS_AND_MANAGER_SPLIT.md
 └── pyproject.toml

@@ -7,10 +7,6 @@
 !.ai-memory/rules/
 !.ai-memory/rules/**
 
-# 兼容：无 rules 白名单时仍忽略的零散路径（已由 .ai-memory/** 覆盖时可删，保留无妨）
-.ai-memory/activity.log
-.ai-memory/tool-audit.log
-
 # 本地备份与重初始化打包
 .ai-reinit-backups/
 .sop-backups/

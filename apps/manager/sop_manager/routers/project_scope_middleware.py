@@ -17,6 +17,19 @@ from sop_manager.path_config import project_path, reset_request_scope, set_reque
 
 def _skip_project_scope(path: str) -> bool:
     """无需绑定项目根路径的请求（探活、鉴权、部分只读子系统）。"""
+    if path.startswith("/assets/"):
+        return True
+    if path in (
+        "/",
+        "/index.html",
+        "/login.html",
+        "/console.html",
+        "/favicon.ico",
+        "/vite.svg",
+    ):
+        return True
+    if path.startswith("/pages/"):
+        return True
     if path.startswith("/docs") or path in ("/openapi.json", "/redoc", "/docs", "/redoc"):
         return True
     if path.startswith("/.well-known"):

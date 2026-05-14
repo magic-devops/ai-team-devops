@@ -553,7 +553,7 @@ def _env_llm(user: str, max_tokens: int = 4096) -> str:
 
 @router.get("/check")
 def env_check():
-    """全面环境检查（仅内置项，兼容旧版 UI）"""
+    """全面环境检查（内置项：依赖、路径、脚本可执行性等）"""
     return _builtin_checks_dict()
 
 

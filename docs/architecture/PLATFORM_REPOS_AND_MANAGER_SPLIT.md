@@ -45,13 +45,11 @@ flowchart TB
 | 仓库 | SSH（建议） | 职责 | **不应**包含 |
 |------|-------------|------|----------------|
 | **ai-sop** | `git@github.com:magic-devops/ai-sop.git`（**已建库并推送 `main`**） | `specs/`、`agents/`、`knowledge/`、`skills/`、`templates/`、`workflow/*.md`、`quality/*.md`、`memory/*.md`、`core/*.md`、`custom/` 说明等 | 业务密钥、客户数据、与某产品绑死的 Python 服务代码 |
-| **ai-sop-ops** | `git@github.com:magic-devops/ai-sop-ops.git`（**已建库并推送 `main`**） | 原 `sop/tools` 中 **可执行** 能力：`start-manager`、`health-check`、`cleanup-legacy-runtime`、`sop-ctl`、`reset-admin`、hook 安装脚本、与本地文件系统强绑定的脚本；可选发布 **OCI 镜像 `ghcr.io/.../sop-ops`** | 大段领域业务规约正文（应引用 ai-sop） |
+| **ai-sop-ops** | `git@github.com:magic-devops/ai-sop-ops.git`（**已建库并推送 `main`**） | **可执行运维**：`start-manager`、`health-check`、`cleanup-legacy-runtime`、`sop-ctl`、`reset-admin`、Hook、MCP、`knowledge/` Python、与本地文件系统强绑定的脚本；可选 **OCI 镜像 `ghcr.io/.../sop-ops`** | 大段领域业务规约正文（应引用 `ai-sop`） |
 
 **`ai-sop-ops` 仓内设计**（目录契约、环境变量、`make check`、版本策略）：见 [docs/ARCHITECTURE.md](https://github.com/magic-devops/ai-sop-ops/blob/main/docs/ARCHITECTURE.md) · [docs/ENVIRONMENT.md](https://github.com/magic-devops/ai-sop-ops/blob/main/docs/ENVIRONMENT.md) · [CONTRIBUTING.md](https://github.com/magic-devops/ai-sop-ops/blob/main/CONTRIBUTING.md)。
 
-| **ai-team-devops**（本仓） | 现有 remote | `apis/`、`apps/manager-api`、`apps/manager-worker`、`apps/manager-web`、`apps/agent-runtime`、`packages/*`、`plugins/`、**薄引用** ai-sop | 重复维护一份与 ai-sop 分叉的长期规约 |
-
-> **命名说明**：`ai-sop-ops` 与 `packages/sop-cli` 区分：`sop-cli` 面向 **开发者日常**（`sop task` / `sop login`）；`ai-sop-ops` 面向 **平台运维与本地编排**（起 Manager、自检、清理、备份）。二者可互相调用，但 **依赖方向** 应为 `sop-cli` →（可选）`sop-ops-core` 库，避免循环。
+**本 monorepo（`ai-team-dev-spec` / `ai-team-devops`）**：承载 `apis/`、`apps/manager`、`apps/manager-web`、`apps/agent-runtime`、`packages/*`、`plugins/` 等；通过 submodule **薄引用** `ai-sop` 与 `ai-sop-ops`，**不在本仓重复维护**规约正文。`ai-sop-ops` 与 `packages/sop-cli` 区分：`sop-cli` 面向 **开发者日常**（`sop task` / `sop login`）；`ai-sop-ops` 面向 **平台运维与本地编排**（起 Manager、自检、清理、备份）。二者可互相调用，但 **依赖方向** 应为 `sop-cli` →（可选）`sop-ops-core` 库，避免循环。
 
 ---
 
@@ -93,31 +91,32 @@ ai-sop/
    - 缺点：需维护打包流水线。
 
 4. **OCI 镜像只读层（Kubernetes/GitOps）**  
-   - 规约作为 `volumeMount` `/opt/sop/spec` 注入 `manager-api` / `agent-runtime`。  
+   - 将 **`ai-sop`** 检出挂载为只读卷（例如 `volumeMount` `/opt/ai-sop`），供 `manager-api` / `agent-runtime` 读取规约。  
    - 优点：与应用镜像正交升级。
 
 **统一环境变量（建议）**：`SOP_SPEC_ROOT` → 解析后必须存在 `specs/` 与 `agents/` 等约定子树；`manager-api` 与 `agent-runtime` 启动时 **校验目录结构**，失败快速退出（fail-fast）。
 
 ---
 
-## 4. `ai-sop-ops` 运维工具仓：与 `sop/tools` 的映射
+## 4. `ai-sop-ops` 运维工具仓（当前真源）
 
-### 4.1 迁移切片
+可执行入口均在仓库根 **`ai-sop-ops/`**（Git submodule `magic-devops/ai-sop-ops`），与规约仓 **`ai-sop/`** 并列于平台 monorepo 根目录。
 
-| 当前路径（本仓） | 目标 | 说明 |
-|------------------|------|------|
-| `sop/tools/start-manager.sh` | `ai-sop-ops/bin/` + 文档 | 启动的是 **`apps/manager-api`**（见 §6）；脚本内固定 `PYTHONPATH` |
-| `sop/tools/health-check.sh` | 同上 | 探活 URL、依赖检查 |
-| `sop/tools/sop-ctl.sh` | `sop-ctl` 或 `typer` 子命令 | 可逐步改为 Python 单入口，便于 Windows |
-| `sop/tools/reset-admin.py` | `sop-ops-admin` console_script | 仅依赖 `manager-api` 的公共 Python 包或 HTTP Admin API（更解耦） |
-| `sop/tools/bootstrap-dev.sh` | `sop-ops-bootstrap` | 组合安装 `sop-cli`、拉规约、可选起 docker compose |
-| `sop/tools/*.md`（SCRIPTS、DATA_AND_VECTOR） | `ai-sop-ops/docs/` | **数据平面权威**仍保留在运维侧文档，与 `ai-sop` 中「表设计规约」交叉引用 |
+| 能力 | 典型入口 | 说明 |
+|------|----------|------|
+| 统一管控 | `sop-ctl.sh` | init / backup / start / health / repair / self-check 等 |
+| 启动 Manager | `start-manager.sh` | `uvicorn` + `PROJECT_PATH` / `PORT` |
+| 依赖安装 | `install-integrations.sh` | Python venv、LanceDB 等 |
+| Hook 策略 | `sop_ai_hook.py` | Codex / Claude 等事件统一处理 |
+| 健康检查 | `health-check.sh` | 依赖与可选鉴权探活 |
+| 管理员工具 | `reset-admin.py` | SQLite 等场景 |
+| 运维文档 | `SCRIPTS.md`、`docs/ENVIRONMENT.md` | 环境变量与脚本清单 |
 
-### 4.2 交付形态
+### 4.1 交付形态
 
-- **开发者本机**：`pipx install sop-ops` → `sop-ctl`、`sop-manager-local` 等 entry points。  
-- **CI**：`ghcr.io/magic-devops/sop-ops:1.x` 精简镜像，仅含 bash + python3 + 脚本。  
-- **与 `sop-cli` 关系**：`packages/sop-cli` 保留 **业务开发者** 命令；`sop-ops` 保留 **平台/运维** 命令；共享库可抽 `packages/sop-common-py`（日志格式、env 解析）。
+- **开发者本机**：`bash ai-sop-ops/sop-ctl.sh help`；或 `pip install -e packages/sop-cli` 使用 `sop` 子命令。  
+- **CI**：`ghcr.io/magic-devops/sop-ops:1.x` 精简镜像（bash + python3 + 脚本）。  
+- **与 `sop-cli` 关系**：`packages/sop-cli` 面向业务开发者日常；`ai-sop-ops` 面向平台运维与本地编排；依赖方向为 **`sop-cli` →（可选）共享库**，避免循环。
 
 ---
 
@@ -165,11 +164,11 @@ manager-worker → 同上 + Temporal Frontend + 外网 LLM（经 Egress 白名�
 
 ---
 
-## 6. 与现有代码的对应关系（过渡）
+## 6. 与当前 monorepo 的对应关系
 
-- 当前 **`apps/manager` + `sop_manager`**：在 M-A4 之前继续作为 **单体 API** 真源；新目录 `apps/manager-api` 可先以 **文档占位**，避免双真源。  
-- **`apps/manager-web`**：不变，仅对接 `manager-api` 的 OpenAPI。  
-- **`ai-sop/`、`ai-sop-ops/` 在本仓**：已以 **Git submodule** 引入（`magic-devops/ai-sop`、`magic-devops/ai-sop-ops`）。**规约仅 `ai-sop/`**；可执行与 Python 工具在 **`ai-sop-ops/`**；操作说明见 [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md)。
+- **`apps/manager` + `sop_manager`**：当前 **HTTP API** 实现真源；`apps/manager-api` / `apps/manager-worker` 为演进目标目录（见 §5.4）。  
+- **`apps/manager-web`**：管理 UI，对接 Manager OpenAPI。  
+- **`ai-sop/`、`ai-sop-ops/`**：Git submodule；规约与运维边界见上文 §3–§4。克隆与变量见 [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md)。
 
 ---
 
@@ -180,7 +179,7 @@ manager-worker → 同上 + Temporal Frontend + 外网 LLM（经 Egress 白名�
 | 规约与工具双仓 PR 不同步 | `ai-sop-ops` CI 集成测试引用 **固定** `ai-sop` tag；发版矩阵文档化 |
 | Worker 拖垮 DB 连接池 | Worker 独立连接池上限；只读副本承载报表类任务 |
 | 队列丢消息 | Redis Streams `XAUTOCLAIM` + Pending 监控；或 PG outbox + 事务消息 |
-| 运维脚本分叉 | `sop-ops` 单一发版线；本仓脚本目录标记 **deprecated** 并设删除日期 |
+| 运维脚本分叉 | `ai-sop-ops` 单一发版线；平台仓 CI 固定 submodule commit 或 tag |
 
 ---
 
@@ -190,7 +189,7 @@ manager-worker → 同上 + Temporal Frontend + 外网 LLM（经 Egress 白名�
 - [MODULES.md](MODULES.md) — 模块表含 `manager-api` / `manager-worker`  
 - [DATA_PLANE.md](DATA_PLANE.md) — SQL/向量分层  
 - [DEPLOY.md](DEPLOY.md) — 部署档位  
-- [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md) — **`ai-sop` / `ai-sop-ops` submodule** 与历史 fork 迁移说明
+- [../MIGRATE_AI_SOP_SUBMODULES.md](../MIGRATE_AI_SOP_SUBMODULES.md) — **`ai-sop` / `ai-sop-ops` submodule** 与克隆布局
 
 ---
 

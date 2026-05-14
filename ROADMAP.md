@@ -37,7 +37,7 @@
 ### ✅ 已落地（本仓库当前状态）
 
 - **M1 目录骨架**：`apps/manager`、`apps/agent-runtime`、`packages/sop-cli`、`packages/sop-sdk-python`、`apis/`、`plugins/`、`docs/architecture/` 全部就位
-- **M1 兼容外壳**：`apps/manager` 承载 **`sop_manager`** Python 包（FastAPI）；Dockerfile / Compose（single + saas）
+- **M1 Manager API**：`apps/manager` 承载 **`sop_manager`** Python 包（FastAPI）；Dockerfile / Compose（single + saas）
 - **M1 架构文档**（7 份）：OVERVIEW / MODULES / AI_FIRST / PROTOCOLS / SECURITY / DEPLOY / EVOLUTION
 - **M2 Schema-First**：OpenAPI 3.1（`apis/openapi/openapi.yaml`）+ gRPC proto + AsyncAPI 3 + buf 配置
 - **M3 统一 CLI** `sop`：init / login / status / agentd / task / rule / sync / doctor / llm

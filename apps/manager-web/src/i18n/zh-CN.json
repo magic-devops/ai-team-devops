@@ -7,7 +7,19 @@
     "marketplace": "市场",
     "audit": "审计",
     "copilot": "AI 助手",
-    "settings": "设置"
+    "settings": "设置",
+    "primaryProduct": "标准管理台（主产品）",
+    "openFullConsole": "打开完整管理台",
+    "dockSection": "轻量扩展坞",
+    "dockHint": "部分 OpenAPI 与新能力试用入口。",
+    "setShellHome": "固定从扩展坞进入",
+    "consoleLogin": "经典登录页"
+  },
+  "dashboard": {
+    "fullConsoleTitle": "日常操作请在完整管理台完成。",
+    "fullConsoleBody": "Vibe、编排、MCP、数据港等均已在此；本页用于探活、摘要或实验功能。",
+    "openConsoleCta": "打开完整管理台",
+    "openLoginCta": "经典登录页"
   },
   "page": {
     "dashboard": { "title": "跨项目驾驶舱" },
@@ -17,7 +29,28 @@
     "marketplace": { "title": "规约/技能市场" },
     "audit": { "title": "审计哈希链" },
     "copilot": { "title": "AI 助手" },
-    "settings": { "title": "设置" }
+    "settings": { "title": "设置", "themeCard": "外观" }
+  },
+  "auth": {
+    "title": "登录 Manager",
+    "hint": "项目列表等接口需要 JWT。账号与密码见 init-ai-project / reset-admin（默认常为 admin）。SaaS 模式请填写租户 slug。",
+    "username": "用户名",
+    "password": "密码",
+    "tenantSlug": "租户 slug（可选）",
+    "tenantPlaceholder": "仅 ADMIN_MODE=saas 时需要",
+    "login": "登录",
+    "logout": "退出登录",
+    "status": "状态",
+    "loggedIn": "已登录",
+    "noProject": "未绑定 X-Project-Id：单项目模式将使用服务端 PROJECT_ID；若接口仍失败请在环境变量中配置 PROJECT_ID。",
+    "dashboardNeedLogin": "未登录：项目等数据无法加载。",
+    "openSettings": "前往设置登录",
+    "consoleLink": "完整功能（Vibe、编排、MCP、数据港等）→ 打开 /console.html"
+  },
+  "copilot": {
+    "intro": "用自然语言描述意图；后端返回结构化 JSON（需已配置 LLM 网关）。",
+    "placeholder": "例如：打开任务看板、检查 MCP 状态、说明数据港入口…",
+    "ask": "发送"
   },
   "common": {
     "loading": "加载中…",
@@ -26,5 +59,12 @@
     "search": "搜索",
     "save": "保存",
     "cancel": "取消"
+  },
+  "theme": {
+    "label": "主题",
+    "hint": "浅色 / 深色 / 跟随系统；选择会保存在本机并与顶栏按钮同步。",
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
   }
 }
