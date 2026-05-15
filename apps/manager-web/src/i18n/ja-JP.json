@@ -221,7 +221,32 @@
       "title": "要件管理",
       "list": "要件一覧",
       "allStatus": "すべてのステータス",
-      "empty": "要件なし"
+      "allPriority": "すべての優先度",
+      "empty": "要件なし",
+      "total": "要件数",
+      "pending": "未着手",
+      "inProgress": "進行中",
+      "completed": "完了",
+      "create": "要件を作成",
+      "edit": "要件を編集",
+      "delete": "要件を削除",
+      "confirmDelete": "要件 {{title}} を削除しますか？",
+      "titlePh": "要件タイトル",
+      "priority": "優先度",
+      "status": "ステータス",
+      "tags": "タグ",
+      "description": "要件説明",
+      "acceptance": "受入基準",
+      "acceptancePh": "1 行に 1 つの検証可能な基準",
+      "agent": "担当 Agent",
+      "devTool": "開発ツール",
+      "notes": "人のメモ",
+      "statusMap": {
+        "pending": "未着手",
+        "in_progress": "進行中",
+        "blocked": "ブロック",
+        "completed": "完了"
+      }
     },
     "platforms": {
       "title": "AI 開発プラットフォーム",

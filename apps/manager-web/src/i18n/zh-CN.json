@@ -221,7 +221,32 @@
       "title": "需求管理",
       "list": "需求列表",
       "allStatus": "全部状态",
-      "empty": "暂无需求"
+      "allPriority": "全部优先级",
+      "empty": "暂无需求",
+      "total": "需求总数",
+      "pending": "待处理",
+      "inProgress": "进行中",
+      "completed": "已完成",
+      "create": "新建需求",
+      "edit": "编辑需求",
+      "delete": "删除需求",
+      "confirmDelete": "确认删除需求 {{title}}？",
+      "titlePh": "需求标题",
+      "priority": "优先级",
+      "status": "状态",
+      "tags": "标签",
+      "description": "需求描述",
+      "acceptance": "验收标准",
+      "acceptancePh": "每行一条可验证标准",
+      "agent": "负责 Agent",
+      "devTool": "开发工具",
+      "notes": "人工备注",
+      "statusMap": {
+        "pending": "待处理",
+        "in_progress": "进行中",
+        "blocked": "阻塞",
+        "completed": "已完成"
+      }
     },
     "platforms": {
       "title": "AI 开发平台",

@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-15T13:01:35Z",
+  "updated_at": "2026-05-15T13:12:23Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -54,7 +54,8 @@
       "增强租户会话展示闭环：/auth/login 与 /auth/me 返回 tenant_slug/tenant_name，登录页写入本地用户态，React 顶栏与设置页优先展示友好租户名称而非技术 tenant_id",
       "增强 manager-web 组织与权限管理：Organization 页接入租户成员 CRUD、角色/状态调整、密码重置、业务线创建和项目概览，并补齐 API 封装与多语言文案",
       "增强项目成员权限闭环：后端项目成员列表/添加/移除补齐租户与项目访问校验，manager-web Organization 页支持选择项目、查看成员、添加租户成员到项目并移除成员",
-      "重构 manager-web Settings 系统配置页：按账户与作用域、运行状态、管理入口、外观主题四区块重新设计，接入 health 状态、指标入口、组织权限/数据源/控制台快捷入口与主题卡片选择"
+      "重构 manager-web Settings 系统配置页：按账户与作用域、运行状态、管理入口、外观主题四区块重新设计，接入 health 状态、指标入口、组织权限/数据源/控制台快捷入口与主题卡片选择",
+      "增强 manager-web 需求管理闭环：Requirements 页升级为需求工作台，支持创建、编辑、删除、状态/优先级筛选、指标卡、验收标准、负责 Agent 与开发工具字段，并补齐 API 封装与多语言文案"
     ],
     "in_progress": [],
     "blocked": [],

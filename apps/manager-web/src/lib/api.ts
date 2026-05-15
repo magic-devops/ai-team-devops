@@ -36,6 +36,26 @@ export const api = {
   projectOnboarding: (projectId: string) =>
     request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/onboarding`),
   requirements: () => request<any[]>("/api/v1/requirements"),
+  createRequirement: (body: {
+    title: string;
+    description?: string;
+    priority?: string;
+    acceptance_criteria?: string[];
+    tags?: string[];
+    assigned_agent?: string;
+    dev_tool?: string;
+  }) =>
+    request<any>("/api/v1/requirements", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateRequirement: (id: string, patch: Record<string, unknown>) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteRequirement: (id: string) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}`, { method: "DELETE" }),
   contextMe: () => request<any>("/api/v1/context/me"),
   tasks: (sprintId?: string) => {
     const qs = sprintId ? `?sprint_id=${encodeURIComponent(sprintId)}` : "";

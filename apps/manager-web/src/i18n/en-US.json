@@ -221,7 +221,32 @@
       "title": "Requirements",
       "list": "Requirement list",
       "allStatus": "All statuses",
-      "empty": "No requirements"
+      "allPriority": "All priorities",
+      "empty": "No requirements",
+      "total": "Total requirements",
+      "pending": "Pending",
+      "inProgress": "In progress",
+      "completed": "Completed",
+      "create": "New requirement",
+      "edit": "Edit requirement",
+      "delete": "Delete requirement",
+      "confirmDelete": "Delete requirement {{title}}?",
+      "titlePh": "Requirement title",
+      "priority": "Priority",
+      "status": "Status",
+      "tags": "Tags",
+      "description": "Requirement description",
+      "acceptance": "Acceptance criteria",
+      "acceptancePh": "One testable criterion per line",
+      "agent": "Owner agent",
+      "devTool": "Dev tool",
+      "notes": "Human notes",
+      "statusMap": {
+        "pending": "Pending",
+        "in_progress": "In progress",
+        "blocked": "Blocked",
+        "completed": "Completed"
+      }
     },
     "platforms": {
       "title": "AI development platforms",

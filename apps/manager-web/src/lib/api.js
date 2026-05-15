@@ -33,6 +33,15 @@ export const api = {
     projects: () => request("/api/v1/projects"),
     projectOnboarding: (projectId) => request(`/api/v1/projects/${encodeURIComponent(projectId)}/onboarding`),
     requirements: () => request("/api/v1/requirements"),
+    createRequirement: (body) => request("/api/v1/requirements", {
+        method: "POST",
+        body: JSON.stringify(body),
+    }),
+    updateRequirement: (id, patch) => request(`/api/v1/requirements/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+    }),
+    deleteRequirement: (id) => request(`/api/v1/requirements/${encodeURIComponent(id)}`, { method: "DELETE" }),
     contextMe: () => request("/api/v1/context/me"),
     tasks: (sprintId) => {
         const qs = sprintId ? `?sprint_id=${encodeURIComponent(sprintId)}` : "";
