@@ -63,7 +63,6 @@
         nav_back: '返回上一页',
         sidebar_expand: '展开分组',
         sidebar_collapse: '收起分组',
-        topbar_light_shell: '轻量扩展坞',
       },
       en: {
         topbar_logout: 'Sign out',
@@ -226,9 +225,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   letter-spacing:-.4px;white-space:nowrap}
 [data-theme=light] .topbar-logo{-webkit-text-fill-color:transparent}
 .topbar-badge{background:var(--accent);color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;justify-content:flex-end;flex:1;min-width:0;max-width:min(720px,70vw);overflow:hidden}
-.topbar-tools{display:flex;align-items:center;gap:8px;flex-shrink:1;min-width:0;overflow:hidden}
-.topbar-user{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;white-space:nowrap}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:nowrap;justify-content:flex-end;flex:1;min-width:0;max-width:min(900px,82vw);overflow:visible}
+.topbar-right-cluster{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;flex:1;justify-content:flex-end}
+.topbar-sep{width:1px;height:22px;background:var(--border);flex-shrink:0;opacity:.75;margin:0 2px}
+.topbar-user-wrap{position:relative;margin-left:4px;flex-shrink:0}
+.topbar-user-trigger{
+  display:inline-flex;align-items:center;gap:8px;padding:4px 10px 4px 8px;border-radius:999px;cursor:pointer;max-width:min(260px,34vw);
+  border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;text-align:left;
+  transition:border-color .15s,box-shadow .15s;
+}
+.topbar-user-trigger:hover{border-color:color-mix(in srgb,var(--accent) 42%,var(--border));box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.topbar-user-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.topbar-user-avatar{font-size:15px;line-height:1;opacity:.88;flex-shrink:0}
+.topbar-user-meta{display:flex;flex-direction:column;align-items:flex-start;min-width:0;line-height:1.2}
+.topbar-user-name{font-weight:650;color:var(--text);max-width:132px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-user-role{font-size:10px;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-user-chevron{font-size:9px;color:var(--text3);margin-left:2px;flex-shrink:0;opacity:.9}
+.topbar-user-menu{
+  position:absolute;top:calc(100% + 6px);right:0;min-width:208px;max-width:min(300px,92vw);
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-md);padding:6px 0;z-index:200;
+}
+.topbar-user-menu-hl{padding:8px 14px 2px;font-size:13px;font-weight:700;color:var(--text);word-break:break-all;line-height:1.35}
+.topbar-user-menu-sub{padding:0 14px 10px;font-size:11px;color:var(--text3);border-bottom:1px solid var(--border);line-height:1.4}
+.topbar-user-menu-item{
+  display:block;width:100%;text-align:left;margin:0;padding:10px 14px;border:none;cursor:pointer;font-size:13px;font-weight:600;
+  background:transparent;color:var(--text);border-radius:0;
+}
+.topbar-user-menu-item:hover{background:color-mix(in srgb,var(--accent) 12%,var(--bg3))}
+.topbar-user-menu-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .topbar-hub-btn{
   display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;cursor:pointer;font-size:12px;font-weight:650;
   border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));
@@ -2984,6 +3008,17 @@ function AppV3() {
   const importFileRef = React.useRef(null);
   const [dataHubImportRoles, setDataHubImportRoles] = React.useState(null);
 
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const userMenuRef = React.useRef(null);
+  React.useEffect(function () {
+    if (!userMenuOpen) return;
+    var onDoc = function (e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return function () { document.removeEventListener('mousedown', onDoc); };
+  }, [userMenuOpen]);
+
   React.useEffect(function () {
     apiFetch(API + '/auth/role-constants', { timeoutMs: 10000 })
       .then(function (r) { return r.json(); })
@@ -3155,7 +3190,7 @@ function AppV3() {
 
   React.useEffect(function () {
     var onKey = function (e) {
-      if (e.key === 'Escape') { setHelpOpen(false); return; }
+      if (e.key === 'Escape') { setHelpOpen(false); setUserMenuOpen(false); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
@@ -3369,6 +3404,7 @@ function AppV3() {
         <h3>{tk('help_title')}</h3>
         <p style={{fontSize:12,color:'var(--text2)',lineHeight:1.6}}>{tk('help_intro_p1')}<strong>{tk('help_intro_no_build')}</strong>{tk('help_intro_p2')}<code style={{fontSize:11}}>{API}</code>{tk('help_intro_p3')}</p>
         <ul style={{fontSize:13,color:'var(--text)',lineHeight:1.85,margin:'8px 0 0 18px',padding:0}}>
+          <li>{tk('help_li_topbar_q')}</li>
           <li><span className="help-kbd">Ctrl / ⌘ + /</span>{tk('help_li_ctrl_rest')}</li>
           <li><span className="help-kbd">Esc</span>{tk('help_li_esc_rest')}</li>
           <li>{tk('help_li_sidebar')}</li>
@@ -3454,7 +3490,14 @@ function AppV3() {
         {apiHealth === 'ok' ? <>{tk('api_online')}{apiPingMs != null ? ' · ' + apiPingMs + 'ms' : ''}{apiVer ? ' · v' + apiVer : ''}</> : apiHealth === 'down' ? <>{tk('api_offline')}</> : <>{tk('api_checking')}</>}
       </div>
       <div className="topbar-right">
-        <div className="topbar-tools">
+        <div className="topbar-right-cluster">
+        <a className="btn btn-sm btn-muted" style={{ fontSize: 11, whiteSpace: 'nowrap', textDecoration: 'none' }} href="/?shell=1#/dashboard" title={tk('topbar_management_platform')}>{tk('topbar_management_platform')}</a>
+        <span className="topbar-sep" aria-hidden="true"/>
+        <button type="button" className="topbar-hub-btn" onClick={() => setDataHubOpen(true)} title={tk('dh_title')}>
+          <span className="topbar-hub-ic" aria-hidden="true">⇄</span>
+          <span>{tk('topbar_data_hub')}</span>
+        </button>
+        <span className="topbar-sep" aria-hidden="true"/>
         <label className="text-tertiary" style={{fontSize:10,marginRight:2}} htmlFor="devdash-theme-sel">{tk('topbar_theme')}</label>
         <select id="devdash-theme-sel" className="topbar-select" value={theme} onChange={(e) => setTheme(e.target.value)} aria-label={tk('topbar_theme')}>
           <option value="dark">{tk('theme_dark')}</option>
@@ -3467,19 +3510,43 @@ function AppV3() {
           <option value="zh">中文</option>
           <option value="en">English</option>
         </select>
-        <a className="btn btn-sm btn-muted" style={{fontSize:11,whiteSpace:'nowrap',textDecoration:'none'}} href="/?shell=1#/dashboard" title={tk('topbar_light_shell')}>{tk('topbar_light_shell')}</a>
-        <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title={tk('topbar_help')}>?</button>
-        <button type="button" className="topbar-hub-btn" onClick={() => setDataHubOpen(true)} title={tk('dh_title')}>
-          <span className="topbar-hub-ic" aria-hidden="true">⇄</span>
-          <span>{tk('topbar_data_hub')}</span>
-        </button>
+        <button type="button" className="btn-icon" onClick={() => setHelpOpen(true)} title={tk('topbar_help')} aria-label={tk('topbar_help')}>?</button>
         </div>
-        <div className="topbar-user">
-          {window.__CURRENT_USER__ && <span style={{fontSize:12,color:'var(--text2)',whiteSpace:'nowrap'}}>
-            👤 {window.__CURRENT_USER__.username}
-            <span style={{fontSize:10,color:'var(--text3)',marginLeft:4}}>[{(() => { var r = String(window.__CURRENT_USER__.role || ''); var k = 'role_' + r; var s = tk(k); return s === k ? r : s; })()}]</span>
-          </span>}
-          <button type="button" className="btn btn-sm btn-muted" onClick={doLogout} title={tk('topbar_logout')}>{tk('topbar_logout')}</button>
+        <div className="topbar-user-wrap" ref={userMenuRef}>
+          <button
+            type="button"
+            className="topbar-user-trigger"
+            onClick={() => setUserMenuOpen(function (o) { return !o; })}
+            aria-expanded={userMenuOpen}
+            aria-haspopup="true"
+            title={tk('topbar_user_menu_title')}
+          >
+            <span className="topbar-user-avatar" aria-hidden="true">👤</span>
+            <span className="topbar-user-meta">
+              {window.__CURRENT_USER__ ? (
+                <>
+                  <span className="topbar-user-name">{String(window.__CURRENT_USER__.username || '')}</span>
+                  <span className="topbar-user-role">[{(() => { var r = String(window.__CURRENT_USER__.role || ''); var k = 'role_' + r; var s = tk(k); return s === k ? r : s; })()}]</span>
+                </>
+              ) : (
+                <span className="topbar-user-name">{tk('topbar_user_unknown')}</span>
+              )}
+            </span>
+            <span className="topbar-user-chevron" aria-hidden="true">{userMenuOpen ? '▴' : '▾'}</span>
+          </button>
+          {userMenuOpen ? (
+            <div className="topbar-user-menu" role="menu">
+              {window.__CURRENT_USER__ ? (
+                <>
+                  <div className="topbar-user-menu-hl">{String(window.__CURRENT_USER__.username || '')}</div>
+                  <div className="topbar-user-menu-sub">{(() => { var r = String(window.__CURRENT_USER__.role || ''); var k = 'role_' + r; var s = tk(k); return s === k ? r : s; })()}</div>
+                </>
+              ) : (
+                <div className="topbar-user-menu-hl">{tk('topbar_user_unknown')}</div>
+              )}
+              <button type="button" role="menuitem" className="topbar-user-menu-item" onClick={() => { setUserMenuOpen(false); doLogout(); }}>{tk('topbar_logout')}</button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

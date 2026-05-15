@@ -8,18 +8,16 @@
     "audit": "Audit",
     "copilot": "AI Copilot",
     "settings": "Settings",
-    "primaryProduct": "Full console (primary)",
-    "openFullConsole": "Open full console",
-    "dockSection": "Light shell",
-    "dockHint": "Subset of OpenAPI + experimental UI.",
-    "setShellHome": "Always start in light shell",
-    "consoleLogin": "Classic login"
+    "shellNavSection": "Navigation",
+    "dockHint": "Cross-project health, OpenAPI-aligned views, and experiments; use the control console for daily orchestration.",
+    "setShellHome": "Always open this management platform at site root"
   },
   "dashboard": {
-    "fullConsoleTitle": "Use the full console for day-to-day work.",
-    "fullConsoleBody": "Vibe, orchestration, MCP, and Data hub live there; this page is for health checks, summaries, or new features.",
-    "openConsoleCta": "Open full console",
-    "openLoginCta": "Classic login"
+    "fullConsoleTitle": "Cross-project summaries and health checks live here.",
+    "fullConsoleBody": "Use the control console for Vibe, orchestration, MCP, and Data hub.",
+    "openConsoleCta": "Open control console",
+    "auditPrevHashCaption": "Tip hash prev_hash (previous link on the audit hash chain, used for tamper-evident verification).",
+    "auditGenesisNote": "Genesis placeholder (64 zeros): no on-chain audit entries yet."
   },
   "page": {
     "dashboard": { "title": "Cross-Project Dashboard" },

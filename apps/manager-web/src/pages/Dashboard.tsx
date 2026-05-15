@@ -86,23 +86,17 @@ export function Dashboard() {
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-sky-200/70 bg-gradient-to-br from-sky-50/90 via-white to-indigo-50/50 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-sky-500/20 dark:from-slate-900/90 dark:via-slate-900/70 dark:to-indigo-950/30 dark:text-slate-200">
+        <div className="rounded-xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/60 dark:text-slate-200">
           <p className="font-medium leading-relaxed">
-            <span className="text-sky-900 dark:text-sky-200">{t("dashboard.fullConsoleTitle")}</span>{" "}
-            <span className="text-slate-700 dark:text-slate-300">{t("dashboard.fullConsoleBody")}</span>
+            <span className="text-slate-900 dark:text-slate-100">{t("dashboard.fullConsoleTitle")}</span>{" "}
+            <span className="text-slate-600 dark:text-slate-400">{t("dashboard.fullConsoleBody")}</span>
           </p>
           <p className="mt-2 flex flex-wrap gap-2">
             <a
-              href="/console.html"
-              className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-sky-500 dark:bg-sky-500 dark:hover:bg-sky-400"
+              href="/console.html?from=management-platform"
+              className="inline-flex items-center rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-500 dark:bg-brand-500 dark:hover:bg-brand-400"
             >
               {t("dashboard.openConsoleCta")}
-            </a>
-            <a
-              href="/login.html"
-              className="inline-flex items-center rounded-lg border border-sky-200/90 bg-white/90 px-3 py-1.5 text-xs font-medium text-sky-900 shadow-sm hover:bg-white dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100 dark:hover:bg-slate-800"
-            >
-              {t("dashboard.openLoginCta")}
             </a>
           </p>
         </div>
@@ -162,9 +156,18 @@ export function Dashboard() {
                 <div className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-100">
                   {audit.data.count}
                 </div>
-                <div className="truncate font-mono text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
-                  {String(audit.data.prev_hash ?? "").slice(0, 24)}…
-                </div>
+                <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                  {t("dashboard.auditPrevHashCaption")}
+                </p>
+                {/^0{64}$/.test(String(audit.data.prev_hash ?? "")) ? (
+                  <p className="font-mono text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                    {t("dashboard.auditGenesisNote")}
+                  </p>
+                ) : (
+                  <div className="truncate font-mono text-[11px] leading-tight text-zinc-600 dark:text-zinc-400">
+                    {String(audit.data.prev_hash ?? "").slice(0, 24)}…
+                  </div>
+                )}
               </>
             ) : !audit.isPending && !audit.isError ? (
               <span className="text-zinc-400">—</span>

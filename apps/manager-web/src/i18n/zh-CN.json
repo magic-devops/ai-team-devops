@@ -8,18 +8,16 @@
     "audit": "审计",
     "copilot": "AI 助手",
     "settings": "设置",
-    "primaryProduct": "标准管理台（主产品）",
-    "openFullConsole": "打开完整管理台",
-    "dockSection": "轻量扩展坞",
-    "dockHint": "部分 OpenAPI 与新能力试用入口。",
-    "setShellHome": "固定从扩展坞进入",
-    "consoleLogin": "经典登录页"
+    "shellNavSection": "功能导航",
+    "dockHint": "跨项目探活、OpenAPI 对齐与试验能力；日常编排请在管控台完成。",
+    "setShellHome": "将站点根固定到本管理平台"
   },
   "dashboard": {
-    "fullConsoleTitle": "日常操作请在完整管理台完成。",
-    "fullConsoleBody": "Vibe、编排、MCP、数据港等均已在此；本页用于探活、摘要或实验功能。",
-    "openConsoleCta": "打开完整管理台",
-    "openLoginCta": "经典登录页"
+    "fullConsoleTitle": "此处为跨项目摘要与健康检查。",
+    "fullConsoleBody": "Vibe、编排、MCP、数据港等请在管控台完成。",
+    "openConsoleCta": "进入管控台",
+    "auditPrevHashCaption": "链尖 prev_hash（审计哈希链上一节摘要，用于防篡改校验）。",
+    "auditGenesisNote": "当前为创世占位（64 个 0）：尚无链上审计写入。"
   },
   "page": {
     "dashboard": { "title": "跨项目驾驶舱" },

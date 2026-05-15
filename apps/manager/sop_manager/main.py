@@ -12,6 +12,7 @@ apply_startup_defaults()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html
 from fastapi.responses import JSONResponse
 
 # ── 日志系统（最先初始化）────────────────────────────────────────
@@ -37,7 +38,7 @@ def _manager_web_dist_dir() -> Path | None:
 
 _MANAGER_WEB_DIST = _manager_web_dist_dir()
 
-app = FastAPI(title="ai-team-devops Manager", version="2.0")
+app = FastAPI(title="ai-team-devops Manager", version="2.0", redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # OTel instrument FastAPI（在路由注册前调用）
@@ -257,6 +258,22 @@ except Exception as _e:
 @app.get("/.well-known/appspecific/com.chrome.devtools.json")
 def chrome_devtools_appspecific():
     return JSONResponse(content={})
+
+
+_redoc_js_url = (os.getenv("REDOC_JS_URL") or "").strip() or (
+    "https://unpkg.com/redoc@2.1.4/bundles/redoc.standalone.js"
+)
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_page():
+    """ReDoc：避免默认 redoc@next + Google Fonts 在离线/内网环境空白；固定 2.x + 不拉取外网字体。"""
+    return get_redoc_html(
+        openapi_url="./openapi.json",
+        title=f"{app.title} - ReDoc",
+        redoc_js_url=_redoc_js_url,
+        with_google_fonts=False,
+    )
 
 
 if _MANAGER_WEB_DIST is not None:

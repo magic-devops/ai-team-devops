@@ -8,18 +8,16 @@
     "audit": "監査",
     "copilot": "AI コパイロット",
     "settings": "設定",
-    "primaryProduct": "標準コンソール（主）",
-    "openFullConsole": "フルコンソールを開く",
-    "dockSection": "軽量シェル",
-    "dockHint": "一部 OpenAPI と試験 UI。",
-    "setShellHome": "常に軽量シェルから開始",
-    "consoleLogin": "クラシックログイン"
+    "shellNavSection": "メニュー",
+    "dockHint": "ヘルス確認や試験 UI。日常のオーケストレーションは統制コンソール側で行います。",
+    "setShellHome": "サイトの起点をこの管理プラットフォームに固定"
   },
   "dashboard": {
-    "fullConsoleTitle": "日常作業はフルコンソールで行ってください。",
-    "fullConsoleBody": "Vibe / オーケストレーション / MCP / データ港はそちらにあります。本ページはヘルス確認や要約・試験機能用です。",
-    "openConsoleCta": "フルコンソールを開く",
-    "openLoginCta": "クラシックログイン"
+    "fullConsoleTitle": "クロスプロジェクトの要約とヘルスはここで。",
+    "fullConsoleBody": "Vibe / オーケストレーション / MCP / データ港は統制コンソール側で。",
+    "openConsoleCta": "統制コンソールへ",
+    "auditPrevHashCaption": "チェーン先端の prev_hash（改ざん検知用の直前ハッシュ要約）。",
+    "auditGenesisNote": "ジェネシス占位（0 が 64 個）：まだ監査チェーンに書き込みがありません。"
   },
   "page": {
     "dashboard": { "title": "クロスプロジェクト ダッシュボード" },

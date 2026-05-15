@@ -16,6 +16,10 @@ export default defineConfig({
       "/api": { target: "http://127.0.0.1:8765", changeOrigin: true },
       "/ws": { target: "ws://127.0.0.1:8765", ws: true },
       "/metrics": { target: "http://127.0.0.1:8765", changeOrigin: true },
+      // OpenAPI / ReDoc 与静态台同源开发时走此代理（否则 5173 根路径无 /redoc）
+      "/docs": { target: "http://127.0.0.1:8765", changeOrigin: true },
+      "/redoc": { target: "http://127.0.0.1:8765", changeOrigin: true },
+      "/openapi.json": { target: "http://127.0.0.1:8765", changeOrigin: true },
     },
   },
   build: {
