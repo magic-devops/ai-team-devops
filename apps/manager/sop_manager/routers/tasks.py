@@ -259,6 +259,25 @@ def reorder_tasks_board(body: ReorderTasksBody):
     return {"ok": True}
 
 
+@router.post("/{task_id}:pull")
+def pull_task(task_id: str):
+    _safe_task_id(task_id)
+    t = table("tasks")
+    if t is None:
+        raise HTTPException(503, "数据库不可用")
+    t.update(where=f"id = '{task_id}'", values={"status": "in_progress", "updated_at": now()})
+    notify_webhook(
+        "task.status_changed",
+        {"task_id": task_id, "status": "in_progress", "via": "pull"},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
+    row = next((x for x in rows("tasks", 500) if x.get("id") == task_id), None)
+    if not row:
+        return {"ok": True, "id": task_id, "status": "in_progress"}
+    return _ui_merge_row(row, _ui_load())
+
+
 @router.patch("/{task_id}/unblock")
 def unblock_task(task_id: str, human_notes: str = Body("", embed=True)):
     _safe_task_id(task_id)

@@ -13,7 +13,7 @@ from rich.table import Table
 
 from .._util import console, get_client, get_config, ok, warn
 
-app = typer.Typer(help="AI 平台：list / doctor / install-shims")
+app = typer.Typer(help="AI 平台：list / doctor / init / install-shims")
 
 
 def _project_root() -> Path:
@@ -88,6 +88,52 @@ def platforms_doctor() -> None:
     ok("平台适配检查通过")
 
 
+@app.command("init")
+def platforms_init(
+    platform_id: str = typer.Argument("all", help="平台 id、逗号分隔列表，或 all"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="覆盖已有配置文件"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="只预览，不写文件"),
+) -> None:
+    """按 registry.json 一次性生成各 CLI/IDE/Agent 接入文件。"""
+    root = _project_root()
+    gen = root / "ai-sop-ops" / "platforms" / "onboard.py"
+    if not gen.is_file():
+        warn("缺少 ai-sop-ops/platforms/onboard.py")
+        raise typer.Exit(1)
+    cmd = ["python3", str(gen), "--root", str(root), "--platform", platform_id]
+    if overwrite:
+        cmd.append("--overwrite")
+    if dry_run:
+        cmd.append("--dry-run")
+    r = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True)
+    if r.returncode != 0:
+        warn(r.stderr or r.stdout)
+        raise typer.Exit(r.returncode)
+    try:
+        manifest = json.loads(r.stdout)
+    except Exception:
+        console.print(r.stdout)
+        return
+    rows = manifest.get("platforms") or []
+    tbl = Table(title="平台接入初始化", show_header=True, header_style="bold")
+    tbl.add_column("id")
+    tbl.add_column("entries")
+    tbl.add_column("shim")
+    tbl.add_column("configs")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        entries = ", ".join(f"{x.get('path')}:{x.get('status')}" for x in row.get("entries") or [])
+        shim = row.get("shim") or {}
+        configs = ", ".join(f"{x.get('path')}:{x.get('status')}" for x in row.get("configs") or [])
+        tbl.add_row(str(row.get("id", "")), entries or "—", str(shim.get("status") or "—"), configs or "—")
+    console.print(tbl)
+    if dry_run:
+        warn("dry-run 未写入文件")
+    else:
+        ok(".sop-runtime/platforms/onboarding.json 已更新")
+
+
 @app.command("install-shims")
 def install_shims(
     platform_id: str = typer.Argument(..., help="cursor|workbuddy|hermes|windsurf|opencode|…"),
@@ -119,4 +165,4 @@ def install_shims(
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
-    console.print("[dim]子命令：list | doctor | install-shims[/dim]")
+    console.print("[dim]子命令：list | doctor | init | install-shims[/dim]")

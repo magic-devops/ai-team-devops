@@ -22,6 +22,23 @@ class MemoryCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryForget(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+    query: str = Field("", max_length=1000)
+    kind: str = Field("", max_length=40)
+
+
+class MemorySummarize(BaseModel):
+    query: str = Field("", max_length=1000)
+    limit: int = Field(50, ge=1, le=200)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryAttachRun(BaseModel):
+    run_id: str = Field(..., min_length=1, max_length=200)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 def _require_scope() -> None:
     if not request_scope_active():
         raise HTTPException(
@@ -69,3 +86,36 @@ def memory_recent(limit: int = Query(30, ge=1, le=200)) -> dict[str, Any]:
     except RuntimeError as e:
         raise HTTPException(status_code=501, detail=str(e)) from e
     return {"ok": True, "items": store.recent(limit=limit)}
+
+
+@router.post("/forget")
+def memory_forget(body: MemoryForget) -> dict[str, Any]:
+    _require_scope()
+    if not body.ids and not body.query.strip():
+        raise HTTPException(status_code=400, detail="forget 需要 ids 或 query")
+    try:
+        store = get_memory_store()
+    except RuntimeError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+    return store.forget(ids=body.ids, query=body.query, kind=body.kind)
+
+
+@router.post("/summarize")
+def memory_summarize(body: MemorySummarize) -> dict[str, Any]:
+    _require_scope()
+    try:
+        store = get_memory_store()
+    except RuntimeError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+    rec = store.summarize(query=body.query, limit=body.limit, metadata=body.metadata)
+    return {"ok": True, "item": rec.to_json()}
+
+
+@router.post("/{memory_id}/attach-run")
+def memory_attach_run(memory_id: str, body: MemoryAttachRun) -> dict[str, Any]:
+    _require_scope()
+    try:
+        store = get_memory_store()
+    except RuntimeError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+    return store.attach_run(memory_id, body.run_id, body.metadata)

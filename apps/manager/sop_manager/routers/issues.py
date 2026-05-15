@@ -59,11 +59,12 @@ class IssueCreate(BaseModel):
 @router.post("")
 def create_issue(body: IssueCreate, user: User = Depends(current_user),
                  db: Session = Depends(get_session)):
-    if body.project_id:
-        check_project_access(user, body.project_id, db, "analyst")
+    project_id = (body.project_id or "").strip() or _resolved_project_id().strip()
+    if project_id:
+        check_project_access(user, project_id, db, "analyst")
     i = Issue(
         id=f"ISSUE-{uuid.uuid4().hex[:10]}", tenant_id=user.tenant_id,
-        project_id=body.project_id, sprint_id=body.sprint_id, task_id=body.task_id,
+        project_id=project_id, sprint_id=body.sprint_id, task_id=body.task_id,
         title=body.title, description=body.description, type=body.type,
         severity=body.severity, status="open", reported_by=user.username,
     )

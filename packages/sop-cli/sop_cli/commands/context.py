@@ -6,13 +6,82 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
-from .._util import console, get_client, get_config, warn
+from .._util import console, get_client, get_config, ok, warn
 
 app = typer.Typer(help="v4 上下文：三码 + project_path（默认子命令 show）")
+
+
+def build_project_manifest() -> dict[str, Any]:
+    """Build a secret-free manifest for IDEs, CLIs, and agents."""
+    cfg = get_config()
+    rt = cfg.project_path / ".sop-runtime"
+    sync_dir = rt / "sync"
+    manifest: dict[str, Any] = {
+        "schema": "sop.project-manifest.v1",
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "project": {
+            "path": str(cfg.project_path),
+            "id": cfg.project_id,
+            "code": cfg.project_code or cfg.project_id,
+            "tenant_id": cfg.tenant_id,
+            "tenant_code": cfg.tenant_code or cfg.tenant_id,
+            "business_code": cfg.business_code,
+        },
+        "manager": {
+            "url": cfg.manager_url,
+            "auth": "bearer" if cfg.bearer_token else ("api_key" if cfg.api_key or cfg.api_key_ref else "none"),
+            "verify_ssl": cfg.verify_ssl,
+        },
+        "local": {
+            "agent_toml": str(rt / "agent.toml"),
+            "sync_state": str(rt / "sync_state.json"),
+            "push_queue": str(sync_dir / "push_queue.jsonl"),
+            "entities_dir": str(sync_dir / "entities"),
+            "local_dir": str(rt / "local"),
+            "rules_dir": str(cfg.project_path / ".ai-memory" / "rules"),
+            "custom_dir": str(cfg.project_path / "sop" / "custom"),
+            "memory_state": str(cfg.project_path / "memory" / "current_state.json"),
+            "platform_onboarding": str(rt / "platforms" / "onboarding.json"),
+        },
+        "capabilities": {
+            "context": ["sop context show", "sop context services", "sop context manifest"],
+            "sync": ["sop sync", "sop sync flush", "sop sync pull --direct --materialize", "sop sync status"],
+            "work_items": ["sop requirement list", "sop task list", "sop issue list", "sop sprint list"],
+            "memory": ["sop memory add", "sop memory search", "sop memory summarize"],
+            "knowledge": ["sop kb add", "sop kb search", "sop kb index"],
+            "rules": ["sop rule list", "sop rule propose"],
+            "platforms": ["sop platforms init all", "sop platforms doctor"],
+            "ops": ["sop doctor", "sop ops health", "sop ops stack doctor"],
+        },
+        "interfaces": {
+            "http": cfg.manager_url.rstrip("/") + "/api/v1",
+            "agentd_socket": str(cfg.agentd_socket),
+            "a2a_port": cfg.a2a_port,
+            "mcp_servers": cfg.mcp_servers,
+        },
+    }
+    onboarding_path = rt / "platforms" / "onboarding.json"
+    if onboarding_path.is_file():
+        try:
+            manifest["platforms"] = json.loads(onboarding_path.read_text(encoding="utf-8"))
+        except Exception:
+            manifest["platforms"] = {"error": "failed to parse onboarding.json"}
+    return manifest
+
+
+def write_project_manifest(path: Path | None = None) -> Path:
+    cfg = get_config()
+    target = path or (cfg.project_path / ".sop-runtime" / "project_manifest.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(build_project_manifest(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return target
 
 
 def _show_table() -> None:
@@ -103,3 +172,46 @@ def json_cmd() -> None:
     except Exception as e:
         out["health_error"] = str(e)
     console.print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+@app.command("manifest")
+def manifest_cmd(
+    write: bool = typer.Option(False, "--write", help="写入 .sop-runtime/project_manifest.json"),
+    out: str = typer.Option("", "--out", "-o", help="写入指定路径；隐含 --write"),
+) -> None:
+    """输出/生成项目接入 manifest（不含密钥，适合 IDE/CLI/Agent 读取）。"""
+    if write or out:
+        target = write_project_manifest(Path(out).expanduser() if out else None)
+        ok(f"manifest written: {target}")
+        return
+    console.print_json(data=build_project_manifest())
+
+
+@app.command("services")
+def services_cmd() -> None:
+    """探测远端 Manager / Memory / KB / Sync / Worker / Data 能力。"""
+    cfg = get_config()
+    cli = get_client(cfg)
+    checks = [
+        ("manager", lambda: cli.health()),
+        ("memory", lambda: cli.memory_health()),
+        ("rag", lambda: cli.rag_backend()),
+        ("sync", lambda: cli.sync_health()),
+        ("worker", lambda: cli.worker_health()),
+        ("data", lambda: cli.data_analytics_overview()),
+    ]
+    tbl = Table(title="远端能力探测", show_header=True, header_style="bold")
+    tbl.add_column("service")
+    tbl.add_column("status")
+    tbl.add_column("detail")
+    for name, fn in checks:
+        try:
+            data = fn()
+            if isinstance(data, dict):
+                detail = data.get("service") or data.get("backend") or data.get("ok") or "ok"
+            else:
+                detail = "ok"
+            tbl.add_row(name, "ok", str(detail))
+        except Exception as e:
+            tbl.add_row(name, "offline", str(e)[:120])
+    console.print(tbl)

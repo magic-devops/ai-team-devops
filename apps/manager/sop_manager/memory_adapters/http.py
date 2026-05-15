@@ -97,3 +97,37 @@ class HttpMemoryStore(MemoryStore):
             if isinstance(items, list):
                 return [x for x in items if isinstance(x, dict)]
         return []
+
+    def forget(self, *, ids: list[str] | None = None, query: str = "", kind: str = "") -> dict[str, Any]:
+        body = {**self._scope_body(), "ids": ids or [], "query": query, "kind": kind}
+        with httpx.Client(timeout=self._timeout) as client:
+            r = client.post(f"{self._base}/memories/forget", json=body, headers=self._headers())
+            r.raise_for_status()
+            data = r.json()
+        return data if isinstance(data, dict) else {"ok": True}
+
+    def summarize(self, *, query: str = "", limit: int = 50, metadata: dict[str, Any] | None = None) -> MemoryRecord:
+        body = {**self._scope_body(), "query": query, "limit": limit, "metadata": metadata or {}}
+        with httpx.Client(timeout=self._timeout) as client:
+            r = client.post(f"{self._base}/memories/summarize", json=body, headers=self._headers())
+            r.raise_for_status()
+            data = r.json()
+        item = data.get("item") if isinstance(data, dict) else data
+        if isinstance(item, dict) and item.get("id"):
+            return MemoryRecord(
+                id=str(item["id"]),
+                content=str(item.get("content", "")),
+                kind=str(item.get("kind", "long")),
+                metadata=item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+                created_at=str(item.get("createdAt") or item.get("created_at") or ""),
+            )
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        return MemoryRecord(id=str(uuid.uuid4()), content=str(data), kind="long", metadata=metadata or {}, created_at=now)
+
+    def attach_run(self, memory_id: str, run_id: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = {**self._scope_body(), "run_id": run_id, "metadata": metadata or {}}
+        with httpx.Client(timeout=self._timeout) as client:
+            r = client.post(f"{self._base}/memories/{memory_id}/attach-run", json=body, headers=self._headers())
+            r.raise_for_status()
+            data = r.json()
+        return data if isinstance(data, dict) else {"ok": True}

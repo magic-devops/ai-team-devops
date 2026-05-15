@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-var modules = []string{"tasks", "requirements", "issues", "sprints"}
+var modules = []string{"tasks", "requirements", "issues", "sprints", "rules", "specs", "templates"}
 
 // Store 维护各模块 id → record 映射（.sop-runtime/sync/entities/<module>.json）。
 type Store struct {

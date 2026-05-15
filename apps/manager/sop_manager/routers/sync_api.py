@@ -5,19 +5,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 
-from sop_manager.path_config import request_scope_active, resolved_project_id, resolved_tenant_id
+from sop_manager.path_config import request_scope_active, resolved_project_id, resolved_project_path, resolved_tenant_id
 from sop_manager.routers.sql_models import Issue, Requirement, Sprint, Task, get_session
 from sop_manager.sync_journal import append_event, recent_events
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
-_SYNC_MODULES = frozenset({"tasks", "requirements", "issues", "sprints"})
+_STRUCTURED_MODULES = frozenset({"tasks", "requirements", "issues", "sprints"})
+_ASSET_MODULES = frozenset({"rules", "specs", "templates"})
+_SYNC_MODULES = _STRUCTURED_MODULES | _ASSET_MODULES
 
 # 游标过滤用的时间列（Issue/Sprint 无 updated_at）
 _TIME_COL = {
@@ -60,6 +64,109 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return d
 
 
+def _coerce_column_value(col: Any, value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(col.type, DateTime) and isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "").split("+")[0][:19])
+        except ValueError:
+            raise HTTPException(400, f"{col.name} 须为 ISO8601 时间戳") from None
+    return value
+
+
+def _asset_roots(root: Path, module: str) -> list[Path]:
+    if module == "rules":
+        return [root / ".ai-memory" / "rules", root / "ai-sop" / "agents", root / "ai-sop" / "quality"]
+    if module == "specs":
+        return [root / "ai-sop" / "specs", root / "sop" / "custom" / "specs"]
+    if module == "templates":
+        return [root / "ai-sop" / "templates", root / "sop" / "custom"]
+    return []
+
+
+def _asset_write_root(root: Path, module: str) -> Path:
+    if module == "rules":
+        return root / ".ai-memory" / "rules"
+    if module == "specs":
+        return root / "sop" / "custom" / "specs"
+    if module == "templates":
+        return root / "sop" / "custom"
+    raise HTTPException(400, f"未知资产模块: {module}")
+
+
+def _asset_target_path(module: str, rec: dict[str, Any]) -> tuple[Path, str]:
+    root = resolved_project_path().resolve()
+    raw = str(rec.get("path") or rec.get("id") or "").strip()
+    if not raw:
+        raise HTTPException(400, "资产 push 需要 record.path 或 record.id")
+    if "\x00" in raw:
+        raise HTTPException(400, "非法资产路径")
+    rel = Path(raw)
+    if rel.is_absolute() or ".." in rel.parts:
+        raise HTTPException(400, "资产路径必须是项目内相对路径且不能包含 ..")
+    if rel.suffix.lower() not in {".md", ".json", ".yaml", ".yml", ".toml"}:
+        raise HTTPException(400, "资产仅允许 md/json/yaml/yml/toml")
+
+    allowed = [_asset_write_root(root, module).resolve()]
+    candidate = (root / rel).resolve()
+    for base in allowed:
+        try:
+            candidate.relative_to(base)
+            return candidate, candidate.relative_to(root).as_posix()
+        except ValueError:
+            continue
+
+    target = (allowed[0] / rel).resolve()
+    try:
+        target.relative_to(allowed[0])
+    except ValueError as e:
+        raise HTTPException(400, "非法资产路径") from e
+    return target, target.relative_to(root).as_posix()
+
+
+def _asset_rows(module: str, since: datetime | None, limit: int) -> list[dict[str, Any]]:
+    root = resolved_project_path().resolve()
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for base in _asset_roots(root, module):
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*")):
+            if len(out) >= limit:
+                return out
+            if not path.is_file() or path.suffix.lower() not in {".md", ".json", ".yaml", ".yml", ".toml"}:
+                continue
+            try:
+                stat = path.stat()
+                updated = datetime.fromtimestamp(stat.st_mtime)
+                if since is not None and updated <= since:
+                    continue
+                rel = path.relative_to(root).as_posix()
+                if rel in seen:
+                    continue
+                seen.add(rel)
+                content = path.read_text(encoding="utf-8", errors="replace")
+                if len(content) > 256_000:
+                    content = content[:256_000]
+                out.append(
+                    {
+                        "id": rel,
+                        "module": module,
+                        "path": rel,
+                        "size": stat.st_size,
+                        "updated_at": _iso(updated),
+                        "content": content,
+                    }
+                )
+            except OSError:
+                continue
+    return out
+
+
 def _require_scope() -> str:
     if not request_scope_active():
         raise HTTPException(
@@ -90,7 +197,7 @@ def sync_health() -> dict[str, Any]:
 @router.get("/pull")
 def sync_pull(
     cursor: str = Query("", description="上次游标（ISO8601）；空则返回最近变更"),
-    modules: str = Query("tasks,requirements,issues,sprints", description="逗号分隔模块名"),
+    modules: str = Query("tasks,requirements,issues,sprints,rules,specs,templates", description="逗号分隔模块名"),
     limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
@@ -107,6 +214,20 @@ def sync_pull(
         "sprints": Sprint,
     }
     for name in names:
+        if name in _ASSET_MODULES:
+            asset_rows = _asset_rows(name, since, limit)
+            changes[name] = asset_rows
+            for r in asset_rows:
+                raw = r.get("updated_at")
+                if not raw:
+                    continue
+                try:
+                    dt = datetime.fromisoformat(str(raw).replace("Z", "")[:19])
+                except ValueError:
+                    continue
+                if max_dt is None or dt > max_dt:
+                    max_dt = dt
+            continue
         model = model_map[name]
         time_col = getattr(model, _TIME_COL[name])
         q = db.query(model).filter_by(project_id=pid)
@@ -139,7 +260,7 @@ def sync_pull(
 
 
 class SyncPushIn(BaseModel):
-    module: Literal["tasks", "requirements", "issues", "sprints"]
+    module: str
     action: Literal["upsert", "delete"] = "upsert"
     record: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str = ""
@@ -177,7 +298,9 @@ def sync_journal(
 def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str, Any]:
     pid = _require_scope()
     tid = resolved_tenant_id()
-    if body.module not in _SYNC_MODULES:
+    if body.module in _ASSET_MODULES:
+        return _sync_push_asset(body, pid)
+    if body.module not in _STRUCTURED_MODULES:
         raise HTTPException(400, f"未知模块: {body.module}")
     rec = dict(body.record or {})
     rid = str(rec.get("id") or "").strip()
@@ -210,7 +333,12 @@ def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str,
 
     row = db.query(model).filter_by(id=rid, project_id=pid).first()
     allowed = {c.name for c in model.__table__.columns}
-    patch = {k: v for k, v in rec.items() if k in allowed and k not in ("id", "tenant_id", "project_id")}
+    cols = {c.name: c for c in model.__table__.columns}
+    patch = {
+        k: _coerce_column_value(cols[k], v)
+        for k, v in rec.items()
+        if k in allowed and k not in ("id", "tenant_id", "project_id")
+    }
     if row is None:
         row = model(id=rid, tenant_id=tid, project_id=pid)
         db.add(row)
@@ -229,3 +357,49 @@ def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str,
     )
     _ws_sync_event(pid, body.module, "upsert", rid)
     return {"ok": True, "action": "upsert", "id": rid, "event_id": evt["id"], "record": _row_dict(row)}
+
+
+def _sync_push_asset(body: SyncPushIn, pid: str) -> dict[str, Any]:
+    rec = dict(body.record or {})
+    target, rel = _asset_target_path(body.module, rec)
+    if body.action == "delete":
+        if target.exists():
+            target.unlink()
+        evt = append_event(
+            module=body.module,
+            action="delete",
+            record_id=rel,
+            idempotency_key=body.idempotency_key,
+        )
+        _ws_sync_event(pid, body.module, "delete", rel)
+        return {"ok": True, "action": "delete", "id": rel, "event_id": evt["id"]}
+
+    content = rec.get("content")
+    if content is None:
+        raise HTTPException(400, "资产 upsert 需要 record.content")
+    text = str(content)
+    if len(text.encode("utf-8")) > 512_000:
+        raise HTTPException(400, "资产内容超过 512KB")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    evt = append_event(
+        module=body.module,
+        action="upsert",
+        record_id=rel,
+        idempotency_key=body.idempotency_key,
+        payload={"path": rel, "size": len(text.encode("utf-8"))},
+    )
+    _ws_sync_event(pid, body.module, "upsert", rel)
+    return {
+        "ok": True,
+        "action": "upsert",
+        "id": rel,
+        "event_id": evt["id"],
+        "record": {
+            "id": rel,
+            "module": body.module,
+            "path": rel,
+            "size": target.stat().st_size,
+            "updated_at": _iso(datetime.fromtimestamp(target.stat().st_mtime)),
+        },
+    }

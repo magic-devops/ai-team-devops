@@ -14,6 +14,7 @@
 | 产品价值、四层能力地图 | `ai-platform-v4-architecture.html`（浏览器打开） |
 | 通道、目录、里程碑、设计原则 | [OVERVIEW.md](OVERVIEW.md) + [EVOLUTION.md](EVOLUTION.md) |
 | **本文**：隔离模型、记忆/知识、CLI、同步、Epic 与代码落点 | 当前文件 |
+| v4+ 目标态、产业化/商业化路线、开发任务包 | [AI_PLATFORM_TARGET_ARCHITECTURE.md](AI_PLATFORM_TARGET_ARCHITECTURE.md) |
 | OpenAPI 片段、示例 SQL、ASCII 细图 | [UPGRADE_v3_ARCHITECTURE.md](UPGRADE_v3_ARCHITECTURE.md) |
 | AI 改码规范、MCP、Copilot、闭环 | [AI_FIRST.md](AI_FIRST.md) |
 
@@ -208,7 +209,7 @@ flowchart TB
 | CLI | `sop memory health \| recent \| search \| add` |
 | 前端 | `manager-web` 路由 `#/intelligence`：知识库检索 Tab + 记忆读写 Tab（调用上述 API） |
 | 扩展 | `get_memory_store()` 支持 `MEMORY_BACKEND=file|http`；http 走 `memory_adapters/http.py`（mem0 兼容 URL） |
-| 同步 | `routers/sync_api.py`：`GET /api/v1/sync/pull`（游标拉取 tasks/requirements/issues/sprints） |
+| 同步 | `routers/sync_api.py`：`GET /api/v1/sync/pull`（游标拉取 tasks/requirements/issues/sprints/rules/specs/templates） |
 | Worker | `routers/worker_jobs.py` + `sop-worker` handlers（`kb.index` 等 Redis Streams） |
 | CLI | `sop kb` / `sop ops` / `sop sync pull` |
 | 前端 | `#/organization` `#/analytics` `#/notify`；Intelligence 增加 RAG Tab |
@@ -338,7 +339,7 @@ gantt
 |----|----------|---------|
 | 项目作用域 | `X-Project-Id` + `tenant_id`；**已实现** ContextVar 三码（`tenant_code`=slug、`business_code`、`project_code`=project id）及 SDK 请求头 | OpenAPI 正式字段；独立 `project_code` 列与校验 |
 | manager-worker | **任务投递 API** + `kb.index` handler（Redis Streams 可选）；见 `worker_jobs.py` / `sop_worker/handlers.py` | Temporal、完整工作流真源 |
-| mem0 | **file + http 适配器**（`MEMORY_HTTP_URL`）；非 SDK 内嵌 | mem0 原生 SDK、策略化遗忘 |
+| mem0 | **file + http 适配器**（`MEMORY_HTTP_URL`）；`forget/summarize/attach-run` API/CLI 已补齐；非 SDK 内嵌 | mem0 原生 SDK、策略化遗忘审计 |
 | Native 独立安装包 | 未定义 | 以 runtime + 薄壳为默认路径 |
 | CLI | **context / memory / kb / ops / sync pull+push / platforms** | Native 壳、完整 ops 子命令 |
 | agent-runtime | **Puller + Outbox sync.push**；定时 pull + IPC | WSS 订阅、Watcher |
@@ -354,7 +355,9 @@ gantt
 | 2026-05-15 | 记忆 MVP：`memory_store` + `/api/v1/memory` + `sop memory` + manager-web `#/intelligence` |
 | 2026-05-15 | 同步闭环：`sync/push` + journal + WSS；`context/me`；顶栏 ProjectSelector；Copilot 注入记忆/RAG；`sop copilot` |
 | 2026-05-15 | 多平台：registry + Platforms 管理页 + `sop platforms`；init 生成 Cursor/WorkBuddy/Hermes/Windsurf hooks |
+| 2026-05-15 | 平台接入增强：新增 registry 驱动 `platforms/onboard.py` 与 `sop platforms init`，`sop init` 自动产出 onboarding manifest |
 | 2026-05-15 | agent-runtime Puller + Pusher 闭环；manager-web 任务看板/Sprint；`SYNC_AND_PLATFORMS.md` 使用文档 |
+| 2026-05-15 | sync 扩展：`rules/specs/templates` 规约资产进入 pull 默认模块，agentd 本地物化到 syncstore；push 支持写入项目自有扩展目录 |
 
 ---
 

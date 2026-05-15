@@ -203,6 +203,13 @@ class ManagerClient:
             json_body={"pair_code": pair_code, "hostname": hostname, "local_path": local_path},
         )
 
+    def create_pair_code(self, *, local_path: str = "", preferred_project_id: str = "") -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/auth/pair/codes",
+            json_body={"local_path": local_path, "preferred_project_id": preferred_project_id},
+        )
+
     # projects
     def list_projects(self, *, tenant_id: str | None = None, page: int = 1, size: int = 50) -> dict[str, Any]:
         params: dict[str, Any] = {"page": page, "size": size}
@@ -221,7 +228,13 @@ class ManagerClient:
             params["status"] = status
         if priority:
             params["priority"] = priority
-        return self._request("GET", "/api/v1/tasks", params=params)
+        out = self._request("GET", "/api/v1/tasks", params=params)
+        if isinstance(out, list):
+            items = out
+            if priority:
+                items = [x for x in items if isinstance(x, dict) and x.get("priority") == priority]
+            return {"total": len(items), "page": page, "size": size, "items": items}
+        return out
 
     def create_task(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks", json_body=body)
@@ -231,6 +244,91 @@ class ManagerClient:
 
     def pull_task(self, task_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/tasks/{task_id}:pull")
+
+    def delete_task(self, task_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/tasks/{task_id}")
+
+    # requirements
+    def list_requirements(
+        self,
+        *,
+        status: str | None = None,
+        priority: str | None = None,
+        page: int = 1,
+        size: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"page": page, "size": size}
+        if status:
+            params["status"] = status
+        if priority:
+            params["priority"] = priority
+        out = self._request("GET", "/api/v1/requirements", params=params)
+        if isinstance(out, list):
+            items = out
+            if status:
+                items = [x for x in items if isinstance(x, dict) and x.get("status") == status]
+            if priority:
+                items = [
+                    x
+                    for x in items
+                    if isinstance(x, dict) and str(x.get("priority") or "").upper() == priority.upper()
+                ]
+            start = max(page - 1, 0) * size
+            return {"total": len(items), "page": page, "size": size, "items": items[start : start + size]}
+        return out
+
+    def create_requirement(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/requirements", json_body=body)
+
+    def update_requirement(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PATCH", f"/api/v1/requirements/{req_id}", json_body=body)
+
+    def delete_requirement(self, req_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/requirements/{req_id}")
+
+    # issues
+    def list_issues(
+        self,
+        *,
+        status: str | None = None,
+        severity: str | None = None,
+        page: int = 1,
+        size: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"page": page, "size": size}
+        if status:
+            params["status"] = status
+        if severity:
+            params["severity"] = severity
+        return self._request("GET", "/api/v1/issues", params=params)
+
+    def create_issue(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/issues", json_body=body)
+
+    def update_issue(self, issue_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PATCH", f"/api/v1/issues/{issue_id}", json_body=body)
+
+    def resolve_issue(self, issue_id: str, *, resolution: str = "") -> dict[str, Any]:
+        return self._request("PATCH", f"/api/v1/issues/{issue_id}/resolve", json_body={"resolution": resolution})
+
+    def delete_issue(self, issue_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/issues/{issue_id}")
+
+    # sprints
+    def list_sprints(self, *, page: int = 1, size: int = 20) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/sprints", params={"page": page, "size": size})
+
+    def create_sprint(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/sprints", json_body=body)
+
+    def update_sprint(self, sprint_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PATCH", f"/api/v1/sprints/{sprint_id}", json_body=body)
+
+    def sprint_progress(self, sprint_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/sprints/{sprint_id}/progress")
+
+    def delete_sprint(self, sprint_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/sprints/{sprint_id}")
 
     # llm gateway
     def llm_chat(
@@ -278,6 +376,33 @@ class ManagerClient:
     def memory_recent(self, *, limit: int = 30) -> dict[str, Any]:
         return self._request("GET", "/api/v1/memory/recent", params={"limit": limit})
 
+    def memory_forget(
+        self,
+        *,
+        ids: list[str] | None = None,
+        query: str = "",
+        kind: str = "",
+    ) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/memory/forget", json_body={"ids": ids or [], "query": query, "kind": kind})
+
+    def memory_summarize(
+        self,
+        *,
+        query: str = "",
+        limit: int = 50,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/memory/summarize", json_body={"query": query, "limit": limit, "metadata": dict(metadata or {})})
+
+    def memory_attach_run(
+        self,
+        memory_id: str,
+        *,
+        run_id: str,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/memory/{memory_id}/attach-run", json_body={"run_id": run_id, "metadata": dict(metadata or {})})
+
     def knowledge_search_workspace(self, q: str, *, category: str | None = None) -> list[dict[str, Any]]:
         params: dict[str, Any] = {"q": q}
         if category:
@@ -294,7 +419,7 @@ class ManagerClient:
         self,
         *,
         cursor: str = "",
-        modules: str = "tasks,requirements,issues,sprints",
+        modules: str = "tasks,requirements,issues,sprints,rules,specs,templates",
         limit: int = 200,
     ) -> dict[str, Any]:
         return self._request(

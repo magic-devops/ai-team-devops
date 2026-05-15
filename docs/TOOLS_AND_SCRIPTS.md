@@ -122,17 +122,33 @@ bash ai-sop-ops/start-manager.sh
 
 # 3. 在业务项目目录
 cd /path/to/your-app
-sop init my-app --manager http://localhost:8765
-sop login --pair
+sop register my-app --manager http://localhost:8765 --username admin
 sop agentd install    # 可选：macOS launchd / Linux systemd
 sop agentd start
 sop doctor
 
 # 4. 日常
 sop status
+sop context services
+sop context manifest --write
+sop requirement create "统一项目注册流程" --priority P1
+sop requirement list --local
+sop issue create "登录回调异常" --severity P1 --local
+sop sprint create "MVP 闭环" --points 20 --local
+sop work next --local
 sop task list --status pending
+sop task create "补齐项目注册自检" --priority P1
 sop sync
+sop sync doctor
+sop sync repair --dry-run
+sop sync compact
+sop sync flush
+sop sync enqueue-file specs docs/spec.md --remote-path demo/spec.md
+sop sync pull --direct --materialize
+sop platforms init all
 sop platforms doctor
+sop ops health
+sop ops stack doctor
 ```
 
 ### 子命令速查
@@ -140,16 +156,24 @@ sop platforms doctor
 | 命令 | 作用 |
 |------|------|
 | `sop init` | 项目初始化（memory、.ai-memory、多 IDE 配置、agent.toml） |
+| `sop register` | 一键初始化并注册到 Manager，补齐 CLI/IDE/Agent 接入配置 |
 | `sop login` | 登录 / OAuth 配对 |
 | `sop agentd` | 守护进程 start/stop/status/logs/install |
-| `sop doctor` | 端到端自检（含 Manager、RAG、agentd IPC、平台 shim） |
-| `sop sync` | 触发同步（优先经 agentd IPC） |
-| `sop task` | 任务 list/pull/done/fail/issue |
-| `sop platforms` | 多 AI 平台 list/doctor/install-shims |
+| `sop doctor` | 端到端自检（含 Manager、RAG、agentd IPC、平台 shim、sync 本地队列、manifest） |
+| `sop sync` | 触发同步（优先经 agentd IPC）；`sop sync enqueue/enqueue-file/doctor/repair/compact/flush` 可不依赖 agentd 离线入队/自检/修复/压缩/冲刷本地队列；`sop sync pull --materialize` 物化远端数据 |
+| `sop requirement` | 需求 list/create/update/delete；支持本地离线队列与远端同步 |
+| `sop issue` | 问题/缺陷 list/create/update/resolve/delete；支持本地离线队列与远端同步 |
+| `sop sprint` | 迭代 list/create/update/complete/progress/delete；支持本地离线队列与远端同步 |
+| `sop work` | 工作台 summary/list/next；聚合需求/任务/问题/迭代，支持本地离线视图 |
+| `sop task` | 任务 list/create/update/pull/done/fail/delete/issue；支持本地离线队列 |
+| `sop platforms` | 多 AI 平台 list/init/doctor/install-shims |
+| `sop ops` | 运维 health/stack/deploy/snapshot/notify/worker |
 | `sop memory` / `context` / `kb` / `copilot` | v4 记忆与助手 |
 | `sop llm` | LLM Gateway：chat/embed/search |
 
 每条支持 `sop <cmd> --help`。详见 [packages/sop-cli/README.md](../packages/sop-cli/README.md)。
+
+CLI 默认采用本地优先、远端增强：Manager 或远端记忆/知识/数据服务在线时自动调用远端；不可用时 `requirement`、`task`、`issue`、`sprint`、`kb`、`rule` 等命令回退本地文件/离线队列，之后可通过 `sop sync` / `sop sync enqueue-file` / `sop sync doctor` / `sop sync repair` / `sop sync compact` / `sop sync flush` / `sop sync pull --materialize` / `sop sync push-file` / `sop kb index` 更新远端。各 IDE/CLI/Agent 可读取 `sop context manifest --write` 生成的 `.sop-runtime/project_manifest.json` 完成标准接入。
 
 ### 命令发现与 Shell 补全
 
@@ -166,14 +190,27 @@ sop completion doctor         # 检查补全是否就绪
 
 | 检查项 | 常见原因 | 修复 |
 |--------|----------|------|
-| memory/current_state.json | 未 init | `sop init <project>` |
+| memory/current_state.json | 未 init | `sop register <project>` 或 `sop init <project>` |
 | .ai-memory/ | 未 init | 同上 |
-| AI 工具配置 | 缺少 IDE 配置 | `init-ai-project.sh` 或 `sop init` |
-| AI 平台适配 | hook shim 缺失 | `sop platforms install-shims <id>` |
+| AI 工具配置 | 缺少 IDE 配置 | `sop register <project>` 或 `sop platforms init all` |
+| AI 平台适配 | hook shim 或入口配置缺失 | `sop platforms init <id>` 或 `sop platforms install-shims <id>` |
+| 项目接入 manifest | 缺失或损坏 | `sop context manifest --write` |
 | Manager 连通 | API 未启动 | `start-manager.sh` |
-| sync API | 未配对 | `sop login --pair` |
+| sync API | 未配对 | `sop register <project>` 或 `sop login --pair` |
+| sync 本地状态 | 队列坏行 / entities 损坏 | `sop sync doctor` 后执行 `sop sync repair` 或 `sop sync pull --direct --materialize` |
 | sop-agentd IPC | agentd 未运行 | `sop agentd start` |
 | RAG 向量后端 | Manager 环境变量 | 见 [DATA_AND_VECTOR.md](../ai-sop-ops/DATA_AND_VECTOR.md) |
+
+### 运维常用入口
+
+```bash
+sop ops health                  # ai-sop-ops/health-check.sh
+sop ops stack start --agentd    # Manager 后台 + agentd
+sop ops stack doctor            # sop doctor + health-check
+sop ops deploy print --mode saas
+sop ops deploy up --mode single
+sop ops snapshot
+```
 
 失败时 `sop doctor` 会打印 **修复建议** 列表。
 
@@ -305,6 +342,7 @@ curl -s http://localhost:8765/api/v1/health | head
 
 ```bash
 sop platforms list
+sop platforms init all
 sop platforms doctor
 sop platforms install-shims cursor
 ```

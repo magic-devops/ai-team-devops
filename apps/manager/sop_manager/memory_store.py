@@ -67,6 +67,18 @@ class MemoryStore(ABC):
     def recent(self, *, limit: int) -> list[dict[str, Any]]:
         raise NotImplementedError
 
+    @abstractmethod
+    def forget(self, *, ids: list[str] | None = None, query: str = "", kind: str = "") -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def summarize(self, *, query: str = "", limit: int = 50, metadata: dict[str, Any] | None = None) -> MemoryRecord:
+        raise NotImplementedError
+
+    @abstractmethod
+    def attach_run(self, memory_id: str, run_id: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class FileJsonlMemoryStore(MemoryStore):
     """按 tenant/business/project 分文件；单机文件锁，适合默认部署。"""
@@ -122,6 +134,13 @@ class FileJsonlMemoryStore(MemoryStore):
                 continue
         return out
 
+    def _write_all(self, rows: list[dict[str, Any]]) -> None:
+        path = _scope_file()
+        with self._lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            lines = [json.dumps(r, ensure_ascii=False) for r in rows]
+            path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
     def search(self, query: str, *, limit: int) -> list[dict[str, Any]]:
         q = query.lower().strip()
         rows = self._read_all()
@@ -139,6 +158,74 @@ class FileJsonlMemoryStore(MemoryStore):
     def recent(self, *, limit: int) -> list[dict[str, Any]]:
         rows = self._read_all()
         return list(reversed(rows[-limit:]))
+
+    def forget(self, *, ids: list[str] | None = None, query: str = "", kind: str = "") -> dict[str, Any]:
+        rows = self._read_all()
+        id_set = {str(x).strip() for x in (ids or []) if str(x).strip()}
+        q = query.lower().strip()
+        k = kind.strip()
+
+        def should_forget(row: dict[str, Any]) -> bool:
+            if id_set and str(row.get("id") or "") in id_set:
+                return True
+            if k and str(row.get("kind") or "") != k:
+                return False
+            if q:
+                hay = f"{row.get('content', '')} {json.dumps(row.get('metadata', {}), ensure_ascii=False)}".lower()
+                return q in hay
+            return False
+
+        kept = [r for r in rows if not should_forget(r)]
+        removed = len(rows) - len(kept)
+        if removed:
+            self._write_all(kept)
+        return {"ok": True, "removed": removed}
+
+    def summarize(self, *, query: str = "", limit: int = 50, metadata: dict[str, Any] | None = None) -> MemoryRecord:
+        rows = self.search(query, limit=limit) if query.strip() else self.recent(limit=limit)
+        snippets: list[str] = []
+        for row in reversed(rows[-limit:]):
+            content = str(row.get("content") or "").strip()
+            if content:
+                snippets.append(content[:500])
+        if not snippets:
+            summary = "No memory items available for summary."
+        else:
+            joined = "\n".join(f"- {x}" for x in snippets)
+            summary = f"Summary of {len(snippets)} memory items:\n{joined}"
+            if len(summary) > 8000:
+                summary = summary[:8000] + "\n- ... truncated"
+        md = {
+            "source": "memory.summarize",
+            "query": query,
+            "item_count": len(snippets),
+            **(metadata or {}),
+        }
+        return self.append(summary, "long", md)
+
+    def attach_run(self, memory_id: str, run_id: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        mid = memory_id.strip()
+        rid = run_id.strip()
+        if not mid or not rid:
+            return {"ok": False, "updated": 0}
+        rows = self._read_all()
+        updated = 0
+        for row in rows:
+            if str(row.get("id") or "") != mid:
+                continue
+            md = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            runs = md.get("runs") if isinstance(md.get("runs"), list) else []
+            if rid not in runs:
+                runs.append(rid)
+            md["runs"] = runs[-50:]
+            md["last_run_id"] = rid
+            if metadata:
+                md.setdefault("run_metadata", {})[rid] = metadata
+            row["metadata"] = md
+            updated += 1
+        if updated:
+            self._write_all(rows)
+        return {"ok": True, "updated": updated}
 
 
 _store_singleton: MemoryStore | None = None

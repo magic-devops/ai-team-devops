@@ -16,7 +16,7 @@ import (
 	httpx "github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/transport/http"
 )
 
-const defaultModules = "tasks,requirements,issues,sprints"
+const defaultModules = "tasks,requirements,issues,sprints,rules,specs,templates"
 
 // State 持久化在 .sop-runtime/sync_state.json。
 type State struct {
@@ -36,10 +36,10 @@ type Result struct {
 }
 
 type pullResponse struct {
-	OK       bool                              `json:"ok"`
-	Cursor   string                            `json:"cursor"`
-	Previous string                            `json:"previous_cursor"`
-	Total    int                               `json:"total"`
+	OK       bool                                `json:"ok"`
+	Cursor   string                              `json:"cursor"`
+	Previous string                              `json:"previous_cursor"`
+	Total    int                                 `json:"total"`
 	Changes  map[string][]map[string]interface{} `json:"changes"`
 }
 

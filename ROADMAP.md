@@ -2,6 +2,7 @@
 
 > 详细架构演进见 [`docs/architecture/EVOLUTION.md`](docs/architecture/EVOLUTION.md)
 > v2 总体架构见 [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
+> v4+ 目标架构与产业化路线见 [`docs/architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md`](docs/architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md)
 
 ## ✅ v1.0 — 已完成
 
@@ -84,6 +85,16 @@
 - 跨团队规范共享市场（联邦）
 - AI 规范合规自动检测
 - 深度集成 Jira / Linear / GitHub Issues / Notion
+
+## 🧭 v4+ — AI 一栈式平台目标态
+
+详见 [`docs/architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md`](docs/architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md)。该蓝图在现有 v4 工程基线之上，进一步明确：
+
+- tenant/business/project 三码隔离落库、OpenAPI/SDK 正式化与迁移策略。
+- 可扩展 MemoryPort、知识库、Graph RAG、AI Data、AIOps、Message Channel Port。
+- `sop` CLI 覆盖项目端、管理端、运维端，并支持 agentd 离线/直连降级。
+- React Shell 收敛 legacy console，补齐租户、权限、需求、进度、运维、AI、数据与商业化管理域。
+- 本地化、SaaS 化、企业化、产业化、商业化的分阶段任务包。
 
 ## 参与贡献
 

@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime
+from pathlib import Path
 
 import typer
 from rich.table import Table
@@ -14,6 +17,73 @@ from .._util import console, get_client, get_config, ok, warn
 app = typer.Typer(help="知识库检索、写入与索引（对接 Manager /api/v1/knowledge 与 /api/v1/rag）")
 
 
+def _local_kb_roots() -> list[Path]:
+    root = get_config().project_path
+    return [
+        root / "sop" / "custom",
+        root / "ai-sop",
+        root / ".ai-memory" / "rules",
+        root / "memory",
+    ]
+
+
+def _local_search(q: str, *, category: str = "", limit: int = 50) -> list[dict]:
+    needle = q.lower().strip()
+    rows: list[dict] = []
+    for base in _local_kb_roots():
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*")):
+            if len(rows) >= limit:
+                return rows
+            if not path.is_file() or path.suffix.lower() not in {".md", ".json", ".yaml", ".yml", ".toml"}:
+                continue
+            if category and category not in path.parts and category not in path.as_posix():
+                continue
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            hay = f"{path.as_posix()} {content}".lower()
+            if not needle or needle in hay:
+                rel = path.relative_to(get_config().project_path).as_posix()
+                rows.append({"id": rel, "category": category or _guess_category(path), "path": rel, "content": content[:800]})
+    return rows
+
+
+def _guess_category(path: Path) -> str:
+    parts = set(path.parts)
+    for c in ("specs", "examples", "design", "interaction", "daily", "rules", "templates"):
+        if c in parts:
+            return c
+    return "general"
+
+
+def _slug(title: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9._-]+", "-", title.strip().lower()).strip("-")
+    return s[:80] or datetime.utcnow().strftime("kb-%Y%m%d%H%M%S")
+
+
+def _write_local_knowledge(title: str, content: str, category: str, tags: list[str]) -> Path:
+    root = get_config().project_path
+    cat = category if category in {"specs", "examples", "design", "interaction", "daily", "rules"} else "daily"
+    out = root / "sop" / "custom" / cat / f"{_slug(title)}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    front = "\n".join(
+        [
+            "---",
+            f"title: {title}",
+            f"category: {category}",
+            f"tags: {', '.join(tags)}",
+            f"created_at: {datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            "---",
+            "",
+        ]
+    )
+    out.write_text(front + content.strip() + "\n", encoding="utf-8")
+    return out
+
+
 @app.command("search")
 def kb_search(
     q: str = typer.Argument(..., help="关键词"),
@@ -21,6 +91,12 @@ def kb_search(
 ) -> None:
     try:
         rows = get_client(get_config()).knowledge_search_workspace(q, category=category or None)
+        source = "Manager"
+    except Exception as e:
+        warn(f"Manager 知识库不可用，回退本地搜索：{e}")
+        rows = _local_search(q, category=category)
+        source = "local"
+    try:
         tbl = Table(title=f"知识库: {q}", show_header=True, header_style="bold")
         tbl.add_column("id")
         tbl.add_column("category")
@@ -35,6 +111,8 @@ def kb_search(
                     str(row.get("content", ""))[:120],
                 )
         console.print(tbl)
+        if source == "local":
+            warn("本地结果未进入远端索引；连接 Manager 后可执行 sop kb index 或 sop sync push-file")
     except Exception as e:
         warn(str(e))
 
@@ -80,7 +158,11 @@ def kb_add(
         console.print_json(data=r)
         ok("知识条目已写入")
     except Exception as e:
-        warn(str(e))
+        warn(f"Manager 知识写入失败，落本地知识文件：{e}")
+        p = _write_local_knowledge(title, content, category, tag_list)
+        ok(f"知识条目已写入本地 {p.relative_to(get_config().project_path)}")
+        sync_module = "specs" if category == "specs" else "templates"
+        warn(f"连接 Manager 后可执行 sop sync push-file {sync_module} {p.relative_to(get_config().project_path)} 或 sop kb index")
 
 
 @app.command("index")

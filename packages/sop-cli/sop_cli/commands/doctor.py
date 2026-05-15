@@ -115,7 +115,7 @@ def _check_platforms(cfg) -> tuple[bool, str]:
         if shim and not (root / shim).is_file():
             missing_shims.append(str(p.get("id", "?")))
     if missing_shims:
-        return False, f"缺少 hook shim：{', '.join(missing_shims)} → sop platforms install-shims <id>"
+        return False, f"缺少 hook shim：{', '.join(missing_shims)} → sop platforms init all"
     count = len(reg.get("platforms") or [])
     return True, f"{count} 个平台已注册"
 
@@ -147,21 +147,64 @@ def _check_sync_api(cfg) -> tuple[bool, str]:
 
 
 def _check_sync_local(cfg) -> tuple[bool, str]:
+    try:
+        from .sync import _compact_queue_items, _load_queue_items
+
+        items, bad = _load_queue_items()
+        compacted = _compact_queue_items(items)
+    except Exception as e:
+        return False, f"队列检查失败：{e}"
+
+    entities = cfg.project_path / ".sop-runtime" / "sync" / "entities"
+    entity_bad: list[str] = []
+    entity_ok = 0
+    if entities.is_dir():
+        for f in sorted(entities.glob("*.json")):
+            try:
+                d = json.loads(f.read_text(encoding="utf-8"))
+                if isinstance(d, dict):
+                    entity_ok += 1
+                else:
+                    entity_bad.append(f.name)
+            except Exception:
+                entity_bad.append(f.name)
     state = cfg.project_path / ".sop-runtime" / "sync_state.json"
-    latest = cfg.project_path / ".sop-runtime" / "sync" / "latest.json"
-    if state.is_file() or latest.is_file():
-        return True, f"state={'✓' if state.is_file() else '—'} latest={'✓' if latest.is_file() else '—'}"
-    return True, "尚无本地拉取记录（agentd 启动后会自动 pull）"
+    duplicates = max(0, len(items) - len(compacted))
+    detail = f"queue={len(items)} bad={bad} duplicates={duplicates} entities_ok={entity_ok} state={'✓' if state.is_file() else '—'}"
+    if bad or entity_bad:
+        if entity_bad:
+            detail += f" bad_entities={','.join(entity_bad)}"
+        return False, detail
+    if duplicates:
+        return True, detail + "（建议 sop sync compact）"
+    return True, detail
+
+
+def _check_project_manifest(cfg) -> tuple[bool, str]:
+    p = cfg.project_path / ".sop-runtime" / "project_manifest.json"
+    if not p.is_file():
+        return False, "缺少 .sop-runtime/project_manifest.json → sop context manifest --write"
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"manifest 解析失败：{e}"
+    schema = data.get("schema") if isinstance(data, dict) else ""
+    project = data.get("project") if isinstance(data, dict) else {}
+    if schema != "sop.project-manifest.v1" or not isinstance(project, dict):
+        return False, f"manifest schema 异常：{schema or '-'}"
+    return True, f"schema={schema} project={project.get('id') or '-'}"
 
 
 _FIX_HINTS: dict[str, str] = {
     "memory/current_state.json": "sop init <project>  或  bash ai-sop-ops/init-ai-project.sh <project>",
     ".ai-memory/": "sop init 会创建 .ai-memory → .sop-runtime/ai-memory 符号链接",
-    "AI 工具配置": "bash ai-sop-ops/init-ai-project.sh <project> 生成 AGENTS.md / .cursorrules 等",
-    "AI 平台适配": "sop platforms install-shims <id>  或  检查 ai-sop-ops/platforms/registry.json",
+    "AI 工具配置": "sop register <project>  或  sop platforms init all",
+    "AI 平台适配": "sop platforms init all  或  检查 ai-sop-ops/platforms/registry.json",
     "Manager 连通": "bash ai-sop-ops/start-manager.sh  或  sop-manager start（默认 :8765）",
     "鉴权凭据": "sop login（Bearer）或 sop login --pair（API Key）",
     "sync API": "sop login 后 sop sync 或 sop sync --direct；agentd 会自动热加载凭据",
+    "项目接入 manifest": "sop context manifest --write",
+    "sync 本地状态": "坏队列行: sop sync repair；重复队列: sop sync compact；缺本地数据: sop sync pull --direct --materialize",
     "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
     "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",
     "基础依赖": "安装 python3、git（macOS: xcode-select --install）",
@@ -176,6 +219,7 @@ _CHECKS: list[tuple[str, Callable]] = [
     ("Manager 连通", _check_manager),
     ("鉴权凭据", _check_auth_credentials),
     ("sync API", _check_sync_api),
+    ("项目接入 manifest", _check_project_manifest),
     ("sync 本地状态", _check_sync_local),
     ("RAG 向量后端", _check_rag_vector),
     ("sop-agentd IPC", _check_agentd_ipc),

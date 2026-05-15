@@ -1,11 +1,25 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-15T07:19:19Z",
+  "updated_at": "2026-05-15T10:41:11Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
-    "completed": [],
+    "completed": [
+      "补齐 sop requirement 需求 CLI：Manager CRUD + 本地离线队列 + sync push_queue",
+      "补齐 sop issue 问题 CLI：Manager CRUD/resolve + 本地离线队列 + sync push_queue",
+      "补齐 sop sprint 迭代 CLI：Manager CRUD/progress + 本地离线队列 + sync push_queue",
+      "补齐 sop task 任务 CLI：Manager CRUD 状态流 + 本地离线队列 + sync push_queue",
+      "补齐 sop sync flush：不依赖 agentd 直连冲刷本地离线队列",
+      "补齐 sop sync pull --materialize：直连拉取并物化远端实体/规约资产到本地",
+      "补齐 sop context manifest：生成无密钥项目接入清单，供 IDE/CLI/Agent 标准接入",
+      "补齐 sop sync compact：压缩本地离线队列，减少重复上送并提升 Agent 高频写入稳定性",
+      "补齐 sop sync doctor/repair：本地同步自检与温和修复坏队列行",
+      "增强 sop doctor：纳入项目 manifest 与本地 sync 队列/entities 健康检查",
+      "补齐 sop task update：支持任务通用字段、Agent 产物字段和本地离线队列",
+      "补齐 sop sync enqueue/enqueue-file：结构化记录与规约资产可离线入队后统一 flush",
+      "新增 sop work 聚合工作台：summary/list/next 统一查看需求、任务、问题、迭代"
+    ],
     "in_progress": [],
     "blocked": [],
     "pending": []

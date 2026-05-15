@@ -63,6 +63,8 @@ def init(
 
     _write_agent_toml_skeleton(Path.cwd(), project_name, manager_url)
     ok("写入 .sop-runtime/agent.toml（骨架）")
+    _init_platform_onboarding(repo_tools, Path.cwd(), project_name)
+    _write_project_manifest()
 
     console.rule("[bold green]完成")
     console.print(textwrap.dedent(f"""
@@ -169,3 +171,30 @@ def _write_agent_toml_skeleton(project_path: Path, project_name: str, manager_ur
         nonce_window_seconds = 300
         sign_body = true
     """).lstrip(), encoding="utf-8")
+
+
+def _init_platform_onboarding(repo_tools: Path, project_path: Path, project_name: str) -> None:
+    gen = repo_tools / "platforms" / "onboard.py"
+    if not gen.is_file():
+        warn("缺少 ai-sop-ops/platforms/onboard.py；跳过 registry 驱动的平台接入 manifest")
+        return
+    r = subprocess.run(
+        ["python3", str(gen), "--root", str(project_path), "--project-name", project_name, "--platform", "all"],
+        cwd=str(project_path),
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        warn(f"平台接入初始化未完成：{r.stderr or r.stdout}")
+        return
+    ok("统一平台接入已生成（.sop-runtime/platforms/onboarding.json）")
+
+
+def _write_project_manifest() -> None:
+    try:
+        from .context import write_project_manifest
+
+        p = write_project_manifest()
+        ok(f"项目接入 manifest 已生成（{p}）")
+    except Exception as e:
+        warn(f"项目接入 manifest 生成失败：{e}")

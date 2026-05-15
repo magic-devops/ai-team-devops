@@ -47,26 +47,27 @@ class SprintCreate(BaseModel):
 @router.post("")
 def create_sprint(body: SprintCreate, user: User = Depends(current_user),
                   db: Session = Depends(get_session)):
-    if body.project_id:
+    project_id = (body.project_id or "").strip() or _resolved_project_id().strip()
+    if project_id:
         # analyst 及以下可参与迭代规划；viewer(40) 不可写
-        check_project_access(user, body.project_id, db, "analyst")
+        check_project_access(user, project_id, db, "analyst")
     prev = db.query(Sprint).filter_by(
-        tenant_id=user.tenant_id, project_id=body.project_id, status="active"
+        tenant_id=user.tenant_id, project_id=project_id, status="active"
     ).all()
     # 关闭当前活跃 Sprint
     db.query(Sprint).filter_by(
-        tenant_id=user.tenant_id, project_id=body.project_id, status="active"
+        tenant_id=user.tenant_id, project_id=project_id, status="active"
     ).update({"status": "completed"})
     for old in prev:
         notify_webhook(
             "sprint.completed",
             {"sprint_id": old.id, "goal": old.goal or ""},
             tenant_id=user.tenant_id,
-            project_id=body.project_id or "",
+            project_id=project_id,
         )
     s = Sprint(
         id=f"SPRINT-{uuid.uuid4().hex[:8]}", tenant_id=user.tenant_id,
-        project_id=body.project_id, goal=body.goal, status="active",
+        project_id=project_id, goal=body.goal, status="active",
         planned_points=body.planned_points,
         ends_at=datetime.fromisoformat(body.ends_at) if body.ends_at else None,
     )
@@ -75,7 +76,7 @@ def create_sprint(body: SprintCreate, user: User = Depends(current_user),
         "sprint.started",
         {"sprint_id": s.id, "goal": body.goal, "planned_points": body.planned_points},
         tenant_id=user.tenant_id,
-        project_id=body.project_id or "",
+        project_id=project_id,
     )
     return {"ok": True, "id": s.id}
 
