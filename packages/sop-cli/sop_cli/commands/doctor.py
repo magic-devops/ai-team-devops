@@ -195,6 +195,55 @@ def _check_project_manifest(cfg) -> tuple[bool, str]:
     return True, f"schema={schema} project={project.get('id') or '-'}"
 
 
+def _check_agent_context(cfg) -> tuple[bool, str]:
+    ctx = cfg.project_path / ".sop-runtime" / "agent_context.json"
+    snap = cfg.project_path / ".sop-runtime" / "work_snapshot.json"
+    env = cfg.project_path / ".sop-runtime" / "sop.env"
+    missing = [str(p.relative_to(cfg.project_path)) for p in (ctx, snap, env) if not p.is_file()]
+    if missing:
+        return False, f"缺少 {', '.join(missing)} → sop context prepare"
+    try:
+        data = json.loads(ctx.read_text(encoding="utf-8"))
+        snapshot = json.loads(snap.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"Agent 上下文解析失败：{e}"
+    schema = data.get("schema") if isinstance(data, dict) else ""
+    snap_schema = snapshot.get("schema") if isinstance(snapshot, dict) else ""
+    if schema != "sop.agent-context.v1" or snap_schema != "sop.work.snapshot.v1":
+        return False, f"schema 异常：context={schema or '-'} snapshot={snap_schema or '-'}"
+    return True, f"context={schema} snapshot={snap_schema} env=✓"
+
+
+def _jsonl_count(path: Path) -> tuple[int, int]:
+    if not path.is_file():
+        return 0, 0
+    total = 0
+    bad = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        total += 1
+        try:
+            json.loads(line)
+        except json.JSONDecodeError:
+            bad += 1
+    return total, bad
+
+
+def _check_agent_outboxes(cfg) -> tuple[bool, str]:
+    memory_total, memory_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "memory" / "outbox.jsonl")
+    kb_total, kb_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "kb" / "outbox.jsonl")
+    event_total, event_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "events" / "outbox.jsonl")
+    usage_total, usage_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "usage" / "outbox.jsonl")
+    detail = f"memory={memory_total} bad={memory_bad} kb={kb_total} bad={kb_bad} events={event_total} bad={event_bad} usage={usage_total} bad={usage_bad}"
+    if memory_bad or kb_bad or event_bad or usage_bad:
+        return False, detail
+    if memory_total or kb_total or event_total or usage_total:
+        return True, detail + "（可执行 sop context prepare --flush）"
+    return True, detail
+
+
 _FIX_HINTS: dict[str, str] = {
     "memory/current_state.json": "sop init <project>  或  bash ai-sop-ops/init-ai-project.sh <project>",
     ".ai-memory/": "sop init 会创建 .ai-memory → .sop-runtime/ai-memory 符号链接",
@@ -204,6 +253,8 @@ _FIX_HINTS: dict[str, str] = {
     "鉴权凭据": "sop login（Bearer）或 sop login --pair（API Key）",
     "sync API": "sop login 后 sop sync 或 sop sync --direct；agentd 会自动热加载凭据",
     "项目接入 manifest": "sop context manifest --write",
+    "Agent 上下文包": "sop context prepare",
+    "Agent outbox": "坏 JSONL 需手工修复；可先 sop context prepare --flush 冲刷可用记录",
     "sync 本地状态": "坏队列行: sop sync repair；重复队列: sop sync compact；缺本地数据: sop sync pull --direct --materialize",
     "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
     "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",
@@ -220,6 +271,8 @@ _CHECKS: list[tuple[str, Callable]] = [
     ("鉴权凭据", _check_auth_credentials),
     ("sync API", _check_sync_api),
     ("项目接入 manifest", _check_project_manifest),
+    ("Agent 上下文包", _check_agent_context),
+    ("Agent outbox", _check_agent_outboxes),
     ("sync 本地状态", _check_sync_local),
     ("RAG 向量后端", _check_rag_vector),
     ("sop-agentd IPC", _check_agentd_ipc),

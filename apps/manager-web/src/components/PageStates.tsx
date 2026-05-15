@@ -3,14 +3,15 @@ import { useTranslation } from "react-i18next";
 
 export function NeedLogin() {
   const { t } = useTranslation();
+  const loginHref = `/login.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`;
   return (
     <div
       role="status"
       className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-50/95"
     >
       <span>{t("auth.dashboardNeedLogin")}</span>{" "}
-      <a href="#/settings" className="font-semibold text-brand-700 underline dark:text-brand-300">
-        {t("auth.openSettings")}
+      <a href={loginHref} className="font-semibold text-brand-700 underline dark:text-brand-300">
+        {t("auth.openLogin")}
       </a>
     </div>
   );
@@ -73,7 +74,7 @@ export function SearchInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder ?? t("common.search")}
-      className="w-full max-w-xs rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm shadow-sm dark:border-slate-600 dark:bg-slate-900"
+      className="w-full min-w-56 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-1.5 text-sm text-[var(--text)] shadow-sm placeholder:text-[var(--muted)]"
     />
   );
 }

@@ -4,12 +4,12 @@ import os, uuid
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Tenant, Business, Project, ProjectMember, User, Requirement, Task
-from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role
+from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role, check_project_access
 from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
@@ -175,8 +175,12 @@ def delete_project(project_id: str, user: User = Depends(require_role("tenant_ad
 @proj_router.get("/{project_id}/members")
 def list_members(project_id: str, user: User = Depends(current_user),
                  db: Session = Depends(get_session)):
+    check_project_access(user, project_id, db, min_role="viewer")
+    p = db.get(Project, project_id)
+    if not p or p.tenant_id != user.tenant_id:
+        raise HTTPException(404, "项目不存在")
     members = db.query(ProjectMember).filter_by(project_id=project_id).all()
-    return [{"user_id": m.user_id, "username": m.user.username, "role": m.role}
+    return [{"user_id": m.user_id, "username": m.user.username, "email": m.user.email, "role": m.role}
             for m in members]
 
 class MemberAdd(BaseModel):
@@ -187,6 +191,12 @@ class MemberAdd(BaseModel):
 def add_member(project_id: str, body: MemberAdd,
                user: User = Depends(require_role("project_admin")),
                db: Session = Depends(get_session)):
+    p = db.get(Project, project_id)
+    if not p or p.tenant_id != user.tenant_id:
+        raise HTTPException(404, "项目不存在")
+    target = db.get(User, body.user_id)
+    if not target or target.tenant_id != user.tenant_id or target.status != "active":
+        raise HTTPException(404, "用户不存在或不可用")
     if db.query(ProjectMember).filter_by(project_id=project_id, user_id=body.user_id).first():
         raise HTTPException(400, "成员已存在")
     mrole = assert_project_member_role(body.role)
@@ -204,6 +214,9 @@ def add_member(project_id: str, body: MemberAdd,
 def remove_member(project_id: str, user_id: str,
                   user: User = Depends(require_role("project_admin")),
                   db: Session = Depends(get_session)):
+    p = db.get(Project, project_id)
+    if not p or p.tenant_id != user.tenant_id:
+        raise HTTPException(404, "项目不存在")
     m = db.query(ProjectMember).filter_by(project_id=project_id, user_id=user_id).first()
     if not m:
         raise HTTPException(404, "成员不存在")
@@ -215,6 +228,193 @@ def remove_member(project_id: str, user_id: str,
         project_id=project_id,
     )
     return {"ok": True}
+
+
+@proj_router.get("/{project_id}/onboarding")
+def project_onboarding(project_id: str, request: Request,
+                       user: User = Depends(current_user),
+                       db: Session = Depends(get_session)):
+    """返回无密钥项目接入包，供 Web/CLI/IDE/Agent 初始化使用。"""
+    check_project_access(user, project_id, db, min_role="viewer")
+    p = db.get(Project, project_id)
+    if not p or p.tenant_id != user.tenant_id:
+        raise HTTPException(404, "项目不存在")
+    tenant = db.get(Tenant, p.tenant_id)
+    business = db.get(Business, p.business_id) if p.business_id else None
+    manager_url = str(request.base_url).rstrip("/")
+    tenant_code = tenant.slug if tenant and tenant.slug else p.tenant_id
+    business_code = business.id if business else ""
+    project_code = p.id
+    project_name = p.name or p.id
+    env = {
+        "MANAGER_URL": manager_url,
+        "PROJECT_ID": p.id,
+        "PROJECT_CODE": project_code,
+        "TENANT_ID": p.tenant_id,
+        "TENANT_CODE": tenant_code,
+        "BUSINESS_CODE": business_code,
+        "SOP_PROJECT_MANIFEST": ".sop-runtime/project_manifest.json",
+        "SOP_AGENT_CONTEXT": ".sop-runtime/agent_context.json",
+    }
+    agent_toml = f"""[manager]
+url = "{manager_url}"
+project_id = "{p.id}"
+project_code = "{project_code}"
+tenant_id = "{p.tenant_id}"
+tenant_code = "{tenant_code}"
+business_code = "{business_code}"
+
+[auth]
+method = "apikey"
+api_key_ref = "keyring://sop/manager"
+verify_ssl = true
+
+[transport]
+ws = true
+grpc = false
+mcp_servers = ["lancedb", "knowledge", "tasks", "files"]
+a2a_port = 7741
+
+[reliability]
+outbox_path = ".sop-runtime/outbox.sqlite"
+batch_size = 50
+max_retries = 6
+dlq_path = ".sop-runtime/dlq/"
+timeout_seconds = 30
+"""
+    commands = {
+        "new_project": f"sop register {project_name} --manager {manager_url} --username <manager-user>",
+        "existing_project": f"sop init {project_name} --manager {manager_url} && sop login --pair",
+        "prepare_context": "sop context prepare --flush",
+        "doctor": "sop doctor && sop status --json",
+        "sync": "sop sync pull --direct --materialize && sop sync flush",
+        "watch": "sop sync watch --flush",
+        "copilot": "sop copilot ask \"总结当前任务和下一步\"",
+    }
+    agent_context = {
+        "schema": "sop.agent-context.v1",
+        "project": {
+            "id": p.id,
+            "code": project_code,
+            "tenant_code": tenant_code,
+            "business_code": business_code,
+        },
+        "files": {
+            "manifest": ".sop-runtime/project_manifest.json",
+            "env": ".sop-runtime/sop.env",
+            "work_snapshot": ".sop-runtime/work_snapshot.json",
+            "db_connections": ".sop-runtime/db_connections.json",
+        },
+        "commands": {
+            "refresh": "sop context prepare --flush",
+            "status": "sop status --json",
+            "next_work": "sop work next --local --json",
+            "memory_search": "sop memory search",
+            "kb_search": "sop kb search --local --json",
+            "copilot_ask": "sop copilot ask",
+        },
+    }
+    tool_profiles = [
+        {
+            "id": "codex",
+            "name": "Codex CLI / Codex App",
+            "target": "AGENTS.md",
+            "content": (
+                "启动时读取 .sop-runtime/project_manifest.json 与 .sop-runtime/agent_context.json；"
+                "执行开发前先运行 sop context prepare --flush；任务、需求、记忆、知识库、规则和事件统一通过 sop CLI 接入。"
+            ),
+            "commands": ["sop context prepare --flush", "sop status --json", "sop copilot ask \"总结当前工程状态\""],
+        },
+        {
+            "id": "claude",
+            "name": "Claude Code",
+            "target": "CLAUDE.md",
+            "content": (
+                "Use SOP context from .sop-runtime/agent_context.json. Before coding, run `sop context prepare --flush` "
+                "and inspect `sop work next --local --json`. Persist durable decisions with `sop memory add`."
+            ),
+            "commands": ["sop context prepare --flush", "sop work next --local --json"],
+        },
+        {
+            "id": "cursor",
+            "name": "Cursor",
+            "target": ".cursorrules",
+            "content": (
+                "Load SOP project manifest from .sop-runtime/project_manifest.json. Respect tenant_code/business_code/project_code "
+                "headers and use sop CLI for requirements, tasks, rules, memory, knowledge and sync."
+            ),
+            "commands": ["sop context manifest --write", "sop context prepare --flush"],
+        },
+        {
+            "id": "qoder",
+            "name": "Qoder / Trae / generic Agent",
+            "target": ".qoder/context.md",
+            "content": (
+                f"Manager: {manager_url}\\nProject: {p.id}\\nTenant: {tenant_code}\\n"
+                "Read .sop-runtime/agent_context.json for commands and local cache paths."
+            ),
+            "commands": ["sop context env --out .sop-runtime/sop.env", "sop event subscribe --json"],
+        },
+    ]
+    return {
+        "ok": True,
+        "schema": "sop.project-onboarding.v1",
+        "project": {
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "status": p.status,
+            "project_path": p.project_path,
+            "vector_db": p.vector_db,
+        },
+        "isolation": {
+            "tenant_id": p.tenant_id,
+            "tenant_code": tenant_code,
+            "business_id": p.business_id or "",
+            "business_code": business_code,
+            "project_id": p.id,
+            "project_code": project_code,
+        },
+        "manager": {
+            "url": manager_url,
+            "api_base": manager_url + "/api/v1",
+            "ws_events": manager_url.replace("http://", "ws://").replace("https://", "wss://") + "/ws/events",
+            "auth": "bearer-or-api-key",
+        },
+        "commands": commands,
+        "env": env,
+        "agent_context": agent_context,
+        "tool_profiles": tool_profiles,
+        "files": {
+            "agent_toml": ".sop-runtime/agent.toml",
+            "env": ".sop-runtime/sop.env",
+            "manifest": ".sop-runtime/project_manifest.json",
+            "agent_context": ".sop-runtime/agent_context.json",
+            "work_snapshot": ".sop-runtime/work_snapshot.json",
+            "db_connections": ".sop-runtime/db_connections.json",
+        },
+        "agent_toml": agent_toml,
+        "capabilities": [
+            "requirements",
+            "tasks",
+            "issues",
+            "sprints",
+            "memory",
+            "knowledge",
+            "rules",
+            "events-wss",
+            "usage-quota",
+            "db-config",
+            "copilot",
+            "platform-shims",
+        ],
+        "recommended_flow": [
+            "在工程根目录执行 new_project 或 existing_project 命令",
+            "执行 sop context prepare --flush 生成 manifest、agent_context、env 与远端物化缓存",
+            "执行 sop doctor 检查 Manager、同步队列、记忆/知识库 outbox 与平台 shim",
+            "各类 CLI/IDE/Agent 读取 .sop-runtime/project_manifest.json 或 SOP_AGENT_CONTEXT 即可接入",
+        ],
+    }
 
 
 # ── 项目模板 ──────────────────────────────────────────────────────

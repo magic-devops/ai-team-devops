@@ -49,7 +49,7 @@ export function Workflows() {
   if (!hasProject) return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       {flash ? <FlashMessage kind={flash.kind} message={flash.message} onDismiss={() => setFlash(null)} /> : null}
 
       <Card

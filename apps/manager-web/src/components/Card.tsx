@@ -13,13 +13,13 @@ export function Card({
   className?: string;
 }) {
   const base =
-    "rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm ring-1 ring-slate-900/[0.04] dark:border-slate-700/70 dark:bg-slate-900/75 dark:ring-white/[0.06]";
+    "rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 text-[var(--text)] shadow-sm shadow-slate-950/[0.04] ring-1 ring-white/40 backdrop-blur dark:shadow-black/20 dark:ring-white/[0.04]";
   return (
     <section className={[base, className].filter(Boolean).join(" ")}>
       {(title || actions) && (
         <header className="mb-3 flex items-center justify-between gap-2">
           {title && (
-            <h3 className="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100">{title}</h3>
+            <h3 className="text-sm font-semibold tracking-tight text-[var(--text)]">{title}</h3>
           )}
           {actions}
         </header>

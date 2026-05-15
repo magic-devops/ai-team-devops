@@ -182,6 +182,132 @@ def _enqueue_item(module: str, record: dict, *, action: str = "upsert", idempote
     return item
 
 
+def _watch_state_path() -> "Path":
+    return _sync_root() / "watch_state.json"
+
+
+def _asset_watch_roots(modules: set[str]) -> list[tuple[str, "Path"]]:
+    from .._util import get_config
+
+    root = get_config().project_path
+    rows: list[tuple[str, "Path"]] = []
+    if "rules" in modules:
+        rows.append(("rules", root / ".ai-memory" / "rules"))
+    if "specs" in modules:
+        rows.append(("specs", root / "sop" / "custom" / "specs"))
+    if "templates" in modules:
+        rows.append(("templates", root / "sop" / "custom" / "templates"))
+        rows.append(("templates", root / "sop" / "templates"))
+    return rows
+
+
+def _watchable_file(path: "Path") -> bool:
+    if not path.is_file():
+        return False
+    if any(part in {".git", ".sop-runtime", "__pycache__", "node_modules"} for part in path.parts):
+        return False
+    return path.suffix.lower() in {".md", ".mdx", ".txt", ".json", ".yaml", ".yml", ".toml"}
+
+
+def _file_fingerprint(path: "Path") -> dict:
+    import hashlib
+
+    data = path.read_bytes()
+    st = path.stat()
+    return {
+        "mtime_ns": st.st_mtime_ns,
+        "size": st.st_size,
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+def _load_watch_state() -> dict:
+    import json
+
+    p = _watch_state_path()
+    if not p.is_file():
+        return {"schema": "sop.sync.watch-state.v1", "files": {}}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {"schema": "sop.sync.watch-state.v1", "files": {}}
+    if not isinstance(data, dict) or not isinstance(data.get("files"), dict):
+        return {"schema": "sop.sync.watch-state.v1", "files": {}}
+    return data
+
+
+def _write_watch_state(state: dict) -> None:
+    import json
+    from datetime import datetime, timezone
+
+    state["schema"] = "sop.sync.watch-state.v1"
+    state["updated_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    p = _watch_state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _scan_watch_files(modules: set[str]) -> dict[str, dict]:
+    from .._util import get_config
+
+    cfg = get_config()
+    seen: dict[str, dict] = {}
+    for module, base in _asset_watch_roots(modules):
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if not _watchable_file(path):
+                continue
+            try:
+                rel = path.relative_to(base).as_posix()
+            except ValueError:
+                rel = path.relative_to(cfg.project_path).as_posix()
+            key = f"{module}:{rel}"
+            fp = _file_fingerprint(path)
+            seen[key] = {
+                **fp,
+                "module": module,
+                "path": rel,
+                "local_path": path.relative_to(cfg.project_path).as_posix(),
+            }
+    return seen
+
+
+def _watch_once(modules: set[str], *, enqueue_deletes: bool = True) -> dict[str, int]:
+    state = _load_watch_state()
+    old = state.get("files") if isinstance(state.get("files"), dict) else {}
+    cur = _scan_watch_files(modules)
+    counts = {"created": 0, "updated": 0, "deleted": 0, "unchanged": 0}
+    for key, meta in cur.items():
+        prev = old.get(key) if isinstance(old.get(key), dict) else None
+        changed = not prev or prev.get("sha256") != meta.get("sha256") or prev.get("size") != meta.get("size")
+        if not changed:
+            counts["unchanged"] += 1
+            continue
+        from pathlib import Path
+
+        from .._util import get_config
+
+        path = get_config().project_path / str(meta["local_path"])
+        record = {"path": meta["path"], "content": path.read_text(encoding="utf-8")}
+        _enqueue_item(str(meta["module"]), record, action="upsert")
+        counts["created" if not prev else "updated"] += 1
+    if enqueue_deletes:
+        for key, prev in old.items():
+            if key in cur or not isinstance(prev, dict):
+                continue
+            module = str(prev.get("module") or "")
+            if module not in modules:
+                continue
+            rel = str(prev.get("path") or "")
+            if rel:
+                _enqueue_item(module, {"path": rel}, action="delete")
+                counts["deleted"] += 1
+    state["files"] = cur
+    _write_watch_state(state)
+    return counts
+
+
 def _pull_result_payload(r: dict) -> dict:
     """Normalize agentd IPC result vs Manager HTTP body."""
     if not isinstance(r, dict):
@@ -638,6 +764,45 @@ def sync_enqueue_file(
     except Exception as e:
         warn(str(e))
         raise typer.Exit(2) from e
+
+
+@app.command("watch")
+def sync_watch(
+    modules: str = typer.Option("rules,specs,templates", "--modules", "-m", help="监听模块：rules,specs,templates"),
+    once: bool = typer.Option(False, "--once", help="只扫描一次后退出"),
+    interval: float = typer.Option(2.0, "--interval", help="轮询间隔秒"),
+    flush: bool = typer.Option(False, "--flush", help="每轮发现变更后立即 sop sync flush"),
+    no_delete: bool = typer.Option(False, "--no-delete", help="不为删除文件写入 delete 队列"),
+) -> None:
+    """监听本地规则/规约/模板文件变化并写入 sync push_queue。"""
+    import time
+
+    from .._util import console, ok, warn
+
+    allowed = {"rules", "specs", "templates"}
+    selected = {m.strip() for m in modules.split(",") if m.strip()}
+    if not selected or not selected <= allowed:
+        warn("modules 只能包含 rules,specs,templates")
+        raise typer.Exit(2)
+
+    def run_one() -> dict[str, int]:
+        counts = _watch_once(selected, enqueue_deletes=not no_delete)
+        console.print_json(data={"modules": sorted(selected), **counts})
+        if flush and (counts["created"] or counts["updated"] or counts["deleted"]):
+            sync_flush(limit=0, compact=True, dry_run=False)
+        return counts
+
+    if once:
+        run_one()
+        ok("sync watch scan complete")
+        return
+    ok(f"sync watch started modules={','.join(sorted(selected))} interval={interval}s")
+    try:
+        while True:
+            run_one()
+            time.sleep(max(0.5, interval))
+    except KeyboardInterrupt:
+        ok("sync watch stopped")
 
 
 def _direct_sync_cycle() -> dict | None:

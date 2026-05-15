@@ -19,7 +19,7 @@ export function Audit() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-slate-600 dark:text-slate-400">{t("page.audit.subtitle")}</p>
         <RefreshButton onClick={refresh} pending={state.isFetching || verify.isFetching} />

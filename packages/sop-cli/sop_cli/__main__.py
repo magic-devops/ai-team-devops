@@ -18,7 +18,9 @@ from .commands import (
     completion as completion_cmd,
     context as context_cmd,
     copilot as copilot_cmd,
+    db_config as db_config_cmd,
     doctor as doctor_cmd,
+    event as event_cmd,
     init as init_cmd,
     issue as issue_cmd,
     kb as kb_cmd,
@@ -34,6 +36,7 @@ from .commands import (
     status as status_cmd,
     sync as sync_cmd,
     task as task_cmd,
+    usage as usage_cmd,
     work as work_cmd,
 )
 from .commands_info import QUICK_START
@@ -51,9 +54,10 @@ app.add_typer(init_cmd.app,    name="init",    help="初始化项目（取代 in
 app.add_typer(register_cmd.app, name="register", help="一键初始化并注册工程到 Manager")
 app.add_typer(login_cmd.app,   name="login",   help="OAuth 配对 / Bearer 登录")
 app.add_typer(context_cmd.app, name="context", help="v4 三码上下文与 Manager 探活回显")
-app.add_typer(memory_cmd.app,   name="memory",   help="v4 记忆：add/search/recent/forget/summarize/attach-run")
-app.add_typer(kb_cmd.app,       name="kb",       help="知识库：search / rag / add / index")
-app.add_typer(copilot_cmd.app, name="copilot", help="AI Copilot：ask / classify / summarize / suggest")
+app.add_typer(memory_cmd.app,   name="memory",   help="v4 记忆：add/search/recent/forget/summarize/attach-run/flush")
+app.add_typer(kb_cmd.app,       name="kb",       help="知识库：search / rag / add / flush / index")
+app.add_typer(copilot_cmd.app, name="copilot", help="AI Copilot：ask / sessions / show / classify / summarize / suggest")
+app.add_typer(db_config_cmd.app, name="db-config", help="数据库配置：OceanBase/PG/MySQL")
 app.add_typer(ops_cmd.app,      name="ops",      help="运维：health/stack/deploy/snapshot/notify/worker")
 app.add_typer(platforms_cmd.app, name="platforms", help="AI 平台：Cursor/Codex/Claude/WorkBuddy/Hermes…")
 app.add_typer(status_cmd.app,  name="status",  help="本地 + Manager 状态概览")
@@ -62,8 +66,10 @@ app.add_typer(requirement_cmd.app, name="requirement", help="需求：list/creat
 app.add_typer(issue_cmd.app, name="issue", help="问题：list/create/update/resolve/delete")
 app.add_typer(task_cmd.app,    name="task",    help="任务：list/create/update/pull/done/fail/delete/issue")
 app.add_typer(sprint_cmd.app, name="sprint", help="迭代：list/create/update/complete/progress/delete")
-app.add_typer(work_cmd.app, name="work", help="工作台：summary/list/next")
-app.add_typer(rule_cmd.app,    name="rule",    help="规则：list/propose/apply")
+app.add_typer(work_cmd.app, name="work", help="工作台：summary/list/next/export")
+app.add_typer(event_cmd.app, name="event", help="事件：emit/flush/list")
+app.add_typer(usage_cmd.app, name="usage", help="用量：record/flush/summary/quota")
+app.add_typer(rule_cmd.app,    name="rule",    help="规则：list/propose/apply/flush")
 app.add_typer(sync_cmd.app,    name="sync",    help="双向同步规约 / 规则 / 知识")
 app.add_typer(doctor_cmd.app,  name="doctor",  help="端到端连通性自检")
 app.add_typer(llm_cmd.app,     name="llm",     help="通过 LLM Gateway 调用模型 / 嵌入 / 检索")

@@ -56,10 +56,13 @@ sop doctor
 
 # 5. 状态总览
 sop status
+sop status --json --out .sop-runtime/status_snapshot.json
 
 # 探测远端能力；不可用时 CLI 会尽量使用本地文件兜底
 sop context services
 sop context manifest --write
+sop context env --out .sop-runtime/sop.env
+sop context prepare --flush
 
 # 6. 干活
 sop requirement create "统一项目注册流程" --priority P1 --acceptance "sop register 可一键接入"
@@ -67,6 +70,26 @@ sop requirement list --priority P1
 sop issue create "登录回调异常" --severity P1 --type bug
 sop sprint create "MVP 闭环" --points 20
 sop work next --local
+sop work export --local --out .sop-runtime/work_snapshot.json
+sop memory add "项目采用本地优先、远端增强" --local
+sop memory search "本地优先" --local
+sop memory flush
+sop kb add "项目接入规范" "CLI/Agent 读取 .sop-runtime/sop.env 接入。" --local
+sop kb flush
+sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env" --local
+sop rule list --local --proposals
+sop copilot ask "下一步该做什么？" --local --remember
+sop copilot sessions
+sop event emit sop.agent.run.completed --data run_id=demo --local
+sop event flush
+sop event subscribe --json
+sop usage summary --json
+sop usage check llm_tokens 1000
+sop usage record llm_tokens 123 --unit tokens --source codex --local
+sop db-config drivers --json
+sop db-config list --json
+sop db-config add prod-ob --type oceanbase --role business --capability sql --capability vector --host ob.example.com --port 2881 --database app --username app --secret-ref env://APP_OB_URL
+sop db-config test prod-ob --url "$APP_OB_URL"
 sop task list --status pending
 sop task create "实现登录页 SSO 对接" --priority P1 --assignee Coder
 sop task pull T-123
@@ -84,6 +107,7 @@ sop sync compact            # 压缩本地离线队列
 sop sync flush              # 直连 Manager 冲刷本地离线队列
 sop sync enqueue-file specs docs/spec.md --remote-path demo/spec.md
 sop sync pull --direct --materialize  # 直连拉取并物化到 .sop-runtime/sync/entities
+sop sync watch --once       # 扫描规则/规约/模板变更并写入队列
 sop sync pull -o out.json   # 直连 Manager 拉取
 sop sync status             # 本地游标 / 实体 / 推送队列
 sop platforms init all      # 按 registry 生成 CLI/IDE/Agent 接入文件
@@ -101,28 +125,31 @@ CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECT
 
 | 命令 | 作用 |
 |------|------|
-| `sop init`    | 项目初始化（取代 `init-ai-project.sh`） |
-| `sop register` | 一键初始化、注册 Manager、生成各 CLI/IDE/Agent 接入配置 |
+| `sop init`    | 项目初始化（取代 `init-ai-project.sh`），并生成 manifest / work snapshot / agent context |
+| `sop register` | 一键初始化、注册 Manager、生成各 CLI/IDE/Agent 接入配置并刷新 Agent 上下文 |
 | `sop login`   | 用户名密码登录 / OAuth 配对 |
-| `sop status`  | 本地 + Manager 状态总览 |
+| `sop status`  | 本地 + Manager 状态总览；支持 `--json/--out` 输出 Agent 健康快照 |
 | `sop agentd`  | 守护进程：start/stop/status/logs/install |
 | `sop requirement` | 需求：list/create/update/delete；Manager 不可用时写本地离线队列 |
 | `sop issue`   | 问题/缺陷：list/create/update/resolve/delete；支持本地离线队列 |
 | `sop sprint`  | 迭代：list/create/update/complete/progress/delete；支持本地离线队列 |
-| `sop work`    | 聚合工作台：summary/list/next；支持远端优先和本地离线视图 |
-| `sop task`    | 任务：list/create/update/pull/done/fail/delete/issue；支持本地离线队列 |
-| `sop rule`    | 规则：list/propose |
+| `sop work`    | 聚合工作台：summary/list/next/export；支持远端优先、本地离线视图和机器可读快照 |
+| `sop event`   | CloudEvent 事件：emit/flush/list/subscribe；支持本地 outbox、Manager journal 和 WSS 订阅 |
+| `sop usage`   | 用量计量与配额：record/flush/summary/quota/check；支撑租户套餐、出账和限额 |
+| `sop task`    | 任务：list/create/update/pull/done/fail/delete/issue；任务状态和 issue 上报均支持本地离线队列 |
+| `sop rule`    | 规则：list/propose/apply/flush；支持本地提案、应用到 RULES.md、写入 sync 队列并推送 Manager |
 | `sop sync`    | 触发同步（pull+push，需 agentd） |
-| `sop sync pull` / `push` / `enqueue` / `push-file` / `enqueue-file` / `doctor` / `repair` / `compact` / `flush` / `status` | 直连 Manager、离线入队、物化远端数据、自检/修复/压缩/冲刷本地队列或查看本地状态 |
+| `sop sync pull` / `push` / `enqueue` / `push-file` / `enqueue-file` / `watch` / `doctor` / `repair` / `compact` / `flush` / `status` | 直连 Manager、离线入队、文件监听入队、物化远端数据、自检/修复/压缩/冲刷本地队列或查看本地状态 |
 | `sop platforms` | AI 平台 list / init / doctor / install-shims |
-| `sop memory` / `context` / `kb` / `copilot` | v4 记忆、上下文、知识库、助手；memory 支持 add/search/recent/forget/summarize/attach-run |
+| `sop memory` / `context` / `kb` / `copilot` | v4 记忆、上下文、知识库、助手；`sop context prepare --flush` 可生成 Agent 上下文包、刷新远端无密钥 DB 配置并冲刷 outbox；memory 与 kb 均支持本地 outbox + flush，copilot 支持会话/run_id/transcript |
+| `sop db-config` | 远端数据库配置：drivers/list/add/test/delete/export；支持 OceanBase、PostgreSQL、MySQL、SQLite 和向量/分析/记忆等能力声明 |
 | `sop ops` | 运维：health/stack/deploy/snapshot/notify/worker |
 | `sop doctor`  | 端到端自检（含 sync 本地队列、manifest、平台） |
 | `sop llm`     | LLM Gateway 客户端：chat/embed/search |
 
 每条都支持 `--help`。浏览全部子命令：
 
-本地优先与远端增强：`sop requirement`、`sop task`、`sop issue`、`sop sprint`、`sop kb search/add`、`sop rule list/propose` 会优先调用 Manager；远端不可达时自动回退到 `.sop-runtime/local/`、`sop/custom/`、`.ai-memory/rules/`、`ai-sop/` 等本地资产。连接 Manager 后可用 `sop sync`、`sop sync enqueue-file`、`sop sync doctor`、`sop sync repair`、`sop sync compact`、`sop sync flush`、`sop sync pull --materialize`、`sop sync push-file` 或 `sop kb index` 更新远端数据。各 IDE/CLI/Agent 可读取 `sop context manifest --write` 生成的 `.sop-runtime/project_manifest.json` 完成标准接入。
+本地优先与远端增强：`sop requirement`、`sop task`、`sop issue`、`sop sprint`、`sop memory`、`sop event`、`sop usage`、`sop kb search/add`、`sop rule list/propose` 会优先调用 Manager；远端不可达时自动回退到 `.sop-runtime/local/`、`.sop-runtime/memory/`、`.sop-runtime/kb/`、`.sop-runtime/rules/proposals.jsonl`、`.sop-runtime/events/outbox.jsonl`、`.sop-runtime/usage/outbox.jsonl`、`sop/custom/`、`.ai-memory/rules/`、`ai-sop/` 等本地资产。连接 Manager 后可用 `sop sync`、`sop sync watch`、`sop sync enqueue-file`、`sop sync doctor`、`sop sync repair`、`sop sync compact`、`sop sync flush`、`sop sync pull --materialize`、`sop sync push-file`、`sop memory flush`、`sop kb flush`、`sop rule flush`、`sop event flush`、`sop usage flush` 或 `sop kb index` 更新远端数据。各 IDE/CLI/Agent 可读取 `sop context manifest --write` 生成的 `.sop-runtime/project_manifest.json` 完成标准接入，读取 `sop context env --out .sop-runtime/sop.env` 生成通用环境变量，读取 `sop status --json` 判断项目健康，读取 `sop work export --local` 生成的 `.sop-runtime/work_snapshot.json` 获取需求、任务、问题、迭代和下一步建议；也可直接运行 `sop context prepare` 生成 `.sop-runtime/agent_context.json` 索引全部本地入口。
 
 ```bash
 sop commands              # 表格

@@ -25,7 +25,9 @@
       "system": "システム"
     },
     "dockHint": "ヘルス確認や試験 UI。日常のオーケストレーションは統制コンソール側で行います。",
-    "setShellHome": "サイトの起点をこの管理プラットフォームに固定"
+    "setShellHome": "サイトの起点をこの管理プラットフォームに固定",
+    "collapseSidebar": "メニューを折りたたむ",
+    "expandSidebar": "メニューを展開"
   },
   "dashboard": {
     "fullConsoleTitle": "クロスプロジェクトの要約とヘルスはここで。",
@@ -44,7 +46,9 @@
     "linkSettings": "ログインとテーマ"
   },
   "page": {
-    "dashboard": { "title": "クロスプロジェクト ダッシュボード" },
+    "dashboard": {
+      "title": "クロスプロジェクト ダッシュボード"
+    },
     "projects": {
       "title": "プロジェクト管理",
       "list": "プロジェクト一覧",
@@ -52,7 +56,15 @@
       "searchPh": "名前または ID で検索",
       "empty": "プロジェクトなし",
       "current": "現在",
-      "select": "現在に設定"
+      "select": "現在に設定",
+      "onboarding": "プロジェクト接続パック",
+      "pickProject": "プロジェクトを選択して CLI / Agent 接続設定を表示します。",
+      "scope": "3 コード分離",
+      "quickStart": "新規ワークスペース登録",
+      "prepare": "初期化後の文脈準備",
+      "env": "SOP 環境変数",
+      "agentContext": "Agent コンテキスト JSON",
+      "toolProfiles": "CLI / IDE / Agent プロファイル"
     },
     "tasks": {
       "title": "タスクボード",
@@ -113,14 +125,24 @@
       "verifyFail": "検証失敗",
       "total": "検証件数"
     },
-    "copilot": { "title": "AI コパイロット" },
+    "copilot": {
+      "title": "AI コパイロット"
+    },
     "intelligence": {
       "title": "インテリジェンスと知識",
       "subtitle": "ナレッジ検索（Lance）とスコープ付きメモリ（ファイル、mem0 拡張可）。",
       "tabKb": "ナレッジ",
       "tabMem": "メモリ",
+      "tabRules": "ルール",
+      "tabDb": "データソース",
+      "tabEvents": "イベント",
+      "tabUsage": "使用量",
       "kbHint": "/api/v1/knowledge/search を利用。Lance インデックスが必要です。",
+      "kbSearch": "ナレッジ検索",
+      "kbCreate": "ナレッジ追加",
       "kbPh": "キーワードを入力",
+      "titlePh": "タイトル",
+      "contentPh": "Markdown 本文",
       "memAdd": "メモリ追加",
       "memAddPh": "判断・文脈・振り返り…",
       "memSearch": "メモリ検索",
@@ -128,16 +150,47 @@
       "memRecent": "最近のメモリ",
       "tabRag": "RAG 検索",
       "ragPh": "自然言語で質問",
-      "indexKb": "KB インデックス実行"
+      "indexKb": "KB インデックス実行",
+      "rulesList": "ルール一覧",
+      "ruleCreate": "ルール追加",
+      "rulePh": "開発規約、業務ルール、Agent 制約を入力",
+      "dbDrivers": "ドライバーと能力テンプレート",
+      "dbConnections": "リモートデータソース",
+      "dbCreate": "データソース追加",
+      "test": "テスト",
+      "eventsList": "イベントストリーム",
+      "usageSummary": "使用量サマリー",
+      "quotaEdit": "クォータ JSON"
     },
     "organization": {
       "title": "組織と権限",
       "businesses": "事業ライン",
       "projects": "プロジェクト",
       "users": "テナントユーザー",
-      "usersHint": "ユーザー管理は tenant_admin が必要です。",
+      "usersHint": "ユーザー管理には tenant_admin が必要です。無効化されたユーザーはログインできません。",
       "emptyBusiness": "業務ラインなし",
-      "emptyUsers": "メンバーデータなし"
+      "emptyUsers": "メンバーデータなし",
+      "username": "ユーザー名",
+      "email": "メール",
+      "password": "初期パスワード",
+      "role": "ロール",
+      "status": "状態",
+      "actions": "操作",
+      "addUser": "ユーザー追加",
+      "newPassword": "新しいパスワード",
+      "resetPassword": "パスワード再設定",
+      "deleteUser": "ユーザー削除",
+      "confirmDelete": "{{name}} を削除しますか？",
+      "active": "有効",
+      "disabled": "無効",
+      "businessName": "事業ライン名",
+      "businessDesc": "事業ライン説明",
+      "addBusiness": "事業ライン追加",
+      "projectMembers": "プロジェクトメンバー",
+      "pickUser": "テナントユーザーを選択",
+      "addMember": "メンバー追加",
+      "removeMember": "メンバー削除",
+      "emptyMembers": "プロジェクトメンバーなし"
     },
     "analytics": {
       "title": "AI データ分析",
@@ -179,7 +232,30 @@
       "installOk": "{{id}} の shim をインストールしました: {{shim}}",
       "shimReady": "shim 準備完了"
     },
-    "settings": { "title": "設定", "themeCard": "外観" }
+    "settings": {
+      "title": "設定",
+      "themeCard": "外観",
+      "systemCard": "システム設定",
+      "accountCard": "アカウントとスコープ",
+      "runtimeCard": "稼働状態",
+      "workspaceCard": "管理ショートカット",
+      "sessionError": "セッション異常",
+      "manager": "Manager",
+      "version": "バージョン",
+      "apiBase": "API ベース",
+      "consoleTitle": "フルコンソール",
+      "consoleDesc": "legacy 機能、オーケストレーション、MCP、データハブなどを開きます。",
+      "loginTitle": "統一ログイン",
+      "loginDesc": "独立ログイン画面でテナント、アカウント、安全なセッションを認証します。",
+      "healthTitle": "サービスヘルス",
+      "healthDesc": "Manager API のヘルスチェックと稼働状態を確認します。",
+      "metricsTitle": "稼働メトリクス",
+      "metricsDesc": "監視とアラート用の Prometheus メトリクスを開きます。",
+      "orgTitle": "組織権限",
+      "orgDesc": "テナントユーザー、プロジェクトメンバー、ロール、状態、事業ラインを管理します。",
+      "dbTitle": "データソース",
+      "dbDesc": "OceanBase、PG、MySQL などのリモートデータサービス設定を管理します。"
+    }
   },
   "projectSelector": {
     "label": "プロジェクト",
@@ -199,13 +275,28 @@
     "loggedIn": "ログイン済み",
     "noProject": "X-Project-Id なし：単一モードではサーバの PROJECT_ID を使用します。",
     "dashboardNeedLogin": "未ログイン：プロジェクトデータを読み込めません。",
-    "openSettings": "設定でログイン",
-    "consoleLink": "全機能（Vibe 等）→ /console.html"
+    "openSettings": "設定を開く",
+    "openLogin": "統一ログインを開く",
+    "redirectingLogin": "統一ログインへ移動しています",
+    "redirectingLoginDesc": "未ログインのため認証が必要です。ログイン後、このワークスペースへ戻ります。",
+    "consoleLink": "全機能（Vibe 等）→ /console.html",
+    "hero": "ログイン、プロジェクトスコープ、AI ツール権限を統合します。",
+    "secure": "安全なセッション",
+    "account": "アカウント",
+    "role": "ロール",
+    "tenant": "テナント",
+    "project": "プロジェクト"
   },
   "copilot": {
     "intro": "自然言語で意図を書くと JSON が返ります（LLM ゲートウェイ要設定）。",
     "placeholder": "例: タスクボードを開く、MCP の状態を…",
-    "ask": "送信"
+    "ask": "送信",
+    "newSession": "新規セッション",
+    "session": "セッション",
+    "withProject": "現在のプロジェクト文脈を注入",
+    "sessions": "セッション",
+    "transcript": "会話記録",
+    "empty": "会話記録はまだありません"
   },
   "common": {
     "loading": "読み込み中…",
@@ -213,13 +304,18 @@
     "refresh": "更新",
     "search": "検索",
     "save": "保存",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "copy": "コピー",
+    "copied": "コピー済み"
   },
   "theme": {
     "label": "テーマ",
-    "hint": "ライト / ダーク / OS に合わせる。選択は端末に保存され、ヘッダーと同期します。",
+    "hint": "製品向けの複数テーマを選択できます。設定は端末に保存され、ヘッダーと同期します。",
     "light": "ライト",
     "dark": "ダーク",
-    "system": "システムに合わせる"
+    "system": "システムに合わせる",
+    "ocean": "オーシャン",
+    "sage": "セージ",
+    "graphite": "グラファイト"
   }
 }

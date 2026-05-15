@@ -69,23 +69,8 @@ export function Dashboard() {
   const audit = useQuery({ queryKey: ["audit"], queryFn: api.auditState });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="w-full space-y-6">
       <div className="flex flex-col gap-3">
-        {!hasToken ? (
-          <div
-            role="status"
-            className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950 shadow-sm dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-50/95"
-          >
-            <span>{t("auth.dashboardNeedLogin")}</span>
-            <a
-              href="#/settings"
-              className="inline-flex items-center rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-amber-500 dark:bg-amber-500 dark:hover:bg-amber-400"
-            >
-              {t("auth.openSettings")}
-            </a>
-          </div>
-        ) : null}
-
         <div className="rounded-xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/60 dark:text-slate-200">
           <p className="font-medium leading-relaxed">
             <span className="text-slate-900 dark:text-slate-100">{t("dashboard.fullConsoleTitle")}</span>{" "}

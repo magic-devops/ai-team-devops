@@ -25,7 +25,9 @@
       "system": "System"
     },
     "dockHint": "Cross-project health, OpenAPI-aligned views, and experiments; use the control console for daily orchestration.",
-    "setShellHome": "Always open this management platform at site root"
+    "setShellHome": "Always open this management platform at site root",
+    "collapseSidebar": "Collapse menu",
+    "expandSidebar": "Expand menu"
   },
   "dashboard": {
     "fullConsoleTitle": "Cross-project summaries and health checks live here.",
@@ -44,7 +46,9 @@
     "linkSettings": "Login & theme"
   },
   "page": {
-    "dashboard": { "title": "Cross-Project Dashboard" },
+    "dashboard": {
+      "title": "Cross-Project Dashboard"
+    },
     "projects": {
       "title": "Projects",
       "list": "Project list",
@@ -52,7 +56,15 @@
       "searchPh": "Search name or ID",
       "empty": "No projects",
       "current": "Current",
-      "select": "Set current"
+      "select": "Set current",
+      "onboarding": "Project onboarding",
+      "pickProject": "Select a project to view CLI / Agent onboarding config.",
+      "scope": "Isolation codes",
+      "quickStart": "Register a new workspace",
+      "prepare": "Prepare context after init",
+      "env": "SOP environment",
+      "agentContext": "Agent context JSON",
+      "toolProfiles": "CLI / IDE / Agent profiles"
     },
     "tasks": {
       "title": "Task board",
@@ -113,14 +125,24 @@
       "verifyFail": "Verification failed",
       "total": "Entries checked"
     },
-    "copilot": { "title": "AI Copilot" },
+    "copilot": {
+      "title": "AI Copilot"
+    },
     "intelligence": {
       "title": "Intelligence & knowledge",
       "subtitle": "Knowledge search (Lance) and scoped memory (file backend; mem0-ready).",
       "tabKb": "Knowledge base",
       "tabMem": "Memory",
+      "tabRules": "Rules",
+      "tabDb": "Data sources",
+      "tabEvents": "Events",
+      "tabUsage": "Usage",
       "kbHint": "Uses /api/v1/knowledge/search; requires Lance index.",
+      "kbSearch": "Knowledge search",
+      "kbCreate": "Add knowledge",
       "kbPh": "Type a query to search",
+      "titlePh": "Title",
+      "contentPh": "Markdown content",
       "memAdd": "Add memory",
       "memAddPh": "Decisions, context, reflections…",
       "memSearch": "Search memory",
@@ -128,16 +150,47 @@
       "memRecent": "Recent memories",
       "tabRag": "RAG search",
       "ragPh": "Natural language query",
-      "indexKb": "Trigger KB index"
+      "indexKb": "Trigger KB index",
+      "rulesList": "Rules",
+      "ruleCreate": "Add rule",
+      "rulePh": "Team development standard, business rule, or Agent behavior guardrail",
+      "dbDrivers": "Drivers and capability templates",
+      "dbConnections": "Remote data sources",
+      "dbCreate": "Add data source",
+      "test": "Test",
+      "eventsList": "Event stream",
+      "usageSummary": "Usage summary",
+      "quotaEdit": "Quota JSON"
     },
     "organization": {
       "title": "Organization & access",
       "businesses": "Business lines",
       "projects": "Projects",
       "users": "Tenant users",
-      "usersHint": "User admin requires tenant_admin; project members via console or API.",
+      "usersHint": "User admin requires tenant_admin. Disabled users cannot sign in. Password resets require at least 8 characters.",
       "emptyBusiness": "No business lines",
-      "emptyUsers": "No member data"
+      "emptyUsers": "No member data",
+      "username": "Username",
+      "email": "Email",
+      "password": "Initial password",
+      "role": "Role",
+      "status": "Status",
+      "actions": "Actions",
+      "addUser": "Add user",
+      "newPassword": "New password",
+      "resetPassword": "Reset password",
+      "deleteUser": "Delete user",
+      "confirmDelete": "Delete user {{name}}?",
+      "active": "Active",
+      "disabled": "Disabled",
+      "businessName": "Business name",
+      "businessDesc": "Business description",
+      "addBusiness": "Add business",
+      "projectMembers": "Project members",
+      "pickUser": "Select tenant user",
+      "addMember": "Add member",
+      "removeMember": "Remove member",
+      "emptyMembers": "No project members"
     },
     "analytics": {
       "title": "AI analytics",
@@ -179,7 +232,30 @@
       "installOk": "Shim installed for {{id}}: {{shim}}",
       "shimReady": "Shim ready"
     },
-    "settings": { "title": "Settings", "themeCard": "Appearance" }
+    "settings": {
+      "title": "Settings",
+      "themeCard": "Appearance",
+      "systemCard": "System configuration",
+      "accountCard": "Account and scope",
+      "runtimeCard": "Runtime status",
+      "workspaceCard": "Management shortcuts",
+      "sessionError": "Session issue",
+      "manager": "Manager",
+      "version": "Version",
+      "apiBase": "API base",
+      "consoleTitle": "Full console",
+      "consoleDesc": "Open legacy capabilities, orchestration, MCP, data hub, and advanced operations.",
+      "loginTitle": "Unified sign-in",
+      "loginDesc": "Use the standalone sign-in page for tenant, account, and secure session auth.",
+      "healthTitle": "Service health",
+      "healthDesc": "Inspect Manager API health and runtime status.",
+      "metricsTitle": "Runtime metrics",
+      "metricsDesc": "Open Prometheus metrics for monitoring and alerts.",
+      "orgTitle": "Organization access",
+      "orgDesc": "Manage tenant users, project members, roles, status, and business lines.",
+      "dbTitle": "Data sources",
+      "dbDesc": "Manage remote OceanBase, PG, MySQL, and other data service metadata."
+    }
   },
   "projectSelector": {
     "label": "Project",
@@ -199,13 +275,28 @@
     "loggedIn": "Signed in",
     "noProject": "No X-Project-Id: single-tenant mode falls back to server PROJECT_ID.",
     "dashboardNeedLogin": "Not signed in: project data cannot load.",
-    "openSettings": "Open Settings to sign in",
-    "consoleLink": "Full UI (Vibe, orchestration, MCP, data hub) → /console.html"
+    "openSettings": "Open Settings",
+    "openLogin": "Open unified sign-in",
+    "redirectingLogin": "Redirecting to unified sign-in",
+    "redirectingLoginDesc": "You need to sign in first. After authentication, you will return to this workspace.",
+    "consoleLink": "Full UI (Vibe, orchestration, MCP, data hub) → /console.html",
+    "hero": "Unified sign-in, project scope, and AI tool access.",
+    "secure": "Secure session",
+    "account": "Account",
+    "role": "Role",
+    "tenant": "Tenant",
+    "project": "Project"
   },
   "copilot": {
     "intro": "Describe your intent; the API returns structured JSON (LLM gateway must be configured).",
     "placeholder": "e.g. open the task board, check MCP health, explain the data hub…",
-    "ask": "Send"
+    "ask": "Send",
+    "newSession": "New session",
+    "session": "Session",
+    "withProject": "Inject current project context",
+    "sessions": "Sessions",
+    "transcript": "Transcript",
+    "empty": "No transcript yet"
   },
   "common": {
     "loading": "Loading…",
@@ -213,13 +304,18 @@
     "refresh": "Refresh",
     "search": "Search",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "theme": {
     "label": "Theme",
-    "hint": "Light, dark, or match the OS. Your choice is saved locally and synced with the header control.",
+    "hint": "Choose from product-ready themes. The preference is saved locally and synced with the header control.",
     "light": "Light",
     "dark": "Dark",
-    "system": "System"
+    "system": "System",
+    "ocean": "Ocean",
+    "sage": "Sage",
+    "graphite": "Graphite"
   }
 }

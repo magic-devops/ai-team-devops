@@ -19,9 +19,9 @@ export function ProjectSelector() {
 
   return (
     <label className="flex items-center gap-1.5 text-sm">
-      {projects.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" /> : null}
+      {projects.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--muted)]" /> : null}
       <select
-        className="max-w-[14rem] truncate rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm shadow-sm dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100"
+        className="max-w-[14rem] truncate rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 py-1.5 text-sm text-[var(--text)] shadow-sm"
         value={current ?? ""}
         onChange={(e) => setProjectId(e.target.value || null)}
         aria-label={t("projectSelector.label")}

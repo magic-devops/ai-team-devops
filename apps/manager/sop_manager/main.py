@@ -104,6 +104,7 @@ from sop_manager.routers.worker_jobs import router as worker_jobs_router
 from sop_manager.routers.data_analytics import router as analytics_router
 from sop_manager.routers.context_api import router as context_router
 from sop_manager.routers.platforms_api import router as platforms_router
+from sop_manager.routers.usage import router as usage_router
 from sop_manager.routers.tenants import router as tenants_router, biz_router, proj_router
 from sop_manager.routers.sprints import router as sprints_router
 
@@ -188,6 +189,7 @@ app.include_router(worker_jobs_router)
 app.include_router(analytics_router)
 app.include_router(context_router)
 app.include_router(platforms_router)
+app.include_router(usage_router)
 app.include_router(workspace.router)
 app.include_router(requirements.router)
 app.include_router(tasks.router)

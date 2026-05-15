@@ -55,7 +55,7 @@ export function Requirements() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <Card
         title={t("page.requirements.list")}
         actions={

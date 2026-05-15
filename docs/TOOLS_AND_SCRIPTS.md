@@ -129,13 +129,36 @@ sop doctor
 
 # 4. 日常
 sop status
+sop status --json --out .sop-runtime/status_snapshot.json
 sop context services
 sop context manifest --write
+sop context env --out .sop-runtime/sop.env
+sop context prepare --flush
 sop requirement create "统一项目注册流程" --priority P1
 sop requirement list --local
 sop issue create "登录回调异常" --severity P1 --local
 sop sprint create "MVP 闭环" --points 20 --local
 sop work next --local
+sop work export --local --out .sop-runtime/work_snapshot.json
+sop memory add "项目采用本地优先、远端增强" --local
+sop memory search "本地优先" --local
+sop memory flush
+sop kb add "项目接入规范" "CLI/Agent 读取 .sop-runtime/sop.env 接入。" --local
+sop kb flush
+sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env" --local
+sop rule list --local --proposals
+sop copilot ask "下一步该做什么？" --local --remember
+sop copilot sessions
+sop event emit sop.agent.run.completed --data run_id=demo --local
+sop event flush
+sop event subscribe --json
+sop usage summary --json
+sop usage check llm_tokens 1000
+sop usage record llm_tokens 123 --unit tokens --source codex --local
+sop db-config drivers --json
+sop db-config list --json
+sop db-config add prod-ob --type oceanbase --role business --capability sql --capability vector --host ob.example.com --port 2881 --database app --username app --secret-ref env://APP_OB_URL
+sop db-config test prod-ob --url "$APP_OB_URL"
 sop task list --status pending
 sop task create "补齐项目注册自检" --priority P1
 sop sync
@@ -145,6 +168,7 @@ sop sync compact
 sop sync flush
 sop sync enqueue-file specs docs/spec.md --remote-path demo/spec.md
 sop sync pull --direct --materialize
+sop sync watch --once
 sop platforms init all
 sop platforms doctor
 sop ops health
@@ -155,25 +179,30 @@ sop ops stack doctor
 
 | 命令 | 作用 |
 |------|------|
-| `sop init` | 项目初始化（memory、.ai-memory、多 IDE 配置、agent.toml） |
-| `sop register` | 一键初始化并注册到 Manager，补齐 CLI/IDE/Agent 接入配置 |
+| `sop init` | 项目初始化（memory、.ai-memory、多 IDE 配置、agent.toml、manifest、work snapshot、agent context） |
+| `sop register` | 一键初始化并注册到 Manager，补齐 CLI/IDE/Agent 接入配置并刷新 Agent 上下文 |
 | `sop login` | 登录 / OAuth 配对 |
+| `sop status` | 本地 + Manager 状态总览；支持 `--json/--out` 输出 Agent 健康快照 |
 | `sop agentd` | 守护进程 start/stop/status/logs/install |
 | `sop doctor` | 端到端自检（含 Manager、RAG、agentd IPC、平台 shim、sync 本地队列、manifest） |
-| `sop sync` | 触发同步（优先经 agentd IPC）；`sop sync enqueue/enqueue-file/doctor/repair/compact/flush` 可不依赖 agentd 离线入队/自检/修复/压缩/冲刷本地队列；`sop sync pull --materialize` 物化远端数据 |
+| `sop sync` | 触发同步（优先经 agentd IPC）；`sop sync enqueue/enqueue-file/watch/doctor/repair/compact/flush` 可不依赖 agentd 离线入队/文件监听入队/自检/修复/压缩/冲刷本地队列；`sop sync pull --materialize` 物化远端数据 |
 | `sop requirement` | 需求 list/create/update/delete；支持本地离线队列与远端同步 |
 | `sop issue` | 问题/缺陷 list/create/update/resolve/delete；支持本地离线队列与远端同步 |
 | `sop sprint` | 迭代 list/create/update/complete/progress/delete；支持本地离线队列与远端同步 |
-| `sop work` | 工作台 summary/list/next；聚合需求/任务/问题/迭代，支持本地离线视图 |
-| `sop task` | 任务 list/create/update/pull/done/fail/delete/issue；支持本地离线队列 |
+| `sop work` | 工作台 summary/list/next/export；聚合需求/任务/问题/迭代，支持本地离线视图和机器可读快照 |
+| `sop event` | CloudEvent 事件 emit/flush/list/subscribe；支持本地 outbox、Manager journal 和 WSS 订阅 |
+| `sop usage` | 用量计量与配额 record/flush/summary/quota/check；支撑租户套餐、出账和限额 |
+| `sop task` | 任务 list/create/update/pull/done/fail/delete/issue；任务状态和 issue 上报均支持本地离线队列 |
 | `sop platforms` | 多 AI 平台 list/init/doctor/install-shims |
 | `sop ops` | 运维 health/stack/deploy/snapshot/notify/worker |
-| `sop memory` / `context` / `kb` / `copilot` | v4 记忆与助手 |
+| `sop memory` / `context` / `kb` / `copilot` | v4 记忆与助手；`sop context prepare --flush` 生成 Agent 上下文包、刷新远端无密钥 DB 配置并冲刷 memory/kb/event/usage 等 outbox；copilot 支持会话/run_id/transcript |
+| `sop rule` | 规则 list/propose/apply/flush；支持本地提案、应用到 RULES.md、写入 sync 队列并推送 Manager |
+| `sop db-config` | 远端数据库配置 drivers/list/add/test/delete/export；支持 OceanBase、PostgreSQL、MySQL、SQLite 和向量/分析/记忆等能力声明 |
 | `sop llm` | LLM Gateway：chat/embed/search |
 
 每条支持 `sop <cmd> --help`。详见 [packages/sop-cli/README.md](../packages/sop-cli/README.md)。
 
-CLI 默认采用本地优先、远端增强：Manager 或远端记忆/知识/数据服务在线时自动调用远端；不可用时 `requirement`、`task`、`issue`、`sprint`、`kb`、`rule` 等命令回退本地文件/离线队列，之后可通过 `sop sync` / `sop sync enqueue-file` / `sop sync doctor` / `sop sync repair` / `sop sync compact` / `sop sync flush` / `sop sync pull --materialize` / `sop sync push-file` / `sop kb index` 更新远端。各 IDE/CLI/Agent 可读取 `sop context manifest --write` 生成的 `.sop-runtime/project_manifest.json` 完成标准接入。
+CLI 默认采用本地优先、远端增强：Manager 或远端记忆/知识/数据服务在线时自动调用远端；不可用时 `requirement`、`task`、`issue`、`sprint`、`memory`、`event`、`usage`、`kb`、`rule` 等命令回退本地文件/离线队列，之后可通过 `sop sync` / `sop sync watch` / `sop sync enqueue-file` / `sop sync doctor` / `sop sync repair` / `sop sync compact` / `sop sync flush` / `sop sync pull --materialize` / `sop sync push-file` / `sop memory flush` / `sop kb flush` / `sop rule flush` / `sop event flush` / `sop usage flush` / `sop kb index` 更新远端。各 IDE/CLI/Agent 可读取 `sop context manifest --write` 生成的 `.sop-runtime/project_manifest.json` 完成标准接入，读取 `sop context env --out .sop-runtime/sop.env` 生成通用环境变量，读取 `sop status --json` 判断项目健康，并读取 `sop work export --local` 生成的 `.sop-runtime/work_snapshot.json` 获取工作台快照；也可直接运行 `sop context prepare` 生成 `.sop-runtime/agent_context.json` 索引全部本地入口。
 
 ### 命令发现与 Shell 补全
 

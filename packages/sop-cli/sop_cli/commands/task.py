@@ -14,7 +14,7 @@ from typing import Any
 import typer
 from rich.table import Table
 
-from .._util import console, err, get_client, get_config, kv, ok, warn
+from .._util import console, get_client, get_config, kv, ok, warn
 
 app = typer.Typer(help="任务：list/create/pull/done/fail/delete/issue（本地优先，远端增强）")
 
@@ -411,21 +411,45 @@ def delete_task(
 
 
 @app.command()
-def issue(title: str, severity: str = typer.Option("P2", "--severity"), description: str = typer.Option("", "--desc")) -> None:
-    """通过 IPC 上报 issue（agentd 不可用时降级到直连 Manager）。"""
-    from sop_sdk import AgentdIpcClient
-    ipc = AgentdIpcClient()
-    if ipc.available():
-        out = ipc.report_issue(title=title, severity=severity, description=description)
-        if out.get("ok"):
-            ok(f"issue reported via agentd: {out.get('id', '-')}")
+def issue(
+    title: str,
+    severity: str = typer.Option("P2", "--severity"),
+    description: str = typer.Option("", "--desc"),
+    task_id: str = typer.Option("", "--task", help="关联任务 ID"),
+    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+) -> None:
+    """上报 issue；优先 agentd/Manager，离线时写入本地队列。"""
+    if not local:
+        from sop_sdk import AgentdIpcClient
+
+        ipc = AgentdIpcClient()
+        if ipc.available():
+            out = ipc.report_issue(title=title, severity=severity, description=description)
+            if out.get("ok"):
+                ok(f"issue reported via agentd: {out.get('id', '-')}")
+                return
+            warn(f"agentd issue 上报失败，回退直连 Manager: {out.get('error', '-')}")
+        else:
+            warn("agentd 不可达，回退直连 Manager")
+        try:
+            out = get_client().create_issue(
+                {"title": title, "severity": severity.upper(), "description": description, "task_id": task_id}
+            )
+            ok(f"issue reported via Manager: {out.get('id', '-')}")
             return
-        warn(f"agentd issue 上报失败，回退直连 Manager: {out.get('error', '-')}")
-    else:
-        warn("agentd 不可达，回退直连 Manager")
-    try:
-        out = get_client().create_issue({"title": title, "severity": severity, "description": description})
-    except Exception as e:
-        err(str(e))
-        raise typer.Exit(2) from e
-    ok(f"issue reported via Manager: {out.get('id', '-')}")
+        except Exception as e:
+            warn(f"Manager issue 上报不可用，写入本地队列: {e}")
+
+    from . import issue as issue_cmd
+
+    row = issue_cmd._new_row(
+        title,
+        description=description,
+        issue_type="bug",
+        severity=severity,
+        task_id=task_id,
+        sprint_id="",
+        reported_by="sop task issue",
+    )
+    issue_cmd._save_and_queue(row)
+    ok(f"local issue queued {row['id']}")

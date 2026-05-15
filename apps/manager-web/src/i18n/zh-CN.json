@@ -25,7 +25,9 @@
       "system": "系统"
     },
     "dockHint": "跨项目探活、OpenAPI 对齐与试验能力；日常编排请在管控台完成。",
-    "setShellHome": "将站点根固定到本管理平台"
+    "setShellHome": "将站点根固定到本管理平台",
+    "collapseSidebar": "收起菜单",
+    "expandSidebar": "展开菜单"
   },
   "dashboard": {
     "fullConsoleTitle": "此处为跨项目摘要与健康检查。",
@@ -44,7 +46,9 @@
     "linkSettings": "登录与主题"
   },
   "page": {
-    "dashboard": { "title": "跨项目驾驶舱" },
+    "dashboard": {
+      "title": "跨项目驾驶舱"
+    },
     "projects": {
       "title": "项目管理",
       "list": "项目列表",
@@ -52,7 +56,15 @@
       "searchPh": "搜索项目名称或 ID",
       "empty": "暂无项目",
       "current": "当前项目",
-      "select": "设为当前"
+      "select": "设为当前",
+      "onboarding": "项目接入包",
+      "pickProject": "选择一个项目查看 CLI / Agent 接入配置。",
+      "scope": "三码隔离",
+      "quickStart": "新工程一键注册",
+      "prepare": "初始化后准备上下文",
+      "env": "SOP 环境变量",
+      "agentContext": "Agent 上下文 JSON",
+      "toolProfiles": "CLI / IDE / Agent 接入 Profile"
     },
     "tasks": {
       "title": "任务看板",
@@ -64,7 +76,7 @@
       "sprintTasks": "Sprint 任务",
       "allSprints": "全部 Sprint",
       "pickSprint": "选择 Sprint 查看进度",
-    "blockedList": "阻塞任务",
+      "blockedList": "阻塞任务",
       "total": "任务总数",
       "done": "已完成",
       "inProgress": "进行中",
@@ -113,14 +125,24 @@
       "verifyFail": "校验失败",
       "total": "校验条目"
     },
-    "copilot": { "title": "AI 助手" },
+    "copilot": {
+      "title": "AI 助手"
+    },
     "intelligence": {
       "title": "智能与知识",
       "subtitle": "知识库检索（Lance）与 v4 分区记忆（文件后端，可扩展 mem0）",
       "tabKb": "知识库",
       "tabMem": "记忆",
+      "tabRules": "规则",
+      "tabDb": "数据源",
+      "tabEvents": "事件",
+      "tabUsage": "用量",
       "kbHint": "调用已有 /api/v1/knowledge/search；需已配置 Lance 与索引。",
+      "kbSearch": "知识检索",
+      "kbCreate": "新增知识",
       "kbPh": "输入关键词开始搜索",
+      "titlePh": "标题",
+      "contentPh": "Markdown 正文",
       "memAdd": "写入记忆",
       "memAddPh": "记录决策、上下文、反思要点…",
       "memSearch": "搜索记忆",
@@ -128,16 +150,47 @@
       "memRecent": "最近记忆",
       "tabRag": "RAG 语义检索",
       "ragPh": "自然语言提问",
-      "indexKb": "触发知识库索引"
+      "indexKb": "触发知识库索引",
+      "rulesList": "规则列表",
+      "ruleCreate": "新增规则",
+      "rulePh": "输入团队开发规约、业务规则或 Agent 行为约束",
+      "dbDrivers": "驱动与能力模板",
+      "dbConnections": "远端数据源",
+      "dbCreate": "新增数据源",
+      "test": "测试",
+      "eventsList": "事件流水",
+      "usageSummary": "用量汇总",
+      "quotaEdit": "配额设置 JSON"
     },
     "organization": {
       "title": "组织与权限",
       "businesses": "业务线",
       "projects": "项目列表",
       "users": "租户成员",
-      "usersHint": "成员管理需 tenant_admin；项目成员请在管控台或 API 维护。",
+      "usersHint": "成员管理需 tenant_admin；禁用成员会阻止其登录，重置密码至少 8 位。",
       "emptyBusiness": "暂无业务线",
-      "emptyUsers": "暂无成员数据"
+      "emptyUsers": "暂无成员数据",
+      "username": "用户名",
+      "email": "邮箱",
+      "password": "初始密码",
+      "role": "角色",
+      "status": "状态",
+      "actions": "操作",
+      "addUser": "新增成员",
+      "newPassword": "新密码",
+      "resetPassword": "重置密码",
+      "deleteUser": "删除成员",
+      "confirmDelete": "确认删除成员 {{name}}？",
+      "active": "启用",
+      "disabled": "禁用",
+      "businessName": "业务线名称",
+      "businessDesc": "业务线说明",
+      "addBusiness": "新增业务线",
+      "projectMembers": "项目成员",
+      "pickUser": "选择租户成员",
+      "addMember": "添加成员",
+      "removeMember": "移除成员",
+      "emptyMembers": "暂无项目成员"
     },
     "analytics": {
       "title": "AI 数据分析",
@@ -179,7 +232,30 @@
       "installOk": "已为 {{id}} 安装 shim：{{shim}}",
       "shimReady": "shim 已就绪"
     },
-    "settings": { "title": "设置", "themeCard": "外观" }
+    "settings": {
+      "title": "设置",
+      "themeCard": "外观",
+      "systemCard": "系统配置",
+      "accountCard": "账户与作用域",
+      "runtimeCard": "运行状态",
+      "workspaceCard": "管理入口",
+      "sessionError": "会话异常",
+      "manager": "Manager",
+      "version": "版本",
+      "apiBase": "API 地址",
+      "consoleTitle": "完整控制台",
+      "consoleDesc": "进入 legacy 能力、编排、MCP、数据港等深度管理页。",
+      "loginTitle": "统一登录页",
+      "loginDesc": "使用独立登录页完成租户、账号与安全会话认证。",
+      "healthTitle": "服务健康",
+      "healthDesc": "查看 Manager API 健康检查与运行状态。",
+      "metricsTitle": "运行指标",
+      "metricsDesc": "查看 Prometheus 指标，用于运维监控与告警。",
+      "orgTitle": "组织权限",
+      "orgDesc": "管理租户成员、项目成员、角色、状态与业务线。",
+      "dbTitle": "数据源配置",
+      "dbDesc": "管理 OceanBase、PG、MySQL 等远端数据服务元数据。"
+    }
   },
   "projectSelector": {
     "label": "当前项目",
@@ -199,13 +275,28 @@
     "loggedIn": "已登录",
     "noProject": "未绑定 X-Project-Id：单项目模式将使用服务端 PROJECT_ID；若接口仍失败请在环境变量中配置 PROJECT_ID。",
     "dashboardNeedLogin": "未登录：项目等数据无法加载。",
-    "openSettings": "前往设置登录",
-    "consoleLink": "完整功能（Vibe、编排、MCP、数据港等）→ 打开 /console.html"
+    "openSettings": "前往设置",
+    "openLogin": "前往统一登录页",
+    "redirectingLogin": "正在跳转到统一登录页",
+    "redirectingLoginDesc": "未登录用户需要先完成统一认证，登录后会回到当前工作区。",
+    "consoleLink": "完整功能（Vibe、编排、MCP、数据港等）→ 打开 /console.html",
+    "hero": "统一登录、项目作用域与 AI 工具访问凭据。",
+    "secure": "安全会话",
+    "account": "账户",
+    "role": "角色",
+    "tenant": "租户",
+    "project": "项目"
   },
   "copilot": {
     "intro": "用自然语言描述意图；后端返回结构化 JSON（需已配置 LLM 网关）。",
     "placeholder": "例如：打开任务看板、检查 MCP 状态、说明数据港入口…",
-    "ask": "发送"
+    "ask": "发送",
+    "newSession": "新会话",
+    "session": "会话",
+    "withProject": "注入当前项目上下文",
+    "sessions": "会话列表",
+    "transcript": "会话记录",
+    "empty": "暂无会话记录"
   },
   "common": {
     "loading": "加载中…",
@@ -213,13 +304,18 @@
     "refresh": "刷新",
     "search": "搜索",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "copy": "复制",
+    "copied": "已复制"
   },
   "theme": {
     "label": "主题",
-    "hint": "浅色 / 深色 / 跟随系统；选择会保存在本机并与顶栏按钮同步。",
+    "hint": "支持多套商业化外观主题；选择会保存在本机并与顶栏按钮同步。",
     "light": "浅色",
     "dark": "深色",
-    "system": "跟随系统"
+    "system": "跟随系统",
+    "ocean": "海洋蓝",
+    "sage": "松石绿",
+    "graphite": "石墨黑"
   }
 }

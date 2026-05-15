@@ -250,6 +250,38 @@ def _pick_provider(model: str) -> Provider:
     raise HTTPException(400, f"暂无 Provider 支持 model={model}")
 
 
+def _estimate_prompt_tokens(body: ChatIn) -> int:
+    chars = sum(len(m.content or "") for m in body.messages)
+    prompt_tokens = max(1, chars // 4)
+    requested_out = int(body.max_tokens or 1024)
+    return prompt_tokens + max(0, requested_out)
+
+
+def _enforce_llm_quota(body: ChatIn, model: str) -> None:
+    try:
+        from sop_manager.routers.usage import check_usage_quota
+
+        estimated = float(_estimate_prompt_tokens(body))
+        check = check_usage_quota("llm_tokens", estimated)
+        if not check.get("allowed", True):
+            raise HTTPException(
+                429,
+                {
+                    "error": "usage_quota_exceeded",
+                    "metric": "llm_tokens",
+                    "model": model,
+                    "estimated_tokens": estimated,
+                    "current": check.get("current"),
+                    "limit": check.get("limit"),
+                    "remaining": check.get("remaining"),
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.warning("usage quota check skipped: %s", e)
+
+
 # ── 缓存（进程内 LRU + TTL；后续可替换为 Redis） ────────────────
 class _Cache:
     def __init__(self, max_items: int = 4096) -> None:
@@ -312,12 +344,49 @@ def _audit_call(model: str, usage: ChatUsage, task_type: str | None,
         )
     except Exception:
         pass
+    try:
+        from sop_manager.routers.usage import record_usage_event
+
+        total_tokens = float((usage.prompt_tokens or 0) + (usage.completion_tokens or 0))
+        record_usage_event(
+            {
+                "metric": "llm_tokens",
+                "value": total_tokens,
+                "unit": "tokens",
+                "source": "llm_gateway",
+                "subject": model,
+                "metadata": {
+                    "model": model,
+                    "provider": provider,
+                    "task_type": task_type or "",
+                    "cached": cached,
+                    "latency_ms": latency_ms,
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                },
+                "idempotency_key": f"llm:{model}:{provider}:{cached}:{latency_ms}:{total_tokens}",
+            }
+        )
+        if float(usage.cost_usd or 0) > 0:
+            record_usage_event(
+                {
+                    "metric": "llm_cost_usd",
+                    "value": float(usage.cost_usd or 0),
+                    "unit": "usd",
+                    "source": "llm_gateway",
+                    "subject": model,
+                    "metadata": {"model": model, "provider": provider, "task_type": task_type or "", "cached": cached},
+                }
+            )
+    except Exception:
+        pass
 
 
 # ── 路由 ────────────────────────────────────────────────────────
 @router.post("/chat", response_model=ChatOut)
 def llm_chat(body: ChatIn, _: Request) -> ChatOut:
     model = _route_model(body)
+    _enforce_llm_quota(body, model)
     cache_ttl = body.cache_ttl or 0
     key = _Cache.key(body, model) if cache_ttl > 0 else ""
     if key:

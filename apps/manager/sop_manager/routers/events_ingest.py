@@ -13,8 +13,10 @@ import time
 from threading import RLock
 from typing import Any, Callable
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from sop_manager.sync_journal import append_event, recent_events
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 _log = logging.getLogger("sop.events")
@@ -58,6 +60,7 @@ class IngestIn(BaseModel):
 class IngestOut(BaseModel):
     accepted: list[str] = Field(default_factory=list)
     duplicated: list[str] = Field(default_factory=list)
+    journal_ids: list[str] = Field(default_factory=list)
 
 
 # ── 事件类型处理表 ───────────────────────────────────────────────
@@ -111,14 +114,51 @@ def ingest(body: IngestIn) -> IngestOut:
             handler = _HANDLERS.get(e.type)
             if handler:
                 handler(e)
-            _publish(e)
+            journal = _publish(e)
             out.accepted.append(e.id)
+            if journal.get("id"):
+                out.journal_ids.append(str(journal["id"]))
         except Exception as err:  # pragma: no cover
             _log.warning("event %s handle failed: %s", e.id, err)
     return out
 
 
-def _publish(e: CloudEvent) -> None:
-    """转发到内部 EventBus（M9 接入 Redis Streams / NATS / WS broadcast）。"""
-    # 占位：单进程内仅记日志，便于调试
-    _log.debug("event published type=%s id=%s subject=%s", e.type, e.id, e.subject)
+@router.get("")
+def list_events(
+    since: str = Query("", description="只返回 ts 大于该值的事件"),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    """查询统一事件流水，供 Web/CLI/Agent 断点续读。"""
+    if not isinstance(since, str):
+        since = ""
+    if not isinstance(limit, int):
+        limit = 100
+    items = recent_events(since_ts=since, limit=limit)
+    return {"items": items, "total": len(items), "cursor": items[-1]["ts"] if items else since}
+
+
+def _event_payload(e: CloudEvent) -> dict[str, Any]:
+    if hasattr(e, "model_dump"):
+        return e.model_dump()  # pydantic v2
+    return e.dict()  # pydantic v1
+
+
+def _publish(e: CloudEvent) -> dict[str, Any]:
+    """落入同步事件日志并转发给 WSS 订阅端。"""
+    payload = _event_payload(e)
+    evt = append_event(
+        module="events",
+        action=e.type,
+        record_id=e.subject or e.id,
+        idempotency_key=e.id,
+        payload=payload,
+    )
+    try:
+        from sop_manager.routers.ws_events import broadcast
+
+        project_id = str(e.data.get("project_id") or e.data.get("project_code") or "")
+        broadcast(project_id, {"type": e.type, "id": e.id, "subject": e.subject, "data": e.data, "journal": evt})
+    except Exception as err:  # pragma: no cover
+        _log.debug("ws broadcast skipped type=%s id=%s err=%s", e.type, e.id, err)
+    _log.debug("event published type=%s id=%s subject=%s journal=%s", e.type, e.id, e.subject, evt.get("id"))
+    return evt

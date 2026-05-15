@@ -56,6 +56,7 @@ def register(
         console.print(f"打开 [bold]{manager_url}/pair[/bold]，登录后复制 code；或下次使用 `--username <user>` 自动生成。")
         pair_code = typer.prompt("配对 code").strip()
     _pair_project(manager_url, pair_code, root)
+    _run_optional(["context", "prepare", "--no-platforms"], "刷新 Agent 上下文")
 
     if start_agentd:
         _run_optional(["agentd", "start"], "启动 sop-agentd")

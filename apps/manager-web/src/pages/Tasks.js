@@ -172,7 +172,7 @@ export function Tasks() {
         { key: "priority", label: t("page.tasks.tabPriority") },
         { key: "sprint", label: t("page.tasks.tabSprint") },
     ];
-    return (_jsxs("div", { className: "mx-auto max-w-6xl space-y-4", children: [_jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [_jsx("div", { className: "flex flex-wrap gap-2", children: tabs.map((x) => (_jsx("button", { type: "button", className: `rounded-lg px-3 py-1.5 text-sm ${tab === x.key
+    return (_jsxs("div", { className: "w-full space-y-4", children: [_jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [_jsx("div", { className: "flex flex-wrap gap-2", children: tabs.map((x) => (_jsx("button", { type: "button", className: `rounded-lg px-3 py-1.5 text-sm ${tab === x.key
                                 ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
                                 : "border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"}`, onClick: () => setTab(x.key), children: x.label }, x.key))) }), loading ? _jsx("span", { className: "text-xs text-slate-500", children: "\u2026" }) : null, _jsx("button", { type: "button", className: "rounded-lg bg-slate-900 px-3 py-1.5 text-sm text-white dark:bg-slate-100 dark:text-slate-900", onClick: () => setCreateOpen((v) => !v), children: createOpen ? t("page.tasks.cancelCreate") : t("page.tasks.create") })] }), createOpen ? (_jsxs(Card, { title: t("page.tasks.create"), children: [_jsxs("form", { className: "flex flex-wrap items-end gap-2", onSubmit: (e) => {
                             e.preventDefault();

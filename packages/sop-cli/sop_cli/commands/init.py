@@ -192,9 +192,25 @@ def _init_platform_onboarding(repo_tools: Path, project_path: Path, project_name
 
 def _write_project_manifest() -> None:
     try:
-        from .context import write_project_manifest
+        from .context import write_agent_context, write_db_connections_cache, write_project_manifest
+        from .work import _build_snapshot
 
         p = write_project_manifest()
         ok(f"项目接入 manifest 已生成（{p}）")
+        ws = Path.cwd() / ".sop-runtime" / "work_snapshot.json"
+        ws.parent.mkdir(parents=True, exist_ok=True)
+        import json
+
+        ws.write_text(
+            json.dumps(_build_snapshot(local=True, limit=20), ensure_ascii=False, indent=2, default=str) + "\n",
+            encoding="utf-8",
+        )
+        db_path = write_db_connections_cache()
+        ctx = write_agent_context(
+            manifest_path=p,
+            work_snapshot_path=ws,
+            prepared={"manifest": True, "work_snapshot": True, "db_config": bool(db_path and db_path.is_file())},
+        )
+        ok(f"Agent 上下文索引已生成（{ctx}）")
     except Exception as e:
-        warn(f"项目接入 manifest 生成失败：{e}")
+        warn(f"项目接入 manifest/Agent 上下文生成失败：{e}")

@@ -10,10 +10,21 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from sop_manager.path_config import (
+    resolved_ai_memory_root,
+    resolved_business_code,
+    resolved_project_code,
+    resolved_project_id,
+    resolved_tenant_code,
+)
 
 router = APIRouter(prefix="/api/v1/copilot", tags=["copilot"])
 _log = logging.getLogger("sop.copilot")
@@ -91,10 +102,101 @@ def _chat(system: str, user: str, task_type: str = "classify") -> dict[str, Any]
             "provider": out.provider, "cached": out.cached}
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _safe_id(value: str, prefix: str) -> str:
+    raw = (value or "").strip() or f"{prefix}-{uuid.uuid4().hex[:12]}"
+    out = "".join(c for c in raw if c.isalnum() or c in "-_.")[:120]
+    return out or f"{prefix}-{uuid.uuid4().hex[:12]}"
+
+
+def _copilot_dir() -> Path:
+    base = resolved_ai_memory_root() / "copilot-v1"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _scope_key() -> str:
+    t = resolved_tenant_code().replace("/", "_")[:80]
+    b = (resolved_business_code() or "_").replace("/", "_")[:80]
+    p = resolved_project_code().replace("/", "_")[:80]
+    return f"{t}__{b}__{p}"
+
+
+def _sessions_file() -> Path:
+    return _copilot_dir() / f"{_scope_key()}.sessions.jsonl"
+
+
+def _turns_file(session_id: str) -> Path:
+    sid = _safe_id(session_id, "cp")
+    d = _copilot_dir() / _scope_key()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{sid}.jsonl"
+
+
+def _read_jsonl(path: Path, limit: int = 500) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+        if len(rows) >= limit:
+            break
+    return list(reversed(rows))
+
+
+def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def _upsert_session(session_id: str, *, title: str, run_id: str) -> None:
+    path = _sessions_file()
+    rows = _read_jsonl(path, limit=5000)
+    now = _now()
+    found = False
+    for row in rows:
+        if str(row.get("session_id") or "") == session_id:
+            row["updated_at"] = now
+            row["last_run_id"] = run_id
+            row["title"] = row.get("title") or title
+            found = True
+            break
+    if not found:
+        rows.append({
+            "session_id": session_id,
+            "title": title[:120] or session_id,
+            "created_at": now,
+            "updated_at": now,
+            "last_run_id": run_id,
+            "tenant_code": resolved_tenant_code(),
+            "business_code": resolved_business_code(),
+            "project_id": resolved_project_id(),
+            "project_code": resolved_project_code(),
+        })
+    path.write_text("".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in rows[-1000:]), encoding="utf-8")
+
+
+def _record_turn(session_id: str, row: dict[str, Any]) -> None:
+    _append_jsonl(_turns_file(session_id), row)
+
+
 # ── Schemas ──────────────────────────────────────────────────────
 class AskIn(BaseModel):
     query: str
     context: dict[str, Any] | None = None
+    session_id: str = ""
+    run_id: str = ""
 
 
 class ClassifyIn(BaseModel):
@@ -116,10 +218,37 @@ def copilot_ask(body: AskIn) -> dict[str, Any]:
     """⌘K 自然语言意图理解：返回结构化 intent。"""
     if not body.query.strip():
         raise HTTPException(400, "query 为空")
+    ctx = body.context if isinstance(body.context, dict) else {}
+    session_id = _safe_id(body.session_id or str(ctx.get("session_id") or ""), "cp")
+    run_id = _safe_id(body.run_id or str(ctx.get("run_id") or ""), "run")
     ctx_txt = f"\n上下文: {body.context}" if body.context else ""
     enrich = _gather_rag_memory(body.query)
     extra = f"\n\n{enrich}" if enrich else ""
-    return _chat(_SYS_ASK, body.query + ctx_txt + extra, task_type="plan")
+    try:
+        result = _chat(_SYS_ASK, body.query + ctx_txt + extra, task_type="plan")
+    except Exception as e:
+        _upsert_session(session_id, title=body.query, run_id=run_id)
+        _record_turn(session_id, {
+            "ts": _now(),
+            "session_id": session_id,
+            "run_id": run_id,
+            "query": body.query,
+            "context": ctx,
+            "ok": False,
+            "error": str(e),
+        })
+        raise
+    _upsert_session(session_id, title=body.query, run_id=run_id)
+    _record_turn(session_id, {
+        "ts": _now(),
+        "session_id": session_id,
+        "run_id": run_id,
+        "query": body.query,
+        "context": ctx,
+        "ok": True,
+        "response": result,
+    })
+    return {"ok": True, "session_id": session_id, "run_id": run_id, **result}
 
 
 @router.post("/classify")
@@ -148,4 +277,18 @@ def copilot_suggest(body: SuggestIn) -> dict[str, Any]:
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest"]}
+    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest", "sessions"]}
+
+
+@router.get("/sessions")
+def copilot_sessions(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
+    rows = _read_jsonl(_sessions_file(), limit=limit)
+    rows = list(reversed(rows))
+    return {"ok": True, "items": rows[:limit], "total": len(rows)}
+
+
+@router.get("/sessions/{session_id}")
+def copilot_session(session_id: str, limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
+    sid = _safe_id(session_id, "cp")
+    rows = _read_jsonl(_turns_file(sid), limit=limit)
+    return {"ok": True, "session_id": sid, "items": rows, "total": len(rows)}

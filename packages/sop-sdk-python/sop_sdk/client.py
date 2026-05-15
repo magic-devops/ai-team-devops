@@ -220,6 +220,9 @@ class ManagerClient:
     def create_project(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/projects", json_body=body)
 
+    def project_onboarding(self, project_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/projects/{project_id}/onboarding")
+
     # tasks
     def list_tasks(self, *, status: str | None = None, priority: str | None = None,
                    page: int = 1, size: int = 50) -> dict[str, Any]:
@@ -465,17 +468,53 @@ class ManagerClient:
     def data_analytics_nlq(self, question: str) -> dict[str, Any]:
         return self._request("POST", "/api/v1/analytics/nlq", json_body={"question": question})
 
+    def db_config(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/db-config")
+
+    def db_connections(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/db-config/connections")
+
+    def db_drivers(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/db-config/drivers")
+
+    def db_upsert_connection(self, name: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PUT", f"/api/v1/db-config/connections/{name}", json_body=dict(body))
+
+    def db_delete_connection(self, name: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/api/v1/db-config/connections/{name}")
+
+    def db_test_connection(self, name: str, *, url: str = "") -> dict[str, Any]:
+        params = {"url": url} if url else None
+        return self._request("POST", f"/api/v1/db-config/connections/{name}/test", params=params)
+
     def platforms_list(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/platforms")
 
     def platforms_install_shims(self, platform_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/platforms/install-shims/{platform_id}")
 
-    def copilot_ask(self, query: str, *, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def copilot_ask(
+        self,
+        query: str,
+        *,
+        context: Mapping[str, Any] | None = None,
+        session_id: str = "",
+        run_id: str = "",
+    ) -> dict[str, Any]:
         body: dict[str, Any] = {"query": query}
         if context:
             body["context"] = dict(context)
+        if session_id:
+            body["session_id"] = session_id
+        if run_id:
+            body["run_id"] = run_id
         return self._request("POST", "/api/v1/copilot/ask", json_body=body)
+
+    def copilot_sessions(self, *, limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/copilot/sessions", params={"limit": limit})
+
+    def copilot_session(self, session_id: str, *, limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/copilot/sessions/{session_id}", params={"limit": limit})
 
     def copilot_classify(self, text: str) -> dict[str, Any]:
         return self._request("POST", "/api/v1/copilot/classify", json_body={"text": text})
@@ -510,6 +549,31 @@ class ManagerClient:
 
     def sync_journal(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:
         return self._request("GET", "/api/v1/sync/journal", params={"since": since, "limit": limit})
+
+    def events_ingest(self, events: list[Mapping[str, Any]]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/events:ingest", json_body={"events": [dict(e) for e in events]})
+
+    def events_list(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/events", params={"since": since, "limit": limit})
+
+    def usage_record(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/usage/record", json_body=dict(body))
+
+    def usage_summary(self, *, since: str = "", limit: int = 5000) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/usage/summary", params={"since": since, "limit": limit})
+
+    def usage_quota(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/usage/quota")
+
+    def usage_check(self, metric: str, delta: float, *, source: str = "sop-sdk", subject: str = "") -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/usage/check",
+            json_body={"metric": metric, "delta": delta, "source": source, "subject": subject},
+        )
+
+    def usage_set_quota(self, limits: Mapping[str, float]) -> dict[str, Any]:
+        return self._request("PUT", "/api/v1/usage/quota", json_body={"limits": dict(limits)})
 
     # 工作台驾驶舱（原 console/overview 合并至此）
     def console_overview(self) -> dict[str, Any]:

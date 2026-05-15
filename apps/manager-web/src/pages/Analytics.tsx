@@ -38,7 +38,7 @@ export function Analytics() {
   const metrics = overview.data?.metrics ?? {};
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="w-full space-y-6">
       <Card
         title={t("page.analytics.overview")}
         actions={<RefreshButton onClick={() => void overview.refetch()} pending={overview.isFetching} />}

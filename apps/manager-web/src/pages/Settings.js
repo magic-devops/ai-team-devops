@@ -1,46 +1,69 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Database, ExternalLink, LogOut, Palette, ServerCog, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "../components/Card";
 import { api } from "../lib/api";
-import { clearSession, getProjectId, getToken, setSession } from "../lib/authStorage";
-import { getThemePreference, setThemePreference } from "../lib/theme";
+import { clearSession, getProjectId, getToken } from "../lib/authStorage";
+import { getThemePreference, setThemePreference, THEME_OPTIONS } from "../lib/theme";
+function currentRedirectTarget() {
+    return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/?shell=1#/dashboard";
+}
 export function Settings() {
     const { t } = useTranslation();
     const qc = useQueryClient();
     const [themePref, setThemePref] = useState(() => getThemePreference());
-    const [username, setUsername] = useState("");
-    const [password, setPassword] = useState("");
-    const [tenantSlug, setTenantSlug] = useState("");
     const token = getToken();
     const projectId = getProjectId();
+    const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: Boolean(token), retry: false });
+    const health = useQuery({ queryKey: ["health"], queryFn: api.health, enabled: Boolean(token), retry: false });
     useEffect(() => {
         const sync = () => setThemePref(getThemePreference());
         window.addEventListener("sop-theme", sync);
         return () => window.removeEventListener("sop-theme", sync);
     }, []);
-    const login = useMutation({
-        mutationFn: () => api.login({
-            username: username.trim(),
-            password,
-            ...(tenantSlug.trim() ? { tenant_slug: tenantSlug.trim() } : {}),
-        }),
-        onSuccess: (data) => {
-            setSession(data.token, data.default_project_id || undefined);
-            setPassword("");
+    useEffect(() => {
+        if (!token) {
+            window.location.replace(`/login.html?redirect=${encodeURIComponent(currentRedirectTarget())}`);
+        }
+    }, [token]);
+    const logout = useMutation({
+        mutationFn: api.logout,
+        onSettled: () => {
+            clearSession();
             void qc.invalidateQueries();
+            window.location.assign("/login.html");
         },
     });
-    return (_jsxs("div", { className: "space-y-4", children: [_jsxs(Card, { title: t("auth.title"), children: [_jsx("p", { className: "mb-3 text-sm text-zinc-600 dark:text-zinc-400", children: t("auth.hint") }), _jsx("p", { className: "mb-3 text-xs text-zinc-500 dark:text-zinc-400", children: _jsx("a", { href: "/console.html", className: "font-medium text-brand-700 underline dark:text-brand-400", children: t("auth.consoleLink") }) }), token ? (_jsxs("div", { className: "space-y-2 text-sm", children: [_jsxs("div", { children: [_jsx("span", { className: "text-zinc-500", children: t("auth.status") }), " ", _jsx("span", { className: "font-medium text-emerald-600", children: t("auth.loggedIn") })] }), projectId ? (_jsxs("div", { className: "font-mono text-xs text-zinc-600 dark:text-zinc-400", children: ["X-Project-Id: ", projectId] })) : (_jsx("div", { className: "text-xs text-amber-700 dark:text-amber-400", children: t("auth.noProject") })), _jsx("button", { type: "button", className: "rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800", onClick: () => {
-                                    clearSession();
-                                    void qc.invalidateQueries();
-                                }, children: t("auth.logout") })] })) : (_jsxs("form", { className: "max-w-md space-y-2", onSubmit: (e) => {
-                            e.preventDefault();
-                            login.mutate();
-                        }, children: [_jsxs("label", { className: "block text-sm", children: [_jsx("span", { className: "text-zinc-600 dark:text-zinc-400", children: t("auth.username") }), _jsx("input", { className: "mt-1 w-full rounded border border-zinc-300 px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900", value: username, onChange: (e) => setUsername(e.target.value), autoComplete: "username" })] }), _jsxs("label", { className: "block text-sm", children: [_jsx("span", { className: "text-zinc-600 dark:text-zinc-400", children: t("auth.password") }), _jsx("input", { type: "password", className: "mt-1 w-full rounded border border-zinc-300 px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900", value: password, onChange: (e) => setPassword(e.target.value), autoComplete: "current-password" })] }), _jsxs("label", { className: "block text-sm", children: [_jsx("span", { className: "text-zinc-600 dark:text-zinc-400", children: t("auth.tenantSlug") }), _jsx("input", { className: "mt-1 w-full rounded border border-zinc-300 px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900", value: tenantSlug, onChange: (e) => setTenantSlug(e.target.value), placeholder: t("auth.tenantPlaceholder") })] }), _jsx("button", { type: "submit", disabled: !username.trim() || !password || login.isPending, className: "rounded bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700 disabled:opacity-50", children: t("auth.login") }), login.error ? (_jsx("div", { className: "text-sm text-red-600", children: login.error.message })) : null] }))] }), _jsxs(Card, { title: t("page.settings.themeCard"), children: [_jsx("p", { className: "mb-2 text-xs text-slate-500 dark:text-slate-400", children: t("theme.hint") }), _jsxs("label", { className: "block max-w-xs text-sm text-slate-700 dark:text-slate-300", children: [_jsx("span", { className: "mb-1 block font-medium", children: t("theme.label") }), _jsxs("select", { value: themePref, onChange: (e) => {
-                                    const v = e.target.value;
-                                    setThemePreference(v);
-                                    setThemePref(v);
-                                }, className: "mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-600 dark:bg-slate-800/90 dark:text-slate-100", children: [_jsx("option", { value: "light", children: t("theme.light") }), _jsx("option", { value: "dark", children: t("theme.dark") }), _jsx("option", { value: "system", children: t("theme.system") })] })] })] })] }));
+    if (!token)
+        return null;
+    const tenantLabel = me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || "-";
+    const healthOk = health.data?.ok === true;
+    return (_jsxs("div", { className: "w-full space-y-5", children: [_jsxs("div", { className: "grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]", children: [_jsxs(Card, { title: t("page.settings.accountCard"), actions: _jsx(StatusPill, { tone: me.isError ? "danger" : "ok", label: me.isError ? t("page.settings.sessionError") : t("auth.secure") }), children: [_jsxs("div", { className: "grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]", children: [_jsxs("div", { className: "rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4", children: [_jsxs("div", { className: "flex items-center gap-3", children: [_jsx("div", { className: "flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]", children: _jsx(ShieldCheck, { className: "h-7 w-7" }) }), _jsxs("div", { className: "min-w-0", children: [_jsx("p", { className: "truncate text-lg font-semibold text-[var(--text)]", children: me.data?.username || t("auth.account") }), _jsx("p", { className: "truncate text-xs text-[var(--muted)]", children: me.data?.email || me.data?.role || t("auth.loggedIn") })] })] }), _jsxs("button", { type: "button", className: "mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-medium text-[var(--text)] shadow-sm hover:bg-[var(--surface-muted)] disabled:opacity-50", disabled: logout.isPending, onClick: () => logout.mutate(), children: [_jsx(LogOut, { className: "h-4 w-4 text-[var(--brand)]" }), t("auth.logout")] })] }), _jsxs("div", { className: "grid gap-3 sm:grid-cols-2 xl:grid-cols-4", children: [_jsx(Info, { label: t("auth.status"), value: t("auth.loggedIn") }), _jsx(Info, { label: t("auth.role"), value: me.data?.role || "-" }), _jsx(Info, { label: t("auth.tenant"), value: tenantLabel }), _jsx(Info, { label: t("auth.project"), value: projectId || "-" })] })] }), me.isError ? _jsx(ErrorLine, { message: me.error.message }) : null, !projectId ? _jsx(HintLine, { message: t("auth.noProject") }) : null] }), _jsxs(Card, { title: t("page.settings.runtimeCard"), actions: _jsx(StatusPill, { tone: healthOk ? "ok" : health.isError ? "danger" : "warn", label: healthOk ? "OK" : health.isError ? "ERR" : "..." }), children: [_jsxs("div", { className: "grid gap-3 sm:grid-cols-3", children: [_jsx(Info, { label: t("page.settings.manager"), value: healthOk ? "online" : health.isError ? "error" : t("common.loading") }), _jsx(Info, { label: t("page.settings.version"), value: String(health.data?.version ?? "-") }), _jsx(Info, { label: t("page.settings.apiBase"), value: window.location.origin })] }), health.isError ? _jsx(ErrorLine, { message: health.error.message }) : null, _jsxs("div", { className: "mt-4 grid gap-3 sm:grid-cols-2", children: [_jsx(SettingLink, { href: "/api/v1/health", icon: _jsx(ServerCog, { className: "h-5 w-5" }), title: t("page.settings.healthTitle"), body: t("page.settings.healthDesc"), external: true }), _jsx(SettingLink, { href: "/metrics", icon: _jsx(SlidersHorizontal, { className: "h-5 w-5" }), title: t("page.settings.metricsTitle"), body: t("page.settings.metricsDesc"), external: true })] })] })] }), _jsxs("div", { className: "grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]", children: [_jsx(Card, { title: t("page.settings.workspaceCard"), children: _jsxs("div", { className: "grid gap-3 md:grid-cols-2 xl:grid-cols-4", children: [_jsx(SettingLink, { href: "#/organization", icon: _jsx(UsersRound, { className: "h-5 w-5" }), title: t("page.settings.orgTitle"), body: t("page.settings.orgDesc") }), _jsx(SettingLink, { href: "#/intelligence", icon: _jsx(Database, { className: "h-5 w-5" }), title: t("page.settings.dbTitle"), body: t("page.settings.dbDesc") }), _jsx(SettingLink, { href: "/console.html", icon: _jsx(ExternalLink, { className: "h-5 w-5" }), title: t("page.settings.consoleTitle"), body: t("page.settings.consoleDesc"), external: true }), _jsx(SettingLink, { href: "/login.html", icon: _jsx(ShieldCheck, { className: "h-5 w-5" }), title: t("page.settings.loginTitle"), body: t("page.settings.loginDesc"), external: true })] }) }), _jsxs(Card, { title: t("page.settings.themeCard"), children: [_jsx("p", { className: "mb-3 text-sm leading-6 text-[var(--muted)]", children: t("theme.hint") }), _jsx("div", { className: "grid grid-cols-2 gap-2", children: THEME_OPTIONS.map((theme) => (_jsxs("button", { type: "button", onClick: () => {
+                                        setThemePreference(theme);
+                                        setThemePref(theme);
+                                    }, className: `rounded-xl border p-3 text-left transition ${themePref === theme
+                                        ? "border-[var(--brand)] bg-[var(--brand-softer)] text-[var(--text)]"
+                                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`, children: [_jsx("span", { className: "mb-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]", children: _jsx(Palette, { className: "h-4 w-4" }) }), _jsx("span", { className: "block text-sm font-semibold", children: t(`theme.${theme}`) })] }, theme))) })] })] })] }));
+}
+function Info({ label, value }) {
+    return (_jsxs("div", { className: "rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3", children: [_jsx("dt", { className: "text-[11px] text-[var(--muted)]", children: label }), _jsx("dd", { className: "mt-1 truncate font-mono text-xs text-[var(--muted-strong)]", children: value })] }));
+}
+function SettingLink({ href, title, body, icon, external = false }) {
+    return (_jsxs("a", { href: href, className: "group flex min-h-32 flex-col justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-sm hover:border-[var(--brand)] hover:bg-[var(--surface-muted)]", target: external ? "_blank" : undefined, rel: external ? "noreferrer" : undefined, children: [_jsx("span", { className: "flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]", children: icon }), _jsxs("span", { children: [_jsx("span", { className: "mt-3 block text-sm font-semibold text-[var(--text)]", children: title }), _jsx("span", { className: "mt-1 block text-xs leading-5 text-[var(--muted)]", children: body })] })] }));
+}
+function StatusPill({ tone, label }) {
+    const cls = tone === "ok"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
+        : tone === "danger"
+            ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-200"
+            : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-200";
+    return _jsx("span", { className: `rounded-full border px-2.5 py-1 text-xs font-medium ${cls}`, children: label });
+}
+function ErrorLine({ message }) {
+    return _jsx("div", { className: "mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-200", children: message });
+}
+function HintLine({ message }) {
+    return _jsx("div", { className: "mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-200", children: message });
 }

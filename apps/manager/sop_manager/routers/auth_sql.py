@@ -208,6 +208,7 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
     user = q.first()
     if not user or user.status != "active":
         raise HTTPException(401, "用户名或密码错误")
+    tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
     token = _make_token(user.id, user.tenant_id, user.role, user.username)
     default_project_id = ""
     try:
@@ -233,14 +234,18 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
         "username": user.username,
         "role": user.role,
         "tenant_id": user.tenant_id,
+        "tenant_slug": tenant.slug if tenant else "",
+        "tenant_name": tenant.name if tenant else "",
         "default_project_id": default_project_id,
     }
 
 
 @router.get("/me")
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user), db: Session = Depends(get_session)):
+    tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
     return {"user_id": user.id, "username": user.username, "role": user.role,
-            "tenant_id": user.tenant_id, "email": user.email}
+            "tenant_id": user.tenant_id, "tenant_slug": tenant.slug if tenant else "",
+            "tenant_name": tenant.name if tenant else "", "email": user.email}
 
 
 @router.post("/logout")
@@ -385,6 +390,50 @@ def role_constants():
         "project_member_roles": list(PROJECT_MEMBER_ROLES),
         "data_hub_import_roles": sorted(DATA_HUB_IMPORT_ROLES, key=lambda r: role_weight(r)),
     }
+
+
+@router.get("/tenant-options")
+def tenant_options(username: Optional[str] = None, db: Session = Depends(get_session)):
+    """无需登录：供登录页选择租户，仅暴露登录所需的非敏感字段。
+
+    传入 username 时仅返回该用户有活跃账号的租户，避免 SaaS 登录页展示无关租户。
+    """
+    username_norm = (username or "").strip()
+    if username_norm:
+        tenants = (
+            db.query(Tenant)
+            .join(User, User.tenant_id == Tenant.id)
+            .filter(Tenant.status == "active", User.status == "active", User.username == username_norm)
+            .order_by(Tenant.slug.asc())
+            .all()
+        )
+    else:
+        tenants = (
+            db.query(Tenant)
+            .filter_by(status="active")
+            .order_by(Tenant.slug.asc())
+            .all()
+        )
+    if not tenants:
+        return {
+            "admin_mode": ADMIN_MODE,
+            "count": 0 if username_norm else 1,
+            "authorized_for": username_norm or None,
+            "items": [] if username_norm else [{"id": "t-default", "name": "default", "slug": "default", "default": True}],
+        }
+    items = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "slug": t.slug,
+            "plan": t.plan,
+            "default": t.slug == "default" or t.id == "t-default",
+        }
+        for t in tenants
+    ]
+    if not any(x["default"] for x in items):
+        items[0]["default"] = True
+    return {"admin_mode": ADMIN_MODE, "count": len(items), "authorized_for": username_norm or None, "items": items}
 
 
 @router.post("/users")
@@ -532,4 +581,3 @@ def reset_password(body: ResetPasswordBody, db: Session = Depends(get_session)):
     target.updated_at = datetime.utcnow()
     db.commit()
     return {"ok": True}
-

@@ -33,6 +33,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ ok: boolean; version?: string }>("/api/v1/health"),
   projects: () => request<any[]>("/api/v1/projects"),
+  projectOnboarding: (projectId: string) =>
+    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/onboarding`),
   requirements: () => request<any[]>("/api/v1/requirements"),
   contextMe: () => request<any>("/api/v1/context/me"),
   tasks: (sprintId?: string) => {
@@ -73,16 +75,29 @@ export const api = {
     ),
   auditState: () => request<any>("/api/v1/audit/chain/state"),
   auditVerify: () => request<any>("/api/v1/audit/chain/verify"),
-  copilotAsk: (query: string) =>
+  copilotAsk: (query: string, context?: Record<string, unknown>, session_id = "", run_id = "") =>
     request<any>("/api/v1/copilot/ask", {
       method: "POST",
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, session_id, run_id, ...(context ? { context } : {}) }),
     }),
+  copilotSessions: (limit = 100) =>
+    request<{ ok: boolean; items: any[]; total: number }>(
+      `/api/v1/copilot/sessions?limit=${encodeURIComponent(String(limit))}`,
+    ),
+  copilotSession: (sessionId: string, limit = 100) =>
+    request<{ ok: boolean; session_id: string; items: any[]; total: number }>(
+      `/api/v1/copilot/sessions/${encodeURIComponent(sessionId)}?limit=${encodeURIComponent(String(limit))}`,
+    ),
   knowledgeSearch: (q: string, category?: string) => {
     const qs = new URLSearchParams({ q });
     if (category) qs.set("category", category);
     return request<any[]>(`/api/v1/knowledge/search?${qs}`);
   },
+  knowledgeCreate: (body: { title: string; content: string; category?: string; tags?: string[] }) =>
+    request<any>("/api/v1/knowledge", { method: "POST", body: JSON.stringify(body) }),
+  rules: () => request<any[]>("/api/v1/rules"),
+  ruleCreate: (body: { rule: string; category?: string; source?: string; confidence?: number }) =>
+    request<any>("/api/v1/rules", { method: "POST", body: JSON.stringify(body) }),
   memoryHealth: () => request<any>("/api/v1/memory/health"),
   memoryRecent: (limit = 30) =>
     request<any>(`/api/v1/memory/recent?limit=${encodeURIComponent(String(limit))}`),
@@ -92,11 +107,63 @@ export const api = {
     ),
   memoryAdd: (body: { content: string; kind?: string; metadata?: Record<string, unknown> }) =>
     request<any>("/api/v1/memory", { method: "POST", body: JSON.stringify(body) }),
+  dbDrivers: () => request<any>("/api/v1/db-config/drivers"),
+  dbConnections: () => request<{ items: any[]; total: number }>("/api/v1/db-config/connections"),
+  dbUpsertConnection: (name: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  dbTestConnection: (name: string, url = "") => {
+    const qs = url ? `?url=${encodeURIComponent(url)}` : "";
+    return request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}/test${qs}`, {
+      method: "POST",
+    });
+  },
+  eventsList: (limit = 100, since = "") => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (since) qs.set("since", since);
+    return request<{ items: any[]; total: number; cursor: string }>(`/api/v1/events?${qs}`);
+  },
+  usageSummary: (limit = 5000, since = "") => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (since) qs.set("since", since);
+    return request<any>(`/api/v1/usage/summary?${qs}`);
+  },
+  usageQuota: () => request<any>("/api/v1/usage/quota"),
+  usageSetQuota: (limits: Record<string, number>) =>
+    request<any>("/api/v1/usage/quota", { method: "PUT", body: JSON.stringify({ limits }) }),
   businesses: () => request<any[]>("/api/v1/businesses"),
+  createBusiness: (body: { name: string; description?: string }) =>
+    request<any>("/api/v1/businesses", { method: "POST", body: JSON.stringify(body) }),
   platformsList: () => request<any>("/api/v1/platforms"),
   platformsInstallShims: (id: string) =>
     request<any>(`/api/v1/platforms/install-shims/${encodeURIComponent(id)}`, { method: "POST" }),
   authUsers: () => request<any[]>("/api/v1/auth/users"),
+  authCreateUser: (body: { username: string; password: string; email?: string; role?: string }) =>
+    request<any>("/api/v1/auth/users", { method: "POST", body: JSON.stringify(body) }),
+  authUpdateUser: (userId: string, body: { email?: string; role?: string; status?: string; password?: string }) =>
+    request<any>(`/api/v1/auth/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  authDeleteUser: (userId: string) =>
+    request<any>(`/api/v1/auth/users/${encodeURIComponent(userId)}`, { method: "DELETE" }),
+  projectMembers: (projectId: string) =>
+    request<any[]>(`/api/v1/projects/${encodeURIComponent(projectId)}/members`),
+  projectAddMember: (projectId: string, body: { user_id: string; role?: string }) =>
+    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/members`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  projectRemoveMember: (projectId: string, userId: string) =>
+    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/members/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    }),
+  roleConstants: () =>
+    request<{ user_roles: string[]; project_member_roles: string[]; data_hub_import_roles: string[] }>(
+      "/api/v1/auth/role-constants",
+    ),
   notifyChannels: () => request<any[]>("/api/v1/notify/channels"),
   notifyAddChannel: (body: Record<string, unknown>) =>
     request<any>("/api/v1/notify/channels", { method: "POST", body: JSON.stringify(body) }),
@@ -120,7 +187,27 @@ export const api = {
       username: string;
       role: string;
       tenant_id: string;
+      tenant_slug?: string;
+      tenant_name?: string;
       default_project_id?: string;
     }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
+  authMe: () =>
+    request<{
+      user_id: string;
+      username: string;
+      role: string;
+      tenant_id: string;
+      tenant_slug?: string;
+      tenant_name?: string;
+      email?: string;
+    }>("/api/v1/auth/me"),
+  tenantOptions: () =>
+    request<{
+      admin_mode?: "single" | "saas";
+      count?: number;
+      authorized_for?: string | null;
+      items: Array<{ id: string; name: string; slug: string; plan?: string; default?: boolean }>;
+    }>("/api/v1/auth/tenant-options"),
+  logout: () => request<{ ok: boolean }>("/api/v1/auth/logout", { method: "POST" }),
   metrics: () => fetch(BASE + "/metrics").then((r) => r.text()),
 };

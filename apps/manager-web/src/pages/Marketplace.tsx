@@ -16,7 +16,7 @@ export function Marketplace() {
   const items = list.data?.items ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4">
+    <div className="w-full space-y-4">
       <Card
         title={t("page.marketplace.title")}
         actions={<SearchInput value={q} onChange={setQ} placeholder={t("page.marketplace.searchPh")} />}
