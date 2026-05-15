@@ -1,6 +1,7 @@
 # 平台仓顶层 Makefile（常用开发入口）
 .PHONY: help build-sop install-sop wheel-sop build-agentd build-all verify-sop \
-        doctor start-agentd stop-agentd dev-env bootstrap-dev
+        doctor start-agentd stop-agentd dev-env bootstrap-dev \
+        deploy-up deploy-down stack-start stack-stop stack-health health-check
 
 help:
 	@echo "Targets:"
@@ -15,6 +16,12 @@ help:
 	@echo "  make start-agentd    # 启动 sop-agentd"
 	@echo "  make stop-agentd     # 停止 sop-agentd"
 	@echo "  make verify-sop      # 检查 sop 是否在 PATH"
+	@echo "  make deploy-up       # Docker 单机 up（scripts/deploy.sh）"
+	@echo "  make deploy-down     # Docker 单机 down"
+	@echo "  make stack-start     # 本地 Manager 后台 + wait-health"
+	@echo "  make stack-stop      # 停止本地栈"
+	@echo "  make stack-health    # stack doctor + health-check"
+	@echo "  make health-check    # ai-sop-ops/health-check.sh"
 	@echo ""
 	@echo "文档: docs/TOOLS_AND_SCRIPTS.md"
 
@@ -50,3 +57,21 @@ stop-agentd:
 
 verify-sop:
 	@command -v sop >/dev/null && sop --version || (echo "sop 未在 PATH；运行: make build-sop" && exit 1)
+
+deploy-up:
+	PROJECT_PATH="$(CURDIR)" bash scripts/deploy.sh up single
+
+deploy-down:
+	bash scripts/deploy.sh down single
+
+stack-start:
+	bash scripts/stack.sh start
+
+stack-stop:
+	bash scripts/stack.sh stop
+
+stack-health:
+	bash scripts/stack.sh doctor
+
+health-check:
+	PORT=$${PORT:-8765} PROJECT_PATH="$(CURDIR)" bash ai-sop-ops/health-check.sh

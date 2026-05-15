@@ -17,6 +17,8 @@
 | **启动项目侧守护进程** | `sop agentd start`（需先构建 agentd） |
 | **端到端健康检查** | `sop doctor` 或 `bash ai-sop-ops/sop-ctl.sh doctor` |
 | **日常运维（备份/启停/修复）** | `bash ai-sop-ops/sop-ctl.sh help` |
+| **Docker 部署 Manager** | `make deploy-up` 或 `bash scripts/deploy.sh up single` |
+| **本地开发栈（Manager 后台）** | `make stack-start` / `make stack-health` |
 
 ---
 
@@ -61,6 +63,36 @@ bash scripts/dev-env.sh --start-agentd    # 顺带启动 agentd
 bash scripts/dev-env.sh --skip-manager    # 不装 Manager
 SOP_DEV_VENV=.venv bash scripts/dev-env.sh
 ```
+
+### `scripts/deploy.sh`
+
+Docker 部署 Manager（封装 `apps/manager/docker-compose.*.yml`）。
+
+```bash
+bash scripts/deploy.sh print single          # 仅打印建议命令
+bash scripts/deploy.sh up single             # compose up -d --build
+bash scripts/deploy.sh down single
+bash scripts/deploy.sh logs single
+SECRET_KEY=<强随机> PROJECT_PATH=$(pwd) bash scripts/deploy.sh up saas
+```
+
+**Make：** `make deploy-up` / `make deploy-down`（默认 single 模式）。
+
+**sop-ctl 等价：** `bash ai-sop-ops/sop-ctl.sh deploy up single`（兼容旧用法 `deploy single` → print）。
+
+### `scripts/stack.sh`
+
+本地开发栈：Manager 后台启停 + 可选 agentd + 健康检查。
+
+```bash
+bash scripts/stack.sh start
+bash scripts/stack.sh start --agentd
+bash scripts/stack.sh stop
+bash scripts/stack.sh status
+bash scripts/stack.sh doctor
+```
+
+**Make：** `make stack-start` / `make stack-stop` / `make stack-health` / `make health-check`。
 
 ---
 
