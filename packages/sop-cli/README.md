@@ -92,7 +92,41 @@ CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECT
 | `sop doctor`  | 端到端自检（含 sync、平台） |
 | `sop llm`     | LLM Gateway 客户端：chat/embed/search |
 
-每条都支持 `--help`。
+每条都支持 `--help`。浏览全部子命令：
+
+```bash
+sop commands              # 表格
+sop commands --examples   # 含常用流程
+sop commands --json       # 机器可读
+```
+
+## Shell 自动补全
+
+支持 **bash / zsh / fish**（Typer/Click 动态补全 + 可选静态 bash 增强）。
+
+```bash
+# 持久安装（写入 shell 配置）
+sop completion install bash
+sop completion install zsh
+
+# 当前终端临时启用
+eval "$(sop completion show bash)"
+
+# 静态增强（子命令 / 常用 flag，仅 bash）
+source packages/sop-cli/sop_cli/completions/sop.bash
+
+# 检查补全环境
+sop completion doctor
+```
+
+顶层 Typer 选项（**自动检测当前 shell**，不接收 bash/zsh 参数）：
+
+```bash
+sop --install-completion    # 写入 ~/.bashrc 等
+sop --show-completion       # 打印当前 shell 的补全脚本
+```
+
+指定 shell 时请用 `sop completion install bash` / `sop completion show bash`。
 
 完整同步与多平台说明见 **[`ai-sop-ops/SYNC_AND_PLATFORMS.md`](../../ai-sop-ops/SYNC_AND_PLATFORMS.md)**。
 

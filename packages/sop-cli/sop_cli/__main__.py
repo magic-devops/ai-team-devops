@@ -14,6 +14,8 @@ from rich.console import Console
 from . import __version__
 from .commands import (
     agentd as agentd_cmd,
+    commands_cmd,
+    completion as completion_cmd,
     context as context_cmd,
     copilot as copilot_cmd,
     doctor as doctor_cmd,
@@ -29,13 +31,15 @@ from .commands import (
     sync as sync_cmd,
     task as task_cmd,
 )
+from .commands_info import QUICK_START
 
 app = typer.Typer(
     name="sop",
     help="ai-team-devops 统一命令行（项目初始化 / 接入 / 同步 / 自检 / LLM）",
-    add_completion=False,
+    add_completion=True,
     no_args_is_help=True,
     rich_markup_mode="rich",
+    epilog=QUICK_START.strip(),
 )
 
 app.add_typer(init_cmd.app,    name="init",    help="初始化项目（取代 init-ai-project.sh）")
@@ -53,6 +57,8 @@ app.add_typer(rule_cmd.app,    name="rule",    help="规则：list/propose/apply
 app.add_typer(sync_cmd.app,    name="sync",    help="双向同步规约 / 规则 / 知识")
 app.add_typer(doctor_cmd.app,  name="doctor",  help="端到端连通性自检")
 app.add_typer(llm_cmd.app,     name="llm",     help="通过 LLM Gateway 调用模型 / 嵌入 / 检索")
+app.add_typer(commands_cmd.app, name="commands", help="列出全部子命令与常用示例")
+app.add_typer(completion_cmd.app, name="completion", help="Shell 自动补全 install / show / doctor")
 
 
 @app.callback()

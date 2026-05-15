@@ -149,6 +149,12 @@ def resolve_scope_for_authenticated_user(
         return None
 
     proj = db.query(Project).filter_by(id=x_pid).first()
+    if not proj and admin_mode != "saas":
+        from sop_manager.project_provision import ensure_project
+
+        proj = ensure_project(db, x_pid, owner_user=user)
+        if proj:
+            db.flush()
     if not proj:
         if admin_mode != "saas":
             return None

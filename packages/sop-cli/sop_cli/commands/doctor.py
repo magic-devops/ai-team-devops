@@ -74,7 +74,18 @@ def _check_agentd_ipc(cfg) -> tuple[bool, str]:
             hint += "（PID 文件存在但 socket 缺失，可先 sop agentd stop 再 start）"
         return False, f"socket 不存在：{sock} — {hint}"
     try:
-        s = socket.socket(socket.AF_UNIX); s.settimeout(0.5); s.connect(str(sock)); s.close()
+        from sop_sdk import AgentdIpcClient
+        ipc = AgentdIpcClient(sock)
+        if ipc.available():
+            h = ipc.health()
+            if h.get("ok"):
+                r = h.get("result") or {}
+                auth = "bearer" if r.get("has_bearer") else ("apikey" if r.get("has_api_key") else "none")
+                return True, f"{sock} project_id={r.get('project_id','-')} auth={auth}"
+        s = socket.socket(socket.AF_UNIX)
+        s.settimeout(0.5)
+        s.connect(str(sock))
+        s.close()
         return True, str(sock)
     except Exception as e:
         return False, f"连接失败：{e}"
@@ -109,11 +120,23 @@ def _check_platforms(cfg) -> tuple[bool, str]:
     return True, f"{count} 个平台已注册"
 
 
+def _check_auth_credentials(cfg) -> tuple[bool, str]:
+    has_b = bool((cfg.bearer_token or "").strip())
+    has_k = bool((cfg.api_key or "").strip())
+    if has_b and has_k:
+        return True, "Bearer + API Key 已配置（优先 Bearer）"
+    if has_b:
+        return True, "Bearer 已配置"
+    if has_k:
+        return True, "API Key 已配置"
+    return False, "未登录 → sop login 或 sop login --pair"
+
+
 def _check_sync_api(cfg) -> tuple[bool, str]:
     if not cfg.project_id:
-        return True, "跳过（未配对 project_id）"
+        return True, "跳过（未配置 project_id → sop login）"
     if not cfg.bearer_token and not cfg.api_key:
-        return True, "跳过（未登录，无 Bearer/API Key）"
+        return False, "无鉴权 → sop login 或 sop login --pair"
     try:
         from sop_sdk import build_default_client
         cli = build_default_client(cfg)
@@ -137,7 +160,8 @@ _FIX_HINTS: dict[str, str] = {
     "AI 工具配置": "bash ai-sop-ops/init-ai-project.sh <project> 生成 AGENTS.md / .cursorrules 等",
     "AI 平台适配": "sop platforms install-shims <id>  或  检查 ai-sop-ops/platforms/registry.json",
     "Manager 连通": "bash ai-sop-ops/start-manager.sh  或  sop-manager start（默认 :8765）",
-    "sync API": "sop login --pair  写入 project_id 与 Bearer",
+    "鉴权凭据": "sop login（Bearer）或 sop login --pair（API Key）",
+    "sync API": "sop login 后 sop sync 或 sop sync --direct；agentd 会自动热加载凭据",
     "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
     "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",
     "基础依赖": "安装 python3、git（macOS: xcode-select --install）",
@@ -150,6 +174,7 @@ _CHECKS: list[tuple[str, Callable]] = [
     ("AI 工具配置", _check_tool_configs),
     ("AI 平台适配", _check_platforms),
     ("Manager 连通", _check_manager),
+    ("鉴权凭据", _check_auth_credentials),
     ("sync API", _check_sync_api),
     ("sync 本地状态", _check_sync_local),
     ("RAG 向量后端", _check_rag_vector),

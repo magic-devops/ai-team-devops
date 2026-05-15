@@ -103,15 +103,19 @@ func Load() (*Config, error) {
 		cfg.Manager.TenantID = v
 	}
 
-	// 解析 api_key_ref / bearer
+	// 解析 api_key_ref / bearer（含 ~/.sop/credentials，与 sop login --pair 落盘一致）
+	credFile := filepath.Join(home, ".sop", "credentials")
 	if cfg.Auth.APIKey == "" {
 		cfg.Auth.APIKey = resolveAPIKey(cfg.Auth.APIKeyRef)
+	}
+	if cfg.Auth.APIKey == "" {
+		cfg.Auth.APIKey = resolveCredValue(credFile, "MANAGER_API_KEY")
 	}
 	if v := os.Getenv("SOP_BEARER_TOKEN"); v != "" {
 		cfg.Auth.Bearer = v
 	} else if v := os.Getenv("MANAGER_SOP_TOKEN"); v != "" {
 		cfg.Auth.Bearer = v
-	} else if v := resolveBearerFromFile(filepath.Join(home, ".sop", "credentials")); v != "" {
+	} else if v := resolveCredValue(credFile, "SOP_BEARER_TOKEN"); v != "" {
 		cfg.Auth.Bearer = v
 	}
 
@@ -134,15 +138,16 @@ func mergeFromFile(cfg *Config, path string) error {
 	return err
 }
 
-func resolveBearerFromFile(path string) string {
+func resolveCredValue(path, key string) string {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
+	prefix := key + "="
 	for _, line := range strings.Split(string(raw), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "SOP_BEARER_TOKEN=") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "SOP_BEARER_TOKEN="))
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
 		}
 	}
 	return ""

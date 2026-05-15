@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<title>CLI 配对 — ai-team-devops</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root,[data-theme=dark]{
+  --bg:#0f172a;--bg2:rgba(30,41,59,.78);--border:rgba(59,130,246,.22);
+  --text:#e8eef7;--text2:#94a3b8;--text3:#64748b;
+  --accent:#3b82f6;--accent2:#22d3ee;
+  --input-bg:rgba(15,23,42,.72);--shadow:0 0 0 1px rgba(59,130,246,.12),0 28px 90px rgba(0,0,0,.45);
+  --glass:linear-gradient(145deg,rgba(255,255,255,.06) 0%,rgba(255,255,255,.02) 40%,rgba(59,130,246,.06) 100%);
+}
+html,body{min-height:100%}
+body{
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  color:var(--text);background:var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.card{
+  width:100%;max-width:480px;border-radius:20px;padding:36px 32px;
+  background:var(--glass);border:1px solid var(--border);box-shadow:var(--shadow);
+}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.logo img{width:36px;height:36px;border-radius:12px}
+.logo span{font-size:17px;font-weight:800}
+h1{font-size:20px;font-weight:800;margin-bottom:8px}
+.sub{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px}
+label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);margin:14px 0 6px}
+input{
+  width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+  background:var(--input-bg);color:var(--text);font-size:13px;outline:none;
+}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
+.code-box{
+  margin-top:18px;padding:16px;border-radius:12px;
+  background:rgba(15,23,42,.55);border:1px dashed var(--border);
+  font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5;
+  word-break:break-all;color:var(--accent2);display:none;
+}
+.code-box.visible{display:block}
+.btn{
+  width:100%;margin-top:16px;padding:12px;border-radius:11px;border:none;
+  background:linear-gradient(105deg,#1d4ed8,#2563eb,#0891b2);
+  color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+}
+.btn:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn-secondary{
+  margin-top:10px;background:transparent;border:1px solid var(--border);color:var(--text2);
+}
+.btn-secondary:hover{color:var(--text);border-color:var(--accent)}
+.msg{margin-top:14px;padding:10px 12px;border-radius:10px;font-size:13px;display:none}
+.msg.err{display:block;background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.msg.ok{display:block;background:rgba(34,197,94,.1);color:#4ade80;border:1px solid rgba(34,197,94,.28)}
+.hint{font-size:12px;color:var(--text3);margin-top:16px;line-height:1.55}
+.hint code{font-size:11px;background:rgba(59,130,246,.12);padding:2px 6px;border-radius:4px}
+.steps{margin:12px 0 0;padding-left:18px;font-size:13px;color:var(--text2);line-height:1.7}
+a{color:var(--accent);text-decoration:none;font-weight:600}
+a:hover{text-decoration:underline}
+.loading{color:var(--text2);font-size:14px;text-align:center;padding:24px 0}
+.field-hint{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <img src="/brand-mark.svg" width="36" height="36" alt="" decoding="async"/>
+    <span>ai-team-devops</span>
+  </div>
+  <div id="loading" class="loading">加载中…</div>
+  <div id="content" style="display:none">
+    <h1>CLI 项目配对</h1>
+    <p class="sub">为 <code>sop login --pair</code> 生成一次性配对码。终端会在<strong>当前目录</strong>读取 <code>memory/current_state.json</code>，请保证项目 ID 与之一致。</p>
+    <ol class="steps">
+      <li>在<strong>项目根目录</strong>执行 <code>sop login --pair</code></li>
+      <li>将下方配对码粘贴到终端</li>
+    </ol>
+    <label for="project-id">项目 ID</label>
+    <input id="project-id" type="text" placeholder="sop-dev" autocomplete="off"/>
+    <p class="field-hint">与 <code>sop init</code> / <code>memory/current_state.json</code> 中的 <code>project_id</code> 一致，<strong>不是</strong>磁盘路径。</p>
+    <label for="local-path">本地项目根路径（可选）</label>
+    <input id="local-path" type="text" placeholder="/Users/you/your-app" autocomplete="off"/>
+    <p class="field-hint">须为绝对路径；留空则由 Manager 使用 <code>PROJECT_PATH</code>，CLI 仍以终端当前目录为准。</p>
+    <button class="btn" type="button" id="gen-btn">生成配对码</button>
+    <button class="btn btn-secondary" type="button" id="copy-btn" style="display:none">复制配对码</button>
+    <div id="code-box" class="code-box"></div>
+    <div id="msg" class="msg"></div>
+    <p class="hint" id="exp-hint" style="display:none"></p>
+    <p class="hint"><a href="console.html">返回管理台</a> · <a href="login.html" id="logout-link">切换账号</a></p>
+  </div>
+</div>
+<script>
+(function () {
+  var API = window.location.origin + '/api/v1';
+  var params = new URLSearchParams(window.location.search);
+  var token = localStorage.getItem('sop-token');
+
+  function showErr(text) {
+    var el = document.getElementById('msg');
+    el.textContent = text;
+    el.className = 'msg err';
+  }
+  function showOk(text) {
+    var el = document.getElementById('msg');
+    el.textContent = text;
+    el.className = 'msg ok';
+  }
+  function apiFetch(url, init) {
+    var o = init || {};
+    o.headers = o.headers || {};
+    o.headers.Authorization = 'Bearer ' + token;
+    return fetch(url, o).then(function (r) {
+      return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+    });
+  }
+  function ready() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+    var pathInput = document.getElementById('local-path');
+    var pidInput = document.getElementById('project-id');
+    var qPath = params.get('path') || params.get('local_path') || '';
+    if (qPath) pathInput.value = qPath;
+    apiFetch(API + '/auth/pair/hint').then(function (res) {
+      if (!res.ok) return;
+      if (res.d.project_id && !pidInput.value) pidInput.value = res.d.project_id;
+      if (res.d.project_path && !pathInput.value) pathInput.value = res.d.project_path;
+    }).catch(function () {});
+  }
+  if (!token) {
+    var redir = 'pair.html' + (window.location.search || '');
+    window.location.replace('login.html?redirect=' + encodeURIComponent(redir));
+    return;
+  }
+  apiFetch(API + '/auth/me').then(function (res) {
+    if (!res.ok) {
+      localStorage.removeItem('sop-token');
+      window.location.replace('login.html?redirect=' + encodeURIComponent('pair.html'));
+      return;
+    }
+    ready();
+  }).catch(function () {
+    showErr('无法连接 Manager API，请确认服务已启动（端口 8765）');
+    ready();
+  });
+
+  document.getElementById('logout-link').addEventListener('click', function (e) {
+    e.preventDefault();
+    localStorage.removeItem('sop-token');
+    localStorage.removeItem('sop-user');
+    window.location.replace('login.html?redirect=pair.html');
+  });
+
+  var lastCode = '';
+  document.getElementById('gen-btn').addEventListener('click', function () {
+    var btn = document.getElementById('gen-btn');
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    var body = {
+      preferred_project_id: document.getElementById('project-id').value.trim(),
+      local_path: document.getElementById('local-path').value.trim()
+    };
+    apiFetch(API + '/auth/pair/codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = '重新生成配对码';
+      if (!res.ok) {
+        showErr((res.d && res.d.detail) || '生成失败（HTTP ' + res.status + '）');
+        return;
+      }
+      lastCode = res.d.pair_code || '';
+      var box = document.getElementById('code-box');
+      box.textContent = lastCode;
+      box.classList.add('visible');
+      document.getElementById('copy-btn').style.display = 'block';
+      var sec = res.d.expires_in || 600;
+      var pidNote = res.d.project_id ? (' 项目 ID: ' + res.d.project_id) : '';
+      document.getElementById('exp-hint').style.display = 'block';
+      document.getElementById('exp-hint').textContent =
+        '配对码约 ' + Math.round(sec / 60) + ' 分钟内有效，仅可使用一次。' + pidNote;
+      showOk('已生成，请复制到终端。');
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = '生成配对码';
+      showErr('网络错误：' + (e.message || e));
+    });
+  });
+
+  document.getElementById('copy-btn').addEventListener('click', function () {
+    if (!lastCode) return;
+    navigator.clipboard.writeText(lastCode).then(function () {
+      showOk('已复制到剪贴板');
+    }).catch(function () {
+      showErr('复制失败，请手动选择配对码');
+    });
+  });
+})();
+</script>
+</body>
+</html>

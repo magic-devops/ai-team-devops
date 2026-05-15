@@ -26,6 +26,7 @@ WITH_AGENTD=0
 START_AGENTD=0
 RUN_DOCTOR=0
 VERIFY=0
+WITH_COMPLETION=0
 INSTALLER=""      # auto | uv | pip
 
 step() { printf '\n\033[1;36m[build-sop]\033[0m %s\n' "$*"; }
@@ -54,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --agentd) WITH_AGENTD=1; shift ;;
     --start-agentd) START_AGENTD=1; shift ;;
     --doctor) RUN_DOCTOR=1; shift ;;
+    --completion) WITH_COMPLETION=1; shift ;;
     --all) WITH_AGENTD=1; VERIFY=1; RUN_DOCTOR=1; shift ;;
     --verify) VERIFY=1; shift ;;
     --uv) INSTALLER="uv"; shift ;;
@@ -152,6 +154,15 @@ if [[ "$RUN_DOCTOR" -eq 1 ]]; then
   _run_sop doctor || true
 fi
 
+if [[ "$WITH_COMPLETION" -eq 1 ]]; then
+  step "安装 bash Tab 补全"
+  if _run_sop completion install bash 2>/dev/null; then
+    ok "bash 补全已安装（新终端生效；或 eval \"\$(sop completion show bash)\"）"
+  else
+    warn "补全安装跳过（可手动: sop completion install bash）"
+  fi
+fi
+
 echo
 echo "── 获取 sop 命令的几种方式 ──"
 echo "  1) 本脚本（开发）: bash scripts/build-sop.sh --venv .venv && source .venv/bin/activate"
@@ -161,4 +172,5 @@ echo "  4) 发布 wheel:     bash scripts/build-sop.sh --wheel && pip install di
 echo "  5) 一键环境:       bash ai-sop-ops/bootstrap-dev.sh"
 echo
 echo "验证: sop --help && sop doctor"
+echo "补全: sop completion install bash  或  make install-completion"
 echo "文档: docs/TOOLS_AND_SCRIPTS.md"

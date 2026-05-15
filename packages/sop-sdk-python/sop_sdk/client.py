@@ -189,7 +189,12 @@ class ManagerClient:
         body = {"username": username, "password": password}
         if tenant_slug:
             body["tenant_slug"] = tenant_slug
-        return self._request("POST", "/api/v1/auth/login", json_body=body)
+        out = self._request("POST", "/api/v1/auth/login", json_body=body)
+        if isinstance(out, dict):
+            tok = (out.get("access_token") or out.get("token") or "").strip()
+            if tok:
+                out = {**out, "access_token": tok, "token": tok, "token_type": out.get("token_type") or "Bearer"}
+        return out
 
     def pair_project(self, pair_code: str, hostname: str = "", local_path: str = "") -> dict[str, Any]:
         return self._request(

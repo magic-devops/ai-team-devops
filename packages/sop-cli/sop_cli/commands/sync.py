@@ -146,24 +146,62 @@ def sync_push_cmd(
         raise typer.Exit(2) from e
 
 
+def _direct_sync_cycle() -> dict | None:
+    """直连 Manager 执行 pull+push（login 后立即可用，不依赖 agentd 内存中的旧 token）。"""
+    from .._util import get_client, get_config
+
+    cfg = get_config()
+    if not cfg.project_id:
+        warn("agent.toml 未配置 project_id；可执行 sop login 或编辑 .sop-runtime/agent.toml")
+        return None
+    cli = get_client(cfg)
+    pull = cli.sync_pull(cursor="", modules="tasks,requirements,issues,sprints")
+    return {"pull": pull, "project_id": cfg.project_id}
+
+
 @app.callback(invoke_without_command=True)
 def sync(
     ctx: typer.Context,
     rules: bool = typer.Option(True, "--rules/--no-rules", help="同步规则库"),
     specs: bool = typer.Option(True, "--specs/--no-specs", help="同步规约文档"),
     knowledge: bool = typer.Option(False, "--knowledge", help="同步知识库（默认关闭，体量大）"),
+    direct: bool = typer.Option(False, "--direct", help="跳过 agentd，直连 Manager"),
 ) -> None:
     if ctx.invoked_subcommand is not None:
         return
+
+    if direct:
+        r = _direct_sync_cycle()
+        if r is None:
+            raise typer.Exit(2)
+        ok(f"直连同步完成 project_id={r.get('project_id')} total={r.get('pull', {}).get('total', 0)}")
+        return
+
     ipc = AgentdIpcClient()
     if not ipc.available():
-        warn("sop-agentd 未运行；当前只能手动调用 Manager")
-        warn("启动：sop agentd start")
+        warn("sop-agentd 未运行，尝试直连 Manager…")
+        r = _direct_sync_cycle()
+        if r is not None:
+            ok(f"直连同步完成 project_id={r.get('project_id')} total={r.get('pull', {}).get('total', 0)}")
+            return
+        warn("启动 agentd：sop agentd start")
         raise typer.Exit(1)
+
     out = ipc.send("sync.trigger", data={"rules": rules, "specs": specs, "knowledge": knowledge})
     if out.get("ok"):
         summary = (out.get("result") or {}).get("summary") or out.get("summary", "-")
         ok(f"sync 已触发：{summary}")
-    else:
-        err(f"sync 失败：{out.get('error', '-')}")
-        raise typer.Exit(2)
+        return
+
+    err_msg = str(out.get("error", "-"))
+    if "X-Project-Id" in err_msg or "绑定同步分区" in err_msg or "project_id" in err_msg.lower():
+        warn("agentd 鉴权/项目作用域未就绪，尝试直连 Manager（已读取最新 login token）…")
+        r = _direct_sync_cycle()
+        if r is not None:
+            ok(f"直连同步完成 project_id={r.get('project_id')} total={r.get('pull', {}).get('total', 0)}")
+            warn("建议重建 agentd 以使用 IPC 同步：sop agentd stop && sop agentd start")
+            return
+
+    err(f"sync 失败：{err_msg}")
+    warn("若刚 sop login：sop agentd stop && sop agentd start，或 sop sync --direct")
+    raise typer.Exit(2)

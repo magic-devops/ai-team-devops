@@ -645,6 +645,12 @@ function useFetch(url) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(null);
   const load = React.useCallback(function () {
+    if (!url) {
+      setLoading(false);
+      setError(null);
+      setData(null);
+      return Promise.resolve(null);
+    }
     setLoading(true);
     setError(null);
     return apiFetch(url, { timeoutMs: 32000 })
@@ -2526,7 +2532,24 @@ function ExecutionPlan() {
 
 // ── 迭代进度 ─────────────────────────────────────────────────────
 function IterationProgress() {
-  const {data:sprints,loading,error,reload} = useFetch(`${API}/sprints?size=100`);
+  const [projReady, setProjReady] = React.useState(function () {
+    try { return !!(localStorage.getItem('sop-current-project-id') || '').trim(); } catch (e) { return false; }
+  });
+  React.useEffect(function () {
+    function onReady(e) {
+      var pid = (e && e.detail && e.detail.projectId) ? String(e.detail.projectId) : '';
+      try { pid = pid || (localStorage.getItem('sop-current-project-id') || '').trim(); } catch (e2) {}
+      setProjReady(!!pid);
+    }
+    window.addEventListener('devdash-project-ready', onReady);
+    window.addEventListener('devdash-project-change', onReady);
+    return function () {
+      window.removeEventListener('devdash-project-ready', onReady);
+      window.removeEventListener('devdash-project-change', onReady);
+    };
+  }, []);
+  const sprintUrl = projReady ? `${API}/sprints?size=100` : null;
+  const {data:sprints,loading,error,reload} = useFetch(sprintUrl);
   const [selected,setSelected] = React.useState(null);
   const [progress,setProgress] = React.useState(null);
 
@@ -2539,6 +2562,7 @@ function IterationProgress() {
   const active = sprintList.find(s=>s.status==='active');
   React.useEffect(()=>{ if(active&&!selected) loadProgress(active.id); },[(active && active.id)]);
 
+  if (!projReady) return <motion.div className="card page-enter"><div className="empty">正在加载项目…若长时间无数据请刷新页面。</div></motion.div>;
   if (loading) return <PageSkeleton cards={2} />;
   if (error) return <LoadError message={error} onRetry={reload} />;
 
@@ -3223,7 +3247,11 @@ function AppV3() {
         if (pick) {
           try { localStorage.setItem('sop-current-project-id', pick); } catch (e2) {}
           setProjectId(pick);
+        } else {
+          try { localStorage.removeItem('sop-current-project-id'); } catch (e3) {}
+          setProjectId('');
         }
+        try { window.dispatchEvent(new CustomEvent('devdash-project-ready', { detail: { projectId: pick || '' } })); } catch (e4) {}
       })
       .catch(function () {});
   }, []);

@@ -27,6 +27,15 @@ type Client struct {
 	maxRetries int
 }
 
+// SetAuth 热更新鉴权（sop login 后无需重启 agentd）。
+func (c *Client) SetAuth(projectID, bearer, apiKey string) {
+	if strings.TrimSpace(projectID) != "" {
+		c.projectID = strings.TrimSpace(projectID)
+	}
+	c.bearer = strings.TrimSpace(bearer)
+	c.apiKey = strings.TrimSpace(apiKey)
+}
+
 func New(baseURL, projectID, bearer, apiKey string, timeout time.Duration, verifySSL bool, maxRetries int) *Client {
 	tr := &http.Transport{
 		MaxIdleConns:        100,

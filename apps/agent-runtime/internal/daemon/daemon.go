@@ -127,6 +127,7 @@ func (d *Daemon) outboxSenderLoop(ctx context.Context) error {
 
 // pullerLoop 定时从 Manager 拉取结构化变更（默认 5 分钟；需 project_id + bearer/apikey）。
 func (d *Daemon) pullerLoop(ctx context.Context) error {
+	d.refreshAuthFromDisk()
 	if d.cfg.Manager.ProjectID == "" {
 		d.log.Info("sync puller idle: project_id 未配置（sop login --pair）")
 		return nil
@@ -182,7 +183,24 @@ func (d *Daemon) runPushOnce(ctx context.Context) {
 	}
 }
 
+// refreshAuthFromDisk 重新读取 agent.toml 与 ~/.sop/credentials（login/pair 后无需重启）。
+func (d *Daemon) refreshAuthFromDisk() {
+	cfg, err := config.Load()
+	if err != nil {
+		d.log.Warn("reload config", zap.Error(err))
+		return
+	}
+	d.cfg.Manager.ProjectID = cfg.Manager.ProjectID
+	d.cfg.Manager.TenantID = cfg.Manager.TenantID
+	d.cfg.Auth.Bearer = cfg.Auth.Bearer
+	d.cfg.Auth.APIKey = cfg.Auth.APIKey
+	if d.http != nil {
+		d.http.SetAuth(cfg.Manager.ProjectID, cfg.Auth.Bearer, cfg.Auth.APIKey)
+	}
+}
+
 func (d *Daemon) runSyncCycle(ctx context.Context, modules string) (map[string]any, error) {
+	d.refreshAuthFromDisk()
 	out := map[string]any{}
 	if d.puller != nil {
 		res, err := d.puller.PullOnce(ctx, modules)

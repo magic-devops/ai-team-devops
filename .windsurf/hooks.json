@@ -1,0 +1,7 @@
+{
+  "description": "sop unified hooks for Windsurf → ai-sop-ops/sop_ai_hook.py",
+  "hooks": {
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.windsurf/hooks/sop_hook.py\" PreToolUse" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.windsurf/hooks/sop_hook.py\" Stop" }] }]
+  }
+}

@@ -100,9 +100,22 @@ def _pair_with_manager(manager_url: str, code: str, project_path: Path) -> None:
         err(f"配对失败：{e}")
         return
     ok("Manager 配对成功")
-    kv("project_id", out.get("project_id"))
+    from ._agent_toml import project_id_from_memory, update_agent_toml_manager
+    pid = str(out.get("project_id") or "")
+    mem_pid = project_id_from_memory(project_path)
+    if mem_pid:
+        pid = mem_pid
+    kv("project_id", pid)
     kv("tenant_id", out.get("tenant_id"))
     _save_api_key(out.get("api_key", ""))
+    if update_agent_toml_manager(
+        project_path,
+        project_id=pid,
+        tenant_id=str(out.get("tenant_id") or "") or None,
+        manager_url=manager_url,
+        auth_method="apikey",
+    ):
+        ok("已写入 .sop-runtime/agent.toml")
 
 
 def _save_api_key(api_key: str) -> None:
@@ -113,11 +126,9 @@ def _save_api_key(api_key: str) -> None:
         keyring.set_password("sop", "manager", api_key)
         ok("API Key 已写入 OS keyring（service=sop, account=manager）")
     except Exception:
-        cred = Path.home() / ".sop" / "credentials"
-        cred.parent.mkdir(parents=True, exist_ok=True)
-        cred.write_text(f"MANAGER_API_KEY={api_key}\n", encoding="utf-8")
-        cred.chmod(0o600)
-        warn(f"keyring 不可用；API Key 已落盘到 {cred}（chmod 600）")
+        from ._credentials import write_credentials
+        p = write_credentials({"MANAGER_API_KEY": api_key})
+        warn(f"keyring 不可用；API Key 已落盘到 {p}（chmod 600）")
 
 
 def _write_agent_toml_skeleton(project_path: Path, project_name: str, manager_url: str) -> None:
@@ -133,7 +144,7 @@ def _write_agent_toml_skeleton(project_path: Path, project_name: str, manager_ur
 
         [manager]
         url = "{manager_url or 'http://localhost:8765'}"
-        project_id = ""    # 由 `sop login --pair` 自动填充
+        project_id = "{project_name}"    # 与 memory/current_state.json 一致；Manager single 模式会自动注册
         tenant_id  = "t-default"
 
         [auth]

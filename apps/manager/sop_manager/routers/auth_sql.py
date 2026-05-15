@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os, hashlib, uuid, secrets
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -172,6 +173,9 @@ def require_role(min_role: str):
 
 def check_project_access(user: User, project_id: str, db: Session, min_role: str = "viewer"):
     proj = db.query(Project).filter_by(id=project_id).first()
+    if not proj and ADMIN_MODE == "single":
+        from sop_manager.project_provision import ensure_project_for_user
+        proj = ensure_project_for_user(db, project_id, user)
     if not proj:
         raise HTTPException(404, "项目不存在")
     if user.role == "super_admin":
@@ -222,7 +226,9 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
     except Exception:
         default_project_id = ""
     return {
-        "token": token,
+        "access_token": token,
+        "token": token,  # 兼容 Web login.html（localStorage sop-token）
+        "token_type": "Bearer",
         "user_id": user.id,
         "username": user.username,
         "role": user.role,
@@ -241,6 +247,121 @@ def me(user: User = Depends(current_user)):
 def logout():
     """JWT 无服务端会话；登出以客户端清除 token 为主。保留端点便于前端统一调用与后续扩展（如黑名单）。"""
     return {"ok": True}
+
+
+# ── 项目配对（sop init / sop login --pair）────────────────────────
+class PairCodeCreate(BaseModel):
+    local_path: str = ""
+    preferred_project_id: str = ""
+
+
+@router.get("/pair/hint")
+def pair_hint(user: User = Depends(current_user)):
+    """配对页预填：Manager PROJECT_PATH 与 memory 中的 project_id。"""
+    from sop_manager.project_provision import local_project_id_from_memory
+    from sop_manager.path_config import project_path
+
+    pp = project_path().resolve()
+    return {
+        "project_id": local_project_id_from_memory(pp),
+        "project_path": str(pp),
+    }
+
+
+@router.post("/pair/codes")
+def create_pair_code_endpoint(
+    body: PairCodeCreate,
+    user: User = Depends(current_user),
+):
+    """已登录用户生成一次性配对码（供 CLI `sop login --pair` 使用）。"""
+    from sop_manager.project_provision import (
+        _path_has_memory,
+        create_pair_code,
+        local_project_id_from_memory,
+    )
+
+    preferred = (body.preferred_project_id or "").strip()
+    lp = (body.local_path or "").strip()
+    stored_lp = ""
+    if lp:
+        p = Path(lp)
+        if p.is_absolute() and p.is_dir():
+            stored_lp = str(p.resolve())
+            if not preferred and _path_has_memory(p):
+                preferred = local_project_id_from_memory(p)
+    if not preferred:
+        preferred = local_project_id_from_memory()
+    code = create_pair_code(
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        local_path=stored_lp,
+        preferred_project_id=preferred,
+    )
+    return {
+        "pair_code": code,
+        "expires_in": int(os.getenv("SOP_PAIR_CODE_TTL", "600")),
+        "project_id": preferred,
+    }
+
+
+class PairBody(BaseModel):
+    pair_code: str
+    hostname: str = ""
+    local_path: str = ""
+
+
+@router.post("/pair")
+def pair_project(body: PairBody, db: Session = Depends(get_session)):
+    """用配对码注册/绑定本地项目，返回 project_id 与 API Key。"""
+    from sop_manager.project_provision import (
+        consume_pair_code,
+        ensure_project,
+        resolve_pair_project_id,
+    )
+
+    entry = consume_pair_code(body.pair_code)
+    if not entry:
+        raise HTTPException(401, "配对码无效或已过期")
+    user = db.get(User, entry["user_id"])
+    if not user or user.status != "active":
+        raise HTTPException(401, "配对用户无效")
+
+    pid, local_pp = resolve_pair_project_id(entry, body.local_path or "")
+
+    proj = ensure_project(
+        db,
+        pid,
+        project_path_str=local_pp or None,
+        tenant_id=user.tenant_id,
+        owner_user=user,
+    )
+    if not proj:
+        raise HTTPException(500, "无法注册项目")
+
+    raw = "sop_" + secrets.token_hex(24)
+    prefix = raw[:12]
+    key = ApiKey(
+        id=f"ak-{uuid.uuid4().hex[:12]}",
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        name=f"pair-{body.hostname or 'cli'}",
+        key_hash=_hash_apikey(raw),
+        key_prefix=prefix,
+    )
+    db.add(key)
+    db.commit()
+
+    manager_url = (os.getenv("MANAGER_PUBLIC_URL") or os.getenv("MANAGER_URL") or "").strip()
+    if not manager_url:
+        manager_url = "http://localhost:8765"
+
+    return {
+        "project_id": proj.id,
+        "tenant_id": proj.tenant_id,
+        "api_key": raw,
+        "manager_url": manager_url.rstrip("/"),
+        "a2a_port": int(os.getenv("A2A_PORT", "7741")),
+    }
 
 
 # ── 用户管理 ──────────────────────────────────────────────────────

@@ -251,6 +251,14 @@ for _sr in _env_subrouters:
     except Exception as _e:
         app_logger.warning("include env subrouter: %s", _e)
 
+# single 模式：将 memory/current_state.json 的 project_id 注册到 projects 表
+try:
+    from sop_manager.project_provision import ensure_default_project_on_startup
+
+    ensure_default_project_on_startup()
+except Exception as _e:
+    app_logger.warning("project provision on startup: %s", _e)
+
 # 启动 WORM 后台归档线程（幂等）
 try:
     if globals().get("_audit_worm") is not None:
@@ -286,6 +294,33 @@ async def redoc_page():
         redoc_js_url=_redoc_js_url,
         with_google_fonts=False,
     )
+
+
+def _pair_html_path() -> Path | None:
+    """CLI 配对页：优先 dist，其次 public（无 build 时仍可 /pair）。"""
+    if _MANAGER_WEB_DIST is not None:
+        p = _MANAGER_WEB_DIST / "pair.html"
+        if p.is_file():
+            return p
+    pub = Path(__file__).resolve().parents[2] / "manager-web" / "public" / "pair.html"
+    return pub if pub.is_file() else None
+
+
+_PAIR_HTML = _pair_html_path()
+
+
+@app.get("/pair", include_in_schema=False)
+async def pair_page():
+    """sop login --pair 浏览器配对页（须先登录 Manager）。"""
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+
+    if _PAIR_HTML is None:
+        raise HTTPException(
+            404,
+            "配对页未找到；请确认 apps/manager-web/public/pair.html 存在",
+        )
+    return FileResponse(_PAIR_HTML, media_type="text/html; charset=utf-8")
 
 
 if _MANAGER_WEB_DIST is not None:

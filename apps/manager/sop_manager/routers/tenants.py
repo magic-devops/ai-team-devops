@@ -106,6 +106,13 @@ class ProjectCreate(BaseModel):
 
 @proj_router.get("")
 def list_projects(user: User = Depends(current_user), db: Session = Depends(get_session)):
+    import os
+    from sop_manager.project_provision import ensure_project_for_user, local_project_id_from_memory
+
+    if (os.getenv("ADMIN_MODE", "single") or "single").strip().lower() == "single":
+        pid = local_project_id_from_memory()
+        if pid:
+            ensure_project_for_user(db, pid, user)
     q = db.query(Project).filter_by(tenant_id=user.tenant_id)
     if user.role not in ("super_admin", "tenant_admin"):
         member_pids = [m.project_id for m in user.memberships]

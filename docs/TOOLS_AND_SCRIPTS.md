@@ -151,6 +151,17 @@ sop platforms doctor
 
 每条支持 `sop <cmd> --help`。详见 [packages/sop-cli/README.md](../packages/sop-cli/README.md)。
 
+### 命令发现与 Shell 补全
+
+```bash
+sop commands --examples       # 命令树 + 常用流程
+sop completion install bash   # 安装 Tab 补全（bash/zsh/fish）
+eval "$(sop completion show bash)"   # 当前会话临时启用
+sop completion doctor         # 检查补全是否就绪
+```
+
+构建时可选安装补全：`bash scripts/build-sop.sh --completion` 或 `make install-completion`。
+
 ### `sop doctor` 检查项与修复
 
 | 检查项 | 常见原因 | 修复 |
@@ -275,6 +286,13 @@ sop doctor
 ### `sync API` 被跳过
 
 属正常：未配对 `project_id`。执行 `sop login --pair` 后重跑 `sop doctor`。
+
+### Web 后台「项目不存在」
+
+**不是服务宕机**（API 在线即可排除）。常见原因：本地 `memory/current_state.json` 的 `project_id`（如 `sop-dev`）未写入 Manager 的 `projects` 表。
+
+- **single 模式**：重启 Manager 后会按 `memory/` 自动注册；或刷新控制台后顶栏选择项目。
+- 手动：`sop login --pair` 或登录后调用 `POST /api/v1/auth/pair`。
 
 ### Manager 不可达
 

@@ -1,6 +1,6 @@
 # 平台仓顶层 Makefile（常用开发入口）
 .PHONY: help build-sop install-sop wheel-sop build-agentd build-all verify-sop \
-        doctor start-agentd stop-agentd dev-env bootstrap-dev \
+        doctor integration-check install-completion start-agentd stop-agentd dev-env bootstrap-dev \
         deploy-up deploy-down stack-start stack-stop stack-health health-check
 
 help:
@@ -13,6 +13,8 @@ help:
 	@echo "  make dev-env         # 全量本地开发环境（venv + CLI + agentd + doctor）"
 	@echo "  make bootstrap-dev   # ai-sop-ops/bootstrap-dev.sh（含 Manager 依赖）"
 	@echo "  make doctor          # sop doctor 端到端自检"
+	@echo "  make integration-check  # Manager + sync + agentd 冒烟"
+	@echo "  make install-completion # 安装 sop bash Tab 补全"
 	@echo "  make start-agentd    # 启动 sop-agentd"
 	@echo "  make stop-agentd     # 停止 sop-agentd"
 	@echo "  make verify-sop      # 检查 sop 是否在 PATH"
@@ -46,6 +48,13 @@ bootstrap-dev:
 doctor:
 	@command -v sop >/dev/null && sop doctor || \
 	  (PYTHONPATH=packages/sop-cli:packages/sop-sdk-python python3 -m sop_cli doctor)
+
+integration-check:
+	PROJECT_PATH="$(CURDIR)" bash scripts/sop-integration-check.sh
+
+install-completion:
+	@command -v sop >/dev/null && sop completion install bash || \
+	  (PYTHONPATH=packages/sop-cli:packages/sop-sdk-python python3 -m sop_cli completion install bash)
 
 start-agentd:
 	@command -v sop >/dev/null && sop agentd start || \

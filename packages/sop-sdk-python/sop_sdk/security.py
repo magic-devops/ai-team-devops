@@ -70,13 +70,31 @@ class HmacAuth(Auth):
         headers["X-Sop-Signature"] = f"sha256={signature}"
 
 
+def _credentials_from_file() -> dict[str, str]:
+    from pathlib import Path
+    p = Path.home() / ".sop" / "credentials"
+    if not p.is_file():
+        return {}
+    out: dict[str, str] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            out[k.strip()] = v.strip()
+    return out
+
+
 def auth_from_env(env: Mapping[str, str] | None = None) -> Auth:
-    """从环境变量推断 Auth：优先 SOP_BEARER_TOKEN / MANAGER_SOP_TOKEN；其次 MANAGER_API_KEY。"""
+    """从环境变量 + ~/.sop/credentials 推断 Auth；优先 Bearer。"""
     env = env if env is not None else os.environ
-    token = (env.get("SOP_BEARER_TOKEN") or env.get("MANAGER_SOP_TOKEN") or "").strip()
+    creds = _credentials_from_file()
+    token = (
+        (env.get("SOP_BEARER_TOKEN") or env.get("MANAGER_SOP_TOKEN") or creds.get("SOP_BEARER_TOKEN") or creds.get("MANAGER_SOP_TOKEN") or "")
+        .strip()
+    )
     if token:
         return BearerAuth(token)
-    api_key = (env.get("MANAGER_API_KEY") or "").strip()
+    api_key = (env.get("MANAGER_API_KEY") or creds.get("MANAGER_API_KEY") or "").strip()
     if api_key:
         return HmacAuth(api_key)
     return NoAuth()

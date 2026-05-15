@@ -85,13 +85,20 @@ func writeIPC(conn net.Conn, r IPCResponse) {
 }
 
 func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
+	d.refreshAuthFromDisk()
 	switch req.Op {
 	case "health":
 		depth, _ := d.outbox.Depth(ctx)
+		hasBearer := d.cfg.Auth.Bearer != ""
+		hasKey := d.cfg.Auth.APIKey != ""
 		return IPCResponse{OK: true, Result: map[string]any{
-			"agent_id":     d.agentID,
-			"version":      d.version,
-			"outbox_depth": depth,
+			"agent_id":      d.agentID,
+			"version":       d.version,
+			"outbox_depth":  depth,
+			"project_id":    d.cfg.Manager.ProjectID,
+			"has_bearer":    hasBearer,
+			"has_api_key":   hasKey,
+			"manager_url":   d.cfg.Manager.URL,
 		}}
 	case "event":
 		e := outbox.NewEvent("sop."+req.Name, stringOr(req.Data, "subject", ""), req.Data)

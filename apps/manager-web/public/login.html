@@ -783,13 +783,24 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     try {
       if (d.default_project_id) localStorage.setItem('sop-current-project-id', d.default_project_id);
     } catch (e) {}
-    window.location.replace('console.html');
+    var next = new URLSearchParams(window.location.search).get('redirect');
+    if (next && !/^https?:\/\//i.test(next) && next.indexOf('//') === -1) {
+      window.location.replace(next);
+    } else {
+      window.location.replace('console.html');
+    }
+  }
+
+  function postLoginTarget(){
+    var next = new URLSearchParams(window.location.search).get('redirect');
+    if (next && !/^https?:\/\//i.test(next) && next.indexOf('//') === -1) return next;
+    return 'console.html';
   }
 
   var token = localStorage.getItem('sop-token');
   if(token){
     loginPublicFetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
-      .then(function(r){if(r.ok) window.location.replace('console.html');})
+      .then(function(r){if(r.ok) window.location.replace(postLoginTarget());})
       .catch(function(){});
   }
 

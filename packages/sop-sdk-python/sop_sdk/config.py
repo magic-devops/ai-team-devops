@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from dataclasses import dataclass, field
@@ -53,6 +54,20 @@ def _read_toml(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _read_credentials_file() -> dict[str, str]:
+    """解析 ~/.sop/credentials（sop login / --pair 落盘）。"""
+    p = Path.home() / ".sop" / "credentials"
+    if not p.is_file():
+        return {}
+    out: dict[str, str] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            out[k.strip()] = v.strip()
+    return out
+
+
 def _resolve_api_key(ref: str, fallback_env: str = "MANAGER_API_KEY") -> str:
     """支持 ref："keyring://service/account" / "env://NAME" / "file:///path"。"""
     if not ref:
@@ -96,13 +111,28 @@ def load_config(project_path: Path | None = None) -> AgentConfig:
     rel = cfg.get("reliability", {})
 
     api_key_ref = auth.get("api_key_ref", "")
-    api_key = _resolve_api_key(api_key_ref)
+    creds_file = _read_credentials_file()
+    api_key = _resolve_api_key(api_key_ref) or creds_file.get("MANAGER_API_KEY", "")
 
-    bearer = os.getenv("SOP_BEARER_TOKEN", "") or os.getenv("MANAGER_SOP_TOKEN", "")
+    bearer = (
+        os.getenv("SOP_BEARER_TOKEN", "")
+        or os.getenv("MANAGER_SOP_TOKEN", "")
+        or creds_file.get("SOP_BEARER_TOKEN", "")
+    )
+
+    pid = os.getenv("PROJECT_ID") or mgr.get("project_id") or ""
+    if not str(pid).strip():
+        try:
+            state_f = project_path / "memory" / "current_state.json"
+            if state_f.is_file():
+                mem = json.loads(state_f.read_text(encoding="utf-8"))
+                pid = str(mem.get("project_id") or "").strip()
+        except (OSError, json.JSONDecodeError):
+            pass
 
     return AgentConfig(
         manager_url=os.getenv("MANAGER_URL") or mgr.get("url") or "http://localhost:8765",
-        project_id=os.getenv("PROJECT_ID") or mgr.get("project_id") or "",
+        project_id=pid,
         tenant_id=os.getenv("TENANT_ID") or mgr.get("tenant_id") or "t-default",
         tenant_code=os.getenv("TENANT_CODE") or str(mgr.get("tenant_code") or "").strip(),
         business_code=os.getenv("BUSINESS_CODE") or str(mgr.get("business_code") or "").strip(),
