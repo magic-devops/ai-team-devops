@@ -1,0 +1,55 @@
+{
+  "description": "sop unified hooks for Cursor → ai-sop-ops/sop_ai_hook.py (cursor). Trust in Cursor settings.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.cursor/hooks/sop_hook.py\" SessionStart"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.cursor/hooks/sop_hook.py\" UserPromptSubmit"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.cursor/hooks/sop_hook.py\" PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.cursor/hooks/sop_hook.py\" PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.cursor/hooks/sop_hook.py\" Stop"
+          }
+        ]
+      }
+    ]
+  }
+}

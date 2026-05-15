@@ -2,6 +2,8 @@
 
 > 让"AI 改 / AI 用"是默认体验，而不是事后兼容。
 
+与 **v4 平台工程视图**（隔离、记忆、CLI、同步、Epic）对齐说明见 [UPGRADE_v4_ENGINEERING.md](UPGRADE_v4_ENGINEERING.md)。
+
 ## 一、AI 修改友好的代码结构
 
 ### 1. 文件大小红线

@@ -66,3 +66,9 @@ from sop_tools.manager_client import report_task_status  # 现状写法不变
 ```
 
 底层全部走 `ManagerClient`，自动获得签名 / 重试 / 错误映射的增强。
+
+## 相关文档
+
+- CLI 命令：`packages/sop-cli/README.md`
+- 安装与环境：`docs/TOOLS_AND_SCRIPTS.md`
+- 同步与 IPC：`ai-sop-ops/SYNC_AND_PLATFORMS.md`

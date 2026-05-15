@@ -67,3 +67,12 @@ class AgentdIpcClient:
 
     def report_issue(self, title: str, severity: str = "P2", description: str = "") -> dict[str, Any]:
         return self.send("issue.report", data={"title": title, "severity": severity, "description": description})
+
+    def sync_pull(self, modules: str = "") -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        if modules:
+            data["modules"] = modules
+        return self.send("sync.pull", data=data)
+
+    def sync_push(self, module: str, record: dict[str, Any], action: str = "upsert") -> dict[str, Any]:
+        return self.send("sync.push", data={"module": module, "action": action, "record": record})

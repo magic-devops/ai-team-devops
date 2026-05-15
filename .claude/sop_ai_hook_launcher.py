@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """从仓库根执行 ``ai-sop-ops/sop_ai_hook.py``（唯一权威实现）。
 
-供 Claude Code hook 使用固定路径 ``.claude/sop_ai_hook_launcher.py``。"""
+用法（Claude Code / 兼容 hooks）::
+  python3 .claude/sop_ai_hook_launcher.py claude PreToolUse
+
+stdin 转发各工具 JSON payload。
+"""
 from __future__ import annotations
 
 import runpy
@@ -31,7 +35,9 @@ def main() -> None:
             "SOP: 未找到 ai-sop-ops/sop_ai_hook.py。请执行: git submodule update --init --recursive\n"
         )
         sys.exit(0)
-    sys.argv[0] = str(target)
+    tool = sys.argv[1] if len(sys.argv) > 1 else "claude"
+    event = sys.argv[2] if len(sys.argv) > 2 else ""
+    sys.argv = [str(target), tool, event]
     runpy.run_path(str(target), run_name="__main__")
 
 

@@ -8,8 +8,16 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 from fastapi.responses import PlainTextResponse
 
-from sop_manager.path_config import request_scope_active, resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
-from sop_manager.path_config import runtime_paths_summary
+from sop_manager.path_config import (
+    request_scope_active,
+    resolved_ai_memory_root,
+    resolved_business_code,
+    resolved_project_code,
+    resolved_project_id,
+    resolved_tenant_code,
+    resolved_tenant_id,
+    runtime_paths_summary,
+)
 
 router = APIRouter(tags=["health"])
 
@@ -44,7 +52,7 @@ def health_v1() -> dict[str, object]:
             updated_at = d.get("updatedAt") or d.get("updated_at")
             if updated_at is not None:
                 updated_at = str(updated_at)[:40]
-        except Exception:
+        except Exception:  # noqa: S110 — 发布元数据损坏不影响探活
             pass
     envv = (os.getenv("ADMIN_RELEASE_VERSION") or "").strip()
     if envv:
@@ -62,6 +70,9 @@ def health_v1() -> dict[str, object]:
     if request_scope_active():
         out["scopedTenantId"] = resolved_tenant_id()
         out["scopedProjectId"] = resolved_project_id()
+        out["scopedTenantCode"] = resolved_tenant_code()
+        out["scopedBusinessCode"] = resolved_business_code()
+        out["scopedProjectCode"] = resolved_project_code()
     return out
 
 
@@ -70,8 +81,9 @@ def health_detail() -> dict[str, object]:
     checks: dict[str, object] = {}
 
     try:
-        from .sql_models import engine
         from sqlalchemy import text
+
+        from .sql_models import engine
 
         with engine.connect() as c:
             c.execute(text("SELECT 1"))

@@ -65,7 +65,7 @@ export function Dashboard() {
 
   const health = useQuery({ queryKey: ["health"], queryFn: api.health });
   const projects = useQuery({ queryKey: ["projects"], queryFn: api.projects });
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: api.tasks });
+  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => api.tasks() });
   const audit = useQuery({ queryKey: ["audit"], queryFn: api.auditState });
 
   return (
@@ -175,6 +175,34 @@ export function Dashboard() {
           </div>
         </StatCard>
       </div>
+
+      {hasToken ? (
+        <Card title={t("dashboard.quickLinks")}>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {(
+              [
+                { href: "#/tasks", label: t("nav.tasks"), desc: t("dashboard.linkTasks") },
+                { href: "#/requirements", label: t("nav.requirements"), desc: t("dashboard.linkReqs") },
+                { href: "#/platforms", label: t("nav.platforms"), desc: t("dashboard.linkPlatforms") },
+                { href: "#/intelligence", label: t("nav.intelligence"), desc: t("dashboard.linkIntel") },
+                { href: "#/analytics", label: t("nav.analytics"), desc: t("dashboard.linkAnalytics") },
+                { href: "#/copilot", label: t("nav.copilot"), desc: t("dashboard.linkCopilot") },
+                { href: "#/workflows", label: t("nav.workflows"), desc: t("dashboard.linkWorkflows") },
+                { href: "#/settings", label: t("nav.settings"), desc: t("dashboard.linkSettings") },
+              ] as const
+            ).map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="rounded-lg border border-slate-200/90 bg-white px-3 py-2.5 text-sm shadow-sm transition hover:border-brand-300 hover:bg-brand-50/50 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-brand-500/40 dark:hover:bg-brand-950/20"
+              >
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{link.label}</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{link.desc}</p>
+              </a>
+            ))}
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }

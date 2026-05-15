@@ -98,6 +98,12 @@ from sop_manager.routers import notify, cli_wrapper
 # ── 新增：SQL 认证 + 租户/项目/数据库配置 ─────────────────────────
 from sop_manager.routers import auth_sql, db_config, audit, webhook
 from sop_manager.routers.health import router as health_router
+from sop_manager.routers.memory_api import router as memory_router
+from sop_manager.routers.sync_api import router as sync_router
+from sop_manager.routers.worker_jobs import router as worker_jobs_router
+from sop_manager.routers.data_analytics import router as analytics_router
+from sop_manager.routers.context_api import router as context_router
+from sop_manager.routers.platforms_api import router as platforms_router
 from sop_manager.routers.tenants import router as tenants_router, biz_router, proj_router
 from sop_manager.routers.sprints import router as sprints_router
 
@@ -176,6 +182,12 @@ except Exception as _e:
     app_logger.warning("routers.env 子包扫描失败: %s", _e)
 
 app.include_router(health_router)
+app.include_router(memory_router)
+app.include_router(sync_router)
+app.include_router(worker_jobs_router)
+app.include_router(analytics_router)
+app.include_router(context_router)
+app.include_router(platforms_router)
 app.include_router(workspace.router)
 app.include_router(requirements.router)
 app.include_router(tasks.router)

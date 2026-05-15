@@ -85,7 +85,31 @@ PORT=9000 PROJECT_PATH=/path/to/app bash ai-sop-ops/start-manager.sh
 | 等待服务就绪 | **`wait-health`**（默认 60s 轮询 `GET /api/health`；**`--timeout SEC`**；可与 **`--json`** 联用输出 `{ok,waitedSec,port}`） |
 | 脚本自检 / 子命令列表 | **`self-check`**（`bash -n` + 补全文件存在；支持 **`--json`**）；**`commands`** 每行一条子命令，供 shell 脚本枚举 |
 
-已安装 **`pip install -e "packages/sop-cli[all]"`**（及 `sop-sdk`）时，推荐使用 Typer 命令：`sop init`、`sop doctor`、`sop agentd`、`sop task` 等；全量开发环境可执行 `bash ai-sop-ops/bootstrap-dev.sh`。详见 `packages/sop-cli` 与 [ai-sop-ops/bootstrap-dev.sh](../ai-sop-ops/bootstrap-dev.sh)。
+**安装 `sop` CLI（推荐，本 monorepo 根目录）**：
+
+```bash
+bash scripts/build-sop.sh --venv .venv --verify
+source .venv/bin/activate
+sop --help
+# 等价：make build-sop
+```
+
+若提示 `command not found: sop`，说明未激活 `.venv` 或未执行上述安装脚本。
+
+已安装 **`pip install -e "packages/sop-cli[all]"`**（及 `sop-sdk`）时，推荐使用 Typer 命令：`sop init`、`sop doctor`、`sop agentd`、`sop task` 等。全量开发环境：`make dev-env` 或 `bash ai-sop-ops/bootstrap-dev.sh`（可加 `--start-agentd`）。**统一工具指南**：[TOOLS_AND_SCRIPTS.md](TOOLS_AND_SCRIPTS.md)；CLI 细节见 [packages/sop-cli/README.md](../packages/sop-cli/README.md)。
+
+### 1.4 轻量 React 壳（`/?shell=1`）
+
+在 `apps/manager-web` 开发模式下访问 **`http://127.0.0.1:5173/?shell=1`**，侧栏按 **交付 / 运营 / AI / 系统** 分组，支持页面搜索（**Ctrl/Cmd+K**）。须先在 **`#/settings`** 登录并在顶栏 **选择项目**。
+
+| 分组 | 主要页面 |
+|------|----------|
+| 交付与执行 | 驾驶舱、项目、任务（看板拖拽 + 新建）、需求、工作流 |
+| 运营与治理 | 组织、数据分析、消息通道、审计 |
+| AI 能力 | AI 助手、智能与知识、市场、AI 平台 |
+| 系统 | 设置 |
+
+任务看板、同步与多平台详见 [ai-sop-ops/SYNC_AND_PLATFORMS.md](../ai-sop-ops/SYNC_AND_PLATFORMS.md)。
 
 ## 2. 菜单与职责速览
 

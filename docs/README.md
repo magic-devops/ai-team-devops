@@ -25,6 +25,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [TOOLS_AND_SCRIPTS.md](TOOLS_AND_SCRIPTS.md) | **脚本与工具统一指南**：`sop`、`make`、`build-sop.sh`、`sop-agentd`、`doctor` 故障排查 |
 | [USER_MANUAL.md](USER_MANUAL.md) | Web 使用手册（§1.2 鉴权 / §1.3 `sop-ctl`） |
 | [ORCHESTRATION_DEV_TOOLS.md](ORCHESTRATION_DEV_TOOLS.md) | Agent 编排、开发工具、受控安装 API 与新特性 |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | 系统架构（v1 背景） |

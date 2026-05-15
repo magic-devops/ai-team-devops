@@ -23,6 +23,10 @@ class AgentConfig:
     manager_url: str = "http://localhost:8765"
     project_id: str = ""
     tenant_id: str = "t-default"
+    # v4 三码（可选）：与 Manager 请求头对齐；缺省时由 SDK 用 tenant_id / project_id 回填。
+    tenant_code: str = ""
+    business_code: str = ""
+    project_code: str = ""
     api_key_ref: str = ""
     api_key: str = ""
     bearer_token: str = ""
@@ -100,6 +104,9 @@ def load_config(project_path: Path | None = None) -> AgentConfig:
         manager_url=os.getenv("MANAGER_URL") or mgr.get("url") or "http://localhost:8765",
         project_id=os.getenv("PROJECT_ID") or mgr.get("project_id") or "",
         tenant_id=os.getenv("TENANT_ID") or mgr.get("tenant_id") or "t-default",
+        tenant_code=os.getenv("TENANT_CODE") or str(mgr.get("tenant_code") or "").strip(),
+        business_code=os.getenv("BUSINESS_CODE") or str(mgr.get("business_code") or "").strip(),
+        project_code=os.getenv("PROJECT_CODE") or str(mgr.get("project_code") or "").strip(),
         api_key_ref=api_key_ref,
         api_key=api_key,
         bearer_token=bearer,

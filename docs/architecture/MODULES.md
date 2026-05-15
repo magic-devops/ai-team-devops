@@ -9,7 +9,7 @@
 | **magic-devops/ai-sop**（外仓） | AI 规约、模板、协作 Markdown **单一真源** | Git + SemVer tag | — |
 | **magic-devops/ai-sop-ops**（外仓，建议） | 运维脚本、`bin`、本地起服与健康检查 | Bash / Python Typer / OCI | 单脚本 < 800 |
 | `apps/manager-api` | 管理面 **同步 API**（目标部署单元） | FastAPI / SQLAlchemy / Pydantic | 单文件 < 500 |
-| `apps/manager-worker` | **异步任务、工作流、批处理**（目标部署单元） | Redis Streams / Temporal / httpx | 单文件 < 500 |
+| `apps/manager-worker` | **异步任务**（健康探活 + 可选 Redis Streams）；`sop-worker` 入口 | httpx（可选 redis） | 单文件 < 500 |
 | `apps/manager` | **当前** API 实现载体（`sop_manager`），迁移后收敛或删除 | 同 manager-api | 单文件 < 500 |
 | `apps/manager-web` | Manager **UI** | Vite / React 18 / TS / Tailwind | 单文件 < 400 |
 | `apps/agent-runtime` | 项目侧守护 | Go 1.22 | 单文件 < 400 |

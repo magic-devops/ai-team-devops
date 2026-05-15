@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>架构升级设计 v3.0 - 大型软件系统</title>
+    
+    <!-- Mermaid.js for architecture diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    
+    <!-- Chart.js for Gantt chart -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Color Palette */
+            --color-background-primary: #FFFFFF;
+            --color-background-secondary: #F8F9FA;
+            --color-background-tertiary: #F1F3F5;
+            --color-text-primary: #1A1A1A;
+            --color-text-secondary: #6B7280;
+            --color-text-tertiary: #9CA3AF;
+            --color-border-primary: #E5E7EB;
+            --color-border-secondary: #D1D5DB;
+            --color-border-tertiary: #F3F4F6;
+            
+            /* Semantic Colors */
+            --color-info: #3B82F6;
+            --color-info-bg: #EFF6FF;
+            --color-success: #10B981;
+            --color-success-bg: #ECFDF5;
+            --color-warning: #F59E0B;
+            --color-warning-bg: #FFFBEB;
+            --color-danger: #EF4444;
+            --color-danger-bg: #FEF2F2;
+            
+            /* Spacing */
+            --border-radius-md: 8px;
+            --border-radius-lg: 12px;
+            --border-radius-xl: 16px;
+            
+            /* Typography */
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: var(--font-sans);
+            background: var(--color-background-secondary);
+            color: var(--color-text-primary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--color-background-primary);
+            border-bottom: 1px solid var(--color-border-primary);
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--color-text-primary);
+        }
+        
+        .header-meta {
+            display: flex;
+            gap: 2rem;
+            font-size: 0.875rem;
+            color: var(--color-text-secondary);
+        }
+        
+        /* Navigation */
+        .nav-sidebar {
+            position: fixed;
+            left: 0;
+            top: 73px;
+            width: 280px;
+            height: calc(100vh - 73px);
+            background: var(--color-background-primary);
+            border-right: 1px solid var(--color-border-primary);
+            overflow-y: auto;
+            padding: 1.5rem 1rem;
+            z-index: 50;
+        }
+        
+        .nav-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .nav-section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--color-text-tertiary);
+            margin-bottom: 0.75rem;
+            padding-left: 0.75rem;
+        }
+        
+        .nav-item {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 0.25rem;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            border-radius: var(--border-radius-md);
+            font-size: 0.875rem;
+            transition: all 0.15s ease;
+        }
+        
+        .nav-item:hover {
+            background: var(--color-background-tertiary);
+            color: var(--color-text-primary);
+        }
+        
+        .nav-item.active {
+            background: var(--color-info-bg);
+            color: var(--color-info);
+            font-weight: 500;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            padding: 2rem 3rem;
+            max-width: 1200px;
+        }
+        
+        /* Section */
+        .section {
+            background: var(--color-background-primary);
+            border-radius: var(--border-radius-xl);
+            border: 1px solid var(--color-border-primary);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--color-border-tertiary);
+        }
+        
+        .section-number {
+            background: var(--color-info);
+            color: white;
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--color-text-primary);
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--color-background-secondary);
+            border-radius: var(--border-radius-lg);
+            border: 1px solid var(--color-border-primary);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--color-text-primary);
+        }
+        
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        
+        th {
+            background: var(--color-background-tertiary);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--color-text-primary);
+            border-bottom: 2px solid var(--color-border-primary);
+        }
+        
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--color-border-tertiary);
+            color: var(--color-text-secondary);
+        }
+        
+        tr:hover td {
+            background: var(--color-background-secondary);
+        }
+        
+        /* Code Block */
+        .code-block {
+            background: #1E293B;
+            color: #E2E8F0;
+            padding: 1.5rem;
+            border-radius: var(--border-radius-lg);
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            line-height: 1.7;
+            margin: 1.5rem 0;
+        }
+        
+        .code-block pre {
+            margin: 0;
+        }
+        
+        /* Mermaid Diagram */
+        .diagram-container {
+            background: var(--color-background-secondary);
+            border-radius: var(--border-radius-lg);
+            padding: 2rem;
+            margin: 1.5rem 0;
+            border: 1px solid var(--color-border-primary);
+            overflow-x: auto;
+        }
+        
+        .diagram-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--color-text-primary);
+        }
+        
+        /* Priority Badge */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-p0 {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+        }
+        
+        .badge-p1 {
+            background: var(--color-warning-bg);
+            color: var(--color-warning);
+        }
+        
+        .badge-p2 {
+            background: var(--color-info-bg);
+            color: var(--color-info);
+        }
+        
+        /* Info Box */
+        .info-box {
+            background: var(--color-info-bg);
+            border-left: 4px solid var(--color-info);
+            padding: 1rem 1.5rem;
+            border-radius: var(--border-radius-md);
+            margin: 1.5rem 0;
+        }
+        
+        .info-box-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--color-info);
+        }
+        
+        /* Gantt Chart */
+        .gantt-container {
+            background: var(--color-background-secondary);
+            border-radius: var(--border-radius-lg);
+            padding: 2rem;
+            margin: 1.5rem 0;
+            border: 1px solid var(--color-border-primary);
+            height: 600px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .nav-sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .main-content {
+                margin-left: 0;
+                padding: 1.5rem;
+            }
+        }
+        
+        /* Print Styles */
+        @media print {
+            .header, .nav-sidebar {
+                display: none;
+            }
+            
+            .main-content {
+                margin-left: 0;
+                padding: 0;
+            }
+            
+            .section {
+                break-inside: avoid;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1>🏗️ 架构升级设计 v3.0</h1>
+            <div class="header-meta">
+                <span>📅 2026-05-15</span>
+                <span>👤 Software Architect</span>
+                <span>📦 基于 v2.0-dev</span>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Navigation Sidebar -->
+    <nav class="nav-sidebar">
+        <div class="nav-section">
+            <div class="nav-section-title">概述</div>
+            <a href="#overview" class="nav-item active">需求解析</a>
+            <a href="#architecture" class="nav-item">升级架构总览</a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">核心设计</div>
+            <a href="#memory" class="nav-item">记忆层设计</a>
+            <a href="#knowledge" class="nav-item">知识库层设计</a>
+            <a href="#isolation" class="nav-item">多租户隔离设计</a>
+            <a href="#communication" class="nav-item">通信架构设计</a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">应用层</div>
+            <a href="#visualization" class="nav-item">可视化管理设计</a>
+            <a href="#ai-capabilities" class="nav-item">AI能力设计</a>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">实施</div>
+            <a href="#tasks" class="nav-item">开发任务规划</a>
+            <a href="#diagrams" class="nav-item">架构图汇总</a>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Section 1: Overview -->
+        <section id="overview" class="section">
+            <div class="section-header">
+                <div class="section-number">1</div>
+                <h2 class="section-title">需求解析</h2>
+            </div>
+            
+            <div class="info-box">
+                <div class="info-box-title">📋 架构映射</div>
+                <p>将用户需求映射到具体的架构层级和关键设计决策</p>
+            </div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>用户需求</th>
+                            <th>架构层</th>
+                            <th>关键设计</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge badge-p0">1</span></td>
+                            <td>记忆能力（mem0等）</td>
+                            <td>记忆层</td>
+                            <td>Memory Abstraction + mem0 adapter</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p0">2</span></td>
+                            <td>知识库系统</td>
+                            <td>知识层</td>
+                            <td>Knowledge Base + RAG 2.0</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p1">3</span></td>
+                            <td>SOP CLI工具</td>
+                            <td>工具层</td>
+                            <td>`sop` CLI 增强</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p0">4</span></td>
+                            <td>租户/业务/项目隔离</td>
+                            <td>隔离层</td>
+                            <td>tenant_code + business_code + project_code</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p1">5</span></td>
+                            <td>前后端分离+通信</td>
+                            <td>通信层</td>
+                            <td>WebSocket + gRPC + Sync Protocol</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p1">6</span></td>
+                            <td>可视化管理</td>
+                            <td>管理层</td>
+                            <td>manager-web v3</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge badge-p2">7</span></td>
+                            <td>AI数据分析</td>
+                            <td>AI层</td>
+                            <td>LLM Gateway + Data Analytics</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        
+        <!-- Section 2: Architecture Overview -->
+        <section id="architecture" class="section">
+            <div class="section-header">
+                <div class="section-number">2</div>
+                <h2 class="section-title">升级架构总览</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">v3 五层架构（升级自v2三层）</h3>
+                <div class="diagram-container">
+                    <div class="diagram-title">图1：v3 五层架构图</div>
+                    <div class="mermaid">
+graph TB
+    subgraph "工具层 (v2 已有)"
+        A1[Codex CLI]
+        A2[Claude Code]
+        A3[Cursor]
+        A4[自建 Agent]
+    end
+    
+    subgraph "SOP-CLI 层 (新增)"
+        B1[sop CLI<br/>init/login/status]
+        B2[agentd 子命令]
+        B3[task/rule/sync 子命令]
+        B4[llm 子命令]
+    end
+    
+    subgraph "项目运行时层 (v2 已有，增强)"
+        C1[agent-runtime<br/>(Go)]
+        C2[记忆模块]
+        C3[知识库模块]
+        C4[数据分析模块]
+        C5[MCP Hub]
+        C6[A2A Node]
+    end
+    
+    subgraph "Manager 管理层 (v2 已有，增强)"
+        D1[manager-api<br/>(FastAPI)]
+        D2[manager-worker<br/>(Temporal)]
+        D3[多租户中间件]
+        D4[可视化管理 v3]
+        D5[AI Copilot]
+    end
+    
+    subgraph "基础设施层 (v2 已有)"
+        E1[(Redis)]
+        E2[(PostgreSQL)]
+        E3[(LanceDB)]
+        E4[Prometheus]
+        E5[Grafana]
+    end
+    
+    A1 -->|hooks/MCP| B1
+    A2 -->|hooks/MCP| B1
+    B1 -->|stdio/IPC| C1
+    C1 -->|HTTPS REST/WSS| D1
+    D1 -->|gRPC| C1
+    C1 --> E1
+    C1 --> E2
+    C1 --> E3
+    D1 --> E1
+    D1 --> E2
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">技术栈版本升级</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>组件</th>
+                                <th>v2</th>
+                                <th>v3</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Manager API</strong></td>
+                                <td>FastAPI (Python)</td>
+                                <td>FastAPI + RBAC</td>
+                                <td>新增多租户中间件</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Manager Worker</strong></td>
+                                <td>Queue + Temporal</td>
+                                <td>Temporal Cloud</td>
+                                <td>完整工作流引擎</td>
+                            </tr>
+                            <tr>
+                                <td><strong>agent-runtime</strong></td>
+                                <td>Go 二进制</td>
+                                <td>Go + Plugin System</td>
+                                <td>新增记忆/知识库插件</td>
+                            </tr>
+                            <tr>
+                                <td><strong>前端</strong></td>
+                                <td>Vite + React 18</td>
+                                <td>Vite 6 + React 19</td>
+                                <td>升级到最新</td>
+                            </tr>
+                            <tr>
+                                <td><strong>记忆系统</strong></td>
+                                <td>Hermes 增强</td>
+                                <td>mem0 + LanceDB</td>
+                                <td>可扩展记忆</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 3: Memory Layer -->
+        <section id="memory" class="section">
+            <div class="section-header">
+                <div class="section-number">3</div>
+                <h2 class="section-title">记忆层设计（mem0 集成）</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">架构设计</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph LR
+    A[记忆抽象层<br/>Memory Abstraction] --> B[短期记忆 Session]
+    A --> C[长期记忆 mem0]
+    B --> D[记忆路由器<br/>Memory Router]
+    C --> D
+    D --> E[mem0 Adapter]
+    D --> F[LanceDB Adapter]
+    D --> G[File Adapter]
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">记忆层 API 设计</h3>
+                <div class="code-block">
+<pre><code># apis/openapi/memory.yaml (部分)
+paths:
+  /api/v1/memory/{tenant_code}/{project_code}:
+    post:
+      summary: 写入记忆
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  description: 记忆内容
+                metadata:
+                  type: object
+                  description: 元数据
+                memory_type:
+                  type: string
+                  enum: [short_term, long_term, episodic]
+              required: [content, memory_type]
+      responses:
+        '200':
+          description: 写入成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memory_id:
+                    type: string
+                    format: uuid</code></pre>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 4: Knowledge Layer -->
+        <section id="knowledge" class="section">
+            <div class="section-header">
+                <div class="section-number">4</div>
+                <h2 class="section-title">知识库层设计</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">知识库流水线</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph LR
+    A[文档] --> D[知识库流水线]
+    B[Web] --> D
+    C[代码] --> D
+    D --> E[Chunk 语义分块]
+    E --> F[Embed 向量化]
+    F --> G[Index 索引]
+    G --> H[Store 存储]
+    H --> I[(LanceDB)]
+    H --> J[(Qdrant)]
+    H --> K[(File)]
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 5: Multi-tenant Isolation -->
+        <section id="isolation" class="section">
+            <div class="section-header">
+                <div class="section-number">5</div>
+                <h2 class="section-title">多租户隔离设计</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">三级隔离模型</h3>
+                <div class="diagram-container">
+                    <div class="diagram-title">图2：多租户隔离模型</div>
+                    <div class="mermaid">
+graph TD
+    subgraph "租户 A"
+        B1[业务 B1]
+        B2[业务 B2]
+    end
+    
+    subgraph "业务 B1"
+        P1[项目 P1]
+        P2[项目 P2]
+    end
+    
+    subgraph "项目 P1"
+        R1[需求]
+        T1[任务]
+        M1[记忆]
+        K1[知识库]
+    end
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">数据库 Schema 设计</h3>
+                <div class="code-block">
+<pre><code>-- 租户表
+CREATE TABLE tenants (
+    tenant_code VARCHAR(32) PRIMARY KEY,
+    tenant_name VARCHAR(128) NOT NULL,
+    status TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP 
+                ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='租户表';
+
+-- 业务表
+CREATE TABLE businesses (
+    business_code VARCHAR(32) PRIMARY KEY,
+    tenant_code VARCHAR(32) NOT NULL,
+    business_name VARCHAR(128) NOT NULL,
+    status TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    INDEX idx_tenant_code (tenant_code),
+    FOREIGN KEY (tenant_code) REFERENCES tenants(tenant_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='业务表';
+
+-- 项目表
+CREATE TABLE projects (
+    project_code VARCHAR(32) PRIMARY KEY,
+    business_code VARCHAR(32) NOT NULL,
+    tenant_code VARCHAR(32) NOT NULL,
+    project_name VARCHAR(128) NOT NULL,
+    status TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    INDEX idx_tenant_business (tenant_code, business_code),
+    FOREIGN KEY (business_code) REFERENCES businesses(business_code),
+    FOREIGN KEY (tenant_code) REFERENCES tenants(tenant_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目表';</code></pre>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 6: Communication Architecture -->
+        <section id="communication" class="section">
+            <div class="section-header">
+                <div class="section-number">6</div>
+                <h2 class="section-title">通信架构设计</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">前后端通信架构</h3>
+                <div class="diagram-container">
+                    <div class="diagram-title">图3：通信架构序列图</div>
+                    <div class="mermaid">
+sequenceDiagram
+    participant FE as 前端 React
+    participant API as Manager API
+    participant WS as WebSocket
+    participant GRPC as gRPC Server
+    participant AR as agent-runtime
+    
+    FE->>API: HTTPS REST 请求
+    API-->>FE: HTTPS REST 响应
+    
+    FE->>WS: WSS 连接 /ws/events
+    API->>WS: 推送事件 Server-sent
+    WS-->>FE: 事件推送 CloudEvents
+    
+    AR->>GRPC: gRPC 请求 高频低延迟
+    GRPC-->>AR: gRPC 响应
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 7: Visualization -->
+        <section id="visualization" class="section">
+            <div class="section-header">
+                <div class="section-number">7</div>
+                <h2 class="section-title">可视化管理设计</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">管理界面架构</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph TD
+    A[可视化管理 v3] --> B[驾驶舱 Dashboard]
+    A --> C[运维中心 Ops Center]
+    A --> D[AI 中心 AI Center]
+    A --> E[设置 Settings]
+    
+    B --> B1[需求管理 Kanban]
+    B --> B2[任务管理 Gantt]
+    B --> B3[进度追踪 Burndown]
+    
+    C --> C1[用户管理 RBAC]
+    C --> C2[权限管理 ABAC]
+    C --> C3[租户管理]
+    C --> C4[项目管理]
+    
+    D --> D1[LLM 路由配置]
+    D --> D2[记忆管理]
+    D --> D3[知识库管理]
+    D --> D4[数据分析]
+                </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 8: AI Capabilities -->
+        <section id="ai-capabilities" class="section">
+            <div class="section-header">
+                <div class="section-number">8</div>
+                <h2 class="section-title">AI能力设计</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">AI 数据分析架构</h3>
+                <div class="diagram-container">
+                    <div class="mermaid">
+graph LR
+    A[需求数据] --> D[LLM Gateway]
+    B[任务数据] --> D
+    C[记忆数据] --> D
+    
+    D --> E[Anthropic Claude]
+    D --> F[OpenAI GPT]
+    D --> G[本地 Ollama]
+    
+    D --> H[分析流水线]
+    H --> I[数据聚合]
+    H --> J[趋势分析]
+    H --> K[异常检测]
+    H --> L[预测]
+    
+    H --> M[输出]
+    M --> N[报表 PDF/Excel]
+    M --> O[图表 Recharts]
+    M --> P[自然语言摘要]
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 9: Task Planning -->
+        <section id="tasks" class="section">
+            <div class="section-header">
+                <div class="section-number">9</div>
+                <h2 class="section-title">开发任务规划</h2>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">任务分解（按优先级）</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>任务ID</th>
+                                <th>任务名称</th>
+                                <th>所属层</th>
+                                <th>预估工时</th>
+                                <th>依赖</th>
+                                <th>优先级</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>T001</strong></td>
+                                <td>多租户数据库迁移（Alembic）</td>
+                                <td>Manager API</td>
+                                <td>8h</td>
+                                <td>-</td>
+                                <td><span class="badge badge-p0">P0</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>T002</strong></td>
+                                <td>隔离中间件实现</td>
+                                <td>Manager API</td>
+                                <td>4h</td>
+                                <td>T001</td>
+                                <td><span class="badge badge-p0">P0</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>T003</strong></td>
+                                <td>mem0 适配器实现</td>
+                                <td>项目运行时</td>
+                                <td>12h</td>
+                                <td>-</td>
+                                <td><span class="badge badge-p0">P0</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>T004</strong></td>
+                                <td>记忆层 API 实现</td>
+                                <td>Manager API</td>
+                                <td>8h</td>
+                                <td>T002</td>
+                                <td><span class="badge badge-p0">P0</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>T005</strong></td>
+                                <td>知识库流水线实现</td>
+                                <td>项目运行时</td>
+                                <td>16h</td>
+                                <td>-</td>
+                                <td><span class="badge badge-p1">P1</span></td>
+                            </tr>
+                            <tr>
+                                <td><strong>T009</strong></td>
+                                <td>可视化管理 v3 前端</td>
+                                <td>manager-web</td>
+                                <td>40h</td>
+                                <td>T004, T006</td>
+                                <td><span class="badge badge-p1">P1</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">甘特图 - 开发进度规划</h3>
+                <div class="gantt-container">
+                    <canvas id="ganttChart"></canvas>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 10: Architecture Diagrams -->
+        <section id="diagrams" class="section">
+            <div class="section-header">
+                <div class="section-number">10</div>
+                <h2 class="section-title">架构图汇总</h2>
+            </div>
+            
+            <div class="info-box">
+                <div class="info-box-title">📊 交互式架构图</div>
+                <p>所有架构图均使用 Mermaid.js 渲染，支持缩放和交互操作</p>
+            </div>
+            
+            <div class="card">
+                <h3 class="card-title">架构图查看指南</h3>
+                <ul style="line-height: 2;">
+                    <li><strong>图1</strong>：v3 五层架构图 - 查看 <a href="#architecture">架构总览</a></li>
+                    <li><strong>图2</strong>：多租户隔离模型 - 查看 <a href="#isolation">隔离设计</a></li>
+                    <li><strong>图3</strong>：通信架构序列图 - 查看 <a href="#communication">通信架构</a></li>
+                </ul>
+            </div>
+        </section>
+        
+        <!-- Next Steps -->
+        <section class="section">
+            <div class="section-header">
+                <div class="section-number">▶</div>
+                <h2 class="section-title">下一步行动</h2>
+            </div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>步骤</th>
+                            <th>行动</th>
+                            <th>负责人</th>
+                            <th>期望完成</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>评审本架构设计文档</td>
+                            <td>你（人类）</td>
+                            <td>2026-05-16</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>批准/提出修改建议</td>
+                            <td>你（人类）</td>
+                            <td>2026-05-17</td>
+                        </tr>
+                        <tr>
+                            <td>3</td>
+                            <td>开始执行 T001（多租户数据库迁移）</td>
+                            <td>AI Agent</td>
+                            <td>2026-05-20</td>
+                        </tr>
+                        <tr>
+                            <td>4</td>
+                            <td>每周同步进度</td>
+                            <td>AI Agent + 你</td>
+                            <td>每周五</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+    
+    <script>
+        // Initialize Mermaid
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#3B82F6',
+                primaryTextColor: '#1A1A1A',
+                primaryBorderColor: '#E5E7EB',
+                lineColor: '#6B7280',
+                secondaryColor: '#F3F4F6',
+                tertiaryColor: '#EFF6FF',
+                background: '#FFFFFF',
+                mainBkg: '#F8F9FA',
+                nodeBorder: '#E5E7EB',
+                clusterBkg: '#F8F9FA',
+                titleColor: '#1A1A1A',
+                edgeLabelBackground: '#FFFFFF',
+                fontFamily: 'Inter, sans-serif'
+            }
+        });
+        
+        // Smooth scrolling for navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Remove active class from all items
+                document.querySelectorAll('.nav-item').forEach(nav => {
+                    nav.classList.remove('active');
+                });
+                
+                // Add active class to clicked item
+                this.classList.add('active');
+                
+                // Smooth scroll to section
+                const targetId = this.getAttribute('href');
+                const targetElement = document.querySelector(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // Update active nav item on scroll
+        window.addEventListener('scroll', function() {
+            const sections = document.querySelectorAll('section[id]');
+            const scrollPos = window.scrollY + 100;
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.offsetHeight;
+                const sectionId = section.getAttribute('id');
+                
+                if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
+                    document.querySelectorAll('.nav-item').forEach(item => {
+                        item.classList.remove('active');
+                        if (item.getAttribute('href') === '#' + sectionId) {
+                            item.classList.add('active');
+                        }
+                    });
+                }
+            });
+        });
+        
+        // Gantt Chart
+        const ganttCtx = document.getElementById('ganttChart');
+        if (ganttCtx) {
+            const ganttChart = new Chart(ganttCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['T001', 'T002', 'T003', 'T004', 'T005', 'T006', 'T007', 'T008', 'T009', 'T010', 'T011', 'T012'],
+                    datasets: [{
+                        label: '开始日期',
+                        data: [0, 1, 0, 2, 2, 2, 5, 2, 4, 2, 4, 8],
+                        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1,
+                        barPercentage: 0.8
+                    }, {
+                        label: '持续时间 (天)',
+                        data: [1, 0.5, 1.5, 1, 2, 1, 1.5, 0.75, 5, 1.5, 2, 1.5],
+                        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 1,
+                        barPercentage: 0.8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '开发任务甘特图 (v3.0)',
+                            font: {
+                                size: 16,
+                                weight: '600'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.datasetIndex === 0) {
+                                        return '开始: 2026-05-' + (20 + context.parsed.x) + ' (' + context.parsed.x + '天后)';
+                                    } else {
+                                        return '持续: ' + (context.parsed.x * 8) + '小时 (' + context.parsed.x + '天)';
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: '天数 (从2026-05-20开始)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '5-' + (20 + value);
+                                }
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: '任务ID'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

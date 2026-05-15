@@ -67,10 +67,11 @@ def init(
     console.rule("[bold green]完成")
     console.print(textwrap.dedent(f"""
         下一步建议：
-          1. 启动 agentd:    [bold]sop agentd install && sop agentd start[/bold]
-          2. 健康自检:       [bold]sop doctor[/bold] 或 [bold]bash ai-sop-ops/sop-ctl.sh doctor[/bold]
-          3. 状态总览:       [bold]sop status[/bold]
-          4. 启动 Manager:   [bold]bash ai-sop-ops/sop-ctl.sh start[/bold] 或 [bold]bash ai-sop-ops/start-manager.sh[/bold]
+          1. 启动 Manager:   [bold]bash ai-sop-ops/start-manager.sh[/bold]
+          2. 配对:           [bold]sop login --pair[/bold]
+          3. 启动 agentd:    [bold]sop agentd start[/bold]（可选 [bold]sop agentd install[/bold] 自启）
+          4. 健康自检:       [bold]sop doctor[/bold]（见 docs/TOOLS_AND_SCRIPTS.md）
+          5. 状态总览:       [bold]sop status[/bold]
     """).strip())
 
 

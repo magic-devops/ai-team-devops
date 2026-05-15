@@ -14,10 +14,12 @@ CLI_TOOLS: Dict[str, Dict[str, str]] = {
     "openclaw":     {"cmd": "openclaw",    "description": "OpenClaw AI 编码工具"},
     "workbuddy":    {"cmd": "workbuddy",   "description": "WorkBuddy AI 助手"},
     "hermes-agent": {"cmd": "hermes",      "description": "Hermes Agent（NousResearch）"},
+    "hermes":       {"cmd": "hermes",      "description": "Hermes Agent（别名）"},
     "claude":       {"cmd": "claude",      "description": "Claude Code CLI"},
     "opencode":     {"cmd": "opencode",    "description": "opencode TUI"},
     "aider":        {"cmd": "aider",       "description": "Aider AI 编码"},
     "cursor":       {"cmd": "cursor",      "description": "Cursor IDE"},
+    "windsurf":     {"cmd": "windsurf",    "description": "Windsurf IDE（Codeium）"},
     "trae":         {"cmd": "trae",        "description": "Trae AI IDE，读取 .trae/rules.md"},
     "qoder":        {"cmd": "qoder",     "description": "Qoder，读取 .qoder/context.md"},
 }
@@ -76,7 +78,10 @@ def _hint(tool: str) -> str:
         "aider":        "pip install aider-chat --break-system-packages",
         "openclaw":     "参考 https://github.com/openclaw/openclaw",
         "workbuddy":    "参考 WorkBuddy 官方文档",
-        "hermes-agent": "pip install hermes-agent --break-system-packages",
+        "hermes-agent": "pip install hermes-agent",
+        "hermes":       "pip install hermes-agent",
+        "windsurf":     "Codeium Windsurf IDE",
+        "cursor":       "https://cursor.com",
     }
     return hints.get(tool, f"请参考 {tool} 官方文档安装")
 

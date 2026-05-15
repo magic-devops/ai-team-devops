@@ -3,12 +3,17 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Sparkles } from "lucide-react";
 import { Card } from "../components/Card";
+import { NeedLogin } from "../components/PageStates";
 import { api } from "../lib/api";
+import { getToken } from "../lib/authStorage";
 
 export function Copilot() {
   const { t } = useTranslation();
+  const authed = Boolean(getToken());
   const [q, setQ] = useState("");
   const ask = useMutation({ mutationFn: (s: string) => api.copilotAsk(s) });
+
+  if (!authed) return <NeedLogin />;
 
   return (
     <div className="mx-auto max-w-3xl">

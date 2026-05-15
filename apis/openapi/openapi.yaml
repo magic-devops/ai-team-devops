@@ -39,6 +39,7 @@ tags:
   - { name: plugins,      description: 插件管理 }
   - { name: marketplace,  description: 规约 / 技能市场 }
   - { name: copilot,      description: 内嵌 AI 助手 }
+  - { name: platforms,    description: AI Agent / CLI / IDE 平台注册表 }
   - { name: health,       description: 探活 }
 
 security:
@@ -270,6 +271,132 @@ paths:
           description: ok
           content:
             application/json: { schema: { $ref: "#/components/schemas/RagSearchOut" } }
+
+  /api/v1/memory/health:
+    get:
+      operationId: memoryHealth
+      tags: [rag]
+      summary: 记忆服务探活
+      security: []
+      responses:
+        "200": { description: ok }
+
+  /api/v1/memory:
+    post:
+      operationId: memoryCreate
+      tags: [rag]
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                kind: { type: string, enum: [short, long, episodic] }
+                metadata: { type: object }
+      responses:
+        "200": { description: ok }
+
+  /api/v1/sync/pull:
+    get:
+      operationId: syncPull
+      tags: [workflow]
+      summary: 游标拉取结构化变更
+      parameters:
+        - { $ref: "#/components/parameters/XProjectId" }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: modules, in: query, schema: { type: string } }
+      responses:
+        "200": { description: ok }
+
+  /api/v1/sync/push:
+    post:
+      operationId: syncPush
+      tags: [workflow]
+      summary: 推送单条结构化变更（幂等键可选）
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [module, record]
+              properties:
+                module: { type: string, enum: [tasks, requirements, issues, sprints] }
+                action: { type: string, enum: [upsert, delete], default: upsert }
+                record: { type: object, additionalProperties: true }
+                idempotency_key: { type: string }
+      responses:
+        "200": { description: ok }
+
+  /api/v1/sync/journal:
+    get:
+      operationId: syncJournal
+      tags: [workflow]
+      summary: 同步事件流水
+      parameters:
+        - { $ref: "#/components/parameters/XProjectId" }
+        - { name: since, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 100 } }
+      responses:
+        "200": { description: ok }
+
+  /api/v1/context/me:
+    get:
+      operationId: contextMe
+      tags: [projects]
+      summary: 当前请求三码与项目上下文
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      responses:
+        "200": { description: ok }
+
+  /api/v1/platforms:
+    get:
+      operationId: platformsList
+      tags: [platforms]
+      summary: 列举已注册 AI 平台及本地就绪状态
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformsListOut" }
+
+  /api/v1/platforms/install-shims/{platform_id}:
+    post:
+      operationId: platformsInstallShims
+      tags: [platforms]
+      summary: 生成缺失的 hook shim（不覆盖 hooks.json）
+      parameters:
+        - name: platform_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: ok }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/worker/jobs:
+    post:
+      operationId: workerEnqueue
+      tags: [workflow]
+      summary: 投递异步 Worker 任务
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      responses:
+        "200": { description: ok }
+
+  /api/v1/analytics/overview:
+    get:
+      operationId: analyticsOverview
+      tags: [copilot]
+      summary: 项目指标概览
+      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      responses:
+        "200": { description: ok }
 
   /api/v1/console/overview:
     get:
@@ -574,3 +701,23 @@ components:
               title: { type: string }
               project_id: { type: string }
               created_at: { type: string, format: date-time }
+
+    PlatformsListOut:
+      type: object
+      properties:
+        ok: { type: boolean }
+        project_root: { type: string }
+        platforms:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              category: { type: string }
+              integration: { type: string }
+              hook_format: { type: string }
+              cli_available: { type: boolean }
+              hook_shim_present: { type: boolean }
+              ready: { type: boolean }
+              install_hint: { type: string }

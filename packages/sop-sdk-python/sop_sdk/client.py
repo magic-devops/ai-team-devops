@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Iterable, Mapping
-from urllib.parse import urljoin, urlparse
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import httpx
 from tenacity import (
-    Retrying,
     RetryError,
+    Retrying,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -49,6 +49,9 @@ class ManagerClient:
         *,
         auth: Auth | None = None,
         project_id: str = "",
+        tenant_code: str = "",
+        business_code: str = "",
+        project_code: str = "",
         timeout: float = 30,
         max_retries: int = 3,
         verify: bool = True,
@@ -57,6 +60,9 @@ class ManagerClient:
         self.base_url = base_url.rstrip("/")
         self.auth: Auth = auth or NoAuth()
         self.project_id = project_id
+        self.tenant_code = tenant_code
+        self.business_code = business_code
+        self.project_code = project_code
         self.timeout = timeout
         self.max_retries = max_retries
         self._client = httpx.Client(
@@ -71,11 +77,26 @@ class ManagerClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "ManagerClient":
+    def __enter__(self) -> ManagerClient:
         return self
 
     def __exit__(self, *_exc) -> None:
         self.close()
+
+    def _scope_headers(self) -> dict[str, str]:
+        h: dict[str, str] = {}
+        if self.project_id:
+            h["X-Project-Id"] = self.project_id
+        tc = (self.tenant_code or "").strip()
+        if tc:
+            h["X-Tenant-Code"] = tc
+        bc = (self.business_code or "").strip()
+        if bc:
+            h["X-Business-Code"] = bc
+        pc = (self.project_code or "").strip()
+        if pc:
+            h["X-Project-Code"] = pc
+        return h
 
     # ── 核心 _request ──────────────────────────────────────────────
     def _request(
@@ -95,8 +116,8 @@ class ManagerClient:
 
         def _do() -> Any:
             headers: dict[str, str] = dict(extra_headers or {})
-            if self.project_id:
-                headers.setdefault("X-Project-Id", self.project_id)
+            for k, v in self._scope_headers().items():
+                headers.setdefault(k, v)
             if body_bytes:
                 headers["Content-Type"] = "application/json"
             self.auth.attach(method, url_path, headers, body_bytes)
@@ -239,9 +260,134 @@ class ManagerClient:
             body["collections"] = collections
         return self._request("POST", "/api/v1/rag/search", json_body=body)
 
+    # ── v4 记忆（可扩展后端 file → mem0）────────────────────────────
+    def memory_health(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/memory/health", retry=False)
+
+    def memory_add(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/memory", json_body=body)
+
+    def memory_search(self, q: str, *, limit: int = 20) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/memory/search", params={"q": q, "limit": limit})
+
+    def memory_recent(self, *, limit: int = 30) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/memory/recent", params={"limit": limit})
+
+    def knowledge_search_workspace(self, q: str, *, category: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"q": q}
+        if category:
+            params["category"] = category
+        return self._request("GET", "/api/v1/knowledge/search", params=params)
+
+    def knowledge_create(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/knowledge", json_body=body)
+
+    def knowledge_index(self) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/knowledge/index")
+
+    def sync_pull(
+        self,
+        *,
+        cursor: str = "",
+        modules: str = "tasks,requirements,issues,sprints",
+        limit: int = 200,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/sync/pull",
+            params={"cursor": cursor, "modules": modules, "limit": limit},
+        )
+
+    def sync_health(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/sync/health", retry=False)
+
+    def worker_enqueue(self, job_type: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/worker/jobs",
+            json_body={"type": job_type, "payload": dict(payload or {})},
+        )
+
+    def worker_job_status(self, job_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/worker/jobs/{job_id}")
+
+    def worker_health(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/worker/health", retry=False)
+
+    def notify_list_channels(self) -> list[dict[str, Any]]:
+        r = self._request("GET", "/api/v1/notify/channels")
+        return r if isinstance(r, list) else []
+
+    def notify_test_channel(self, channel_name: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/notify/test/{channel_name}")
+
+    def list_businesses(self) -> list[dict[str, Any]]:
+        r = self._request("GET", "/api/v1/businesses")
+        return r if isinstance(r, list) else []
+
+    def list_auth_users(self) -> list[dict[str, Any]]:
+        r = self._request("GET", "/api/v1/auth/users")
+        return r if isinstance(r, list) else []
+
+    def data_analytics_overview(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/analytics/overview")
+
+    def data_analytics_nlq(self, question: str) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/nlq", json_body={"question": question})
+
+    def platforms_list(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/platforms")
+
+    def platforms_install_shims(self, platform_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/platforms/install-shims/{platform_id}")
+
+    def copilot_ask(self, query: str, *, context: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {"query": query}
+        if context:
+            body["context"] = dict(context)
+        return self._request("POST", "/api/v1/copilot/ask", json_body=body)
+
+    def copilot_classify(self, text: str) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/copilot/classify", json_body={"text": text})
+
+    def copilot_summarize(self, items: list[str]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/copilot/summarize", json_body={"items": items})
+
+    def copilot_suggest(self, context: str, *, goal: str = "") -> dict[str, Any]:
+        return self._request("POST", "/api/v1/copilot/suggest", json_body={"context": context, "goal": goal})
+
+    def context_me(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/context/me")
+
+    def sync_push(
+        self,
+        module: str,
+        record: Mapping[str, Any],
+        *,
+        action: str = "upsert",
+        idempotency_key: str = "",
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/sync/push",
+            json_body={
+                "module": module,
+                "action": action,
+                "record": dict(record),
+                "idempotency_key": idempotency_key,
+            },
+        )
+
+    def sync_journal(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/sync/journal", params={"since": since, "limit": limit})
+
     # 工作台驾驶舱（原 console/overview 合并至此）
     def console_overview(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/dashboard")
+
+    def health_detail(self) -> dict[str, Any]:
+        """含 DB/向量/系统检查；带 Bearer 时 paths 中含 v4 三码作用域。"""
+        return self._request("GET", "/api/v1/health/detail")
 
 
 def build_default_client(config: AgentConfig | None = None) -> ManagerClient:
@@ -253,10 +399,16 @@ def build_default_client(config: AgentConfig | None = None) -> ManagerClient:
         auth = HmacAuth(cfg.api_key)
     else:
         auth = auth_from_env()
+    tenant_code = (cfg.tenant_code or "").strip() or (cfg.tenant_id or "").strip()
+    business_code = (cfg.business_code or "").strip()
+    project_code = (cfg.project_code or "").strip() or (cfg.project_id or "").strip()
     return ManagerClient(
         base_url=cfg.manager_url,
         auth=auth,
         project_id=cfg.project_id,
+        tenant_code=tenant_code,
+        business_code=business_code,
+        project_code=project_code,
         timeout=cfg.timeout_seconds,
         max_retries=cfg.max_retries,
         verify=cfg.verify_ssl,

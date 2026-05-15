@@ -1,0 +1,45 @@
+{
+  "description": "sop unified hooks for Hermes Agent → ai-sop-ops/sop_ai_hook.py (hermes)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.hermes/hooks/sop_hook.py\" SessionStart"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.hermes/hooks/sop_hook.py\" PreToolUse"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.hermes/hooks/sop_hook.py\" PostToolUse"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.hermes/hooks/sop_hook.py\" Stop"
+          }
+        ]
+      }
+    ]
+  }
+}

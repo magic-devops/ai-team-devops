@@ -12,17 +12,35 @@ dependencies = []
 
 [project.optional-dependencies]
 manager = ["sop-manager"]
+worker = ["sop-manager-worker"]
 sdk = ["sop-sdk"]
 cli = ["sop-cli"]
-all = ["sop-manager", "sop-sdk", "sop-cli"]
+all = ["sop-manager", "sop-manager-worker", "sop-sdk", "sop-cli"]
 
 # 用 uv / pip / hatch workspace 都能识别
 [tool.uv.workspace]
 members = [
   "apps/manager",
+  "apps/manager-worker",
   "packages/sop-cli",
   "packages/sop-sdk-python",
 ]
+
+[tool.uv.sources]
+sop-manager = { workspace = true }
+sop-manager-worker = { workspace = true }
+sop-cli = { workspace = true }
+sop-sdk = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "sop-cli",
+  "sop-sdk",
+  "sop-manager-worker",
+]
+
+[tool.uv]
+default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 110

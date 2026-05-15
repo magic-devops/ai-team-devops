@@ -1,14 +1,15 @@
-# sop
+# sop-dev
 
 ## AI 开发规约
 
-本项目使用 sop 规约体系。规约 Markdown 在 **`ai-sop/`**（Git submodule `magic-devops/ai-sop`）；运维脚本在 **`ai-sop-ops/`**。
+本项目使用 sop 规约体系。规约 Markdown 建议放在 **`ai-sop/`**（Git submodule）；运维脚本可参考 **`ai-sop-ops/`**。
 
 ### 启动检查清单
 
 1. 读取 `memory/current_state.json` 了解当前状态
 2. 读取 `.ai-memory/rules/RULES.md` 加载项目规则
-3. 按需查阅 **`ai-sop/specs/`**、**`ai-sop/quality/`** 下对应规范；IDE 规则见仓库根 **`.cursorrules`**、**`.trae/rules.md`**、**`.qoder/context.md`**
+3. 按需查阅 **`ai-sop/specs/`** 等规范；IDE 规则见 **`.cursorrules`**、**`.trae/rules.md`**、**`.qoder/context.md`**
+4. 确认当前阶段和待处理任务
 
 ### 核心原则
 
@@ -16,7 +17,8 @@
 - 状态外化：进度持久化到 memory/ 目录
 - 可追溯：commit 格式 `type(scope): desc [T-id]`
 - 安全优先：用户输入必须验证，禁止硬编码密钥
-- 统一能力：AI Agent / CLI / IDE 通过 `ai-sop-ops/AI_CAPABILITY_CONTROL_PLANE.md`、`.ai-memory/ai_capabilities.json` 与 `ai-sop-ops/sop_ai_hook.py`（或 `.claude/sop_ai_hook_launcher.py`）接入统一能力控制平面
+
+### 技术栈
 
 （在此填写项目技术栈）
 

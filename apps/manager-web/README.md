@@ -48,3 +48,37 @@ public/
 - **路由可替换**：当前用 hash 路由（零依赖），切换到 `@tanstack/react-router` 仅改 `App.tsx`
 - **国际化默认**：所有可见字符串走 `t()`；新增字段同步更新 `i18n/<lang>.json`
 - **可观测**：默认接 Manager `/metrics`、`/api/v1/audit/chain/state` 等只读端点
+
+## 轻量壳导航（`/?shell=1`）
+
+侧栏按 **四大分组** 组织，支持 **搜索（Ctrl/Cmd+K）** 与分组折叠：
+
+| 分组 | 页面 |
+|------|------|
+| 交付与执行 | 驾驶舱、项目、任务、需求、工作流 |
+| 运营与治理 | 组织、数据分析、消息通道、审计 |
+| AI 能力 | AI 助手、智能与知识、市场、AI 平台 |
+| 系统 | 设置（登录 / 主题） |
+
+顶栏 **项目选择器** 写入 `X-Project-Id`；多数业务 API 须已登录且已选项目。
+
+## 任务看板与 Sprint（`/#/tasks`）
+
+1. `pnpm dev` → `http://localhost:5173/?shell=1#/settings` 登录
+2. 顶栏 **选择项目**
+3. **任务** Tab：状态看板（拖拽改状态）、优先级（拖拽排序）、Sprint 进度
+
+完整 Vibe / 深度编排请用 **`/console.html`**。  
+详见 [`ai-sop-ops/SYNC_AND_PLATFORMS.md`](../../ai-sop-ops/SYNC_AND_PLATFORMS.md) §5。
+
+## 安装 `sop` CLI（本 monorepo）
+
+```bash
+# 仓库根目录
+bash scripts/build-sop.sh --venv .venv --verify
+source .venv/bin/activate
+sop --help
+# 或：make build-sop
+```
+
+见 [`packages/sop-cli/README.md`](../../packages/sop-cli/README.md)。

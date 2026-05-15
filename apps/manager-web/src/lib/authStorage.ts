@@ -25,6 +25,19 @@ function notifySession() {
   }
 }
 
+export function setProjectId(projectId: string | null) {
+  try {
+    if (projectId && projectId.trim()) {
+      localStorage.setItem(PROJECT_ID_KEY, projectId.trim());
+    } else {
+      localStorage.removeItem(PROJECT_ID_KEY);
+    }
+    notifySession();
+  } catch {
+    /* ignore */
+  }
+}
+
 export function setSession(token: string, projectId: string | null | undefined) {
   localStorage.setItem(TOKEN_KEY, token);
   if (projectId && String(projectId).trim()) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -20,6 +21,7 @@ type Auth struct {
 	Method     string `toml:"method"`       // apikey | bearer | mtls
 	APIKeyRef  string `toml:"api_key_ref"`  // keyring://... / env://... / file://...
 	APIKey     string // 运行时解析
+	Bearer     string // 运行时解析（SOP_BEARER_TOKEN / ~/.sop/credentials）
 	VerifySSL  bool   `toml:"verify_ssl"`
 }
 
@@ -101,9 +103,16 @@ func Load() (*Config, error) {
 		cfg.Manager.TenantID = v
 	}
 
-	// 解析 api_key_ref
+	// 解析 api_key_ref / bearer
 	if cfg.Auth.APIKey == "" {
 		cfg.Auth.APIKey = resolveAPIKey(cfg.Auth.APIKeyRef)
+	}
+	if v := os.Getenv("SOP_BEARER_TOKEN"); v != "" {
+		cfg.Auth.Bearer = v
+	} else if v := os.Getenv("MANAGER_SOP_TOKEN"); v != "" {
+		cfg.Auth.Bearer = v
+	} else if v := resolveBearerFromFile(filepath.Join(home, ".sop", "credentials")); v != "" {
+		cfg.Auth.Bearer = v
 	}
 
 	// 运行时路径
@@ -123,6 +132,20 @@ func mergeFromFile(cfg *Config, path string) error {
 	}
 	_, err := toml.DecodeFile(path, cfg)
 	return err
+}
+
+func resolveBearerFromFile(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "SOP_BEARER_TOKEN=") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "SOP_BEARER_TOKEN="))
+		}
+	}
+	return ""
 }
 
 func resolveAPIKey(ref string) string {

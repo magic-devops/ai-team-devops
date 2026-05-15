@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/outbox"
+	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/pusher"
 )
 
 // IPCRequest: { "v":1, "op":"...", "name":"...", "data":{...} }
@@ -98,7 +100,18 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 		}
 		return IPCResponse{OK: true, ID: e.ID}
 	case "task.update":
-		e := outbox.NewEvent("sop.task.status_changed", req.Name, req.Data)
+		if d.pusher == nil {
+			return IPCResponse{OK: false, Error: "pusher not initialized"}
+		}
+		record := map[string]any{"id": req.Name}
+		for k, v := range req.Data {
+			record[k] = v
+		}
+		item := pusher.PushItem{Module: "tasks", Action: "upsert", Record: record}
+		_ = d.pusher.Enqueue(item)
+		e := outbox.NewEvent("sop.sync.push", req.Name, map[string]any{
+			"module": "tasks", "action": "upsert", "record": record,
+		})
 		if err := d.outbox.Append(ctx, e); err != nil {
 			return IPCResponse{OK: false, Error: err.Error()}
 		}
@@ -110,9 +123,62 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 		}
 		return IPCResponse{OK: true, ID: e.ID}
 	case "sync.trigger":
-		// 同步任务交给 Puller 主循环；这里仅打标记
-		d.log.Info("sync.trigger requested", zap.Any("data", req.Data))
-		return IPCResponse{OK: true, Result: map[string]any{"queued": true}}
+		modules := stringOr(req.Data, "modules", "")
+		cycle, err := d.runSyncCycle(ctx, modules)
+		if err != nil {
+			return IPCResponse{OK: false, Error: err.Error()}
+		}
+		total, _ := cycle["pull_total"].(int)
+		cursor, _ := cycle["cursor"].(string)
+		return IPCResponse{OK: true, Result: map[string]any{
+			"queued":  true,
+			"summary": fmt.Sprintf("pull=%d push_sent=%v cursor=%s", total, cycle["push_sent"], cursor),
+			"cycle":   cycle,
+		}}
+	case "sync.pull":
+		modules := stringOr(req.Data, "modules", "")
+		res, err := d.puller.PullOnce(ctx, modules)
+		if err != nil {
+			return IPCResponse{OK: false, Error: err.Error()}
+		}
+		return IPCResponse{OK: true, Result: map[string]any{
+			"total":         res.Total,
+			"cursor":        res.Cursor,
+			"previous":      res.Previous,
+			"snapshot_path": res.SnapshotPath,
+			"merged":        res.Merged,
+		}}
+	case "sync.push":
+		if d.pusher == nil {
+			return IPCResponse{OK: false, Error: "pusher not initialized"}
+		}
+		module := stringOr(req.Data, "module", "tasks")
+		action := stringOr(req.Data, "action", "upsert")
+		record, _ := req.Data["record"].(map[string]any)
+		if record == nil {
+			record = map[string]any{}
+			for k, v := range req.Data {
+				if k == "module" || k == "action" || k == "idempotency_key" {
+					continue
+				}
+				record[k] = v
+			}
+		}
+		item := pusher.PushItem{Module: module, Action: action, Record: record}
+		if k := stringOr(req.Data, "idempotency_key", ""); k != "" {
+			item.IdempotencyKey = k
+		}
+		if err := d.pusher.Enqueue(item); err != nil {
+			return IPCResponse{OK: false, Error: err.Error()}
+		}
+		if err := d.pusher.PushDirect(ctx, item); err != nil {
+			e := outbox.NewEvent("sop.sync.push", stringOr(record, "id", ""), map[string]any{
+				"module": module, "action": action, "record": record,
+			})
+			_ = d.outbox.Append(ctx, e)
+			return IPCResponse{OK: true, ID: e.ID, Result: map[string]any{"queued": true}}
+		}
+		return IPCResponse{OK: true, Result: map[string]any{"sent": true}}
 	default:
 		return IPCResponse{OK: false, Error: "unknown op: " + req.Op}
 	}

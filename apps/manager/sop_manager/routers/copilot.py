@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -35,6 +36,37 @@ _SYS_SUMMARIZE = (
 _SYS_SUGGEST = (
     "你是研发教练。基于上下文给出 ≤ 5 条**下一步行动建议**，每条 ≤ 24 字，输出 JSON 数组字符串。"
 )
+
+
+def _gather_rag_memory(query: str) -> str:
+    """可选：注入记忆 + RAG 片段，增强 Copilot 回答。"""
+    parts: list[str] = []
+    if not query.strip():
+        return ""
+    try:
+        from sop_manager.memory_store import get_memory_store
+        from sop_manager.path_config import request_scope_active
+
+        if request_scope_active():
+            hits = get_memory_store().search(query, limit=5)
+            if hits:
+                parts.append("相关记忆:\n" + json.dumps(hits[:5], ensure_ascii=False)[:2000])
+    except Exception as e:
+        _log.debug("copilot memory context skip: %s", e)
+    try:
+        from sop_manager.routers.rag import SearchIn, search as rag_search
+
+        out = rag_search(SearchIn(query=query, limit=4))
+        items = out.items if hasattr(out, "items") else []
+        if items:
+            snippets = [
+                {"collection": x.collection, "title": x.title, "snippet": (x.snippet or "")[:200]}
+                for x in items[:4]
+            ]
+            parts.append("RAG 检索:\n" + json.dumps(snippets, ensure_ascii=False))
+    except Exception as e:
+        _log.debug("copilot rag context skip: %s", e)
+    return "\n\n".join(parts)
 
 
 def _chat(system: str, user: str, task_type: str = "classify") -> dict[str, Any]:
@@ -85,7 +117,9 @@ def copilot_ask(body: AskIn) -> dict[str, Any]:
     if not body.query.strip():
         raise HTTPException(400, "query 为空")
     ctx_txt = f"\n上下文: {body.context}" if body.context else ""
-    return _chat(_SYS_ASK, body.query + ctx_txt, task_type="plan")
+    enrich = _gather_rag_memory(body.query)
+    extra = f"\n\n{enrich}" if enrich else ""
+    return _chat(_SYS_ASK, body.query + ctx_txt + extra, task_type="plan")
 
 
 @router.post("/classify")

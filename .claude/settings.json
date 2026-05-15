@@ -14,77 +14,12 @@
     ]
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude SessionStart",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude UserPromptSubmit",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Task|WebFetch|WebSearch|mcp__.*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PreToolUse",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Task|WebFetch|WebSearch|mcp__.*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PermissionRequest",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash|Write|Edit|NotebookEdit|MultiEdit|Glob|Grep|Read|Task|WebFetch|WebSearch|mcp__.*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude PostToolUse",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/sop_ai_hook_launcher.py\" claude Stop",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "bash \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.claude/hooks/stop.sh\"",
-            "timeout": 30
+            "command": "[ -f memory/current_state.json ] && python3 -c \"import json,sys; d=json.load(open('memory/current_state.json')); d['updated_at']=__import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'); json.dump(d,open('memory/current_state.json','w'),indent=2)\" 2>/dev/null || true"
           }
         ]
       }

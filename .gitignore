@@ -101,3 +101,6 @@ node_modules/
 # 本地覆盖型编辑器配置
 .vscode/*.local.*
 *.code-workspace
+
+# AI 记忆系统（若未使用符号链接可忽略）
+.ai-memory/lancedb/

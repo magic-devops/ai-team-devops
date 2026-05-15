@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "sop.tasks": {
+      "command": "python3",
+      "args": ["/Users/zyc/Documents/code/ai-works/ai-team-dev-spec/ai-sop-ops/integrations/mcp/tasks_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    },
+    "sop.lancedb": {
+      "command": "python3",
+      "args": ["/Users/zyc/Documents/code/ai-works/ai-team-dev-spec/ai-sop-ops/integrations/mcp/lancedb_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    },
+    "sop.llm": {
+      "command": "python3",
+      "args": ["/Users/zyc/Documents/code/ai-works/ai-team-dev-spec/ai-sop-ops/integrations/mcp/llm_server.py"],
+      "env": { "PROJECT_PATH": "." }
+    }
+  }
+}

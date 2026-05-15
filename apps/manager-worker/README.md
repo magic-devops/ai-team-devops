@@ -1,25 +1,32 @@
-# manager-worker（目标部署单元）
+# manager-worker（异步任务进程）
 
-> **角色**：异步任务、批处理、工作流推进、对外部 LLM/向量库的 **长连接与重试**。  
-> **当前真源**：逻辑仍在 `apps/manager/sop_manager/routers/*` 内同步执行；迁移时按任务类型逐步下沉到本进程。
+> **角色**：管理面后台任务（嵌入、批处理、工作流）；与 `apps/manager` API 进程分离，便于水平扩展与故障隔离。
 
-## 职责
+## 当前交付（v4 骨架）
 
-- 消费队列（默认设计：Redis Streams；可选 PostgreSQL 队列表）。
-- 幂等执行、指数退避、死信队列（DLQ）、可观测指标（处理延迟、重试次数）。
-- 可选集成 **Temporal**：长流程、定时、人工节点、补偿事务。
+可安装包 **`sop-manager-worker`**（本目录 `pyproject.toml`）：
 
-## 非职责
+| 能力 | 说明 |
+|------|------|
+| HTTP 健康 | 默认 `127.0.0.1:8790/health`（`WORKER_HEALTH_HOST` / `WORKER_HEALTH_PORT` 可覆盖） |
+| Redis Streams | 设置 `REDIS_URL` 且 `pip install 'sop-manager-worker[redis]'` 后消费 `WORKER_TASK_STREAM`（默认 `sop:tasks`），消费者组 `WORKER_TASK_GROUP`，消费者名 `WORKER_CONSUMER_NAME` |
 
-- 不对外暴露公网 HTTP（仅集群内 gRPC/HTTP 健康检查，或经 sidecar）。
-- 不替代 `sop-agentd`（项目侧守护）；Worker 服务 **管理面** 后台任务。
+```bash
+# 自仓开发（需在 monorepo 根执行 uv sync 后）
+uv run --project apps/manager-worker sop-worker --port 8790
+```
 
-## 与 API 的协作
+API 进程通过 `POST /api/v1/worker/jobs` 写入 Stream（或本地 job 文件）后，由本进程消费并回写 `PATCH /api/v1/worker/jobs/{id}`。
 
-1. API 校验权限后写入任务记录 + 队列消息。  
-2. Worker 领取任务 → 更新 `running/succeeded/failed`。  
-3. API/WebSocket 向客户端暴露状态（轮询或推送）。
+| 任务类型 | 行为 |
+|----------|------|
+| `kb.index` / `kb.reindex` | 回调 Manager `POST /api/v1/knowledge/index` |
+| `memory.summarize` | 拉取 recent 记忆并生成预览摘要 |
+| `rag.warmup` | 占位 noop |
 
-## 设计文档
+Worker 需配置 `MANAGER_URL`、`MANAGER_BEARER`（或 `SOP_BEARER_TOKEN`）、`PROJECT_ID`（及可选三码头）。
 
-详见 **[docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md](../../docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md)**。
+## 设计权威
+
+- [PLATFORM_REPOS_AND_MANAGER_SPLIT.md](../../docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md)
+- [UPGRADE_v4_ENGINEERING.md](../../docs/architecture/UPGRADE_v4_ENGINEERING.md)

@@ -5,63 +5,15 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
+from contextvars import Token
 
 import jwt
 from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse, Response
 
-from sop_manager.path_config import project_path, reset_request_scope, set_request_scope
-
-
-def _skip_project_scope(path: str) -> bool:
-    """无需绑定项目根路径的请求（探活、鉴权、部分只读子系统）。"""
-    if path.startswith("/assets/"):
-        return True
-    if path in (
-        "/",
-        "/index.html",
-        "/login.html",
-        "/console.html",
-        "/favicon.ico",
-        "/vite.svg",
-    ):
-        return True
-    if path.startswith("/pages/"):
-        return True
-    if path.startswith("/docs") or path in ("/openapi.json", "/redoc", "/docs", "/redoc"):
-        return True
-    if path.startswith("/.well-known"):
-        return True
-    if path == "/metrics" or path.startswith("/metrics"):
-        return True
-    if path.startswith("/ws"):
-        return True
-    if path.startswith("/api/v1/auth"):
-        return True
-    if path.startswith("/api/v1/health"):
-        return True
-    if path.startswith("/api/v1/sso/"):
-        if "/login" in path or "/callback" in path or "/saml/" in path:
-            return True
-    if path.startswith("/api/v1/llm/health"):
-        return True
-    if path.startswith("/api/v1/rag/health"):
-        return True
-    if path.startswith("/api/v1/copilot/health"):
-        return True
-    if path.startswith("/api/v1/workflows/_health"):
-        return True
-    if path.startswith("/api/v1/marketplace/registries"):
-        return True
-    if path.startswith("/api/v1/data-exchange/export"):
-        return True
-    return False
-
-
-def _admin_mode() -> str:
-    return (os.getenv("ADMIN_MODE", "single") or "single").strip().lower()
+from sop_manager.path_config import reset_request_scope
+from sop_manager.routers import project_scope_resolve as psr
 
 
 def _http_error_response(exc: HTTPException) -> JSONResponse:
@@ -71,15 +23,19 @@ def _http_error_response(exc: HTTPException) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": detail})
 
 
+def _admin_mode() -> str:
+    return (os.getenv("ADMIN_MODE", "single") or "single").strip().lower()
+
+
 async def project_scope_middleware(request: Request, call_next: Callable) -> Response:
     from sop_manager.routers.auth_sql import ALGORITHM, SECRET_KEY, check_project_access
-    from sop_manager.routers.sql_models import Project, ProjectMember, SessionLocal, User
+    from sop_manager.routers.sql_models import SessionLocal, User
 
     path = request.url.path
-    if request.method == "OPTIONS" or _skip_project_scope(path):
+    if request.method == "OPTIONS" or psr.skip_scope(path):
         return await call_next(request)
 
-    scope_tokens: Optional[Tuple[object, object, object]] = None
+    scope_tokens: tuple[Token, Token, Token, Token, Token, Token] | None = None
     auth = request.headers.get("Authorization") or ""
 
     try:
@@ -94,59 +50,24 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
                     try:
                         user = db.get(User, uid)
                         if user and user.status == "active":
-                            x_pid = (request.headers.get("X-Project-Id") or "").strip()
-                            mode = _admin_mode()
-                            if not x_pid:
-                                if mode != "saas":
-                                    x_pid = (os.getenv("PROJECT_ID", "default") or "default").strip()
-                                else:
-                                    m = (
-                                        db.query(ProjectMember)
-                                        .filter_by(user_id=user.id)
-                                        .order_by(ProjectMember.project_id)
-                                        .first()
-                                    )
-                                    if m:
-                                        x_pid = m.project_id
-                                    elif user.role in ("tenant_admin", "super_admin"):
-                                        first = (
-                                            db.query(Project)
-                                            .filter_by(tenant_id=user.tenant_id)
-                                            .order_by(Project.created_at.asc())
-                                            .first()
-                                        )
-                                        x_pid = first.id if first else ""
-                                    else:
-                                        x_pid = ""
-                            if not x_pid:
-                                return await call_next(request)
-
-                            proj = db.query(Project).filter_by(id=x_pid).first()
-                            if not proj:
-                                if mode != "saas":
-                                    return await call_next(request)
-                                return JSONResponse(status_code=404, content={"detail": "项目不存在"})
-                            if user.role != "super_admin" and proj.tenant_id != user.tenant_id:
-                                return JSONResponse(status_code=403, content={"detail": "无项目访问权限"})
-                            if user.role not in ("super_admin", "tenant_admin"):
-                                try:
-                                    check_project_access(user, x_pid, db, "viewer")
-                                except HTTPException as he:
-                                    return _http_error_response(he)
-
-                            pp_str = (proj.project_path or "").strip()
-                            if pp_str:
-                                pp = Path(pp_str).expanduser().resolve()
-                            else:
-                                pp = project_path()
-                            scope_tokens = set_request_scope(proj.tenant_id, x_pid, pp)
+                            result = psr.resolve_scope_for_authenticated_user(
+                                db,
+                                user,
+                                request,
+                                admin_mode=_admin_mode(),
+                                check_project_access=check_project_access,
+                                http_error_response=_http_error_response,
+                            )
+                            if isinstance(result, JSONResponse):
+                                return result
+                            scope_tokens = result
                     finally:
                         db.close()
     except jwt.ExpiredSignatureError:
         pass
     except jwt.InvalidTokenError:
         pass
-    except Exception:
+    except Exception:  # noqa: S110 — 与旧版一致：非法 JWT / DB 异常不阻塞无鉴权请求
         pass
 
     try:

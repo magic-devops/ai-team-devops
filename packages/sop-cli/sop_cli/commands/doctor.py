@@ -67,8 +67,12 @@ def _check_rag_vector(cfg) -> tuple[bool, str]:
 
 def _check_agentd_ipc(cfg) -> tuple[bool, str]:
     sock = cfg.agentd_socket
+    pidf = cfg.project_path / ".sop-runtime" / "agentd.pid"
     if not sock.exists():
-        return False, f"socket 不存在：{sock}"
+        hint = "修复: sop agentd start  或  make start-agentd"
+        if pidf.is_file():
+            hint += "（PID 文件存在但 socket 缺失，可先 sop agentd stop 再 start）"
+        return False, f"socket 不存在：{sock} — {hint}"
     try:
         s = socket.socket(socket.AF_UNIX); s.settimeout(0.5); s.connect(str(sock)); s.close()
         return True, str(sock)
@@ -81,11 +85,73 @@ def _check_binaries(_cfg) -> tuple[bool, str]:
     return (not missing), ("缺少：" + ",".join(missing) if missing else "齐全")
 
 
+def _check_platforms(cfg) -> tuple[bool, str]:
+    reg_path = cfg.project_path / "ai-sop-ops" / "platforms" / "registry.json"
+    if not reg_path.is_file():
+        return False, "缺少 ai-sop-ops/platforms/registry.json"
+    try:
+        reg = json.loads(reg_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return False, f"registry 解析失败：{e}"
+    root = cfg.project_path
+    missing_shims: list[str] = []
+    for p in reg.get("platforms") or []:
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("integration") or "") != "hooks":
+            continue
+        shim = str(p.get("hook_shim") or "")
+        if shim and not (root / shim).is_file():
+            missing_shims.append(str(p.get("id", "?")))
+    if missing_shims:
+        return False, f"缺少 hook shim：{', '.join(missing_shims)} → sop platforms install-shims <id>"
+    count = len(reg.get("platforms") or [])
+    return True, f"{count} 个平台已注册"
+
+
+def _check_sync_api(cfg) -> tuple[bool, str]:
+    if not cfg.project_id:
+        return True, "跳过（未配对 project_id）"
+    if not cfg.bearer_token and not cfg.api_key:
+        return True, "跳过（未登录，无 Bearer/API Key）"
+    try:
+        from sop_sdk import build_default_client
+        cli = build_default_client(cfg)
+        r = cli.sync_pull(cursor="", modules="tasks")
+        return bool(r.get("ok")), f"pull ok total={r.get('total', 0)} cursor={r.get('cursor', '-')}"
+    except Exception as e:
+        return False, f"sync API 失败：{e}"
+
+
+def _check_sync_local(cfg) -> tuple[bool, str]:
+    state = cfg.project_path / ".sop-runtime" / "sync_state.json"
+    latest = cfg.project_path / ".sop-runtime" / "sync" / "latest.json"
+    if state.is_file() or latest.is_file():
+        return True, f"state={'✓' if state.is_file() else '—'} latest={'✓' if latest.is_file() else '—'}"
+    return True, "尚无本地拉取记录（agentd 启动后会自动 pull）"
+
+
+_FIX_HINTS: dict[str, str] = {
+    "memory/current_state.json": "sop init <project>  或  bash ai-sop-ops/init-ai-project.sh <project>",
+    ".ai-memory/": "sop init 会创建 .ai-memory → .sop-runtime/ai-memory 符号链接",
+    "AI 工具配置": "bash ai-sop-ops/init-ai-project.sh <project> 生成 AGENTS.md / .cursorrules 等",
+    "AI 平台适配": "sop platforms install-shims <id>  或  检查 ai-sop-ops/platforms/registry.json",
+    "Manager 连通": "bash ai-sop-ops/start-manager.sh  或  sop-manager start（默认 :8765）",
+    "sync API": "sop login --pair  写入 project_id 与 Bearer",
+    "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
+    "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",
+    "基础依赖": "安装 python3、git（macOS: xcode-select --install）",
+}
+
+
 _CHECKS: list[tuple[str, Callable]] = [
     ("memory/current_state.json", _check_local_state),
     (".ai-memory/", _check_ai_memory),
     ("AI 工具配置", _check_tool_configs),
+    ("AI 平台适配", _check_platforms),
     ("Manager 连通", _check_manager),
+    ("sync API", _check_sync_api),
+    ("sync 本地状态", _check_sync_local),
     ("RAG 向量后端", _check_rag_vector),
     ("sop-agentd IPC", _check_agentd_ipc),
     ("基础依赖", _check_binaries),
@@ -101,6 +167,7 @@ def doctor() -> None:
     kv("project_id", cfg.project_id or "(未配对)")
 
     failed = 0
+    failed_names: list[str] = []
     for name, fn in _CHECKS:
         try:
             o, msg = fn(cfg)
@@ -109,8 +176,18 @@ def doctor() -> None:
         (ok if o else warn)(f"{name}: {msg}")
         if not o:
             failed += 1
+            failed_names.append(name)
     if failed == 0:
         console.print("[bold green]全部检查通过[/bold green]")
+        if not cfg.project_id:
+            console.print(
+                "[muted]提示: project_id 未配对，sync 相关能力受限 → sop login --pair[/muted]"
+            )
         raise typer.Exit(0)
     console.print(f"[bold red]{failed} 项未通过[/bold red]")
+    console.print("\n[bold]修复建议[/bold]")
+    for name in failed_names:
+        if name in _FIX_HINTS:
+            console.print(f"  • {name}: {_FIX_HINTS[name]}")
+    console.print("[muted]完整说明: docs/TOOLS_AND_SCRIPTS.md[/muted]")
     raise typer.Exit(1)

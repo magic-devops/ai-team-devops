@@ -114,13 +114,16 @@ bash ai-sop-ops/health-check.sh
 ### 🚀 推荐：v2 方式（统一 CLI + sop-agentd）
 
 ```bash
-# 一键拉起开发环境（装 SDK/CLI，构建 sop-agentd）
+# 一键开发环境（CLI + agentd + Manager 依赖 + doctor）
 bash ai-sop-ops/bootstrap-dev.sh
+# 或仅 CLI/agentd：make dev-env && source .venv/bin/activate
 
 # 在你的业务项目里：
 cd /path/to/your-project
 sop init my-app --manager https://mgr.example.com    # 初始化 + 配对 Manager
-sop agentd install && sop agentd start                # 装上守护进程（macOS launchd / Linux systemd）
+sop login --pair                                      # 写入 project_id（启用 sync）
+sop agentd start                                      # 启动守护进程（doctor 要求 IPC socket）
+sop agentd install                                    # 可选：macOS launchd / Linux systemd 自启
 sop doctor                                            # 端到端自检
 sop status                                            # 一屏式总览
 sop task list --status pending                        # 拉任务
@@ -134,7 +137,7 @@ docker compose -f apps/manager/docker-compose.saas.yml up -d
 新增端点：`/api/v1/llm/{chat,embeddings,models}` · `/api/v1/rag/{search,index}` · `/api/v1/copilot/{ask,classify,summarize,suggest}` · `/api/v1/events:ingest` · `/ws/events` · `/metrics`
 完整契约：[`apis/openapi/openapi.yaml`](apis/openapi/openapi.yaml)。
 
-**脚本完整清单**：[ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md)。**日常运维推荐**：`bash ai-sop-ops/sop-ctl.sh help`（`--json status`、`wait-health`、`self-check`、`commands` 等见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md) §1.3）。亦可用 `bash ai-sop-ops/sop-ctl.sh reset-admin` / `complete bash` 安装 Tab 补全。若需重置或创建管理员账号：`python3 ai-sop-ops/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `ai-sop-ops/manager_client.py`。
+**脚本与工具指南**：[docs/TOOLS_AND_SCRIPTS.md](docs/TOOLS_AND_SCRIPTS.md)（`sop` / `make` / `build-sop.sh` / `sop-agentd`）。**脚本完整清单**：[ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md)。**日常运维推荐**：`bash ai-sop-ops/sop-ctl.sh help`（`--json status`、`wait-health`、`self-check`、`commands` 等见 [docs/USER_MANUAL.md](docs/USER_MANUAL.md) §1.3）。亦可用 `bash ai-sop-ops/sop-ctl.sh reset-admin` / `complete bash` 安装 Tab 补全。若需重置或创建管理员账号：`python3 ai-sop-ops/reset-admin.py`（见脚本说明）。**CI/本地脚本调 API**：`MANAGER_SOP_TOKEN`（登录 JWT）+ `PROJECT_ID`（`X-Project-Id`），见 `ai-sop-ops/manager_client.py`。
 
 ### 在 Claude Code 中使用
 
@@ -215,6 +218,7 @@ ai-team-devops/
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | 使用 Web 后台的同事 | 启动、菜单、研发流、Vibe、常见问题 |
 | [TUTORIAL.md](TUTORIAL.md) | 全员 | 初始化、日常工作流、多 Agent、Web、自定义模块、`/evolve`、多工具 |
 | [apps/manager/README.md](apps/manager/README.md) | 维护 Web 的开发者 | 路由、页面模块、`main.py` 约定、环境变量 |
+| [docs/TOOLS_AND_SCRIPTS.md](docs/TOOLS_AND_SCRIPTS.md) | 开发 / 运维 | **统一入口**：`sop` CLI、`make`、`build-sop.sh`、`sop-agentd`、故障排查 |
 | [ai-sop-ops/SCRIPTS.md](ai-sop-ops/SCRIPTS.md) | 运维 / 集成 | `ai-sop-ops` 下 Shell、Python、配置与规范文档索引 |
 
 详细教程见 [TUTORIAL.md](TUTORIAL.md)，包含：项目初始化与配置、日常开发工作流、多 Agent 协作、Web 后台、自定义模块、自我进化、多工具切换与状态共享。

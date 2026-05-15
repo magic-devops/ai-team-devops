@@ -23,6 +23,20 @@ function notifySession() {
         window.dispatchEvent(new Event("sop-session"));
     }
 }
+export function setProjectId(projectId) {
+    try {
+        if (projectId && projectId.trim()) {
+            localStorage.setItem(PROJECT_ID_KEY, projectId.trim());
+        }
+        else {
+            localStorage.removeItem(PROJECT_ID_KEY);
+        }
+        notifySession();
+    }
+    catch {
+        /* ignore */
+    }
+}
 export function setSession(token, projectId) {
     localStorage.setItem(TOKEN_KEY, token);
     if (projectId && String(projectId).trim()) {

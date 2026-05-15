@@ -10,28 +10,51 @@ import shutil
 import sys
 from contextvars import ContextVar, Token
 from pathlib import Path
-from typing import Optional, Tuple
 
 # ── 请求级项目作用域（SaaS / 多项目：由中间件在 JWT 解析后注入）──────────────
-_ctx_project_path: ContextVar[Optional[Path]] = ContextVar("sop_ctx_project_path", default=None)
-_ctx_tenant_id: ContextVar[Optional[str]] = ContextVar("sop_ctx_tenant_id", default=None)
-_ctx_project_id: ContextVar[Optional[str]] = ContextVar("sop_ctx_project_id", default=None)
+_ctx_project_path: ContextVar[Path | None] = ContextVar("sop_ctx_project_path", default=None)
+_ctx_tenant_id: ContextVar[str | None] = ContextVar("sop_ctx_tenant_id", default=None)
+_ctx_project_id: ContextVar[str | None] = ContextVar("sop_ctx_project_id", default=None)
+# v4 三码：与租户 slug / 业务主键 / 项目主键对齐（无外键列时回退 id）
+_ctx_tenant_code: ContextVar[str | None] = ContextVar("sop_ctx_tenant_code", default=None)
+_ctx_business_code: ContextVar[str | None] = ContextVar("sop_ctx_business_code", default=None)
+_ctx_project_code: ContextVar[str | None] = ContextVar("sop_ctx_project_code", default=None)
 
 
-def set_request_scope(tenant_id: str, project_id: str, project_path: Path) -> Tuple[Token, Token, Token]:
-    """返回三个 reset token，须在请求结束时 reset_request_scope。"""
+def set_request_scope(
+    tenant_id: str,
+    project_id: str,
+    project_path: Path,
+    *,
+    tenant_code: str | None = None,
+    business_code: str | None = None,
+    project_code: str | None = None,
+) -> tuple[Token, Token, Token, Token, Token, Token]:
+    """返回六个 reset token；须在请求结束时 reset_request_scope。
+
+    tenant_code / project_code 缺省时回退为内部 id，保证下游总有稳定字符串键。
+    business_code 为 None 表示未解析；空字符串表示显式「无业务线」。
+    """
     pp = Path(project_path).expanduser().resolve()
+    t_code = str(tenant_code) if tenant_code is not None else str(tenant_id)
+    p_code = str(project_code) if project_code is not None else str(project_id)
     return (
         _ctx_tenant_id.set(str(tenant_id)),
         _ctx_project_id.set(str(project_id)),
         _ctx_project_path.set(pp),
+        _ctx_tenant_code.set(t_code),
+        _ctx_business_code.set(business_code),
+        _ctx_project_code.set(p_code),
     )
 
 
-def reset_request_scope(tokens: Tuple[Token, Token, Token]) -> None:
+def reset_request_scope(tokens: tuple[Token, Token, Token, Token, Token, Token]) -> None:
     _ctx_tenant_id.reset(tokens[0])
     _ctx_project_id.reset(tokens[1])
     _ctx_project_path.reset(tokens[2])
+    _ctx_tenant_code.reset(tokens[3])
+    _ctx_business_code.reset(tokens[4])
+    _ctx_project_code.reset(tokens[5])
 
 
 def request_scope_active() -> bool:
@@ -50,6 +73,27 @@ def resolved_project_id() -> str:
     if t:
         return str(t)
     return (os.environ.get("PROJECT_ID", "default") or "default").strip()
+
+
+def resolved_tenant_code() -> str:
+    c = _ctx_tenant_code.get()
+    if c:
+        return str(c)
+    return resolved_tenant_id()
+
+
+def resolved_business_code() -> str:
+    c = _ctx_business_code.get()
+    if c is None:
+        return ""
+    return str(c)
+
+
+def resolved_project_code() -> str:
+    c = _ctx_project_code.get()
+    if c:
+        return str(c)
+    return resolved_project_id()
 
 
 def resolved_project_path() -> Path:
@@ -294,6 +338,9 @@ def runtime_paths_summary() -> dict:
         out["scope"] = "request"
         out["scopedTenantId"] = resolved_tenant_id()
         out["scopedProjectId"] = resolved_project_id()
+        out["scopedTenantCode"] = resolved_tenant_code()
+        out["scopedBusinessCode"] = resolved_business_code()
+        out["scopedProjectCode"] = resolved_project_code()
     else:
         out["scope"] = "process"
     return out

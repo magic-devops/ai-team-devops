@@ -2,6 +2,8 @@
 
 > 版本: 2.1 · 状态: 多仓库与 Manager 拆分设计已定稿（见 [PLATFORM_REPOS_AND_MANAGER_SPLIT.md](PLATFORM_REPOS_AND_MANAGER_SPLIT.md)） · 日期: 2026-05-14
 
+**架构升级（v4 工程视图）**：产品四层叙事见 [`ai-platform-v4-architecture.html`](ai-platform-v4-architecture.html)；与本文通道模型、目录与里程碑对齐的**工程真源**见 **[UPGRADE_v4_ENGINEERING.md](UPGRADE_v4_ENGINEERING.md)**。OpenAPI 片段与 SQL 样例等细节草案仍保留在 [UPGRADE_v3_ARCHITECTURE.md](UPGRADE_v3_ARCHITECTURE.md)。
+
 ## 设计目标
 
 | 维度 | 目标 |

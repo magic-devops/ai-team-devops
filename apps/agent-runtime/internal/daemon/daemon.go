@@ -16,6 +16,8 @@ import (
 
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/config"
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/outbox"
+	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/puller"
+	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/pusher"
 	httpx "github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/transport/http"
 )
 
@@ -24,6 +26,8 @@ type Daemon struct {
 	cfg     *config.Config
 	http    *httpx.Client
 	outbox  *outbox.Outbox
+	puller  *puller.Puller
+	pusher  *pusher.Pusher
 	agentID string
 	version string
 }
@@ -37,12 +41,14 @@ func New(log *zap.Logger, cfg *config.Config, version string) (*Daemon, error) {
 		return nil, fmt.Errorf("open outbox: %w", err)
 	}
 	cli := httpx.New(
-		cfg.Manager.URL, cfg.Manager.ProjectID, "", cfg.Auth.APIKey,
+		cfg.Manager.URL, cfg.Manager.ProjectID, cfg.Auth.Bearer, cfg.Auth.APIKey,
 		time.Duration(cfg.Reliability.TimeoutSeconds)*time.Second,
 		cfg.Auth.VerifySSL, cfg.Reliability.MaxRetries,
 	)
+	pl := puller.New(log, cli, cfg.ProjectPath)
+	pu := pusher.New(log, cli, cfg.ProjectPath)
 	return &Daemon{
-		log: log, cfg: cfg, http: cli, outbox: ob,
+		log: log, cfg: cfg, http: cli, outbox: ob, puller: pl, pusher: pu,
 		agentID: ulid.Make().String(), version: version,
 	}, nil
 }
@@ -59,7 +65,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	g.Go(func() error { return d.serveIPC(ctx) })
 	g.Go(func() error { return d.heartbeatLoop(ctx) })
 	g.Go(func() error { return d.outboxSenderLoop(ctx) })
-	// 后续：g.Go(d.watcherLoop) / d.pullerLoop / d.wsLoop / d.mcpHub / d.a2aNode
+	g.Go(func() error { return d.pullerLoop(ctx) })
+	g.Go(func() error { return d.pusherLoop(ctx) })
+	// 后续：g.Go(d.watcherLoop) / d.wsLoop / d.mcpHub / d.a2aNode
 
 	defer d.shutdown()
 	if err := g.Wait(); err != nil && ctx.Err() == nil {
@@ -117,6 +125,87 @@ func (d *Daemon) outboxSenderLoop(ctx context.Context) error {
 	}
 }
 
+// pullerLoop 定时从 Manager 拉取结构化变更（默认 5 分钟；需 project_id + bearer/apikey）。
+func (d *Daemon) pullerLoop(ctx context.Context) error {
+	if d.cfg.Manager.ProjectID == "" {
+		d.log.Info("sync puller idle: project_id 未配置（sop login --pair）")
+		return nil
+	}
+	tick := time.NewTicker(5 * time.Minute)
+	defer tick.Stop()
+	d.runPullOnce(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+			d.runPullOnce(ctx)
+		}
+	}
+}
+
+func (d *Daemon) runPullOnce(ctx context.Context) {
+	if d.puller == nil {
+		return
+	}
+	res, err := d.puller.PullOnce(ctx, "")
+	if err != nil {
+		d.log.Warn("sync pull", zap.Error(err))
+		return
+	}
+	d.log.Debug("sync pull ok", zap.Int("total", res.Total), zap.String("cursor", res.Cursor))
+}
+
+// pusherLoop 定时 flush push_queue.jsonl（默认 30 秒）。
+func (d *Daemon) pusherLoop(ctx context.Context) error {
+	if d.cfg.Manager.ProjectID == "" {
+		return nil
+	}
+	tick := time.NewTicker(30 * time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+			d.runPushOnce(ctx)
+		}
+	}
+}
+
+func (d *Daemon) runPushOnce(ctx context.Context) {
+	if d.pusher == nil {
+		return
+	}
+	if _, err := d.pusher.FlushOnce(ctx); err != nil {
+		d.log.Warn("sync push flush", zap.Error(err))
+	}
+}
+
+func (d *Daemon) runSyncCycle(ctx context.Context, modules string) (map[string]any, error) {
+	out := map[string]any{}
+	if d.puller != nil {
+		res, err := d.puller.PullOnce(ctx, modules)
+		if err != nil {
+			return nil, err
+		}
+		out["pull_total"] = res.Total
+		out["cursor"] = res.Cursor
+		out["snapshot_path"] = res.SnapshotPath
+		out["merged"] = res.Merged
+	}
+	if d.pusher != nil {
+		pr, err := d.pusher.FlushOnce(ctx)
+		if err != nil {
+			return out, err
+		}
+		out["push_sent"] = pr.Sent
+		out["push_failed"] = pr.Failed
+	}
+	d.flushOutboxOnce(ctx)
+	return out, nil
+}
+
 func (d *Daemon) flushOutboxOnce(ctx context.Context) {
 	batch, err := d.outbox.PendingBatch(ctx, d.cfg.Reliability.BatchSize)
 	if err != nil {
@@ -127,7 +216,6 @@ func (d *Daemon) flushOutboxOnce(ctx context.Context) {
 		return
 	}
 	for _, e := range batch {
-		// M9 完成后切到 POST /api/v1/events:ingest；目前用最小可行通道：透传到任务/反思接口
 		err := d.deliver(ctx, e)
 		if err != nil {
 			d.log.Warn("outbox deliver fail", zap.String("id", e.ID), zap.Error(err))
@@ -169,6 +257,12 @@ func (d *Daemon) deliver(ctx context.Context, e outbox.Event) error {
 	case "sop.agent.heartbeat":
 		// 没有专用端点前，仅探活 Manager 即视为成功
 		return d.http.Do(ctx, "GET", "/api/v1/health", nil, nil)
+	case "sop.sync.push":
+		body := map[string]any{}
+		for k, v := range e.Data {
+			body[k] = v
+		}
+		return d.http.Do(ctx, "POST", "/api/v1/sync/push", body, nil)
 	default:
 		// 未实现的事件类型：暂时静默 Ack，避免长期堆积（M9 切到统一 ingest 端点后会全量上送）
 		d.log.Debug("event silently acked (no route yet)", zap.String("type", e.Type))
@@ -183,7 +277,7 @@ func Doctor(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	cli := httpx.New(cfg.Manager.URL, cfg.Manager.ProjectID, "", cfg.Auth.APIKey,
+	cli := httpx.New(cfg.Manager.URL, cfg.Manager.ProjectID, cfg.Auth.Bearer, cfg.Auth.APIKey,
 		5*time.Second, cfg.Auth.VerifySSL, 0)
 	var h map[string]any
 	if err := cli.Do(ctx, "GET", "/api/v1/health", nil, &h); err != nil {
