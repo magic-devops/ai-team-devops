@@ -686,6 +686,9 @@ export const api = {
     }>("/api/v1/platforms/charts"),
   platformsInstallShims: (id: string) =>
     request<any>(`/api/v1/platforms/install-shims/${encodeURIComponent(id)}`, { method: "POST" }),
+  platformsOpsPlan: () => request<any>("/api/v1/platforms/ops-plan"),
+  platformsOpsTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[] }) =>
+    request<any>("/api/v1/platforms/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
   agents: () => request<any[]>("/api/v1/agents"),
   agentsBuiltin: () => request<any[]>("/api/v1/agents/builtin"),
   agentsSummary: () => request<any>("/api/v1/agents/summary"),

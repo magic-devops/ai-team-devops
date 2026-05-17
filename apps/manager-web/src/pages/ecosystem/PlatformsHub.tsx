@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Blocks, Bot, Brain, TerminalIcon, Wrench } from "lucide-react";
+import { ArrowRight, Blocks, Bot, Brain, ShieldCheck, TerminalIcon, Wrench } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "../../components/Card";
@@ -15,6 +15,7 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
   agents: Bot,
   models: Brain,
   cli: TerminalIcon,
+  ops: ShieldCheck,
 };
 
 const DOMAIN_I18N: Record<string, string> = {
@@ -23,6 +24,7 @@ const DOMAIN_I18N: Record<string, string> = {
   agents: "nav.agentRegistry",
   models: "nav.modelOps",
   cli: "nav.cliTools",
+  ops: "nav.platformOps",
 };
 
 export function PlatformsHub() {

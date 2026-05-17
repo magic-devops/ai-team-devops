@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, BrainCircuit, Copy, Cpu, Network, Plus, RotateCw, Server, Trash2, Users, Wrench } from "lucide-react";
+import { Bot, BrainCircuit, Copy, Cpu, ListChecks, Network, Plus, RotateCw, Server, ShieldCheck, Terminal, Trash2, Users, Wrench } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,18 +25,19 @@ function pieToRecord(items?: Array<{ name: string; value: number }>) {
 }
 
 type Flash = { kind: "ok" | "err"; message: string } | null;
-type PlatformModule = "tools" | "mcp" | "agents" | "models";
+type PlatformModule = "tools" | "mcp" | "agents" | "models" | "ops";
 
 const inputClass =
   "rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20";
 
-export function Platforms() {
+export function Platforms({ initialModule = "tools" }: { initialModule?: PlatformModule; focused?: boolean }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const [flash, setFlash] = useState<Flash>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
-  const [activeModule, setActiveModule] = useState<PlatformModule>("tools");
+  const [activeModule, setActiveModule] = useState<PlatformModule>(initialModule);
+  const [opsResult, setOpsResult] = useState<any>(null);
   const [providerDraft, setProviderDraft] = useState({ name: "openai", api_key: "", base_url: "", enabled: true });
   const [customDraft, setCustomDraft] = useState({ id: "", provider: "openai", name: "", context: "32000" });
   const [roleDraft, setRoleDraft] = useState({ role: "developer", model_id: "" });
@@ -122,6 +123,11 @@ export function Platforms() {
     queryKey: ["mcp-builtin"],
     queryFn: api.mcpBuiltin,
     enabled: authed && activeModule === "mcp",
+  });
+  const platformOpsPlan = useQuery({
+    queryKey: ["platformsOpsPlan"],
+    queryFn: api.platformsOpsPlan,
+    enabled: authed && activeModule === "ops",
   });
 
   const install = useMutation({
@@ -277,6 +283,28 @@ export function Platforms() {
     onSuccess: (data) => setMcpProfile(data),
     onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
   });
+  const platformOpsTasks = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.platformsOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "DevOps" }),
+    onSuccess: (data) => {
+      setOpsResult(data);
+      setFlash({
+        kind: "ok",
+        message: t("page.platforms.opsTaskResult", {
+          planned: data?.summary?.planned ?? 0,
+          created: data?.summary?.created ?? 0,
+          skipped: data?.summary?.skipped ?? 0,
+        }),
+      });
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void platformOpsPlan.refetch();
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
+
+  useEffect(() => {
+    setActiveModule(initialModule);
+  }, [initialModule]);
 
   useEffect(() => {
     if (!flash) return;
@@ -305,6 +333,7 @@ export function Platforms() {
     { id: "mcp", title: t("page.platforms.moduleMcp"), desc: t("page.platforms.moduleMcpDesc"), icon: <Server className="h-5 w-5" /> },
     { id: "agents", title: t("page.platforms.moduleAgents"), desc: t("page.platforms.moduleAgentsDesc"), icon: <Bot className="h-5 w-5" /> },
     { id: "models", title: t("page.platforms.moduleModels"), desc: t("page.platforms.moduleModelsDesc"), icon: <BrainCircuit className="h-5 w-5" /> },
+    { id: "ops", title: t("page.platforms.moduleOps"), desc: t("page.platforms.moduleOpsDesc"), icon: <ShieldCheck className="h-5 w-5" /> },
   ];
 
   return (
@@ -318,8 +347,9 @@ export function Platforms() {
               void q.refetch();
               void platformSummary.refetch();
               void platformCharts.refetch();
+              void platformOpsPlan.refetch();
             }}
-            pending={q.isFetching || platformSummary.isFetching || platformCharts.isFetching}
+            pending={q.isFetching || platformSummary.isFetching || platformCharts.isFetching || platformOpsPlan.isFetching}
           />
         }
         metrics={
@@ -402,7 +432,9 @@ export function Platforms() {
             ? t("page.platforms.mcpHint")
             : activeModule === "agents"
               ? t("page.platforms.agentsHint")
-              : t("page.platforms.modelsHint")}
+              : activeModule === "models"
+                ? t("page.platforms.modelsHint")
+                : t("page.platforms.opsHint")}
       </p>
       {flash ? (
         <FlashMessage kind={flash.kind} message={flash.message} onDismiss={() => setFlash(null)} />
@@ -443,6 +475,95 @@ export function Platforms() {
           ))}
         </ul>
       </Card>
+      ) : null}
+
+      {activeModule === "ops" ? (
+        <div className="space-y-4">
+          {platformOpsPlan.isLoading ? <LoadingBlock /> : null}
+          {platformOpsPlan.isError ? <p className="text-sm text-rose-600">{(platformOpsPlan.error as Error).message}</p> : null}
+          <div className="grid gap-3 md:grid-cols-4">
+            <Metric label={t("page.platforms.opsHealth")} value={platformOpsPlan.data?.health?.score ?? 0} />
+            <Metric label={t("page.platforms.opsRisks")} value={(platformOpsPlan.data?.health?.risks ?? []).length} />
+            <Metric label={t("page.platforms.opsTasks")} value={(platformOpsPlan.data?.task_candidates ?? []).length} />
+            <Metric label={t("page.platforms.opsCommands")} value={(platformOpsPlan.data?.commands ?? []).length} />
+          </div>
+          <Card
+            title={t("page.platforms.opsRunbook")}
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm" disabled={platformOpsTasks.isPending} onClick={() => platformOpsTasks.mutate(true)}>
+                  <ListChecks className="h-4 w-4" />{t("page.platforms.previewOpsTasks")}
+                </button>
+                <button type="button" className="inline-flex items-center gap-1 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50" disabled={platformOpsTasks.isPending} onClick={() => platformOpsTasks.mutate(false)}>
+                  <Plus className="h-4 w-4" />{t("page.platforms.createOpsTasks")}
+                </button>
+              </div>
+            }
+          >
+            <div className="grid gap-3 lg:grid-cols-2">
+              {(platformOpsPlan.data?.commands ?? []).map((cmd: any) => (
+                <div key={cmd.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--text)]">{cmd.title}</p>
+                      <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{cmd.command}</p>
+                    </div>
+                    <button type="button" className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted)] hover:text-[var(--brand)]" onClick={() => copyText(cmd.command, () => setFlash({ kind: "ok", message: t("common.copied") }))}>
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    <Tag>{cmd.category}</Tag>
+                    <Tag><Terminal className="mr-1 inline h-3 w-3" />CLI</Tag>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+            <Card title={t("page.platforms.opsTasks")}>
+              <div className="space-y-3">
+                {(platformOpsPlan.data?.task_candidates ?? []).map((task: any) => (
+                  <div key={task.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--text)]">{task.title}</p>
+                        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{task.description}</p>
+                      </div>
+                      <Tag>{task.priority}</Tag>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      <Tag>{task.category}</Tag>
+                      <Tag>{task.assigned_to}</Tag>
+                      <Tag>{task.estimate}</Tag>
+                    </div>
+                  </div>
+                ))}
+                {opsResult ? (
+                  <pre className="max-h-40 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(opsResult.summary ?? opsResult, null, 2)}</pre>
+                ) : null}
+              </div>
+            </Card>
+            <div className="space-y-4">
+              <Card title={t("page.platforms.opsRisks")}>
+                <div className="space-y-2">
+                  {(platformOpsPlan.data?.health?.risks ?? []).length ? (platformOpsPlan.data?.health?.risks ?? []).map((risk: any, idx: number) => (
+                    <div key={`${risk.platform_id}-${idx}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-mono text-xs text-[var(--muted)]">{risk.platform_id}</p>
+                        <Tag>{risk.level}</Tag>
+                      </div>
+                      <p className="mt-1 text-sm text-[var(--text)]">{risk.message}</p>
+                    </div>
+                  )) : <p className="text-sm text-[var(--muted)]">{t("page.platforms.noRisks")}</p>}
+                </div>
+              </Card>
+              <Card title={t("page.platforms.aiPacket")}>
+                <pre className="max-h-96 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(platformOpsPlan.data?.ai_packet ?? {}, null, 2)}</pre>
+              </Card>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {activeModule === "mcp" ? (

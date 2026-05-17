@@ -7,13 +7,14 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
 from .._util import console, get_client, get_config, ok, warn
 
-app = typer.Typer(help="AI 平台：list / doctor / init / install-shims")
+app = typer.Typer(help="AI 平台：list / doctor / init / install-shims / ops-plan / ops-tasks")
 
 
 def _project_root() -> Path:
@@ -161,8 +162,79 @@ def install_shims(
     ok(r.stdout.strip() or f"shim → {dest_dir / 'sop_hook.py'}")
 
 
+@app.command("ops-plan")
+def ops_plan(
+    as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """生成 Agent 与工具链运行治理计划，供人和 AI CLI 同步消费。"""
+    data = get_client(get_config()).platforms_ops_plan()
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    health = data.get("health") if isinstance(data, dict) else {}
+    summary = health.get("summary") if isinstance(health, dict) else {}
+    console.print(f"[bold]Agent 与工具链健康分：[/bold]{health.get('score', 0)}")
+    console.print(
+        f"[dim]平台 {summary.get('platforms_total', 0)}，就绪 {summary.get('ready', 0)}，CLI 可用 {summary.get('cli_available', 0)}，Hook Shim {summary.get('hook_shim_present', 0)}[/dim]"
+    )
+    commands = data.get("commands") if isinstance(data, dict) else []
+    tbl = Table(title="治理 Runbook", show_header=True, header_style="bold")
+    tbl.add_column("id")
+    tbl.add_column("category")
+    tbl.add_column("command")
+    for cmd in commands or []:
+        if isinstance(cmd, dict):
+            tbl.add_row(str(cmd.get("id", "")), str(cmd.get("category", "")), str(cmd.get("command", "")))
+    console.print(tbl)
+    risks = (health.get("risks") if isinstance(health, dict) else []) or []
+    if risks:
+        risk_tbl = Table(title="风险", show_header=True, header_style="bold")
+        risk_tbl.add_column("level")
+        risk_tbl.add_column("platform")
+        risk_tbl.add_column("message")
+        for r in risks:
+            if isinstance(r, dict):
+                risk_tbl.add_row(str(r.get("level", "")), str(r.get("platform_id", "")), str(r.get("message", "")))
+        console.print(risk_tbl)
+    tasks = data.get("task_candidates") if isinstance(data, dict) else []
+    if tasks:
+        task_tbl = Table(title="候选治理任务", show_header=True, header_style="bold")
+        task_tbl.add_column("category")
+        task_tbl.add_column("priority")
+        task_tbl.add_column("title")
+        for task in tasks:
+            if isinstance(task, dict):
+                task_tbl.add_row(str(task.get("category", "")), str(task.get("priority", "")), str(task.get("title", "")))
+        console.print(task_tbl)
+
+
+@app.command("ops-tasks")
+def ops_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建任务；默认只预览"),
+    priority: str = typer.Option("P1", "--priority", help="任务优先级"),
+    assigned_to: str = typer.Option("DevOps", "--assigned-to", help="默认处理人"),
+    category: list[str] = typer.Option([], "--category", help="仅生成指定类别，可多次传入"),
+    as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把 Agent 与工具链治理项转为任务。"""
+    body: dict[str, Any] = {
+        "dry_run": not apply,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "categories": category,
+    }
+    data = get_client(get_config()).platforms_ops_tasks(body)
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    summary = data.get("summary") if isinstance(data, dict) else {}
+    ok(
+        f"{'已创建' if apply else '已预览'}治理任务：计划 {summary.get('planned', 0)}，创建 {summary.get('created', 0)}，跳过 {summary.get('skipped', 0)}"
+    )
+
+
 @app.callback(invoke_without_command=True)
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
-    console.print("[dim]子命令：list | doctor | init | install-shims[/dim]")
+    console.print("[dim]子命令：list | doctor | init | install-shims | ops-plan | ops-tasks[/dim]")

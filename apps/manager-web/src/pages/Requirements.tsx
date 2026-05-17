@@ -18,6 +18,8 @@ import { MarkdownView } from "../components/MarkdownView";
 import { buildReviewMarkdown } from "../lib/copilotFormat";
 import { api } from "../lib/api";
 import { getProjectId, getToken } from "../lib/authStorage";
+import { ProductRequirementsShell } from "./product/ProductRequirementsShell";
+import { parseRequirementsHash } from "./product/requirementsNav";
 import { WorkbenchShell } from "./shared/WorkbenchShell";
 import { WorkbenchStats } from "./shared/workbenchUi";
 
@@ -197,10 +199,23 @@ export function Requirements({
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
   const [mode, setMode] = useState<RequirementMode>(initialMode);
+  const [routeFocused, setRouteFocused] = useState(focused);
+
+  const applyRoute = (next: ReturnType<typeof parseRequirementsHash>) => {
+    setMode(next.mode);
+    setRouteFocused(next.focused);
+  };
 
   useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
+    applyRoute(parseRequirementsHash(window.location.hash));
+    const onHash = () => applyRoute(parseRequirementsHash(window.location.hash));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    applyRoute({ mode: initialMode, focused });
+  }, [initialMode, focused]);
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState(STATUS_ALL);
   const [priority, setPriority] = useState(PRIORITY_ALL);
@@ -291,6 +306,7 @@ export function Requirements({
   const refreshRequirements = () => {
     void qc.invalidateQueries({ queryKey: ["requirements"] });
     void qc.invalidateQueries({ queryKey: ["requirementsSummary"] });
+    void qc.invalidateQueries({ queryKey: ["requirementsHub"] });
   };
 
   const createReq = useMutation({
@@ -380,73 +396,104 @@ export function Requirements({
   const selectedReqSet = useMemo(() => new Set(selectedReqIds), [selectedReqIds]);
   const canBulkUpdate = selectedReqIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAgent.trim() || bulkTool.trim());
 
+  const hubSummary = summaryQ.data?.summary ?? {};
+  const kitTotal = Number(hubSummary.total ?? metrics.total);
+  const kitReady = Number(hubSummary.ready ?? 0);
+  const kitCompleted = Number(hubSummary.completed ?? metrics.byStatus.get("completed") ?? 0);
+  const kitCompletion = Number(hubSummary.completion_rate ?? 0);
+
+  const displayList = useMemo(() => {
+    if (mode === "review") {
+      return [...filtered].sort((a, b) => {
+        const aScore = (a.acceptance_criteria?.length ?? 0) > 0 ? 1 : 0;
+        const bScore = (b.acceptance_criteria?.length ?? 0) > 0 ? 1 : 0;
+        return aScore - bScore;
+      });
+    }
+    if (mode === "generation") {
+      const rank = (s?: string) => (s === "in_progress" ? 0 : s === "pending" ? 1 : 2);
+      return [...filtered].sort((a, b) => rank(a.status) - rank(b.status));
+    }
+    return filtered;
+  }, [filtered, mode]);
+
+  const showCreate = !routeFocused || mode === "pool";
+  const showBulkPanel = !routeFocused || mode === "pool" || mode === "batch";
+  const showCardReview = !routeFocused || mode === "pool" || mode === "review";
+  const showCardGenerate = !routeFocused || mode === "pool" || mode === "generation";
+
   if (!authed) return <NeedLogin />;
   if (!hasProject) {
     return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
   }
 
   const aiReq = aiContextReq ?? requirements.find((r) => r.id === reviewReqId) ?? requirements[0] ?? null;
+  const workbenchFocused = routeFocused;
 
-  return (
+  const workbenchBody = (
     <>
-    <WorkbenchShell
-      title={t("page.requirements.title")}
-      description={focused ? t(`page.requirements.mode.${mode}.hint`) : t("page.requirements.desc")}
-      actions={
-        <>
-          <AiAssistButton
-            onClick={() => {
-              if (aiReq) setAiContextReq(aiReq);
-              setAiOpen(true);
-            }}
-          />
-          <RefreshButton onClick={() => void q.refetch()} pending={q.isFetching} />
-        </>
-      }
-      metrics={
-        <WorkbenchStats
-          items={[
-            { label: t("page.requirements.total"), value: metrics.total },
-            { label: t("page.requirements.pending"), value: metrics.byStatus.get("pending") ?? 0 },
-            { label: t("page.requirements.inProgress"), value: metrics.byStatus.get("in_progress") ?? 0 },
-            { label: t("page.requirements.completed"), value: metrics.byStatus.get("completed") ?? 0 },
-          ]}
+      {workbenchFocused && mode !== "pool" ? (
+        <RequirementsModeWorkbench
+          mode={mode}
+          requirements={displayList}
+          reviewReqId={reviewReqId}
+          reviewResult={reviewResult}
+          reviewPending={reviewReq.isPending || applyReview.isPending}
+          reviewError={reviewReq.error || applyReview.error}
+          onPickReview={(id) => {
+            setReviewReqId(id);
+            setReviewResult(null);
+            if (id) reviewReq.mutate(id);
+          }}
+          onApplyReview={(id, criteria) => applyReview.mutate({ id, criteria })}
+          onCloseReview={() => {
+            setReviewReqId("");
+            setReviewResult(null);
+          }}
+          taskPlanReqId={taskPlanReqId}
+          taskPlanDraft={taskPlanDraft}
+          taskPlanResult={taskPlanResult}
+          taskPlanPending={generateTasks.isPending}
+          taskPlanError={generateTasks.error}
+          onPickGeneration={(row) => {
+            const next = defaultTaskGenDraft(row);
+            setTaskPlanReqId(row.id);
+            setTaskPlanDraft(next);
+            setTaskPlanResult(null);
+            generateTasks.mutate({ id: row.id, dryRun: true });
+          }}
+          onTaskDraftChange={setTaskPlanDraft}
+          onPreviewTasks={(id) => generateTasks.mutate({ id, dryRun: true })}
+          onCreateTasks={(id) => generateTasks.mutate({ id, dryRun: false })}
+          onCloseTaskPlan={() => {
+            setTaskPlanReqId("");
+            setTaskPlanResult(null);
+          }}
         />
-      }
-    >
-      {focused && mode !== "pool" ? (
-        <div
-          className={`rounded-xl border px-4 py-3 text-sm ${
-            mode === "batch"
-              ? "border-[var(--brand)]/40 bg-[var(--brand-softer)]"
-              : "border-[var(--border)] bg-[var(--surface-muted)]"
-          }`}
-        >
-          <p className="font-semibold text-[var(--text)]">{t(`page.requirements.mode.${mode}.title`)}</p>
-          <p className="mt-1 text-[var(--muted)]">{t(`page.requirements.mode.${mode}.hint`)}</p>
-        </div>
       ) : null}
 
       <Card
         title={t("page.requirements.list")}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              onClick={() => setCreateOpen((v) => !v)}
-            >
-              {createOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {createOpen ? t("common.cancel") : t("page.requirements.create")}
-            </button>
-          </div>
+          showCreate ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                onClick={() => setCreateOpen((v) => !v)}
+              >
+                {createOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {createOpen ? t("common.cancel") : t("page.requirements.create")}
+              </button>
+            </div>
+          ) : null
         }
       >
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-950/30">
+        <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
           <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]">
             <SearchInput value={keyword} onChange={setKeyword} />
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-2 text-sm text-[var(--text)]"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -458,7 +505,7 @@ export function Requirements({
               ))}
             </select>
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-2 text-sm text-[var(--text)]"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
@@ -483,7 +530,7 @@ export function Requirements({
           </div>
         </div>
 
-        {createOpen ? (
+        {createOpen && showCreate ? (
           <RequirementEditor
             draft={draft}
             onChange={setDraft}
@@ -496,89 +543,16 @@ export function Requirements({
           />
         ) : null}
 
-        <div
-          className={`mb-4 rounded-lg border p-3 ${
-            focused && mode === "batch"
-              ? "border-[var(--brand)]/50 bg-[var(--brand-softer)] ring-1 ring-[var(--brand)]/20"
-              : "border-[var(--border)] bg-[var(--surface-muted)]"
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-[var(--muted-strong)]">
-              {t("page.requirements.bulkSelected", { count: selectedReqIds.length })}
-            </span>
-            <Button
-              size="small"
-              onClick={() => setSelectedReqIds(filtered.map((item) => item.id).filter(Boolean))}
-              disabled={!filtered.length}
-            >
-              {t("page.requirements.selectAll")}
-            </Button>
-            <Button size="small" onClick={() => setSelectedReqIds([])} disabled={!selectedReqIds.length}>
-              {t("page.requirements.clearSelection")}
-            </Button>
-            <Select
-              className="min-w-40"
-              allowClear
-              placeholder={t("page.requirements.bulkStatus")}
-              value={bulkStatus || undefined}
-              onChange={(value) => setBulkStatus(value || "")}
-              options={STATUSES.map((item) => ({ value: item, label: statusLabel(t, item) }))}
-            />
-            <Select
-              className="min-w-36"
-              allowClear
-              placeholder={t("page.requirements.bulkPriority")}
-              value={bulkPriority || undefined}
-              onChange={(value) => setBulkPriority(value || "")}
-              options={PRIORITIES.map((item) => ({ value: item, label: item }))}
-            />
-            <AntInput
-              className="w-40"
-              allowClear
-              value={bulkAgent}
-              onChange={(e) => setBulkAgent(e.target.value)}
-              placeholder={t("page.requirements.bulkAgent")}
-            />
-            <AntInput
-              className="w-40"
-              allowClear
-              value={bulkTool}
-              onChange={(e) => setBulkTool(e.target.value)}
-              placeholder={t("page.requirements.bulkTool")}
-            />
-            <Button
-              type="primary"
-              disabled={!canBulkUpdate}
-              loading={bulkUpdateReq.isPending}
-              onClick={() => bulkUpdateReq.mutate()}
-            >
-              {t("page.requirements.bulkApply")}
-            </Button>
-            <Button
-              disabled={!selectedReqIds.length && !bulkStatus && !bulkPriority && !bulkAgent && !bulkTool}
-              onClick={() => {
-                setSelectedReqIds([]);
-                setBulkStatus("");
-                setBulkPriority("");
-                setBulkAgent("");
-                setBulkTool("");
-              }}
-            >
-              {t("common.reset")}
-            </Button>
-          </div>
-          {bulkUpdateReq.error ? <p className="mt-2 text-sm text-rose-600">{(bulkUpdateReq.error as Error).message}</p> : null}
-        </div>
+        {showBulkPanel ? renderBulkPanel() : null}
 
         {q.isLoading ? <LoadingBlock /> : null}
         {q.error ? <ErrorBlock message={(q.error as Error).message} /> : null}
-        {!q.isLoading && !q.error && filtered.length === 0 ? (
+        {!q.isLoading && !q.error && displayList.length === 0 ? (
           <EmptyState message={t("page.requirements.empty")} />
         ) : null}
 
         <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
-          {filtered.map((r) =>
+          {displayList.map((r) =>
             editingId === r.id ? (
               <RequirementEditor
                 key={r.id}
@@ -594,63 +568,67 @@ export function Requirements({
             ) : (
               <article
                 key={r.id}
-                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
+                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Checkbox
-                        checked={selectedReqSet.has(r.id)}
-                        onChange={(e) => {
-                          setSelectedReqIds((prev) =>
-                            e.target.checked ? Array.from(new Set([...prev, r.id])) : prev.filter((id) => id !== r.id),
-                          );
-                        }}
-                      />
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold dark:bg-slate-800">
+                      {(routeFocused && mode === "batch") || !routeFocused ? (
+                        <Checkbox
+                          checked={selectedReqSet.has(r.id)}
+                          onChange={(e) => {
+                            setSelectedReqIds((prev) =>
+                              e.target.checked ? Array.from(new Set([...prev, r.id])) : prev.filter((id) => id !== r.id),
+                            );
+                          }}
+                        />
+                      ) : null}
+                      <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs font-semibold">
                         {r.priority ?? "P?"}
                       </span>
                       <span className={`rounded px-1.5 py-0.5 text-xs ${statusTone[r.status ?? ""] ?? statusTone.pending}`}>
                         {statusLabel(t, r.status || "pending")}
                       </span>
                     </div>
-                    <h3 className="mt-2 text-base font-semibold text-slate-950 dark:text-slate-50">
-                      {r.title}
-                    </h3>
-                    <p className="mt-1 font-mono text-[10px] text-slate-400">{r.id}</p>
+                    <h3 className="mt-2 text-base font-semibold text-[var(--text)]">{r.title}</h3>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--muted)]">{r.id}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
+                    {showCardGenerate ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[var(--brand)]/30 p-2 text-[var(--brand)] hover:bg-[var(--brand-soft)] disabled:opacity-50"
+                        title={t("page.requirements.generateTasks")}
+                        disabled={busy}
+                        onClick={() => {
+                          const next = defaultTaskGenDraft(r);
+                          setTaskPlanReqId(r.id);
+                          setTaskPlanDraft(next);
+                          setTaskPlanResult(null);
+                          generateTasks.mutate({ id: r.id, dryRun: true });
+                        }}
+                      >
+                        <Wand2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    {showCardReview ? (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-violet-200 p-2 text-violet-600 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
+                        title={t("page.requirements.aiReview")}
+                        disabled={busy}
+                        onClick={() => {
+                          setReviewReqId(r.id);
+                          setReviewResult(null);
+                          reviewReq.mutate(r.id);
+                        }}
+                      >
+                        <BrainCircuit className="h-4 w-4" />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      className="rounded-lg border border-sky-200 p-2 text-sky-600 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900 dark:text-sky-300 dark:hover:bg-sky-950/40"
-                      title={t("page.requirements.generateTasks")}
-                      disabled={busy}
-                      onClick={() => {
-                        const next = defaultTaskGenDraft(r);
-                        setTaskPlanReqId(r.id);
-                        setTaskPlanDraft(next);
-                        setTaskPlanResult(null);
-                        generateTasks.mutate({ id: r.id, dryRun: true });
-                      }}
-                    >
-                      <Wand2 className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-violet-200 p-2 text-violet-600 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
-                      title={t("page.requirements.aiReview")}
-                      disabled={busy}
-                      onClick={() => {
-                        setReviewReqId(r.id);
-                        setReviewResult(null);
-                        reviewReq.mutate(r.id);
-                      }}
-                    >
-                      <BrainCircuit className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                      className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
                       title={t("page.requirements.edit")}
                       onClick={() => {
                         setEditingId(r.id);
@@ -659,41 +637,41 @@ export function Requirements({
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:hover:bg-rose-950/40"
-                      title={t("page.requirements.delete")}
-                      disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(t("page.requirements.confirmDelete", { title: r.title || r.id }))) {
-                          deleteReq.mutate(r.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {(!routeFocused || mode === "pool") && (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50 dark:border-rose-900 dark:hover:bg-rose-950/40"
+                        title={t("page.requirements.delete")}
+                        disabled={busy}
+                        onClick={() => {
+                          if (window.confirm(t("page.requirements.confirmDelete", { title: r.title || r.id }))) {
+                            deleteReq.mutate(r.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 {r.description ? (
-                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                    {r.description}
-                  </p>
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-[var(--muted-strong)]">{r.description}</p>
                 ) : null}
-                <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2 text-xs text-[var(--muted)] sm:grid-cols-2">
                   <Info label={t("page.requirements.agent")} value={r.assigned_agent || "-"} />
                   <Info label={t("page.requirements.devTool")} value={r.dev_tool || "-"} />
                 </div>
                 {r.acceptance_criteria?.length ? (
-                  <ul className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                  <ul className="mt-3 space-y-1 text-xs text-[var(--muted-strong)]">
                     {r.acceptance_criteria.slice(0, 3).map((x, i) => (
                       <li key={`${r.id}-ac-${i}`} className="flex gap-2">
-                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-sky-500" />
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--brand)]" />
                         <span>{x}</span>
                       </li>
                     ))}
                   </ul>
                 ) : null}
-                {taskPlanReqId === r.id ? (
+                {taskPlanReqId === r.id && showCardGenerate ? (
                   <TaskPlanPanel
                     draft={taskPlanDraft}
                     onChange={setTaskPlanDraft}
@@ -708,7 +686,7 @@ export function Requirements({
                     }}
                   />
                 ) : null}
-                {reviewReqId === r.id ? (
+                {reviewReqId === r.id && showCardReview && !workbenchFocused ? (
                   <ReviewPanel
                     result={reviewResult}
                     pending={reviewReq.isPending || applyReview.isPending}
@@ -732,6 +710,123 @@ export function Requirements({
           <p className="mt-3 text-sm text-rose-600">{(deleteReq.error as Error).message}</p>
         ) : null}
       </Card>
+    </>
+  );
+
+  function renderBulkPanel() {
+    return (
+      <div
+        className={`mb-4 rounded-lg border p-3 ${
+          workbenchFocused && mode === "batch"
+            ? "border-[var(--brand)]/50 bg-[var(--brand-softer)] ring-1 ring-[var(--brand)]/20"
+            : "border-[var(--border)] bg-[var(--surface-muted)]"
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--muted-strong)]">
+            {t("page.requirements.bulkSelected", { count: selectedReqIds.length })}
+          </span>
+          <Button
+            size="small"
+            onClick={() => setSelectedReqIds(displayList.map((item) => item.id).filter(Boolean))}
+            disabled={!displayList.length}
+          >
+            {t("page.requirements.selectAll")}
+          </Button>
+          <Button size="small" onClick={() => setSelectedReqIds([])} disabled={!selectedReqIds.length}>
+            {t("page.requirements.clearSelection")}
+          </Button>
+          <Select
+            className="min-w-40"
+            allowClear
+            placeholder={t("page.requirements.bulkStatus")}
+            value={bulkStatus || undefined}
+            onChange={(value) => setBulkStatus(value || "")}
+            options={STATUSES.map((item) => ({ value: item, label: statusLabel(t, item) }))}
+          />
+          <Select
+            className="min-w-36"
+            allowClear
+            placeholder={t("page.requirements.bulkPriority")}
+            value={bulkPriority || undefined}
+            onChange={(value) => setBulkPriority(value || "")}
+            options={PRIORITIES.map((item) => ({ value: item, label: item }))}
+          />
+          <AntInput
+            className="w-40"
+            allowClear
+            value={bulkAgent}
+            onChange={(e) => setBulkAgent(e.target.value)}
+            placeholder={t("page.requirements.bulkAgent")}
+          />
+          <AntInput
+            className="w-40"
+            allowClear
+            value={bulkTool}
+            onChange={(e) => setBulkTool(e.target.value)}
+            placeholder={t("page.requirements.bulkTool")}
+          />
+          <Button type="primary" disabled={!canBulkUpdate} loading={bulkUpdateReq.isPending} onClick={() => bulkUpdateReq.mutate()}>
+            {t("page.requirements.bulkApply")}
+          </Button>
+          <Button
+            disabled={!selectedReqIds.length && !bulkStatus && !bulkPriority && !bulkAgent && !bulkTool}
+            onClick={() => {
+              setSelectedReqIds([]);
+              setBulkStatus("");
+              setBulkPriority("");
+              setBulkAgent("");
+              setBulkTool("");
+            }}
+          >
+            {t("common.reset")}
+          </Button>
+        </div>
+        {bulkUpdateReq.error ? <p className="mt-2 text-sm text-rose-600">{(bulkUpdateReq.error as Error).message}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <>
+    <WorkbenchShell
+      title={workbenchFocused ? t("page.requirements.kit.title") : t("page.requirements.title")}
+      description={workbenchFocused ? t(`page.requirements.mode.${mode}.hint`) : t("page.requirements.desc")}
+      actions={
+        <>
+          <AiAssistButton
+            onClick={() => {
+              if (aiReq) setAiContextReq(aiReq);
+              setAiOpen(true);
+            }}
+          />
+          <RefreshButton onClick={() => void q.refetch()} pending={q.isFetching} />
+        </>
+      }
+      metrics={
+        <WorkbenchStats
+          items={[
+            { label: t("page.requirements.total"), value: metrics.total },
+            { label: t("page.requirements.pending"), value: metrics.byStatus.get("pending") ?? 0 },
+            { label: t("page.requirements.inProgress"), value: metrics.byStatus.get("in_progress") ?? 0 },
+            { label: t("page.requirements.completed"), value: metrics.byStatus.get("completed") ?? 0 },
+          ]}
+        />
+      }
+    >
+      {workbenchFocused ? (
+        <ProductRequirementsShell
+          phase={mode}
+          total={kitTotal}
+          ready={kitReady}
+          completed={kitCompleted}
+          completionRate={kitCompletion}
+        >
+          {workbenchBody}
+        </ProductRequirementsShell>
+      ) : (
+        workbenchBody
+      )}
     </WorkbenchShell>
 
     <AiAssistDrawer
@@ -757,6 +852,123 @@ export function Requirements({
     />
     </>
   );
+}
+
+function RequirementsModeWorkbench({
+  mode,
+  requirements,
+  reviewReqId,
+  reviewResult,
+  reviewPending,
+  reviewError,
+  onPickReview,
+  onApplyReview,
+  onCloseReview,
+  taskPlanReqId,
+  taskPlanDraft,
+  taskPlanResult,
+  taskPlanPending,
+  taskPlanError,
+  onPickGeneration,
+  onTaskDraftChange,
+  onPreviewTasks,
+  onCreateTasks,
+  onCloseTaskPlan,
+}: {
+  mode: RequirementMode;
+  requirements: RequirementRow[];
+  reviewReqId: string;
+  reviewResult: ReviewResult | null;
+  reviewPending: boolean;
+  reviewError: unknown;
+  onPickReview: (id: string) => void;
+  onApplyReview: (id: string, criteria: string[]) => void;
+  onCloseReview: () => void;
+  taskPlanReqId: string;
+  taskPlanDraft: TaskGenDraft;
+  taskPlanResult: TaskPlanResult | null;
+  taskPlanPending: boolean;
+  taskPlanError: unknown;
+  onPickGeneration: (row: RequirementRow) => void;
+  onTaskDraftChange: (draft: TaskGenDraft) => void;
+  onPreviewTasks: (id: string) => void;
+  onCreateTasks: (id: string) => void;
+  onCloseTaskPlan: () => void;
+}) {
+  const { t } = useTranslation();
+  const options = requirements.map((r) => ({
+    value: r.id,
+    label: `${r.title || r.id} · ${r.priority ?? "P?"}`,
+  }));
+
+  if (mode === "review") {
+    return (
+      <Card title={t("page.requirements.mode.review.title")}>
+        <Select
+          showSearch
+          allowClear
+          className="w-full max-w-2xl"
+          placeholder={t("page.requirements.kit.pickRequirement")}
+          value={reviewReqId || undefined}
+          onChange={(id) => onPickReview(id || "")}
+          options={options}
+          optionFilterProp="label"
+        />
+        {reviewReqId ? (
+          <ReviewPanel
+            result={reviewResult}
+            pending={reviewPending}
+            error={reviewError}
+            onApply={() => {
+              const criteria = reviewResult?.suggested_acceptance_criteria ?? [];
+              if (criteria.length) onApplyReview(reviewReqId, criteria);
+            }}
+            onClose={onCloseReview}
+          />
+        ) : (
+          <p className="mt-3 text-sm text-[var(--muted)]">{t("page.requirements.kit.pickRequirementHint")}</p>
+        )}
+      </Card>
+    );
+  }
+
+  if (mode === "generation") {
+    const active = requirements.find((r) => r.id === taskPlanReqId);
+    return (
+      <Card title={t("page.requirements.mode.generation.title")}>
+        <Select
+          showSearch
+          allowClear
+          className="w-full max-w-2xl"
+          placeholder={t("page.requirements.kit.pickRequirement")}
+          value={taskPlanReqId || undefined}
+          onChange={(id) => {
+            const row = requirements.find((r) => r.id === id);
+            if (row) onPickGeneration(row);
+            else onCloseTaskPlan();
+          }}
+          options={options}
+          optionFilterProp="label"
+        />
+        {active && taskPlanReqId ? (
+          <TaskPlanPanel
+            draft={taskPlanDraft}
+            onChange={onTaskDraftChange}
+            result={taskPlanResult}
+            pending={taskPlanPending}
+            error={taskPlanError}
+            onPreview={() => onPreviewTasks(taskPlanReqId)}
+            onCreate={() => onCreateTasks(taskPlanReqId)}
+            onClose={onCloseTaskPlan}
+          />
+        ) : (
+          <p className="mt-3 text-sm text-[var(--muted)]">{t("page.requirements.kit.pickRequirementHint")}</p>
+        )}
+      </Card>
+    );
+  }
+
+  return null;
 }
 
 function ReviewPanel({

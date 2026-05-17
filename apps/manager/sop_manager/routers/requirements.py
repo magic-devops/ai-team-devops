@@ -709,6 +709,13 @@ def requirements_hub() -> dict[str, Any]:
             {"id": "generation", "path": "#/requirements/generation", "capability": "product.requirements.generation"},
             {"id": "batch", "path": "#/requirements/batch", "capability": "product.requirements.batch"},
         ],
+        "workbench_path": "#/requirements/pool",
+        "flow": [
+            {"id": "pool", "done": (summary.get("total") or 0) > 0},
+            {"id": "review", "done": (summary.get("ready") or 0) > 0},
+            {"id": "generation", "done": (summary.get("completed") or 0) > 0},
+            {"id": "batch", "done": float(summary.get("completion_rate") or 0) >= 30},
+        ],
     }
 
 

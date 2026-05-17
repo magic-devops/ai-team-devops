@@ -760,6 +760,12 @@ class ManagerClient:
     def platforms_install_shims(self, platform_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/platforms/install-shims/{platform_id}")
 
+    def platforms_ops_plan(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/platforms/ops-plan")
+
+    def platforms_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/platforms/ops-tasks", json_body=dict(body))
+
     def copilot_ask(
         self,
         query: str,
