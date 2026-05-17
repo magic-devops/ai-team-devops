@@ -1,5 +1,8 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx } from "react/jsx-runtime";
+import { Card as AntCard } from "antd";
 export function Card({ title, children, actions, className = "", }) {
-    const base = "rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 text-[var(--text)] shadow-sm shadow-slate-950/[0.04] ring-1 ring-white/40 backdrop-blur dark:shadow-black/20 dark:ring-white/[0.04]";
-    return (_jsxs("section", { className: [base, className].filter(Boolean).join(" "), children: [(title || actions) && (_jsxs("header", { className: "mb-3 flex items-center justify-between gap-2", children: [title && (_jsx("h3", { className: "text-sm font-semibold tracking-tight text-[var(--text)]", children: title })), actions] })), children] }));
+    return (_jsx(AntCard, { title: title ? _jsx("span", { className: "block min-w-0 whitespace-normal text-sm font-semibold leading-6 tracking-tight text-[var(--text)]", children: title }) : undefined, extra: actions, className: [
+            "sop-card min-w-0 text-[var(--text)] shadow-sm shadow-slate-950/[0.04] dark:shadow-black/20",
+            className,
+        ].filter(Boolean).join(" "), styles: { body: { padding: 16 }, header: { padding: "0 16px", minHeight: 48 } }, children: children }));
 }

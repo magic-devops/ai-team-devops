@@ -24,5 +24,105 @@
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "tasks": {
+      "command": "python3",
+      "args": [
+        "ai-sop-ops/integrations/mcp/tasks_server.py"
+      ],
+      "description": "需求、任务、迭代、问题统一读写",
+      "tags": [
+        "delivery",
+        "sop"
+      ]
+    },
+    "knowledge": {
+      "command": "python3",
+      "args": [
+        "ai-sop-ops/integrations/mcp/knowledge_server.py"
+      ],
+      "description": "知识库、RAG、规约与规则检索",
+      "tags": [
+        "knowledge",
+        "rag"
+      ]
+    },
+    "audit": {
+      "command": "python3",
+      "args": [
+        "ai-sop-ops/integrations/mcp/audit_server.py"
+      ],
+      "description": "审计链、事件、合规证据查询",
+      "tags": [
+        "audit",
+        "governance"
+      ]
+    },
+    "lancedb": {
+      "command": "python3",
+      "args": [
+        "ai-sop-ops/integrations/mcp/lancedb_server.py"
+      ],
+      "description": "LanceDB 语义搜索",
+      "tags": [
+        "vector",
+        "memory"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "description": "文件系统操作",
+      "tags": [
+        "files"
+      ]
+    },
+    "git": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git",
+        "--repository",
+        "."
+      ],
+      "description": "Git 操作",
+      "tags": [
+        "dev"
+      ]
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "description": "GitHub API",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "tags": [
+        "devops",
+        "remote"
+      ]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "description": "网络搜索",
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      },
+      "tags": [
+        "search"
+      ]
+    }
   }
 }

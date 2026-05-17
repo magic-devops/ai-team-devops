@@ -7,10 +7,26 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, HttpUrl
 from sqlalchemy.orm import Session
 
+from sop_manager.path_config import resolved_ai_memory_root
 from .sql_models import get_session, WebhookConfig
 from .auth_sql import current_user, require_role, User
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
+
+
+def _delivery_log_path():
+    from pathlib import Path
+
+    p = resolved_ai_memory_root() / "webhook_deliveries.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _append_delivery(row: dict) -> None:
+    import json as _json
+
+    with _delivery_log_path().open("a", encoding="utf-8") as f:
+        f.write(_json.dumps(row, ensure_ascii=False) + "\n")
 
 # (id, category, label_zh, label_en, hint_zh, hint_en)
 _EVENT_ROWS: list[tuple[str, str, str, str, str, str]] = [
@@ -120,6 +136,17 @@ def test_webhook(hook_id: str, user: User = Depends(current_user),
     if not h or h.tenant_id != user.tenant_id:
         raise HTTPException(404, "Webhook 不存在")
     result = _fire_sync(h, "webhook.test", {"message": "test ping", "triggered_by": user.username})
+    _append_delivery(
+        {
+            "hook_id": h.id,
+            "event": "webhook.test",
+            "ok": result.get("ok"),
+            "status_code": result.get("status_code"),
+            "error": result.get("error"),
+            "fired_at": datetime.utcnow().isoformat() + "Z",
+            "source": "test",
+        }
+    )
     return {"ok": result["ok"], "status_code": result.get("status_code"), "error": result.get("error")}
 
 
@@ -127,6 +154,35 @@ def test_webhook(hook_id: str, user: User = Depends(current_user),
 def list_events():
     """返回扁平 id 列表 + 分组元数据（供 Web UI 展示说明与分组全选）。"""
     return {"events": SUPPORTED_EVENTS, "catalog": EVENT_CATALOG}
+
+
+@router.get("/{hook_id}/deliveries")
+def list_deliveries(
+    hook_id: str,
+    limit: int = 50,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_session),
+):
+    hook = db.get(WebhookConfig, hook_id)
+    if not hook or hook.tenant_id != user.tenant_id:
+        raise HTTPException(404, "Webhook 不存在")
+    path = _delivery_log_path()
+    if not path.is_file():
+        return {"ok": True, "items": [], "total": 0}
+    items: list[dict] = []
+    for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if row.get("hook_id") != hook_id:
+            continue
+        items.append(row)
+        if len(items) >= limit:
+            break
+    return {"ok": True, "items": items, "total": len(items)}
 
 
 def notify_webhook(event: str, data: dict, *, tenant_id: str, project_id: str = "") -> None:
@@ -184,6 +240,18 @@ def _fire_with_retry(hook_id: str, event: str, data: dict, max_retries: int = 3)
         if not hook: return
         for attempt in range(max_retries):
             result = _fire_sync(hook, event, data)
+            _append_delivery(
+                {
+                    "hook_id": hook.id,
+                    "event": event,
+                    "attempt": attempt + 1,
+                    "ok": result.get("ok"),
+                    "status_code": result.get("status_code"),
+                    "error": result.get("error"),
+                    "fired_at": datetime.utcnow().isoformat() + "Z",
+                    "source": "event",
+                }
+            )
             if result["ok"]:
                 hook.fail_count = 0
                 hook.last_fired_at = datetime.utcnow()

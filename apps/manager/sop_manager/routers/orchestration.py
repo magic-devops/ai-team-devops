@@ -7,6 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -742,9 +743,54 @@ def list_install_logs(limit: int = Query(40, ge=1, le=200)):
     return {"items": items}
 
 
+@router.get("/hub")
+def orchestration_hub() -> dict[str, Any]:
+    tools = list_tools()
+    workflows = list_workflows()
+    tool_rows = tools if isinstance(tools, list) else []
+    wf_rows = workflows if isinstance(workflows, list) else []
+    by_category: dict[str, int] = dict(Counter(str(t.get("category") or "unknown") for t in tool_rows))
+    available = sum(1 for t in tool_rows if t.get("available"))
+    try:
+        versions = list_versions()
+        version_count = len(versions) if isinstance(versions, list) else 0
+    except Exception:
+        version_count = 0
+
+    def _pie(counter: dict[str, int]) -> list[dict[str, Any]]:
+        return [{"name": k, "value": v} for k, v in sorted(counter.items(), key=lambda x: (-x[1], x[0])) if v > 0]
+
+    return {
+        "ok": True,
+        "summary": {
+            "tools_total": len(tool_rows),
+            "tools_available": available,
+            "workflows_total": len(wf_rows),
+            "versions_total": version_count,
+        },
+        "charts": {"by_category": _pie(by_category)},
+        "domains": [
+            {"id": "studio", "path": "#/orchestration/studio", "capability": "delivery.orchestration.studio"},
+            {"id": "workflows", "path": "#/workflows", "capability": "delivery.workflows"},
+            {"id": "cli", "path": "#/platforms/cli", "capability": "ecosystem.platforms.cli"},
+            {"id": "dev-flow", "path": "#/dev-flow/workbench", "capability": "delivery.dev-flow.workbench"},
+        ],
+    }
+
+
 @router.get("/workflows")
 def list_workflows():
     return [json.loads(f.read_text()) for f in sorted(_orch_dir().glob("wf_*.json"))]
+
+
+@router.get("/workflows/{wf_id}")
+def get_workflow(wf_id: str):
+    f = _orch_dir() / f"wf_{wf_id}.json"
+    if not f.is_file():
+        raise HTTPException(404, "工作流不存在")
+    data = json.loads(f.read_text(encoding="utf-8"))
+    steps = data.get("steps") or data.get("nodes") or []
+    return {"ok": True, "workflow": data, "step_count": len(steps)}
 
 
 @router.post("/workflows")

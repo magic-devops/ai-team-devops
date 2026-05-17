@@ -1,13 +1,15 @@
 # AI 一栈式平台目标架构与产业化路线
 
-> 版本: 1.0
-> 日期: 2026-05-15
-> 状态: 面向 v4+ 的目标蓝图与开发任务包
-> 关联: [ROADMAP.md](../../ROADMAP.md) · [UPGRADE_v4_ENGINEERING.md](UPGRADE_v4_ENGINEERING.md) · [OVERVIEW.md](OVERVIEW.md) · [EVOLUTION.md](EVOLUTION.md)
+> 版本: 1.2
+> 日期: 2026-05-17
+> 状态: 面向 v4+ 的目标蓝图与开发任务包（含九域菜单 IA 与智能 CLI 对接）
+> 关联: [HERMES_PLATFORM_LATEST_ARCHITECTURE.md](HERMES_PLATFORM_LATEST_ARCHITECTURE.md) · [HERMES_PRODUCT_IA_MENU_SPEC.md](HERMES_PRODUCT_IA_MENU_SPEC.md) · [hermes-platform-latest-architecture.html](hermes-platform-latest-architecture.html) · [ROADMAP.md](../../ROADMAP.md) · [UPGRADE_v4_ENGINEERING.md](UPGRADE_v4_ENGINEERING.md) · [OVERVIEW.md](OVERVIEW.md) · [EVOLUTION.md](EVOLUTION.md)
 
 ## 1. 目标定位
 
-本平台面向大型软件系统的 AI 原生研发、治理、运维与数据分析，目标是形成一个可本地化交付、可 SaaS 化运营、可企业级合规扩展的 **AI + 业务 + Data + DevOps + AIOps 一栈式平台**。
+本平台（Hermes）面向大型软件系统的 AI 原生研发、治理、运维与数据分析，目标是形成一个可本地化交付、可 SaaS 化运营、可企业级合规扩展的 **AI + 业务 + Data + DevOps + AIOps 一栈式平台**。
+
+**产品化入口**：manager-web 九域菜单（战略总览 → 系统运维）+ `sop` 统一 CLI + IDE/Agent 接入包；菜单、能力码、Manifest 由 `system/pages` 与 `navigation.tsx` 双端注册，详见 [HERMES_PRODUCT_IA_MENU_SPEC.md](HERMES_PRODUCT_IA_MENU_SPEC.md)。
 
 目标态不是把所有工具堆在同一个页面里，而是用统一的上下文、统一的权限、统一的事件与同步协议，把以下能力沉淀成可复用资产：
 
@@ -205,9 +207,9 @@ MemoryPort 目标契约：
 3. 将 rules/specs/knowledge 同步纳入 sync 模块和 Worker 索引。
 4. 增加记忆策略：保留期、敏感等级、可共享范围、租户级禁用。
 
-## 7. CLI 与运维工具体系
+## 7. CLI 与运维工具体系（智能 CLI 2.0）
 
-`sop` 是统一入口，不再拆成项目端 CLI、管理端 CLI、运维 CLI 三套工具。通过 profile 和 context 切换运行面。
+`sop` 是统一入口，不再拆成项目端 CLI、管理端 CLI、运维 CLI 三套工具。通过 profile 和 context 切换运行面，并与平台菜单/能力码同源。
 
 ```mermaid
 flowchart LR
@@ -231,12 +233,76 @@ flowchart LR
 | 资产 | `sop template`、`sop marketplace`、`sop platforms` |
 | 运维 | `sop ops health/logs/events/deploy/backup/restore/doctor` |
 | 商业化 | `sop usage quota/bill/export` |
+| 平台菜单 | `sop pages list/manifest/capabilities`（与 manager-web 九域菜单、子能力码对齐） |
+| 工作台 | `sop work summary/list/next/export`（跨需求/任务/问题/迭代聚合） |
+| 调度 | `sop task schedule/feed/claim/heartbeat/report/gates/evaluate`（Hermes DAG + 质量卡点） |
+| 数据智能 | `sop data blueprint/tasks/assets/quality/dev-schedule/...`（与 Analytics 菜单分区一致） |
 
 推荐新工程入口：`sop register <project> --manager <url> --username <user>`。该命令负责初始化项目状态、生成各 CLI/IDE/Agent 接入配置、注册到 Manager、写入 agent.toml/API Key，并运行自检。
+
+**智能 CLI 增强方向**（按迭代落地）：
+
+1. **菜单感知**：`sop context prepare` 拉取 `pages/manifest` + `capabilities/me`，写入 `.sop-runtime/pages_manifest.json`，Agent 按能力码选模块而非硬编码 URL。
+2. **项目批量对接**：`sop context manifest` 支持 monorepo 多 `project_id` 清单；`sop sync pull --materialize` 按项目物化规约与任务。
+3. **离线优先增强**：`sync watch/compact/doctor` + `event subscribe` + `usage check` 组成「无 Manager 也可开发、有 Manager 则增强」双模。
+4. **执行闭环**：任务域与数据域均提供 `agent-feed` / `claim` / `report` 协议，CLI 与 Web「任务依赖调度」菜单同一套 API。
 
 运行策略：CLI 和 Agent 遵循“本地优先、远端增强”。本地记忆、知识库、规约、规则、需求、任务在无网络或未注册时可独立使用；当 Manager、记忆服务、知识库服务或数据服务可用时，命令自动调用远端能力，并通过 sync/worker/index 流程更新远端数据。
 
 P0 状态：`sop task` 已支持不依赖 agentd 的 Manager 直连创建/更新/Issue 上报；`sop ops` 已覆盖 health-check、stack doctor、snapshot、deploy profile。
+
+## 7.1 数据智能平台蓝图
+
+数据智能面不是报表页面的附属能力，而是 Hermes 平台的第二条主线：研发任务解决“怎么开发”，数据智能解决“开发、运维和业务如何持续变聪明”。目标是把数据接入、集成、开发、质量、监控、指标、标签、问数、报表、归因、知识、画像、服务和知产治理全部纳入统一作用域、统一任务、统一调度和统一审计。
+
+```mermaid
+flowchart TB
+  SRC["业务系统 / 文件 / API / IM / Webhook / Agent / CDC"] --> ING["智能接入与 Schema Registry"]
+  ING --> CDC["Flink CDC / Event Stream"]
+  ING --> BATCH["Spark Batch / Python Jobs"]
+  CDC --> LAKE["Paimon Lakehouse"]
+  BATCH --> LAKE
+  LAKE --> OB["OceanBase 主数据与多模态底座"]
+  LAKE --> OLAP["StarRocks / Hologres / GP"]
+  OB --> SEM["指标语义层 / 标签语义层 / 业务本体"]
+  OLAP --> SEM
+  SEM --> SERVE["数据 API / 指标服务 / 标签服务 / 报表订阅"]
+  SEM --> AI["NLQ / RAG / Graph RAG / 记忆画像 / 归因分析"]
+  AI --> TASK["需求 / 任务 / DAG 调度 / 质量卡点"]
+  SERVE --> GOV["权限 / 脱敏 / 审计 / 计量 / 知产治理"]
+  TASK --> GOV
+```
+
+核心边界：
+
+| 能力域 | 平台职责 | 首选成熟技术 |
+|--------|----------|--------------|
+| 智能数据接入 | 连接器注册、Schema 推断、CDC 位点、接入风险评估 | OceanBase、Flink CDC、Paimon、Kafka/Redis Streams |
+| 智能数据开发 | SQL/ETL 任务、依赖推断、代码生成、质量卡点、发布回滚 | Spark、Flink、Python、SQL、Temporal |
+| 数据质量与监控 | 批流质量规则、SLO、异常检测、告警转任务、根因分析 | Spark、Flink、OpenSearch、Prometheus |
+| 指标中心 | 指标目录、口径版本、语义层、血缘影响、高并发查询 | StarRocks、OceanBase、Hologres |
+| 标签服务 | 标签目录、标签开发、画像圈选、实时标签、权限策略 | OceanBase、Flink、StarRocks、Lance |
+| 本体论记忆画像 | 业务实体、关系图谱、人/项目/Agent 画像、多模态检索 | Lance、OceanBase、OpenSearch、Graph RAG |
+| 统一数据服务 | 数据 API 发布、字段级权限、脱敏、限流、审计与配额 | OceanBase、API Gateway、ABAC |
+| 数据知产治理 | 资产分级、授权、血缘、使用计量、合规审计、市场化 | Audit WORM、Object Storage、Billing |
+
+落地策略：
+
+1. **控制面先行**：Manager 提供 `/api/v1/analytics/blueprint` 和 `/blueprint/tasks`，把能力成熟度、技术栈、缺口和任务化入口统一输出。
+2. **任务化闭环**：所有数据能力缺口都能生成 `source=data_intelligence_blueprint_gap` 的研发任务，再进入 Hermes DAG 调度中心、质量卡点和 Agent feed。
+3. **三码隔离**：指标、标签、质量规则、数据服务、报表、画像全部携带 `tenant_code`、`business_code`、`project_id`，服务端强制注入作用域。
+4. **成熟技术优先**：OceanBase 作为默认主数据与多模态底座；StarRocks/Hologres/GP 按企业现状接入；Flink/Spark/Paimon 承载批流开发；Lance 承载本地优先向量和多模态记忆。
+5. **AI 默认覆盖**：Schema 理解、指标口径、标签建议、质量规则、异常归因、Runbook、报告生成、任务拆解都优先通过 Copilot/Agent 辅助，但最终沉淀为可审计资产。
+
+阶段化任务：
+
+| 阶段 | 目标 | 关键交付 |
+|------|------|----------|
+| D0 | 数据智能蓝图与任务化 | Analytics 蓝图页、CLI `sop data blueprint/tasks`、缺口任务生成 |
+| D1 | 指标语义层 | 指标版本、负责人、口径审批、StarRocks/Hologres 查询 Profile |
+| D2 | 数据质量中心 | 质量规则目录、批流运行结果、告警转任务、质量报告订阅 |
+| D3 | 标签与画像 | 标签目录、标签开发任务、画像服务、本体/关系建模 |
+| D4 | 数据服务与知产治理 | 数据 API、字段权限、脱敏、计量、授权、合规审计 |
 
 ## 8. 前后端分离、Native 与同步
 
@@ -266,20 +332,23 @@ P0 状态：`sop task` 已支持不依赖 agentd 的 Manager 直连创建/更新
 | 记忆 | append-only + summarize/forget 策略 |
 | 审计/用量 | append-only，不允许覆盖 |
 
-## 9. 可视化管理域
+## 9. 可视化管理域（九域产品 IA）
 
-React Shell 是长期主线，legacy console 只保留迁移缓冲期。页面域按企业级一体化管理拆分：
+React Shell 是长期主线，legacy console 只保留迁移缓冲期，由 **SystemMap / 页面地图** 承接迁移 Backlog。侧栏按九域 + 专业分组 + 模块/子入口组织（见 [HERMES_PRODUCT_IA_MENU_SPEC.md](HERMES_PRODUCT_IA_MENU_SPEC.md)）：
 
-| 域 | 页面 | 目标能力 |
-|----|------|----------|
-| 驾驶舱 | Dashboard | 研发、AI、运维、用量统一态势 |
-| 租户组织 | Tenants、Organization、Users、Roles | 成员、ABAC、业务线、项目授权 |
-| 研发管理 | Requirements、Tasks、Sprints、Issues、Workflows | 需求到交付闭环、进度、风险、评审 |
-| AI 智能 | Copilot、Agents、Memory、Knowledge、RAG Jobs | 会话、run_id、知识索引、记忆审计 |
-| 数据智能 | Analytics、Metrics Catalog、Lineage、NLQ | 指标目录、血缘、导出、数据问答 |
-| 运维管理 | Ops、Events、Notify、Audit、Worker Jobs | 告警、消息通道、审计链、任务队列 |
-| 资产市场 | Marketplace、Templates、Skills、MCP Hub | 安装、签名、评分、联邦共享 |
-| 平台设置 | Settings、SSO、Billing、Deploy | IdP、配额、计费、部署模式 |
+| 域 | 核心模块 | 目标能力 |
+|----|----------|----------|
+| 战略总览 | Dashboard | 运营态势、Hermes 蓝图、技术升级、风险、下一步动作 |
+| 组织项目 | Projects、Organization | 三码工作区、租户/业务/项目、成员、接入包、项目治理 |
+| 产品需求 | Requirements | 需求池、智能评审、拆任务、批量治理 |
+| 研发交付 | Tasks、Workflows | 执行中心、看板、Sprint、依赖图、**任务依赖调度**、流程实例 |
+| 数据智能 | Analytics（多分区） | 蓝图、报告、资产/指标/标签/服务/质量/开发、血缘、交换、NLQ |
+| AI 智能 | Copilot、Intelligence | 指挥台、知识/RAG/记忆/规则、Worker/Sync、用量 |
+| 平台生态 | Platforms、Marketplace、Notify | Agent/MCP/模型、资产市场、通信连接器 |
+| 安全治理 | Audit、SystemMap | 审计链、模块动作、审批、Manifest、能力矩阵 |
+| 系统运维 | Settings | SSO、计费、部署 Profile、观测、运行状态 |
+
+**菜单体验要求**：Pinned 高频入口、域色条、面包屑、子路由 `focused` 驱动页面分区；权限按 `capabilities/me` 过滤侧栏与按钮。
 
 console 迁移优先级：
 

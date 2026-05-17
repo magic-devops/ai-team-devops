@@ -1,5 +1,14 @@
 # 文档索引
 
+## 最新 Hermes 平台架构文档
+
+| 文档 | 说明 |
+|------|------|
+| [architecture/HERMES_PLATFORM_LATEST_ARCHITECTURE.md](architecture/HERMES_PLATFORM_LATEST_ARCHITECTURE.md) | **最新版平台架构总纲**：AI 自主开发闭环、DAG 调度、数据智能、通信集成、三码隔离、部署拓扑与迭代路线 |
+| [architecture/hermes-platform-latest-architecture.html](architecture/hermes-platform-latest-architecture.html) | **最新版 HTML 技术架构图**：可直接浏览的 Hermes 一栈式 AI 平台架构图 |
+| [architecture/HERMES_PLATFORM_DEVELOPMENT_PLAN.md](architecture/HERMES_PLATFORM_DEVELOPMENT_PLAN.md) | **开发迭代计划**：P0-P4 分阶段任务、验收标准与当前迭代任务表 |
+| [architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md](architecture/AI_PLATFORM_TARGET_ARCHITECTURE.md) | AI 一栈式平台目标架构与产业化路线 |
+
 ## v2 架构文档（新增）
 
 | 文档 | 说明 |

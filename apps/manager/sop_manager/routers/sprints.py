@@ -1,8 +1,8 @@
 """Sprint CRUD — SQLAlchemy，支持租户/项目隔离"""
 from __future__ import annotations
 import uuid
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,6 +22,100 @@ def _row(s: Sprint) -> dict:
             "retrospective": s.retrospective,
             "started_at": s.started_at.isoformat() + "Z",
             "ends_at": s.ends_at.isoformat() + "Z" if s.ends_at else None}
+
+
+def _parse_dt(val: Any) -> Optional[datetime]:
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    try:
+        return datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _task_stats(tasks: List[Task]) -> Dict[str, Any]:
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.status == "completed")
+    confs = [float(t.confidence) for t in tasks if t.confidence is not None]
+    return {
+        "total_tasks": total,
+        "completed": done,
+        "in_progress": sum(1 for t in tasks if t.status == "in_progress"),
+        "pending": sum(1 for t in tasks if t.status == "pending"),
+        "blocked": [
+            {"id": t.id, "title": t.title, "assigned_to": t.assigned_to or ""}
+            for t in tasks
+            if t.status == "blocked"
+        ],
+        "completion_rate": round(done / max(1, total) * 100, 1),
+        "avg_confidence": round(sum(confs) / max(1, len(confs)), 2) if confs else 0,
+        "remaining": max(0, total - done),
+    }
+
+
+def _burndown_payload(sprint: Sprint, tasks: List[Task]) -> Dict[str, Any]:
+    stats = _task_stats(tasks)
+    total = int(stats["total_tasks"])
+    remaining = int(stats["remaining"])
+    done = int(stats["completed"])
+    started = _parse_dt(sprint.started_at)
+    ends = _parse_dt(sprint.ends_at)
+    now = datetime.now(timezone.utc)
+    if started and ends and ends > started:
+        span_days = max(1, (ends - started).days)
+        elapsed_days = min(span_days, max(0, (now - started).days))
+    else:
+        span_days = 14
+        elapsed_days = min(span_days, max(0, int(done / max(1, total) * span_days)))
+    ideal: List[Dict[str, Any]] = []
+    actual: List[Dict[str, Any]] = []
+    for d in range(span_days + 1):
+        ideal.append({"day": d, "remaining": round(total * (1 - d / span_days), 1) if span_days else 0})
+    actual.append({"day": 0, "remaining": float(total)})
+    actual.append({"day": elapsed_days, "remaining": float(remaining)})
+    if done >= total and total > 0:
+        actual.append({"day": span_days, "remaining": 0.0})
+    return {
+        "ok": True,
+        "sprint": _row(sprint),
+        "stats": stats,
+        "span_days": span_days,
+        "elapsed_days": elapsed_days,
+        "ideal": ideal,
+        "actual": actual,
+    }
+
+
+@router.get("/summary")
+def sprints_summary(
+    project_id: Optional[str] = None,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
+    q = db.query(Sprint).filter(Sprint.tenant_id == user.tenant_id)
+    if eff_pid:
+        check_project_access(user, eff_pid, db)
+        q = q.filter(Sprint.project_id == eff_pid)
+    items = q.order_by(Sprint.started_at.desc()).limit(100).all()
+    by_status: Dict[str, int] = {}
+    for s in items:
+        st = s.status or "unknown"
+        by_status[st] = by_status.get(st, 0) + 1
+    active = next((s for s in items if s.status == "active"), None)
+    active_progress = None
+    if active:
+        tasks = db.query(Task).filter_by(sprint_id=active.id, tenant_id=user.tenant_id).all()
+        active_progress = _task_stats(tasks)
+    return {
+        "ok": True,
+        "total": len(items),
+        "by_status": by_status,
+        "active_sprint": _row(active) if active else None,
+        "active_progress": active_progress,
+    }
 
 
 @router.get("")
@@ -131,23 +225,26 @@ def sprint_progress(sprint_id: str, user: User = Depends(current_user),
     if not s: raise HTTPException(404, "Sprint 不存在")
     tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
     issues = db.query(Issue).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
-    total = len(tasks); done = sum(1 for t in tasks if t.status == "completed")
-    confs = [t.confidence for t in tasks if t.confidence]
+    stats = _task_stats(tasks)
     return {
         "sprint": _row(s),
-        "total_tasks": total, "completed": done,
-        "in_progress": sum(1 for t in tasks if t.status == "in_progress"),
-        "blocked": [
-            {"id": t.id, "title": t.title, "assigned_to": t.assigned_to or ""}
-            for t in tasks
-            if t.status == "blocked"
-        ],
-        "pending": sum(1 for t in tasks if t.status == "pending"),
-        "completion_rate": round(done / max(1, total) * 100, 1),
-        "avg_confidence": round(sum(confs) / max(1, len(confs)), 2) if confs else 0,
+        **stats,
         "open_issues": [{"id": i.id, "title": i.title, "severity": i.severity}
                         for i in issues if i.status == "open"],
     }
+
+
+@router.get("/{sprint_id}/burndown")
+def sprint_burndown(
+    sprint_id: str,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_session),
+) -> Dict[str, Any]:
+    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=user.tenant_id).first()
+    if not s:
+        raise HTTPException(404, "Sprint 不存在")
+    tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
+    return _burndown_payload(s, tasks)
 
 
 @router.delete("/{sprint_id}")

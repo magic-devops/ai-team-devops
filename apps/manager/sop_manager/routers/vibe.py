@@ -161,6 +161,33 @@ def clear_history():
     return {"ok": True}
 
 
+@router.get("/hub")
+def vibe_hub() -> dict[str, Any]:
+    payload = list_sessions()
+    sessions = payload.get("sessions") if isinstance(payload, dict) else []
+    templates = get_templates()
+    template_rows = templates if isinstance(templates, list) else []
+    with_messages = sum(
+        1
+        for s in sessions
+        if isinstance(s, dict) and isinstance(s.get("messages"), list) and len(s.get("messages") or []) > 0
+    )
+    return {
+        "ok": True,
+        "summary": {
+            "sessions": len(sessions),
+            "sessions_active": with_messages,
+            "templates": len(template_rows),
+        },
+        "domains": [
+            {"id": "workspace", "path": "#/vibe/workspace", "capability": "ai.vibe.workspace"},
+            {"id": "copilot", "path": "#/copilot/chat", "capability": "ai.copilot.chat"},
+            {"id": "cli", "path": "#/platforms/cli", "capability": "ecosystem.platforms.cli"},
+            {"id": "orchestration", "path": "#/orchestration", "capability": "delivery.orchestration"},
+        ],
+    }
+
+
 @router.get("/sessions")
 def list_sessions():
     db = _load_sessions()

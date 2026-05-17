@@ -104,11 +104,17 @@ from sop_manager.routers.worker_jobs import router as worker_jobs_router
 from sop_manager.routers.data_analytics import router as analytics_router
 from sop_manager.routers.context_api import router as context_router
 from sop_manager.routers.platforms_api import router as platforms_router
+from sop_manager.routers.dashboard import router as dashboard_router
+from sop_manager.routers.hermes import router as hermes_router
 from sop_manager.routers.usage import router as usage_router
+from sop_manager.routers.intelligence_api import router as intelligence_router
+from sop_manager.routers.billing import router as billing_router
+from sop_manager.routers.system_pages import router as system_pages_router
+from sop_manager.routers.system_ops import router as system_ops_router, settings_router as settings_hub_router
 from sop_manager.routers.tenants import router as tenants_router, biz_router, proj_router
 from sop_manager.routers.sprints import router as sprints_router
 
-from sop_manager.routers import data_exchange
+from sop_manager.routers import data_exchange, organization as organization_router
 
 # ── 新增：LLM Gateway + RAG（M5）+ Events 推送（M9）────────────
 try:
@@ -184,12 +190,19 @@ except Exception as _e:
 
 app.include_router(health_router)
 app.include_router(memory_router)
+app.include_router(intelligence_router)
 app.include_router(sync_router)
 app.include_router(worker_jobs_router)
 app.include_router(analytics_router)
 app.include_router(context_router)
 app.include_router(platforms_router)
+app.include_router(dashboard_router)
+app.include_router(hermes_router)
 app.include_router(usage_router)
+app.include_router(billing_router)
+app.include_router(system_pages_router)
+app.include_router(system_ops_router)
+app.include_router(settings_hub_router)
 app.include_router(workspace.router)
 app.include_router(requirements.router)
 app.include_router(tasks.router)
@@ -206,6 +219,7 @@ app.include_router(vibe.router)
 app.include_router(design_docs.router)
 app.include_router(dev_flow.router)
 app.include_router(notify.router)
+app.include_router(organization_router.router)
 app.include_router(cli_wrapper.router)
 
 # ── 新增路由 ──────────────────────────────────────────────────────

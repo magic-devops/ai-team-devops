@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 import jwt
 
@@ -123,6 +124,20 @@ def _decode_token(token: str) -> dict:
         raise HTTPException(401, "Token 无效")
 
 
+def _active_user_from_payload(payload: dict, db: Session) -> User:
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id or len(user_id) > 64:
+        raise HTTPException(401, "Token 用户标识无效")
+    try:
+        user = db.query(User).filter(User.id == user_id).order_by(User.updated_at.desc()).first()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(401, "Token 用户加载失败，请重新登录")
+    if user and user.status == "active":
+        return user
+    raise HTTPException(401, "用户不存在或已禁用")
+
+
 def current_user(
     creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_session),
@@ -130,10 +145,7 @@ def current_user(
     # 优先 Bearer JWT
     if creds:
         payload = _decode_token(creds.credentials)
-        user = db.get(User, payload["sub"])
-        if user and user.status == "active":
-            return user
-        raise HTTPException(401, "用户不存在或已禁用")
+        return _active_user_from_payload(payload, db)
     raise HTTPException(401, "未提供认证 Token")
 
 
@@ -157,9 +169,7 @@ def current_user_or_apikey(
     # Bearer JWT
     if creds:
         payload = _decode_token(creds.credentials)
-        user = db.get(User, payload["sub"])
-        if user and user.status == "active":
-            return user
+        return _active_user_from_payload(payload, db)
     raise HTTPException(401, "未提供有效认证")
 
 

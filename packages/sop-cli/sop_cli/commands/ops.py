@@ -60,6 +60,64 @@ def notify_channels() -> None:
         warn(str(e))
 
 
+@app.command("notify-connectors")
+def notify_connectors(json_out: bool = typer.Option(False, "--json", help="输出原始 JSON")) -> None:
+    try:
+        r = get_client(get_config()).notify_connectors()
+        if json_out:
+            console.print_json(data=r)
+            return
+        tbl = Table(title="通信连接器", show_header=True, header_style="bold")
+        tbl.add_column("type")
+        tbl.add_column("name")
+        tbl.add_column("direction")
+        tbl.add_column("configured")
+        tbl.add_column("maturity")
+        for item in r.get("items", []) if isinstance(r, dict) else []:
+            tbl.add_row(
+                str(item.get("type", "")),
+                str(item.get("display_name") or item.get("name") or ""),
+                ",".join(item.get("direction") or []),
+                str(item.get("configured_channels", 0)),
+                str(item.get("maturity", "")),
+            )
+        console.print(tbl)
+    except Exception as e:
+        warn(str(e))
+
+
+@app.command("notify-callback")
+def notify_callback(connector_type: str = typer.Argument(..., help="连接器类型：dingtalk/wechat_work/webhook")) -> None:
+    try:
+        r = get_client(get_config()).notify_connector_callback_template(connector_type)
+        console.print_json(data=r)
+    except Exception as e:
+        warn(str(e))
+
+
+@app.command("notify-verify")
+def notify_verify(
+    connector_type: str = typer.Argument(..., help="连接器类型：dingtalk/wechat_work/webhook"),
+    secret: str = typer.Option("", "--secret", help="签名密钥/token"),
+    timestamp: str = typer.Option("", "--timestamp", help="时间戳，留空自动生成"),
+    nonce: str = typer.Option("", "--nonce", help="企业微信 nonce"),
+    signature: str = typer.Option("", "--signature", help="待校验签名"),
+    body: str = typer.Option("", "--body", help="原始请求体"),
+) -> None:
+    try:
+        r = get_client(get_config()).notify_connector_verify(
+            connector_type,
+            secret=secret,
+            timestamp=timestamp,
+            nonce=nonce,
+            signature=signature,
+            body=body,
+        )
+        console.print_json(data=r)
+    except Exception as e:
+        warn(str(e))
+
+
 @app.command("notify-test")
 def notify_test(channel: str = typer.Argument(..., help="通道名称")) -> None:
     try:
@@ -164,4 +222,4 @@ def snapshot(project_path: str = typer.Option("", "--project-path", help="要导
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
-    console.print("[dim]子命令：health | stack | deploy | snapshot | notify-channels | notify-test | sync-pull | worker-health[/dim]")
+    console.print("[dim]子命令：health | stack | deploy | snapshot | notify-connectors | notify-channels | notify-callback | notify-verify | notify-test | sync-pull | worker-health[/dim]")

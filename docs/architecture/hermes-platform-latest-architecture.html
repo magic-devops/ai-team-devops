@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermes 一栈式 AI 全栈研发运维与数据智能平台 - 最新技术架构图</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --paper: #ffffff;
+      --paper-soft: #f9fbfd;
+      --ink: #15202b;
+      --muted: #5c6b7a;
+      --subtle: #8793a0;
+      --line: #d9e2ec;
+      --line-strong: #b8c7d9;
+      --navy: #172033;
+      --teal: #0f766e;
+      --cyan: #0369a1;
+      --green: #15803d;
+      --amber: #b45309;
+      --rose: #be123c;
+      --violet: #6d28d9;
+      --steel: #334155;
+      --teal-bg: #e6f6f3;
+      --cyan-bg: #eaf5ff;
+      --green-bg: #ecfdf3;
+      --amber-bg: #fff7ed;
+      --rose-bg: #fff1f2;
+      --violet-bg: #f4f0ff;
+      --steel-bg: #eef2f7;
+      --radius: 8px;
+      --shadow: 0 16px 38px rgba(15, 23, 42, 0.08);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: var(--sans);
+      line-height: 1.58;
+    }
+
+    a {
+      color: var(--cyan);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 28px 18px;
+      overflow: auto;
+      color: #dce7f7;
+      background: #121a2a;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .brand {
+      padding: 0 10px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 18px;
+    }
+
+    .brand-kicker {
+      color: #8ddbd0;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      margin: 8px 0 6px;
+      color: #ffffff;
+      font-size: 21px;
+      font-weight: 750;
+      line-height: 1.25;
+    }
+
+    .brand-subtitle {
+      margin: 0;
+      color: #a8b7ca;
+      font-size: 13px;
+    }
+
+    .nav-group {
+      margin: 18px 0;
+    }
+
+    .nav-label {
+      margin: 0 10px 8px;
+      color: #7890aa;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      color: #dce7f7;
+      font-size: 14px;
+    }
+
+    .nav-link:hover {
+      background: rgba(255, 255, 255, 0.08);
+      text-decoration: none;
+    }
+
+    .main {
+      min-width: 0;
+    }
+
+    .hero {
+      color: #ffffff;
+      background: #172033;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .hero-inner {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 48px 46px 34px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+      gap: 28px;
+      align-items: end;
+    }
+
+    .eyebrow {
+      color: #8ddbd0;
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 14px 0 14px;
+      max-width: 1040px;
+      font-size: 40px;
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 920px;
+      color: #c5d3e6;
+      font-size: 16px;
+    }
+
+    .hero-meta {
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius);
+    }
+
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      color: #c5d3e6;
+      font-size: 13px;
+    }
+
+    .meta-item strong {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .scope-band {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .scope-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 11px;
+      color: #dff8f4;
+      background: rgba(15, 118, 110, 0.24);
+      border: 1px solid rgba(141, 219, 208, 0.4);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--mono);
+    }
+
+    .content {
+      max-width: 1480px;
+      margin: 0 auto;
+      padding: 32px 46px 70px;
+    }
+
+    section {
+      margin-bottom: 28px;
+      padding: 28px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      margin: 7px 0 0;
+      max-width: 860px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .tag {
+      display: inline-flex;
+      white-space: nowrap;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 9px;
+      color: var(--steel);
+      background: var(--steel-bg);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tag.teal { color: var(--teal); background: var(--teal-bg); border-color: #b6e4dd; }
+    .tag.cyan { color: var(--cyan); background: var(--cyan-bg); border-color: #bfddf5; }
+    .tag.green { color: var(--green); background: var(--green-bg); border-color: #bce8ca; }
+    .tag.amber { color: var(--amber); background: var(--amber-bg); border-color: #f4d6a8; }
+    .tag.rose { color: var(--rose); background: var(--rose-bg); border-color: #fecdd3; }
+    .tag.violet { color: var(--violet); background: var(--violet-bg); border-color: #d9ccff; }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .metric {
+      padding: 16px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 23px;
+      line-height: 1.2;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .architecture-map {
+      display: grid;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 4px 2px 8px;
+    }
+
+    .layer {
+      min-width: 960px;
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      align-items: stretch;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper-soft);
+    }
+
+    .layer-title {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-right: 1px solid var(--line);
+      background: #f1f5f9;
+    }
+
+    .layer-title b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .layer-title small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nodes {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .node {
+      min-height: 64px;
+      padding: 11px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--steel);
+      border-radius: var(--radius);
+    }
+
+    .node b {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .node span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .node.teal { border-left-color: var(--teal); }
+    .node.cyan { border-left-color: var(--cyan); }
+    .node.green { border-left-color: var(--green); }
+    .node.amber { border-left-color: var(--amber); }
+    .node.rose { border-left-color: var(--rose); }
+    .node.violet { border-left-color: var(--violet); }
+
+    .connector {
+      min-width: 960px;
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      padding: 0 210px 0 202px;
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .connector span {
+      text-align: center;
+    }
+
+    .capability-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .capability {
+      padding: 16px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .capability h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 10px;
+      font-size: 16px;
+      line-height: 1.3;
+    }
+
+    .capability p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .mini-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      color: var(--steel);
+      font-size: 13px;
+    }
+
+    .mini-list li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      margin-top: 8px;
+      flex: 0 0 auto;
+      background: var(--teal);
+      border-radius: 50%;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+      overflow-x: auto;
+    }
+
+    .flow-step {
+      min-width: 132px;
+      padding: 14px;
+      position: relative;
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -10px;
+      transform: translate(50%, -50%);
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 18px;
+      z-index: 2;
+    }
+
+    .flow-step b {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    .flow-step span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #ffffff;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+
+    th:last-child,
+    td:last-child {
+      border-right: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    th {
+      color: var(--steel);
+      background: #f1f5f9;
+      font-weight: 750;
+    }
+
+    td {
+      color: var(--muted);
+    }
+
+    td strong,
+    code {
+      color: var(--ink);
+    }
+
+    code {
+      padding: 2px 5px;
+      background: #edf2f7;
+      border: 1px solid #dbe4ef;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .lane {
+      padding: 16px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .lane h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .lane p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stack-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stack-item {
+      padding: 14px;
+      min-height: 110px;
+      background: var(--paper-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .stack-item b {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 14px;
+    }
+
+    .stack-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .phase {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--cyan);
+      border-radius: var(--radius);
+      background: var(--paper-soft);
+    }
+
+    .phase h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+
+    .phase p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .phase:nth-child(2) { border-top-color: var(--teal); }
+    .phase:nth-child(3) { border-top-color: var(--green); }
+    .phase:nth-child(4) { border-top-color: var(--amber); }
+
+    .doc-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .doc-links a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 32px;
+      padding: 6px 10px;
+      color: var(--steel);
+      background: #eef2f7;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .doc-links a:hover {
+      color: var(--cyan);
+      background: #ffffff;
+      text-decoration: none;
+    }
+
+    .footer {
+      padding: 16px 0 0;
+      color: var(--subtle);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1180px) {
+      .shell {
+        display: block;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+
+      .nav-group {
+        display: none;
+      }
+
+      .hero-inner,
+      .content {
+        padding-left: 22px;
+        padding-right: 22px;
+      }
+
+      .hero-grid,
+      .two-col,
+      .summary-grid,
+      .capability-grid,
+      .stack-grid,
+      .roadmap {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 31px;
+      }
+
+      section {
+        padding: 20px;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .shell {
+        display: block;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .hero {
+        color: var(--ink);
+        background: #ffffff;
+        border: 0;
+      }
+
+      .hero p,
+      .meta-item,
+      .brand-subtitle {
+        color: var(--muted);
+      }
+
+      .hero-meta,
+      section {
+        box-shadow: none;
+      }
+
+      .content,
+      .hero-inner {
+        max-width: none;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-kicker">Hermes Platform</div>
+        <div class="brand-title">最新技术架构图</div>
+        <p class="brand-subtitle">AI 全栈研发运维 + 数据智能 + Agent 调度中心</p>
+      </div>
+      <nav>
+        <div class="nav-group">
+          <div class="nav-label">总览</div>
+          <a class="nav-link" href="#position">平台定位</a>
+          <a class="nav-link" href="#architecture">总体架构</a>
+          <a class="nav-link" href="#scope">三码隔离</a>
+          <a class="nav-link" href="#menu-architecture">菜单结构</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">能力</div>
+          <a class="nav-link" href="#capability">核心能力地图</a>
+          <a class="nav-link" href="#loop">AI 自主开发闭环</a>
+          <a class="nav-link" href="#scheduler">调度中心</a>
+          <a class="nav-link" href="#data">数据智能平台</a>
+          <a class="nav-link" href="#tech-upgrade">底层技术升级</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-label">工程</div>
+          <a class="nav-link" href="#frontend-backend">前后台模块化</a>
+          <a class="nav-link" href="#integration">生态集成</a>
+          <a class="nav-link" href="#infra">部署与基础设施</a>
+          <a class="nav-link" href="#roadmap">迭代路线</a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="hero">
+        <div class="hero-inner">
+          <div class="hero-grid">
+            <div>
+              <div class="eyebrow">Latest Architecture · 2026.05</div>
+              <h1>Hermes 一栈式 AI 全栈研发运维与数据智能平台</h1>
+              <p>
+                面向“人管理需求与团队，AI/CLI/Agent 自主拆解、开发、部署、运维、监控、优化和持续迭代”的企业级平台。
+                本架构把需求管理、任务 DAG、调度中心、AgentOps、MCP/A2A、知识记忆、数据开发、指标标签、智能问数与 AIOps 打成完整闭环。
+              </p>
+              <div class="scope-band">
+                <span class="scope-pill">tenant_code 企业/租户隔离</span>
+                <span class="scope-pill">business_code 业务域隔离</span>
+                <span class="scope-pill">project_id 项目级执行上下文</span>
+              </div>
+            </div>
+            <div class="hero-meta" aria-label="版本信息">
+              <div class="meta-item"><span>文档版本</span><strong>2026.05 latest</strong></div>
+              <div class="meta-item"><span>输出日期</span><strong>2026-05-17</strong></div>
+              <div class="meta-item"><span>目标形态</span><strong>SaaS / 私有化 / 本地优先</strong></div>
+              <div class="meta-item"><span>核心协议</span><strong>REST · WSS · Webhook · MCP · A2A</strong></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="content">
+        <section id="position">
+          <div class="section-head">
+            <div>
+              <h2>1. 平台定位</h2>
+              <p>Hermes 是让 AI 真正能读懂、能执行、能回写、能持续优化的软件研发与数据智能操作系统。</p>
+            </div>
+            <span class="tag teal">AI Native SDLC</span>
+          </div>
+
+          <div class="summary-grid">
+            <div class="metric">
+              <strong>人</strong>
+              <span>输入想法、业务目标、优先级和团队约束，负责判断、组织、授权与验收。</span>
+            </div>
+            <div class="metric">
+              <strong>AI</strong>
+              <span>理解需求、读取规约、拆解 DAG、选择工具、执行任务、生成证据和建议。</span>
+            </div>
+            <div class="metric">
+              <strong>CLI/Agent</strong>
+              <span>通过 Agent Feed 获取任务包，在项目仓库自主开发、测试、部署和回写结果。</span>
+            </div>
+            <div class="metric">
+              <strong>平台</strong>
+              <span>统一需求、调度、质量、知识、数据、运维、安全、审计和商业化治理。</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="architecture">
+          <div class="section-head">
+            <div>
+              <h2>2. 总体技术架构图</h2>
+              <p>从体验入口到基础设施分层治理，每一层默认带 scope、权限、事件、审计和智能能力。</p>
+            </div>
+            <span class="tag cyan">Layered Architecture</span>
+          </div>
+
+          <div class="architecture-map" role="img" aria-label="Hermes 平台总体技术架构图">
+            <div class="layer">
+              <div class="layer-title"><b>体验与入口层</b><small>用户、开发者、Agent 的统一入口</small></div>
+              <div class="nodes">
+                <div class="node cyan"><b>manager-web</b><span>React + Ant Design 管理端</span></div>
+                <div class="node cyan"><b>Product IA</b><span>域/模块/子能力/动作</span></div>
+                <div class="node teal"><b>sop CLI / SDK</b><span>项目侧自动化命令</span></div>
+                <div class="node violet"><b>IDE / Agent</b><span>Codex、Claude、Cursor、Trae</span></div>
+                <div class="node green"><b>IM / Webhook</b><span>企业微信、钉钉、Slack</span></div>
+                <div class="node amber"><b>WorkBuddy</b><span>OpenClaw、Hermes Agent 对接</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>统一接入层</b><small>身份、权限、作用域、事件入口</small></div>
+              <div class="nodes">
+                <div class="node cyan"><b>Manager API</b><span>FastAPI / OpenAPI / SDK 契约</span></div>
+                <div class="node rose"><b>AuthN/AuthZ</b><span>SSO、OIDC、SAML、ABAC</span></div>
+                <div class="node teal"><b>Scope Resolver</b><span>tenant/business/project 注入</span></div>
+                <div class="node green"><b>Event Gateway</b><span>CloudEvents、WSS、Webhook</span></div>
+                <div class="node amber"><b>Secure Access</b><span>JWT、API Key、HMAC、mTLS</span></div>
+                <div class="node violet"><b>Rate & Quota</b><span>租户配额、模型用量、计费事件</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>智能控制面</b><small>需求到执行的业务控制中心</small></div>
+              <div class="nodes">
+                <div class="node cyan"><b>Requirements</b><span>需求池、智能评审、验收标准</span></div>
+                <div class="node teal"><b>Tasks + DAG</b><span>依赖、优先级、质量卡点</span></div>
+                <div class="node green"><b>WorkflowOps</b><span>流程、审批、部署、回滚</span></div>
+                <div class="node violet"><b>Copilot Center</b><span>智能指令、上下文问答、建议</span></div>
+                <div class="node amber"><b>AgentOps</b><span>Agent 注册、能力、心跳、回写</span></div>
+                <div class="node rose"><b>SystemMap</b><span>模块 Manifest、权限、动作目录</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>AI 与知识面</b><small>让平台可理解、可复用、可进化</small></div>
+              <div class="nodes">
+                <div class="node violet"><b>LLM Gateway</b><span>模型路由、成本、评估、降级</span></div>
+                <div class="node cyan"><b>Knowledge/RAG</b><span>规约、文档、代码、运行证据</span></div>
+                <div class="node teal"><b>Graph RAG</b><span>知识图谱、依赖、血缘、因果</span></div>
+                <div class="node green"><b>Memory/Ontology</b><span>项目记忆、组织画像、业务本体</span></div>
+                <div class="node amber"><b>Skill/MCP Market</b><span>技能、工具、插件、权限</span></div>
+                <div class="node rose"><b>Eval/Reflection</b><span>质量评估、Prompt 评测、反思蒸馏</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>数据智能面</b><small>数据接入、开发、治理、洞察闭环</small></div>
+              <div class="nodes">
+                <div class="node teal"><b>Data Ingestion</b><span>连接器、CDC、Schema Registry</span></div>
+                <div class="node cyan"><b>Data Dev</b><span>Spark、Flink、SQL、Python</span></div>
+                <div class="node rose"><b>Data Quality</b><span>规则、SLO、监控告警、归因</span></div>
+                <div class="node green"><b>Metrics Center</b><span>指标语义层、血缘、口径治理</span></div>
+                <div class="node amber"><b>Tag/Profile</b><span>标签开发、画像、本体记忆</span></div>
+                <div class="node violet"><b>NLQ/Report</b><span>智能问数、报表、洞察、归因</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>执行运行时</b><small>任务执行、事件、审计与观测</small></div>
+              <div class="nodes">
+                <div class="node teal"><b>sop-agentd</b><span>项目端守护进程、上下文同步</span></div>
+                <div class="node amber"><b>Outbox/DLQ</b><span>离线容错、重试、同步游标</span></div>
+                <div class="node cyan"><b>manager-worker</b><span>异步任务、报告、数据任务</span></div>
+                <div class="node green"><b>Scheduler</b><span>Agent Feed、事件唤醒、批次调度</span></div>
+                <div class="node rose"><b>Audit WORM</b><span>不可篡改审计、动作链路</span></div>
+                <div class="node violet"><b>Observability</b><span>Metrics、Logs、Traces、SLO</span></div>
+              </div>
+            </div>
+            <div class="connector"><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span><span>↓</span></div>
+            <div class="layer">
+              <div class="layer-title"><b>成熟基础设施</b><small>优先采用成熟稳定技术</small></div>
+              <div class="nodes">
+                <div class="node teal"><b>OceanBase</b><span>主数据、HTAP、多模态底座</span></div>
+                <div class="node cyan"><b>StarRocks</b><span>高并发 OLAP、指标服务</span></div>
+                <div class="node green"><b>Hologres/GP</b><span>实时数仓、MPP 离线数仓</span></div>
+                <div class="node amber"><b>ES/OpenSearch</b><span>搜索、日志、告警检索</span></div>
+                <div class="node violet"><b>Spark/Flink/Paimon</b><span>批流开发、CDC、湖仓表</span></div>
+                <div class="node rose"><b>Lance/Redis/Object</b><span>向量、事件流、对象存储</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="scope">
+          <div class="section-head">
+            <div>
+              <h2>3. 租户、业务、项目三码隔离</h2>
+              <p>所有接口、任务、知识、记忆、数据、事件和审计都必须由服务端解析并强制注入统一作用域。</p>
+            </div>
+            <span class="tag rose">Security Baseline</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>隔离维度</th>
+                <th>字段</th>
+                <th>控制范围</th>
+                <th>实现原则</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>租户</strong></td>
+                <td><code>tenant_code</code></td>
+                <td>企业、用户、组织、权限、密钥、计费、审计、数据域</td>
+                <td>服务端解析租户上下文；SQL、对象存储、向量 namespace、事件 topic 默认带租户条件。</td>
+              </tr>
+              <tr>
+                <td><strong>业务</strong></td>
+                <td><code>business_code</code></td>
+                <td>业务线、指标、标签、流程、团队、数据资产、知识资产</td>
+                <td>业务隔离和授权策略进入 ABAC；跨业务共享必须经审批、脱敏和审计。</td>
+              </tr>
+              <tr>
+                <td><strong>项目</strong></td>
+                <td><code>project_id</code></td>
+                <td>需求、任务、Agent、记忆、规约、部署、运行证据</td>
+                <td>Agent Feed 和 CLI 自动任务包必须携带 project scope，任务执行前强校验。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="capability">
+          <div class="section-head">
+            <div>
+              <h2>4. 核心能力地图</h2>
+              <p>围绕 AI 可理解、可执行、可评估、可运营，补齐研发运维与数据智能全链路能力。</p>
+            </div>
+            <span class="tag green">Capability Map</span>
+          </div>
+
+          <div class="capability-grid">
+            <div class="capability">
+              <h3><span class="tag cyan">REQ</span>需求与项目治理</h3>
+              <p>支持多入口需求采集、需求评审、相似需求检测、验收标准生成、项目模板和团队权限。</p>
+              <ul class="mini-list">
+                <li>Idea → Requirement → Epic → Task 全链路。</li>
+                <li>需求自动补全背景、约束、风险和验收口径。</li>
+                <li>项目初始化自动生成规约、知识库、Agent 接入包。</li>
+              </ul>
+            </div>
+            <div class="capability">
+              <h3><span class="tag teal">DAG</span>任务调度中心</h3>
+              <p>把需求拆成 AI 可消费任务包，生成优先级、依赖、阻塞原因和质量卡点。</p>
+              <ul class="mini-list">
+                <li>DAG 依赖、批次计算、环检测、事件唤醒。</li>
+                <li>Agent Feed 输出命令、上下文、验收证据要求。</li>
+                <li>Agent Report 回写状态、分支、产物和 gate 结果。</li>
+              </ul>
+            </div>
+            <div class="capability">
+              <h3><span class="tag violet">AI</span>智能控制与 AgentOps</h3>
+              <p>统一 LLM、Skill、MCP、A2A、记忆、知识、评估和工具权限，避免能力碎片化。</p>
+              <ul class="mini-list">
+                <li>模型路由、成本治理、Prompt 评估和质量反思。</li>
+                <li>Agent 注册、能力发现、心跳、沙箱和审计。</li>
+                <li>知识图谱与项目记忆辅助 AI 理解长期上下文。</li>
+              </ul>
+            </div>
+            <div class="capability">
+              <h3><span class="tag amber">OPS</span>部署运维与 AIOps</h3>
+              <p>将发布、监控、告警、诊断、自愈和复盘都任务化、流程化、可审计。</p>
+              <ul class="mini-list">
+                <li>WorkflowOps 接入审批、发布、回滚和 Runbook。</li>
+                <li>告警自动归因，生成修复 DAG 和 Agent 任务。</li>
+                <li>SLO、成本、性能、稳定性统一观测。</li>
+              </ul>
+            </div>
+            <div class="capability">
+              <h3><span class="tag green">DATA</span>数据智能平台</h3>
+              <p>覆盖数据接入、开发、质量、指标、标签、问数、报表、归因和数据知产治理。</p>
+              <ul class="mini-list">
+                <li>CDC、批流一体、Lakehouse、数据服务和语义层。</li>
+                <li>质量规则、血缘、异常归因、告警转任务。</li>
+                <li>多模态数据开发、标签画像和智能决策。</li>
+              </ul>
+            </div>
+            <div class="capability">
+              <h3><span class="tag rose">GRC</span>安全、审计与商业化</h3>
+              <p>企业级交付需要权限、审批、合规、用量、账单和插件生态的完整治理。</p>
+              <ul class="mini-list">
+                <li>SSO、ABAC、字段级权限、敏感数据策略。</li>
+                <li>Audit Chain、WORM、操作证据和审批追踪。</li>
+                <li>租户配额、模型用量、插件订阅和企业账单。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="menu-architecture">
+          <div class="section-head">
+            <div>
+              <h2>4.1 产品化菜单结构与权限粒度</h2>
+              <p>新平台按域、模块、子能力、动作四级建模；侧边栏展示专业模块，权限系统按子能力和动作裁决。legacy 能力作为承接清单和验收参考，不复制旧交互。</p>
+            </div>
+            <span class="tag cyan">Product IA</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>菜单域</th>
+                <th>模块</th>
+                <th>典型子能力</th>
+                <th>权限码前缀</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>战略总览</strong></td><td>运营驾驶舱</td><td>平台蓝图、技术升级、风险看板、下一步动作</td><td><code>overview.*</code></td></tr>
+              <tr><td><strong>组织项目</strong></td><td>项目组合、组织权限</td><td>租户、业务线、项目成员、AI 接入、项目治理</td><td><code>portfolio.*</code></td></tr>
+              <tr><td><strong>产品需求</strong></td><td>需求工作台</td><td>需求池、智能评审、验收标准、任务拆解、批量治理</td><td><code>product.*</code></td></tr>
+              <tr><td><strong>研发交付</strong></td><td>任务调度、流程编排</td><td>DAG、调度中心、Agent Feed、质量卡点、工作流实例</td><td><code>delivery.*</code></td></tr>
+              <tr><td><strong>数据智能</strong></td><td>指标总览、数据蓝图、报告、血缘、问数</td><td>指标、标签、质量、血缘、NLQ、报告转任务</td><td><code>data.*</code></td></tr>
+              <tr><td><strong>AI 智能</strong></td><td>AI 指挥台、知识记忆</td><td>Copilot、命令中心、RAG、记忆、Worker、规则</td><td><code>ai.*</code></td></tr>
+              <tr><td><strong>平台生态</strong></td><td>Agent 平台、资产市场、通信集成</td><td>MCP、A2A、模型、插件、企业微信、钉钉、Webhook</td><td><code>ecosystem.*</code></td></tr>
+              <tr><td><strong>安全治理</strong></td><td>安全审计、模块治理</td><td>审计链、权限矩阵、模块动作、审批、legacy 能力承接</td><td><code>governance.*</code></td></tr>
+              <tr><td><strong>系统运维</strong></td><td>系统设置</td><td>SSO、Profile、计费、日志、观测、部署配置</td><td><code>system.*</code></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="loop">
+          <div class="section-head">
+            <div>
+              <h2>5. AI 自主开发闭环</h2>
+              <p>平台目标是让 AI CLI 能从项目任务池自动取活、开发、测试、部署、回写证据，并持续接收数据洞察驱动的新任务。</p>
+            </div>
+            <span class="tag violet">Agent Loop</span>
+          </div>
+
+          <div class="flow">
+            <div class="flow-step"><b>需求输入</b><span>人输入想法、目标、范围、负责人和优先级。</span></div>
+            <div class="flow-step"><b>智能拆解</b><span>AI 生成验收标准、任务、依赖和风险。</span></div>
+            <div class="flow-step"><b>DAG 调度</b><span>计算可执行批次、阻塞原因和质量卡点。</span></div>
+            <div class="flow-step"><b>Agent 取活</b><span>CLI/Agent 拉取任务包、规约、知识和命令。</span></div>
+            <div class="flow-step"><b>自主开发</b><span>Agent 在仓库内编码、测试、生成产物。</span></div>
+            <div class="flow-step"><b>质量回写</b><span>回写状态、证据、分支、评估和阻塞项。</span></div>
+            <div class="flow-step"><b>运维洞察</b><span>发布、监控、归因、优化并生成下一轮任务。</span></div>
+          </div>
+        </section>
+
+        <section id="scheduler">
+          <div class="section-head">
+            <div>
+              <h2>6. 调度中心目标能力</h2>
+              <p>调度中心不是简单定时器，而是面向 AI 自动执行的任务操作系统。</p>
+            </div>
+            <span class="tag amber">Scheduler OS</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>能力</th>
+                <th>目标设计</th>
+                <th>AI/CLI 使用方式</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>DAG 依赖</strong></td>
+                <td>支持 blocks、relates、duplicates、环检测、批次计算、阻塞原因输出。</td>
+                <td>CLI 只领取 ready 任务，blocked 任务返回依赖链和等待事件。</td>
+              </tr>
+              <tr>
+                <td><strong>调度策略</strong></td>
+                <td>balanced、quality_first、throughput、cost_saver、ai_first、human_review。</td>
+                <td>Agent 根据策略选择模型、工具、并发、测试深度和人工确认点。</td>
+              </tr>
+              <tr>
+                <td><strong>质量卡点</strong></td>
+                <td>规约加载、需求追溯、实现说明、测试证据、视觉验证、安全扫描、运维观测。</td>
+                <td>Report 必须提交 gate_results，失败自动转 blocked 或生成修复任务。</td>
+              </tr>
+              <tr>
+                <td><strong>事件唤醒</strong></td>
+                <td>task.created、task.status_changed、agent_reported、notify.inbound、agent.heartbeat。</td>
+                <td>Agent 订阅或轮询 feed，平台可基于事件主动分派任务。</td>
+              </tr>
+              <tr>
+                <td><strong>运行证据</strong></td>
+                <td>artifact、branch、commit、log、report、screenshot、trace、deploy id。</td>
+                <td>AI 产物进入审计链和知识库，用于复盘、学习和二次调度。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="data">
+          <div class="section-head">
+            <div>
+              <h2>7. 数据智能平台</h2>
+              <p>数据能力是 Hermes 的第二主线，服务业务智能迭代、智能运营、智能决策和 AI 长期学习。</p>
+            </div>
+            <span class="tag green">Data Intelligence</span>
+          </div>
+
+          <div class="two-col">
+            <div class="lane">
+              <h3>数据链路</h3>
+              <p>从业务源、项目事件、Agent 证据、日志指标和外部系统接入，经过批流一体开发和质量治理，形成指标、标签、知识和任务。</p>
+              <ul class="mini-list">
+                <li>智能数据接入、Schema Registry、Flink CDC、离线/实时同步。</li>
+                <li>Spark/Flink/SQL/Python 数据开发和多模态数据处理。</li>
+                <li>数据质量评估、血缘影响分析、监控告警、异常归因。</li>
+              </ul>
+            </div>
+            <div class="lane">
+              <h3>智能服务</h3>
+              <p>指标中心、标签中心、画像服务、智能问数、智能报表、智能归因和统一数据服务对业务与 AI 同时开放。</p>
+              <ul class="mini-list">
+                <li>指标语义层、口径审批、血缘和服务化 API。</li>
+                <li>标签开发、用户/企业/项目画像、本体论 AI 记忆。</li>
+                <li>NLQ、报告生成、经营洞察、告警转需求/任务。</li>
+              </ul>
+            </div>
+          </div>
+
+          <div style="height: 14px;"></div>
+          <table>
+            <thead>
+              <tr>
+                <th>技术</th>
+                <th>平台角色</th>
+                <th>采用策略</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>OceanBase</strong></td><td>主数据、HTAP、多模态、审计和统一数据服务底座。</td><td>作为默认企业级主存储，承载租户、任务、权限、数据服务元数据。</td></tr>
+              <tr><td><strong>StarRocks</strong></td><td>高并发 OLAP、指标服务、实时看板。</td><td>承载指标中心查询加速和 BI/NLQ 低延迟分析。</td></tr>
+              <tr><td><strong>Hologres / Greenplum</strong></td><td>实时数仓、MPP 离线数仓和复杂 SQL 分析。</td><td>兼容云上实时分析和存量企业数仓迁移。</td></tr>
+              <tr><td><strong>ElasticSearch / OpenSearch</strong></td><td>全文搜索、日志检索、告警分析、知识检索。</td><td>服务统一搜索和可观测数据查询。</td></tr>
+              <tr><td><strong>Spark / Flink / Paimon</strong></td><td>批流开发、CDC、Lakehouse、实时质量和实时标签。</td><td>作为成熟数据开发与湖仓一体能力。</td></tr>
+              <tr><td><strong>Lance / LanceDB</strong></td><td>向量、多模态资产、代码/文档检索和 Agent 记忆。</td><td>支持本地优先 RAG、图文向量和轻量多模态索引。</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="tech-upgrade">
+          <div class="section-head">
+            <div>
+              <h2>7.1 底层技术升级路线</h2>
+              <p>技术底座优先成熟、稳定、可企业化交付；每项升级都必须进入任务、权限、审计、观测和质量卡点闭环。</p>
+            </div>
+            <span class="tag amber">Tech Upgrade</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>升级域</th>
+                <th>目标技术栈</th>
+                <th>阶段</th>
+                <th>升级策略</th>
+                <th>护栏</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>企业主存储</strong></td><td>OceanBase、MySQL-compatible SQL</td><td><span class="tag rose">P0</span></td><td>OceanBase 作为 SaaS/私有化默认主存储，SQLite 仅保留本地开发模式。</td><td>三码列、组合索引、审计字段、SecretRef。</td></tr>
+              <tr><td><strong>批流一体数据底座</strong></td><td>Flink CDC、Spark、Paimon、StarRocks、Hologres、Greenplum</td><td><span class="tag amber">P1</span></td><td>数据接入、数据开发、质量评估、指标服务和标签服务统一控制面。</td><td>Schema Registry、血缘、质量 SLO、告警转任务。</td></tr>
+              <tr><td><strong>知识图谱与多模态记忆</strong></td><td>Lance、OpenSearch、Graph RAG、本体记忆</td><td><span class="tag amber">P1</span></td><td>规约、代码、需求、运行证据、数据血缘统一进入知识/记忆层。</td><td>租户向量 namespace、记忆生命周期、脱敏、证据回传。</td></tr>
+              <tr><td><strong>调度与工作流内核</strong></td><td>Temporal-ready、Redis Streams、Outbox/DLQ、CloudEvents</td><td><span class="tag amber">P1</span></td><td>调度中心输出 AI 可消费任务包、DAG、事件唤醒和质量卡点。</td><td>幂等键、重试策略、人工审批、执行证据。</td></tr>
+              <tr><td><strong>Agent/MCP/A2A 运行底座</strong></td><td>sop-agentd、MCP Hub、A2A Gateway、Skill Marketplace</td><td><span class="tag rose">P0</span></td><td>统一 Agent 注册、能力画像、工具权限、心跳、任务领取和执行回写。</td><td>工具白名单、沙箱执行、HMAC/JWT、动作审计。</td></tr>
+              <tr><td><strong>产品化前端</strong></td><td>React 18、Ant Design 6、TanStack Query、lazy chunks</td><td><span class="tag rose">P0</span></td><td>专业域菜单、模块 Manifest、细粒度 capability 和 AI surfaces。</td><td>域/模块/子能力注册、按钮动作审计、页面地图校验。</td></tr>
+              <tr><td><strong>安全可观测治理</strong></td><td>OpenTelemetry、Prometheus、Grafana、Loki、Audit WORM、ABAC</td><td><span class="tag cyan">P2</span></td><td>日志、指标、链路、审计、用量、账单和审批策略统一治理。</td><td>字段级权限、审计不可篡改、配额限流、策略审批。</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="frontend-backend">
+          <div class="section-head">
+            <div>
+              <h2>8. 前后台模块化产品设计</h2>
+              <p>前后台都按领域模块、可插拔能力、AI 可编辑边界和可配置流程设计，方便后续 Agent 增强。</p>
+            </div>
+            <span class="tag cyan">Modular Product</span>
+          </div>
+
+          <div class="stack-grid">
+            <div class="stack-item"><b>运营驾驶舱</b><span>平台蓝图、技术升级路线、菜单能力矩阵、风险看板。</span></div>
+            <div class="stack-item"><b>项目组合</b><span>租户、业务线、项目模板、成员权限、AI/CLI 接入包。</span></div>
+            <div class="stack-item"><b>需求工作台</b><span>需求池、智能评审、验收标准、需求转任务和批量治理。</span></div>
+            <div class="stack-item"><b>任务调度</b><span>执行列表、看板、依赖图、DAG 调度中心、Agent Feed/Report。</span></div>
+            <div class="stack-item"><b>数据智能</b><span>数据蓝图、指标、标签、血缘、报告、问数、归因。</span></div>
+            <div class="stack-item"><b>AI 指挥台</b><span>Copilot、命令中心、工具计划、计划转任务。</span></div>
+            <div class="stack-item"><b>Agent 平台</b><span>CLI/IDE/Agent、MCP、A2A、模型、工具 Profile。</span></div>
+            <div class="stack-item"><b>模块治理</b><span>模块 Manifest、子能力、动作权限、legacy 能力承接。</span></div>
+          </div>
+        </section>
+
+        <section id="integration">
+          <div class="section-head">
+            <div>
+              <h2>9. 通信与生态集成</h2>
+              <p>通过标准协议、连接器和插件化适配，把企业协同工具、Agent 生态和外部研发系统接入同一调度闭环。</p>
+            </div>
+            <span class="tag teal">Integration Fabric</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>集成对象</th>
+                <th>接入方式</th>
+                <th>闭环能力</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>企业微信 / 钉钉 / Slack</strong></td>
+                <td>Webhook、Bot、OAuth、消息回调、HMAC 签名。</td>
+                <td>消息入站转需求/任务，任务状态推送，审批与告警通知。</td>
+              </tr>
+              <tr>
+                <td><strong>WorkBuddy / OpenClaw / Hermes Agent</strong></td>
+                <td>A2A、MCP、Agent Registry、能力声明、心跳。</td>
+                <td>自动领任务、执行、回写、协作转派和质量证据沉淀。</td>
+              </tr>
+              <tr>
+                <td><strong>Git / CI / CD / Issue 系统</strong></td>
+                <td>OAuth App、Webhook、REST API、事件总线。</td>
+                <td>PR、测试、发布、缺陷、回滚和变更审计自动关联任务。</td>
+              </tr>
+              <tr>
+                <td><strong>数据平台 / BI / 监控系统</strong></td>
+                <td>JDBC、OpenAPI、CDC、日志采集、指标采集。</td>
+                <td>数据质量告警、业务异常、SLO 违约转任务和智能归因。</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section id="infra">
+          <div class="section-head">
+            <div>
+              <h2>10. 部署拓扑与工程保障</h2>
+              <p>优先采用成熟技术，支持单机、团队、SaaS、企业私有化和混合云形态。</p>
+            </div>
+            <span class="tag rose">Enterprise Ready</span>
+          </div>
+
+          <div class="two-col">
+            <div class="lane">
+              <h3>部署形态</h3>
+              <ul class="mini-list">
+                <li><strong>single</strong>：本地 SQLite/文件记忆/本地向量，适合个人和团队试用。</li>
+                <li><strong>team</strong>：Manager API + Worker + Redis + OceanBase/MySQL，适合团队协作。</li>
+                <li><strong>saas</strong>：多租户、SSO、配额、计费、审计、可观测和数据隔离。</li>
+                <li><strong>enterprise</strong>：私有化、专有网络、WORM、密钥托管、离线模型和混合云数据。</li>
+              </ul>
+            </div>
+            <div class="lane">
+              <h3>工程保障</h3>
+              <ul class="mini-list">
+                <li>API 契约、SDK、CLI、前端页面与 Agent Feed 保持同步演进。</li>
+                <li>所有高风险动作走审批、审计、策略引擎和回滚预案。</li>
+                <li>任务、数据、模型、工具、插件、用量均可观测、可限流、可追踪。</li>
+                <li>新功能通过模块 Manifest、SystemMap 和测试证据纳入治理。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="roadmap">
+          <div class="section-head">
+            <div>
+              <h2>11. 有序迭代路线</h2>
+              <p>按“架构资产化 → 核心闭环 → 数据智能 → 企业化运营”推进，确保每轮都有可用能力。</p>
+            </div>
+            <span class="tag amber">Roadmap</span>
+          </div>
+
+          <div class="roadmap">
+            <div class="phase">
+              <h3>P0 架构资产化</h3>
+              <p>统一最新架构文档、HTML 架构图、页面地图、模块 Manifest 和 memory 状态。</p>
+              <ul class="mini-list">
+                <li>补齐架构说明和技术选型。</li>
+                <li>明确三码隔离与安全基线。</li>
+              </ul>
+            </div>
+            <div class="phase">
+              <h3>P1 AI 执行闭环</h3>
+              <p>强化需求到任务 DAG、Agent Feed、质量卡点、事件唤醒和回写证据。</p>
+              <ul class="mini-list">
+                <li>完善调度中心和 Agent 自主取活。</li>
+                <li>前端可视化依赖图和执行批次。</li>
+              </ul>
+            </div>
+            <div class="phase">
+              <h3>P2 数据智能闭环</h3>
+              <p>落地数据接入、数据开发、质量、指标、标签、问数、归因和数据服务。</p>
+              <ul class="mini-list">
+                <li>数据蓝图任务化进入调度中心。</li>
+                <li>告警和洞察回流需求池。</li>
+              </ul>
+            </div>
+            <div class="phase">
+              <h3>P3 企业化运营</h3>
+              <p>完善 SSO、ABAC、计费、插件市场、审计报表、私有化部署和高可用。</p>
+              <ul class="mini-list">
+                <li>通信服务和外部 Agent 深度接入。</li>
+                <li>模型训练优化和持续评估。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <div>
+              <h2>12. 相关文档</h2>
+              <p>本 HTML 是最新版可视化总图；详细说明以 Markdown 架构文档和既有目标架构为准。</p>
+            </div>
+            <span class="tag steel">Docs</span>
+          </div>
+          <div class="doc-links">
+            <a href="HERMES_PLATFORM_LATEST_ARCHITECTURE.md">最新版架构设计 Markdown</a>
+            <a href="AI_PLATFORM_TARGET_ARCHITECTURE.md">AI 平台目标架构</a>
+            <a href="OVERVIEW.md">架构总览</a>
+            <a href="PROTOCOLS.md">协议设计</a>
+            <a href="SECURITY.md">安全设计</a>
+            <a href="../README.md">文档索引</a>
+          </div>
+        </section>
+
+        <div class="footer">
+          Hermes Platform Architecture · 2026-05-17 · tenant_code / business_code / project_id scoped by default
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

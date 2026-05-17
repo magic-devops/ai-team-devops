@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,84 @@ _SYS_SUMMARIZE = (
 _SYS_SUGGEST = (
     "你是研发教练。基于上下文给出 ≤ 5 条**下一步行动建议**，每条 ≤ 24 字，输出 JSON 数组字符串。"
 )
+
+
+def _command_catalog() -> list[dict[str, Any]]:
+    """产品级命令注册表：前端 CmdK、CLI/Agent 都可消费同一份能力清单。"""
+    return [
+        {"id": "nav.dashboard", "type": "navigate", "label": "打开驾驶舱", "description": "查看项目健康、交付摘要和快捷入口", "target": "#/dashboard", "keywords": ["dashboard", "驾驶舱", "首页", "健康"]},
+        {"id": "nav.projects", "type": "navigate", "label": "打开项目管理", "description": "项目列表、当前项目切换和接入包", "target": "#/projects", "keywords": ["project", "项目", "register", "onboarding"]},
+        {"id": "nav.tasks", "type": "navigate", "label": "打开任务看板", "description": "查看任务、迭代和研发执行状态", "target": "#/tasks", "keywords": ["task", "任务", "看板", "sprint"]},
+        {"id": "nav.requirements", "type": "navigate", "label": "打开需求管理", "description": "管理需求、验收标准、优先级和 Agent 归属", "target": "#/requirements", "keywords": ["requirement", "需求", "prd", "验收"]},
+        {"id": "nav.workflows", "type": "navigate", "label": "打开工作流编排", "description": "启动流程、查看实例、发送信号和取消运行", "target": "#/workflows", "keywords": ["workflow", "编排", "流程", "temporal"]},
+        {"id": "nav.organization", "type": "navigate", "label": "打开组织权限", "description": "租户成员、业务线、项目成员和角色", "target": "#/organization", "keywords": ["org", "组织", "权限", "成员", "tenant"]},
+        {"id": "nav.analytics", "type": "navigate", "label": "打开数据分析", "description": "指标目录、数据血缘、NLQ 和导出", "target": "#/analytics", "keywords": ["analytics", "数据", "指标", "血缘", "nlq"]},
+        {"id": "nav.notify", "type": "navigate", "label": "打开消息通道", "description": "Webhook、IM 通道、入站与出站消息流水", "target": "#/notify", "keywords": ["notify", "消息", "钉钉", "企微", "webhook"]},
+        {"id": "nav.audit", "type": "navigate", "label": "打开审计合规", "description": "审计链校验、事件查询、手动留痕和 CSV 导出", "target": "#/audit", "keywords": ["audit", "审计", "合规", "hash", "csv"]},
+        {"id": "nav.copilot", "type": "navigate", "label": "打开 AI 助手", "description": "会话、计划、自然语言问答和上下文注入", "target": "#/copilot", "keywords": ["copilot", "ai", "助手", "cmdk"]},
+        {"id": "nav.intelligence", "type": "navigate", "label": "打开智能与知识", "description": "知识库、RAG、记忆、规则、蒸馏审核和用量", "target": "#/intelligence", "keywords": ["knowledge", "知识", "rag", "memory", "记忆", "规则"]},
+        {"id": "nav.marketplace", "type": "navigate", "label": "打开资产市场", "description": "规约包、技能包、安装、签名和评分", "target": "#/marketplace", "keywords": ["marketplace", "市场", "技能", "规约"]},
+        {"id": "nav.platforms", "type": "navigate", "label": "打开 AI 平台", "description": "CLI/IDE/Agent 接入、模型提供商和角色模型", "target": "#/platforms", "keywords": ["platform", "模型", "agent", "cli", "ide"]},
+        {"id": "nav.system_map", "type": "navigate", "label": "打开页面能力地图", "description": "查看 React 与 legacy 页面迁移成熟度", "target": "#/system-map", "keywords": ["system map", "页面地图", "迁移", "legacy"]},
+        {"id": "nav.settings", "type": "navigate", "label": "打开系统设置", "description": "账户、运行状态、外观、商业计费和管理入口", "target": "#/settings", "keywords": ["settings", "设置", "主题", "计费"]},
+        {"id": "ops.health", "type": "operation", "label": "检查 Manager 健康", "description": "调用 /api/v1/health 查看服务状态", "target": "/api/v1/health", "keywords": ["health", "健康", "manager", "服务"]},
+        {"id": "ops.audit_verify", "type": "operation", "label": "校验审计链", "description": "调用 /api/v1/audit/chain/verify 验证审计完整性", "target": "/api/v1/audit/chain/verify", "keywords": ["verify", "校验", "审计链", "hash"]},
+        {"id": "ops.workflow_summary", "type": "operation", "label": "查看工作流摘要", "description": "调用 /api/v1/workflows/summary 查看流程运行概览", "target": "/api/v1/workflows/summary", "keywords": ["workflow", "summary", "流程", "摘要"]},
+        {"id": "ops.billing_summary", "type": "operation", "label": "查看商业化汇总", "description": "调用 /api/v1/billing/summary 查看账单与收款汇总", "target": "/api/v1/billing/summary", "keywords": ["billing", "计费", "收款", "商业化"]},
+        {"id": "ai.summarize_project", "type": "copilot", "label": "总结当前项目状态", "description": "让 Copilot 汇总需求、任务、风险和下一步", "target": "#/copilot", "prompt": "总结当前项目状态、主要风险和下一步行动", "keywords": ["summary", "总结", "项目状态", "下一步"]},
+        {"id": "ai.plan_iteration", "type": "copilot", "label": "生成迭代推进计划", "description": "让 Copilot 基于上下文生成可执行计划", "target": "#/copilot", "prompt": "基于当前项目上下文生成下一轮迭代推进计划", "keywords": ["plan", "计划", "迭代", "sprint"]},
+    ]
+
+
+def _score_command(cmd: dict[str, Any], query: str) -> int:
+    q = query.strip().lower()
+    if not q:
+        return 1
+    hay = " ".join([
+        str(cmd.get("id", "")),
+        str(cmd.get("label", "")),
+        str(cmd.get("description", "")),
+        " ".join(str(x) for x in cmd.get("keywords", [])),
+    ]).lower()
+    score = 0
+    for token in [x for x in q.replace("/", " ").replace("#", " ").split() if x]:
+        if token in hay:
+            score += 4
+        if hay.startswith(token):
+            score += 2
+    if q in hay:
+        score += 8
+    return score
+
+
+def _resolve_commands(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    rows = sorted(
+        ((cmd, _score_command(cmd, query)) for cmd in _command_catalog()),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    picked = [dict(cmd, score=score) for cmd, score in rows if score > 0]
+    return picked[:limit]
+
+
+def _parse_jsonish(text: str) -> dict[str, Any] | None:
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else None
+    except json.JSONDecodeError:
+        pass
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            obj = json.loads(raw[start:end + 1])
+            return obj if isinstance(obj, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def _gather_rag_memory(query: str) -> str:
@@ -212,6 +291,76 @@ class SuggestIn(BaseModel):
     goal: str = ""
 
 
+class CommandResolveIn(BaseModel):
+    query: str = ""
+    limit: int = Field(8, ge=1, le=30)
+
+
+class PlanIn(BaseModel):
+    query: str
+    context: dict[str, Any] | None = None
+    session_id: str = ""
+    run_id: str = ""
+
+
+class PlanTasksIn(BaseModel):
+    query: str = ""
+    plan: dict[str, Any] = Field(default_factory=dict)
+    commands: list[dict[str, Any]] = Field(default_factory=list)
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "Coder"
+    dev_tool: str = "copilot"
+
+
+def _plan_task_specs(body: PlanTasksIn) -> list[dict[str, Any]]:
+    plan = body.plan if isinstance(body.plan, dict) else {}
+    query = (body.query or "").strip()
+    summary = str(plan.get("summary") or "").strip()
+    intent = str(plan.get("intent") or "copilot").strip()
+    target = str(plan.get("target") or "").strip()
+    params = plan.get("params") if isinstance(plan.get("params"), dict) else {}
+    command_labels = [
+        str(x.get("label") or "").strip()
+        for x in (body.commands or [])[:3]
+        if isinstance(x, dict) and str(x.get("label") or "").strip()
+    ]
+    title_seed = summary or query or "Copilot 执行计划"
+    detail = {
+        "query": query,
+        "intent": intent,
+        "target": target,
+        "params": params,
+        "commands": command_labels,
+    }
+    specs = [
+        {
+            "title": f"确认 Copilot 计划：{title_seed[:48]}",
+            "description": "核对 Copilot 生成的意图、目标页面/API、上下文参数和验收口径。\n\n"
+            + json.dumps(detail, ensure_ascii=False, indent=2),
+            "estimate": "S",
+        },
+        {
+            "title": f"执行 Copilot 建议动作：{(target or intent or title_seed)[:48]}",
+            "description": "按计划推进实际操作或开发工作，必要时拆分子任务并同步风险。\n\n"
+            + (summary or query or "无补充说明"),
+            "estimate": "M",
+        },
+        {
+            "title": f"验收 Copilot 计划结果：{title_seed[:48]}",
+            "description": "验证执行结果、补齐审计记录和后续行动，确保任务状态可以关闭。",
+            "estimate": "S",
+        },
+    ]
+    if command_labels:
+        specs.insert(1, {
+            "title": f"处理候选命令：{command_labels[0][:48]}",
+            "description": "评估并执行 Copilot 推荐命令：\n" + "\n".join(f"- {x}" for x in command_labels),
+            "estimate": "S",
+        })
+    return specs[:4]
+
+
 # ── Routes ──────────────────────────────────────────────────────
 @router.post("/ask")
 def copilot_ask(body: AskIn) -> dict[str, Any]:
@@ -275,9 +424,146 @@ def copilot_suggest(body: SuggestIn) -> dict[str, Any]:
     return _chat(_SYS_SUGGEST, user, task_type="plan")
 
 
+@router.get("/commands")
+def copilot_commands(q: str = "", limit: int = Query(30, ge=1, le=100)) -> dict[str, Any]:
+    """统一命令注册表：React CmdK、CLI 和 Agent 可复用。"""
+    items = _resolve_commands(q, limit=limit) if q.strip() else _command_catalog()[:limit]
+    return {"ok": True, "items": items, "total": len(items)}
+
+
+@router.post("/commands/resolve")
+def copilot_resolve_command(body: CommandResolveIn) -> dict[str, Any]:
+    """自然语言命令轻量解析：无需 LLM 也能稳定返回候选动作。"""
+    items = _resolve_commands(body.query, limit=body.limit)
+    best = items[0] if items else None
+    return {"ok": True, "query": body.query, "best": best, "items": items, "total": len(items)}
+
+
+@router.post("/plan")
+def copilot_plan(body: PlanIn) -> dict[str, Any]:
+    """面向 CmdK/助手页的工具调用计划，LLM 不可用时回退到命令解析。"""
+    if not body.query.strip():
+        raise HTTPException(400, "query 为空")
+    ctx = body.context if isinstance(body.context, dict) else {}
+    session_id = _safe_id(body.session_id or str(ctx.get("session_id") or ""), "cp")
+    run_id = _safe_id(body.run_id or str(ctx.get("run_id") or ""), "run")
+    commands = _resolve_commands(body.query, limit=6)
+    fallback = commands[0] if commands else {
+        "id": "ai.answer",
+        "type": "copilot",
+        "label": "询问 AI 助手",
+        "description": "没有匹配到明确命令，进入 AI 助手会话",
+        "target": "#/copilot",
+    }
+    plan: dict[str, Any] = {
+        "intent": fallback.get("type", "copilot"),
+        "target": fallback.get("target", "#/copilot"),
+        "params": {"command_id": fallback.get("id")},
+        "summary": fallback.get("description") or fallback.get("label") or "已生成候选动作。",
+    }
+    raw_result: dict[str, Any] | None = None
+    try:
+        ctx_txt = f"\n上下文: {ctx}" if ctx else ""
+        enrich = _gather_rag_memory(body.query)
+        extra = f"\n\n可用候选命令: {json.dumps(commands, ensure_ascii=False)[:4000]}\n\n{enrich}" if enrich else f"\n\n可用候选命令: {json.dumps(commands, ensure_ascii=False)[:4000]}"
+        raw_result = _chat(_SYS_ASK, body.query + ctx_txt + extra, task_type="plan")
+        parsed = _parse_jsonish(str(raw_result.get("raw", "")))
+        if parsed:
+            plan = {
+                "intent": str(parsed.get("intent") or plan["intent"]),
+                "target": str(parsed.get("target") or plan["target"]),
+                "params": parsed.get("params") if isinstance(parsed.get("params"), dict) else plan["params"],
+                "summary": str(parsed.get("summary") or plan["summary"]),
+            }
+    except Exception as e:
+        raw_result = {"error": str(e), "fallback": True}
+    _upsert_session(session_id, title=body.query, run_id=run_id)
+    _record_turn(session_id, {
+        "ts": _now(),
+        "session_id": session_id,
+        "run_id": run_id,
+        "query": body.query,
+        "context": ctx,
+        "ok": True,
+        "response": {"plan": plan, "commands": commands, "raw": raw_result},
+    })
+    return {"ok": True, "session_id": session_id, "run_id": run_id, "plan": plan, "commands": commands, "raw": raw_result}
+
+
+@router.post("/plan/tasks")
+def copilot_plan_tasks(body: PlanTasksIn) -> dict[str, Any]:
+    """将 Copilot 工具调用计划转换为任务中心可跟进的执行任务。"""
+    specs = _plan_task_specs(body)
+    items: list[dict[str, Any]] = []
+    if body.dry_run:
+        for idx, spec in enumerate(specs, start=1):
+            items.append({
+                "id": "",
+                "title": spec["title"],
+                "description": spec["description"],
+                "priority": body.priority,
+                "estimate": spec.get("estimate") or "M",
+                "assigned_to": body.assigned_to or "Coder",
+                "source": "copilot_plan",
+                "preview": True,
+                "order": idx,
+            })
+        return {"ok": True, "dry_run": True, "created": 0, "items": items}
+
+    from .tasks import TaskCreate, create_task
+
+    for idx, spec in enumerate(specs, start=1):
+        out = create_task(TaskCreate(
+            title=spec["title"],
+            description=spec["description"],
+            priority=body.priority,
+            estimate=str(spec.get("estimate") or "M"),
+            assigned_to=body.assigned_to or "Coder",
+            dev_tool=body.dev_tool or "copilot",
+            source="copilot_plan",
+            debug_notes=json.dumps({
+                "query": body.query,
+                "plan": body.plan,
+                "order": idx,
+            }, ensure_ascii=False)[:1800],
+        ))
+        items.append({
+            "id": out.get("id"),
+            "title": spec["title"],
+            "priority": body.priority,
+            "estimate": spec.get("estimate") or "M",
+            "assigned_to": body.assigned_to or "Coder",
+            "source": "copilot_plan",
+            "created": True,
+            "order": idx,
+        })
+        time.sleep(0.002)
+    return {"ok": True, "dry_run": False, "created": len(items), "items": items}
+
+
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest", "sessions"]}
+    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest", "sessions", "commands", "plan", "plan_tasks"]}
+
+
+@router.get("/hub")
+def copilot_hub(limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
+    rows = list(reversed(_read_jsonl(_sessions_file(), limit=limit)))
+    recent = rows[:5]
+    return {
+        "ok": True,
+        "summary": {
+            "sessions": len(rows),
+            "skills": 8,
+            "scope": _scope_key(),
+        },
+        "recent_sessions": recent,
+        "domains": [
+            {"id": "chat", "path": "#/copilot/chat", "capability": "ai.copilot.chat"},
+            {"id": "commands", "path": "#/copilot/commands", "capability": "ai.copilot.commands"},
+            {"id": "tool-plan", "path": "#/copilot/tool-plan", "capability": "ai.copilot.tool-plan"},
+        ],
+    }
 
 
 @router.get("/sessions")

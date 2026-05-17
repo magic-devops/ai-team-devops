@@ -64,6 +64,60 @@ def dashboard() -> dict[str, Any]:
     }
 
 
+def _design_doc_search_hits(q: str) -> list[dict[str, Any]]:
+    idx_path = resolved_ai_memory_root() / "tech_design" / "index.json"
+    if not idx_path.exists():
+        return []
+    try:
+        docs = json.loads(idx_path.read_text(encoding="utf-8")).get("documents") or []
+    except Exception:
+        return []
+    needle = q.lower()
+    hits: list[dict[str, Any]] = []
+    for d in docs:
+        blob = f"{d.get('title', '')} {d.get('id', '')} {' '.join(d.get('tags') or [])}".lower()
+        if needle in blob:
+            hits.append(
+                {
+                    "type": "design_docs",
+                    "id": d.get("id"),
+                    "title": d.get("title") or d.get("id"),
+                    "description": d.get("category", ""),
+                    "snippet": f"v{d.get('current_version', 0)} · {d.get('category', '')}",
+                }
+            )
+    return hits
+
+
+@router.get("/search/hub")
+def search_hub() -> dict[str, Any]:
+    status = semantic_search_status()
+    tables = status.get("tables") if isinstance(status.get("tables"), list) else []
+    ready = sum(1 for t in tables if isinstance(t, dict) and t.get("ready"))
+    rows_total = sum(int(t.get("rows") or 0) for t in tables if isinstance(t, dict))
+    chart = [
+        {"name": str(t.get("table")), "value": int(t.get("rows") or 0)}
+        for t in tables
+        if isinstance(t, dict) and int(t.get("rows") or 0) > 0
+    ]
+    return {
+        "ok": True,
+        "summary": {
+            "semantic_available": bool(status.get("available")),
+            "indexed_tables": len(tables),
+            "ready_tables": ready,
+            "indexed_rows": rows_total,
+        },
+        "charts": {"by_table": chart},
+        "domains": [
+            {"id": "workbench", "path": "#/search/workbench", "capability": "ai.search.workbench"},
+            {"id": "rag", "path": "#/intelligence/rag", "capability": "ai.intelligence.rag"},
+            {"id": "knowledge", "path": "#/intelligence/kb", "capability": "ai.intelligence.knowledge"},
+            {"id": "specs", "path": "#/intelligence/specs", "capability": "ai.intelligence.specs"},
+        ],
+    }
+
+
 @router.get("/search")
 def search(q: str = Query(..., min_length=1)) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
@@ -71,6 +125,23 @@ def search(q: str = Query(..., min_length=1)) -> list[dict[str, Any]]:
         for row in rows(name, 500):
             if q.lower() in f"{row.get('title', '')} {row.get('description', '')}".lower():
                 results.append({"type": name, **{k: v for k, v in row.items() if k != "vector"}})
+    results.extend(_design_doc_search_hits(q))
+    needle = q.lower()
+    try:
+        for spec in list_specs():
+            blob = f"{spec.get('path', '')} {spec.get('name', '')} {spec.get('category', '')}".lower()
+            if needle in blob:
+                results.append(
+                    {
+                        "type": "specs",
+                        "id": spec.get("path"),
+                        "title": spec.get("path"),
+                        "description": spec.get("category", ""),
+                        "snippet": f"{spec.get('ext', '')} · {spec.get('size', 0)} bytes",
+                    }
+                )
+    except Exception:
+        pass
     return results[:50]
 
 
@@ -134,32 +205,193 @@ def analytics() -> dict[str, Any]:
     }
 
 
-@router.get("/semantic-search")
-def semantic_search(
-    q: str = Query(...),
-    tables: str = "tasks,requirements,issues,knowledge",
-) -> list[dict[str, Any]]:
+_SEMANTIC_DEFAULT_TABLES = "tasks,requirements,issues,knowledge,design_docs,specs"
+
+
+def _keyword_semantic_hits(q: str, tables: list[str], limit_per_table: int = 5) -> list[dict[str, Any]]:
+    """向量库不可用时的关键词回退（带简易相关度分数）。"""
+    needle = q.lower().strip()
+    if len(needle) < 2:
+        return []
+    out: list[dict[str, Any]] = []
+
+    def _score(blob: str) -> float:
+        b = blob.lower()
+        if needle in b:
+            return 0.95 - min(0.4, b.index(needle) / max(len(b), 1))
+        parts = [p for p in needle.split() if len(p) > 1]
+        if not parts:
+            return 0.0
+        return sum(1 for p in parts if p in b) / len(parts) * 0.55
+
+    for tbl in tables:
+        if tbl in ("tasks", "requirements", "issues"):
+            for row in rows(tbl, 400):
+                blob = f"{row.get('title', '')} {row.get('description', '')} {row.get('id', '')}"
+                sc = _score(blob)
+                if sc < 0.35:
+                    continue
+                out.append(
+                    {
+                        "table": tbl,
+                        "type": tbl,
+                        "id": row.get("id", ""),
+                        "title": row.get("title", row.get("id", "")),
+                        "snippet": str(row.get("description", ""))[:200],
+                        "status": row.get("status", ""),
+                        "priority": row.get("priority", row.get("severity", "")),
+                        "score": round(sc, 3),
+                        "source": "keyword",
+                    }
+                )
+        elif tbl == "design_docs":
+            for hit in _design_doc_search_hits(q):
+                out.append({**hit, "table": "design_docs", "score": 0.72, "source": "keyword"})
+        elif tbl == "specs":
+            for spec in list_specs():
+                blob = f"{spec.get('path', '')} {spec.get('name', '')}"
+                sc = _score(blob)
+                if sc < 0.35:
+                    continue
+                out.append(
+                    {
+                        "table": "specs",
+                        "type": "specs",
+                        "id": spec.get("path"),
+                        "title": spec.get("path"),
+                        "snippet": f"{spec.get('ext', '')} · {spec.get('size', 0)} bytes",
+                        "score": round(sc, 3),
+                        "source": "keyword",
+                    }
+                )
+        elif tbl == "knowledge":
+            pass
+    out.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
+    per: dict[str, int] = {}
+    trimmed: list[dict[str, Any]] = []
+    for row in out:
+        tbl = str(row.get("table") or "")
+        if per.get(tbl, 0) >= limit_per_table:
+            continue
+        per[tbl] = per.get(tbl, 0) + 1
+        trimmed.append(row)
+        if len(trimmed) >= limit_per_table * max(1, len(tables)):
+            break
+    return trimmed
+
+
+def _vector_semantic_hits(q: str, tables: list[str], limit_per_table: int = 5) -> tuple[list[dict[str, Any]], str]:
+    ensure_lance_ops_import_path()
+    from knowledge.lancedb_ops import LanceOps
+
+    ops = LanceOps()
+    results: list[dict[str, Any]] = []
+    for tbl in tables:
+        for h in ops.search(tbl, q, limit=limit_per_table):
+            distance = h.get("_distance")
+            score = round(max(0.05, 1.0 - float(distance)), 3) if distance is not None else 0.85
+            results.append(
+                {
+                    "table": tbl,
+                    "type": tbl,
+                    "id": h.get("id", ""),
+                    "title": h.get("title", h.get("rule", h.get("path", ""))),
+                    "snippet": str(h.get("description", h.get("content", h.get("rule", ""))))[:200],
+                    "status": h.get("status", ""),
+                    "priority": h.get("priority", h.get("severity", "")),
+                    "score": score,
+                    "source": "vector",
+                }
+            )
+    return results, ""
+
+
+@router.get("/semantic-search/status")
+def semantic_search_status() -> dict[str, Any]:
+    tables = [t.strip() for t in _SEMANTIC_DEFAULT_TABLES.split(",") if t.strip()]
+    indexed: list[dict[str, Any]] = []
+    available = False
+    reason = ""
     try:
         ensure_lance_ops_import_path()
         from knowledge.lancedb_ops import LanceOps
 
         ops = LanceOps()
-        results: list[dict[str, Any]] = []
-        for tbl in tables.split(","):
-            for h in ops.search(tbl.strip(), q, limit=3):
-                results.append(
-                    {
-                        "table": tbl.strip(),
-                        "id": h.get("id", ""),
-                        "title": h.get("title", h.get("rule", h.get("path", ""))),
-                        "snippet": str(h.get("description", h.get("content", h.get("rule", ""))))[:200],
-                        "status": h.get("status", ""),
-                        "priority": h.get("priority", h.get("severity", "")),
-                    }
-                )
-        return results
-    except Exception:
-        return []
+        available = True
+        for tbl in tables:
+            try:
+                stats = ops.table_stats(tbl) if hasattr(ops, "table_stats") else {}
+                rows_n = int(stats.get("rows") or stats.get("count") or 0) if stats else 0
+            except Exception:
+                rows_n = 0
+            indexed.append({"table": tbl, "rows": rows_n, "ready": rows_n > 0})
+    except Exception as exc:
+        reason = str(exc)[:300] or "LanceDB 不可用"
+    return {
+        "ok": True,
+        "available": available,
+        "reason": reason,
+        "tables": indexed,
+        "default_tables": _SEMANTIC_DEFAULT_TABLES,
+    }
+
+
+@router.get("/semantic-search")
+def semantic_search(
+    q: str = Query(..., min_length=2),
+    tables: str = _SEMANTIC_DEFAULT_TABLES,
+    mode: str = Query("hybrid", pattern="^(vector|keyword|hybrid)$"),
+    limit: int = Query(5, ge=1, le=20),
+) -> dict[str, Any]:
+    tbls = [t.strip() for t in tables.split(",") if t.strip()]
+    vector_items: list[dict[str, Any]] = []
+    vector_reason = ""
+    vector_ok = False
+    if mode in ("vector", "hybrid"):
+        try:
+            vector_items, vector_reason = _vector_semantic_hits(q, tbls, limit)
+            vector_ok = True
+        except Exception as exc:
+            vector_reason = str(exc)[:300] or "LanceDB 不可用"
+
+    keyword_items = _keyword_semantic_hits(q, tbls, limit) if mode in ("keyword", "hybrid") else []
+
+    merged: dict[str, dict[str, Any]] = {}
+    for row in vector_items + keyword_items:
+        key = f"{row.get('table')}:{row.get('id')}"
+        prev = merged.get(key)
+        if not prev or float(row.get("score") or 0) > float(prev.get("score") or 0):
+            merged[key] = row
+    items = sorted(merged.values(), key=lambda x: float(x.get("score") or 0), reverse=True)[: limit * len(tbls)]
+
+    available = vector_ok or bool(keyword_items)
+    reason = ""
+    if not vector_ok and mode != "keyword":
+        reason = vector_reason or "向量检索不可用，已回退关键词匹配"
+    if not items:
+        reason = reason or "无匹配结果"
+
+    return {
+        "ok": True,
+        "available": available,
+        "mode": mode,
+        "vector_used": vector_ok,
+        "items": items,
+        "reason": reason,
+        "total": len(items),
+    }
+
+
+@router.get("/specs/summary")
+def specs_summary() -> dict[str, Any]:
+    items = list_specs()
+    by_category: dict[str, int] = {}
+    total_size = 0
+    for it in items:
+        cat = str(it.get("category") or "root")
+        by_category[cat] = by_category.get(cat, 0) + 1
+        total_size += int(it.get("size") or 0)
+    return {"ok": True, "total": len(items), "by_category": by_category, "total_bytes": total_size}
 
 
 @router.get("/specs")
@@ -195,13 +427,18 @@ def get_spec_content(path: str = Query(...)) -> dict[str, Any]:
     return {"content": None, "type": "binary"}
 
 
+class SpecContentBody(BaseModel):
+    content: str = ""
+
+
 @router.put("/specs/content")
-def update_spec(path: str = Query(...), content: str = "") -> dict[str, str]:
+def update_spec(path: str = Query(...), body: SpecContentBody = SpecContentBody()) -> dict[str, str]:
     specs_dir = (sop_dir() / "specs").resolve()
     target = (specs_dir / path).resolve()
     if not str(target).startswith(str(specs_dir)):
         raise HTTPException(403, "Access denied")
-    target.write_text(content, encoding="utf-8")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body.content, encoding="utf-8")
     return {"ok": "true"}
 
 

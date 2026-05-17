@@ -16,7 +16,7 @@ from rich.table import Table
 
 from .._util import console, get_client, get_config, kv, ok, warn
 
-app = typer.Typer(help="任务：list/create/pull/done/fail/delete/issue（本地优先，远端增强）")
+app = typer.Typer(help="任务：list/schedule/feed/report/create/pull/done/fail/delete/issue（本地优先，远端增强）")
 
 
 def _now() -> str:
@@ -158,6 +158,43 @@ def _render(items: list[dict[str, Any]], title: str) -> None:
     console.print(tbl)
 
 
+def _csv_ids(raw: str) -> list[str]:
+    return [x.strip() for x in (raw or "").split(",") if x.strip()]
+
+
+def _render_packets(items: list[dict[str, Any]], title: str) -> None:
+    tbl = Table(title=title, show_header=True, header_style="bold")
+    for col in ("order", "lane", "ready", "task_id", "priority", "assigned_to", "dev_tool", "gates", "title"):
+        tbl.add_column(col)
+    for item in items:
+        tbl.add_row(
+            str(item.get("order", "")),
+            str(item.get("lane", "")),
+            "yes" if item.get("ready") else "no",
+            str(item.get("task_id", "")),
+            str(item.get("priority", "")),
+            str(item.get("assigned_to", "")),
+            str(item.get("dev_tool", "")),
+            str(len(item.get("quality_gates") or [])),
+            str(item.get("title") or "")[:72],
+        )
+    console.print(tbl)
+
+
+def _parse_gate_results(items: list[str] | None) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in items or []:
+        parts = str(item).split(":", 2)
+        if not parts or not parts[0].strip():
+            continue
+        out.append({
+            "id": parts[0].strip(),
+            "status": parts[1].strip() if len(parts) > 1 and parts[1].strip() else "passed",
+            "evidence": parts[2].strip() if len(parts) > 2 else "",
+        })
+    return out
+
+
 def _new_row(
     title: str,
     *,
@@ -196,6 +233,280 @@ def _save_and_queue(row: dict[str, Any]) -> None:
     _save_deleted(deleted)
     _enqueue("tasks", row)
     _write_task_doc(row)
+
+
+@app.command(name="schedule")
+def schedule_tasks(
+    ids: str = typer.Option("", "--ids", help="逗号分隔任务 ID；为空则调度整个任务池"),
+    policy: str = typer.Option("quality_first", "--policy", help="quality_first|balanced|throughput|cost_saver"),
+    max_items: int = typer.Option(50, "--max-items", min=1, max=300),
+    max_parallel: int = typer.Option(6, "--max-parallel", min=1, max=50),
+    include_blocked: bool = typer.Option(False, "--include-blocked", help="包含被依赖/状态阻塞的任务包"),
+    apply: bool = typer.Option(False, "--apply", help="应用调度分配；默认只预览"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """生成 Hermes DAG 调度计划，供人工预览或 Agent 执行器消费。"""
+    body = {
+        "ids": _csv_ids(ids),
+        "dry_run": not apply,
+        "policy": policy,
+        "max_items": max_items,
+        "max_parallel": max_parallel,
+        "include_blocked": include_blocked,
+        "event": "cli.task.schedule",
+    }
+    try:
+        out = get_client().task_scheduler_plan(body)
+    except Exception as e:
+        warn(f"Manager scheduler 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("schedule_id", out.get("schedule_id", "-"))
+    kv("policy", out.get("policy", policy))
+    kv("ready", summary.get("ready", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("scheduled", summary.get("scheduled", 0))
+    kv("quality_gates", summary.get("quality_gates", 0))
+    if not out.get("dry_run"):
+        ok(f"applied {out.get('applied', 0)} ready tasks")
+    _render_packets(list(out.get("agent_packets") or []), "hermes scheduler packets")
+
+
+@app.command(name="feed")
+def agent_feed(
+    limit: int = typer.Option(10, "--limit", min=1, max=100),
+    agent: str = typer.Option("", "--agent", help="指定 Agent 名称，返回任务包时覆盖 assignee"),
+    include_blocked: bool = typer.Option(False, "--include-blocked", help="包含阻塞任务包"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """拉取 AI/CLI 可消费任务包；适合 Agent 循环自动取活。"""
+    try:
+        out = get_client().task_agent_feed(limit=limit, agent=agent, include_blocked=include_blocked)
+    except Exception as e:
+        warn(f"Manager agent-feed 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("ready", summary.get("ready", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("scheduled", summary.get("scheduled", 0))
+    _render_packets(list(out.get("items") or []), "agent feed")
+
+
+@app.command(name="claims")
+def agent_claims(
+    status: str = typer.Option("active", "--status", help="active|all|closed"),
+    limit: int = typer.Option(50, "--limit", min=1, max=500),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看 Agent 领取租约，用于调度中心、运维和自动执行器排障。"""
+    try:
+        out = get_client().task_agent_claims(status=status, limit=limit)
+    except Exception as e:
+        warn(f"Manager agent claims 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    tbl = Table(title=f"agent claims total={out.get('total', 0)}", show_header=True, header_style="bold")
+    for col in ("claim_id", "task_id", "agent", "status", "progress", "lease_expires_at"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("claim_id", "")),
+            str(item.get("task_id", "")),
+            str(item.get("agent", "")),
+            str(item.get("status", "")),
+            str(item.get("progress", 0)),
+            str(item.get("lease_expires_at", "")),
+        )
+    console.print(tbl)
+
+
+@app.command(name="claim")
+def agent_claim(
+    task_id: str = typer.Option("", "--task-id", help="指定任务 ID；为空则自动领取一个就绪任务"),
+    agent: str = typer.Option("HermesAgent", "--agent", help="Agent 名称"),
+    dev_tool: str = typer.Option("", "--dev-tool", help="codex/claude/cursor/qoder/openclaw/hermes-agent 等"),
+    lease_seconds: int = typer.Option(900, "--lease-seconds", min=60, max=86400),
+    force: bool = typer.Option(False, "--force", help="强制覆盖其他 Agent 的活跃租约"),
+    no_start: bool = typer.Option(False, "--no-start", help="只领取，不自动把任务置为 in_progress"),
+    note: str = typer.Option("", "--note", help="领取说明"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """领取一个 Agent 任务包并创建租约。"""
+    body = {
+        "task_id": task_id,
+        "agent": agent,
+        "dev_tool": dev_tool,
+        "lease_seconds": lease_seconds,
+        "force": force,
+        "auto_start": not no_start,
+        "note": note,
+    }
+    try:
+        out = get_client().task_agent_claim(body)
+    except Exception as e:
+        warn(f"Manager agent claim 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    claim = out.get("claim") or {}
+    ok(f"claimed {claim.get('task_id')} as {claim.get('agent')} claim_id={claim.get('claim_id')}")
+    kv("lease_expires_at", claim.get("lease_expires_at", ""))
+
+
+@app.command(name="heartbeat")
+def agent_heartbeat(
+    claim_id: str = typer.Option("", "--claim-id", help="领取 ID；推荐传入"),
+    task_id: str = typer.Option("", "--task-id", help="未传 claim-id 时可用任务 ID + agent 定位"),
+    agent: str = typer.Option("", "--agent", help="Agent 名称"),
+    progress: int = typer.Option(0, "--progress", min=0, max=100),
+    state: str = typer.Option("running", "--state", help="claimed|running|heartbeat|blocked"),
+    status_message: str = typer.Option("", "--message", "--status-message"),
+    extend_seconds: int = typer.Option(900, "--extend-seconds", min=60, max=86400),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """发送 Agent 心跳并续约。"""
+    body = {
+        "claim_id": claim_id,
+        "task_id": task_id,
+        "agent": agent,
+        "progress": progress,
+        "state": state,
+        "status_message": status_message,
+        "extend_seconds": extend_seconds,
+    }
+    try:
+        out = get_client().task_agent_heartbeat(body)
+    except Exception as e:
+        warn(f"Manager agent heartbeat 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    claim = out.get("claim") or {}
+    ok(f"heartbeat {claim.get('claim_id')} progress={claim.get('progress')} lease={claim.get('lease_expires_at')}")
+
+
+@app.command(name="report")
+def agent_report(
+    task_id: str = typer.Argument(..., help="任务 ID"),
+    claim_id: str = typer.Option("", "--claim-id", help="领取 ID，用于关闭租约"),
+    agent: str = typer.Option("", "--agent", help="Agent 名称"),
+    status: str = typer.Option("completed", "--status", help="pending|in_progress|blocked|completed"),
+    progress: int = typer.Option(100, "--progress", min=0, max=100),
+    summary: str = typer.Option("", "--summary", "--notes", help="执行摘要"),
+    confidence: float | None = typer.Option(None, "--confidence", min=0, max=1),
+    artifact_url: str = typer.Option("", "--artifact-url"),
+    artifact_path: str = typer.Option("", "--artifact-path"),
+    branch: str = typer.Option("", "--branch"),
+    gate: list[str] | None = typer.Option(None, "--gate", help="质量卡点，格式 gate_id:passed|failed[:evidence]，可重复"),
+    block_reason: str = typer.Option("", "--block-reason"),
+    next_action: str = typer.Option("", "--next-action"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """回写 Agent 执行结果、质量卡点和交付证据。"""
+    body: dict[str, Any] = {
+        "claim_id": claim_id,
+        "agent": agent,
+        "status": status,
+        "progress": progress,
+        "summary": summary,
+        "artifact_url": artifact_url,
+        "artifact_path": artifact_path,
+        "branch": branch,
+        "gate_results": _parse_gate_results(gate),
+        "block_reason": block_reason,
+        "next_action": next_action,
+    }
+    if confidence is not None:
+        body["confidence"] = confidence
+    try:
+        out = get_client().task_agent_report(task_id, body)
+    except Exception as e:
+        warn(f"Manager agent-report 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    ok(f"reported {task_id} → {out.get('status', status)}")
+    if out.get("failed_gates"):
+        warn("failed gates: " + ", ".join(out.get("failed_gates") or []))
+    quality = out.get("quality") or {}
+    if quality:
+        kv("quality_decision", quality.get("decision", ""))
+        kv("quality_score", quality.get("score", ""))
+
+
+@app.command(name="gates")
+def quality_gates(
+    task_id: str = typer.Option("", "--task-id", help="查看指定任务的质量卡点；为空则查看默认策略"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看质量卡点策略或单任务卡点。"""
+    try:
+        out = get_client().task_quality(task_id) if task_id else get_client().task_quality_policy()
+    except Exception as e:
+        warn(f"Manager quality gates 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    policy = out.get("policy") or (out.get("quality") or {}).get("policy") or {}
+    gates = out.get("default_gates") or (out.get("quality") or {}).get("gates") or []
+    kv("mode", policy.get("mode", "-"))
+    kv("required", len(policy.get("required_gate_ids") or []))
+    tbl = Table(title="quality gates", show_header=True, header_style="bold")
+    for col in ("id", "type", "severity", "required", "name"):
+        tbl.add_column(col)
+    for gate in gates:
+        tbl.add_row(str(gate.get("id", "")), str(gate.get("type", "")), str(gate.get("severity", "")), str(gate.get("required", "")), str(gate.get("name", "")))
+    console.print(tbl)
+
+
+@app.command(name="evaluate")
+def quality_evaluate(
+    task_id: str = typer.Argument(..., help="任务 ID"),
+    gate: list[str] | None = typer.Option(None, "--gate", help="质量卡点，格式 gate_id:passed|failed[:evidence]，可重复"),
+    confidence: float | None = typer.Option(None, "--confidence", min=0, max=1),
+    artifact_url: str = typer.Option("", "--artifact-url"),
+    artifact_path: str = typer.Option("", "--artifact-path"),
+    status: str = typer.Option("completed", "--status"),
+    apply: bool = typer.Option(False, "--apply", help="落库评估并在阻断时更新任务状态"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """执行质量卡点评估。"""
+    body: dict[str, Any] = {
+        "task_id": task_id,
+        "gate_results": _parse_gate_results(gate),
+        "artifact_url": artifact_url,
+        "artifact_path": artifact_path,
+        "status": status,
+        "dry_run": not apply,
+        "source": "cli.task.evaluate",
+    }
+    if confidence is not None:
+        body["confidence"] = confidence
+    try:
+        out = get_client().task_quality_evaluate(body)
+    except Exception as e:
+        warn(f"Manager quality evaluate 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    quality = out.get("quality") or {}
+    kv("decision", quality.get("decision", ""))
+    kv("score", quality.get("score", ""))
+    if quality.get("blockers"):
+        warn("blockers: " + ", ".join(quality.get("blockers") or []))
 
 
 @app.command(name="list")

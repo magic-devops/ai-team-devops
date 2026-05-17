@@ -184,6 +184,23 @@ class ManagerClient:
         """RAG 向量后端与 SQL 类型探测（无需鉴权时部分部署可能 401，doctor 内捕获）。"""
         return self._request("GET", "/api/v1/rag/health")
 
+    def system_pages(
+        self,
+        *,
+        view: str = "react",
+        domain: str = "",
+        status: str = "",
+        q: str = "",
+    ) -> dict[str, Any]:
+        params = {"view": view, "domain": domain, "status": status, "q": q}
+        return self._request("GET", "/api/v1/system/pages", params=params)
+
+    def system_pages_manifest(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/manifest")
+
+    def system_pages_capabilities(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/capabilities")
+
     # auth
     def login(self, username: str, password: str, tenant_slug: str | None = None) -> dict[str, Any]:
         body = {"username": username, "password": password}
@@ -223,6 +240,41 @@ class ManagerClient:
     def project_onboarding(self, project_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/projects/{project_id}/onboarding")
 
+    def project_review(self, project_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/projects/{project_id}/review")
+
+    def project_ops_plan(self, project_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/projects/{project_id}/ops-plan")
+
+    def project_ops_tasks(self, project_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/projects/{project_id}/ops-tasks", json_body=body)
+
+    def project_clone_preview(self, template_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/projects/{template_id}/clone-preview", json_body=body)
+
+    # workflows
+    def workflow_instances(self, *, limit: int = 100, status: str = "", type: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
+        if type:
+            params["type"] = type
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/workflows/instances", params=params)
+
+    def workflow_events(self, *, limit: int = 100, workflow_id: str = "") -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if workflow_id:
+            params["workflow_id"] = workflow_id
+        return self._request("GET", "/api/v1/workflows/events", params=params)
+
+    def workflow_ops_plan(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/workflows/ops-plan")
+
+    def workflow_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/workflows/ops-tasks", json_body=body)
+
     # tasks
     def list_tasks(self, *, status: str | None = None, priority: str | None = None,
                    page: int = 1, size: int = 50) -> dict[str, Any]:
@@ -247,6 +299,45 @@ class ManagerClient:
 
     def pull_task(self, task_id: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/tasks/{task_id}:pull")
+
+    def task_scheduler_plan(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/scheduler/plan", json_body=dict(body))
+
+    def task_agent_feed(
+        self,
+        *,
+        limit: int = 10,
+        agent: str = "",
+        include_blocked: bool = False,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit, "include_blocked": str(include_blocked).lower()}
+        if agent:
+            params["agent"] = agent
+        return self._request("GET", "/api/v1/tasks/agent-feed", params=params)
+
+    def task_agent_claims(self, *, status: str = "active", limit: int = 50) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/tasks/agent-feed/claims", params={"status": status, "limit": limit})
+
+    def task_agent_claim(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/agent-feed/claim", json_body=dict(body))
+
+    def task_agent_heartbeat(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/agent-feed/heartbeat", json_body=dict(body))
+
+    def task_agent_report(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/tasks/{task_id}/agent-report", json_body=dict(body))
+
+    def task_quality_policy(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/tasks/quality/policy")
+
+    def task_quality_policy_update(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PUT", "/api/v1/tasks/quality/policy", json_body=dict(body))
+
+    def task_quality(self, task_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/tasks/{task_id}/quality")
+
+    def task_quality_evaluate(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/quality/evaluate", json_body=dict(body))
 
     def delete_task(self, task_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/tasks/{task_id}")
@@ -285,6 +376,12 @@ class ManagerClient:
 
     def update_requirement(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("PATCH", f"/api/v1/requirements/{req_id}", json_body=body)
+
+    def review_requirement(self, req_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/requirements/{req_id}/review")
+
+    def apply_requirement_review(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/requirements/{req_id}/apply-review", json_body=body)
 
     def delete_requirement(self, req_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/requirements/{req_id}")
@@ -451,6 +548,39 @@ class ManagerClient:
         r = self._request("GET", "/api/v1/notify/channels")
         return r if isinstance(r, list) else []
 
+    def notify_connectors(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/notify/connectors")
+
+    def notify_connector_callback_template(self, connector_type: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/notify/connectors/{connector_type}/callback-template")
+
+    def notify_connector_verify(
+        self,
+        connector_type: str,
+        *,
+        secret: str = "",
+        timestamp: str = "",
+        nonce: str = "",
+        signature: str = "",
+        body: str = "",
+        payload: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/notify/connectors/{connector_type}/verify",
+            json_body={
+                "secret": secret,
+                "timestamp": timestamp,
+                "nonce": nonce,
+                "signature": signature,
+                "body": body,
+                "payload": dict(payload or {}),
+            },
+        )
+
+    def notify_inbound_connector(self, connector_type: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/notify/connectors/{connector_type}/inbound", json_body=dict(payload))
+
     def notify_test_channel(self, channel_name: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/notify/test/{channel_name}")
 
@@ -464,6 +594,143 @@ class ManagerClient:
 
     def data_analytics_overview(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/analytics/overview")
+
+    def data_analytics_blueprint(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/analytics/blueprint")
+
+    def data_analytics_blueprint_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/blueprint/tasks", json_body=dict(body))
+
+    def data_assets(self, *, type: str = "", status: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if type:
+            params["type"] = type
+        if status:
+            params["status"] = status
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/assets", params=params)
+
+    def data_metrics_center(self, *, domain: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if domain:
+            params["domain"] = domain
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/metrics/center", params=params)
+
+    def data_tags(self, *, category: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if category:
+            params["category"] = category
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/tags", params=params)
+
+    def data_quality_rules(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/analytics/quality/rules")
+
+    def data_quality_evaluate(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/quality/evaluate", json_body=dict(body))
+
+    def data_governance_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/governance/tasks", json_body=dict(body))
+
+    def data_metric_upsert(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/metrics/center", json_body=dict(body))
+
+    def data_tag_upsert(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/tags", json_body=dict(body))
+
+    def data_services(self, *, status: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if status:
+            params["status"] = status
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/services", params=params)
+
+    def data_service_upsert(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/services", json_body=dict(body))
+
+    def data_service_publish(self, service_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/analytics/services/{service_id}/publish", json_body=dict(body))
+
+    def data_quality_alerts(self, *, severity: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if severity:
+            params["severity"] = severity
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/quality/alerts", params=params)
+
+    def data_quality_alert_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/quality/alerts/tasks", json_body=dict(body))
+
+    def data_quality_alert_notify(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/quality/alerts/notify", json_body=dict(body))
+
+    def data_dev_templates(self, *, status: str = "", q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {}
+        if status:
+            params["status"] = status
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/development/templates", params=params)
+
+    def data_dev_template_upsert(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/templates", json_body=dict(body))
+
+    def data_dev_template_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/tasks", json_body=dict(body))
+
+    def data_dev_schedule(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/schedule", json_body=dict(body))
+
+    def data_dev_ops_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/analytics/development/ops-summary")
+
+    def data_dev_runbook(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/runbook", json_body=dict(body))
+
+    def data_dev_schedules(self, *, limit: int = 20, q: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {"limit": str(limit)}
+        if q:
+            params["q"] = q
+        return self._request("GET", "/api/v1/analytics/development/schedules", params=params)
+
+    def data_dev_schedule_detail(self, schedule_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/analytics/development/schedules/{schedule_id}")
+
+    def data_dev_schedule_action(self, schedule_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/analytics/development/schedules/{schedule_id}/action", json_body=dict(body))
+
+    def data_dev_agent_feed(self, *, limit: int = 20, schedule_id: str = "", agent: str = "", include_blocked: bool = False) -> dict[str, Any]:
+        params: dict[str, str] = {"limit": str(limit), "include_blocked": str(include_blocked).lower()}
+        if schedule_id:
+            params["schedule_id"] = schedule_id
+        if agent:
+            params["agent"] = agent
+        return self._request("GET", "/api/v1/analytics/development/agent-feed", params=params)
+
+    def data_dev_agent_feed_action(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/agent-feed/action", json_body=dict(body))
+
+    def data_dev_evidence(self, *, limit: int = 50, schedule_id: str = "", packet_id: str = "", decision: str = "") -> dict[str, Any]:
+        params: dict[str, str] = {"limit": str(limit)}
+        if schedule_id:
+            params["schedule_id"] = schedule_id
+        if packet_id:
+            params["packet_id"] = packet_id
+        if decision:
+            params["decision"] = decision
+        return self._request("GET", "/api/v1/analytics/development/evidence", params=params)
+
+    def data_dev_evidence_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/evidence/tasks", json_body=dict(body))
+
+    def data_dev_evidence_notify(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/analytics/development/evidence/notify", json_body=dict(body))
 
     def data_analytics_nlq(self, question: str) -> dict[str, Any]:
         return self._request("POST", "/api/v1/analytics/nlq", json_body={"question": question})

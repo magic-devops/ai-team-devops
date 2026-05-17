@@ -53,6 +53,51 @@ _CACHE_TTL_SECONDS = 600
 _INSTALL_DIR = Path(os.getenv("SOP_MARKETPLACE_DIR")
                     or Path(os.getenv("SOP_RUNTIME_DIR", ".sop-runtime")) / "marketplace")
 
+_BUILTIN_PACKAGES: list[dict[str, Any]] = [
+    {
+        "name": "sop-ai-project-starter",
+        "version": "1.0.0",
+        "type": "template",
+        "description": "内置 AI 项目接入模板：包含 sop register、context prepare、rules/specs 同步建议。",
+        "authors": ["SOP"],
+        "homepage": "/?shell=1#/projects",
+        "license": "Apache-2.0",
+        "files": ["README.md", "sop.template.json"],
+        "signature": {"alg": "builtin", "digest": "local"},
+        "rating": {"avg": 4.8, "count": 18},
+        "repo": "",
+        "registry": "builtin://sop",
+    },
+    {
+        "name": "sop-dev-rule-pack",
+        "version": "1.0.0",
+        "type": "rule-pack",
+        "description": "内置研发规约包：覆盖安全输入、可追溯提交、AI Agent 上下文准备和本地优先同步。",
+        "authors": ["SOP"],
+        "homepage": "/?shell=1#/intelligence",
+        "license": "Apache-2.0",
+        "files": ["README.md", "rules/RULES.md"],
+        "signature": {"alg": "builtin", "digest": "local"},
+        "rating": {"avg": 4.7, "count": 12},
+        "repo": "",
+        "registry": "builtin://sop",
+    },
+    {
+        "name": "sop-ops-runbook",
+        "version": "1.0.0",
+        "type": "spec",
+        "description": "内置运维手册包：包含健康检查、用量配额、账单出账、事件订阅和部署检查清单。",
+        "authors": ["SOP"],
+        "homepage": "/?shell=1#/settings",
+        "license": "Apache-2.0",
+        "files": ["README.md", "ops/RUNBOOK.md"],
+        "signature": {"alg": "builtin", "digest": "local"},
+        "rating": {"avg": 4.6, "count": 9},
+        "repo": "",
+        "registry": "builtin://sop",
+    },
+]
+
 
 @dataclass
 class Package:
@@ -114,6 +159,21 @@ def refresh_cache(force: bool = False) -> list[Package]:
                 ))
             except Exception as e:
                 _log.warning("skip pkg in %s: %s", reg, e)
+    for d in _BUILTIN_PACKAGES:
+        if not any(p.name == d["name"] for p in items):
+            items.append(Package(
+                name=d["name"], version=d.get("version", "0.0.1"),
+                type=d.get("type", "skill"),
+                description=d.get("description", ""),
+                authors=d.get("authors", []),
+                homepage=d.get("homepage", ""),
+                license=d.get("license", "MIT"),
+                files=d.get("files", []),
+                signature=d.get("signature", {}),
+                rating=d.get("rating", {"avg": 0.0, "count": 0}),
+                repo=d.get("repo", ""),
+                registry=d.get("registry", "builtin://sop"),
+            ))
     _cache["at"] = time.time()
     _cache["items"] = items
     return items
@@ -131,6 +191,82 @@ class RatingIn(BaseModel):
     package: str
     score: int = Field(ge=1, le=5)
     comment: str = ""
+
+
+def _installed_records() -> list[dict[str, Any]]:
+    rec = _INSTALL_DIR / "_installed.json"
+    if not rec.exists():
+        return []
+    try:
+        data = json.loads(rec.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _rating_records(package: str = "") -> list[dict[str, Any]]:
+    path = _INSTALL_DIR / "_ratings.jsonl"
+    if not path.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if package and row.get("package") != package:
+            continue
+        out.append(row)
+    return out
+
+
+def _rating_overlay(package: str, base: dict[str, Any]) -> dict[str, Any]:
+    rows = _rating_records(package)
+    if not rows:
+        return base
+    scores = [int(r.get("score") or 0) for r in rows if int(r.get("score") or 0) > 0]
+    if not scores:
+        return base
+    base_count = int(base.get("count") or 0)
+    base_avg = float(base.get("avg") or 0.0)
+    total = base_avg * base_count + sum(scores)
+    count = base_count + len(scores)
+    return {"avg": round(total / max(count, 1), 2), "count": count, "local_count": len(scores)}
+
+
+def _signature_status(pkg: Package) -> str:
+    alg = (pkg.signature or {}).get("alg", "")
+    digest = (pkg.signature or {}).get("digest", "")
+    if alg == "builtin":
+        return "builtin"
+    if alg == "sha256" and digest:
+        return "signed"
+    return "unsigned"
+
+
+def _write_builtin_package(pkg: Package, target: Path) -> None:
+    target.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "name": pkg.name,
+        "version": pkg.version,
+        "type": pkg.type,
+        "description": pkg.description,
+        "authors": pkg.authors,
+        "installed_from": pkg.registry,
+    }
+    (target / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    (target / "README.md").write_text(
+        f"# {pkg.name}\n\n{pkg.description}\n\n"
+        "This package is bundled with SOP Manager for offline/local deployments.\n",
+        encoding="utf-8",
+    )
+    for rel in pkg.files:
+        p = target / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if not p.exists():
+            p.write_text(f"# {pkg.name}\n\nGenerated asset: `{rel}`.\n", encoding="utf-8")
 
 
 @router.get("/registries")
@@ -166,6 +302,77 @@ def list_packages(
     }
 
 
+@router.get("/charts")
+def marketplace_charts() -> dict[str, Any]:
+    payload = summary()
+    by_type = payload.get("by_type") if isinstance(payload.get("by_type"), dict) else {}
+    by_signature = payload.get("by_signature") if isinstance(payload.get("by_signature"), dict) else {}
+    return {
+        "ok": True,
+        "by_type": [{"name": k, "value": int(v)} for k, v in sorted(by_type.items(), key=lambda x: (-x[1], x[0])) if int(v) > 0],
+        "by_signature": [{"name": k, "value": int(v)} for k, v in sorted(by_signature.items(), key=lambda x: (-x[1], x[0])) if int(v) > 0],
+    }
+
+
+@router.get("/summary")
+def summary() -> dict[str, Any]:
+    items = [_to_dict(p) for p in refresh_cache()]
+    installed_items = _installed_records()
+    by_type: dict[str, int] = {}
+    by_signature: dict[str, int] = {}
+    rating_sum = 0.0
+    rating_n = 0
+    for p in items:
+        by_type[p["type"]] = by_type.get(p["type"], 0) + 1
+        sig = str(p.get("signature_status") or "unknown")
+        by_signature[sig] = by_signature.get(sig, 0) + 1
+        avg = float((p.get("rating") or {}).get("avg") or 0)
+        cnt = int((p.get("rating") or {}).get("count") or 0)
+        if cnt > 0:
+            rating_sum += avg * cnt
+            rating_n += cnt
+    return {
+        "ok": True,
+        "packages": len(items),
+        "installed": len(installed_items),
+        "registries": len(_registries()) + 1,
+        "by_type": by_type,
+        "by_signature": by_signature,
+        "avg_rating": round(rating_sum / max(1, rating_n), 2) if rating_n else 0,
+        "rating_count": rating_n,
+        "signed_packages": by_signature.get("signed", 0) + by_signature.get("builtin", 0),
+        "unsigned_packages": by_signature.get("unsigned", 0),
+        "cache_at": _cache.get("at", 0),
+    }
+
+
+@router.get("/hub")
+def marketplace_hub() -> dict[str, Any]:
+    payload = summary()
+    charts = marketplace_charts()
+    return {
+        "ok": True,
+        "summary": {
+            "packages": payload.get("packages", 0),
+            "installed": payload.get("installed", 0),
+            "registries": payload.get("registries", 0),
+            "avg_rating": payload.get("avg_rating", 0),
+            "signed_packages": payload.get("signed_packages", 0),
+            "unsigned_packages": payload.get("unsigned_packages", 0),
+        },
+        "charts": {
+            "by_type": charts.get("by_type") or [],
+            "by_signature": charts.get("by_signature") or [],
+        },
+        "domains": [
+            {"id": "catalog", "path": "#/marketplace/catalog", "capability": "ecosystem.marketplace.catalog"},
+            {"id": "installed", "path": "#/marketplace/installed", "capability": "ecosystem.marketplace.installed"},
+            {"id": "ratings", "path": "#/marketplace/ratings", "capability": "ecosystem.marketplace.ratings"},
+            {"id": "skills", "path": "#/skills-hub", "capability": "ecosystem.skills-hub"},
+        ],
+    }
+
+
 @router.get("/packages/{name}")
 def get_package(name: str) -> dict[str, Any]:
     items = refresh_cache()
@@ -173,6 +380,29 @@ def get_package(name: str) -> dict[str, Any]:
         if p.name == name:
             return _to_dict(p)
     raise HTTPException(404)
+
+
+@router.get("/packages/{name}/ratings")
+def package_ratings(name: str, limit: int = 50) -> dict[str, Any]:
+    rows = list(reversed(_rating_records(name)))[:limit]
+    return {"ok": True, "items": rows, "total": len(rows)}
+
+
+@router.get("/packages/{name}/verify")
+def verify_package(name: str) -> dict[str, Any]:
+    pkg = _find(name)
+    if not pkg:
+        raise HTTPException(404, "package not found")
+    return {
+        "ok": True,
+        "name": pkg.name,
+        "version": pkg.version,
+        "registry": pkg.registry,
+        "signature": pkg.signature,
+        "signature_status": _signature_status(pkg),
+        "installable": bool(pkg.repo or pkg.registry.startswith("builtin://")),
+        "files": pkg.files,
+    }
 
 
 @router.post("/refresh")
@@ -194,35 +424,39 @@ def install(body: InstallIn) -> dict[str, Any]:
         shutil.rmtree(target)
 
     if not pkg.repo:
-        raise HTTPException(400, "package 缺少 repo 字段（无法下载）")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        rc = subprocess.call(
-            ["git", "clone", "--depth", "1", "--branch", "v" + pkg.version, pkg.repo, tmp],
-            stdout=subprocess.DEVNULL,
-        )
-        if rc != 0:
-            # 尝试 main 分支
-            shutil.rmtree(tmp, ignore_errors=True)
-            os.makedirs(tmp, exist_ok=True)
-            rc = subprocess.call(["git", "clone", "--depth", "1", pkg.repo, tmp],
-                                 stdout=subprocess.DEVNULL)
+        if pkg.registry.startswith("builtin://"):
+            _write_builtin_package(pkg, target)
+        else:
+            raise HTTPException(400, "package 缺少 repo 字段（无法下载）")
+    else:
+        with tempfile.TemporaryDirectory() as tmp:
+            rc = subprocess.call(
+                ["git", "clone", "--depth", "1", "--branch", "v" + pkg.version, pkg.repo, tmp],
+                stdout=subprocess.DEVNULL,
+            )
             if rc != 0:
-                raise HTTPException(502, "git clone 失败")
+                # 尝试 main 分支
+                shutil.rmtree(tmp, ignore_errors=True)
+                os.makedirs(tmp, exist_ok=True)
+                rc = subprocess.call(["git", "clone", "--depth", "1", pkg.repo, tmp],
+                                     stdout=subprocess.DEVNULL)
+                if rc != 0:
+                    raise HTTPException(502, "git clone 失败")
 
-        # 签名校验：sha256 over 所有 files 的连接
-        if body.verify_signature and pkg.signature.get("alg") == "sha256":
-            digest = _sha256_of_files(Path(tmp), pkg.files)
-            expect = pkg.signature.get("digest", "")
-            if expect and digest != expect:
-                raise HTTPException(400, f"签名不匹配 expected={expect} got={digest}")
+            # 签名校验：sha256 over 所有 files 的连接
+            if body.verify_signature and pkg.signature.get("alg") == "sha256":
+                digest = _sha256_of_files(Path(tmp), pkg.files)
+                expect = pkg.signature.get("digest", "")
+                if expect and digest != expect:
+                    raise HTTPException(400, f"签名不匹配 expected={expect} got={digest}")
 
-        shutil.copytree(tmp, target, dirs_exist_ok=True)
+            shutil.copytree(tmp, target, dirs_exist_ok=True)
 
     # 写入安装记录
     record = {
         "name": pkg.name, "version": pkg.version, "type": pkg.type,
         "installed_at": time.time(), "target": str(target),
+        "registry": pkg.registry, "signature_status": _signature_status(pkg),
     }
     rec_path = _INSTALL_DIR / "_installed.json"
     rec_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,13 +474,7 @@ def install(body: InstallIn) -> dict[str, Any]:
 
 @router.get("/installed")
 def installed() -> list[dict[str, Any]]:
-    rec = _INSTALL_DIR / "_installed.json"
-    if not rec.exists():
-        return []
-    try:
-        return json.loads(rec.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    return _installed_records()
 
 
 @router.delete("/installed/{name}")
@@ -283,12 +511,15 @@ def _find(name: str) -> Optional[Package]:
 
 
 def _to_dict(p: Package) -> dict[str, Any]:
+    installed_names = {r.get("name") for r in _installed_records()}
     return {
         "name": p.name, "version": p.version, "type": p.type,
         "description": p.description, "authors": p.authors,
         "homepage": p.homepage, "license": p.license,
         "repo": p.repo, "files": p.files,
-        "rating": p.rating, "signature": p.signature,
+        "rating": _rating_overlay(p.name, p.rating), "signature": p.signature,
+        "signature_status": _signature_status(p),
+        "installed": p.name in installed_names,
         "registry": p.registry,
     }
 

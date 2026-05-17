@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -11,8 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import JSON, Integer, Float
 from sqlalchemy.orm import Session
 
-from sop_manager.path_config import resolved_project_id
-from .auth_sql import User, require_data_hub_import
+from sop_manager.path_config import resolved_project_id, resolved_runtime_dir, resolved_tenant_id
+from .auth_sql import User, current_user, require_data_hub_import
 from .db_sql_compat import rows
 from .sql_models import get_session, Requirement, Task, Sprint, Issue
 
@@ -25,6 +27,47 @@ _MODEL_MAP = {
     "issues": Issue,
     "sprints": Sprint,
 }
+
+
+def _utc_now() -> str:
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def _jobs_file() -> Path:
+    p = resolved_runtime_dir() / "data-exchange" / "jobs.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _read_jobs(limit: int = 50) -> list[dict[str, Any]]:
+    path = _jobs_file()
+    if not path.exists():
+        return []
+    items: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+        if item.get("project_id") == resolved_project_id() and item.get("tenant_id") == resolved_tenant_id():
+            items.append(item)
+    items.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
+    return items[: max(1, min(int(limit), 200))]
+
+
+def _append_job(job: dict[str, Any]) -> dict[str, Any]:
+    path = _jobs_file()
+    record = {
+        "id": job.get("id") or f"dx-{uuid4().hex[:12]}",
+        "tenant_id": resolved_tenant_id(),
+        "project_id": resolved_project_id(),
+        "created_at": _utc_now(),
+        **job,
+    }
+    path.open("a", encoding="utf-8").write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    return record
 
 
 def _serialize_rows(raw: List[dict]) -> List[dict]:
@@ -49,6 +92,59 @@ def _parse_modules_param(modules: Optional[str]) -> List[str]:
     if not pick:
         return list(_SQL_TABLES) + ["agent_reflections"]
     return sorted(pick, key=lambda n: (0 if n in _SQL_TABLES else 1, n))
+
+
+def _module_counts() -> dict[str, int]:
+    out: dict[str, int] = {}
+    for name in _SQL_TABLES:
+        out[name] = len(rows(name, 1000))
+    try:
+        from sop_manager.routers.db import rows as lance_rows
+
+        out["agent_reflections"] = len(lance_rows("agent_reflections", 1000))
+    except Exception:
+        out["agent_reflections"] = 0
+    return out
+
+
+@router.get("/summary")
+def data_exchange_summary():
+    counts = _module_counts()
+    modules = [
+        {"name": "requirements", "label": "需求", "count": counts.get("requirements", 0), "kind": "sql"},
+        {"name": "tasks", "label": "任务", "count": counts.get("tasks", 0), "kind": "sql"},
+        {"name": "issues", "label": "问题", "count": counts.get("issues", 0), "kind": "sql"},
+        {"name": "sprints", "label": "迭代", "count": counts.get("sprints", 0), "kind": "sql"},
+        {"name": "agent_reflections", "label": "Agent 反思", "count": counts.get("agent_reflections", 0), "kind": "vector"},
+    ]
+    return {
+        "ok": True,
+        "project_id": resolved_project_id(),
+        "modules": modules,
+        "total": sum(int(x["count"]) for x in modules),
+        "export_url": "/api/v1/data-exchange/export",
+        "import_mode": ["merge"],
+    }
+
+
+@router.get("/charts")
+def data_exchange_charts(_: User = Depends(current_user)) -> dict[str, Any]:
+    counts = _module_counts()
+    modules = [
+        {"name": "requirements", "label": "需求", "count": counts.get("requirements", 0)},
+        {"name": "tasks", "label": "任务", "count": counts.get("tasks", 0)},
+        {"name": "issues", "label": "问题", "count": counts.get("issues", 0)},
+        {"name": "sprints", "label": "迭代", "count": counts.get("sprints", 0)},
+        {"name": "agent_reflections", "label": "Agent 反思", "count": counts.get("agent_reflections", 0)},
+    ]
+    by_module = [{"name": row["label"], "value": row["count"]} for row in modules if row["count"] > 0]
+    sql_total = sum(row["count"] for row in modules if row["name"] != "agent_reflections")
+    vector_total = counts.get("agent_reflections", 0)
+    by_kind = [
+        {"name": "SQL 实体", "value": sql_total},
+        {"name": "向量反思", "value": vector_total},
+    ]
+    return {"ok": True, "by_module": by_module, "by_kind": [x for x in by_kind if x["value"] > 0]}
 
 
 @router.get("/export")
@@ -190,6 +286,68 @@ class ImportBody(BaseModel):
     sprints: Optional[List[dict]] = None
 
 
+class ExportJobBody(BaseModel):
+    modules: Optional[List[str]] = None
+
+
+@router.post("/preview")
+def preview_import(body: ImportBody, _: User = Depends(current_user)):
+    if body.mode not in ("merge",):
+        raise HTTPException(400, "mode 仅支持 merge")
+    out: dict[str, Any] = {"ok": True, "mode": body.mode, "modules": {}, "total": 0, "warnings": []}
+    for name in ("sprints", "requirements", "tasks", "issues"):
+        items = getattr(body, name, None) or []
+        if not isinstance(items, list):
+            out["warnings"].append(f"{name} 不是数组，导入时会忽略")
+            continue
+        ids = [str(x.get("id") or "") for x in items if isinstance(x, dict)]
+        unique = len({x for x in ids if x})
+        missing = len([x for x in items if isinstance(x, dict) and not x.get("id")])
+        duplicates = max(0, len([x for x in ids if x]) - unique)
+        out["modules"][name] = {
+            "rows": len(items),
+            "unique_ids": unique,
+            "missing_ids": missing,
+            "duplicates": duplicates,
+        }
+        out["total"] += len(items)
+        if missing:
+            out["warnings"].append(f"{name} 有 {missing} 行缺少 id，将被跳过")
+        if duplicates:
+            out["warnings"].append(f"{name} 有 {duplicates} 个重复 id，merge 时后写覆盖")
+    return out
+
+
+@router.get("/jobs")
+def data_exchange_jobs(limit: int = Query(30, ge=1, le=200), _: User = Depends(current_user)):
+    items = _read_jobs(limit)
+    status_counts: dict[str, int] = {}
+    for item in items:
+        status = str(item.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {"ok": True, "items": items, "total": len(items), "status_counts": status_counts}
+
+
+@router.post("/export-job")
+def create_export_job(body: ExportJobBody, user: User = Depends(current_user)):
+    modules = _parse_modules_param(",".join(body.modules or []))
+    counts = _module_counts()
+    selected_counts = {name: counts.get(name, 0) for name in modules}
+    job = _append_job(
+        {
+            "type": "export",
+            "status": "ready",
+            "actor": getattr(user, "username", "") or getattr(user, "id", ""),
+            "modules": modules,
+            "counts": selected_counts,
+            "total": sum(int(v) for v in selected_counts.values()),
+            "download_url": f"/api/v1/data-exchange/export?modules={','.join(modules)}",
+            "finished_at": _utc_now(),
+        }
+    )
+    return {"ok": True, "job": job}
+
+
 @router.post("/import")
 def import_data(
     body: ImportBody,
@@ -201,6 +359,7 @@ def import_data(
     tid = user.tenant_id
     pid = resolved_project_id()
     counts: Dict[str, int] = {}
+    preview = preview_import(body, user)
     order = ("sprints", "requirements", "tasks", "issues")
     try:
         for name in order:
@@ -209,10 +368,35 @@ def import_data(
                 continue
             counts[name] = _merge_table(db, name, items, tid, pid)
         db.commit()
-        return {"ok": True, "counts": counts}
+        job = _append_job(
+            {
+                "type": "import",
+                "status": "completed",
+                "actor": getattr(user, "username", "") or getattr(user, "id", ""),
+                "mode": body.mode,
+                "modules": [name for name in order if getattr(body, name, None)],
+                "counts": counts,
+                "total": sum(int(v) for v in counts.values()),
+                "preview": preview,
+                "finished_at": _utc_now(),
+            }
+        )
+        return {"ok": True, "counts": counts, "job": job}
     except HTTPException:
         db.rollback()
         raise
     except Exception as e:
         db.rollback()
+        _append_job(
+            {
+                "type": "import",
+                "status": "failed",
+                "actor": getattr(user, "username", "") or getattr(user, "id", ""),
+                "mode": body.mode,
+                "modules": [name for name in order if getattr(body, name, None)],
+                "counts": counts,
+                "error": str(e),
+                "finished_at": _utc_now(),
+            }
+        )
         raise HTTPException(500, f"导入失败: {e}") from e

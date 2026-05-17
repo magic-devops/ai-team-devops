@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -13,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root
@@ -265,6 +266,33 @@ def list_versions(doc_id: str):
     doc_id = _safe_id(doc_id)
     meta = _load_meta(doc_id)
     return {"ok": True, "versions": meta.get("versions") or [], "current_version": meta.get("current_version", 0)}
+
+
+@router.get("/{doc_id}/compare")
+def compare_versions(
+    doc_id: str,
+    from_version: int = Query(..., alias="from", ge=1),
+    to_version: int = Query(..., alias="to", ge=1),
+):
+    doc_id = _safe_id(doc_id)
+    p_from = _doc_dir(doc_id) / f"v{from_version}.md"
+    p_to = _doc_dir(doc_id) / f"v{to_version}.md"
+    if not p_from.exists() or not p_to.exists():
+        raise HTTPException(404, "版本不存在")
+    a = p_from.read_text(encoding="utf-8", errors="replace").splitlines()
+    b = p_to.read_text(encoding="utf-8", errors="replace").splitlines()
+    diff_lines = list(difflib.unified_diff(a, b, fromfile=f"v{from_version}", tofile=f"v{to_version}", lineterm=""))
+    added = sum(1 for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++"))
+    removed = sum(1 for ln in diff_lines if ln.startswith("-") and not ln.startswith("---"))
+    return {
+        "ok": True,
+        "from_version": from_version,
+        "to_version": to_version,
+        "added_lines": added,
+        "removed_lines": removed,
+        "diff_preview": "\n".join(diff_lines[:120]),
+        "truncated": len(diff_lines) > 120,
+    }
 
 
 @router.get("/{doc_id}/versions/{version}")

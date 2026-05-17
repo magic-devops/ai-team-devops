@@ -4009,12 +4009,16 @@ dependencies = [
 all = [
     { name = "keyring" },
     { name = "textual" },
+    { name = "websockets" },
 ]
 keyring = [
     { name = "keyring" },
 ]
 tui = [
     { name = "textual" },
+]
+ws = [
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -4027,8 +4031,10 @@ requires-dist = [
     { name = "textual", marker = "extra == 'all'", specifier = ">=0.60" },
     { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "websockets", marker = "extra == 'all'", specifier = ">=12.0" },
+    { name = "websockets", marker = "extra == 'ws'", specifier = ">=12.0" },
 ]
-provides-extras = ["tui", "keyring", "all"]
+provides-extras = ["tui", "keyring", "ws", "all"]
 
 [[package]]
 name = "sop-manager"

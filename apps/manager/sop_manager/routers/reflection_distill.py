@@ -19,6 +19,8 @@ import json
 import logging
 import os
 import time
+import hashlib
+import pathlib
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -57,6 +59,87 @@ class ProposedRule(BaseModel):
     evidence_count: int = 0
     examples: list[str] = Field(default_factory=list)
     source_reflections: list[str] = Field(default_factory=list)
+
+
+class ReviewIn(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    note: str = ""
+    reviewer: str = "manager-web"
+
+
+def _distill_dir() -> pathlib.Path:
+    base = pathlib.Path(os.getenv("SOP_RUNTIME_DIR") or ".sop-runtime")
+    out = base / "distill"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _proposal_id(row: dict[str, Any]) -> str:
+    h = hashlib.sha1()
+    h.update(str(row.get("rule", "")).encode("utf-8"))
+    h.update(b"|")
+    h.update(str(row.get("category", "")).encode("utf-8"))
+    h.update(b"|")
+    h.update(json.dumps(row.get("source_reflections", []), ensure_ascii=False, sort_keys=True).encode("utf-8"))
+    return h.hexdigest()[:20]
+
+
+def _load_reviews() -> dict[str, dict[str, Any]]:
+    fp = _distill_dir() / "reviews.jsonl"
+    out: dict[str, dict[str, Any]] = {}
+    if not fp.exists():
+        return out
+    for line in fp.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        pid = str(row.get("id", ""))
+        if pid:
+            out[pid] = row
+    return out
+
+
+def _load_proposals(limit: int = 1000) -> list[dict[str, Any]]:
+    p = _distill_dir()
+    reviews = _load_reviews()
+    out: list[dict[str, Any]] = []
+    for fp in sorted(p.glob("proposed-*.jsonl"), reverse=True):
+        for line in fp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            pid = str(row.get("id") or _proposal_id(row))
+            row["id"] = pid
+            row.setdefault("status", "pending")
+            row.setdefault("created_at", fp.stem.removeprefix("proposed-"))
+            if pid in reviews:
+                row.update(reviews[pid])
+            out.append(row)
+            if len(out) >= limit:
+                return out
+    return out
+
+
+def _append_review(proposal: dict[str, Any], body: ReviewIn, applied_rule_id: str = "") -> dict[str, Any]:
+    row = {
+        "id": str(proposal["id"]),
+        "status": body.status,
+        "review_note": body.note,
+        "reviewer": body.reviewer or "manager-web",
+        "reviewed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "applied_rule_id": applied_rule_id,
+    }
+    with (_distill_dir() / "reviews.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
 
 
 def _load_reflections(days: int, category: str, limit: int) -> list[dict[str, Any]]:
@@ -126,13 +209,15 @@ def _persist_proposals(props: list[ProposedRule]) -> int:
     """写入 proposed_rules 文件（M11 终态接入 DB 表）。"""
     if not props:
         return 0
-    base = (os.getenv("SOP_RUNTIME_DIR") or ".sop-runtime")
-    out_dir = f"{base}/distill"
-    os.makedirs(out_dir, exist_ok=True)
-    fn = f"{out_dir}/proposed-{time.strftime('%Y-%m-%d')}.jsonl"
+    out_dir = _distill_dir()
+    fn = out_dir / f"proposed-{time.strftime('%Y-%m-%d')}.jsonl"
     with open(fn, "a", encoding="utf-8") as f:
         for p in props:
-            f.write(p.model_dump_json() + "\n")
+            row = p.model_dump()
+            row["id"] = _proposal_id(row)
+            row["status"] = "pending"
+            row["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return len(props)
 
 
@@ -199,21 +284,33 @@ def distill(body: DistillIn) -> dict[str, Any]:
 
 @router.get("/proposals")
 def list_proposals(limit: int = 100) -> list[dict[str, Any]]:
-    base = (os.getenv("SOP_RUNTIME_DIR") or ".sop-runtime") + "/distill"
-    out: list[dict[str, Any]] = []
-    import pathlib
-    p = pathlib.Path(base)
-    if not p.is_dir():
-        return []
-    for fp in sorted(p.glob("proposed-*.jsonl"), reverse=True):
-        for line in fp.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                out.append(json.loads(line))
-            except Exception:
-                pass
-            if len(out) >= limit:
-                return out
-    return out
+    return _load_proposals(limit)
+
+
+@router.post("/proposals/{proposal_id}/review")
+def review_proposal(proposal_id: str, body: ReviewIn) -> dict[str, Any]:
+    proposal = next((p for p in _load_proposals(5000) if str(p.get("id")) == proposal_id), None)
+    if not proposal:
+        raise HTTPException(404, "proposal not found")
+    if proposal.get("status") in {"approved", "rejected"}:
+        raise HTTPException(409, f"proposal already {proposal.get('status')}")
+
+    applied_rule_id = ""
+    if body.status == "approved":
+        try:
+            from sop_manager.path_config import ensure_lance_ops_import_path
+
+            ensure_lance_ops_import_path()
+            from knowledge.lancedb_ops import LanceOps
+
+            applied_rule_id = str(LanceOps().add_rule(
+                proposal.get("rule", ""),
+                proposal.get("category", "coding"),
+                "distill_review",
+                float(proposal.get("confidence") or 0.75),
+            ))
+        except Exception as e:
+            raise HTTPException(500, f"apply rule failed: {e}") from e
+
+    review = _append_review(proposal, body, applied_rule_id)
+    return {"ok": True, "proposal": {**proposal, **review}}

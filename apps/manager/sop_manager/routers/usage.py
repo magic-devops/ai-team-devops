@@ -49,6 +49,14 @@ class UsageCheckIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class UsageAlertTasksIn(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=50)
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "Ops"
+    dev_tool: str = "copilot"
+
+
 def _usage_dir() -> Path:
     base = resolved_ai_memory_root() / "usage-v1"
     base.mkdir(parents=True, exist_ok=True)
@@ -154,6 +162,60 @@ def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"totals": totals, "by_source": by_source, "quota": quota, "remaining": remaining}
 
 
+def _usage_alerts(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    totals = summary.get("totals") if isinstance(summary.get("totals"), dict) else {}
+    quota = summary.get("quota") if isinstance(summary.get("quota"), dict) else {}
+    limits = quota.get("limits") if isinstance(quota.get("limits"), dict) else {}
+    alerts: list[dict[str, Any]] = []
+    for metric, limit_raw in limits.items():
+        if not isinstance(limit_raw, int | float) or float(limit_raw) <= 0:
+            continue
+        used = float(totals.get(metric, 0.0))
+        limit = float(limit_raw)
+        ratio = round((used / limit) * 100, 2)
+        remaining = limit - used
+        if ratio >= 100:
+            level = "critical"
+            recommendation = "已超过配额，建议立即扩容、清理异常调用或暂停非关键任务。"
+        elif ratio >= 90:
+            level = "high"
+            recommendation = "配额即将耗尽，建议确认高消耗来源并制定扩容或降载方案。"
+        elif ratio >= 75:
+            level = "medium"
+            recommendation = "配额使用偏高，建议关注趋势并提前规划容量。"
+        else:
+            continue
+        alerts.append({
+            "id": f"quota-{metric}",
+            "metric": metric,
+            "level": level,
+            "used": used,
+            "limit": limit,
+            "remaining": remaining,
+            "ratio": ratio,
+            "recommendation": recommendation,
+        })
+    alerts.sort(key=lambda x: ({"critical": 0, "high": 1, "medium": 2}.get(str(x["level"]), 9), -float(x["ratio"])))
+    return alerts
+
+
+def _usage_alert_task_payload(alert: dict[str, Any], body: UsageAlertTasksIn) -> dict[str, Any]:
+    metric = str(alert.get("metric") or "usage")
+    title = f"用量配额治理：{metric} {alert.get('ratio')}%"
+    return {
+        "title": title,
+        "description": "请处理该用量配额告警，核查高消耗来源、业务影响、是否需要扩容或降载。\n\n"
+        + json.dumps(alert, ensure_ascii=False, indent=2),
+        "priority": body.priority,
+        "estimate": "M",
+        "assigned_to": body.assigned_to or "Ops",
+        "source": "usage_quota_alert",
+        "source_report_id": str(alert.get("id") or metric),
+        "source_report_title": title,
+        "dev_tool": body.dev_tool or "copilot",
+    }
+
+
 def check_usage_quota(metric: str, delta: float = 0.0, *, limit_rows: int = 20000) -> dict[str, Any]:
     rows = _read_rows(limit=limit_rows)
     summary = _summarize(rows)
@@ -178,26 +240,113 @@ def check_usage_quota(metric: str, delta: float = 0.0, *, limit_rows: int = 2000
     }
 
 
+def write_quota(limits: dict[str, float]) -> dict[str, Any]:
+    payload = {"limits": limits, "updated_at": _now()}
+    path = _quota_file()
+    with _lock:
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return payload
+
+
+def usage_summary_payload(limit: int = 5000, since: str = "", until: str = "") -> dict[str, Any]:
+    rows = _read_rows(limit=limit)
+    if since:
+        rows = [r for r in rows if str(r.get("ts") or "") > since]
+    if until:
+        rows = [r for r in rows if str(r.get("ts") or "") < until]
+    summary = _summarize(rows)
+    return {"ok": True, "items": rows, "total": len(rows), **summary}
+
+
 @router.post("/record")
 def record_usage(body: UsageIn) -> dict[str, Any]:
     row = record_usage_event(body)
     return {"ok": True, "record": row}
 
 
+@router.get("/charts")
+def usage_charts(limit: int = Query(5000, ge=1, le=20000)) -> dict[str, Any]:
+    """ECharts：按指标汇总、按来源、近 14 日用量趋势。"""
+    from collections import defaultdict
+    from datetime import datetime, timedelta, timezone
+
+    rows = _read_rows(limit=limit)
+    summary = _summarize(rows)
+    totals = summary.get("totals") if isinstance(summary.get("totals"), dict) else {}
+    by_source = summary.get("by_source") if isinstance(summary.get("by_source"), dict) else {}
+
+    now = datetime.now(timezone.utc)
+    day_labels: list[str] = []
+    buckets: dict[str, dict[str, float]] = {}
+    for offset in range(13, -1, -1):
+        d = (now - timedelta(days=offset)).date().isoformat()
+        day_labels.append(d)
+        buckets[d] = defaultdict(float)
+
+    for row in rows:
+        ts = str(row.get("ts") or "")
+        if len(ts) < 10:
+            continue
+        day = ts[:10]
+        if day not in buckets:
+            continue
+        metric = str(row.get("metric") or "unknown")
+        buckets[day][metric] += float(row.get("value") or 0)
+
+    top_metrics = sorted(totals.keys(), key=lambda k: -float(totals.get(k, 0)))[:6]
+    trend_series = [{"name": m, "data": [buckets[d].get(m, 0) for d in day_labels]} for m in top_metrics]
+
+    source_totals: dict[str, float] = {}
+    for src, metrics in by_source.items():
+        source_totals[src] = sum(float(v) for v in metrics.values())
+
+    return {
+        "ok": True,
+        "by_metric": [{"name": k, "value": float(v)} for k, v in totals.items() if float(v) > 0],
+        "by_source": [{"name": k, "value": v} for k, v in sorted(source_totals.items(), key=lambda x: -x[1])],
+        "activity_trend": {"days": day_labels, "series": trend_series},
+    }
+
+
 @router.get("/summary")
 def usage_summary(
     since: str = Query("", description="只统计 ts 大于该值的记录"),
+    until: str = Query("", description="只统计 ts 小于该值的记录"),
     limit: int = Query(5000, ge=1, le=20000),
 ) -> dict[str, Any]:
     if not isinstance(since, str):
         since = ""
     if not isinstance(limit, int):
         limit = 5000
-    rows = _read_rows(limit=limit)
-    if since:
-        rows = [r for r in rows if str(r.get("ts") or "") > since]
-    summary = _summarize(rows)
-    return {"ok": True, "items": rows, "total": len(rows), **summary}
+    if not isinstance(until, str):
+        until = ""
+    return usage_summary_payload(limit=limit, since=since, until=until)
+
+
+@router.get("/alerts")
+def usage_alerts(limit: int = Query(5000, ge=1, le=20000)) -> dict[str, Any]:
+    summary = usage_summary_payload(limit=limit)
+    alerts = _usage_alerts(summary)
+    return {"ok": True, "items": alerts, "total": len(alerts), "summary": {"critical": sum(1 for x in alerts if x["level"] == "critical"), "high": sum(1 for x in alerts if x["level"] == "high"), "medium": sum(1 for x in alerts if x["level"] == "medium")}}
+
+
+@router.post("/alerts/tasks")
+def usage_alert_tasks(body: UsageAlertTasksIn) -> dict[str, Any]:
+    summary = usage_summary_payload(limit=20000)
+    alerts = _usage_alerts(summary)
+    if body.ids:
+        wanted = set(body.ids)
+        alerts = [x for x in alerts if str(x.get("id") or "") in wanted]
+    items = [_usage_alert_task_payload(alert, body) for alert in alerts]
+    if body.dry_run:
+        return {"ok": True, "dry_run": True, "created": 0, "items": items}
+    from .tasks import TaskCreate, create_task
+
+    created: list[dict[str, Any]] = []
+    for item in items:
+        out = create_task(TaskCreate(**item))
+        created.append({**item, "id": out.get("id")})
+    return {"ok": True, "dry_run": False, "created": len(created), "items": created}
 
 
 @router.get("/quota")
@@ -212,8 +361,5 @@ def check_usage(body: UsageCheckIn) -> dict[str, Any]:
 
 @router.put("/quota")
 def set_quota(body: QuotaIn) -> dict[str, Any]:
-    payload = {"limits": body.limits, "updated_at": _now()}
-    path = _quota_file()
-    with _lock:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = write_quota(body.limits)
     return {"ok": True, **payload}

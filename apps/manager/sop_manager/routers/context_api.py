@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from sop_manager.path_config import (
     request_scope_active,
@@ -18,6 +19,7 @@ from sop_manager.path_config import (
     runtime_paths_summary,
 )
 from sop_manager.routers.auth_sql import User, current_user
+from sop_manager.routers.sql_models import Business, Project, Tenant, get_session
 
 router = APIRouter(prefix="/api/v1/context", tags=["context"])
 
@@ -28,12 +30,15 @@ def context_health() -> dict[str, Any]:
 
 
 @router.get("/me")
-def context_me(user: User = Depends(current_user)) -> dict[str, Any]:
+def context_me(user: User = Depends(current_user), db: Session = Depends(get_session)) -> dict[str, Any]:
     if not request_scope_active():
         raise HTTPException(
             400,
             detail="需要 X-Project-Id 以绑定项目作用域；请在顶栏选择项目或在设置页登录后绑定",
         )
+    tenant = db.get(Tenant, resolved_tenant_id())
+    project = db.get(Project, resolved_project_id())
+    business = db.get(Business, project.business_id) if project and project.business_id else None
     return {
         "ok": True,
         "user": {
@@ -48,6 +53,9 @@ def context_me(user: User = Depends(current_user)) -> dict[str, Any]:
             "tenant_code": resolved_tenant_code(),
             "business_code": resolved_business_code(),
             "project_code": resolved_project_code(),
+            "tenant_name": tenant.name if tenant else "",
+            "business_name": business.name if business else "",
+            "project_name": project.name if project else "",
         },
         "paths": runtime_paths_summary(),
     }

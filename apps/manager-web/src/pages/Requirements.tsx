@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ClipboardList, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { Button, Checkbox, Input as AntInput, Select } from "antd";
+import { BrainCircuit, CheckCircle2, ListTodo, Pencil, Plus, Save, Trash2, Wand2, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "../components/Card";
 import {
@@ -12,8 +13,13 @@ import {
   RefreshButton,
   SearchInput,
 } from "../components/PageStates";
+import { AiAssistButton, AiAssistDrawer } from "../components/ai/AiAssistDrawer";
+import { MarkdownView } from "../components/MarkdownView";
+import { buildReviewMarkdown } from "../lib/copilotFormat";
 import { api } from "../lib/api";
 import { getProjectId, getToken } from "../lib/authStorage";
+import { WorkbenchShell } from "./shared/WorkbenchShell";
+import { WorkbenchStats } from "./shared/workbenchUi";
 
 const STATUS_ALL = "__all__";
 const PRIORITY_ALL = "__all__";
@@ -52,6 +58,49 @@ type Draft = {
   human_notes: string;
 };
 
+type TaskGenDraft = {
+  mode: string;
+  max_tasks: number;
+  assigned_to: string;
+  dev_tool: string;
+  create_dependencies: boolean;
+};
+
+type TaskPlanItem = {
+  id?: string;
+  title?: string;
+  description?: string;
+  priority?: string;
+  estimate?: string;
+  assigned_to?: string;
+  work_type?: string;
+  agent_hint?: string;
+  tool_hint?: string;
+  reason?: string;
+};
+
+type TaskPlanResult = {
+  ok?: boolean;
+  dry_run?: boolean;
+  mode?: string;
+  items?: TaskPlanItem[];
+  skipped?: TaskPlanItem[];
+  count?: number;
+};
+
+type ReviewResult = {
+  ok?: boolean;
+  requirement_id?: string;
+  score?: number;
+  level?: string;
+  risks?: Array<{ code?: string; level?: string; message?: string }>;
+  suggestions?: string[];
+  suggested_acceptance_criteria?: string[];
+  duplicates?: Array<{ id?: string; title?: string; similarity?: number }>;
+  linked_tasks?: number;
+  next_actions?: string[];
+};
+
 const emptyDraft: Draft = {
   title: "",
   description: "",
@@ -63,6 +112,16 @@ const emptyDraft: Draft = {
   dev_tool: "",
   human_notes: "",
 };
+
+function defaultTaskGenDraft(row: RequirementRow): TaskGenDraft {
+  return {
+    mode: "standard",
+    max_tasks: 6,
+    assigned_to: row.assigned_agent || "Coder",
+    dev_tool: row.dev_tool || "",
+    create_dependencies: true,
+  };
+}
 
 function toLines(value?: string[] | string): string {
   if (Array.isArray(value)) return value.join("\n");
@@ -124,11 +183,24 @@ const statusTone: Record<string, string> = {
   completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
 };
 
-export function Requirements() {
+export type RequirementMode = "pool" | "review" | "generation" | "batch";
+
+export function Requirements({
+  initialMode = "pool",
+  focused = false,
+}: {
+  initialMode?: RequirementMode;
+  focused?: boolean;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
+  const [mode, setMode] = useState<RequirementMode>(initialMode);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
   const [keyword, setKeyword] = useState("");
   const [status, setStatus] = useState(STATUS_ALL);
   const [priority, setPriority] = useState(PRIORITY_ALL);
@@ -136,15 +208,51 @@ export function Requirements() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [editingId, setEditingId] = useState("");
   const [editDraft, setEditDraft] = useState<Draft>(emptyDraft);
+  const [taskPlanReqId, setTaskPlanReqId] = useState("");
+  const [taskPlanDraft, setTaskPlanDraft] = useState<TaskGenDraft>({
+    mode: "standard",
+    max_tasks: 6,
+    assigned_to: "Coder",
+    dev_tool: "",
+    create_dependencies: true,
+  });
+  const [taskPlanResult, setTaskPlanResult] = useState<TaskPlanResult | null>(null);
+  const [reviewReqId, setReviewReqId] = useState("");
+  const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
+  const [selectedReqIds, setSelectedReqIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkPriority, setBulkPriority] = useState("");
+  const [bulkAgent, setBulkAgent] = useState("");
+  const [bulkTool, setBulkTool] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiContextReq, setAiContextReq] = useState<RequirementRow | null>(null);
 
   const q = useQuery({
-    queryKey: ["requirements"],
-    queryFn: api.requirements,
+    queryKey: ["requirements", keyword, status, priority],
+    queryFn: () =>
+      api.requirements({
+        q: keyword.trim(),
+        status: status === STATUS_ALL ? "" : status,
+        priority: priority === PRIORITY_ALL ? "" : priority,
+      }),
+    enabled: authed && hasProject,
+  });
+  const summaryQ = useQuery({
+    queryKey: ["requirementsSummary"],
+    queryFn: api.requirementsSummary,
     enabled: authed && hasProject,
   });
 
   const requirements = (q.data ?? []) as RequirementRow[];
   const metrics = useMemo(() => {
+    const summary = summaryQ.data?.summary;
+    if (summary) {
+      return {
+        total: summary.total ?? 0,
+        byStatus: new Map<string, number>(Object.entries(summary.by_status ?? {}).map(([k, v]) => [k, Number(v)])),
+        byPriority: new Map<string, number>(Object.entries(summary.by_priority ?? {}).map(([k, v]) => [k, Number(v)])),
+      };
+    }
     const byStatus = new Map<string, number>();
     const byPriority = new Map<string, number>();
     for (const row of requirements) {
@@ -154,7 +262,7 @@ export function Requirements() {
       byPriority.set(pr, (byPriority.get(pr) ?? 0) + 1);
     }
     return { total: requirements.length, byStatus, byPriority };
-  }, [requirements]);
+  }, [requirements, summaryQ.data]);
 
   const statuses = useMemo(() => {
     const set = new Set<string>(STATUSES);
@@ -182,6 +290,7 @@ export function Requirements() {
 
   const refreshRequirements = () => {
     void qc.invalidateQueries({ queryKey: ["requirements"] });
+    void qc.invalidateQueries({ queryKey: ["requirementsSummary"] });
   };
 
   const createReq = useMutation({
@@ -207,21 +316,116 @@ export function Requirements() {
     onSuccess: refreshRequirements,
   });
 
-  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending;
+  const bulkUpdateReq = useMutation({
+    mutationFn: () =>
+      api.bulkUpdateRequirements({
+        ids: selectedReqIds,
+        status: bulkStatus || undefined,
+        priority: bulkPriority || undefined,
+        assigned_agent: bulkAgent.trim() || undefined,
+        dev_tool: bulkTool.trim() || undefined,
+      }),
+    onSuccess: () => {
+      setSelectedReqIds([]);
+      setBulkStatus("");
+      setBulkPriority("");
+      setBulkAgent("");
+      setBulkTool("");
+      refreshRequirements();
+    },
+  });
+
+  const generateTasks = useMutation({
+    mutationFn: ({ id, dryRun }: { id: string; dryRun: boolean }) =>
+      api.generateRequirementTasks(id, {
+        dry_run: dryRun,
+        mode: taskPlanDraft.mode,
+        max_tasks: taskPlanDraft.max_tasks,
+        assigned_to: taskPlanDraft.assigned_to,
+        dev_tool: taskPlanDraft.dev_tool,
+        create_dependencies: taskPlanDraft.create_dependencies,
+      }),
+    onSuccess: (data, vars) => {
+      setTaskPlanReqId(vars.id);
+      setTaskPlanResult(data as TaskPlanResult);
+      if (!vars.dryRun) {
+        void qc.invalidateQueries({ queryKey: ["tasks"] });
+        void qc.invalidateQueries({ queryKey: ["task-dependencies"] });
+      }
+    },
+  });
+
+  const reviewReq = useMutation({
+    mutationFn: (id: string) => api.reviewRequirement(id),
+    onSuccess: (data, id) => {
+      setReviewReqId(id);
+      setReviewResult(data as ReviewResult);
+    },
+  });
+
+  const applyReview = useMutation({
+    mutationFn: ({ id, criteria }: { id: string; criteria: string[] }) =>
+      api.applyRequirementReview(id, {
+        acceptance_criteria: criteria,
+        human_notes: t("page.requirements.reviewAppliedNote"),
+      }),
+    onSuccess: (data, vars) => {
+      setReviewReqId(vars.id);
+      setReviewResult(data?.review as ReviewResult);
+      refreshRequirements();
+    },
+  });
+
+  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || reviewReq.isPending || applyReview.isPending || bulkUpdateReq.isPending;
+  const selectedReqSet = useMemo(() => new Set(selectedReqIds), [selectedReqIds]);
+  const canBulkUpdate = selectedReqIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAgent.trim() || bulkTool.trim());
 
   if (!authed) return <NeedLogin />;
   if (!hasProject) {
     return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
   }
 
+  const aiReq = aiContextReq ?? requirements.find((r) => r.id === reviewReqId) ?? requirements[0] ?? null;
+
   return (
-    <div className="w-full space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <MetricCard icon={<ClipboardList className="h-4 w-4" />} label={t("page.requirements.total")} value={metrics.total} />
-        <MetricCard label={t("page.requirements.pending")} value={metrics.byStatus.get("pending") ?? 0} />
-        <MetricCard label={t("page.requirements.inProgress")} value={metrics.byStatus.get("in_progress") ?? 0} />
-        <MetricCard icon={<CheckCircle2 className="h-4 w-4" />} label={t("page.requirements.completed")} value={metrics.byStatus.get("completed") ?? 0} />
-      </div>
+    <>
+    <WorkbenchShell
+      title={t("page.requirements.title")}
+      description={focused ? t(`page.requirements.mode.${mode}.hint`) : t("page.requirements.desc")}
+      actions={
+        <>
+          <AiAssistButton
+            onClick={() => {
+              if (aiReq) setAiContextReq(aiReq);
+              setAiOpen(true);
+            }}
+          />
+          <RefreshButton onClick={() => void q.refetch()} pending={q.isFetching} />
+        </>
+      }
+      metrics={
+        <WorkbenchStats
+          items={[
+            { label: t("page.requirements.total"), value: metrics.total },
+            { label: t("page.requirements.pending"), value: metrics.byStatus.get("pending") ?? 0 },
+            { label: t("page.requirements.inProgress"), value: metrics.byStatus.get("in_progress") ?? 0 },
+            { label: t("page.requirements.completed"), value: metrics.byStatus.get("completed") ?? 0 },
+          ]}
+        />
+      }
+    >
+      {focused && mode !== "pool" ? (
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm ${
+            mode === "batch"
+              ? "border-[var(--brand)]/40 bg-[var(--brand-softer)]"
+              : "border-[var(--border)] bg-[var(--surface-muted)]"
+          }`}
+        >
+          <p className="font-semibold text-[var(--text)]">{t(`page.requirements.mode.${mode}.title`)}</p>
+          <p className="mt-1 text-[var(--muted)]">{t(`page.requirements.mode.${mode}.hint`)}</p>
+        </div>
+      ) : null}
 
       <Card
         title={t("page.requirements.list")}
@@ -235,9 +439,14 @@ export function Requirements() {
               {createOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {createOpen ? t("common.cancel") : t("page.requirements.create")}
             </button>
+          </div>
+        }
+      >
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-950/30">
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_auto]">
             <SearchInput value={keyword} onChange={setKeyword} />
             <select
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -249,7 +458,7 @@ export function Requirements() {
               ))}
             </select>
             <select
-              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
             >
@@ -260,10 +469,20 @@ export function Requirements() {
                 </option>
               ))}
             </select>
-            <RefreshButton onClick={() => void q.refetch()} pending={q.isFetching} />
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              onClick={() => {
+                setKeyword("");
+                setStatus(STATUS_ALL);
+                setPriority(PRIORITY_ALL);
+              }}
+            >
+              {t("page.requirements.clearFilters")}
+            </button>
           </div>
-        }
-      >
+        </div>
+
         {createOpen ? (
           <RequirementEditor
             draft={draft}
@@ -276,6 +495,81 @@ export function Requirements() {
             mode="create"
           />
         ) : null}
+
+        <div
+          className={`mb-4 rounded-lg border p-3 ${
+            focused && mode === "batch"
+              ? "border-[var(--brand)]/50 bg-[var(--brand-softer)] ring-1 ring-[var(--brand)]/20"
+              : "border-[var(--border)] bg-[var(--surface-muted)]"
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--muted-strong)]">
+              {t("page.requirements.bulkSelected", { count: selectedReqIds.length })}
+            </span>
+            <Button
+              size="small"
+              onClick={() => setSelectedReqIds(filtered.map((item) => item.id).filter(Boolean))}
+              disabled={!filtered.length}
+            >
+              {t("page.requirements.selectAll")}
+            </Button>
+            <Button size="small" onClick={() => setSelectedReqIds([])} disabled={!selectedReqIds.length}>
+              {t("page.requirements.clearSelection")}
+            </Button>
+            <Select
+              className="min-w-40"
+              allowClear
+              placeholder={t("page.requirements.bulkStatus")}
+              value={bulkStatus || undefined}
+              onChange={(value) => setBulkStatus(value || "")}
+              options={STATUSES.map((item) => ({ value: item, label: statusLabel(t, item) }))}
+            />
+            <Select
+              className="min-w-36"
+              allowClear
+              placeholder={t("page.requirements.bulkPriority")}
+              value={bulkPriority || undefined}
+              onChange={(value) => setBulkPriority(value || "")}
+              options={PRIORITIES.map((item) => ({ value: item, label: item }))}
+            />
+            <AntInput
+              className="w-40"
+              allowClear
+              value={bulkAgent}
+              onChange={(e) => setBulkAgent(e.target.value)}
+              placeholder={t("page.requirements.bulkAgent")}
+            />
+            <AntInput
+              className="w-40"
+              allowClear
+              value={bulkTool}
+              onChange={(e) => setBulkTool(e.target.value)}
+              placeholder={t("page.requirements.bulkTool")}
+            />
+            <Button
+              type="primary"
+              disabled={!canBulkUpdate}
+              loading={bulkUpdateReq.isPending}
+              onClick={() => bulkUpdateReq.mutate()}
+            >
+              {t("page.requirements.bulkApply")}
+            </Button>
+            <Button
+              disabled={!selectedReqIds.length && !bulkStatus && !bulkPriority && !bulkAgent && !bulkTool}
+              onClick={() => {
+                setSelectedReqIds([]);
+                setBulkStatus("");
+                setBulkPriority("");
+                setBulkAgent("");
+                setBulkTool("");
+              }}
+            >
+              {t("common.reset")}
+            </Button>
+          </div>
+          {bulkUpdateReq.error ? <p className="mt-2 text-sm text-rose-600">{(bulkUpdateReq.error as Error).message}</p> : null}
+        </div>
 
         {q.isLoading ? <LoadingBlock /> : null}
         {q.error ? <ErrorBlock message={(q.error as Error).message} /> : null}
@@ -305,6 +599,14 @@ export function Requirements() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
+                      <Checkbox
+                        checked={selectedReqSet.has(r.id)}
+                        onChange={(e) => {
+                          setSelectedReqIds((prev) =>
+                            e.target.checked ? Array.from(new Set([...prev, r.id])) : prev.filter((id) => id !== r.id),
+                          );
+                        }}
+                      />
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold dark:bg-slate-800">
                         {r.priority ?? "P?"}
                       </span>
@@ -318,6 +620,34 @@ export function Requirements() {
                     <p className="mt-1 font-mono text-[10px] text-slate-400">{r.id}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-sky-200 p-2 text-sky-600 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900 dark:text-sky-300 dark:hover:bg-sky-950/40"
+                      title={t("page.requirements.generateTasks")}
+                      disabled={busy}
+                      onClick={() => {
+                        const next = defaultTaskGenDraft(r);
+                        setTaskPlanReqId(r.id);
+                        setTaskPlanDraft(next);
+                        setTaskPlanResult(null);
+                        generateTasks.mutate({ id: r.id, dryRun: true });
+                      }}
+                    >
+                      <Wand2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-violet-200 p-2 text-violet-600 hover:bg-violet-50 disabled:opacity-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950/40"
+                      title={t("page.requirements.aiReview")}
+                      disabled={busy}
+                      onClick={() => {
+                        setReviewReqId(r.id);
+                        setReviewResult(null);
+                        reviewReq.mutate(r.id);
+                      }}
+                    >
+                      <BrainCircuit className="h-4 w-4" />
+                    </button>
                     <button
                       type="button"
                       className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
@@ -363,6 +693,36 @@ export function Requirements() {
                     ))}
                   </ul>
                 ) : null}
+                {taskPlanReqId === r.id ? (
+                  <TaskPlanPanel
+                    draft={taskPlanDraft}
+                    onChange={setTaskPlanDraft}
+                    result={taskPlanResult}
+                    pending={generateTasks.isPending}
+                    error={generateTasks.error}
+                    onPreview={() => generateTasks.mutate({ id: r.id, dryRun: true })}
+                    onCreate={() => generateTasks.mutate({ id: r.id, dryRun: false })}
+                    onClose={() => {
+                      setTaskPlanReqId("");
+                      setTaskPlanResult(null);
+                    }}
+                  />
+                ) : null}
+                {reviewReqId === r.id ? (
+                  <ReviewPanel
+                    result={reviewResult}
+                    pending={reviewReq.isPending || applyReview.isPending}
+                    error={reviewReq.error || applyReview.error}
+                    onApply={() => {
+                      const criteria = reviewResult?.suggested_acceptance_criteria ?? [];
+                      if (criteria.length) applyReview.mutate({ id: r.id, criteria });
+                    }}
+                    onClose={() => {
+                      setReviewReqId("");
+                      setReviewResult(null);
+                    }}
+                  />
+                ) : null}
               </article>
             ),
           )}
@@ -372,6 +732,122 @@ export function Requirements() {
           <p className="mt-3 text-sm text-rose-600">{(deleteReq.error as Error).message}</p>
         ) : null}
       </Card>
+    </WorkbenchShell>
+
+    <AiAssistDrawer
+      open={aiOpen}
+      onClose={() => setAiOpen(false)}
+      module="product.requirements"
+      context={
+        aiReq
+          ? {
+              requirement_id: aiReq.id,
+              title: aiReq.title,
+              status: aiReq.status,
+              priority: aiReq.priority,
+              description_preview: (aiReq.description ?? "").slice(0, 800),
+            }
+          : undefined
+      }
+      initialPrompt={
+        aiReq
+          ? t("page.requirements.aiCopilotPrefill", { title: aiReq.title ?? aiReq.id })
+          : t("page.requirements.aiCopilotPrefillGeneric")
+      }
+    />
+    </>
+  );
+}
+
+function ReviewPanel({
+  result,
+  pending,
+  error,
+  onApply,
+  onClose,
+}: {
+  result: ReviewResult | null;
+  pending: boolean;
+  error: unknown;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const score = Number(result?.score ?? 0);
+  const tone =
+    score >= 85
+      ? "border-emerald-200 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/20 dark:text-emerald-200"
+      : score >= 65
+        ? "border-amber-200 bg-amber-50/70 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/20 dark:text-amber-200"
+        : "border-rose-200 bg-rose-50/70 text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/20 dark:text-rose-200";
+  const suggested = result?.suggested_acceptance_criteria ?? [];
+  return (
+    <div className={`mt-4 rounded-lg border p-3 ${tone}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <BrainCircuit className="mt-0.5 h-4 w-4" />
+          <div>
+            <p className="text-sm font-semibold">{t("page.requirements.aiReview")}</p>
+            <p className="mt-1 text-xs opacity-80">{t("page.requirements.aiReviewDesc")}</p>
+          </div>
+        </div>
+        <button type="button" className={secondaryButtonClass} onClick={onClose}>
+          <X className="h-4 w-4" />
+          {t("common.close")}
+        </button>
+      </div>
+      {pending && !result ? <p className="mt-3 text-sm">{t("common.loading")}</p> : null}
+      {error ? <p className="mt-2 text-sm text-rose-600">{(error as Error).message}</p> : null}
+      {result ? (
+        <div className="mt-3 space-y-3">
+          <MarkdownView content={buildReviewMarkdown(result)} className="rounded-lg border border-current/10 bg-white/50 p-3 dark:bg-slate-950/20" />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Info label={t("page.requirements.reviewScore")} value={`${result.score ?? 0}/100`} />
+            <Info label={t("page.requirements.reviewLevel")} value={t(`page.requirements.reviewLevelMap.${result.level || "needs_work"}`)} />
+            <Info label={t("page.requirements.linkedTasks")} value={String(result.linked_tasks ?? 0)} />
+          </div>
+          {result.risks?.length ? (
+            <div className="rounded-lg border border-current/20 bg-white/60 p-3 dark:bg-slate-950/30">
+              <p className="text-xs font-semibold">{t("page.requirements.reviewRisks")}</p>
+              <ul className="mt-2 space-y-1 text-xs leading-5">
+                {result.risks.map((risk, idx) => <li key={`${risk.code}-${idx}`}>{risk.message}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {result.suggestions?.length ? (
+            <div className="rounded-lg border border-current/20 bg-white/60 p-3 dark:bg-slate-950/30">
+              <p className="text-xs font-semibold">{t("page.requirements.reviewSuggestions")}</p>
+              <ul className="mt-2 space-y-1 text-xs leading-5">
+                {result.suggestions.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {suggested.length ? (
+            <div className="rounded-lg border border-current/20 bg-white/60 p-3 dark:bg-slate-950/30">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold">{t("page.requirements.suggestedAcceptance")}</p>
+                <button type="button" className={primaryButtonClass} disabled={pending} onClick={onApply}>
+                  <CheckCircle2 className="h-4 w-4" />
+                  {t("page.requirements.applyAcceptance")}
+                </button>
+              </div>
+              <ul className="mt-2 space-y-1 text-xs leading-5">
+                {suggested.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {result.duplicates?.length ? (
+            <div className="rounded-lg border border-current/20 bg-white/60 p-3 text-xs dark:bg-slate-950/30">
+              <p className="font-semibold">{t("page.requirements.duplicates")}</p>
+              <div className="mt-2 space-y-1">
+                {result.duplicates.map((item) => (
+                  <p key={item.id} className="font-mono">{item.id} · {item.title} · {item.similarity}</p>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -475,6 +951,138 @@ function RequirementEditor({
   );
 }
 
+function TaskPlanPanel({
+  draft,
+  onChange,
+  result,
+  pending,
+  error,
+  onPreview,
+  onCreate,
+  onClose,
+}: {
+  draft: TaskGenDraft;
+  onChange: (next: TaskGenDraft) => void;
+  result: TaskPlanResult | null;
+  pending: boolean;
+  error: unknown;
+  onPreview: () => void;
+  onCreate: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const items = result?.items ?? [];
+  const skipped = result?.skipped ?? [];
+  const set = (patch: Partial<TaskGenDraft>) => onChange({ ...draft, ...patch });
+  return (
+    <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900/70 dark:bg-sky-950/20">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <ListTodo className="h-4 w-4 text-sky-500" />
+            {t("page.requirements.taskFlow")}
+          </div>
+          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+            {t("page.requirements.taskFlowDesc")}
+          </p>
+        </div>
+        <button type="button" className={secondaryButtonClass} onClick={onClose}>
+          <X className="h-4 w-4" />
+          {t("common.close")}
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-5">
+        <Field label={t("page.requirements.taskMode")}>
+          <select className={fieldClass} value={draft.mode} onChange={(e) => set({ mode: e.target.value })}>
+            {["standard", "fullstack", "frontend", "backend", "test"].map((m) => (
+              <option key={m} value={m}>
+                {t(`page.requirements.taskModeMap.${m}`)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t("page.requirements.maxTasks")}>
+          <input
+            className={fieldClass}
+            type="number"
+            min={1}
+            max={20}
+            value={draft.max_tasks}
+            onChange={(e) => set({ max_tasks: Number(e.target.value) || 6 })}
+          />
+        </Field>
+        <Field label={t("page.requirements.agent")}>
+          <input className={fieldClass} value={draft.assigned_to} onChange={(e) => set({ assigned_to: e.target.value })} />
+        </Field>
+        <Field label={t("page.requirements.devTool")}>
+          <input className={fieldClass} value={draft.dev_tool} onChange={(e) => set({ dev_tool: e.target.value })} />
+        </Field>
+        <label className="flex items-end gap-2 pb-2 text-xs font-medium text-slate-500">
+          <input
+            type="checkbox"
+            checked={draft.create_dependencies}
+            onChange={(e) => set({ create_dependencies: e.target.checked })}
+          />
+          {t("page.requirements.createDependencies")}
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" className={secondaryButtonClass} disabled={pending} onClick={onPreview}>
+          <Wand2 className="h-4 w-4" />
+          {t("page.requirements.previewTasks")}
+        </button>
+        <button type="button" className={primaryButtonClass} disabled={pending || items.length === 0} onClick={onCreate}>
+          <ListTodo className="h-4 w-4" />
+          {t("page.requirements.createTasks")}
+        </button>
+      </div>
+      {error ? <p className="mt-2 text-sm text-rose-600">{(error as Error).message}</p> : null}
+      {result ? (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span className="rounded-full bg-white px-2 py-1 dark:bg-slate-900">
+              {result.dry_run ? t("page.requirements.previewReady") : t("page.requirements.tasksCreated", { count: result.count ?? items.length })}
+            </span>
+            {skipped.length ? (
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                {t("page.requirements.tasksSkipped", { count: skipped.length })}
+              </span>
+            ) : null}
+          </div>
+          {items.length ? (
+            <div className="grid gap-2">
+              {items.map((item, idx) => (
+                <div key={`${item.title}-${idx}`} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900/70">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold dark:bg-slate-800">
+                      {item.priority || "P2"}
+                    </span>
+                    <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-950 dark:text-sky-200">
+                      {item.work_type || "engineering"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{item.estimate || "M"}</span>
+                    {item.id ? <span className="font-mono text-[10px] text-slate-400">{item.id}</span> : null}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">{item.title}</p>
+                  {item.description ? (
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.description}</p>
+                  ) : null}
+                  <div className="mt-2 grid gap-2 text-[10px] text-slate-500 sm:grid-cols-2">
+                    <Info label={t("page.requirements.agent")} value={item.assigned_to || "-"} />
+                    <Info label={t("page.requirements.toolHint")} value={item.tool_hint || "-"} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState message={t("page.requirements.noTaskPlan")} />
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Field({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
   return (
     <label className={`flex flex-col gap-1 text-xs font-medium text-slate-500 ${className}`}>
@@ -489,18 +1097,6 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-slate-200 px-2 py-1.5 dark:border-slate-700">
       <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
       <p className="truncate text-slate-700 dark:text-slate-300">{value}</p>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, icon }: { label: string; value: number; icon?: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500">{label}</p>
-        {icon ? <span className="rounded-lg bg-sky-500/10 p-2 text-sky-500">{icon}</span> : null}
-      </div>
-      <p className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{value}</p>
     </div>
   );
 }

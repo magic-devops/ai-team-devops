@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +23,15 @@ router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 _STRUCTURED_MODULES = frozenset({"tasks", "requirements", "issues", "sprints"})
 _ASSET_MODULES = frozenset({"rules", "specs", "templates"})
 _SYNC_MODULES = _STRUCTURED_MODULES | _ASSET_MODULES
+_MODULE_META: dict[str, dict[str, Any]] = {
+    "tasks": {"kind": "structured", "cursor_field": "updated_at", "description": "研发任务与看板状态"},
+    "requirements": {"kind": "structured", "cursor_field": "updated_at", "description": "需求、验收标准与优先级"},
+    "issues": {"kind": "structured", "cursor_field": "created_at", "description": "缺陷、阻塞与问题闭环"},
+    "sprints": {"kind": "structured", "cursor_field": "started_at", "description": "迭代与进度快照"},
+    "rules": {"kind": "asset", "cursor_field": "updated_at", "description": "团队规约、AI 行为规则与质量规则"},
+    "specs": {"kind": "asset", "cursor_field": "updated_at", "description": "开发规范、架构规范与业务规约"},
+    "templates": {"kind": "asset", "cursor_field": "updated_at", "description": "项目模板、提示词模板与初始化资产"},
+}
 
 # 游标过滤用的时间列（Issue/Sprint 无 updated_at）
 _TIME_COL = {
@@ -167,6 +177,29 @@ def _asset_rows(module: str, since: datetime | None, limit: int) -> list[dict[st
     return out
 
 
+def _asset_count(module: str) -> dict[str, Any]:
+    root = resolved_project_path().resolve()
+    count = 0
+    bytes_total = 0
+    newest = ""
+    for base in _asset_roots(root, module):
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in {".md", ".json", ".yaml", ".yml", ".toml"}:
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            count += 1
+            bytes_total += stat.st_size
+            updated = _iso(datetime.fromtimestamp(stat.st_mtime))
+            if updated > newest:
+                newest = updated
+    return {"count": count, "bytes": bytes_total, "newest": newest}
+
+
 def _require_scope() -> str:
     if not request_scope_active():
         raise HTTPException(
@@ -192,6 +225,63 @@ def _parse_modules(modules: str) -> list[str]:
 @router.get("/health")
 def sync_health() -> dict[str, Any]:
     return {"ok": True, "service": "sync", "modules": sorted(_SYNC_MODULES)}
+
+
+@router.get("/modules")
+def sync_modules() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "items": [
+            {"id": name, **_MODULE_META[name]}
+            for name in sorted(_SYNC_MODULES)
+        ],
+    }
+
+
+@router.get("/summary")
+def sync_summary(db: Session = Depends(get_session)) -> dict[str, Any]:
+    pid = _require_scope()
+    model_map = {
+        "tasks": Task,
+        "requirements": Requirement,
+        "issues": Issue,
+        "sprints": Sprint,
+    }
+    modules: list[dict[str, Any]] = []
+    for name in sorted(_SYNC_MODULES):
+        meta = dict(_MODULE_META[name])
+        if name in _ASSET_MODULES:
+            stats = _asset_count(name)
+            modules.append({"id": name, **meta, **stats})
+            continue
+        model = model_map[name]
+        newest = ""
+        try:
+            count = db.query(model).filter_by(project_id=pid).count()
+            time_col = getattr(model, _TIME_COL[name])
+            row = db.query(model).filter_by(project_id=pid).order_by(time_col.desc()).first()
+            if row:
+                newest = _iso(getattr(row, _TIME_COL[name], None))
+        except Exception:
+            count = 0
+        modules.append({"id": name, **meta, "count": count, "bytes": 0, "newest": newest})
+
+    journal = recent_events(limit=100)
+    by_module = Counter(str(x.get("module") or "unknown") for x in journal)
+    by_action = Counter(str(x.get("action") or "unknown") for x in journal)
+    return {
+        "ok": True,
+        "project_id": pid,
+        "tenant_id": resolved_tenant_id(),
+        "modules": modules,
+        "journal": {
+            "total": len(journal),
+            "by_module": dict(by_module),
+            "by_action": dict(by_action),
+            "latest": journal[:20],
+        },
+        "wss": {"path": "/ws/events", "event_prefix": "sop.sync."},
+    }
 
 
 @router.get("/pull")

@@ -1,46 +1,65 @@
 /**
  * @ai_safe_edit
- *   - 新增页面：在 src/pages/ 加文件 + 在 NAV 数组加项
+ *   - 新增页面：在 src/pages/ 加文件 + 在 src/navigation.tsx 注册
  *   - 改主题：tailwind.config.js brand + src/lib/theme.ts
  *   - 路由：当前用最小化 hash 路由；如需 nested route 切换到 @tanstack/react-router
  */
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  BellRing,
-  Blocks,
-  Bot,
-  Brain,
-  Building2,
   Check,
   ChevronDown,
   ChevronRight,
-  ClipboardList,
+  Bot,
+  Clock,
+  Command,
   Cpu,
-  FolderKanban,
-  GitBranch,
   Laptop,
-  LayoutDashboard,
-  Library,
+  Lock,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
   Palette,
+  Pin,
+  Rows3,
   Search,
-  Settings as SettingsIcon,
-  ShieldCheck,
+  Sparkles,
+  Star,
   Sun,
+  ArrowRight,
   LogOut,
+  Sliders,
   UserCircle,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { api } from "./lib/api";
-import { clearSession, getProjectId, getToken } from "./lib/authStorage";
+import {
+  BUSINESS_CODE_KEY,
+  clearSession,
+  getBusinessCode,
+  getProjectId,
+  getTenantCode,
+  getToken,
+  PROJECT_CODE_KEY,
+  PROJECT_ID_KEY,
+  TENANT_CODE_KEY,
+  TOKEN_KEY,
+} from "./lib/authStorage";
+import { useCapabilities } from "./lib/capabilities";
+import {
+  densityPadding,
+  getMenuPrefs,
+  patchMenuPrefs,
+  pushRecent,
+  subscribeMenuPrefs,
+  toggleFavorite,
+  type MenuDensity,
+  type MenuPrefs,
+} from "./lib/menuPrefs";
 import {
   getThemePreference,
   isDarkResolved,
@@ -48,51 +67,27 @@ import {
   THEME_OPTIONS,
   type ThemePreference,
 } from "./lib/theme";
-import { Analytics } from "./pages/Analytics";
-import { Audit } from "./pages/Audit";
-import { Copilot } from "./pages/Copilot";
-import { Dashboard } from "./pages/Dashboard";
-import { Intelligence } from "./pages/Intelligence";
-import { Marketplace } from "./pages/Marketplace";
-import { Notify } from "./pages/Notify";
-import { Organization } from "./pages/Organization";
-import { Platforms } from "./pages/Platforms";
-import { Projects } from "./pages/Projects";
-import { Requirements } from "./pages/Requirements";
-import { Settings } from "./pages/Settings";
-import { Tasks } from "./pages/Tasks";
-import { Workflows } from "./pages/Workflows";
+import { applyHashNormalization } from "./lib/routeAliases";
+import {
+  buildNavBreadcrumb,
+  DEFAULT_CATEGORY_COLLAPSE,
+  DEFAULT_COLLAPSE,
+  filterNavByRole,
+  findActiveNavItem,
+  groupNavItems,
+  NAV,
+  NAV_GROUP_ACCENT,
+  pinnedNavItems,
+  resolveNavKeys,
+  type NavBadge,
+  type NavGroupKey,
+  type NavItem,
+} from "./navigation";
 
-type NavGroupKey = "delivery" | "management" | "ai" | "system";
-
-const NAV = [
-  { key: "dashboard", path: "#/dashboard", el: <Dashboard />, group: "delivery", icon: LayoutDashboard },
-  { key: "projects", path: "#/projects", el: <Projects />, group: "delivery", icon: FolderKanban },
-  { key: "tasks", path: "#/tasks", el: <Tasks />, group: "delivery", icon: ClipboardList },
-  { key: "requirements", path: "#/requirements", el: <Requirements />, group: "delivery", icon: Library },
-  { key: "workflows", path: "#/workflows", el: <Workflows />, group: "delivery", icon: GitBranch },
-  { key: "organization", path: "#/organization", el: <Organization />, group: "management", icon: Building2 },
-  { key: "analytics", path: "#/analytics", el: <Analytics />, group: "management", icon: BarChart3 },
-  { key: "notify", path: "#/notify", el: <Notify />, group: "management", icon: BellRing },
-  { key: "audit", path: "#/audit", el: <Audit />, group: "management", icon: ShieldCheck },
-  { key: "copilot", path: "#/copilot", el: <Copilot />, group: "ai", icon: Bot },
-  { key: "intelligence", path: "#/intelligence", el: <Intelligence />, group: "ai", icon: Brain },
-  { key: "marketplace", path: "#/marketplace", el: <Marketplace />, group: "ai", icon: Blocks },
-  { key: "platforms", path: "#/platforms", el: <Platforms />, group: "ai", icon: Cpu },
-  { key: "settings", path: "#/settings", el: <Settings />, group: "system", icon: SettingsIcon },
-] as const;
-
-type NavItem = (typeof NAV)[number];
-
-const GROUP_ORDER: NavGroupKey[] = ["delivery", "management", "ai", "system"];
 const COLLAPSE_STORAGE_KEY = "sop-nav-collapse-v1";
+const CATEGORY_COLLAPSE_STORAGE_KEY = "sop-nav-category-collapse-v1";
+const MODULE_COLLAPSE_STORAGE_KEY = "sop-nav-module-collapse-v1";
 const SIDEBAR_STORAGE_KEY = "sop-sidebar-collapsed-v1";
-const DEFAULT_COLLAPSE: Record<NavGroupKey, boolean> = {
-  delivery: false,
-  management: false,
-  ai: false,
-  system: false,
-};
 
 function ThemeMenu() {
   const { t } = useTranslation();
@@ -169,7 +164,8 @@ function UserMenu({ authed }: { authed: boolean }) {
 
   const username = me.data?.username || t("auth.account");
   const role = me.data?.role || "-";
-  const tenant = me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || "-";
+  const tenant = getTenantCode() || me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || "-";
+  const business = getBusinessCode() || "-";
   const projectId = getProjectId() || "-";
 
   return (
@@ -206,6 +202,7 @@ function UserMenu({ authed }: { authed: boolean }) {
             <dl className="mt-3 grid gap-1 text-[11px] text-[var(--muted-strong)]">
               <div className="flex justify-between gap-3"><dt>{t("auth.role")}</dt><dd className="font-mono">{role}</dd></div>
               <div className="flex justify-between gap-3"><dt>{t("auth.tenant")}</dt><dd className="truncate font-mono">{tenant}</dd></div>
+              <div className="flex justify-between gap-3"><dt>{t("auth.business")}</dt><dd className="truncate font-mono">{business}</dd></div>
               <div className="flex justify-between gap-3"><dt>{t("auth.project")}</dt><dd className="truncate font-mono">{projectId}</dd></div>
             </dl>
           </div>
@@ -232,11 +229,277 @@ function UserMenu({ authed }: { authed: boolean }) {
   );
 }
 
+function NavBadgeTag({ badge }: { badge?: NavBadge }) {
+  const { t } = useTranslation();
+  if (!badge) return null;
+  const tone: Record<NavBadge, string> = {
+    new: "bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-300",
+    beta: "bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-300",
+    preview: "bg-sky-500/15 text-sky-700 ring-sky-500/30 dark:text-sky-300",
+    alpha: "bg-rose-500/15 text-rose-700 ring-rose-500/30 dark:text-rose-300",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded px-1 py-px text-[9px] font-bold uppercase tracking-wider ring-1 ${tone[badge]}`}
+      aria-label={badge}
+    >
+      {t(`nav.badge.${badge}`, { defaultValue: badge })}
+    </span>
+  );
+}
+
+function FavoriteToggle({
+  navKey,
+  isFav,
+  size = "sm",
+  className = "",
+}: {
+  navKey: string;
+  isFav: boolean;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const sz = size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFavorite(navKey);
+      }}
+      aria-pressed={isFav}
+      title={isFav ? t("nav.unfavorite") : t("nav.favorite")}
+      className={`inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-amber-500 ${
+        isFav ? "text-amber-500" : ""
+      } ${className}`}
+    >
+      <Star className={sz} fill={isFav ? "currentColor" : "none"} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+function DensityMenu({ density }: { density: MenuDensity }) {
+  const { t } = useTranslation();
+  const options: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--control-bg)] px-2 text-[11px] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+          title={t("nav.density.label")}
+          aria-label={t("nav.density.label")}
+        >
+          <Sliders className="h-3 w-3" />
+          <span>{t(`nav.density.${density}`)}</span>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="z-50 min-w-[10rem] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg"
+          sideOffset={6}
+          align="end"
+        >
+          {options.map((opt) => (
+            <DropdownMenu.Item
+              key={opt}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text)] data-[highlighted]:bg-[var(--surface-muted)]"
+              onSelect={() => patchMenuPrefs({ density: opt })}
+            >
+              <Sliders className="h-3.5 w-3.5 text-[var(--brand)]" />
+              <span className="flex-1">{t(`nav.density.${opt}`)}</span>
+              {density === opt ? <Check className="h-3.5 w-3.5 text-[var(--brand)]" /> : null}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+type PaletteItem = {
+  id: string;
+  type: "navigate" | "search" | "copilot" | "operation";
+  label: string;
+  description?: string;
+  target?: string;
+  prompt?: string;
+  section?: string;
+};
+
+const SEARCH_TYPE_TARGETS: Record<string, string> = {
+  requirements: "#/requirements",
+  tasks: "#/tasks",
+  issues: "#/issues",
+};
+
+function CommandPalette({ open, setOpen, authed }: { open: boolean; setOpen: (open: boolean) => void; authed: boolean }) {
+  const { t } = useTranslation();
+  const [q, setQ] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const needle = q.trim().toLowerCase();
+
+  const navMatches = useMemo((): PaletteItem[] => {
+    if (!needle) return [];
+    const rows: PaletteItem[] = [];
+    for (const item of NAV) {
+      if (item.hidden) continue;
+      const label = t(`nav.${item.key}`, { defaultValue: item.key });
+      const description = item.description || t(`page.${item.key}.desc`, { defaultValue: item.path });
+      const hay = `${label} ${description} ${item.path} ${item.key}`.toLowerCase();
+      if (!hay.includes(needle)) continue;
+      rows.push({
+        id: `nav-${item.key}`,
+        type: "navigate",
+        label,
+        description,
+        target: item.path,
+        section: t("command.sectionNav"),
+      });
+    }
+    return rows.slice(0, 12);
+  }, [needle, t]);
+
+  const workspaceQ = useQuery({
+    queryKey: ["workspaceSearch", q],
+    queryFn: () => api.workspaceSearch(q.trim()),
+    enabled: authed && open && q.trim().length >= 2,
+    retry: false,
+  });
+
+  const commands = useQuery({
+    queryKey: ["copilotCommands", q],
+    queryFn: () => api.copilotCommands(q, 16),
+    enabled: authed && open && q.trim().length >= 1,
+    retry: false,
+  });
+
+  const items = useMemo(() => {
+    const rows: PaletteItem[] = [...navMatches];
+    for (const row of workspaceQ.data ?? []) {
+      const type = String(row.type || "record");
+      const title = String(row.title || row.id || type);
+      const target = SEARCH_TYPE_TARGETS[type] || "#/dashboard";
+      rows.push({
+        id: `data-${type}-${String(row.id || title)}`,
+        type: "search",
+        label: title,
+        description: `${t("command.sectionData")} · ${type}`,
+        target,
+        section: t("command.sectionData"),
+      });
+    }
+    for (const item of commands.data?.items ?? []) {
+      rows.push({
+        id: String(item.id || item.label),
+        type: (item.type as PaletteItem["type"]) || "copilot",
+        label: String(item.label || ""),
+        description: String(item.description || ""),
+        target: item.target ? String(item.target) : undefined,
+        prompt: item.prompt ? String(item.prompt) : undefined,
+        section: t("command.sectionAi"),
+      });
+    }
+    return rows.slice(0, 28);
+  }, [navMatches, workspaceQ.data, commands.data?.items, t]);
+
+  const loading = workspaceQ.isFetching || commands.isFetching;
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 30);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) setQ("");
+  }, [open]);
+
+  const run = (item: PaletteItem) => {
+    const target = String(item?.target || "#/copilot");
+    const prompt = String(item?.prompt || item?.label || q || "");
+    if (item?.type === "copilot") {
+      sessionStorage.setItem("sop-copilot-prefill", prompt);
+      window.location.hash = "#/copilot";
+    } else if (target.startsWith("#")) {
+      window.location.hash = target;
+    } else {
+      sessionStorage.setItem("sop-copilot-prefill", `请检查 ${item?.label || target}，目标接口：${target}`);
+      window.location.hash = "#/copilot";
+    }
+    setOpen(false);
+  };
+
+  const paletteIcon = (type: PaletteItem["type"]) => {
+    if (type === "navigate") return <Rows3 className="h-4 w-4" />;
+    if (type === "search") return <Search className="h-4 w-4" />;
+    if (type === "operation") return <Cpu className="h-4 w-4" />;
+    return <Bot className="h-4 w-4" />;
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-[12vh] z-50 w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-2xl">
+          <Dialog.Title className="sr-only">{t("command.title")}</Dialog.Title>
+          <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
+            <Command className="h-5 w-5 shrink-0 text-[var(--brand)]" />
+            <input
+              ref={inputRef}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && items[0]) run(items[0]);
+              }}
+              className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[var(--muted)]"
+              placeholder={t("command.placeholder")}
+            />
+            <kbd className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">Esc</kbd>
+          </div>
+          <div className="max-h-[28rem] overflow-y-auto p-2">
+            {loading ? <div className="px-3 py-6 text-center text-sm text-[var(--muted)]">{t("common.loading")}</div> : null}
+            {commands.isError ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-200">
+                {(commands.error as Error).message}
+              </div>
+            ) : null}
+            {!loading && !items.length ? <div className="px-3 py-8 text-center text-sm text-[var(--muted)]">{t("command.empty")}</div> : null}
+            {items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => run(item)}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-[var(--surface-muted)]"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+                  {paletteIcon(item.type)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-[var(--text)]">{item.label}</span>
+                  <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
+                    {item.section ? `${item.section} · ` : ""}
+                    {item.description}
+                  </span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+              </button>
+            ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export function App() {
   const { t, i18n } = useTranslation();
   const [hash, setHash] = useState(window.location.hash || "#/dashboard");
   const [, bump] = useState(0);
   const [keyword, setKeyword] = useState("");
+  const [commandOpen, setCommandOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -254,17 +517,42 @@ export function App() {
       return DEFAULT_COLLAPSE;
     }
   });
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(CATEGORY_COLLAPSE_STORAGE_KEY);
+      if (!raw) return DEFAULT_CATEGORY_COLLAPSE;
+      return { ...DEFAULT_CATEGORY_COLLAPSE, ...(JSON.parse(raw) as Record<string, boolean>) };
+    } catch {
+      return DEFAULT_CATEGORY_COLLAPSE;
+    }
+  });
+  const [collapsedModules, setCollapsedModules] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(MODULE_COLLAPSE_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
+  useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
   const authed = Boolean(getToken());
+  const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+  const capabilities = useCapabilities();
 
   useEffect(() => {
-    const h = () => setHash(window.location.hash || "#/dashboard");
+    const h = () => {
+      if (applyHashNormalization()) return;
+      setHash(window.location.hash || "#/dashboard");
+    };
+    h();
     window.addEventListener("hashchange", h);
     return () => window.removeEventListener("hashchange", h);
   }, []);
 
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "sop-token" || e.key === "sop-current-project-id") bump((x) => x + 1);
+      if ([TOKEN_KEY, PROJECT_ID_KEY, TENANT_CODE_KEY, BUSINESS_CODE_KEY, PROJECT_CODE_KEY].includes(e.key || "")) bump((x) => x + 1);
     };
     const onSession = () => bump((x) => x + 1);
     window.addEventListener("storage", onStorage);
@@ -280,15 +568,60 @@ export function App() {
   }, [collapsedGroups]);
 
   useEffect(() => {
+    localStorage.setItem(CATEGORY_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedCategories));
+  }, [collapsedCategories]);
+
+  useEffect(() => {
+    localStorage.setItem(MODULE_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedModules));
+  }, [collapsedModules]);
+
+  useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    let lastG = 0;
+    const isEditing = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        setCommandOpen(true);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "/") {
+        e.preventDefault();
+        setSidebarCollapsed((v) => !v);
+        return;
+      }
+      if (isEditing()) return;
+      if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        lastG = Date.now();
+        return;
+      }
+      if (lastG && Date.now() - lastG < 900) {
+        const map: Record<string, string> = {
+          d: "#/dashboard",
+          r: "#/requirements",
+          t: "#/tasks",
+          c: "#/copilot",
+          p: "#/projects",
+          a: "#/analytics",
+          o: "#/organization",
+          s: "#/settings",
+          m: "#/system-map",
+        };
+        const target = map[e.key.toLowerCase()];
+        if (target) {
+          e.preventDefault();
+          window.location.hash = target;
+        }
+        lastG = 0;
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -302,43 +635,95 @@ export function App() {
     }
   }, [authed]);
 
-  const current = NAV.find((n) => hash.startsWith(n.path)) ?? NAV[0];
-  const keywordNorm = keyword.trim().toLowerCase();
-  const navLabel = (key: string) => String(t(`nav.${key}`));
+  const humanizeNavKey = (key: string) =>
+    key
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  const navLabel = (key: string) => String(t(`nav.${key}`, { defaultValue: humanizeNavKey(key) }));
 
-  const groupedNav = useMemo(() => {
-    const byGroup: Record<NavGroupKey, NavItem[]> = {
-      delivery: [],
-      management: [],
-      ai: [],
-      system: [],
-    };
-    for (const item of NAV) {
-      const label = navLabel(item.key);
-      if (keywordNorm && !label.toLowerCase().includes(keywordNorm)) continue;
-      byGroup[item.group].push(item);
+  const currentRole = capabilities.role || String(me.data?.role || "viewer");
+  const capabilityItems = capabilities.items.length ? capabilities.items : capabilities.visibleItems;
+  const visibleNav = useMemo(
+    () => filterNavByRole(currentRole, capabilityItems),
+    [capabilityItems, currentRole],
+  );
+  const current = findActiveNavItem(hash, visibleNav.length ? visibleNav : undefined);
+  const groupedNav = useMemo(() => groupNavItems(keyword, navLabel, visibleNav), [keyword, t, visibleNav]);
+  const pinnedItems = useMemo(() => pinnedNavItems(visibleNav), [visibleNav]);
+  const favoriteItems = useMemo(() => resolveNavKeys(menuPrefs.favorites, visibleNav), [menuPrefs.favorites, visibleNav]);
+  const recentItems = useMemo(
+    () => resolveNavKeys(menuPrefs.recents, visibleNav).filter((item) => item.key !== current.key).slice(0, 6),
+    [menuPrefs.recents, visibleNav, current.key],
+  );
+  const favoriteSet = useMemo(() => new Set(menuPrefs.favorites), [menuPrefs.favorites]);
+  const currentFavorite = favoriteSet.has(current.key);
+  const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, navLabel, visibleNav), [hash, navLabel, visibleNav]);
+  const densityCls = densityPadding(menuPrefs.density);
+  const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
+
+  useEffect(() => {
+    if (current?.key) pushRecent(current.key);
+  }, [current?.key]);
+  const childrenByParent = useMemo(() => {
+    const out = new Map<string, NavItem[]>();
+    for (const item of visibleNav) {
+      if (!item.parentKey || item.hidden) continue;
+      const rows = out.get(item.parentKey) ?? [];
+      rows.push(item);
+      out.set(item.parentKey, rows);
     }
-    return GROUP_ORDER.map((group) => ({ group, items: byGroup[group] })).filter((x) => x.items.length > 0);
-  }, [keywordNorm, t]);
+    return out;
+  }, [visibleNav]);
+
+  useEffect(() => {
+    if (!visibleNav.length) return;
+    const activeAllowed = visibleNav.some((item) => !item.external && item.path.startsWith("#") && hash.startsWith(item.path));
+    if (!activeAllowed) {
+      const fallback = visibleNav.find((item) => item.path.startsWith("#")) ?? visibleNav[0];
+      if (fallback?.path?.startsWith("#")) window.location.hash = fallback.path;
+    }
+  }, [hash, visibleNav]);
+  const openModuleCopilot = () => {
+    const label = navLabel(current.key);
+    const group = String(t(`nav.group.${current.group}`));
+    sessionStorage.setItem(
+      "sop-copilot-prefill",
+      t("command.moduleAiPrompt", {
+        module: label,
+        group,
+        capability: current.capability || current.key,
+        path: current.path,
+      }),
+    );
+    window.location.hash = "#/copilot";
+  };
 
   const toggleGroup = (group: NavGroupKey) => {
     setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  };
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories((prev) => ({ ...prev, [category]: !prev[category] }));
+  };
+  const toggleModule = (moduleKey: string) => {
+    setCollapsedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
   };
 
   if (!authed) return null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row">
+      <CommandPalette open={commandOpen} setOpen={setCommandOpen} authed={authed} />
       <aside
-        className={`flex w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:h-screen lg:border-b-0 lg:border-r ${
-          sidebarCollapsed ? "lg:w-20" : "lg:w-72"
+        className={`flex w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${
+          sidebarCollapsed ? "lg:w-20" : "lg:w-80"
         }`}
       >
         <div className={`border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`}>
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-lg font-bold tracking-tight text-[var(--brand)]">
-                {sidebarCollapsed ? "SOP" : "SOP Manager"}
+                {sidebarCollapsed ? "H" : "Hermes"}
               </div>
               {!sidebarCollapsed ? (
                 <p className="mt-1 text-xs text-[var(--nav-muted)]">{t("nav.shellNavSection")}</p>
@@ -381,53 +766,266 @@ export function App() {
           <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{t("nav.searchHint")}</p>
         </div>
 
+        {!sidebarCollapsed && !keyword && pinnedItems.length ? (
+          <div className="mt-3 px-2">
+            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
+              <span className="inline-flex items-center gap-1">
+                <Pin className="h-3 w-3" />
+                {t("nav.pinned")}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              {pinnedItems.map((item) => {
+                const Icon = item.icon;
+                const active = current.key === item.key || current.parentKey === item.key;
+                return (
+                  <a
+                    key={item.key}
+                    href={item.path}
+                    className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition ${
+                      active
+                        ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
+                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                    title={item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key)}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{navLabel(item.key)}</span>
+                    <NavBadgeTag badge={item.badge} />
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {!sidebarCollapsed && !keyword && menuPrefs.showFavorites && favoriteItems.length ? (
+          <div className="mt-3 px-2">
+            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3 w-3" />
+                {t("nav.favorites")}
+              </span>
+              <span className="rounded bg-[var(--surface-muted)] px-1 py-px text-[10px] text-[var(--muted)]">
+                {favoriteItems.length}
+              </span>
+            </div>
+            <div className="space-y-0.5">
+              {favoriteItems.map((item) => {
+                const Icon = item.icon;
+                const active = current.key === item.key || current.parentKey === item.key;
+                return (
+                  <div
+                    key={item.key}
+                    className={`group flex items-center rounded-md text-xs transition ${
+                      active
+                        ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)]"
+                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                  >
+                    <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                      <NavBadgeTag badge={item.badge} />
+                    </a>
+                    <FavoriteToggle navKey={item.key} isFav className="mr-1 opacity-60 group-hover:opacity-100" />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {!sidebarCollapsed && !keyword && menuPrefs.showRecents && recentItems.length ? (
+          <div className="mt-3 px-2">
+            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {t("nav.recents")}
+              </span>
+              <button
+                type="button"
+                onClick={() => patchMenuPrefs({ recents: [] })}
+                className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                title={t("nav.clearRecents")}
+                aria-label={t("nav.clearRecents")}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="space-y-0.5">
+              {recentItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <a
+                    key={item.key}
+                    href={item.path}
+                    className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-[var(--nav-muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                  >
+                    <Icon className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         <nav className={`mt-2 max-h-[42vh] flex-1 space-y-2 overflow-y-auto pb-3 lg:max-h-none ${sidebarCollapsed ? "px-2" : "px-2"}`}>
           {groupedNav.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
               {t("nav.searchEmpty")}
             </div>
           ) : (
-            groupedNav.map(({ group, items }) => {
-              const collapsed = collapsedGroups[group];
+            groupedNav.map(({ group, categories }) => {
+              const collapsed = collapsedGroups[group.key];
+              const groupCount = categories.reduce((sum, category) => sum + category.items.length, 0);
               return (
-                <section key={group}>
+                <section
+                  key={group.key}
+                  className="border-l-2 pl-1"
+                  style={{ borderLeftColor: NAV_GROUP_ACCENT[group.key] }}
+                >
                   <button
                     type="button"
-                    onClick={() => toggleGroup(group)}
+                    onClick={() => toggleGroup(group.key)}
                     className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] ${
                       sidebarCollapsed ? "justify-center" : ""
                     }`}
                   >
-                    {!sidebarCollapsed ? <span>{t(`nav.group.${group}`)}</span> : <span className="sr-only">{t(`nav.group.${group}`)}</span>}
+                    {!sidebarCollapsed ? <span>{t(group.i18nKey)}</span> : <span className="sr-only">{t(group.i18nKey)}</span>}
                     {!sidebarCollapsed ? (
                     <span className="inline-flex items-center gap-1">
                       <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted-strong)]">
-                        {items.length}
+                        {groupCount}
                       </span>
                       {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </span>
                     ) : null}
                   </button>
                   {!collapsed ? (
-                    <div className="mt-1 space-y-1">
-                      {items.map((n) => {
-                        const Icon = n.icon as LucideIcon;
+                    <div className="mt-1 space-y-2">
+                      {categories.map(({ category, items }) => {
+                        const categoryCollapsed = !keyword && collapsedCategories[category.key];
                         return (
-                          <a
-                            key={n.key}
-                            href={n.path}
-                            title={sidebarCollapsed ? navLabel(n.key) : undefined}
-                            className={`flex items-center rounded-lg text-sm transition ${
-                              sidebarCollapsed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3 py-2"
-                            } ${
-                              current.key === n.key
-                                ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] shadow-sm ring-1 ring-[var(--brand)]"
-                                : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                            }`}
-                          >
-                            <Icon className="h-4 w-4 shrink-0" />
-                            {!sidebarCollapsed ? <span>{navLabel(n.key)}</span> : null}
-                          </a>
+                          <div key={category.key} className={!sidebarCollapsed ? "rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/35 p-1" : ""}>
+                            {!sidebarCollapsed ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleCategory(category.key)}
+                                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                              >
+                                <span className="min-w-0 truncate">{t(category.i18nKey, { defaultValue: humanizeNavKey(category.key) })}</span>
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{items.length}</span>
+                                  {categoryCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                </span>
+                              </button>
+                            ) : null}
+                            {!categoryCollapsed ? (
+                              <div className="mt-1 space-y-1">
+                                {items.map((n) => {
+                                  const Icon = n.icon;
+                                  const children = childrenByParent.get(n.key) ?? [];
+                                  const parentActive = current.key === n.key || current.parentKey === n.key;
+                                  const moduleOpen = Boolean(keyword) || parentActive || !collapsedModules[n.key];
+                                  const isFav = favoriteSet.has(n.key);
+                                  const canWrite = n.capability ? capabilities.can(n.capability, "write") : true;
+                                  return (
+                                    <div key={n.key} className="group/nav">
+                                      <div
+                                        className={`flex items-center rounded-lg text-sm transition ${
+                                          parentActive
+                                            ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] shadow-sm ring-1 ring-[var(--brand)]"
+                                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                                        }`}
+                                      >
+                                        <a
+                                          href={n.path}
+                                          title={sidebarCollapsed ? (n.shortcut ? `${navLabel(n.key)} (${n.shortcut})` : navLabel(n.key)) : undefined}
+                                          className={`min-w-0 flex-1 items-center ${sidebarCollapsed ? `flex justify-center px-2 ${densityCls.item}` : `flex gap-2.5 px-3 ${densityCls.item}`}`}
+                                        >
+                                          <Icon className="h-4 w-4 shrink-0" />
+                                          {!sidebarCollapsed ? (
+                                            <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+                                              <span className="min-w-0 flex-1 truncate">{navLabel(n.key)}</span>
+                                              {!canWrite ? (
+                                                <Lock
+                                                  className="h-3 w-3 shrink-0 text-[var(--muted)]"
+                                                  aria-label={t("nav.readOnly")}
+                                                />
+                                              ) : null}
+                                              <NavBadgeTag badge={n.badge} />
+                                            </span>
+                                          ) : null}
+                                        </a>
+                                        {!sidebarCollapsed && n.pinnable !== false ? (
+                                          <FavoriteToggle
+                                            navKey={n.key}
+                                            isFav={isFav}
+                                            className={`mr-1 transition ${
+                                              isFav ? "opacity-100" : "opacity-0 group-hover/nav:opacity-100 focus-visible:opacity-100"
+                                            }`}
+                                          />
+                                        ) : null}
+                                        {!sidebarCollapsed && children.length ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleModule(n.key)}
+                                            className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                                            aria-label={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
+                                            title={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
+                                          >
+                                            {moduleOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                      {!sidebarCollapsed && children.length && moduleOpen ? (
+                                        <div className="ml-7 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                                          {children.map((child) => {
+                                            const ChildIcon = child.icon;
+                                            const childActive = current.key === child.key;
+                                            const childFav = favoriteSet.has(child.key);
+                                            const childCanWrite = child.capability ? capabilities.can(child.capability, "write") : true;
+                                            return (
+                                              <div
+                                                key={child.key}
+                                                className={`group/child flex items-center rounded-md text-xs ${
+                                                  childActive
+                                                    ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                                    : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                                }`}
+                                              >
+                                                <a
+                                                  href={child.path}
+                                                  className={`flex min-w-0 flex-1 items-center gap-2 px-2 ${densityCls.child}`}
+                                                  title={child.capability}
+                                                >
+                                                  <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                                                  <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
+                                                  {!childCanWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
+                                                  <NavBadgeTag badge={child.badge} />
+                                                </a>
+                                                {child.pinnable !== false ? (
+                                                  <FavoriteToggle
+                                                    navKey={child.key}
+                                                    isFav={childFav}
+                                                    className={`mr-0.5 ${
+                                                      childFav ? "opacity-100" : "opacity-0 group-hover/child:opacity-100 focus-visible:opacity-100"
+                                                    }`}
+                                                  />
+                                                ) : null}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>
@@ -438,18 +1036,109 @@ export function App() {
           )}
         </nav>
 
+        {!sidebarCollapsed ? (
+          <div className="border-t border-[var(--nav-border)] px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <DensityMenu density={menuPrefs.density} />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites })}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${
+                    menuPrefs.showFavorites ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"
+                  } hover:bg-[var(--surface-muted)]`}
+                  title={t("nav.toggleFavorites")}
+                >
+                  <Star className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patchMenuPrefs({ showRecents: !menuPrefs.showRecents })}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${
+                    menuPrefs.showRecents ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"
+                  } hover:bg-[var(--surface-muted)]`}
+                  title={t("nav.toggleRecents")}
+                >
+                  <Clock className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+            <p className="mt-1.5 px-0.5 text-[10px] text-[var(--nav-muted)]">{t("nav.shortcutHint")}</p>
+          </div>
+        ) : null}
+
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 xl:px-8 2xl:px-10">
+      <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
-              {t(`page.${current.key}.title`)}
-            </h1>
-            <p className="mt-1 text-xs text-[var(--muted)]">{t(`nav.group.${current.group}`)}</p>
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-5 w-1 rounded"
+                style={{ background: NAV_GROUP_ACCENT[current.group] }}
+                aria-hidden
+              />
+              <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+                {t(`page.${current.key}.title`, { defaultValue: navLabel(current.key) })}
+              </h1>
+              <NavBadgeTag badge={current.badge} />
+              {!canWriteCurrent ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300"
+                  title={t("nav.readOnlyHint")}
+                >
+                  <Lock className="h-3 w-3" />
+                  {t("nav.readOnly")}
+                </span>
+              ) : null}
+              {current.pinnable !== false ? (
+                <FavoriteToggle navKey={current.key} isFav={currentFavorite} size="md" />
+              ) : null}
+            </div>
+            <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]">
+              <span>{t(breadcrumb.group.i18nKey)}</span>
+              {breadcrumb.category ? (
+                <>
+                  <span aria-hidden>/</span>
+                  <span>{t(breadcrumb.category.i18nKey, { defaultValue: humanizeNavKey(breadcrumb.category.key) })}</span>
+                </>
+              ) : null}
+              {breadcrumb.parent ? (
+                <>
+                  <span aria-hidden>/</span>
+                  <span>{navLabel(breadcrumb.parent.key)}</span>
+                </>
+              ) : null}
+              <span aria-hidden>/</span>
+              <span className="font-medium text-[var(--muted-strong)]">{navLabel(breadcrumb.item.key)}</span>
+              {current.shortcut ? (
+                <span className="ml-2 hidden items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-px font-mono text-[10px] text-[var(--muted-strong)] md:inline-flex">
+                  <Sparkles className="h-3 w-3" />
+                  {current.shortcut}
+                </span>
+              ) : null}
+            </p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <button
+              type="button"
+              className="hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)] lg:inline-flex"
+              onClick={() => setCommandOpen(true)}
+              title={t("command.title")}
+            >
+              <Command className="h-4 w-4" />
+              <span>{t("command.short")}</span>
+            </button>
             <ProjectSelector />
+            <button
+              type="button"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]"
+              onClick={openModuleCopilot}
+              title={t("command.moduleAi")}
+            >
+              <Bot className="h-4 w-4 text-[var(--brand)]" />
+              <span className="hidden xl:inline">{t("command.moduleAi")}</span>
+            </button>
             <ThemeMenu />
             <select
               className="rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 py-1.5 text-sm text-[var(--text)] shadow-sm"

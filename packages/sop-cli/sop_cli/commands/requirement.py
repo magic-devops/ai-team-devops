@@ -309,6 +309,57 @@ def update_requirement(
     ok(f"local requirement update queued {req_id}")
 
 
+def _render_review(data: dict[str, Any]) -> None:
+    tbl = Table(title=f"requirement review {data.get('requirement_id', '')}", show_header=True, header_style="bold")
+    tbl.add_column("field")
+    tbl.add_column("value")
+    tbl.add_row("score", f"{data.get('score', 0)}/100")
+    tbl.add_row("level", str(data.get("level") or "-"))
+    tbl.add_row("linked_tasks", str(data.get("linked_tasks", 0)))
+    console.print(tbl)
+    risks = data.get("risks") or []
+    if risks:
+        console.print("[bold]risks[/bold]")
+        for item in risks:
+            console.print(f"- {item.get('message')}")
+    suggestions = data.get("suggestions") or []
+    if suggestions:
+        console.print("[bold]suggestions[/bold]")
+        for item in suggestions:
+            console.print(f"- {item}")
+    criteria = data.get("suggested_acceptance_criteria") or []
+    if criteria:
+        console.print("[bold]suggested acceptance[/bold]")
+        for item in criteria:
+            console.print(f"- {item}")
+
+
+@app.command(name="review")
+def review_requirement(
+    req_id: str = typer.Argument(..., help="需求 ID"),
+    apply_acceptance: bool = typer.Option(False, "--apply-acceptance", help="将评审建议的验收标准回写到 Manager"),
+) -> None:
+    """智能评审需求质量，并可把建议验收标准回写到远端需求。"""
+    try:
+        out = get_client().review_requirement(req_id)
+        _render_review(out)
+        criteria = out.get("suggested_acceptance_criteria") or []
+        if apply_acceptance and criteria:
+            applied = get_client().apply_requirement_review(
+                req_id,
+                {
+                    "acceptance_criteria": criteria,
+                    "human_notes": "已通过 sop requirement review --apply-acceptance 应用智能评审建议。",
+                },
+            )
+            ok(f"applied review suggestions: {', '.join(applied.get('updated', [])) or 'none'}")
+        elif apply_acceptance:
+            warn("没有可应用的建议验收标准")
+    except Exception as e:
+        err(f"Manager requirement review 不可用: {e}")
+        raise typer.Exit(1) from e
+
+
 @app.command(name="delete")
 def delete_requirement(
     req_id: str = typer.Argument(..., help="需求 ID"),

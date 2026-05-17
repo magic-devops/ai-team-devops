@@ -154,7 +154,9 @@ CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECT
 ```bash
 sop commands              # 表格
 sop commands --examples   # 含常用流程
+sop commands --group 同步 # 只看某一类常用流程
 sop commands --json       # 机器可读
+sop help sync             # 查看指定顶层命令摘要
 ```
 
 ## Shell 自动补全

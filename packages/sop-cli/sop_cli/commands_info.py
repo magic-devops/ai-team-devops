@@ -3,6 +3,10 @@ from __future__ import annotations
 
 from typing import TypedDict
 
+from rich import box
+from rich.panel import Panel
+from rich.table import Table
+
 
 class CmdEntry(TypedDict, total=False):
     help: str
@@ -11,6 +15,7 @@ class CmdEntry(TypedDict, total=False):
 
 # 顶层与子命令说明（与 __main__.py add_typer 保持同步）
 COMMAND_TREE: dict[str, CmdEntry] = {
+    "help": {"help": "帮助总览/命令摘要", "subs": {"--examples": "附带示例", "--group": "按场景过滤示例"}},
     "init": {"help": "初始化项目（memory / .ai-memory / agent.toml）"},
     "register": {
         "help": "一键注册工程到 Manager",
@@ -52,6 +57,34 @@ COMMAND_TREE: dict[str, CmdEntry] = {
         "help": "AI Copilot",
         "subs": {"ask": "提问", "sessions": "会话列表", "show": "查看会话", "classify": "分类", "summarize": "摘要", "suggest": "建议"},
     },
+    "data": {
+        "help": "数据智能平台蓝图",
+        "subs": {
+            "blueprint": "查询数据智能蓝图",
+            "tasks": "将能力缺口任务化",
+            "assets": "数据资产目录",
+            "metrics": "指标中心目录",
+            "tags": "标签服务目录",
+            "quality": "数据质量规则/评估",
+            "governance-tasks": "数据治理任务化",
+            "services": "数据服务目录",
+            "publish-service": "发布/暂停数据服务",
+            "alerts": "数据质量告警",
+            "alert-tasks": "质量告警任务化",
+            "dev-templates": "数据开发模板目录",
+            "dev-tasks": "数据开发模板任务化",
+            "dev-schedule": "数据开发智能调度计划",
+            "dev-ops": "数据开发运营汇总",
+            "dev-runbook": "数据开发自动化 Runbook",
+            "dev-schedules": "数据开发调度历史",
+            "dev-schedule-action": "数据开发调度治理动作",
+            "dev-feed": "数据开发 Agent Feed",
+            "dev-packet-action": "数据开发 Packet 执行动作",
+            "dev-evidence": "数据开发质量证据",
+            "dev-evidence-tasks": "数据开发质量证据任务化",
+            "dev-evidence-notify": "数据开发质量证据通知",
+        },
+    },
     "db-config": {
         "help": "远端数据库配置",
         "subs": {"drivers": "驱动/能力模板", "list": "列表", "add": "新增/更新", "test": "测试连接", "delete": "删除", "export": "导出无密钥配置"},
@@ -63,10 +96,21 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "stack": "本地栈",
             "deploy": "Docker 部署",
             "snapshot": "记忆快照",
+            "notify-connectors": "通信连接器矩阵",
             "notify-channels": "通知渠道",
+            "notify-callback": "连接器回调模板",
+            "notify-verify": "连接器签名生成/校验",
             "notify-test": "测试通知",
             "sync-pull": "拉取同步",
             "worker-health": "Worker 健康",
+        },
+    },
+    "pages": {
+        "help": "页面菜单、模块 Manifest 与能力码",
+        "subs": {
+            "list": "页面/菜单注册表",
+            "manifest": "模块 Manifest",
+            "capabilities": "页面能力码与 AI surfaces",
         },
     },
     "platforms": {
@@ -90,6 +134,9 @@ COMMAND_TREE: dict[str, CmdEntry] = {
         "help": "任务（Manager）",
         "subs": {
             "list": "列表",
+            "schedule": "DAG 调度计划",
+            "feed": "AI/CLI 任务包",
+            "report": "Agent 回写",
             "create": "创建",
             "update": "更新",
             "pull": "认领",
@@ -159,6 +206,104 @@ COMMAND_TREE: dict[str, CmdEntry] = {
     },
 }
 
+QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
+    (
+        "接入与登录",
+        [
+            ("sop init my-app --manager http://localhost:8765", "初始化项目"),
+            (
+                "sop register my-app --manager http://localhost:8765 --username admin",
+                "注册到 Manager",
+            ),
+            ("sop login -u admin", "账号登录；配对登录用 sop login --pair"),
+        ],
+    ),
+    (
+        "健康与上下文",
+        [
+            ("sop agentd start && sop doctor", "启动守护进程并自检"),
+            ("sop status --json", "给 CLI/IDE/Agent 的机器可读健康快照"),
+            ("sop context manifest --write", "生成机器可读接入清单"),
+            ("sop context env --out .sop-runtime/sop.env", "导出 SOP_* 环境变量模板"),
+            ("sop context prepare --flush", "刷新上下文、远端配置并冲刷 outbox"),
+            ("sop platforms init all", "生成各 CLI/IDE/Agent 接入配置"),
+            ("sop pages capabilities --json", "让 Agent 读取菜单、能力码与 AI surfaces"),
+        ],
+    ),
+    (
+        "同步",
+        [
+            ("sop sync", "经 agentd 同步；失败可用 sop sync --direct"),
+            ("sop sync doctor", "本地同步自检"),
+            ("sop sync repair --dry-run", "预览队列修复"),
+            ("sop sync compact", "压缩离线队列，减少重复上送"),
+            ("sop sync flush", "不依赖 agentd，直连冲刷离线队列"),
+            ("sop sync pull --direct --materialize", "直连拉取并物化远端实体"),
+            ("sop sync watch --once", "扫描规则/规约/模板变更并写入队列"),
+        ],
+    ),
+    (
+        "交付工作台",
+        [
+            ('sop requirement create "统一项目注册流程" --priority P1', "创建需求"),
+            ('sop issue create "登录回调异常" --severity P1', "创建问题"),
+            ('sop sprint create "MVP 闭环" --points 20', "创建迭代"),
+            ("sop task list --status pending", "查看待处理任务"),
+            ("sop task schedule --json", "生成 AI/CLI 可消费 DAG 调度计划"),
+            ("sop task feed --json", "Agent 自动拉取下一批任务包"),
+            ("sop work next --local", "查看下一批建议处理项"),
+            ("sop work export --local", "导出工作台快照"),
+        ],
+    ),
+    (
+        "知识、记忆与规则",
+        [
+            ('sop memory add "项目采用本地优先、远端增强" --local', "写入本地记忆"),
+            ('sop memory search "本地优先" --local', "检索本地记忆"),
+            ("sop memory flush", "冲刷记忆 outbox"),
+            (
+                'sop kb add "项目接入规范" "CLI/Agent 读取 .sop-runtime/sop.env 接入。" --local',
+                "写入知识库",
+            ),
+            ("sop kb flush", "冲刷知识库 outbox"),
+            (
+                'sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env" --local',
+                "提交规则提案",
+            ),
+            ("sop rule list --local --proposals", "查看本地规则提案"),
+        ],
+    ),
+    (
+        "AI、事件与用量",
+        [
+            ('sop copilot ask "下一步该做什么？" --remember', "带记忆提问"),
+            ("sop copilot sessions", "查看会话"),
+            ("sop event emit sop.agent.run.completed --data run_id=demo", "上报事件"),
+            ("sop event subscribe --json", "订阅 Manager 实时事件"),
+            ("sop usage summary --json", "查看用量汇总"),
+            ("sop usage check llm_tokens 1000", "配额预检查"),
+            ("sop data blueprint --json", "查看数据智能平台蓝图与能力缺口"),
+            ("sop data assets --json", "查看数据资产目录与质量得分"),
+            ("sop data services --json", "查看数据服务目录与发布健康"),
+            ("sop data dev-templates --json", "查看数据开发模板"),
+            ("sop data alerts --json", "查看数据质量与服务健康告警"),
+            ("sop data quality --json", "执行数据质量评估"),
+            ("sop data tasks --json", "预览数据平台增强任务"),
+            ("sop db-config drivers --json", "查看数据源驱动模板"),
+            ("sop db-config list --json", "查看远端数据源配置"),
+        ],
+    ),
+    (
+        "补全",
+        [
+            ("sop completion install bash", "持久安装；也支持 zsh / fish"),
+            ('eval "$(sop completion show bash)"', "当前会话临时启用"),
+        ],
+    ),
+]
+
+QUICK_START_GROUP_NAMES = [name for name, _rows in QUICK_START_GROUPS]
+
 QUICK_START = """
 [b]常用流程[/b]
   sop init my-app --manager http://localhost:8765
@@ -204,6 +349,11 @@ QUICK_START = """
   eval "$(sop completion show bash)"
 """
 
+SHORT_HELP_EPILOG = """
+常用: sop help | sop commands --examples | sop doctor | sop status --json
+提示: 子命令帮助用 sop <command> --help，例如 sop sync --help
+"""
+
 
 def format_command_tree(*, as_json: bool = False) -> str | dict:
     if as_json:
@@ -214,3 +364,53 @@ def format_command_tree(*, as_json: bool = False) -> str | dict:
         sub_s = f"  ({', '.join(subs)})" if subs else ""
         lines.append(f"  {name:<12} {meta.get('help', '')}{sub_s}")
     return "\n".join(lines)
+
+
+def command_tree_table() -> Table:
+    table = Table(
+        title="sop 子命令",
+        box=box.SIMPLE_HEAVY,
+        show_lines=False,
+        expand=True,
+        padding=(0, 1),
+    )
+    table.add_column("命令", style="bold cyan", no_wrap=True, width=12)
+    table.add_column("说明", ratio=3)
+    table.add_column("常用子命令 / 选项", style="dim", ratio=4)
+    for name, meta in COMMAND_TREE.items():
+        subs = meta.get("subs") or {}
+        table.add_row(name, meta.get("help", ""), ", ".join(subs.keys()))
+    return table
+
+
+def quick_start_panels(group: str | None = None) -> list[Panel]:
+    panels: list[Panel] = []
+    for title, rows in QUICK_START_GROUPS:
+        if group and group not in title and group != title:
+            continue
+        table = Table(
+            box=box.SIMPLE,
+            show_header=True,
+            expand=True,
+            padding=(0, 1),
+        )
+        table.add_column("命令", style="cyan", overflow="fold", ratio=5)
+        table.add_column("用途", overflow="fold", ratio=3)
+        for command, purpose in rows:
+            table.add_row(command, purpose)
+        panels.append(Panel(table, title=title, border_style="green"))
+    return panels
+
+
+def command_detail_panel(name: str) -> Panel:
+    meta = COMMAND_TREE[name]
+    subs = meta.get("subs") or {}
+    table = Table(box=box.SIMPLE, show_header=False, expand=True, padding=(0, 1))
+    table.add_column("字段", style="bold cyan", no_wrap=True, width=12)
+    table.add_column("内容", overflow="fold")
+    table.add_row("命令", f"sop {name}")
+    table.add_row("说明", meta.get("help", ""))
+    if subs:
+        table.add_row("子命令/选项", ", ".join(subs.keys()))
+    table.add_row("帮助", f"sop {name} --help")
+    return Panel(table, title=f"sop {name}", border_style="cyan")

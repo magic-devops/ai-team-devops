@@ -1,7 +1,7 @@
 """技能管理：注册、查询、自定义技能"""
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Any, Optional, List
 from pathlib import Path
 import json, os
 from sop_manager.path_config import resolved_ai_memory_root
@@ -41,6 +41,31 @@ def list_skills():
         try: custom.append({**json.loads(f.read_text()), "builtin": False})
         except Exception: pass
     return builtin + custom
+
+@router.get("/hub")
+def skills_hub() -> dict[str, Any]:
+    from sop_manager.routers import skill_repo
+
+    skills = list_skills()
+    repos = skill_repo.list_repos()
+    installed = skill_repo.list_installed()
+    installed_count = len(installed) if isinstance(installed, list) else len(installed or {})
+    return {
+        "ok": True,
+        "summary": {
+            "skills": len(skills),
+            "builtin": sum(1 for s in skills if s.get("builtin")),
+            "custom": sum(1 for s in skills if not s.get("builtin")),
+            "repos": len(repos) if isinstance(repos, list) else 0,
+            "installed": installed_count,
+        },
+        "domains": [
+            {"id": "skills", "path": "#/skills-hub/skills", "capability": "ecosystem.skills-hub.skills"},
+            {"id": "repos", "path": "#/skills-hub/repos", "capability": "ecosystem.skills-hub.repos"},
+            {"id": "installed", "path": "#/skills-hub/installed", "capability": "ecosystem.skills-hub.installed"},
+        ],
+    }
+
 
 @router.post("")
 def create_skill(body: SkillDef):
