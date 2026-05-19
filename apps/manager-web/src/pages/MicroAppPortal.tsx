@@ -96,11 +96,6 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
             console.error(`[wujie] ${app.id} load failed`, error);
             setRemoteFailed(true);
           }}
-          loading={
-            <div className="flex h-80 items-center justify-center text-sm text-[var(--muted)]">
-              正在加载 {app.name}...
-            </div>
-          }
         />
       </section>
     );

@@ -9,6 +9,15 @@ import "../../src/index.css";
 import { MicroAppRuntime } from "./MicroAppRuntime";
 import type { MicroAppId } from "../../src/microApps";
 
+function getOrCreateRoot() {
+  const existing = document.getElementById("root");
+  if (existing) return existing;
+  const root = document.createElement("div");
+  root.id = "root";
+  document.body.appendChild(root);
+  return root;
+}
+
 export function bootstrapMicroApp(appId: MicroAppId) {
   const qc = new QueryClient({
     defaultOptions: {
@@ -16,7 +25,7 @@ export function bootstrapMicroApp(appId: MicroAppId) {
     },
   });
 
-  ReactDOM.createRoot(document.getElementById("root")!).render(
+  ReactDOM.createRoot(getOrCreateRoot()).render(
     <React.StrictMode>
       <QueryClientProvider client={qc}>
         <ConfigProvider
