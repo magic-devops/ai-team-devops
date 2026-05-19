@@ -86,6 +86,7 @@ import {
   filterNavByRole,
   findActiveNavItem,
   NAV,
+  NAV_CATEGORIES,
   NAV_GROUP_ACCENT,
   pinnedNavItems,
   resolveNavKeys,
@@ -106,6 +107,8 @@ const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 280;
 const SIDEBAR_MAX_WIDTH = 520;
 type QuickPanelKey = "pinned" | "favorites" | "recents";
+
+const NAV_CATEGORY_I18N_BY_KEY = new Map(NAV_CATEGORIES.map((category) => [category.key, category.i18nKey]));
 
 function clampSidebarWidth(value: number) {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
@@ -755,7 +758,10 @@ export function App() {
       .replace(/[_-]+/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
   const navLabel = (key: string) => String(t(`nav.${key}`, { defaultValue: humanizeNavKey(key) }));
-  const navTaxonomyLabel = (kind: "group" | "category", key: string) => String(t(`nav.${kind}.${key}`, { defaultValue: humanizeNavKey(key) }));
+  const navTaxonomyLabel = (kind: "group" | "category", key: string) => {
+    const i18nKey = kind === "category" ? NAV_CATEGORY_I18N_BY_KEY.get(key) ?? `nav.category.${key}` : `nav.group.${key}`;
+    return String(t(i18nKey, { defaultValue: humanizeNavKey(key) }));
+  };
 
   const currentRole = capabilities.role || String(me.data?.role || "viewer");
   const menuStrategy = menuPrefsRemote.data?.strategy;

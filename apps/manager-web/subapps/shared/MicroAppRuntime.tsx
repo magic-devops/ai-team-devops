@@ -35,7 +35,7 @@ import {
 import { initTheme } from "../../src/lib/theme";
 import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
-import { buildNavBreadcrumb, NAV, type NavItem } from "../../src/navigation";
+import { buildNavBreadcrumb, NAV, NAV_CATEGORIES, type NavItem } from "../../src/navigation";
 
 type WujieProps = {
   token?: string | null;
@@ -103,6 +103,8 @@ type RuntimeApp = ReturnType<typeof getMicroApp>;
 type RuntimeMenuCategory = { key: string; label: string; items: NavItem[] };
 type RuntimeMenuDomain = { key: string; label: string; categories: RuntimeMenuCategory[]; count: number };
 
+const RUNTIME_CATEGORY_I18N_BY_KEY = new Map(NAV_CATEGORIES.map((category) => [category.key, category.i18nKey]));
+
 function humanizeRuntimeKey(key: string) {
   return key
     .replace(/^nav\.(group|category)\./, "")
@@ -134,7 +136,7 @@ function buildRuntimeMenuTree(items: readonly NavItem[], labelOf: (i18nKey: stri
     }
     let category = domain.categories.find((entry) => entry.key === categoryKey);
     if (!category) {
-      category = { key: categoryKey, label: labelOf(`nav.category.${categoryKey}`, categoryKey), items: [] };
+      category = { key: categoryKey, label: labelOf(RUNTIME_CATEGORY_I18N_BY_KEY.get(categoryKey) ?? `nav.category.${categoryKey}`, categoryKey), items: [] };
       domain.categories.push(category);
     }
     category.items.push(item);

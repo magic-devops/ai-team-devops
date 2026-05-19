@@ -6,10 +6,19 @@ import zhCN from "./i18n/zh-CN.json";
 import enUS from "./i18n/en-US.json";
 import jaJP from "./i18n/ja-JP.json";
 
+function getStoredLanguage() {
+  try {
+    return localStorage.getItem("i18nextLng") || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    lng: getStoredLanguage() || "zh-CN",
     fallbackLng: "zh-CN",
     interpolation: { escapeValue: false },
     resources: {
@@ -17,7 +26,7 @@ i18n
       "en-US": { translation: enUS },
       "ja-JP": { translation: jaJP },
     },
-    detection: { order: ["localStorage", "navigator"], caches: ["localStorage"] },
+    detection: { order: ["localStorage"], caches: ["localStorage"] },
   });
 
 export default i18n;
