@@ -60,7 +60,9 @@ import {
   pushRecent,
   subscribeMenuPrefs,
   toggleFavorite,
+  type MenuEffect,
   type MenuDensity,
+  type MenuLayout,
   type MenuPrefs,
 } from "./lib/menuPrefs";
 import {
@@ -329,39 +331,112 @@ function buildAppMenuTree(items: readonly NavItem[], labelOf: (kind: "group" | "
   return domains;
 }
 
-function DensityMenu({ density }: { density: MenuDensity }) {
+function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
   const { t } = useTranslation();
-  const options: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  const layoutOptions: Array<{ key: MenuLayout; label: string; desc: string }> = [
+    { key: "grouped", label: "分组卡片", desc: "层级最清晰，适合模块多的应用" },
+    { key: "stream", label: "连续列表", desc: "减少卡片边界，浏览更顺滑" },
+    { key: "minimal", label: "极简模式", desc: "弱化装饰，保留路径和层级" },
+  ];
+  const effectOptions: Array<{ key: MenuEffect; label: string }> = [
+    { key: "soft", label: "柔和" },
+    { key: "outline", label: "描边" },
+    { key: "quiet", label: "安静" },
+  ];
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          className="inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--control-bg)] px-2 text-[11px] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-          title={t("nav.density.label")}
-          aria-label={t("nav.density.label")}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 text-[11px] font-medium text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]"
+          title="菜单显示设置"
+          aria-label="菜单显示设置"
         >
           <Sliders className="h-3 w-3" />
-          <span>{t(`nav.density.${density}`)}</span>
+          <span>{t(`nav.density.${prefs.density}`)}</span>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="z-50 min-w-[10rem] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg"
+          className="z-50 w-72 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl"
           sideOffset={6}
           align="end"
         >
-          {options.map((opt) => (
-            <DropdownMenu.Item
-              key={opt}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text)] data-[highlighted]:bg-[var(--surface-muted)]"
-              onSelect={() => patchMenuPrefs({ density: opt })}
-            >
-              <Sliders className="h-3.5 w-3.5 text-[var(--brand)]" />
-              <span className="flex-1">{t(`nav.density.${opt}`)}</span>
-              {density === opt ? <Check className="h-3.5 w-3.5 text-[var(--brand)]" /> : null}
-            </DropdownMenu.Item>
-          ))}
+          <div className="mb-2 px-1">
+            <p className="text-sm font-semibold text-[var(--text)]">菜单显示</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">控制密度、布局和辅助信息显示。</p>
+          </div>
+
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">密度</p>
+            <div className="grid grid-cols-3 gap-1">
+              {densityOptions.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => patchMenuPrefs({ density: opt })}
+                  className={`rounded-lg px-2 py-1.5 text-xs font-medium ${prefs.density === opt ? "bg-[var(--surface)] text-[var(--brand)] shadow-sm" : "text-[var(--muted-strong)] hover:bg-[var(--surface)]"}`}
+                >
+                  {t(`nav.density.${opt}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-2 grid gap-1">
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">布局</p>
+            {layoutOptions.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => patchMenuPrefs({ menuLayout: opt.key })}
+                className={`flex items-start gap-2 rounded-xl px-2.5 py-2 text-left ${prefs.menuLayout === opt.key ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}
+              >
+                <Rows3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-semibold">{opt.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[var(--muted)]">{opt.desc}</span>
+                </span>
+                {prefs.menuLayout === opt.key ? <Check className="mt-0.5 h-3.5 w-3.5" /> : null}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-2 rounded-xl border border-[var(--border)] p-2">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">效果</p>
+            <div className="grid grid-cols-3 gap-1">
+              {effectOptions.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => patchMenuPrefs({ menuEffect: opt.key })}
+                  className={`rounded-lg px-2 py-1.5 text-xs font-medium ${prefs.menuEffect === opt.key ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 grid gap-1">
+              {[
+                { key: "showQuickPanel", label: "快捷区" },
+                { key: "showMenuCounts", label: "计数徽标" },
+                { key: "showMenuMeta", label: "能力说明" },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => patchMenuPrefs({ [item.key]: !prefs[item.key as keyof MenuPrefs] } as Partial<MenuPrefs>)}
+                  className="flex items-center justify-between rounded-lg px-2 py-1.5 text-xs text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                >
+                  <span>{item.label}</span>
+                  <span className={`h-4 w-7 rounded-full p-0.5 transition ${prefs[item.key as keyof MenuPrefs] ? "bg-[var(--brand)]" : "bg-[var(--border)]"}`}>
+                    <span className={`block h-3 w-3 rounded-full bg-white transition ${prefs[item.key as keyof MenuPrefs] ? "translate-x-3" : ""}`} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -861,12 +936,17 @@ export function App() {
         density: prefs.density || menuPrefs.density,
         showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
         showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+        menuLayout: prefs.menu_layout || menuPrefs.menuLayout,
+        menuEffect: prefs.menu_effect || menuPrefs.menuEffect,
+        showMenuCounts: typeof prefs.show_menu_counts === "boolean" ? prefs.show_menu_counts : menuPrefs.showMenuCounts,
+        showMenuMeta: typeof prefs.show_menu_meta === "boolean" ? prefs.show_menu_meta : menuPrefs.showMenuMeta,
+        showQuickPanel: typeof prefs.show_quick_panel === "boolean" ? prefs.show_quick_panel : menuPrefs.showQuickPanel,
       });
       localStorage.setItem(scope, "1");
     } catch {
       /* ignore disabled storage */
     }
-  }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
+  }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
 
   useEffect(() => {
     if (!authed || !menuPrefsRemote.data?.ok) return;
@@ -877,13 +957,18 @@ export function App() {
         density: menuPrefs.density,
         show_recents: menuPrefs.showRecents,
         show_favorites: menuPrefs.showFavorites,
+        menu_layout: menuPrefs.menuLayout,
+        menu_effect: menuPrefs.menuEffect,
+        show_menu_counts: menuPrefs.showMenuCounts,
+        show_menu_meta: menuPrefs.showMenuMeta,
+        show_quick_panel: menuPrefs.showQuickPanel,
         collapsed_groups: collapsedGroups,
         collapsed_categories: collapsedCategories,
         collapsed_modules: collapsedModules,
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
+  }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
 
   useEffect(() => {
     if (!current?.key) return;
@@ -969,6 +1054,23 @@ export function App() {
   const sidebarStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
   } as CSSProperties;
+  const showMenuCounts = menuPrefs.showMenuCounts;
+  const showMenuMeta = menuPrefs.showMenuMeta;
+  const showQuickPanel = menuPrefs.showQuickPanel;
+  const menuSectionClass =
+    menuPrefs.menuLayout === "minimal"
+      ? "rounded-lg border border-transparent bg-transparent p-0"
+      : menuPrefs.menuEffect === "outline"
+        ? "rounded-xl border border-[var(--border)] bg-transparent p-1"
+        : menuPrefs.menuEffect === "quiet"
+          ? "rounded-xl border border-transparent bg-transparent p-1"
+          : "rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2";
+  const menuCategoryClass =
+    menuPrefs.menuLayout === "minimal"
+      ? "rounded-md bg-transparent p-0.5"
+      : menuPrefs.menuLayout === "stream"
+        ? "rounded-lg border-l border-[var(--border)] bg-transparent p-1"
+        : "rounded-md border border-[var(--border)]/50 bg-[var(--surface-raised)]/45 p-1";
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row">
@@ -1028,7 +1130,7 @@ export function App() {
               <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{t("nav.searchHint")}</p>
             </div>
 
-            {!keyword ? (
+            {!keyword && showQuickPanel ? (
               <div className="mt-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
                 <div className="grid grid-cols-3 gap-1">
                   {[
@@ -1053,7 +1155,7 @@ export function App() {
                       >
                         <Icon className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{entry.label}</span>
-                        <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span>
+                        {showMenuCounts ? <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span> : null}
                       </button>
                     );
                   })}
@@ -1091,7 +1193,7 @@ export function App() {
                           >
                             <Icon className="h-3.5 w-3.5 shrink-0" />
                             <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                            <NavBadgeTag badge={item.badge} />
+                            {showMenuCounts ? <NavBadgeTag badge={item.badge} /> : null}
                           </a>
                         );
                       }) : (
@@ -1143,11 +1245,11 @@ export function App() {
                       >
                         <span className="min-w-0">
                           <span className="block truncate">{app.shortName}</span>
-                          <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{app.owner}</span>
+                          {showMenuMeta ? <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{app.owner}</span> : null}
                         </span>
-                        <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]">
+                        {showMenuCounts ? <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]">
                           {appMenus.length}
-                        </span>
+                        </span> : null}
                       </button>
                       <button
                         type="button"
@@ -1183,7 +1285,7 @@ export function App() {
                             const domainKey = `main-domain:${app.id}:${domain.key}`;
                             const domainOpen = !collapsedCategories[domainKey] || active;
                             return (
-                              <section key={domain.key} className="rounded-lg bg-[var(--surface-muted)]/45 p-1">
+                              <section key={domain.key} className={menuSectionClass}>
                                 <button
                                   type="button"
                                   onClick={() => setCollapsedCategories((prev) => ({ ...prev, [domainKey]: !prev[domainKey] }))}
@@ -1191,7 +1293,7 @@ export function App() {
                                 >
                                   {domainOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                                   <span className="min-w-0 flex-1 truncate">{domain.label}</span>
-                                  <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span>
+                                  {showMenuCounts ? <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span> : null}
                                 </button>
                                 {domainOpen ? (
                                   <div className="mt-1 grid gap-1">
@@ -1199,7 +1301,7 @@ export function App() {
                                       const categoryKey = `main-category:${app.id}:${domain.key}:${category.key}`;
                                       const categoryOpen = !collapsedCategories[categoryKey] || active;
                                       return (
-                                        <div key={category.key} className="rounded-md border border-[var(--border)]/50 bg-[var(--surface-raised)]/45 p-1">
+                                        <div key={category.key} className={menuCategoryClass}>
                                           <button
                                             type="button"
                                             onClick={() => setCollapsedCategories((prev) => ({ ...prev, [categoryKey]: !prev[categoryKey] }))}
@@ -1207,7 +1309,7 @@ export function App() {
                                           >
                                             {categoryOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                                             <span className="min-w-0 flex-1 truncate">{category.label}</span>
-                                            <span>{category.items.length}</span>
+                                            {showMenuCounts ? <span>{category.items.length}</span> : null}
                                           </button>
                                           {categoryOpen ? (
                                             <div className="mt-0.5 grid gap-0.5">
@@ -1228,7 +1330,7 @@ export function App() {
                                                       <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
                                                         <Icon className="h-3.5 w-3.5 shrink-0" />
                                                         <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                                                        <NavBadgeTag badge={item.badge} />
+                                                        {showMenuCounts ? <NavBadgeTag badge={item.badge} /> : null}
                                                       </a>
                                                       {item.pinnable !== false ? (
                                                         <FavoriteToggle
@@ -1288,13 +1390,13 @@ export function App() {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[var(--text)]">{activeAppDefinition.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{activeAppDefinition.owner}</p>
+                  {showMenuMeta ? <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{activeAppDefinition.owner}</p> : null}
                 </div>
-                <span className="rounded-md bg-[var(--brand-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand)]">
+                {showMenuCounts ? <span className="rounded-md bg-[var(--brand-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand)]">
                   {activeAppDefinition.mode}
-                </span>
+                </span> : null}
               </div>
-              <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-strong)]">{activeAppDefinition.description}</p>
+              {showMenuMeta ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-strong)]">{activeAppDefinition.description}</p> : null}
               {appPortalItem ? (
                 <a
                   href={appPortalItem.path}
@@ -1338,7 +1440,7 @@ export function App() {
                         <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
                           <span className="min-w-0 flex-1 truncate">{navLabel(n.key)}</span>
                           {!canWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
-                          <NavBadgeTag badge={n.badge} />
+                          {showMenuCounts ? <NavBadgeTag badge={n.badge} /> : null}
                         </span>
                       ) : null}
                     </a>
@@ -1387,7 +1489,7 @@ export function App() {
                               <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                               <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
                               {!childCanWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
-                              <NavBadgeTag badge={child.badge} />
+                              {showMenuCounts ? <NavBadgeTag badge={child.badge} /> : null}
                             </a>
                             {child.pinnable !== false ? (
                               <FavoriteToggle
@@ -1414,7 +1516,7 @@ export function App() {
         {!sidebarCollapsed ? (
           <div className="shrink-0 border-t border-[var(--nav-border)] px-3 py-2">
             <div className="flex items-center justify-between gap-2">
-              <DensityMenu density={menuPrefs.density} />
+              <MenuDisplayMenu prefs={menuPrefs} />
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -1462,6 +1564,11 @@ export function App() {
                         density: prefs.density || menuPrefs.density,
                         showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
                         showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+                        menuLayout: prefs.menu_layout || menuPrefs.menuLayout,
+                        menuEffect: prefs.menu_effect || menuPrefs.menuEffect,
+                        showMenuCounts: typeof prefs.show_menu_counts === "boolean" ? prefs.show_menu_counts : menuPrefs.showMenuCounts,
+                        showMenuMeta: typeof prefs.show_menu_meta === "boolean" ? prefs.show_menu_meta : menuPrefs.showMenuMeta,
+                        showQuickPanel: typeof prefs.show_quick_panel === "boolean" ? prefs.show_quick_panel : menuPrefs.showQuickPanel,
                       });
                     }}
                   >

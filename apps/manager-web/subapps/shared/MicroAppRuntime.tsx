@@ -44,7 +44,7 @@ import {
 import { ProjectSelector } from "../../src/components/ProjectSelector";
 import { api } from "../../src/lib/api";
 import { getThemePreference, initTheme, setThemePreference, THEME_OPTIONS, type ThemePreference } from "../../src/lib/theme";
-import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuPrefs } from "../../src/lib/menuPrefs";
+import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuEffect, type MenuLayout, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
 import { buildNavBreadcrumb, NAV, NAV_CATEGORIES, type NavItem } from "../../src/navigation";
 
@@ -184,21 +184,76 @@ function nextDensity(current: MenuDensity): MenuDensity {
   return DENSITY_ORDER[(index + 1) % DENSITY_ORDER.length] ?? "comfortable";
 }
 
+function RuntimeMenuDisplayButton({ prefs }: { prefs: MenuPrefs }) {
+  const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  const layoutOptions: Array<{ key: MenuLayout; label: string }> = [
+    { key: "grouped", label: "分组" },
+    { key: "stream", label: "列表" },
+    { key: "minimal", label: "极简" },
+  ];
+  const effectOptions: Array<{ key: MenuEffect; label: string }> = [
+    { key: "soft", label: "柔和" },
+    { key: "outline", label: "描边" },
+    { key: "quiet", label: "安静" },
+  ];
+  const toggleBoolean = (key: "showQuickPanel" | "showMenuCounts" | "showMenuMeta") => patchMenuPrefs({ [key]: !prefs[key] });
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
+          显示设置
+        </span>
+        <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{densityText(prefs.density)}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1">
+        {densityOptions.map((item) => (
+          <button key={item} type="button" onClick={() => patchMenuPrefs({ density: item })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.density === item ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+            {densityText(item)}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {layoutOptions.map((item) => (
+          <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuLayout: item.key })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.menuLayout === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {effectOptions.map((item) => (
+          <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuEffect: item.key })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.menuEffect === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {[
+          { key: "showQuickPanel" as const, label: "快捷" },
+          { key: "showMenuCounts" as const, label: "徽标" },
+          { key: "showMenuMeta" as const, label: "说明" },
+        ].map((item) => (
+          <button key={item.key} type="button" onClick={() => toggleBoolean(item.key)} className={`rounded-md px-2 py-1 text-[11px] ${prefs[item.key] ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RuntimeTopBar({
   app,
   currentLabel,
   current,
   onToggleMenu,
-  density,
-  onCycleDensity,
   onOpenCopilot,
 }: {
   app: RuntimeApp;
   currentLabel: string;
   current: NavItem;
   onToggleMenu: () => void;
-  density: MenuDensity;
-  onCycleDensity: () => void;
   onOpenCopilot: () => void;
 }) {
   const { i18n } = useTranslation();
@@ -262,15 +317,6 @@ function RuntimeTopBar({
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <ProjectSelector />
-          <button
-            type="button"
-            onClick={onCycleDensity}
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-            title="菜单密度"
-          >
-            <Rows3 className="h-4 w-4" />
-            {densityText(density)}
-          </button>
           <button
             type="button"
             onClick={onOpenCopilot}
@@ -774,6 +820,23 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const cycleMenuDensity = () => patchMenuPrefs({ density: nextDensity(menuPrefs.density) });
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
   const openCurrentCopilot = () => openModuleCopilot(current, app.name, currentLabel);
+  const showMenuCounts = menuPrefs.showMenuCounts;
+  const showMenuMeta = menuPrefs.showMenuMeta;
+  const showQuickPanel = menuPrefs.showQuickPanel;
+  const runtimeSectionClass =
+    menuPrefs.menuLayout === "minimal"
+      ? "rounded-lg border border-transparent bg-transparent p-0"
+      : menuPrefs.menuEffect === "outline"
+        ? "rounded-xl border border-[var(--border)] bg-transparent p-1"
+        : menuPrefs.menuEffect === "quiet"
+          ? "rounded-xl border border-transparent bg-transparent p-1"
+          : "rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2";
+  const runtimeCategoryClass =
+    menuPrefs.menuLayout === "minimal"
+      ? "rounded-md bg-transparent p-0.5"
+      : menuPrefs.menuLayout === "stream"
+        ? "rounded-lg border-l border-[var(--border)] bg-transparent p-1"
+        : "rounded-lg bg-[var(--surface-muted)]/45 p-1.5";
 
   return (
     <div className={`flex flex-col bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "h-full min-h-0 overflow-hidden" : "h-screen min-h-0 overflow-hidden"}`}>
@@ -781,8 +844,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         app={app}
         current={current}
         currentLabel={currentLabel}
-        density={menuPrefs.density}
-        onCycleDensity={cycleMenuDensity}
         onOpenCopilot={openCurrentCopilot}
         onToggleMenu={() => setMobileMenuOpen((open) => !open)}
       />
@@ -833,7 +894,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
               <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
             </div>
           </div>
-          <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p>
+          {showMenuMeta ? <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
         </div>
 
         <div className="relative mt-4">
@@ -855,7 +916,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             }`}
           >
             <Star className="mb-1 h-4 w-4" />
-            收藏 {favoriteItems.length}
+            收藏 {showMenuCounts ? favoriteItems.length : ""}
           </button>
           <button
             type="button"
@@ -865,7 +926,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             }`}
           >
             <Clock className="mb-1 h-4 w-4" />
-            最近 {recentItems.length}
+            最近 {showMenuCounts ? recentItems.length : ""}
           </button>
           <button
             type="button"
@@ -876,8 +937,11 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             {densityText(menuPrefs.density)}
           </button>
         </div>
+        <div className="mt-3">
+          <RuntimeMenuDisplayButton prefs={menuPrefs} />
+        </div>
 
-        <div className="mt-3 grid gap-2">
+        <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
           <RuntimeQuickList title="快捷入口" items={quickItems} labelOf={labelOf} emptyText="暂无可用快捷入口" icon={<Pin className="h-3.5 w-3.5" />} />
           {menuPrefs.showFavorites ? (
             <RuntimeQuickList title="我的收藏" items={favoriteItems} labelOf={labelOf} emptyText="点击页面右上角星标收藏常用模块" icon={<Star className="h-3.5 w-3.5" />} />
@@ -891,7 +955,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
-              <section key={domain.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+              <section key={domain.key} className={runtimeSectionClass}>
                 <button
                   type="button"
                   onClick={() => toggleGroup(`domain:${domain.key}`)}
@@ -899,7 +963,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                 >
                   {domainCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                   <span className="min-w-0 flex-1 truncate">{domain.label}</span>
-                  <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span>
+                  {showMenuCounts ? <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span> : null}
                 </button>
                 {domainCollapsed ? null : (
                   <div className="mt-1 grid gap-2">
@@ -907,7 +971,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                       const categoryKey = `category:${domain.key}:${category.key}`;
                       const categoryCollapsed = collapsedGroups[categoryKey] && !keyword;
                       return (
-                        <div key={category.key} className="rounded-lg bg-[var(--surface-muted)]/45 p-1.5">
+                        <div key={category.key} className={runtimeCategoryClass}>
                           <button
                             type="button"
                             onClick={() => toggleGroup(categoryKey)}
@@ -915,7 +979,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                           >
                             {categoryCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                             <span className="min-w-0 flex-1 truncate">{category.label}</span>
-                            <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span>
+                            {showMenuCounts ? <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span> : null}
                           </button>
                           {categoryCollapsed ? null : (
                             <div className="mt-1 grid gap-1">

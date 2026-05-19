@@ -846,8 +846,13 @@ export const api = {
     favorites?: string[];
     recents?: string[];
     density?: string;
+    menu_layout?: string;
+    menu_effect?: string;
     show_recents?: boolean;
     show_favorites?: boolean;
+    show_menu_counts?: boolean;
+    show_menu_meta?: boolean;
+    show_quick_panel?: boolean;
     collapsed_groups?: Record<string, boolean>;
     collapsed_categories?: Record<string, boolean>;
     collapsed_modules?: Record<string, boolean>;

@@ -9,11 +9,13 @@
  *   4. AI 安全 — 字段稳定，新增字段需 bump SCHEMA_VERSION 并提供 migrate。
  */
 
-export const MENU_PREFS_SCHEMA_VERSION = 1;
+export const MENU_PREFS_SCHEMA_VERSION = 2;
 const STORAGE_KEY = "sop-menu-prefs-v1";
 const MENU_PREFS_EVENT = "sop-menu-prefs";
 
 export type MenuDensity = "comfortable" | "compact" | "cozy";
+export type MenuLayout = "grouped" | "stream" | "minimal";
+export type MenuEffect = "soft" | "outline" | "quiet";
 
 export type MenuPrefs = {
   schema: number;
@@ -27,6 +29,16 @@ export type MenuPrefs = {
   showRecents: boolean;
   /** 是否显示「收藏」分区 */
   showFavorites: boolean;
+  /** 菜单布局：分组卡片 / 连续列表 / 极简 */
+  menuLayout: MenuLayout;
+  /** 菜单视觉效果：柔和底色 / 描边 / 安静 */
+  menuEffect: MenuEffect;
+  /** 是否显示菜单计数和徽标 */
+  showMenuCounts: boolean;
+  /** 是否显示菜单说明、能力码等辅助信息 */
+  showMenuMeta: boolean;
+  /** 是否显示快捷入口面板 */
+  showQuickPanel: boolean;
   /** 用户手动设置过侧栏宽度（px） */
   sidebarWidth?: number;
 };
@@ -38,6 +50,11 @@ const DEFAULT_PREFS: MenuPrefs = {
   density: "comfortable",
   showRecents: true,
   showFavorites: true,
+  menuLayout: "grouped",
+  menuEffect: "soft",
+  showMenuCounts: true,
+  showMenuMeta: true,
+  showQuickPanel: true,
 };
 
 function readRaw(): MenuPrefs {
@@ -58,6 +75,11 @@ function migrate(raw: Partial<MenuPrefs>): MenuPrefs {
     schema: MENU_PREFS_SCHEMA_VERSION,
     favorites: Array.isArray(raw.favorites) ? raw.favorites.slice(0, 24) : [],
     recents: Array.isArray(raw.recents) ? raw.recents.slice(0, 8) : [],
+    menuLayout: raw.menuLayout === "stream" || raw.menuLayout === "minimal" ? raw.menuLayout : "grouped",
+    menuEffect: raw.menuEffect === "outline" || raw.menuEffect === "quiet" ? raw.menuEffect : "soft",
+    showMenuCounts: typeof raw.showMenuCounts === "boolean" ? raw.showMenuCounts : true,
+    showMenuMeta: typeof raw.showMenuMeta === "boolean" ? raw.showMenuMeta : true,
+    showQuickPanel: typeof raw.showQuickPanel === "boolean" ? raw.showQuickPanel : true,
   };
 }
 

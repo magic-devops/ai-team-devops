@@ -679,8 +679,13 @@ class MenuPreferencesIn(BaseModel):
     favorites: list[str] | None = None
     recents: list[str] | None = None
     density: str | None = Field(None, pattern="^(compact|comfortable|cozy)$")
+    menu_layout: str | None = Field(None, pattern="^(grouped|stream|minimal)$")
+    menu_effect: str | None = Field(None, pattern="^(soft|outline|quiet)$")
     show_recents: bool | None = None
     show_favorites: bool | None = None
+    show_menu_counts: bool | None = None
+    show_menu_meta: bool | None = None
+    show_quick_panel: bool | None = None
     collapsed_groups: dict[str, bool] | None = None
     collapsed_categories: dict[str, bool] | None = None
     collapsed_modules: dict[str, bool] | None = None
@@ -2460,8 +2465,13 @@ def _menu_preferences_payload(user: User) -> dict[str, Any]:
         "favorites": favorites,
         "recents": recents,
         "density": stored.get("density") or strategy["density"],
+        "menu_layout": stored.get("menu_layout") or "grouped",
+        "menu_effect": stored.get("menu_effect") or "soft",
         "show_recents": bool(stored.get("show_recents", strategy["show_recents"])),
         "show_favorites": bool(stored.get("show_favorites", strategy["show_favorites"])),
+        "show_menu_counts": bool(stored.get("show_menu_counts", True)),
+        "show_menu_meta": bool(stored.get("show_menu_meta", True)),
+        "show_quick_panel": bool(stored.get("show_quick_panel", True)),
         "collapsed_groups": {**strategy["collapsed_groups"], **(stored.get("collapsed_groups") if isinstance(stored.get("collapsed_groups"), dict) else {})},
         "collapsed_categories": {**strategy["collapsed_categories"], **(stored.get("collapsed_categories") if isinstance(stored.get("collapsed_categories"), dict) else {})},
         "collapsed_modules": stored.get("collapsed_modules") if isinstance(stored.get("collapsed_modules"), dict) else {},
@@ -2531,7 +2541,7 @@ def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, An
         current["favorites"] = _sanitize_menu_keys(raw.get("favorites"), limit=24)
     if "recents" in raw:
         current["recents"] = _sanitize_menu_keys(raw.get("recents"), limit=8)
-    for key in ("density", "show_recents", "show_favorites"):
+    for key in ("density", "menu_layout", "menu_effect", "show_recents", "show_favorites", "show_menu_counts", "show_menu_meta", "show_quick_panel"):
         if key in raw:
             current[key] = raw[key]
     for key in ("collapsed_groups", "collapsed_categories", "collapsed_modules"):
