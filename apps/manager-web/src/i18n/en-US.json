@@ -137,6 +137,7 @@
     "modelOps": "Model management",
     "platformOps": "Runtime governance",
     "settings": "Settings",
+    "microAppGovernance": "Micro-app management",
     "shellNavSection": "AI full-stack platform",
     "searchPlaceholder": "Search pages (Ctrl/Cmd+K)",
     "searchHint": "Quickly filter and jump by page name.",

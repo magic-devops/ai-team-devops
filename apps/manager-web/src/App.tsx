@@ -85,7 +85,6 @@ import {
   DEFAULT_COLLAPSE,
   filterNavByRole,
   findActiveNavItem,
-  groupNavItems,
   NAV,
   NAV_GROUP_ACCENT,
   pinnedNavItems,
@@ -728,7 +727,23 @@ export function App() {
     return filterNavByMicroApp(activeMicroApp, source);
   }, [activeMicroApp, roleVisibleNav]);
   const current = findActiveNavItem(hash, visibleNav.length ? visibleNav : undefined);
-  const groupedNav = useMemo(() => groupNavItems(keyword, navLabel, visibleNav), [keyword, t, visibleNav]);
+  const activeAppDefinition = useMemo(
+    () => MICRO_APPS.find((app) => app.id === activeMicroApp) ?? MICRO_APPS[0],
+    [activeMicroApp],
+  );
+  const appPortalItem = useMemo(
+    () => visibleNav.find((item) => item.key.startsWith("microApp")),
+    [visibleNav],
+  );
+  const appSidebarItems = useMemo(() => {
+    const normalized = keyword.trim().toLowerCase();
+    return visibleNav.filter((item) => {
+      if (item.hidden || item.parentKey || item.key.startsWith("microApp")) return false;
+      if (!normalized) return true;
+      const label = navLabel(item.key);
+      return `${label} ${item.description || ""} ${item.capability || ""} ${item.path}`.toLowerCase().includes(normalized);
+    });
+  }, [keyword, t, visibleNav]);
   const pinnedItems = useMemo(() => pinnedNavItems(visibleNav), [visibleNav]);
   const favoriteItems = useMemo(() => resolveNavKeys(menuPrefs.favorites, visibleNav), [menuPrefs.favorites, visibleNav]);
   const recentItems = useMemo(
@@ -834,12 +849,6 @@ export function App() {
     window.location.hash = "#/copilot";
   };
 
-  const toggleGroup = (group: NavGroupKey) => {
-    setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }));
-  };
-  const toggleCategory = (category: string) => {
-    setCollapsedCategories((prev) => ({ ...prev, [category]: !prev[category] }));
-  };
   const toggleModule = (moduleKey: string) => {
     setCollapsedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
   };
@@ -1051,167 +1060,130 @@ export function App() {
         ) : null}
 
         <nav className={`mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-3 ${sidebarCollapsed ? "px-2" : "px-2"}`}>
-          {groupedNav.length === 0 ? (
+          {!sidebarCollapsed ? (
+            <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[var(--text)]">{activeAppDefinition.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{activeAppDefinition.owner}</p>
+                </div>
+                <span className="rounded-md bg-[var(--brand-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand)]">
+                  {activeAppDefinition.mode}
+                </span>
+              </div>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-strong)]">{activeAppDefinition.description}</p>
+              {appPortalItem ? (
+                <a
+                  href={appPortalItem.path}
+                  className="mt-3 flex items-center justify-between rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+                >
+                  <span>{activeAppDefinition.mode === "wujie" ? "进入独立子应用" : "进入应用管理台"}</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          {appSidebarItems.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
               {t("nav.searchEmpty")}
             </div>
           ) : (
-            groupedNav.map(({ group, categories }) => {
-              const collapsed = collapsedGroups[group.key];
-              const groupCount = categories.reduce((sum, category) => sum + category.items.length, 0);
+            <div className="space-y-1">
+              {appSidebarItems.map((n) => {
+                const Icon = n.icon;
+                const children = childrenByParent.get(n.key) ?? [];
+                const parentActive = current.key === n.key || current.parentKey === n.key;
+                const moduleOpen = Boolean(keyword) || parentActive || !collapsedModules[n.key];
+                const isFav = favoriteSet.has(n.key);
+                const canWrite = n.capability ? capabilities.can(n.capability, "write") : true;
               return (
-                <section
-                  key={group.key}
-                  className="border-l-2 pl-1"
-                  style={{ borderLeftColor: NAV_GROUP_ACCENT[group.key] }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] ${
-                      sidebarCollapsed ? "justify-center" : ""
+                <div key={n.key} className="group/nav">
+                  <div
+                    className={`flex items-center rounded-lg text-sm transition ${
+                      parentActive
+                        ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] shadow-sm ring-1 ring-[var(--brand)]"
+                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
                     }`}
                   >
-                    {!sidebarCollapsed ? <span>{t(group.i18nKey)}</span> : <span className="sr-only">{t(group.i18nKey)}</span>}
-                    {!sidebarCollapsed ? (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted-strong)]">
-                        {groupCount}
-                      </span>
-                      {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                    </span>
+                    <a
+                      href={n.path}
+                      title={sidebarCollapsed ? (n.shortcut ? `${navLabel(n.key)} (${n.shortcut})` : navLabel(n.key)) : undefined}
+                      className={`min-w-0 flex-1 items-center ${sidebarCollapsed ? `flex justify-center px-2 ${densityCls.item}` : `flex gap-2.5 px-3 ${densityCls.item}`}`}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {!sidebarCollapsed ? (
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+                          <span className="min-w-0 flex-1 truncate">{navLabel(n.key)}</span>
+                          {!canWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
+                          <NavBadgeTag badge={n.badge} />
+                        </span>
+                      ) : null}
+                    </a>
+                    {!sidebarCollapsed && n.pinnable !== false ? (
+                      <FavoriteToggle
+                        navKey={n.key}
+                        isFav={isFav}
+                        className={`mr-1 transition ${
+                          isFav ? "opacity-100" : "opacity-0 group-hover/nav:opacity-100 focus-visible:opacity-100"
+                        }`}
+                      />
                     ) : null}
-                  </button>
-                  {!collapsed ? (
-                    <div className="mt-1 space-y-2">
-                      {categories.map(({ category, items }) => {
-                        const categoryCollapsed = !keyword && collapsedCategories[category.key];
+                    {!sidebarCollapsed && children.length ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleModule(n.key)}
+                        className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                        aria-label={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
+                        title={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
+                      >
+                        {moduleOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </button>
+                    ) : null}
+                  </div>
+                  {!sidebarCollapsed && children.length && moduleOpen ? (
+                    <div className="ml-7 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                      {children.map((child) => {
+                        const ChildIcon = child.icon;
+                        const childActive = current.key === child.key;
+                        const childFav = favoriteSet.has(child.key);
+                        const childCanWrite = child.capability ? capabilities.can(child.capability, "write") : true;
                         return (
-                          <div key={category.key} className={!sidebarCollapsed ? "rounded-lg border border-[var(--border)]/60 bg-[var(--surface-raised)]/30 p-1" : ""}>
-                            {!sidebarCollapsed ? (
-                              <button
-                                type="button"
-                                onClick={() => toggleCategory(category.key)}
-                                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-                              >
-                                <span className="min-w-0 truncate">{t(category.i18nKey, { defaultValue: humanizeNavKey(category.key) })}</span>
-                                <span className="inline-flex items-center gap-1">
-                                  <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{items.length}</span>
-                                  {categoryCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                                </span>
-                              </button>
-                            ) : null}
-                            {!categoryCollapsed ? (
-                              <div className="mt-1 space-y-1">
-                                {items.map((n) => {
-                                  const Icon = n.icon;
-                                  const children = childrenByParent.get(n.key) ?? [];
-                                  const parentActive = current.key === n.key || current.parentKey === n.key;
-                                  const moduleOpen = Boolean(keyword) || parentActive || !collapsedModules[n.key];
-                                  const isFav = favoriteSet.has(n.key);
-                                  const canWrite = n.capability ? capabilities.can(n.capability, "write") : true;
-                                  return (
-                                    <div key={n.key} className="group/nav">
-                                      <div
-                                        className={`flex items-center rounded-lg text-sm transition ${
-                                          parentActive
-                                            ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] shadow-sm ring-1 ring-[var(--brand)]"
-                                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                                        }`}
-                                      >
-                                        <a
-                                          href={n.path}
-                                          title={sidebarCollapsed ? (n.shortcut ? `${navLabel(n.key)} (${n.shortcut})` : navLabel(n.key)) : undefined}
-                                          className={`min-w-0 flex-1 items-center ${sidebarCollapsed ? `flex justify-center px-2 ${densityCls.item}` : `flex gap-2.5 px-3 ${densityCls.item}`}`}
-                                        >
-                                          <Icon className="h-4 w-4 shrink-0" />
-                                          {!sidebarCollapsed ? (
-                                            <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
-                                              <span className="min-w-0 flex-1 truncate">{navLabel(n.key)}</span>
-                                              {!canWrite ? (
-                                                <Lock
-                                                  className="h-3 w-3 shrink-0 text-[var(--muted)]"
-                                                  aria-label={t("nav.readOnly")}
-                                                />
-                                              ) : null}
-                                              <NavBadgeTag badge={n.badge} />
-                                            </span>
-                                          ) : null}
-                                        </a>
-                                        {!sidebarCollapsed && n.pinnable !== false ? (
-                                          <FavoriteToggle
-                                            navKey={n.key}
-                                            isFav={isFav}
-                                            className={`mr-1 transition ${
-                                              isFav ? "opacity-100" : "opacity-0 group-hover/nav:opacity-100 focus-visible:opacity-100"
-                                            }`}
-                                          />
-                                        ) : null}
-                                        {!sidebarCollapsed && children.length ? (
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleModule(n.key)}
-                                            className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
-                                            aria-label={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
-                                            title={moduleOpen ? t("nav.collapseModule") : t("nav.expandModule")}
-                                          >
-                                            {moduleOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                          </button>
-                                        ) : null}
-                                      </div>
-                                      {!sidebarCollapsed && children.length && moduleOpen ? (
-                                        <div className="ml-7 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
-                                          {children.map((child) => {
-                                            const ChildIcon = child.icon;
-                                            const childActive = current.key === child.key;
-                                            const childFav = favoriteSet.has(child.key);
-                                            const childCanWrite = child.capability ? capabilities.can(child.capability, "write") : true;
-                                            return (
-                                              <div
-                                                key={child.key}
-                                                className={`group/child flex items-center rounded-md text-xs ${
-                                                  childActive
-                                                    ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
-                                                    : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                                                }`}
-                                              >
-                                                <a
-                                                  href={child.path}
-                                                  className={`flex min-w-0 flex-1 items-center gap-2 px-2 ${densityCls.child}`}
-                                                  title={child.capability}
-                                                >
-                                                  <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                                                  <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
-                                                  {!childCanWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
-                                                  <NavBadgeTag badge={child.badge} />
-                                                </a>
-                                                {child.pinnable !== false ? (
-                                                  <FavoriteToggle
-                                                    navKey={child.key}
-                                                    isFav={childFav}
-                                                    className={`mr-0.5 ${
-                                                      childFav ? "opacity-100" : "opacity-0 group-hover/child:opacity-100 focus-visible:opacity-100"
-                                                    }`}
-                                                  />
-                                                ) : null}
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                          <div
+                            key={child.key}
+                            className={`group/child flex items-center rounded-md text-xs ${
+                              childActive
+                                ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                            }`}
+                          >
+                            <a
+                              href={child.path}
+                              className={`flex min-w-0 flex-1 items-center gap-2 px-2 ${densityCls.child}`}
+                              title={child.capability}
+                            >
+                              <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
+                              {!childCanWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
+                              <NavBadgeTag badge={child.badge} />
+                            </a>
+                            {child.pinnable !== false ? (
+                              <FavoriteToggle
+                                navKey={child.key}
+                                isFav={childFav}
+                                className={`mr-0.5 ${
+                                  childFav ? "opacity-100" : "opacity-0 group-hover/child:opacity-100 focus-visible:opacity-100"
+                                }`}
+                              />
                             ) : null}
                           </div>
                         );
                       })}
                     </div>
                   ) : null}
-                </section>
+                </div>
               );
-            })
+            })}
+            </div>
           )}
         </nav>
 

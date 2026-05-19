@@ -154,6 +154,7 @@
     "modelOps": "模型管理",
     "platformOps": "运行治理",
     "systemMap": "模块治理",
+    "microAppGovernance": "微应用管理",
     "pageRegistry": "页面注册表",
     "moduleManifest": "模块 Manifest",
     "capabilityGovernance": "能力权限",

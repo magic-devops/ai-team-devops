@@ -38,6 +38,7 @@ const MAIN_ADMIN_KEYS = [
   "orgRolePolicy",
   "orgAccessReview",
   "systemMap",
+  "microAppGovernance",
   "pageRegistry",
   "moduleManifest",
   "capabilityGovernance",

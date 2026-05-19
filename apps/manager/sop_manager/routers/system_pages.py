@@ -384,7 +384,7 @@ MICRO_APPS: list[dict[str, Any]] = [
         "entry": "index.html",
         "mode": "native",
         "domains": ["overview", "portfolio", "governance", "system"],
-        "module_ids": ["dashboard", "projects", "organization", "systemMap", "settings"],
+        "module_ids": ["dashboard", "projects", "organization", "microAppGovernance", "systemMap", "settings"],
         "responsibilities": ["基础管理", "账号权限", "组织管理", "服务治理", "能力控制面"],
     },
     {
@@ -826,6 +826,7 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "microAppAiRdCenter", "name": "智能研发中心", "domain": "delivery", "path": "#/apps/ai-rd-center", "status": "active", "maturity": 84, "apis": ["/api/v1/requirements/summary", "/api/v1/tasks/summary", "/api/v1/tasks/scheduler/ops-summary", "/api/v1/workflows/ops-plan"], "capabilities": ["需求到任务", "AI 开发", "任务下发", "DAG 调度", "质量评审", "交付审计"], "next": ["拆分 ai-rd-center-web 独立仓", "研发流可视化设计器"]},
     {"id": "microAppAiDataCenter", "name": "智能数据中心", "domain": "data", "path": "#/apps/ai-data-center", "status": "active", "maturity": 84, "apis": ["/api/v1/db-config/connections", "/api/v1/analytics/overview", "/api/v1/data-exchange/summary", "/api/v1/analytics/lineage"], "capabilities": ["数据源", "数据接入", "元数据血缘", "数据开发调度", "指标标签", "数据服务"], "next": ["拆分 ai-data-center-web 独立仓", "湖仓元数据接入"]},
     {"id": "microAppAiOpsCenter", "name": "智能运营中心", "domain": "system", "path": "#/apps/ai-ops-center", "status": "active", "maturity": 82, "apis": ["/api/v1/billing/summary", "/api/v1/sso/config", "/api/v1/audit/summary", "/api/v1/notify/summary"], "capabilities": ["商业计费", "企业 SSO", "安全审计", "通信集成", "智能运维"], "next": ["拆分 ai-ops-center-web 独立仓", "运营 Runbook 自动化"]},
+    {"id": "microAppGovernance", "name": "微应用管理", "domain": "governance", "path": "#/micro-apps", "status": "active", "maturity": 88, "apis": ["/api/v1/system/pages/micro-apps", "/api/v1/system/pages/hub"], "capabilities": ["微应用注册表", "Wujie 运行入口", "模块归属", "能力覆盖", "成熟度健康"], "next": ["子应用发布流水线", "运行时心跳探测"]},
     {"id": "dashboard", "name": "运营驾驶舱", "domain": "overview", "path": "#/dashboard", "status": "active", "maturity": 88, "apis": ["/api/v1/dashboard/summary", "/api/v1/dashboard/charts", "/api/v1/hermes/blueprint", "/api/v1/audit/chain/state"], "capabilities": ["跨项目摘要", "ECharts 趋势图", "状态分布图", "平台蓝图", "风险看板"], "next": ["接入实时事件流", "补充 worker/同步实时状态"]},
     {"id": "projects", "name": "项目组合", "domain": "portfolio", "path": "#/projects", "status": "active", "maturity": 86, "apis": ["/api/v1/projects", "/api/v1/projects/{id}/onboarding", "/api/v1/projects/{id}/review"], "capabilities": ["项目组合", "业务线", "项目模板", "成员权限", "AI/CLI 接入包", "智能治理"], "next": ["项目组合容量规划", "跨项目依赖"]},
     {"id": "projectPortfolio", "name": "项目组合", "domain": "portfolio", "path": "#/projects/portfolio", "status": "active", "maturity": 86, "apis": ["/api/v1/projects", "/api/v1/projects/summary"], "capabilities": ["项目清单", "项目创建", "健康摘要", "业务归属"], "next": ["项目容量规划", "跨项目依赖"]},

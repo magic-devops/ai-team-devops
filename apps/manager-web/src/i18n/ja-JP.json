@@ -91,6 +91,7 @@
     "platforms": "Agent プラットフォーム",
     "legacyConsole": "Legacy コンソール",
     "settings": "設定",
+    "microAppGovernance": "マイクロアプリ管理",
     "shellNavSection": "AI フルスタック基盤",
     "searchPlaceholder": "ページ検索（Ctrl/Cmd+K）",
     "searchHint": "名前で素早く絞り込みできます。",
