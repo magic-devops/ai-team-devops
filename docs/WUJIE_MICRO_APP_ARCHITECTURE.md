@@ -27,6 +27,13 @@
 - `workspaceScope`
 - `shell=hermes-manager`
 
+主应用同时提供微应用控制面 API：
+
+- `GET /api/v1/system/pages/micro-apps`
+- `GET /api/v1/system/pages/hub` 中包含 `micro_apps`
+
+控制面返回每个应用的运行入口、构建入口、Owner、领域、模块数、能力数、成熟度和 Agent consumption 字段，供前端治理页、CLI 和 AI Agent 消费。
+
 子应用远程地址通过环境变量配置：
 
 - `VITE_SUB_APP_AI_FOUNDATION_URL`

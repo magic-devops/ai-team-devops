@@ -374,6 +374,69 @@ DOMAINS: list[dict[str, Any]] = [
 
 DOMAIN_BY_ID = {d["id"]: d for d in DOMAINS}
 
+MICRO_APPS: list[dict[str, Any]] = [
+    {
+        "id": "main-admin",
+        "name": "主应用 · 基础管理",
+        "owner": "Platform Admin",
+        "route": "#/apps/main-admin",
+        "runtime_url": "/",
+        "entry": "index.html",
+        "mode": "native",
+        "domains": ["overview", "portfolio", "governance", "system"],
+        "module_ids": ["dashboard", "projects", "organization", "systemMap", "settings"],
+        "responsibilities": ["基础管理", "账号权限", "组织管理", "服务治理", "能力控制面"],
+    },
+    {
+        "id": "ai-foundation",
+        "name": "智能基础服务",
+        "owner": "AI Platform",
+        "route": "#/apps/ai-foundation",
+        "runtime_url": "/subapps/ai-foundation/",
+        "entry": "subapps/ai-foundation/index.html",
+        "mode": "wujie",
+        "domains": ["ai", "ecosystem"],
+        "module_ids": ["intelligence", "platforms", "marketplace", "skillsHub", "agentOps", "llmGateway", "knowledgeGraph", "a2aGateway"],
+        "responsibilities": ["开发环境", "CLI 工具", "知识记忆", "技能插件", "Agent/MCP/A2A"],
+    },
+    {
+        "id": "ai-rd-center",
+        "name": "智能研发中心",
+        "owner": "Engineering AI",
+        "route": "#/apps/ai-rd-center",
+        "runtime_url": "/subapps/ai-rd-center/",
+        "entry": "subapps/ai-rd-center/index.html",
+        "mode": "wujie",
+        "domains": ["product", "delivery", "ai"],
+        "module_ids": ["requirements", "tasks", "issues", "devFlow", "orchestration", "workflows", "copilot", "vibe", "globalSearch"],
+        "responsibilities": ["需求方案", "AI 开发", "任务下发", "调度监控", "质量评审", "运维闭环"],
+    },
+    {
+        "id": "ai-data-center",
+        "name": "智能数据中心",
+        "owner": "Data Platform",
+        "route": "#/apps/ai-data-center",
+        "runtime_url": "/subapps/ai-data-center/",
+        "entry": "subapps/ai-data-center/index.html",
+        "mode": "wujie",
+        "domains": ["data"],
+        "module_ids": ["analytics", "analyticsCatalog", "analyticsReports", "analyticsLineage", "dataExchange", "dataSources", "dataIngest", "dataQualityCenter", "metricsCenter", "tagService", "dataDev"],
+        "responsibilities": ["数据源", "数据接入", "元数据血缘", "数据开发", "指标标签", "数据服务"],
+    },
+    {
+        "id": "ai-ops-center",
+        "name": "智能运营中心",
+        "owner": "Operations",
+        "route": "#/apps/ai-ops-center",
+        "runtime_url": "/subapps/ai-ops-center/",
+        "entry": "subapps/ai-ops-center/index.html",
+        "mode": "wujie",
+        "domains": ["governance", "system", "ecosystem"],
+        "module_ids": ["notify", "webhooks", "audit", "settings", "envOps", "opsCenter"],
+        "responsibilities": ["商业计费", "安全审计", "企业 SSO", "通信集成", "智能运维"],
+    },
+]
+
 DOMAIN_ROLE_MATRIX: dict[str, dict[str, list[str]]] = {
     "overview": {"read": ["viewer", "developer", "devops", "product_manager", "analyst", "project_admin", "tenant_admin", "super_admin"], "write": ["project_admin", "tenant_admin", "super_admin"], "admin": ["tenant_admin", "super_admin"]},
     "portfolio": {"read": ["viewer", "developer", "devops", "product_manager", "analyst", "project_admin", "tenant_admin", "super_admin"], "write": ["project_admin", "tenant_admin", "super_admin"], "admin": ["tenant_admin", "super_admin"]},
@@ -2417,6 +2480,49 @@ def _menu_preferences_payload(user: User) -> dict[str, Any]:
     }
 
 
+def _micro_app_registry() -> list[dict[str, Any]]:
+    pages_by_id = {str(page.get("id")): page for page in _enrich_pages(REACT_PAGES)}
+    rows: list[dict[str, Any]] = []
+    for app in MICRO_APPS:
+        module_ids = [str(item) for item in app.get("module_ids", [])]
+        modules = [pages_by_id[item] for item in module_ids if item in pages_by_id]
+        all_domain_pages = [
+            page
+            for page in pages_by_id.values()
+            if str(page.get("domain")) in set(str(domain) for domain in app.get("domains", []))
+        ]
+        maturity_values = [int(page.get("maturity") or 0) for page in modules or all_domain_pages]
+        avg_maturity = round(sum(maturity_values) / len(maturity_values), 1) if maturity_values else 0
+        status = "healthy" if avg_maturity >= 85 else "watch" if avg_maturity >= 75 else "risk"
+        rows.append({
+            **app,
+            "status": status,
+            "avg_maturity": avg_maturity,
+            "module_count": len(modules),
+            "domain_module_count": len(all_domain_pages),
+            "capability_count": sum(len(page.get("capabilities") or []) for page in modules),
+            "modules": [
+                {
+                    "id": page.get("id"),
+                    "name": page.get("name"),
+                    "path": page.get("path"),
+                    "domain": page.get("domain"),
+                    "maturity": page.get("maturity"),
+                    "capabilities": page.get("capabilities") or [],
+                }
+                for page in modules
+            ],
+            "agent_consumption": {
+                "purpose": "供 AI Agent 按微应用边界选择专业模块与入口。",
+                "route": app.get("route"),
+                "runtime_url": app.get("runtime_url"),
+                "domains": app.get("domains", []),
+                "module_ids": module_ids,
+            },
+        })
+    return rows
+
+
 def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, Any]:
     current = _menu_preferences_payload(user)["preferences"]
     raw = body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
@@ -2444,17 +2550,20 @@ def system_pages_hub() -> dict[str, Any]:
     legacy_sum = _summary(legacy_all)
     validation = _registry_validation()
     menu_health = _menu_health()
+    micro_apps = _micro_app_registry()
     issues = validation.get("issues") if isinstance(validation.get("issues"), list) else []
     return {
         "ok": True,
         "summary": {
             "react_pages": react_sum.get("total", 0),
             "legacy_pages": legacy_sum.get("total", 0),
+            "micro_apps": len(micro_apps),
             "avg_maturity": react_sum.get("avg_maturity", 0),
             "validation_issues": len(issues) + int(menu_health.get("summary", {}).get("issues") or 0),
             "menu_health_score": menu_health.get("score", 0),
             "domains_count": len(DOMAINS),
         },
+        "micro_apps": micro_apps,
         "stack_layers": _domain_matrix(REACT_PAGES, LEGACY_PAGES)[:8],
         "domains": [
             {"id": "registry", "path": "#/system-map/registry", "capability": "governance.system-map.registry"},
@@ -2462,6 +2571,29 @@ def system_pages_hub() -> dict[str, Any]:
             {"id": "capabilities", "path": "#/system-map/capabilities", "capability": "governance.system-map.capabilities"},
             {"id": "actions", "path": "#/system-map/actions", "capability": "governance.system-map.actions"},
         ],
+    }
+
+
+@router.get("/micro-apps")
+def system_pages_micro_apps() -> dict[str, Any]:
+    apps = _micro_app_registry()
+    return {
+        "ok": True,
+        "apps": apps,
+        "summary": {
+            "total": len(apps),
+            "wujie": sum(1 for app in apps if app.get("mode") == "wujie"),
+            "healthy": sum(1 for app in apps if app.get("status") == "healthy"),
+            "watch": sum(1 for app in apps if app.get("status") == "watch"),
+            "risk": sum(1 for app in apps if app.get("status") == "risk"),
+            "module_count": sum(int(app.get("module_count") or 0) for app in apps),
+            "capability_count": sum(int(app.get("capability_count") or 0) for app in apps),
+        },
+        "agent_consumption": {
+            "purpose": "供前端、CLI 和 AI Agent 获取微应用拆分边界、运行入口和模块归属。",
+            "api": "/api/v1/system/pages/micro-apps",
+            "fields": ["apps.id", "apps.runtime_url", "apps.domains", "apps.modules", "apps.agent_consumption"],
+        },
     }
 
 

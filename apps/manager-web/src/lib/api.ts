@@ -838,6 +838,7 @@ export const api = {
   systemPagesCapabilities: () => request<any>("/api/v1/system/pages/capabilities"),
   systemPagesCapabilitiesMe: () => request<any>("/api/v1/system/pages/capabilities/me"),
   systemPagesHealth: () => request<any>("/api/v1/system/pages/health"),
+  systemPagesMicroApps: () => request<any>("/api/v1/system/pages/micro-apps"),
   systemPagesMenuPreferencesMe: () => request<any>("/api/v1/system/pages/menu/preferences/me"),
   systemPagesMenuPreferencesUpdate: (body: {
     favorites?: string[];
