@@ -98,7 +98,7 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
             打开独立应用
           </a>
         </div>
-        <div className="min-h-[calc(100vh-12rem)]">
+        <div className="h-[calc(100vh-12rem)] min-h-[40rem] overflow-hidden">
           <MicroAppRuntime appId={appId} embedded />
         </div>
       </section>

@@ -302,6 +302,30 @@ function FavoriteToggle({
   );
 }
 
+type AppMenuCategory = { key: string; label: string; items: NavItem[] };
+type AppMenuDomain = { key: string; label: string; categories: AppMenuCategory[]; count: number };
+
+function buildAppMenuTree(items: readonly NavItem[], labelOf: (kind: "group" | "category", key: string) => string): AppMenuDomain[] {
+  const domains: AppMenuDomain[] = [];
+  for (const item of items) {
+    const domainKey = item.group || "workspace";
+    const categoryKey = item.category || "default";
+    let domain = domains.find((entry) => entry.key === domainKey);
+    if (!domain) {
+      domain = { key: domainKey, label: labelOf("group", domainKey), categories: [], count: 0 };
+      domains.push(domain);
+    }
+    let category = domain.categories.find((entry) => entry.key === categoryKey);
+    if (!category) {
+      category = { key: categoryKey, label: labelOf("category", categoryKey), items: [] };
+      domain.categories.push(category);
+    }
+    category.items.push(item);
+    domain.count += 1;
+  }
+  return domains;
+}
+
 function DensityMenu({ density }: { density: MenuDensity }) {
   const { t } = useTranslation();
   const options: MenuDensity[] = ["compact", "comfortable", "cozy"];
@@ -731,6 +755,7 @@ export function App() {
       .replace(/[_-]+/g, " ")
       .replace(/\b\w/g, (char) => char.toUpperCase());
   const navLabel = (key: string) => String(t(`nav.${key}`, { defaultValue: humanizeNavKey(key) }));
+  const navTaxonomyLabel = (kind: "group" | "category", key: string) => String(t(`nav.${kind}.${key}`, { defaultValue: humanizeNavKey(key) }));
 
   const currentRole = capabilities.role || String(me.data?.role || "viewer");
   const menuStrategy = menuPrefsRemote.data?.strategy;
@@ -772,6 +797,13 @@ export function App() {
     }
     return map;
   }, [navSource]);
+  const microAppMenuTreeById = useMemo(() => {
+    const map = new Map<MicroAppId, AppMenuDomain[]>();
+    for (const app of MICRO_APPS) {
+      map.set(app.id, buildAppMenuTree(microAppMenuById.get(app.id) ?? [], navTaxonomyLabel));
+    }
+    return map;
+  }, [microAppMenuById, t]);
   const microAppChildrenByParent = useMemo(() => {
     const out = new Map<string, NavItem[]>();
     for (const item of navSource) {
@@ -1070,7 +1102,7 @@ export function App() {
         ) : null}
 
         {!sidebarCollapsed && !keyword ? (
-          <div className="min-h-0 flex-1 border-b border-[var(--nav-border)] px-3 py-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-b border-[var(--nav-border)] px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
                 <Layers3 className="h-3.5 w-3.5" />
@@ -1080,10 +1112,11 @@ export function App() {
                 {t("nav.microAppMode")}
               </span>
             </div>
-            <div className="grid max-h-full gap-1 overflow-y-auto pr-1">
+            <div className="grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
               {MICRO_APPS.map((app) => {
                 const active = app.id === activeMicroApp;
                 const appMenus = microAppMenuById.get(app.id) ?? [];
+                const appMenuTree = microAppMenuTreeById.get(app.id) ?? [];
                 const expanded = Boolean(expandedMicroApps[app.id] ?? active);
                 const portalItem = navSource.find((item) => item.key.startsWith("microApp") && getMicroAppIdForNavItem(item) === app.id);
                 return (
@@ -1139,66 +1172,99 @@ export function App() {
                             <ArrowRight className="h-3.5 w-3.5" />
                           </a>
                         ) : null}
-                        <div className="grid gap-0.5">
-                          {appMenus.slice(0, active ? 10 : 6).map((item) => {
-                            const Icon = item.icon;
-                            const itemActive = current.key === item.key || current.parentKey === item.key;
-                            const children = microAppChildrenByParent.get(item.key) ?? [];
-                            const itemFav = favoriteSet.has(item.key);
+                        <div className="grid gap-2">
+                          {appMenuTree.map((domain) => {
+                            const domainKey = `main-domain:${app.id}:${domain.key}`;
+                            const domainOpen = !collapsedCategories[domainKey] || active;
                             return (
-                              <div key={item.key}>
-                                <div
-                                  className={`group/appmenu flex items-center rounded-lg text-xs ${
-                                    itemActive
-                                      ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
-                                      : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                                  }`}
+                              <section key={domain.key} className="rounded-lg bg-[var(--surface-muted)]/45 p-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setCollapsedCategories((prev) => ({ ...prev, [domainKey]: !prev[domainKey] }))}
+                                  className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
                                 >
-                                  <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
-                                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                                    <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                                    <NavBadgeTag badge={item.badge} />
-                                  </a>
-                                  {item.pinnable !== false ? (
-                                    <FavoriteToggle
-                                      navKey={item.key}
-                                      isFav={itemFav}
-                                      className={`mr-1 ${itemFav ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}`}
-                                    />
-                                  ) : null}
-                                </div>
-                                {itemActive && children.length ? (
-                                  <div className="ml-5 mt-0.5 grid gap-0.5 border-l border-[var(--border)] pl-2">
-                                    {children.slice(0, 4).map((child) => {
-                                      const ChildIcon = child.icon;
-                                      const childActive = current.key === child.key;
+                                  {domainOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                  <span className="min-w-0 flex-1 truncate">{domain.label}</span>
+                                  <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span>
+                                </button>
+                                {domainOpen ? (
+                                  <div className="mt-1 grid gap-1">
+                                    {domain.categories.map((category) => {
+                                      const categoryKey = `main-category:${app.id}:${domain.key}:${category.key}`;
+                                      const categoryOpen = !collapsedCategories[categoryKey] || active;
                                       return (
-                                        <a
-                                          key={child.key}
-                                          href={child.path}
-                                          className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
-                                            childActive ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                                          }`}
-                                        >
-                                          <ChildIcon className="h-3 w-3 shrink-0" />
-                                          <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
-                                        </a>
+                                        <div key={category.key} className="rounded-md border border-[var(--border)]/50 bg-[var(--surface-raised)]/45 p-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => setCollapsedCategories((prev) => ({ ...prev, [categoryKey]: !prev[categoryKey] }))}
+                                            className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] font-semibold text-[var(--nav-muted)] hover:bg-[var(--surface-muted)]"
+                                          >
+                                            {categoryOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                            <span className="min-w-0 flex-1 truncate">{category.label}</span>
+                                            <span>{category.items.length}</span>
+                                          </button>
+                                          {categoryOpen ? (
+                                            <div className="mt-0.5 grid gap-0.5">
+                                              {category.items.map((item) => {
+                                                const Icon = item.icon;
+                                                const itemActive = current.key === item.key || current.parentKey === item.key;
+                                                const children = microAppChildrenByParent.get(item.key) ?? [];
+                                                const itemFav = favoriteSet.has(item.key);
+                                                return (
+                                                  <div key={item.key}>
+                                                    <div
+                                                      className={`group/appmenu flex items-center rounded-lg text-xs ${
+                                                        itemActive
+                                                          ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                                          : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                                      }`}
+                                                    >
+                                                      <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                                                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                                                        <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                                                        <NavBadgeTag badge={item.badge} />
+                                                      </a>
+                                                      {item.pinnable !== false ? (
+                                                        <FavoriteToggle
+                                                          navKey={item.key}
+                                                          isFav={itemFav}
+                                                          className={`mr-1 ${itemFav ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}`}
+                                                        />
+                                                      ) : null}
+                                                    </div>
+                                                    {itemActive && children.length ? (
+                                                      <div className="ml-5 mt-0.5 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                                                        {children.slice(0, 4).map((child) => {
+                                                          const ChildIcon = child.icon;
+                                                          const childActive = current.key === child.key;
+                                                          return (
+                                                            <a
+                                                              key={child.key}
+                                                              href={child.path}
+                                                              className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
+                                                                childActive ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                                              }`}
+                                                            >
+                                                              <ChildIcon className="h-3 w-3 shrink-0" />
+                                                              <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
+                                                            </a>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    ) : null}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : null}
+                                        </div>
                                       );
                                     })}
                                   </div>
                                 ) : null}
-                              </div>
+                              </section>
                             );
                           })}
-                          {appMenus.length > (active ? 10 : 6) ? (
-                            <button
-                              type="button"
-                              onClick={() => chooseMicroApp(app.id, app.route)}
-                              className="mx-1 rounded-md px-2 py-1 text-left text-[11px] font-medium text-[var(--brand)] hover:bg-[var(--surface-muted)]"
-                            >
-                              查看全部 {appMenus.length} 个模块
-                            </button>
-                          ) : null}
                         </div>
                       </div>
                     ) : null}

@@ -573,8 +573,8 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
 
   return (
-    <div className={`flex bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "min-h-[calc(100vh-14rem)]" : "min-h-screen"}`}>
-      <aside className={`${embedded ? "hidden w-72 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 xl:block" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
+    <div className={`flex bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "h-full min-h-0" : "min-h-screen"}`}>
+      <aside className={`${embedded ? "hidden h-full min-h-0 w-72 shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 xl:flex" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -639,7 +639,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           ) : null}
         </div>
 
-        <nav className="mt-4 grid max-h-[calc(100vh-31rem)] gap-3 overflow-y-auto pr-1">
+        <nav className={`mt-4 grid gap-3 overflow-y-auto pr-1 ${embedded ? "min-h-0 flex-1" : "max-h-[calc(100vh-31rem)]"}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
@@ -761,7 +761,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </nav>
       </aside>
 
-      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 xl:px-8">
+      <main className={`min-w-0 flex-1 px-4 py-5 sm:px-6 xl:px-8 ${embedded ? "h-full overflow-y-auto" : ""}`}>
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
