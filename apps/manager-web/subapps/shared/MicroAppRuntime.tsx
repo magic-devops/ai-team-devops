@@ -9,18 +9,25 @@ import {
   CircleDot,
   ExternalLink,
   Gauge,
+  Globe2,
   Layers3,
   ListChecks,
   Lock,
+  LogOut,
+  Menu,
+  Palette,
   Pin,
   Rows3,
   Route,
   Search,
+  Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Star,
+  UserCircle,
   Zap,
 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,9 +37,13 @@ import {
   PROJECT_ID_KEY,
   TENANT_CODE_KEY,
   TOKEN_KEY,
+  USER_KEY,
+  clearSession,
   getToken,
 } from "../../src/lib/authStorage";
-import { initTheme } from "../../src/lib/theme";
+import { ProjectSelector } from "../../src/components/ProjectSelector";
+import { api } from "../../src/lib/api";
+import { getThemePreference, initTheme, setThemePreference, THEME_OPTIONS, type ThemePreference } from "../../src/lib/theme";
 import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
 import { buildNavBreadcrumb, NAV, NAV_CATEGORIES, type NavItem } from "../../src/navigation";
@@ -63,6 +74,21 @@ function setLocalValue(key: string, value: string | null | undefined) {
     if (value && value.trim()) localStorage.setItem(key, value.trim());
   } catch {
     /* ignore sandboxed storage */
+  }
+}
+
+function getStoredRuntimeUser(): { username?: string; tenantName?: string; role?: string } {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (!raw) return {};
+    const value = JSON.parse(raw) as { username?: string; id?: string; tenant_name?: string; tenant_slug?: string; tenant_id?: string; role?: string };
+    return {
+      username: value.username || value.id,
+      tenantName: value.tenant_name || value.tenant_slug || value.tenant_id,
+      role: value.role,
+    };
+  } catch {
+    return {};
   }
 }
 
@@ -156,6 +182,179 @@ function densityText(density: MenuDensity) {
 function nextDensity(current: MenuDensity): MenuDensity {
   const index = DENSITY_ORDER.indexOf(current);
   return DENSITY_ORDER[(index + 1) % DENSITY_ORDER.length] ?? "comfortable";
+}
+
+function RuntimeTopBar({
+  app,
+  currentLabel,
+  current,
+  onToggleMenu,
+  density,
+  onCycleDensity,
+  onOpenCopilot,
+}: {
+  app: RuntimeApp;
+  currentLabel: string;
+  current: NavItem;
+  onToggleMenu: () => void;
+  density: MenuDensity;
+  onCycleDensity: () => void;
+  onOpenCopilot: () => void;
+}) {
+  const { i18n } = useTranslation();
+  const qc = useQueryClient();
+  const [theme, setTheme] = useState<ThemePreference>(() => getThemePreference());
+  const authed = Boolean(getToken());
+  const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+  const logout = useMutation({
+    mutationFn: api.logout,
+    onSettled: () => {
+      clearSession();
+      void qc.clear();
+      window.location.replace(`/login.html?redirect=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`);
+    },
+  });
+
+  useEffect(() => {
+    const syncTheme = () => setTheme(getThemePreference());
+    window.addEventListener("sop-theme", syncTheme);
+    return () => window.removeEventListener("sop-theme", syncTheme);
+  }, []);
+
+  const chooseTheme = (value: ThemePreference) => {
+    setTheme(value);
+    setThemePreference(value);
+  };
+
+  const chooseLanguage = (value: string) => {
+    void i18n.changeLanguage(value);
+    try {
+      localStorage.setItem("i18nextLng", value);
+    } catch {
+      /* ignore sandboxed storage */
+    }
+  };
+
+  const storedUser = getStoredRuntimeUser();
+  const username = String(me.data?.username || me.data?.user_id || storedUser.username || "admin");
+  const tenantName = String(me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || storedUser.tenantName || "default");
+
+  return (
+    <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur xl:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={onToggleMenu}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] lg:hidden"
+            aria-label="打开子应用菜单"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+            <Layers3 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
+            <p className="truncate text-xs text-[var(--muted)]">{app.shortName} / {currentLabel}</p>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <ProjectSelector />
+          <button
+            type="button"
+            onClick={onCycleDensity}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+            title="菜单密度"
+          >
+            <Rows3 className="h-4 w-4" />
+            {densityText(density)}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenCopilot}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+          >
+            <Bot className="h-4 w-4 text-[var(--brand)]" />
+            模块 AI
+          </button>
+          <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2 text-sm text-[var(--muted-strong)] shadow-sm">
+            <Palette className="h-4 w-4" />
+            <select
+              value={theme}
+              onChange={(event) => chooseTheme(event.target.value as ThemePreference)}
+              className="max-w-[7rem] bg-transparent text-[var(--text)] outline-none"
+              aria-label="外观主题"
+            >
+              {THEME_OPTIONS.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2 text-sm text-[var(--muted-strong)] shadow-sm">
+            <Globe2 className="h-4 w-4" />
+            <select
+              value={i18n.language || "zh-CN"}
+              onChange={(event) => chooseLanguage(event.target.value)}
+              className="max-w-[6rem] bg-transparent text-[var(--text)] outline-none"
+              aria-label="界面语言"
+            >
+              <option value="zh-CN">中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </label>
+          <a
+            href="/#/settings"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+            title="子应用配置"
+          >
+            <Settings2 className="h-4 w-4" />
+          </a>
+          <div className="group relative">
+            <a
+              href="/#/organization/users"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--text)] shadow-sm hover:bg-[var(--surface-muted)]"
+              title={`${tenantName} / ${username}`}
+            >
+              <UserCircle className="h-4 w-4 text-[var(--brand)]" />
+              <span className="max-w-[8rem] truncate">{username}</span>
+            </a>
+            <div className="invisible absolute right-0 top-10 z-30 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100">
+              <p className="truncate font-semibold text-[var(--text)]">{username}</p>
+              <p className="mt-1 truncate text-xs text-[var(--muted)]">{tenantName}</p>
+              <div className="mt-3 grid gap-1">
+                <a href="/#/organization/users" className="rounded-lg px-2 py-2 text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]">用户与账号管理</a>
+                <a href="/#/organization/role-policy" className="rounded-lg px-2 py-2 text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]">角色权限策略</a>
+                <button
+                  type="button"
+                  onClick={() => logout.mutate()}
+                  className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-left text-rose-600 hover:bg-rose-500/10"
+                >
+                  <LogOut className="h-4 w-4" />
+                  退出登录
+                </button>
+              </div>
+            </div>
+          </div>
+          {!window.__POWERED_BY_WUJIE__ ? (
+            <a
+              href={app.basePath}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+            >
+              <ExternalLink className="h-4 w-4" />
+              独立打开
+            </a>
+          ) : null}
+        </div>
+      </div>
+      <p className="mt-2 hidden truncate text-xs text-[var(--muted)] lg:block">
+        子应用独立运行态 · {current.capability || current.key} · {app.owner}
+      </p>
+    </div>
+  );
 }
 
 function maturityTone(maturity: RuntimeApp["capabilities"][number]["maturity"]) {
@@ -469,6 +668,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const app = getMicroApp(appId);
   const [hash, setHash] = useState(window.location.hash || app.basePath);
   const [keyword, setKeyword] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -573,10 +773,56 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const currentIsFavorite = menuPrefs.favorites.includes(current.key);
   const cycleMenuDensity = () => patchMenuPrefs({ density: nextDensity(menuPrefs.density) });
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
+  const openCurrentCopilot = () => openModuleCopilot(current, app.name, currentLabel);
 
   return (
-    <div className={`flex bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "h-full min-h-0" : "min-h-screen"}`}>
-      <aside className={`${embedded ? "hidden h-full min-h-0 w-72 shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 xl:flex" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
+    <div className={`flex flex-col bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "h-full min-h-0 overflow-hidden" : "h-screen min-h-0 overflow-hidden"}`}>
+      <RuntimeTopBar
+        app={app}
+        current={current}
+        currentLabel={currentLabel}
+        density={menuPrefs.density}
+        onCycleDensity={cycleMenuDensity}
+        onOpenCopilot={openCurrentCopilot}
+        onToggleMenu={() => setMobileMenuOpen((open) => !open)}
+      />
+
+      {mobileMenuOpen ? (
+        <div className="max-h-[45vh] shrink-0 overflow-y-auto border-b border-[var(--nav-border)] bg-[var(--nav-bg)] p-3 lg:hidden">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="搜索应用模块"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-3 text-sm outline-none ring-[var(--brand)] focus:ring"
+            />
+          </div>
+          <div className="mt-3 grid gap-2">
+            {menuTree.flatMap((domain) => domain.categories).flatMap((category) => category.items).map((item) => {
+              const Icon = item.icon;
+              const active = current.key === item.key || current.parentKey === item.key;
+              return (
+                <a
+                  key={item.key}
+                  href={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                    active ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)]" : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
+                  <ChevronRight className="h-3.5 w-3.5 text-[var(--muted)]" />
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <aside className="hidden min-h-0 w-80 shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:flex">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -641,7 +887,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           ) : null}
         </div>
 
-        <nav className={`mt-4 grid gap-3 overflow-y-auto pr-1 ${embedded ? "min-h-0 flex-1" : "max-h-[calc(100vh-31rem)]"}`}>
+        <nav className="mt-4 grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1">
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
@@ -763,7 +1009,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </nav>
       </aside>
 
-      <main className={`min-w-0 flex-1 px-4 py-5 sm:px-6 xl:px-8 ${embedded ? "h-full overflow-y-auto" : ""}`}>
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -800,22 +1046,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                 {currentIsFavorite ? "已收藏" : "收藏"}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={cycleMenuDensity}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-            >
-              <Rows3 className="h-4 w-4" />
-              {densityText(menuPrefs.density)}
-            </button>
-            <button
-              type="button"
-              onClick={() => openModuleCopilot(current, app.name, currentLabel)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-            >
-              <Bot className="h-4 w-4 text-[var(--brand)]" />
-              模块 AI
-            </button>
             {!window.__POWERED_BY_WUJIE__ ? (
               <a
                 href="/"
@@ -841,6 +1071,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           </div>
         ) : null}
       </main>
+      </div>
     </div>
   );
 }

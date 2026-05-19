@@ -82,23 +82,8 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
 
   if (app.mode === "wujie" && runtimeUrl && sameOriginRuntime && !remoteFailed) {
     return (
-      <section className="min-h-[70vh] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">LOCAL MICRO APP</p>
-            <h2 className="mt-0.5 text-lg font-semibold text-[var(--text)]">{app.name}</h2>
-          </div>
-          <a
-            href={runtimeUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-2 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-          >
-            <ExternalLink className="h-4 w-4" />
-            打开独立应用
-          </a>
-        </div>
-        <div className="h-[calc(100vh-12rem)] min-h-[40rem] overflow-hidden">
+      <section className="h-[calc(100vh-9rem)] min-h-[42rem] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <div className="h-full min-h-0">
           <MicroAppRuntime appId={appId} embedded />
         </div>
       </section>
