@@ -104,7 +104,26 @@
     "collapseSidebar": "メニューを折りたたむ",
     "expandSidebar": "メニューを展開",
     "resizeSidebar": "ドラッグでメニュー幅を調整、ダブルクリックで既定に戻す",
-    "systemMap": "モジュールガバナンス"
+    "systemMap": "モジュールガバナンス",
+    "agentOps": "エージェント実行センター",
+    "llmGateway": "LLMゲートウェイ",
+    "knowledgeGraph": "ナレッジグラフ",
+    "a2aGateway": "A2Aゲートウェイ",
+    "opsCenter": "インテリジェント運用センター",
+    "dataIngest": "データ取り込みセンター",
+    "dataQualityCenter": "データ品質センター",
+    "metricsCenter": "メトリクスセンター",
+    "tagService": "タグサービス",
+    "dataDev": "データ開発ワークベンチ",
+    "category": {
+      "smartOps": "インテリジェント運用センター",
+      "dataIngest": "データ取り込みセンター",
+      "dataQualityCenter": "データ品質センター",
+      "dataMetricsTags": "メトリクスセンター",
+      "aiAgentOps": "エージェント実行センター",
+      "aiModelOps": "LLMゲートウェイ",
+      "a2aProtocol": "A2Aゲートウェイ"
+    }
   },
   "dashboard": {
     "fullConsoleTitle": "クロスプロジェクトの要約とヘルスはここで。",
@@ -246,7 +265,8 @@
       "title": "データサービス"
     },
     "dataQuality": {
-      "title": "品質アラート"
+      "hubTitle": "データ品質センター",
+      "hubDesc": "品質ルール、実行、アラート、レポート"
     },
     "dataDevelopment": {
       "title": "データ開発"
@@ -1996,6 +2016,42 @@
       "category": "分類",
       "risk": "リスク",
       "command": "コマンド"
+    },
+    "agentOps": {
+      "hubTitle": "エージェント実行センター",
+      "hubDesc": "エージェント実行ライフサイクル管理"
+    },
+    "llmGateway": {
+      "hubTitle": "LLMゲートウェイ",
+      "hubDesc": "モデルルーティング、コスト管理、スロットル"
+    },
+    "knowledgeGraph": {
+      "hubTitle": "ナレッジグラフ",
+      "hubDesc": "コード・要件・仕様の統合ナレッジグラフ"
+    },
+    "a2aGateway": {
+      "hubTitle": "A2Aゲートウェイ",
+      "hubDesc": "A2Aプロトコル：エージェント登録・協議・ディスパッチ"
+    },
+    "opsCenter": {
+      "hubTitle": "インテリジェント運用センター",
+      "hubDesc": "パイプライン、RCA、Runbook、自己修復"
+    },
+    "dataIngest": {
+      "hubTitle": "データ取り込みセンター",
+      "hubDesc": "コネクタ、スキーマレジストリ、CDC、バッチジョブ"
+    },
+    "metricsCenter": {
+      "hubTitle": "メトリクスセンター",
+      "hubDesc": "メトリクスカタログ、セマンティック層、API公開"
+    },
+    "tagService": {
+      "hubTitle": "タグサービス",
+      "hubDesc": "タグカタログ、ルール、オントロジー、タグAPI"
+    },
+    "dataDev": {
+      "title": "データ開発ワークベンチ",
+      "desc": "SQLエディタ、Spark/Flinkジョブ、スケジューリング"
     }
   },
   "projectSelector": {

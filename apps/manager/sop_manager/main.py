@@ -116,6 +116,55 @@ from sop_manager.routers.sprints import router as sprints_router
 
 from sop_manager.routers import data_exchange, organization as organization_router
 
+# ── 新增模块：agent_runs / data_quality / metrics_service / tag_service / data_ingest / a2a_gateway / llm_gateway_v2 / ops_center ──
+try:
+    from sop_manager.routers import agent_runs as _agent_runs
+except Exception as _e:
+    _agent_runs = None
+    app_logger.warning("agent_runs 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import data_quality as _data_quality
+except Exception as _e:
+    _data_quality = None
+    app_logger.warning("data_quality 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import metrics_service as _metrics_service
+except Exception as _e:
+    _metrics_service = None
+    app_logger.warning("metrics_service 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import tag_service as _tag_service
+except Exception as _e:
+    _tag_service = None
+    app_logger.warning("tag_service 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import data_ingest as _data_ingest
+except Exception as _e:
+    _data_ingest = None
+    app_logger.warning("data_ingest 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import a2a_gateway as _a2a_gateway
+except Exception as _e:
+    _a2a_gateway = None
+    app_logger.warning("a2a_gateway 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import llm_gateway_v2 as _llm_gateway_v2
+except Exception as _e:
+    _llm_gateway_v2 = None
+    app_logger.warning("llm_gateway_v2 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import ops_center as _ops_center
+except Exception as _e:
+    _ops_center = None
+    app_logger.warning("ops_center 路由未启用: %s", _e)
+
 # ── 新增：LLM Gateway + RAG（M5）+ Events 推送（M9）────────────
 try:
     from sop_manager.routers import llm_gateway as _llm_gateway
@@ -252,7 +301,9 @@ if _plugin_loader is not None:
 
 # ── M7-M12 子模块 mount ──────────────────────────────────────────
 for _name in ("_audit_chain", "_audit_worm", "_crypto_box", "_key_rotation",
-              "_workflow", "_marketplace", "_reflection_distill", "_sso"):
+              "_workflow", "_marketplace", "_reflection_distill", "_sso",
+              "_agent_runs", "_data_quality", "_metrics_service", "_tag_service",
+              "_data_ingest", "_a2a_gateway", "_llm_gateway_v2", "_ops_center"):
     _mod = globals().get(_name)
     if _mod is not None and hasattr(_mod, "router"):
         try:

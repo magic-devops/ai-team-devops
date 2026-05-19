@@ -1608,4 +1608,176 @@ export const api = {
     request<{ ok: boolean; items: Array<Record<string, unknown>>; total: number }>(
       `/api/v1/webhooks/${encodeURIComponent(hookId)}/deliveries?limit=${limit}`,
     ),
+
+  // ── Agent Runs ──────────────────────────────────────────────────────────
+  agentRunsList: (agentId = "", status = "", limit = 100) =>
+    request<any>(`/api/v1/agent-runs?agent_id=${agentId}&status=${status}&limit=${limit}`),
+  agentRunCreate: (body: { agent_id: string; task_id?: string; meta?: Record<string, unknown> }) =>
+    request<any>("/api/v1/agent-runs", { method: "POST", body: JSON.stringify(body) }),
+  agentRunHeartbeat: (runId: string) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/heartbeat`, { method: "PUT" }),
+  agentRunStatus: (runId: string, body: { status: string; error_msg?: string; retry_count?: number }) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/status`, { method: "PUT", body: JSON.stringify(body) }),
+  agentRunEvidence: (runId: string, body: { artifact?: Record<string, unknown>; gate_results?: Record<string, unknown>; confidence?: number }) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/evidence`, { method: "POST", body: JSON.stringify(body) }),
+  agentRunDelete: (runId: string) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}`, { method: "DELETE" }),
+  agentRunProfiles: () => request<any>("/api/v1/agent-runs/profiles"),
+  agentRunsSummaryV2: () => request<any>("/api/v1/agent-runs/summary"),
+
+  // ── Data Quality ────────────────────────────────────────────────────────
+  dataQualityRules: (domain = "", status = "") =>
+    request<any>(`/api/v1/data-quality/rules?domain=${domain}&status=${status}`),
+  dataQualityRuleCreate: (body: { name: string; domain?: string; rule_type?: string; expression?: string; severity?: string }) =>
+    request<any>("/api/v1/data-quality/rules", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityRuleUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/data-quality/rules/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  dataQualityRuleDelete: (id: string) =>
+    request<any>(`/api/v1/data-quality/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dataQualityRuns: (ruleId = "", limit = 50) =>
+    request<any>(`/api/v1/data-quality/runs?rule_id=${ruleId}&limit=${limit}`),
+  dataQualityRunCreate: (body: { rule_id: string; dataset?: string }) =>
+    request<any>("/api/v1/data-quality/runs", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityRunFinish: (id: string) =>
+    request<any>(`/api/v1/data-quality/runs/${encodeURIComponent(id)}/finish`, { method: "POST" }),
+  dataQualityAlerts: (severity = "", status = "") =>
+    request<any>(`/api/v1/data-quality/alerts?severity=${severity}&status=${status}`),
+  dataQualityAlertResolve: (id: string) =>
+    request<any>(`/api/v1/data-quality/alerts/${encodeURIComponent(id)}/resolve`, { method: "POST" }),
+  dataQualitySummary: () => request<any>("/api/v1/data-quality/summary"),
+
+  // ── Metrics Service ─────────────────────────────────────────────────────
+  metricsCatalog: (domain = "", metricType = "") =>
+    request<any>(`/api/v1/metrics-service/catalog?domain=${domain}&metric_type=${metricType}`),
+  metricCreate: (body: { name: string; domain?: string; metric_type?: string; formula?: string; unit?: string; owner?: string }) =>
+    request<any>("/api/v1/metrics-service/catalog", { method: "POST", body: JSON.stringify(body) }),
+  metricUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  metricDelete: (id: string) =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  metricPublishApi: (metricId: string) =>
+    request<any>(`/api/v1/metrics-service/api-publish?metric_id=${encodeURIComponent(metricId)}`, { method: "POST" }),
+  metricsPublished: () => request<any>("/api/v1/metrics-service/api-publish"),
+  metricValues: (metricId: string, grain = "day") =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/values?grain=${encodeURIComponent(grain)}`),
+  metricsSummary: () => request<any>("/api/v1/metrics-service/summary"),
+
+  // ── Tag Service ─────────────────────────────────────────────────────────
+  tagCatalog: (category = "") => request<any>(`/api/v1/tag-service/catalog?category=${category}`),
+  tagCreate: (body: { name: string; category?: string; description?: string; value_type?: string; owner?: string }) =>
+    request<any>("/api/v1/tag-service/catalog", { method: "POST", body: JSON.stringify(body) }),
+  tagUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/tag-service/catalog/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  tagDelete: (id: string) =>
+    request<any>(`/api/v1/tag-service/catalog/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  tagRules: () => request<any>("/api/v1/tag-service/rules"),
+  tagRuleCreate: (body: { tag_id: string; condition?: Record<string, unknown>; priority?: number }) =>
+    request<any>("/api/v1/tag-service/rules", { method: "POST", body: JSON.stringify(body) }),
+  tagRuleDelete: (id: string) =>
+    request<any>(`/api/v1/tag-service/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  tagOntology: () => request<any>("/api/v1/tag-service/ontology"),
+  tagEntityCreate: (body: { entity_type: string; name: string; attributes?: Record<string, unknown> }) =>
+    request<any>("/api/v1/tag-service/ontology/entities", { method: "POST", body: JSON.stringify(body) }),
+  tagEntityDelete: (id: string) =>
+    request<any>(`/api/v1/tag-service/ontology/entities/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  tagSummary: () => request<any>("/api/v1/tag-service/summary"),
+
+  // ── Data Ingest ─────────────────────────────────────────────────────────
+  dataIngestConnectors: (connectorType = "") =>
+    request<any>(`/api/v1/data-ingest/connectors?connector_type=${connectorType}`),
+  dataIngestConnectorCreate: (body: { name: string; connector_type?: string; host?: string; port?: number; database?: string }) =>
+    request<any>("/api/v1/data-ingest/connectors", { method: "POST", body: JSON.stringify(body) }),
+  dataIngestConnectorUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  dataIngestConnectorDelete: (id: string) =>
+    request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dataIngestConnectorTest: (id: string) =>
+    request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}/test`, { method: "POST" }),
+  dataIngestConnectorSchema: (id: string) =>
+    request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}/schema`),
+  dataIngestJobs: (connectorId = "", status = "") =>
+    request<any>(`/api/v1/data-ingest/jobs?connector_id=${connectorId}&status=${status}`),
+  dataIngestJobCreate: (body: { connector_id: string; name: string; ingest_mode?: string; schedule?: string; target_table?: string }) =>
+    request<any>("/api/v1/data-ingest/jobs", { method: "POST", body: JSON.stringify(body) }),
+  dataIngestJobUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  dataIngestJobRun: (id: string) =>
+    request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}/run`, { method: "POST" }),
+  dataIngestJobStatus: (id: string, body: { status: string; rows_ingested?: number; error_msg?: string }) =>
+    request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify(body) }),
+  dataIngestJobDelete: (id: string) =>
+    request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dataIngestSummary: () => request<any>("/api/v1/data-ingest/summary"),
+
+  // ── A2A Gateway ─────────────────────────────────────────────────────────
+  a2aRegistry: (agentType = "") => request<any>(`/api/v1/a2a/registry?agent_type=${agentType}`),
+  a2aRegister: (body: { name: string; agent_type?: string; endpoint?: string; capabilities?: string[] }) =>
+    request<any>("/api/v1/a2a/registry", { method: "POST", body: JSON.stringify(body) }),
+  a2aDeregister: (id: string) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  a2aAgentStatus: (id: string, status: string) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+  a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[] }) =>
+    request<any>("/api/v1/a2a/negotiate", { method: "POST", body: JSON.stringify(body) }),
+  a2aDispatch: (body: { agent_id: string; task_id: string; payload?: Record<string, unknown> }) =>
+    request<any>("/api/v1/a2a/dispatch", { method: "POST", body: JSON.stringify(body) }),
+  a2aDispatches: (agentId = "", status = "") => request<any>(`/api/v1/a2a/dispatch?agent_id=${agentId}&status=${status}`),
+  a2aEvidence: (agentId = "") => request<any>(`/api/v1/a2a/evidence?agent_id=${agentId}`),
+  a2aReceiveEvidence: (body: { dispatch_id: string; status: string; artifact?: Record<string, unknown>; confidence?: number }) =>
+    request<any>("/api/v1/a2a/evidence", { method: "POST", body: JSON.stringify(body) }),
+  a2aSummary: () => request<any>("/api/v1/a2a/summary"),
+
+  // ── LLM Gateway v2 ──────────────────────────────────────────────────────
+  llmRoutes: () => request<any>("/api/v1/llm-gateway/routes"),
+  llmRouteCreate: (body: { name: string; task_type?: string; model_id: string; priority?: number; fallback_model_id?: string }) =>
+    request<any>("/api/v1/llm-gateway/routes", { method: "POST", body: JSON.stringify(body) }),
+  llmRouteUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/llm-gateway/routes/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  llmRouteDelete: (id: string) =>
+    request<any>(`/api/v1/llm-gateway/routes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  llmResolveRoute: (taskType = "general") =>
+    request<any>(`/api/v1/llm-gateway/resolve?task_type=${encodeURIComponent(taskType)}`, { method: "POST" }),
+  llmCostStats: (modelId = "", period = "7d") =>
+    request<any>(`/api/v1/llm-gateway/cost?model_id=${modelId}&period=${period}`),
+  llmRecordCost: (body: { model_id: string; prompt_tokens?: number; completion_tokens?: number; cost_usd?: number; latency_ms?: number; task_type?: string }) =>
+    request<any>("/api/v1/llm-gateway/cost", { method: "POST", body: JSON.stringify(body) }),
+  llmThrottle: () => request<any>("/api/v1/llm-gateway/throttle"),
+  llmThrottleCreate: (body: { model_id: string; rpm_limit?: number; tpm_limit?: number }) =>
+    request<any>("/api/v1/llm-gateway/throttle", { method: "POST", body: JSON.stringify(body) }),
+  llmThrottleUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/llm-gateway/throttle/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  llmThrottleDelete: (id: string) =>
+    request<any>(`/api/v1/llm-gateway/throttle/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  llmGatewaySummary: () => request<any>("/api/v1/llm-gateway/summary"),
+
+  // ── Ops Center ──────────────────────────────────────────────────────────
+  opsPipelines: () => request<any>("/api/v1/ops-center/pipelines"),
+  opsPipelineCreate: (body: { name: string; environment?: string; steps?: string[] }) =>
+    request<any>("/api/v1/ops-center/pipelines", { method: "POST", body: JSON.stringify(body) }),
+  opsPipelineTrigger: (id: string) =>
+    request<any>(`/api/v1/ops-center/pipelines/${encodeURIComponent(id)}/trigger`, { method: "PUT" }),
+  opsPipelineStatus: (id: string, body: { status: string; duration_s?: number; error_msg?: string }) =>
+    request<any>(`/api/v1/ops-center/pipelines/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify(body) }),
+  opsPipelineDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/pipelines/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  opsRca: () => request<any>("/api/v1/ops-center/rca"),
+  opsRcaCreate: (body: { incident_id: string; root_cause: string; impact?: string; resolution?: string }) =>
+    request<any>("/api/v1/ops-center/rca", { method: "POST", body: JSON.stringify(body) }),
+  opsRcaResolve: (id: string) =>
+    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/resolve`, { method: "PUT" }),
+  opsRunbooks: () => request<any>("/api/v1/ops-center/runbooks"),
+  opsRunbookCreate: (body: { name: string; steps?: string[]; tags?: string[] }) =>
+    request<any>("/api/v1/ops-center/runbooks", { method: "POST", body: JSON.stringify(body) }),
+  opsRunbookDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  opsSelfHeal: () => request<any>("/api/v1/ops-center/self-heal"),
+  opsSelfHealCreate: (body: { trigger_condition: string; action: string; enabled?: boolean }) =>
+    request<any>("/api/v1/ops-center/self-heal", { method: "POST", body: JSON.stringify(body) }),
+  opsSelfHealUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  opsSelfHealApply: (id: string) =>
+    request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}/apply`, { method: "POST" }),
+  opsSelfHealDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  opsCenterSummary: () => request<any>("/api/v1/ops-center/summary"),
 };

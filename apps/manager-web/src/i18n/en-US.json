@@ -161,7 +161,26 @@
       "events": "Event stream",
       "agent_runs": "Agent runs"
     },
-    "agentRuns": "Agent runs"
+    "agentRuns": "Agent runs",
+    "agentOps": "Agent Ops",
+    "llmGateway": "LLM Gateway",
+    "knowledgeGraph": "Knowledge Graph",
+    "a2aGateway": "A2A Gateway",
+    "opsCenter": "Ops Center",
+    "dataIngest": "Data Ingest",
+    "dataQualityCenter": "Data Quality",
+    "metricsCenter": "Metrics Center",
+    "tagService": "Tag Service",
+    "dataDev": "Data Dev",
+    "category": {
+      "smartOps": "Ops Center",
+      "dataIngest": "Data Ingest",
+      "dataQualityCenter": "Data Quality",
+      "dataMetricsTags": "Metrics Center",
+      "aiAgentOps": "Agent Ops",
+      "aiModelOps": "LLM Gateway",
+      "a2aProtocol": "A2A Gateway"
+    }
   },
   "dashboard": {
     "fullConsoleTitle": "Cross-project summaries and health checks live here.",
@@ -308,7 +327,8 @@
       "title": "Data services"
     },
     "dataQuality": {
-      "title": "Quality alerts"
+      "hubTitle": "Data Quality Center",
+      "hubDesc": "Quality rules, runs, alerts and reports"
     },
     "dataDevelopment": {
       "title": "Data development"
@@ -2524,6 +2544,42 @@
       "desc": "Configure outbound webhooks and event subscriptions.",
       "deliveries": "Delivery log",
       "noDeliveries": "No deliveries yet"
+    },
+    "agentOps": {
+      "hubTitle": "Agent Ops Center",
+      "hubDesc": "Agent run lifecycle: runs, heartbeat, profiles, retry"
+    },
+    "llmGateway": {
+      "hubTitle": "LLM Gateway",
+      "hubDesc": "Model routing, cost control and throttle policies"
+    },
+    "knowledgeGraph": {
+      "hubTitle": "Knowledge Graph",
+      "hubDesc": "Unified knowledge graph for code, requirements and specs"
+    },
+    "a2aGateway": {
+      "hubTitle": "A2A Gateway",
+      "hubDesc": "A2A protocol: agent registry, negotiation, dispatch and evidence"
+    },
+    "opsCenter": {
+      "hubTitle": "Ops Center",
+      "hubDesc": "Pipelines, RCA, Runbooks and self-healing policies"
+    },
+    "dataIngest": {
+      "hubTitle": "Data Ingest Center",
+      "hubDesc": "Connectors, Schema Registry, CDC and batch jobs"
+    },
+    "metricsCenter": {
+      "hubTitle": "Metrics Center",
+      "hubDesc": "Metric catalog, semantic layer, API publish and monitoring"
+    },
+    "tagService": {
+      "hubTitle": "Tag Service",
+      "hubDesc": "Tag catalog, rules, ontology and tag API"
+    },
+    "dataDev": {
+      "title": "Data Dev Workbench",
+      "desc": "SQL editor, Spark/Flink jobs and scheduling"
     }
   },
   "projectSelector": {

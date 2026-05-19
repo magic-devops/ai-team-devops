@@ -147,6 +147,26 @@ const AnalyticsDataHubPage = lazy(() =>
 );
 const SearchHubPage = lazy(() => import("./pages/ai/SearchHub").then((m) => ({ default: m.SearchHub })));
 const VibeHubPage = lazy(() => import("./pages/ai/VibeHub").then((m) => ({ default: m.VibeHub })));
+// --- new modules ---
+const AgentOpsHubPage = lazy(() => import("./pages/ai/AgentOpsHub").then((m) => ({ default: m.AgentOpsHub })));
+const LlmGatewayHubPage = lazy(() => import("./pages/ai/LlmGatewayHub").then((m) => ({ default: m.LlmGatewayHub })));
+const KnowledgeGraphHubPage = lazy(() => import("./pages/ai/KnowledgeGraphHub").then((m) => ({ default: m.KnowledgeGraphHub })));
+const A2aGatewayHubPage = lazy(() => import("./pages/ecosystem/A2aGatewayHub").then((m) => ({ default: m.A2aGatewayHub })));
+const OpsCenterHubPage = lazy(() => import("./pages/system/OpsCenterHub").then((m) => ({ default: m.OpsCenterHub })));
+const DataIngestHubPage = lazy(() => import("./pages/data/DataIngestHub").then((m) => ({ default: m.DataIngestHub })));
+const DataQualityHubPage = lazy(() => import("./pages/data/DataQualityHub").then((m) => ({ default: m.DataQualityHub })));
+const MetricsCenterHubPage = lazy(() => import("./pages/data/MetricsCenterHub").then((m) => ({ default: m.MetricsCenterHub })));
+const TagServiceHubPage = lazy(() => import("./pages/data/TagServiceHub").then((m) => ({ default: m.TagServiceHub })));
+const DataDevWorkbenchPage = lazy(() => import("./pages/data/DataDevWorkbench").then((m) => ({ default: m.DataDevWorkbench })));
+const LlmGatewayWorkbenchPage = lazy(() => import("./pages/ai/LlmGatewayWorkbench").then((m) => ({ default: m.LlmGatewayWorkbench })));
+const KnowledgeGraphWorkbenchPage = lazy(() => import("./pages/ai/KnowledgeGraphWorkbench").then((m) => ({ default: m.KnowledgeGraphWorkbench })));
+const DataIngestWorkbenchPage = lazy(() => import("./pages/data/DataIngestWorkbench").then((m) => ({ default: m.DataIngestWorkbench })));
+const DataQualityWorkbenchPage = lazy(() => import("./pages/data/DataQualityWorkbench").then((m) => ({ default: m.DataQualityWorkbench })));
+const MetricsWorkbenchPage = lazy(() => import("./pages/data/MetricsWorkbench").then((m) => ({ default: m.MetricsWorkbench })));
+const TagWorkbenchPage = lazy(() => import("./pages/data/TagWorkbench").then((m) => ({ default: m.TagWorkbench })));
+const AgentRunsWorkbenchPage = lazy(() => import("./pages/ai/AgentRunsWorkbench").then((m) => ({ default: m.AgentRunsWorkbench })));
+const A2aWorkbenchPage = lazy(() => import("./pages/ecosystem/A2aWorkbench").then((m) => ({ default: m.A2aWorkbench })));
+const OpsCenterWorkbenchPage = lazy(() => import("./pages/system/OpsCenterWorkbench").then((m) => ({ default: m.OpsCenterWorkbench })));
 
 function pageElement<P extends Record<string, unknown> = Record<string, never>>(
   Component: ComponentType<P>,
@@ -274,6 +294,13 @@ export const NAV_CATEGORIES: readonly NavCategoryDefinition[] = [
   { key: "security-audit", group: "governance", i18nKey: "nav.category.securityAudit" },
   { key: "module-governance", group: "governance", i18nKey: "nav.category.moduleGovernance" },
   { key: "runtime-config", group: "system", i18nKey: "nav.category.runtimeConfig" },
+  { key: "smart-ops", group: "system", i18nKey: "nav.category.smartOps" },
+  { key: "data-ingest", group: "data", i18nKey: "nav.category.dataIngest" },
+  { key: "data-quality-center", group: "data", i18nKey: "nav.category.dataQualityCenter" },
+  { key: "data-metrics-tags", group: "data", i18nKey: "nav.category.dataMetricsTags" },
+  { key: "ai-agent-ops", group: "ai", i18nKey: "nav.category.aiAgentOps" },
+  { key: "ai-model-ops", group: "ai", i18nKey: "nav.category.aiModelOps" },
+  { key: "a2a-protocol", group: "ecosystem", i18nKey: "nav.category.a2aProtocol" },
 ];
 
 export const DEFAULT_CATEGORY_COLLAPSE: Record<string, boolean> = Object.fromEntries(
@@ -414,6 +441,51 @@ const ITEM_CATEGORY: Record<string, string> = {
   taskExecution: "delivery-execution",
   taskBoard: "delivery-execution",
   taskSprints: "delivery-execution",
+  // new modules
+  agentOps: "ai-agent-ops",
+  agentOpsRuns: "ai-agent-ops",
+  agentOpsHeartbeat: "ai-agent-ops",
+  agentOpsProfiles: "ai-agent-ops",
+  agentOpsRetry: "ai-agent-ops",
+  llmGateway: "ai-model-ops",
+  llmGatewayRoutes: "ai-model-ops",
+  llmGatewayCost: "ai-model-ops",
+  llmGatewayThrottle: "ai-model-ops",
+  knowledgeGraph: "ai-knowledge",
+  knowledgeGraphBuild: "ai-knowledge",
+  knowledgeGraphQuery: "ai-knowledge",
+  knowledgeGraphLineage: "ai-knowledge",
+  a2aGateway: "a2a-protocol",
+  a2aRegistry: "a2a-protocol",
+  a2aNegotiate: "a2a-protocol",
+  a2aDispatch: "a2a-protocol",
+  a2aEvidence: "a2a-protocol",
+  opsCenter: "smart-ops",
+  opsCenterPipeline: "smart-ops",
+  opsCenterRca: "smart-ops",
+  opsCenterRunbook: "smart-ops",
+  opsCenterSelfHeal: "smart-ops",
+  dataIngest: "data-ingest",
+  dataIngestConnectors: "data-ingest",
+  dataIngestSchema: "data-ingest",
+  dataIngestCdc: "data-ingest",
+  dataIngestBatch: "data-ingest",
+  dataQualityCenter: "data-quality-center",
+  dataQualityRules: "data-quality-center",
+  dataQualityRuns: "data-quality-center",
+  dataQualityAlerts: "data-quality-center",
+  dataQualityReports: "data-quality-center",
+  metricsCenter: "data-metrics-tags",
+  metricsCatalog: "data-metrics-tags",
+  metricsSemantic: "data-metrics-tags",
+  metricsApiPublish: "data-metrics-tags",
+  metricsMonitor: "data-metrics-tags",
+  tagService: "data-metrics-tags",
+  tagCatalog: "data-metrics-tags",
+  tagRules: "data-metrics-tags",
+  tagOntology: "data-metrics-tags",
+  tagApi: "data-metrics-tags",
+  dataDev: "data-engineering-ops",
 };
 
 export const GROUP_ORDER: NavGroupKey[] = NAV_GROUPS.map((group) => group.key);
@@ -623,6 +695,75 @@ export const NAV: readonly NavItem[] = [
   { key: "settingsObservability", path: "#/settings/observability", el: pageElement(SettingsPage), group: "system", icon: SearchCheck, category: "runtime-config", capability: "system.settings.observability" },
   { key: "envOps", path: "#/ops/env", el: pageElement(EnvOpsHubPage), group: "system", icon: Container, category: "runtime-config", capability: "system.env-ops", badge: "new", description: "环境运维治理中心：探活、Profile 与工具链可用性", submodules: subnav("envOps", "workbench", "docker", "profiles") },
   { key: "envOpsWorkbench", path: "#/ops/env/workbench", el: pageElement(EnvOpsWorkbenchPage, { focused: true }), group: "system", icon: Container, category: "runtime-config", capability: "system.env-ops.workbench" },
+  // ── 智能运维中心 ──────────────────────────────────────────────────────────
+  { key: "opsCenter", path: "#/system/ops-center", el: pageElement(OpsCenterHubPage), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center", badge: "new", description: "智能运维中心：部署流水线、根因分析、Runbook 与自愈策略", submodules: subnav("system/ops-center", "pipeline", "rca", "runbook", "self-heal") },
+  { key: "opsCenterPipeline", path: "#/system/ops-center/pipeline", el: pageElement(OpsCenterWorkbenchPage, { focused: true, initialTab: "pipelines" }), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center.pipeline", hidden: true, parentKey: "opsCenter" },
+  { key: "opsCenterRca", path: "#/system/ops-center/rca", el: pageElement(OpsCenterWorkbenchPage, { focused: true, initialTab: "rca" }), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center.rca", hidden: true, parentKey: "opsCenter" },
+  { key: "opsCenterRunbook", path: "#/system/ops-center/runbook", el: pageElement(OpsCenterWorkbenchPage, { focused: true, initialTab: "runbooks" }), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center.runbook", hidden: true, parentKey: "opsCenter" },
+  { key: "opsCenterSelfHeal", path: "#/system/ops-center/self-heal", el: pageElement(OpsCenterWorkbenchPage, { focused: true, initialTab: "self-heal" }), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center.self-heal", hidden: true, parentKey: "opsCenter" },
+  // ── AI Agent 运行中心 ─────────────────────────────────────────────────────
+  { key: "agentOps", path: "#/ai/agent-ops", el: pageElement(AgentOpsHubPage), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops", badge: "new", description: "Agent 运行中心：运行列表、心跳监控、能力画像与失败重试", submodules: subnav("ai/agent-ops", "runs", "heartbeat", "profiles", "retry") },
+  { key: "agentOpsRuns", path: "#/ai/agent-ops/runs", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "runs" }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.runs", hidden: true, parentKey: "agentOps" },
+  { key: "agentOpsHeartbeat", path: "#/ai/agent-ops/heartbeat", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "runs" }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.heartbeat", hidden: true, parentKey: "agentOps" },
+  { key: "agentOpsProfiles", path: "#/ai/agent-ops/profiles", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "profiles" }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.profiles", hidden: true, parentKey: "agentOps" },
+  { key: "agentOpsRetry", path: "#/ai/agent-ops/retry", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "runs" }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.retry", hidden: true, parentKey: "agentOps" },
+  // ── LLM 模型网关 ──────────────────────────────────────────────────────────
+  { key: "llmGatewayWorkbench", path: "#/ai/llm-gateway/workbench", el: pageElement(LlmGatewayWorkbenchPage, { focused: true }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.workbench", hidden: true, parentKey: "llmGateway" },
+    { key: "llmGateway", path: "#/ai/llm-gateway", el: pageElement(LlmGatewayHubPage), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway", badge: "new", description: "模型网关：路由规则、成本统计与限流策略", submodules: subnav("ai/llm-gateway", "routes", "cost", "throttle") },
+  { key: "llmGatewayRoutes", path: "#/ai/llm-gateway/routes", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "routes" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.routes", hidden: true, parentKey: "llmGateway" },
+  { key: "llmGatewayCost", path: "#/ai/llm-gateway/cost", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "cost" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.cost", hidden: true, parentKey: "llmGateway" },
+  { key: "llmGatewayThrottle", path: "#/ai/llm-gateway/throttle", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "throttle" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.throttle", hidden: true, parentKey: "llmGateway" },
+  // ── 知识图谱 ──────────────────────────────────────────────────────────────
+  { key: "knowledgeGraphWorkbench", path: "#/ai/knowledge-graph/workbench", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true }), group: "ai", icon: Network, category: "ai-knowledge", capability: "ai.knowledge-graph.workbench", hidden: true, parentKey: "knowledgeGraph" },
+    { key: "knowledgeGraph", path: "#/ai/knowledge-graph", el: pageElement(KnowledgeGraphHubPage), group: "ai", icon: Network, category: "ai-knowledge", capability: "ai.knowledge-graph", badge: "new", description: "知识图谱：构建、查询与血缘关联", submodules: subnav("ai/knowledge-graph", "build", "query", "lineage") },
+  { key: "knowledgeGraphBuild", path: "#/ai/knowledge-graph/build", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true, initialTab: "build" }), group: "ai", icon: Network, category: "ai-knowledge", capability: "ai.knowledge-graph.build", hidden: true, parentKey: "knowledgeGraph" },
+  { key: "knowledgeGraphQuery", path: "#/ai/knowledge-graph/query", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true, initialTab: "query" }), group: "ai", icon: Network, category: "ai-knowledge", capability: "ai.knowledge-graph.query", hidden: true, parentKey: "knowledgeGraph" },
+  { key: "knowledgeGraphLineage", path: "#/ai/knowledge-graph/lineage", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true, initialTab: "lineage" }), group: "ai", icon: Network, category: "ai-knowledge", capability: "ai.knowledge-graph.lineage", hidden: true, parentKey: "knowledgeGraph" },
+  // ── A2A 网关 ──────────────────────────────────────────────────────────────
+  { key: "a2aGateway", path: "#/ecosystem/a2a", el: pageElement(A2aGatewayHubPage), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a", badge: "new", description: "A2A 协议网关：外部 Agent 注册、能力协商、任务分发与执行证据", submodules: subnav("ecosystem/a2a", "registry", "negotiate", "dispatch", "evidence") },
+  { key: "a2aWorkbench", path: "#/ecosystem/a2a/workbench", el: pageElement(A2aWorkbenchPage, { focused: true }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.workbench", hidden: true, parentKey: "a2aGateway" },
+  { key: "a2aRegistry", path: "#/ecosystem/a2a/registry", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "registry" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.registry", hidden: true, parentKey: "a2aGateway" },
+  { key: "a2aNegotiate", path: "#/ecosystem/a2a/negotiate", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "negotiate" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.negotiate", hidden: true, parentKey: "a2aGateway" },
+  { key: "a2aDispatch", path: "#/ecosystem/a2a/dispatch", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "dispatches" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.dispatch", hidden: true, parentKey: "a2aGateway" },
+  { key: "a2aEvidence", path: "#/ecosystem/a2a/evidence", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "dispatches" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.evidence", hidden: true, parentKey: "a2aGateway" },
+  // ── 数据接入中心 ──────────────────────────────────────────────────────────
+  { key: "dataIngest", path: "#/data/ingest", el: pageElement(DataIngestHubPage), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest", badge: "new", description: "数据接入中心：连接器、Schema Registry、CDC 与批量作业", submodules: subnav("data/ingest", "connectors", "schema", "cdc", "batch") },
+  { key: "dataIngestWorkbench", path: "#/data/ingest/workbench", el: pageElement(DataIngestWorkbenchPage, { focused: true }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.workbench", hidden: true, parentKey: "dataIngest" },
+  { key: "dataIngestConnectors", path: "#/data/ingest/connectors", el: pageElement(DataIngestWorkbenchPage, { focused: true, initialTab: "connectors" }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.connectors", hidden: true, parentKey: "dataIngest" },
+  { key: "dataIngestSchema", path: "#/data/ingest/schema", el: pageElement(DataIngestWorkbenchPage, { focused: true, initialTab: "connectors" }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.schema", hidden: true, parentKey: "dataIngest" },
+  { key: "dataIngestCdc", path: "#/data/ingest/cdc", el: pageElement(DataIngestWorkbenchPage, { focused: true, initialTab: "jobs" }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.cdc", hidden: true, parentKey: "dataIngest" },
+  { key: "dataIngestBatch", path: "#/data/ingest/batch", el: pageElement(DataIngestWorkbenchPage, { focused: true, initialTab: "jobs" }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.batch", hidden: true, parentKey: "dataIngest" },
+  // ── 数据质量中心 ──────────────────────────────────────────────────────────
+  { key: "dataQualityCenter", path: "#/data/quality", el: pageElement(DataQualityHubPage), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality", badge: "new", description: "数据质量中心：规则目录、运行记录、告警处置与质量报告", submodules: subnav("data/quality", "rules", "runs", "alerts", "reports") },
+  { key: "dataQualityWorkbench", path: "#/data/quality/workbench", el: pageElement(DataQualityWorkbenchPage, { focused: true }), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality.workbench", hidden: true, parentKey: "dataQualityCenter" },
+  { key: "dataQualityRules", path: "#/data/quality/rules", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "rules" }), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality.rules", hidden: true, parentKey: "dataQualityCenter" },
+  { key: "dataQualityRuns", path: "#/data/quality/runs", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "runs" }), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality.runs", hidden: true, parentKey: "dataQualityCenter" },
+  { key: "dataQualityAlerts", path: "#/data/quality/alerts", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "alerts" }), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality.alerts", hidden: true, parentKey: "dataQualityCenter" },
+  { key: "dataQualityReports", path: "#/data/quality/reports", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "runs" }), group: "data", icon: ShieldCheck, category: "data-quality-center", capability: "data.quality.reports", hidden: true, parentKey: "dataQualityCenter" },
+  // ── 指标中心 ──────────────────────────────────────────────────────────────
+  { key: "metricsCenter", path: "#/data/metrics", el: pageElement(MetricsCenterHubPage), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics", badge: "new", description: "指标中心：目录、语义层、API 发布与监控", submodules: subnav("data/metrics", "catalog", "semantic", "api-publish", "monitor") },
+  { key: "metricsWorkbench", path: "#/data/metrics/workbench", el: pageElement(MetricsWorkbenchPage, { focused: true }), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics.workbench", hidden: true, parentKey: "metricsCenter" },
+  { key: "metricsCatalog", path: "#/data/metrics/catalog", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "catalog" }), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics.catalog", hidden: true, parentKey: "metricsCenter" },
+  { key: "metricsSemantic", path: "#/data/metrics/semantic", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "catalog" }), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics.semantic", hidden: true, parentKey: "metricsCenter" },
+  { key: "metricsApiPublish", path: "#/data/metrics/api-publish", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "published" }), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics.api-publish", hidden: true, parentKey: "metricsCenter" },
+  { key: "metricsMonitor", path: "#/data/metrics/monitor", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "published" }), group: "data", icon: BarChart3, category: "data-metrics-tags", capability: "data.metrics.monitor", hidden: true, parentKey: "metricsCenter" },
+  // ── 标签服务 ──────────────────────────────────────────────────────────────
+  { key: "tagService", path: "#/data/tags", el: pageElement(TagServiceHubPage), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags", badge: "new", description: "标签服务：目录、规则、画像本体与标签 API", submodules: subnav("data/tags", "catalog", "rules", "ontology", "api") },
+  { key: "tagWorkbench", path: "#/data/tags/workbench", el: pageElement(TagWorkbenchPage, { focused: true }), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags.workbench", hidden: true, parentKey: "tagService" },
+  { key: "tagCatalog", path: "#/data/tags/catalog", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "catalog" }), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags.catalog", hidden: true, parentKey: "tagService" },
+  { key: "tagRules", path: "#/data/tags/rules", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "rules" }), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags.rules", hidden: true, parentKey: "tagService" },
+  { key: "tagOntology", path: "#/data/tags/ontology", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "ontology" }), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags.ontology", hidden: true, parentKey: "tagService" },
+  { key: "tagApi", path: "#/data/tags/api", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "catalog" }), group: "data", icon: Library, category: "data-metrics-tags", capability: "data.tags.api", hidden: true, parentKey: "tagService" },
+  // ── 数据开发工作台 ────────────────────────────────────────────────────────
+  { key: "dataDev", path: "#/data/dev", el: pageElement(DataDevWorkbenchPage), group: "data", icon: FileCode, category: "data-engineering-ops", capability: "data.dev", badge: "new", description: "数据开发工作台：SQL 编辑器、Spark/Flink 作业与调度" },
+  { key: "dataDevSql", path: "#/data/dev/sql_editor", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "sql_editor" }), group: "data", icon: FileCode, category: "data-engineering-ops", capability: "data.dev.sql-editor", hidden: true, parentKey: "dataDev" },
+  { key: "dataDevSpark", path: "#/data/dev/spark_jobs", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "spark_jobs" }), group: "data", icon: FileCode, category: "data-engineering-ops", capability: "data.dev.spark-jobs", hidden: true, parentKey: "dataDev" },
+  { key: "dataDevFlink", path: "#/data/dev/flink_jobs", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "flink_jobs" }), group: "data", icon: FileCode, category: "data-engineering-ops", capability: "data.dev.flink-jobs", hidden: true, parentKey: "dataDev" },
+  { key: "dataDevSchedules", path: "#/data/dev/schedules", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "schedules" }), group: "data", icon: FileCode, category: "data-engineering-ops", capability: "data.dev.schedules", hidden: true, parentKey: "dataDev" },
+  // ── Agent 运行 Workbench ──────────────────────────────────────────────────
+  { key: "agentRunsWorkbench", path: "#/ai/agent-ops/workbench", el: pageElement(AgentRunsWorkbenchPage, { focused: true }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.workbench", hidden: true, parentKey: "agentOps" },
+  // ── 智能运维 Workbench ────────────────────────────────────────────────────
+  { key: "opsCenterWorkbench", path: "#/system/ops-center/workbench", el: pageElement(OpsCenterWorkbenchPage, { focused: true }), group: "system", icon: Wrench, category: "smart-ops", capability: "system.ops-center.workbench", hidden: true, parentKey: "opsCenter" },
 ];
 
 export type GroupedNav = {

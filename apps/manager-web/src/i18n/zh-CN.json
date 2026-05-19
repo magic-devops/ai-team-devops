@@ -197,7 +197,14 @@
       "communicationIntegration": "通信与连接器",
       "securityAudit": "安全审计",
       "moduleGovernance": "模块与能力治理",
-      "runtimeConfig": "运行配置"
+      "runtimeConfig": "运行配置",
+      "smartOps": "智能运维",
+      "dataIngest": "数据接入",
+      "dataQualityCenter": "数据质量",
+      "dataMetricsTags": "指标与标签",
+      "aiAgentOps": "Agent 运行",
+      "aiModelOps": "模型运维",
+      "a2aProtocol": "A2A 协议"
     },
     "sub": {
       "executive_overview": "运营总览",
@@ -345,7 +352,17 @@
     "resizeSidebar": "拖动调整菜单宽度，双击恢复默认",
     "reflectionDistill": "蒸馏审核",
     "eventStream": "事件流水",
-    "agentRuns": "Agent 运行中心"
+    "agentRuns": "Agent 运行中心",
+    "agentOps": "Agent 运行中心",
+    "llmGateway": "模型网关",
+    "knowledgeGraph": "知识图谱",
+    "a2aGateway": "A2A 网关",
+    "opsCenter": "智能运维中心",
+    "dataIngest": "数据接入中心",
+    "dataQualityCenter": "数据质量中心",
+    "metricsCenter": "指标中心",
+    "tagService": "标签服务",
+    "dataDev": "数据开发工作台"
   },
   "dashboard": {
     "fullConsoleTitle": "此处为跨项目摘要与健康检查。",
@@ -492,7 +509,8 @@
       "title": "数据服务"
     },
     "dataQuality": {
-      "title": "质量告警"
+      "hubTitle": "数据质量中心",
+      "hubDesc": "质量规则目录、运行记录、告警处置与质量报告"
     },
     "dataDevelopment": {
       "title": "数据开发"
@@ -2908,6 +2926,42 @@
       "createSelectedTasks": "批量生成任务",
       "taskResult": "已创建 {{created}} 个，跳过 {{skipped}} 个。",
       "aiPrompt": "请分析 legacy console 模块：{{name}}（{{id}}）。目标 React 页面：{{target}}。当前迁移建议：{{next}}。请给出产品化迁移方案、前后端改造点、权限与 AI 能力接入方式，并拆成可执行任务。"
+    },
+    "agentOps": {
+      "hubTitle": "Agent 运行中心",
+      "hubDesc": "Agent 运行生命周期管理：运行列表、心跳监控、能力画像与失败重试"
+    },
+    "llmGateway": {
+      "hubTitle": "模型网关",
+      "hubDesc": "统一 LLM 路由、成本控制与限流策略管理"
+    },
+    "knowledgeGraph": {
+      "hubTitle": "知识图谱",
+      "hubDesc": "构建代码、需求、规约与运行证据的统一知识图谱"
+    },
+    "a2aGateway": {
+      "hubTitle": "A2A 网关",
+      "hubDesc": "标准 A2A 协议：外部 Agent 注册、能力协商、任务分发与执行证据"
+    },
+    "opsCenter": {
+      "hubTitle": "智能运维中心",
+      "hubDesc": "部署流水线、根因分析、Runbook 与自愈策略统一管理"
+    },
+    "dataIngest": {
+      "hubTitle": "数据接入中心",
+      "hubDesc": "连接器管理、Schema Registry、CDC 实时接入与批量作业"
+    },
+    "metricsCenter": {
+      "hubTitle": "指标中心",
+      "hubDesc": "指标语义层、目录管理、API 发布与监控告警"
+    },
+    "tagService": {
+      "hubTitle": "标签服务",
+      "hubDesc": "标签目录、自动打标规则、画像本体与标签 API 服务"
+    },
+    "dataDev": {
+      "title": "数据开发工作台",
+      "desc": "SQL 编辑器、Spark/Flink 作业管理与调度配置"
     }
   },
   "projectSelector": {

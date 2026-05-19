@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-19T06:05:53Z",
+  "updated_at": "2026-05-19T10:26:35Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -226,7 +226,9 @@
       "完成需求接入工作台一栈式 AI 能力升级：后端 parse-document 支持 Agent/CLI/模式/自动优先级/验收标准配置与本地规则兜底，返回 AI 操作包和 CLI 命令；Requirements 前端新增需求智能接入区，支持文档文本导入、Agent/CLI 选择、解析预览、批量导入需求池，并与人工审核、智能评审、拆任务闭环衔接；SDK/CLI 新增 parse_requirements_document、batch_create_requirements 与 sop requirement parse-doc --apply，已通过后端 smoke、CLI help、i18n、TypeScript 与生产构建验证",
       "增强需求接入工作台草稿审核能力：解析结果从只读预览升级为可编辑需求草稿池，支持逐条修改标题、描述、优先级、验收标准、标签、负责 Agent 和开发工具，支持勾选部分导入、移除草稿、应用默认 Agent/CLI，并保持批量导入、智能评审和拆任务闭环；已通过 TypeScript、i18n、py_compile、CLI help、生产构建与静态入口验证",
       "完成统一登录与权限会话修复：Manager /auth/login 与 /auth/me 统一返回用户、租户、默认工作区、workspace_scope 和权限入口，React 新平台启动时自动从 /auth/me 校准本地 token/user/project/business/tenant 作用域，请求层在业务接口前自动补水缺失项目作用域，登录页阻断 redirect 回登录页导致的循环退出并写入统一会话；已通过 py_compile、真实本地 DB 登录/me/dashboard 烟测、TypeScript 与生产构建验证",
-      "修复登录后一会儿被踢回登录页的问题：前端不再让任意业务/权限接口的 401 清空会话，只有统一会话探活 /api/v1/auth/me 明确返回 Token 过期、无效、用户无效或禁用时才清理 token 并跳转登录；普通模块接口失败只保留页面错误，避免登录后被单个模块错误误退出；已通过 TypeScript、生产构建和真实本地 DB 登录/me/dashboard 烟测验证"
+      "修复登录后一会儿被踢回登录页的问题：前端不再让任意业务/权限接口的 401 清空会话，只有统一会话探活 /api/v1/auth/me 明确返回 Token 过期、无效、用户无效或禁用时才清理 token 并跳转登录；普通模块接口失败只保留页面错误，避免登录后被单个模块错误误退出；已通过 TypeScript、生产构建和真实本地 DB 登录/me/dashboard 烟测验证",
+      "修复新增前后端模块运行失败并补齐功能闭环：修复 DataIngest/DataQuality/Metrics/Tag/A2A/OpsCenter Workbench JSX 结构错误、未使用严格类型错误和 AgentRuns AI 助手接线；补齐 AgentOps、LLM Gateway、知识图谱、A2A、数据接入、数据质量、指标、标签、数据开发、智能运维等二级菜单真实路由与聚焦 Tab；后端新增模块完成路由导入、summary 与核心创建接口验证；已通过 py_compile、前端生产构建、8765 health 与 5173 静态入口验证",
+      "完成新增模块全面可用化升级：数据接入支持连接器测试、Schema 发现、作业创建/运行/完成/删除；数据质量支持规则维护、运行完成、告警处置；指标中心支持指标预览、API 发布和查询；标签服务支持标签、打标规则和本体实体维护；A2A 支持 Agent 启停、能力协商、任务分发和证据回写；AgentRuns 支持新建、开始、心跳、成功、证据和删除；LLM Gateway 支持路由解析、成本记录、限流规则维护；OpsCenter 支持流水线触发/完成/删除、RCA 解决、Runbook 删除和自愈策略应用/启停/删除；前端 API 封装与 TS/JS 双入口同步；已通过端到端工作流验证覆盖创建、状态流转、证据回写、查询和删除"
     ],
     "in_progress": [],
     "blocked": [],
