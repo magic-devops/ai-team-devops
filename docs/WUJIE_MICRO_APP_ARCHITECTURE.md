@@ -2,7 +2,7 @@
 
 ## 目标
 
-当前 Hermes Manager 已覆盖 AI 研发、数据、运营、组织权限、Agent 平台等大量能力，继续堆在单一侧栏会造成认知负担、权限边界不清和后续扩展困难。本次采用 Wujie 微前端作为主方案，先在主应用完成应用级信息架构、统一通信契约和本地兜底，后续每个子应用可以独立仓库、独立发布、独立演进。
+当前 Hermes Manager 已覆盖 AI 研发、数据、运营、组织权限、Agent 平台等大量能力，继续堆在单一侧栏会造成认知负担、权限边界不清和后续扩展困难。本次采用 Wujie 微前端作为主方案，主应用完成应用级信息架构、统一通信契约和同源子应用托管；四个子应用拥有独立 HTML 入口和独立 `src/main.tsx`，后续可以平滑拆为独立仓库、独立发布、独立演进。
 
 ## 应用边界
 
@@ -43,6 +43,36 @@
 
 未配置远程地址时，主应用默认挂载本仓同源 `/subapps/*/` 独立入口；拆独立仓或独立域名后，只需替换环境变量，不需要改主应用代码。
 
+## 物理拆分结果
+
+当前代码已完成仓内物理隔离，不再把子应用入口放在主应用 `src/subapps`：
+
+```text
+apps/manager-web/
+  src/
+    microApps.ts               # 微应用注册表
+    pages/MicroAppPortal.tsx   # Wujie 容器
+    pages/governance/          # 微应用治理与系统地图
+  subapps/
+    ai-foundation/
+      index.html
+      src/main.tsx
+    ai-rd-center/
+      index.html
+      src/main.tsx
+    ai-data-center/
+      index.html
+      src/main.tsx
+    ai-ops-center/
+      index.html
+      src/main.tsx
+    shared/
+      bootstrap.tsx
+      MicroAppRuntime.tsx
+```
+
+`tsconfig.json` 使用 `noEmit`，TypeScript 只负责类型检查，避免在源码旁生成 `.js` 干扰 Vite 入口解析。子应用共享启动器暂时位于 `subapps/shared`，用于沉淀 Wujie props、主题、登录态、水合、子应用菜单和跨应用跳转；拆独立仓时可提升为 `@hermes/micro-app-runtime` 包。
+
 ## 体验设计
 
 侧栏从“所有菜单一次性展开”改为“应用视图 + 应用内专业模块”：
@@ -55,23 +85,21 @@
 
 这种方式直接把运行入口拆开：主应用负责统一治理，四个子应用作为独立 HTML/Vite entry 参与构建，可同源部署，也可后续独立部署。
 
-## 后续物理拆分建议
-
-当前仓内已经具备四个独立入口：
+## 独立入口
 
 - `/subapps/ai-foundation/`
 - `/subapps/ai-rd-center/`
 - `/subapps/ai-data-center/`
 - `/subapps/ai-ops-center/`
 
-后续如需拆独立仓，建议顺序：
+当前四个入口均参与 Vite 多页构建，也可由 Wujie 独立访问。后续拆独立仓时建议顺序：
 
 1. 先拆 `ai-foundation-web`：基础服务复用度最高，能沉淀统一 SDK、Wujie bridge、主题和权限组件。
 2. 再拆 `ai-rd-center-web`：研发中心业务链路最长，适合独立发布节奏。
 3. 再拆 `ai-data-center-web`：数据中心依赖数据开发与指标服务，独立后便于接入湖仓/元数据系统。
 4. 最后拆 `ai-ops-center-web`：运营中心涉及计费、SSO、审计，需与主应用安全控制面充分联调。
 
-每个子应用都应保留：
+每个独立仓子应用都应保留：
 
 - 独立 `package.json`、`vite.config.ts`、`src/main.tsx`
 - `window.__POWERED_BY_WUJIE__` 兼容启动

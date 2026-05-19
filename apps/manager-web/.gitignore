@@ -1,2 +1,4 @@
 # Vite 会优先解析 .js；勿将 tsc/误编译的 JS 放在 src 旁，否则会覆盖 .tsx 源码。
 src/**/*.js
+subapps/**/*.js
+vite.config.js

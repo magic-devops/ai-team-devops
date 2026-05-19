@@ -52,10 +52,12 @@ function redirectToLogin() {
   window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
 }
 
-async function bindDefaultProjectScope(): Promise<boolean> {
+async function bindDefaultProjectScope(tryHydrate = true): Promise<boolean> {
   if (getWorkspaceScope().projectId || !getToken()) return false;
-  const hydrated = await hydrateSessionScope();
-  if (hydrated) return true;
+  if (tryHydrate) {
+    const hydrated = await hydrateSessionScope();
+    if (hydrated) return true;
+  }
   const r = await fetch(BASE + "/api/v1/projects", { headers: authHeaders() });
   if (!r.ok) return false;
   const projects = await r.json().catch(() => []) as Array<{
@@ -122,7 +124,7 @@ async function request<T>(path: string, init?: RequestInit, retriedProjectScope 
     clearStaleSessionOnUnauthorized(path, r.status, txt);
     if (shouldRedirectLogin) redirectToLogin();
     if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
-      const bound = await bindDefaultProjectScope();
+      const bound = await bindDefaultProjectScope(false);
       if (bound) return request<T>(path, init, true);
     }
     throw new Error(`HTTP ${r.status}: ${txt}`);

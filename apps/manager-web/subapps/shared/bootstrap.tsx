@@ -4,10 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { XProvider } from "@ant-design/x";
 import { App as AntdApp, ConfigProvider } from "antd";
 import "antd/dist/reset.css";
-import "../i18n";
-import "../index.css";
+import "../../src/i18n";
+import "../../src/index.css";
 import { MicroAppRuntime } from "./MicroAppRuntime";
-import type { MicroAppId } from "../microApps";
+import type { MicroAppId } from "../../src/microApps";
 
 export function bootstrapMicroApp(appId: MicroAppId) {
   const qc = new QueryClient({

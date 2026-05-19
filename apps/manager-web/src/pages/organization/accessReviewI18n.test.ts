@@ -71,7 +71,12 @@ describe("access review i18n helpers", () => {
 
     await expect(api.syncSummary()).resolves.toMatchObject({ ok: true, project_id: "p1" });
     expect(store.get("sop-current-project-id")).toBe("p1");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      "/api/v1/auth/me",
+      "/api/v1/sync/summary",
+      "/api/v1/projects",
+      "/api/v1/sync/summary",
+    ]);
   });
 
   it("clears the stale browser session when the API reports an expired token", async () => {

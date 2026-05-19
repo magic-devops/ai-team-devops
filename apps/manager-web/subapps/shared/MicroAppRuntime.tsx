@@ -8,10 +8,10 @@ import {
   TENANT_CODE_KEY,
   TOKEN_KEY,
   getToken,
-} from "../lib/authStorage";
-import { initTheme } from "../lib/theme";
-import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../microApps";
-import { buildNavBreadcrumb, NAV, type NavItem } from "../navigation";
+} from "../../src/lib/authStorage";
+import { initTheme } from "../../src/lib/theme";
+import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
+import { buildNavBreadcrumb, NAV, type NavItem } from "../../src/navigation";
 
 type WujieProps = {
   token?: string | null;
