@@ -1,5 +1,23 @@
-import { Activity, ArrowRight, Bot, ChevronDown, ChevronRight, ExternalLink, Gauge, Layers3, Lock, Route, Search, ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  ArrowRight,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Gauge,
+  Layers3,
+  Lock,
+  Pin,
+  Rows3,
+  Route,
+  Search,
+  ShieldCheck,
+  Star,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BUSINESS_CODE_KEY,
@@ -10,6 +28,7 @@ import {
   getToken,
 } from "../../src/lib/authStorage";
 import { initTheme } from "../../src/lib/theme";
+import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
 import { buildNavBreadcrumb, NAV, type NavItem } from "../../src/navigation";
 
@@ -89,6 +108,66 @@ function safeRuntimeLabel(value: unknown, fallback: string) {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text || text === "undefined" || text === "null") return fallback;
   return text;
+}
+
+function resolveRuntimeNavKeys(keys: readonly string[], items: readonly NavItem[]) {
+  const byKey = new Map(items.filter((item) => !item.hidden && !item.external && !item.key.startsWith("microApp")).map((item) => [item.key, item]));
+  return keys.map((key) => byKey.get(key)).filter(Boolean) as NavItem[];
+}
+
+const DENSITY_ORDER: MenuDensity[] = ["comfortable", "compact", "cozy"];
+
+function densityText(density: MenuDensity) {
+  if (density === "compact") return "紧凑";
+  if (density === "cozy") return "宽松";
+  return "标准";
+}
+
+function nextDensity(current: MenuDensity): MenuDensity {
+  const index = DENSITY_ORDER.indexOf(current);
+  return DENSITY_ORDER[(index + 1) % DENSITY_ORDER.length] ?? "comfortable";
+}
+
+function RuntimeQuickList({
+  title,
+  items,
+  labelOf,
+  emptyText,
+  icon,
+}: {
+  title: string;
+  items: NavItem[];
+  labelOf: (key: string) => string;
+  emptyText: string;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
+          {icon}
+          {title}
+        </p>
+        <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">{items.length}</span>
+      </div>
+      {items.length ? (
+        <div className="flex flex-wrap gap-1.5">
+          {items.slice(0, 6).map((item) => (
+            <a
+              key={item.key}
+              href={item.path}
+              className="max-w-full truncate rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)] hover:text-[var(--brand)]"
+              title={labelOf(item.key)}
+            >
+              {labelOf(item.key)}
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs leading-5 text-[var(--muted)]">{emptyText}</p>
+      )}
+    </div>
+  );
 }
 
 function MicroAppHome({
@@ -239,8 +318,18 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const app = getMicroApp(appId);
   const [hash, setHash] = useState(window.location.hash || app.basePath);
   const [keyword, setKeyword] = useState("");
+  const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`sop-subapp-${appId}-collapsed-groups`) || "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
+  const lastRecentKeyRef = useRef<string | null>(null);
   const navItems = useMemo(() => filterNavByMicroApp(appId, NAV), [appId]);
   const visibleItems = useMemo(() => navItems.filter((item) => !item.hidden && !item.parentKey && !item.key.startsWith("microApp")), [navItems]);
+  const densityCls = densityPadding(menuPrefs.density);
   const labelOf = useCallback(
     (key: string) => safeRuntimeLabel(t(`nav.${key}`, { defaultValue: humanizeRuntimeKey(key) }), humanizeRuntimeKey(key)),
     [t],
@@ -249,6 +338,16 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
     (i18nKey: string, fallbackKey: string) => safeRuntimeLabel(t(i18nKey, { defaultValue: humanizeRuntimeKey(fallbackKey) }), humanizeRuntimeKey(fallbackKey)),
     [t],
   );
+
+  useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`sop-subapp-${appId}-collapsed-groups`, JSON.stringify(collapsedGroups));
+    } catch {
+      /* ignore sandboxed storage */
+    }
+  }, [appId, collapsedGroups]);
 
   useEffect(() => {
     hydrateWujieSession();
@@ -269,6 +368,12 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   }, [app.basePath]);
 
   const current = useMemo(() => findRuntimeNavItem(hash, navItems), [hash, navItems]);
+  useEffect(() => {
+    if (!current?.key || current.key.startsWith("microApp") || lastRecentKeyRef.current === current.key) return;
+    lastRecentKeyRef.current = current.key;
+    pushRecent(current.key);
+  }, [current?.key]);
+
   const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, labelOf, navItems), [hash, labelOf, navItems]);
   const matchedModules = useMemo(() => {
     const needle = keyword.trim().toLowerCase();
@@ -297,14 +402,41 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
     }
     return out;
   }, [navItems]);
+  const groupedModules = useMemo(() => {
+    return matchedModules.reduce<Array<{ key: string; label: string; items: NavItem[] }>>((groups, item) => {
+      const key = item.category || item.group || "workspace";
+      const found = groups.find((group) => group.key === key);
+      if (found) {
+        found.items.push(item);
+      } else {
+        groups.push({ key, label: i18nLabelOf(`nav.category.${key}`, key), items: [item] });
+      }
+      return groups;
+    }, []);
+  }, [i18nLabelOf, matchedModules]);
+  const favoriteItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.favorites, navItems), [menuPrefs.favorites, navItems]);
+  const recentItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.recents, navItems).filter((item) => item.key !== current.key), [current.key, menuPrefs.recents, navItems]);
+  const quickItems = useMemo(() => {
+    const seen = new Set<string>();
+    return [...favoriteItems, ...recentItems, ...visibleItems]
+      .filter((item) => {
+        if (seen.has(item.key)) return false;
+        seen.add(item.key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [favoriteItems, recentItems, visibleItems]);
 
   const currentLabel = labelOf(current.key);
   const groupLabel = i18nLabelOf(breadcrumb.group.i18nKey, breadcrumb.group.key);
   const categoryLabel = breadcrumb.category ? i18nLabelOf(breadcrumb.category.i18nKey, breadcrumb.category.key) : "";
+  const currentIsFavorite = menuPrefs.favorites.includes(current.key);
+  const cycleMenuDensity = () => patchMenuPrefs({ density: nextDensity(menuPrefs.density) });
+  const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
 
   return (
     <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
-      <aside className={`${embedded ? "hidden" : "hidden w-72 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
+      <aside className={embedded ? "hidden" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -328,54 +460,135 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           />
         </div>
 
-        <nav className="mt-4 grid max-h-[calc(100vh-18rem)] gap-1 overflow-y-auto pr-1">
-          {matchedModules.map((item) => {
-            const Icon = item.icon;
-            const active = current.key === item.key || current.parentKey === item.key;
-            const children = childrenByParent.get(item.key) ?? [];
-            const open = Boolean(keyword) || active;
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites })}
+            className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
+              menuPrefs.showFavorites ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]"
+            }`}
+          >
+            <Star className="mb-1 h-4 w-4" />
+            收藏 {favoriteItems.length}
+          </button>
+          <button
+            type="button"
+            onClick={() => patchMenuPrefs({ showRecents: !menuPrefs.showRecents })}
+            className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
+              menuPrefs.showRecents ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]"
+            }`}
+          >
+            <Clock className="mb-1 h-4 w-4" />
+            最近 {recentItems.length}
+          </button>
+          <button
+            type="button"
+            onClick={cycleMenuDensity}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-2 text-left text-xs text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)]"
+          >
+            <Rows3 className="mb-1 h-4 w-4" />
+            {densityText(menuPrefs.density)}
+          </button>
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <RuntimeQuickList title="快捷入口" items={quickItems} labelOf={labelOf} emptyText="暂无可用快捷入口" icon={<Pin className="h-3.5 w-3.5" />} />
+          {menuPrefs.showFavorites ? (
+            <RuntimeQuickList title="我的收藏" items={favoriteItems} labelOf={labelOf} emptyText="点击页面右上角星标收藏常用模块" icon={<Star className="h-3.5 w-3.5" />} />
+          ) : null}
+          {menuPrefs.showRecents ? (
+            <RuntimeQuickList title="最近访问" items={recentItems} labelOf={labelOf} emptyText="访问子应用模块后会自动记录" icon={<Clock className="h-3.5 w-3.5" />} />
+          ) : null}
+        </div>
+
+        <nav className="mt-4 grid max-h-[calc(100vh-31rem)] gap-3 overflow-y-auto pr-1">
+          {groupedModules.map((group) => {
+            const groupCollapsed = collapsedGroups[group.key] && !keyword;
             return (
-              <div key={item.key}>
-                <a
-                  href={item.path}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                    active
-                      ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
-                      : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                  }`}
+              <section key={group.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.key)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
-                  {children.length ? (
-                    open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                  )}
-                </a>
-                {children.length && open ? (
-                  <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
-                    {children.map((child) => {
-                      const ChildIcon = child.icon;
-                      const childActive = current.key === child.key;
+                  {groupCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                  <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{group.items.length}</span>
+                </button>
+                {groupCollapsed ? null : (
+                  <div className="mt-1 grid gap-1">
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = current.key === item.key || current.parentKey === item.key;
+                      const children = childrenByParent.get(item.key) ?? [];
+                      const open = Boolean(keyword) || active;
+                      const itemFavorite = menuPrefs.favorites.includes(item.key);
                       return (
-                        <a
-                          key={child.key}
-                          href={child.path}
-                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
-                            childActive
-                              ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
-                              : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                          }`}
-                          title={child.capability}
-                        >
-                          <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
-                        </a>
+                        <div key={item.key}>
+                          <div
+                            className={`group flex items-center gap-1 rounded-lg px-2 text-sm transition ${
+                              active
+                                ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
+                                : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                            }`}
+                          >
+                            <a href={item.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.item}`}>
+                              <Icon className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => toggleFavorite(item.key)}
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-80 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover:opacity-100"
+                              aria-label={itemFavorite ? "取消收藏" : "收藏模块"}
+                            >
+                              <Star className="h-3.5 w-3.5" fill={itemFavorite ? "currentColor" : "none"} />
+                            </button>
+                            {children.length ? (
+                              open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                            )}
+                          </div>
+                          {children.length && open ? (
+                            <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                              {children.map((child) => {
+                                const ChildIcon = child.icon;
+                                const childActive = current.key === child.key;
+                                const childFavorite = menuPrefs.favorites.includes(child.key);
+                                return (
+                                  <div
+                                    key={child.key}
+                                    className={`group/child flex items-center gap-1 rounded-md px-1.5 text-xs ${
+                                      childActive
+                                        ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                        : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                    }`}
+                                    title={child.capability}
+                                  >
+                                    <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.child}`}>
+                                      <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFavorite(child.key)}
+                                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-70 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100"
+                                      aria-label={childFavorite ? "取消收藏" : "收藏模块"}
+                                    >
+                                      <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
-                ) : null}
-              </div>
+                )}
+              </section>
             );
           })}
         </nav>
@@ -404,6 +617,28 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!current.key.startsWith("microApp") ? (
+              <button
+                type="button"
+                onClick={() => toggleFavorite(current.key)}
+                className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium ${
+                  currentIsFavorite
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]"
+                    : "border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                }`}
+              >
+                <Star className="h-4 w-4" fill={currentIsFavorite ? "currentColor" : "none"} />
+                {currentIsFavorite ? "已收藏" : "收藏"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={cycleMenuDensity}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+            >
+              <Rows3 className="h-4 w-4" />
+              {densityText(menuPrefs.density)}
+            </button>
             <button
               type="button"
               onClick={() => openModuleCopilot(current, app.name, currentLabel)}
