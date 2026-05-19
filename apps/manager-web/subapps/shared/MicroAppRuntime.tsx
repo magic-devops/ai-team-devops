@@ -100,6 +100,8 @@ function findRuntimeNavItem(hash: string, items: readonly NavItem[]): NavItem {
 }
 
 type RuntimeApp = ReturnType<typeof getMicroApp>;
+type RuntimeMenuCategory = { key: string; label: string; items: NavItem[] };
+type RuntimeMenuDomain = { key: string; label: string; categories: RuntimeMenuCategory[]; count: number };
 
 function humanizeRuntimeKey(key: string) {
   return key
@@ -118,6 +120,27 @@ function safeRuntimeLabel(value: unknown, fallback: string) {
 function resolveRuntimeNavKeys(keys: readonly string[], items: readonly NavItem[]) {
   const byKey = new Map(items.filter((item) => !item.hidden && !item.external && !item.key.startsWith("microApp")).map((item) => [item.key, item]));
   return keys.map((key) => byKey.get(key)).filter(Boolean) as NavItem[];
+}
+
+function buildRuntimeMenuTree(items: readonly NavItem[], labelOf: (i18nKey: string, fallbackKey: string) => string): RuntimeMenuDomain[] {
+  const domains: RuntimeMenuDomain[] = [];
+  for (const item of items) {
+    const domainKey = item.group || "workspace";
+    const categoryKey = item.category || "default";
+    let domain = domains.find((entry) => entry.key === domainKey);
+    if (!domain) {
+      domain = { key: domainKey, label: labelOf(`nav.group.${domainKey}`, domainKey), categories: [], count: 0 };
+      domains.push(domain);
+    }
+    let category = domain.categories.find((entry) => entry.key === categoryKey);
+    if (!category) {
+      category = { key: categoryKey, label: labelOf(`nav.category.${categoryKey}`, categoryKey), items: [] };
+      domain.categories.push(category);
+    }
+    category.items.push(item);
+    domain.count += 1;
+  }
+  return domains;
 }
 
 const DENSITY_ORDER: MenuDensity[] = ["comfortable", "compact", "cozy"];
@@ -528,18 +551,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
     }
     return out;
   }, [navItems]);
-  const groupedModules = useMemo(() => {
-    return matchedModules.reduce<Array<{ key: string; label: string; items: NavItem[] }>>((groups, item) => {
-      const key = item.category || item.group || "workspace";
-      const found = groups.find((group) => group.key === key);
-      if (found) {
-        found.items.push(item);
-      } else {
-        groups.push({ key, label: i18nLabelOf(`nav.category.${key}`, key), items: [item] });
-      }
-      return groups;
-    }, []);
-  }, [i18nLabelOf, matchedModules]);
+  const menuTree = useMemo(() => buildRuntimeMenuTree(matchedModules, i18nLabelOf), [i18nLabelOf, matchedModules]);
   const favoriteItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.favorites, navItems), [menuPrefs.favorites, navItems]);
   const recentItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.recents, navItems).filter((item) => item.key !== current.key), [current.key, menuPrefs.recents, navItems]);
   const quickItems = useMemo(() => {
@@ -561,8 +573,8 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
 
   return (
-    <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
-      <aside className={embedded ? "hidden" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}>
+    <div className={`flex bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "min-h-[calc(100vh-14rem)]" : "min-h-screen"}`}>
+      <aside className={`${embedded ? "hidden w-72 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 xl:block" : "hidden w-80 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -628,87 +640,116 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </div>
 
         <nav className="mt-4 grid max-h-[calc(100vh-31rem)] gap-3 overflow-y-auto pr-1">
-          {groupedModules.map((group) => {
-            const groupCollapsed = collapsedGroups[group.key] && !keyword;
+          {menuTree.map((domain) => {
+            const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
-              <section key={group.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+              <section key={domain.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
                 <button
                   type="button"
-                  onClick={() => toggleGroup(group.key)}
+                  onClick={() => toggleGroup(`domain:${domain.key}`)}
                   className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
                 >
-                  {groupCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  <span className="min-w-0 flex-1 truncate">{group.label}</span>
-                  <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{group.items.length}</span>
+                  {domainCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  <span className="min-w-0 flex-1 truncate">{domain.label}</span>
+                  <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span>
                 </button>
-                {groupCollapsed ? null : (
-                  <div className="mt-1 grid gap-1">
-                    {group.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = current.key === item.key || current.parentKey === item.key;
-                      const children = childrenByParent.get(item.key) ?? [];
-                      const open = Boolean(keyword) || active;
-                      const itemFavorite = menuPrefs.favorites.includes(item.key);
+                {domainCollapsed ? null : (
+                  <div className="mt-1 grid gap-2">
+                    {domain.categories.map((category) => {
+                      const categoryKey = `category:${domain.key}:${category.key}`;
+                      const categoryCollapsed = collapsedGroups[categoryKey] && !keyword;
                       return (
-                        <div key={item.key}>
-                          <div
-                            className={`group flex items-center gap-1 rounded-lg px-2 text-sm transition ${
-                              active
-                                ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
-                                : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                            }`}
+                        <div key={category.key} className="rounded-lg bg-[var(--surface-muted)]/45 p-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleGroup(categoryKey)}
+                            className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
                           >
-                            <a href={item.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.item}`}>
-                              <Icon className="h-4 w-4 shrink-0" />
-                              <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => toggleFavorite(item.key)}
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-80 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover:opacity-100"
-                              aria-label={itemFavorite ? "取消收藏" : "收藏模块"}
-                            >
-                              <Star className="h-3.5 w-3.5" fill={itemFavorite ? "currentColor" : "none"} />
-                            </button>
-                            {children.length ? (
-                              open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                            ) : (
-                              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                            )}
-                          </div>
-                          {children.length && open ? (
-                            <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
-                              {children.map((child) => {
-                                const ChildIcon = child.icon;
-                                const childActive = current.key === child.key;
-                                const childFavorite = menuPrefs.favorites.includes(child.key);
+                            {categoryCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            <span className="min-w-0 flex-1 truncate">{category.label}</span>
+                            <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span>
+                          </button>
+                          {categoryCollapsed ? null : (
+                            <div className="mt-1 grid gap-1">
+                              {category.items.map((item) => {
+                                const Icon = item.icon;
+                                const active = current.key === item.key || current.parentKey === item.key;
+                                const children = childrenByParent.get(item.key) ?? [];
+                                const moduleKey = `module:${item.key}`;
+                                const open = Boolean(keyword) || active || !collapsedGroups[moduleKey];
+                                const itemFavorite = menuPrefs.favorites.includes(item.key);
                                 return (
-                                  <div
-                                    key={child.key}
-                                    className={`group/child flex items-center gap-1 rounded-md px-1.5 text-xs ${
-                                      childActive
-                                        ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
-                                        : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                                    }`}
-                                    title={child.capability}
-                                  >
-                                    <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.child}`}>
-                                      <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                                      <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
-                                    </a>
-                                    <button
-                                      type="button"
-                                      onClick={() => toggleFavorite(child.key)}
-                                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-70 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100"
-                                      aria-label={childFavorite ? "取消收藏" : "收藏模块"}
+                                  <div key={item.key}>
+                                    <div
+                                      className={`group flex items-center gap-1 rounded-lg px-2 text-sm transition ${
+                                        active
+                                          ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
+                                          : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                                      }`}
                                     >
-                                      <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
-                                    </button>
+                                      <a href={item.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.item}`}>
+                                        <Icon className="h-4 w-4 shrink-0" />
+                                        <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
+                                      </a>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleFavorite(item.key)}
+                                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-80 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover:opacity-100"
+                                        aria-label={itemFavorite ? "取消收藏" : "收藏模块"}
+                                      >
+                                        <Star className="h-3.5 w-3.5" fill={itemFavorite ? "currentColor" : "none"} />
+                                      </button>
+                                      {children.length ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleGroup(moduleKey)}
+                                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--text)]"
+                                          aria-label={open ? "收起模块子能力" : "展开模块子能力"}
+                                        >
+                                          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                        </button>
+                                      ) : (
+                                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                                      )}
+                                    </div>
+                                    {children.length && open ? (
+                                      <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                                        {children.map((child) => {
+                                          const ChildIcon = child.icon;
+                                          const childActive = current.key === child.key;
+                                          const childFavorite = menuPrefs.favorites.includes(child.key);
+                                          return (
+                                            <div
+                                              key={child.key}
+                                              className={`group/child flex items-center gap-1 rounded-md px-1.5 text-xs ${
+                                                childActive
+                                                  ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                                  : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                              }`}
+                                              title={child.capability}
+                                            >
+                                              <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.child}`}>
+                                                <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                                                <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
+                                              </a>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleFavorite(child.key)}
+                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-70 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100"
+                                                aria-label={childFavorite ? "取消收藏" : "收藏模块"}
+                                              >
+                                                <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
+                                              </button>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 );
                               })}
                             </div>
-                          ) : null}
+                          )}
                         </div>
                       );
                     })}

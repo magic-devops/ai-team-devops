@@ -965,6 +965,112 @@ export function App() {
 
         {!sidebarCollapsed ? (
           <div className="border-b border-[var(--nav-border)] px-3 py-3">
+            <div className="px-1">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
+                <input
+                  ref={searchRef}
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  placeholder={t("nav.searchPlaceholder")}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring"
+                  aria-label={t("nav.searchPlaceholder")}
+                />
+                {keyword ? (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                    onClick={() => setKeyword("")}
+                    aria-label={t("common.cancel")}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{t("nav.searchHint")}</p>
+            </div>
+
+            {!keyword ? (
+              <div className="mt-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { key: "pinned" as const, icon: Pin, label: t("nav.pinned"), count: pinnedItems.length, enabled: pinnedItems.length > 0 },
+                    { key: "favorites" as const, icon: Star, label: t("nav.favorites"), count: favoriteItems.length, enabled: menuPrefs.showFavorites },
+                    { key: "recents" as const, icon: Clock, label: t("nav.recents"), count: recentItems.length, enabled: menuPrefs.showRecents },
+                  ].map((entry) => {
+                    const Icon = entry.icon;
+                    const active = quickPanel === entry.key;
+                    return (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        disabled={!entry.enabled}
+                        onClick={() => setQuickPanel((value) => (value === entry.key ? null : entry.key))}
+                        className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          active
+                            ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/25"
+                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                        }`}
+                        title={entry.label}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{entry.label}</span>
+                        <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {quickPanel ? (
+                  <div className="mt-1.5 border-t border-[var(--border)]/70 pt-1.5">
+                    <div className="mb-1 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
+                      <span>{quickPanelTitle}</span>
+                      {quickPanel === "recents" && recentItems.length ? (
+                        <button
+                          type="button"
+                          onClick={() => patchMenuPrefs({ recents: [] })}
+                          className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                          title={t("nav.clearRecents")}
+                          aria-label={t("nav.clearRecents")}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
+                      {quickPanelItems.length ? quickPanelItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = current.key === item.key || current.parentKey === item.key;
+                        return (
+                          <a
+                            key={`${quickPanel}-${item.key}`}
+                            href={item.path}
+                            className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
+                              active
+                                ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                            }`}
+                            title={item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key)}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                            <NavBadgeTag badge={item.badge} />
+                          </a>
+                        );
+                      }) : (
+                        <div className="col-span-2 rounded-md border border-dashed border-[var(--border)] px-2 py-2 text-center text-[11px] text-[var(--nav-muted)]">
+                          {t("nav.quickEmpty")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!sidebarCollapsed && !keyword ? (
+          <div className="min-h-0 flex-1 border-b border-[var(--nav-border)] px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
                 <Layers3 className="h-3.5 w-3.5" />
@@ -974,7 +1080,7 @@ export function App() {
                 {t("nav.microAppMode")}
               </span>
             </div>
-            <div className="grid max-h-[42vh] gap-1 overflow-y-auto pr-1">
+            <div className="grid max-h-full gap-1 overflow-y-auto pr-1">
               {MICRO_APPS.map((app) => {
                 const active = app.id === activeMicroApp;
                 const appMenus = microAppMenuById.get(app.id) ?? [];
@@ -1103,112 +1209,9 @@ export function App() {
           </div>
         ) : null}
 
-        <div className={`${sidebarCollapsed ? "hidden" : "px-4 pt-3"}`}>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
-            <input
-              ref={searchRef}
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder={t("nav.searchPlaceholder")}
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring"
-              aria-label={t("nav.searchPlaceholder")}
-            />
-            {keyword ? (
-              <button
-                type="button"
-                className="absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
-                onClick={() => setKeyword("")}
-                aria-label={t("common.cancel")}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
-          <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{t("nav.searchHint")}</p>
-        </div>
-
-        {!sidebarCollapsed && !keyword ? (
-          <div className="px-3 pt-2">
-            <div className="rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
-              <div className="grid grid-cols-3 gap-1">
-                {[
-                  { key: "pinned" as const, icon: Pin, label: t("nav.pinned"), count: pinnedItems.length, enabled: pinnedItems.length > 0 },
-                  { key: "favorites" as const, icon: Star, label: t("nav.favorites"), count: favoriteItems.length, enabled: menuPrefs.showFavorites },
-                  { key: "recents" as const, icon: Clock, label: t("nav.recents"), count: recentItems.length, enabled: menuPrefs.showRecents },
-                ].map((entry) => {
-                  const Icon = entry.icon;
-                  const active = quickPanel === entry.key;
-                  return (
-                    <button
-                      key={entry.key}
-                      type="button"
-                      disabled={!entry.enabled}
-                      onClick={() => setQuickPanel((value) => (value === entry.key ? null : entry.key))}
-                      className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                        active
-                          ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/25"
-                          : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                      }`}
-                      title={entry.label}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{entry.label}</span>
-                      <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {quickPanel ? (
-                <div className="mt-1.5 border-t border-[var(--border)]/70 pt-1.5">
-                  <div className="mb-1 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
-                    <span>{quickPanelTitle}</span>
-                    {quickPanel === "recents" && recentItems.length ? (
-                      <button
-                        type="button"
-                        onClick={() => patchMenuPrefs({ recents: [] })}
-                        className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
-                        title={t("nav.clearRecents")}
-                        aria-label={t("nav.clearRecents")}
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
-                    {quickPanelItems.length ? quickPanelItems.map((item) => {
-                      const Icon = item.icon;
-                      const active = current.key === item.key || current.parentKey === item.key;
-                      return (
-                        <a
-                          key={`${quickPanel}-${item.key}`}
-                          href={item.path}
-                          className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
-                            active
-                              ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
-                              : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                          }`}
-                          title={item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key)}
-                        >
-                          <Icon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                          <NavBadgeTag badge={item.badge} />
-                        </a>
-                      );
-                    }) : (
-                      <div className="col-span-2 rounded-md border border-dashed border-[var(--border)] px-2 py-2 text-center text-[11px] text-[var(--nav-muted)]">
-                        {t("nav.quickEmpty")}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
+        {sidebarCollapsed || keyword ? (
         <nav className={`mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-3 ${sidebarCollapsed ? "px-2" : "px-2"}`}>
-          {!sidebarCollapsed ? (
+          {!sidebarCollapsed && keyword ? (
             <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
@@ -1334,6 +1337,7 @@ export function App() {
             </div>
           )}
         </nav>
+        ) : null}
 
         {!sidebarCollapsed ? (
           <div className="shrink-0 border-t border-[var(--nav-border)] px-3 py-2">
