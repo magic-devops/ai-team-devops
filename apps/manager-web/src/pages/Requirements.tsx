@@ -104,6 +104,33 @@ type ReviewResult = {
   next_actions?: string[];
 };
 
+type IntakeDraft = {
+  text: string;
+  filename: string;
+  mode: string;
+  agent: string;
+  cli: string;
+  assigned_agent: string;
+  dev_tool: string;
+  auto_priority: boolean;
+  auto_acceptance: boolean;
+};
+
+type IntakeItem = Omit<RequirementRow, "id"> & {
+  id?: string;
+};
+
+type IntakeResult = {
+  ok?: boolean;
+  source?: string;
+  warning?: string;
+  count?: number;
+  items?: IntakeItem[];
+  commands?: Array<{ label?: string; command?: string }>;
+  agent_packet?: Record<string, unknown>;
+  intake_config?: Record<string, unknown>;
+};
+
 const emptyDraft: Draft = {
   title: "",
   description: "",
@@ -115,6 +142,29 @@ const emptyDraft: Draft = {
   dev_tool: "",
   human_notes: "",
 };
+
+const emptyIntakeDraft: IntakeDraft = {
+  text: "",
+  filename: "",
+  mode: "prd",
+  agent: "Product Analyst Agent",
+  cli: "codex",
+  assigned_agent: "Product Analyst Agent",
+  dev_tool: "codex",
+  auto_priority: true,
+  auto_acceptance: true,
+};
+
+const intakeModes = ["idea", "prd", "meeting", "feedback", "incident", "data", "mixed"];
+const intakeAgents = [
+  "Product Analyst Agent",
+  "Business Analyst Agent",
+  "Data Product Agent",
+  "QA Reviewer Agent",
+  "Hermes Agent",
+  "RequirementOps Agent",
+];
+const intakeCliTools = ["codex", "claude", "cursor", "qoder", "openclaw", "workbuddy", "hermes-agent"];
 
 function defaultTaskGenDraft(row: RequirementRow): TaskGenDraft {
   return {
@@ -243,6 +293,9 @@ export function Requirements({
   const [aiOpen, setAiOpen] = useState(false);
   const [aiContextReq, setAiContextReq] = useState<RequirementRow | null>(null);
   const [opsTaskResult, setOpsTaskResult] = useState<any>(null);
+  const [intakeDraft, setIntakeDraft] = useState<IntakeDraft>(emptyIntakeDraft);
+  const [intakeResult, setIntakeResult] = useState<IntakeResult | null>(null);
+  const [intakeSelectedKeys, setIntakeSelectedKeys] = useState<string[]>([]);
 
   const q = useQuery({
     queryKey: ["requirements", keyword, status, priority],
@@ -411,9 +464,45 @@ export function Requirements({
     },
   });
 
-  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || reviewReq.isPending || applyReview.isPending || bulkUpdateReq.isPending || opsTasksMut.isPending;
+  const parseIntake = useMutation({
+    mutationFn: () =>
+      api.parseRequirementsDocument({
+        ...intakeDraft,
+        filename: intakeDraft.filename || "requirements.md",
+      }),
+    onSuccess: (data) => {
+      const result = data as IntakeResult;
+      setIntakeResult(result);
+      setIntakeSelectedKeys((result.items ?? []).map((_, idx) => String(idx)));
+    },
+  });
+
+  const importIntake = useMutation({
+    mutationFn: () =>
+      api.batchCreateRequirements({
+        items: (intakeResult?.items ?? [])
+          .filter((_, idx) => intakeSelectedKeys.includes(String(idx)))
+          .map((item) => ({
+          title: item.title || "",
+          description: item.description || "",
+          priority: item.priority || "P2",
+          acceptance_criteria: item.acceptance_criteria || [],
+          tags: item.tags || [],
+          assigned_agent: item.assigned_agent || intakeDraft.assigned_agent || intakeDraft.agent,
+          dev_tool: item.dev_tool || intakeDraft.dev_tool || intakeDraft.cli,
+        })),
+      }),
+    onSuccess: () => {
+      refreshRequirements();
+      setIntakeSelectedKeys([]);
+    },
+  });
+
+  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || reviewReq.isPending || applyReview.isPending || bulkUpdateReq.isPending || opsTasksMut.isPending || parseIntake.isPending || importIntake.isPending;
   const selectedReqSet = useMemo(() => new Set(selectedReqIds), [selectedReqIds]);
   const canBulkUpdate = selectedReqIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAgent.trim() || bulkTool.trim());
+  const canParseIntake = intakeDraft.text.trim().length >= 20;
+  const canImportIntake = intakeSelectedKeys.length > 0;
 
   const hubSummary = summaryQ.data?.summary ?? {};
   const kitTotal = Number(hubSummary.total ?? metrics.total);
@@ -474,9 +563,127 @@ export function Requirements({
       render: (value) => <Typography.Text code copyable className="!text-xs">{value}</Typography.Text>,
     },
   ];
+  function updateIntakeItem(index: number, patch: Partial<IntakeItem>) {
+    setIntakeResult((prev) => {
+      if (!prev?.items) return prev;
+      const items = prev.items.map((item, idx) => (idx === index ? { ...item, ...patch } : item));
+      return { ...prev, items, count: items.length };
+    });
+  }
+
+  function removeIntakeItem(index: number) {
+    setIntakeResult((prev) => {
+      if (!prev?.items) return prev;
+      const items = prev.items.filter((_, idx) => idx !== index);
+      setIntakeSelectedKeys(items.map((_, idx) => String(idx)));
+      return { ...prev, items, count: items.length };
+    });
+  }
+
+  function applyIntakeDefaults() {
+    setIntakeResult((prev) => {
+      if (!prev?.items) return prev;
+      return {
+        ...prev,
+        items: prev.items.map((item) => ({
+          ...item,
+          assigned_agent: item.assigned_agent || intakeDraft.assigned_agent || intakeDraft.agent,
+          dev_tool: item.dev_tool || intakeDraft.dev_tool || intakeDraft.cli,
+        })),
+      };
+    });
+  }
+
+  const intakeColumns: ColumnsType<IntakeItem> = [
+    {
+      title: t("page.requirements.intakeDraftItem"),
+      dataIndex: "title",
+      width: 360,
+      render: (value, row, index) => (
+        <div className="space-y-2">
+          <AntInput
+            value={String(value || "")}
+            onChange={(e) => updateIntakeItem(index, { title: e.target.value })}
+            placeholder={t("page.requirements.titlePh")}
+          />
+          <AntInput.TextArea
+            value={row.description || ""}
+            onChange={(e) => updateIntakeItem(index, { description: e.target.value })}
+            autoSize={{ minRows: 2, maxRows: 5 }}
+            placeholder={t("page.requirements.description")}
+          />
+        </div>
+      ),
+    },
+    {
+      title: t("page.requirements.priority"),
+      dataIndex: "priority",
+      width: 112,
+      render: (value, _row, index) => (
+        <Select
+          className="w-full"
+          value={value || "P2"}
+          onChange={(priorityValue) => updateIntakeItem(index, { priority: priorityValue })}
+          options={PRIORITIES.map((item) => ({ value: item, label: item }))}
+        />
+      ),
+    },
+    {
+      title: t("page.requirements.acceptance"),
+      dataIndex: "acceptance_criteria",
+      width: 300,
+      render: (value, _row, index) => (
+        <AntInput.TextArea
+          value={(value || []).join("\n")}
+          onChange={(e) => updateIntakeItem(index, { acceptance_criteria: splitLines(e.target.value) })}
+          autoSize={{ minRows: 2, maxRows: 5 }}
+          placeholder={t("page.requirements.acceptancePh")}
+        />
+      ),
+    },
+    {
+      title: t("page.requirements.agent"),
+      dataIndex: "assigned_agent",
+      width: 190,
+      render: (value, row, index) => (
+        <div className="space-y-2">
+          <AntInput
+            value={value || ""}
+            onChange={(e) => updateIntakeItem(index, { assigned_agent: e.target.value })}
+            placeholder={t("page.requirements.agent")}
+          />
+          <AntInput
+            value={row.dev_tool || ""}
+            onChange={(e) => updateIntakeItem(index, { dev_tool: e.target.value })}
+            placeholder={t("page.requirements.devTool")}
+          />
+        </div>
+      ),
+    },
+    {
+      title: t("page.requirements.tags"),
+      dataIndex: "tags",
+      width: 210,
+      render: (value, _row, index) => (
+        <div className="space-y-2">
+          <AntInput
+            value={(value || []).join(", ")}
+            onChange={(e) => updateIntakeItem(index, { tags: splitTags(e.target.value) })}
+            placeholder={t("page.requirements.tags")}
+          />
+          <Button danger size="small" onClick={() => removeIntakeItem(index)}>
+            {t("page.requirements.intakeRemove")}
+          </Button>
+        </div>
+      ),
+    },
+  ];
+  const showIntakePanel = !workbenchFocused || mode === "pool";
 
   const workbenchBody = (
     <>
+      {showIntakePanel ? renderIntakePanel() : null}
+
       <Card
         title={t("page.requirements.opsPlan")}
         actions={
@@ -820,6 +1027,210 @@ export function Requirements({
       </Card>
     </>
   );
+
+  function renderIntakePanel() {
+    const commands = intakeResult?.commands ?? [];
+    return (
+      <Card
+        title={t("page.requirements.intakeTitle")}
+        actions={
+          <Space wrap>
+            <Button
+              disabled={!canParseIntake}
+              loading={parseIntake.isPending}
+              onClick={() => parseIntake.mutate()}
+            >
+              <Wand2 className="mr-1 inline h-4 w-4" />
+              {t("page.requirements.intakeParse")}
+            </Button>
+            <Button
+              type="primary"
+              disabled={!canImportIntake}
+              loading={importIntake.isPending}
+              onClick={() => importIntake.mutate()}
+            >
+              <Plus className="mr-1 inline h-4 w-4" />
+              {t("page.requirements.intakeImport")}
+            </Button>
+          </Space>
+        }
+      >
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.05fr)_minmax(520px,1fr)]">
+          <div className="space-y-3">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-muted)] p-3">
+              <p className="text-sm font-medium text-[var(--text)]">{t("page.requirements.intakeDesc")}</p>
+              <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t("page.requirements.intakeHint")}</p>
+            </div>
+            <div className="grid gap-2 lg:grid-cols-3">
+              <Select
+                value={intakeDraft.mode}
+                onChange={(modeValue) => setIntakeDraft((prev) => ({ ...prev, mode: modeValue }))}
+                options={intakeModes.map((item) => ({ value: item, label: t(`page.requirements.intakeModeMap.${item}`) }))}
+              />
+              <Select
+                showSearch
+                value={intakeDraft.agent}
+                onChange={(agentValue) => setIntakeDraft((prev) => ({
+                  ...prev,
+                  agent: agentValue,
+                  assigned_agent: prev.assigned_agent || agentValue,
+                }))}
+                options={intakeAgents.map((item) => ({ value: item, label: item }))}
+              />
+              <Select
+                showSearch
+                value={intakeDraft.cli}
+                onChange={(cliValue) => setIntakeDraft((prev) => ({
+                  ...prev,
+                  cli: cliValue,
+                  dev_tool: prev.dev_tool || cliValue,
+                }))}
+                options={intakeCliTools.map((item) => ({ value: item, label: item }))}
+              />
+            </div>
+            <div className="grid gap-2 lg:grid-cols-2">
+              <AntInput
+                value={intakeDraft.assigned_agent}
+                onChange={(e) => setIntakeDraft((prev) => ({ ...prev, assigned_agent: e.target.value }))}
+                placeholder={t("page.requirements.intakeAssignedAgent")}
+              />
+              <AntInput
+                value={intakeDraft.dev_tool}
+                onChange={(e) => setIntakeDraft((prev) => ({ ...prev, dev_tool: e.target.value }))}
+                placeholder={t("page.requirements.intakeDevTool")}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className={secondaryButtonClass}>
+                {t("page.requirements.intakeFile")}
+                <input
+                  className="hidden"
+                  type="file"
+                  accept=".md,.txt,.json,.csv"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const content = await file.text();
+                    setIntakeDraft((prev) => ({ ...prev, filename: file.name, text: content }));
+                    setIntakeResult(null);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <Checkbox
+                checked={intakeDraft.auto_priority}
+                onChange={(e) => setIntakeDraft((prev) => ({ ...prev, auto_priority: e.target.checked }))}
+              >
+                {t("page.requirements.intakeAutoPriority")}
+              </Checkbox>
+              <Checkbox
+                checked={intakeDraft.auto_acceptance}
+                onChange={(e) => setIntakeDraft((prev) => ({ ...prev, auto_acceptance: e.target.checked }))}
+              >
+                {t("page.requirements.intakeAutoAcceptance")}
+              </Checkbox>
+              <Button
+                onClick={() => {
+                  setIntakeDraft(emptyIntakeDraft);
+                  setIntakeResult(null);
+                  setIntakeSelectedKeys([]);
+                }}
+              >
+                {t("page.requirements.intakeClear")}
+              </Button>
+            </div>
+            <AntInput.TextArea
+              value={intakeDraft.text}
+              onChange={(e) => {
+                setIntakeDraft((prev) => ({ ...prev, text: e.target.value }));
+                setIntakeResult(null);
+              }}
+              rows={11}
+              showCount
+              maxLength={60000}
+              placeholder={t("page.requirements.intakeTextPh")}
+            />
+            {intakeDraft.filename ? (
+              <p className="text-xs text-[var(--muted)]">{t("page.requirements.intakeFilename")}: {intakeDraft.filename}</p>
+            ) : null}
+            {parseIntake.error ? <p className="text-sm text-rose-600">{(parseIntake.error as Error).message}</p> : null}
+          </div>
+
+          <div className="min-w-0 space-y-3">
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">{t("page.requirements.intakeParsed")}</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{intakeResult?.count ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">{t("page.requirements.intakeSelected")}</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{intakeSelectedKeys.length}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">{t("page.requirements.intakeSource")}</p>
+                <p className="mt-1 text-sm font-semibold text-[var(--text)]">{intakeResult?.source ?? "-"}</p>
+              </div>
+            </div>
+            {intakeResult?.warning ? <Alert type="warning" showIcon message={intakeResult.warning} /> : null}
+            {importIntake.data ? (
+              <Alert
+                type="success"
+                showIcon
+                message={t("page.requirements.intakeImportOk", { count: importIntake.data?.count ?? 0 })}
+              />
+            ) : null}
+            <Table
+              title={() => (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-[var(--text)]">{t("page.requirements.intakeDraftPool")}</span>
+                  <Space wrap>
+                    <Button
+                      size="small"
+                      disabled={!intakeResult?.items?.length}
+                      onClick={() => setIntakeSelectedKeys((intakeResult?.items ?? []).map((_, idx) => String(idx)))}
+                    >
+                      {t("page.requirements.selectAll")}
+                    </Button>
+                    <Button size="small" disabled={!intakeSelectedKeys.length} onClick={() => setIntakeSelectedKeys([])}>
+                      {t("page.requirements.clearSelection")}
+                    </Button>
+                    <Button size="small" disabled={!intakeResult?.items?.length} onClick={applyIntakeDefaults}>
+                      {t("page.requirements.intakeApplyDefaults")}
+                    </Button>
+                  </Space>
+                </div>
+              )}
+              rowKey={(_row, index) => String(index ?? 0)}
+              rowSelection={{
+                selectedRowKeys: intakeSelectedKeys,
+                onChange: (keys) => setIntakeSelectedKeys(keys.map(String)),
+              }}
+              size="small"
+              loading={parseIntake.isPending}
+              columns={intakeColumns}
+              dataSource={intakeResult?.items ?? []}
+              pagination={{ pageSize: 5 }}
+              scroll={{ x: 1220 }}
+              locale={{ emptyText: t("page.requirements.intakeNoPreview") }}
+            />
+            {commands.length ? (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-muted)] p-3">
+                <p className="mb-2 text-xs font-semibold text-[var(--text)]">{t("page.requirements.intakeCommands")}</p>
+                <div className="space-y-2">
+                  {commands.map((item, idx) => (
+                    <div key={`${item.label}-${idx}`} className="grid gap-1 text-xs lg:grid-cols-[8rem_1fr]">
+                      <span className="text-[var(--muted)]">{item.label}</span>
+                      <Typography.Text code copyable className="!text-xs">{item.command}</Typography.Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   function renderBulkPanel() {
     return (

@@ -121,6 +121,37 @@ export function setSession(token, projectId, tenantCode) {
         notifySession();
     }
 }
+export function setUserSession(payload) {
+    try {
+        const token = payload.token || payload.access_token;
+        if (token)
+            localStorage.setItem(TOKEN_KEY, String(token));
+        if (payload.user_id || payload.username || payload.role || payload.tenant_id) {
+            localStorage.setItem(USER_KEY, JSON.stringify({
+                id: payload.user_id || "",
+                username: payload.username || "",
+                email: payload.email || "",
+                role: payload.role || "",
+                tenant_id: payload.tenant_id || "",
+                tenant_code: payload.tenant_code || "",
+                tenant_slug: payload.tenant_slug || "",
+                tenant_name: payload.tenant_name || "",
+                permissions: payload.permissions || null,
+                session_status: payload.session_status || "active",
+            }));
+        }
+        const ws = payload.workspace_scope || {};
+        setWorkspaceScope({
+            tenantCode: ws.tenant_code || payload.tenant_code || payload.tenant_slug || payload.tenant_id || null,
+            businessCode: ws.business_code || payload.default_business_code || null,
+            projectId: ws.project_id || payload.default_project_id || null,
+            projectCode: ws.project_code || payload.default_project_code || ws.project_id || payload.default_project_id || null,
+        });
+    }
+    catch {
+        notifySession();
+    }
+}
 export function clearSession() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);

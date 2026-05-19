@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-19T04:14:52Z",
+  "updated_at": "2026-05-19T06:05:53Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -222,7 +222,11 @@
       "完成 H13 研发全流程 DevFlow 治理操作包闭环：Manager 新增 /api/v1/dev-flow/ops-plan 与 /ops-tasks，按需求追溯、活跃迭代、高优问题、阻塞任务、技术方案和仓库交付线索输出流程健康分、阶段状态、风险、AI/CLI 命令和候选治理任务；DevFlow 工作台新增流程健康分、阶段标签、风险表、预览/生成治理任务；SDK 新增 dev_flow_ops_plan/dev_flow_ops_tasks，CLI 新增 sop dev-flow ops-plan/ops-tasks，支撑 AI CLI/Agent 获取研发主链路治理上下文并任务化修复；已通过 py_compile、后端 smoke、CLI help、i18n JSON、TypeScript、生产构建与本地 HTTP 200 验证。",
       "完成 H14 问题中心 IssueOps 治理操作包闭环：Manager 新增 /api/v1/issues/ops-plan 与 /ops-tasks，按高优未关、超期未关、未关联任务和问题池初始化输出问题健康分、风险、AI/CLI 命令、Agent packet 与候选治理任务；Issues 工作台新增问题治理操作包面板，支持健康分、风险表、命令复制、治理任务预览/生成；SDK 新增 issue_ops_plan/issue_ops_tasks，CLI 新增 sop issue ops-plan/ops-tasks，支撑 AI CLI/Agent 将缺陷和阻塞问题转成可执行修复任务；已通过 py_compile、后端 smoke、CLI help、i18n JSON、TypeScript、生产构建与本地 HTTP 200 验证。",
       "完成 H15 迭代 SprintOps 治理操作包闭环：Manager 新增 /api/v1/sprints/ops-plan 与 /ops-tasks，按无活跃迭代、迭代范围为空、阻塞任务、高优问题、临近交付风险和回顾缺失输出迭代健康分、风险、AI/CLI 命令、Agent packet 与候选治理任务；Tasks 迭代页新增迭代治理操作包面板，支持健康分、当前迭代、剩余天数、高优问题、风险表、命令复制、治理任务预览/生成；SDK 新增 sprint_ops_plan/sprint_ops_tasks，CLI 新增 sop sprint ops-plan/ops-tasks，支撑 AI CLI/Agent 将迭代节奏、范围和收尾动作任务化治理；已通过 py_compile、后端 smoke、CLI help、i18n JSON、TypeScript、生产构建与本地 HTTP 200 验证。",
-      "完成 H16 需求池 RequirementOps 治理操作包闭环：Manager 新增 /api/v1/requirements/ops-plan 与 /ops-tasks，复用单条需求智能评审能力，按低质量需求、缺少验收标准、高优未拆任务、未指定 Agent 和重复需求风险输出需求健康分、平均评审分、风险、AI/CLI 命令、Agent packet 与候选治理任务；Requirements 工作台新增需求治理操作包面板，支持健康分、平均评审分、待深度评审、高优未拆任务、风险表、命令复制、治理任务预览/生成；SDK 新增 requirement_ops_plan/requirement_ops_tasks，CLI 新增 sop requirement ops-plan/ops-tasks，支撑 AI CLI/Agent 将业务想法和需求池转成可评审、可路由、可拆解、可执行的研发入口；已通过 py_compile、后端 smoke、CLI help、i18n JSON、TypeScript、生产构建与本地 HTTP 200 验证。"
+      "完成 H16 需求池 RequirementOps 治理操作包闭环：Manager 新增 /api/v1/requirements/ops-plan 与 /ops-tasks，复用单条需求智能评审能力，按低质量需求、缺少验收标准、高优未拆任务、未指定 Agent 和重复需求风险输出需求健康分、平均评审分、风险、AI/CLI 命令、Agent packet 与候选治理任务；Requirements 工作台新增需求治理操作包面板，支持健康分、平均评审分、待深度评审、高优未拆任务、风险表、命令复制、治理任务预览/生成；SDK 新增 requirement_ops_plan/requirement_ops_tasks，CLI 新增 sop requirement ops-plan/ops-tasks，支撑 AI CLI/Agent 将业务想法和需求池转成可评审、可路由、可拆解、可执行的研发入口；已通过 py_compile、后端 smoke、CLI help、i18n JSON、TypeScript、生产构建与本地 HTTP 200 验证。",
+      "完成需求接入工作台一栈式 AI 能力升级：后端 parse-document 支持 Agent/CLI/模式/自动优先级/验收标准配置与本地规则兜底，返回 AI 操作包和 CLI 命令；Requirements 前端新增需求智能接入区，支持文档文本导入、Agent/CLI 选择、解析预览、批量导入需求池，并与人工审核、智能评审、拆任务闭环衔接；SDK/CLI 新增 parse_requirements_document、batch_create_requirements 与 sop requirement parse-doc --apply，已通过后端 smoke、CLI help、i18n、TypeScript 与生产构建验证",
+      "增强需求接入工作台草稿审核能力：解析结果从只读预览升级为可编辑需求草稿池，支持逐条修改标题、描述、优先级、验收标准、标签、负责 Agent 和开发工具，支持勾选部分导入、移除草稿、应用默认 Agent/CLI，并保持批量导入、智能评审和拆任务闭环；已通过 TypeScript、i18n、py_compile、CLI help、生产构建与静态入口验证",
+      "完成统一登录与权限会话修复：Manager /auth/login 与 /auth/me 统一返回用户、租户、默认工作区、workspace_scope 和权限入口，React 新平台启动时自动从 /auth/me 校准本地 token/user/project/business/tenant 作用域，请求层在业务接口前自动补水缺失项目作用域，登录页阻断 redirect 回登录页导致的循环退出并写入统一会话；已通过 py_compile、真实本地 DB 登录/me/dashboard 烟测、TypeScript 与生产构建验证",
+      "修复登录后一会儿被踢回登录页的问题：前端不再让任意业务/权限接口的 401 清空会话，只有统一会话探活 /api/v1/auth/me 明确返回 Token 过期、无效、用户无效或禁用时才清理 token 并跳转登录；普通模块接口失败只保留页面错误，避免登录后被单个模块错误误退出；已通过 TypeScript、生产构建和真实本地 DB 登录/me/dashboard 烟测验证"
     ],
     "in_progress": [],
     "blocked": [],

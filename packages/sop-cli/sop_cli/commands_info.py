@@ -124,7 +124,16 @@ COMMAND_TREE: dict[str, CmdEntry] = {
     },
     "requirement": {
         "help": "需求（Manager + 本地离线队列）",
-        "subs": {"list": "列表", "create": "创建", "update": "更新", "delete": "删除"},
+        "subs": {
+            "list": "列表",
+            "create": "创建",
+            "parse-doc": "文档转结构化需求",
+            "review": "智能评审",
+            "ops-plan": "治理操作包",
+            "ops-tasks": "治理任务化",
+            "update": "更新",
+            "delete": "删除",
+        },
     },
     "issue": {
         "help": "问题/缺陷（Manager + 本地离线队列）",
@@ -245,6 +254,7 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "交付工作台",
         [
+            ("sop requirement parse-doc --file prd.md --agent \"Product Analyst Agent\" --cli codex --apply", "文档智能拆解并导入需求池"),
             ('sop requirement create "统一项目注册流程" --priority P1', "创建需求"),
             ('sop issue create "登录回调异常" --severity P1', "创建问题"),
             ('sop sprint create "MVP 闭环" --points 20', "创建迭代"),

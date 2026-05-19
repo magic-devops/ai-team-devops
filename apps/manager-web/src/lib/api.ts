@@ -3,7 +3,7 @@
  *  - 改 BASE_URL：仅改本文件常量
  *  - 新接口：在末尾加导出 async 函数；TanStack Query 的 hooks 在 hooks/ 目录
  */
-import { clearSession, getToken, getWorkspaceScope, setWorkspaceScope } from "./authStorage";
+import { clearSession, getToken, getWorkspaceScope, setUserSession, setWorkspaceScope, type SessionPayload } from "./authStorage";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -37,8 +37,12 @@ function isSessionUnauthorized(status: number, body: string) {
   );
 }
 
-function clearStaleSessionOnUnauthorized(status: number, body: string) {
-  if (isSessionUnauthorized(status, body) && getToken()) clearSession();
+function isAuthProbePath(path: string) {
+  return path === "/api/v1/auth/me";
+}
+
+function clearStaleSessionOnUnauthorized(path: string, status: number, body: string) {
+  if (isAuthProbePath(path) && isSessionUnauthorized(status, body) && getToken()) clearSession();
 }
 
 function redirectToLogin() {
@@ -50,6 +54,8 @@ function redirectToLogin() {
 
 async function bindDefaultProjectScope(): Promise<boolean> {
   if (getWorkspaceScope().projectId || !getToken()) return false;
+  const hydrated = await hydrateSessionScope();
+  if (hydrated) return true;
   const r = await fetch(BASE + "/api/v1/projects", { headers: authHeaders() });
   if (!r.ok) return false;
   const projects = await r.json().catch(() => []) as Array<{
@@ -70,7 +76,40 @@ async function bindDefaultProjectScope(): Promise<boolean> {
   return true;
 }
 
+let sessionHydration: Promise<boolean> | null = null;
+
+async function hydrateSessionScope(): Promise<boolean> {
+  if (getWorkspaceScope().projectId || !getToken()) return false;
+  if (!sessionHydration) {
+    sessionHydration = (async () => {
+      const token = getToken();
+      if (!token) return false;
+      const r = await fetch(BASE + "/api/v1/auth/me", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!r.ok) {
+        const txt = await r.text().catch(() => r.statusText);
+        clearStaleSessionOnUnauthorized("/api/v1/auth/me", r.status, txt);
+        return false;
+      }
+      const data = await r.json().catch(() => null) as SessionPayload | null;
+      if (!data) return false;
+      setUserSession(data);
+      return Boolean(data.workspace_scope?.project_id || data.default_project_id);
+    })().finally(() => {
+      sessionHydration = null;
+    });
+  }
+  return sessionHydration;
+}
+
 async function request<T>(path: string, init?: RequestInit, retriedProjectScope = false): Promise<T> {
+  if (!path.startsWith("/api/v1/auth/") && getToken() && !getWorkspaceScope().projectId) {
+    await hydrateSessionScope();
+  }
   const baseHeaders = authHeaders();
   const extra = (init?.headers || {}) as Record<string, string>;
   const r = await fetch(BASE + path, {
@@ -79,8 +118,8 @@ async function request<T>(path: string, init?: RequestInit, retriedProjectScope 
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => r.statusText);
-    const shouldRedirectLogin = isSessionUnauthorized(r.status, txt);
-    clearStaleSessionOnUnauthorized(r.status, txt);
+    const shouldRedirectLogin = isAuthProbePath(path) && isSessionUnauthorized(r.status, txt);
+    clearStaleSessionOnUnauthorized(path, r.status, txt);
     if (shouldRedirectLogin) redirectToLogin();
     if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
       const bound = await bindDefaultProjectScope();
@@ -176,6 +215,26 @@ export const api = {
     categories?: string[];
     limit?: number;
   }) => request<any>("/api/v1/requirements/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
+  parseRequirementsDocument: (body: {
+    text: string;
+    filename?: string;
+    mode?: string;
+    agent?: string;
+    cli?: string;
+    auto_priority?: boolean;
+    auto_acceptance?: boolean;
+    assigned_agent?: string;
+    dev_tool?: string;
+  }) =>
+    request<any>("/api/v1/requirements/parse-document", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  batchCreateRequirements: (body: { items: Array<Record<string, unknown>> }) =>
+    request<any>("/api/v1/requirements/batch", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   createRequirement: (body: {
     title: string;
     description?: string;
@@ -1277,29 +1336,9 @@ export const api = {
   syncPush: (body: { module: string; action?: "upsert" | "delete"; record?: Record<string, unknown>; idempotency_key?: string }) =>
     request<any>("/api/v1/sync/push", { method: "POST", body: JSON.stringify(body) }),
   login: (body: { username: string; password: string; tenant_slug?: string }) =>
-    request<{
-      token: string;
-      user_id: string;
-      username: string;
-      role: string;
-      tenant_id: string;
-      tenant_code?: string;
-      tenant_slug?: string;
-      tenant_name?: string;
-      default_project_id?: string;
-      default_project_code?: string;
-      default_business_code?: string;
-    }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
+    request<SessionPayload>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
   authMe: () =>
-    request<{
-      user_id: string;
-      username: string;
-      role: string;
-      tenant_id: string;
-      tenant_slug?: string;
-      tenant_name?: string;
-      email?: string;
-    }>("/api/v1/auth/me"),
+    request<SessionPayload>("/api/v1/auth/me"),
   tenantOptions: () =>
     request<{
       admin_mode?: "single" | "saas";

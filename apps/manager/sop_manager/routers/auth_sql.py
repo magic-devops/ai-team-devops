@@ -3,7 +3,7 @@ from __future__ import annotations
 import os, hashlib, uuid, secrets
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -201,6 +201,91 @@ def check_project_access(user: User, project_id: str, db: Session, min_role: str
         raise HTTPException(403, f"需要项目 {min_role} 权限")
 
 
+def _tenant_code(tenant: Tenant | None, tenant_id: str) -> str:
+    return tenant.slug if tenant and tenant.slug else tenant_id
+
+
+def _first_accessible_project(user: User, db: Session) -> Project | None:
+    membership = (
+        db.query(ProjectMember)
+        .filter_by(user_id=user.id)
+        .order_by(ProjectMember.project_id.asc())
+        .first()
+    )
+    if membership:
+        project = db.get(Project, membership.project_id)
+        if project:
+            return project
+    if user.role in ("tenant_admin", "super_admin"):
+        return (
+            db.query(Project)
+            .filter_by(tenant_id=user.tenant_id)
+            .order_by(Project.created_at.asc())
+            .first()
+        )
+    return None
+
+
+def _workspace_scope(user: User, tenant: Tenant | None, db: Session) -> dict[str, str]:
+    scope = {
+        "tenant_code": _tenant_code(tenant, user.tenant_id),
+        "business_code": "",
+        "project_id": "",
+        "project_code": "",
+    }
+    try:
+        project = _first_accessible_project(user, db)
+        if project:
+            scope["project_id"] = project.id
+            scope["project_code"] = project.id
+            if project.business_id:
+                business = db.get(Business, project.business_id)
+                scope["business_code"] = business.id if business else project.business_id
+    except Exception:
+        scope["business_code"] = ""
+        scope["project_id"] = ""
+        scope["project_code"] = ""
+    return scope
+
+
+def _session_payload(user: User, db: Session, token: str | None = None) -> dict[str, Any]:
+    tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
+    scope = _workspace_scope(user, tenant, db)
+    payload: dict[str, Any] = {
+        "user_id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": user.role,
+        "role_weight": role_weight(user.role),
+        "tenant_id": user.tenant_id,
+        "tenant_code": _tenant_code(tenant, user.tenant_id),
+        "tenant_slug": tenant.slug if tenant else "",
+        "tenant_name": tenant.name if tenant else "",
+        "default_project_id": scope["project_id"],
+        "default_project_code": scope["project_code"],
+        "default_business_code": scope["business_code"],
+        "workspace_scope": scope,
+        "permissions": {
+            "role": user.role,
+            "role_weight": role_weight(user.role),
+            "user_roles": list(USER_ROLES),
+            "project_member_roles": list(PROJECT_MEMBER_ROLES),
+            "data_hub_import_roles": sorted(DATA_HUB_IMPORT_ROLES, key=lambda r: role_weight(r)),
+            "capability_api": "/api/v1/system/pages/capabilities/me",
+            "policy_api": "/api/v1/organization/policy",
+            "policy_check_api": "/api/v1/organization/policy/check",
+        },
+        "session_status": "active",
+    }
+    if token:
+        payload.update({
+            "access_token": token,
+            "token": token,
+            "token_type": "Bearer",
+        })
+    return payload
+
+
 # ── 登录 ──────────────────────────────────────────────────────────
 class LoginBody(BaseModel):
     username: str
@@ -218,57 +303,13 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
     user = q.first()
     if not user or user.status != "active":
         raise HTTPException(401, "用户名或密码错误")
-    tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
     token = _make_token(user.id, user.tenant_id, user.role, user.username)
-    tenant_code = tenant.slug if tenant and tenant.slug else user.tenant_id
-    default_project_id = ""
-    default_business_code = ""
-    default_project_code = ""
-    try:
-        project = None
-        m = db.query(ProjectMember).filter_by(user_id=user.id).order_by(ProjectMember.project_id).first()
-        if m:
-            project = db.get(Project, m.project_id)
-        elif user.role in ("tenant_admin", "super_admin"):
-            project = (
-                db.query(Project)
-                .filter_by(tenant_id=user.tenant_id)
-                .order_by(Project.created_at.asc())
-                .first()
-            )
-        if project:
-            default_project_id = project.id
-            default_project_code = project.id
-            if project.business_id:
-                business = db.get(Business, project.business_id)
-                default_business_code = business.id if business else project.business_id
-    except Exception:
-        default_project_id = ""
-        default_business_code = ""
-        default_project_code = ""
-    return {
-        "access_token": token,
-        "token": token,  # 兼容 Web login.html（localStorage sop-token）
-        "token_type": "Bearer",
-        "user_id": user.id,
-        "username": user.username,
-        "role": user.role,
-        "tenant_id": user.tenant_id,
-        "tenant_code": tenant_code,
-        "tenant_slug": tenant.slug if tenant else "",
-        "tenant_name": tenant.name if tenant else "",
-        "default_project_id": default_project_id,
-        "default_project_code": default_project_code,
-        "default_business_code": default_business_code,
-    }
+    return _session_payload(user, db, token=token)
 
 
 @router.get("/me")
 def me(user: User = Depends(current_user), db: Session = Depends(get_session)):
-    tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
-    return {"user_id": user.id, "username": user.username, "role": user.role,
-            "tenant_id": user.tenant_id, "tenant_slug": tenant.slug if tenant else "",
-            "tenant_name": tenant.name if tenant else "", "email": user.email}
+    return _session_payload(user, db)
 
 
 @router.post("/logout")

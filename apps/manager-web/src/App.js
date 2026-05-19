@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { api } from "./lib/api";
-import { BUSINESS_CODE_KEY, clearSession, getBusinessCode, getProjectId, getTenantCode, getToken, PROJECT_CODE_KEY, PROJECT_ID_KEY, TENANT_CODE_KEY, TOKEN_KEY, } from "./lib/authStorage";
+import { BUSINESS_CODE_KEY, clearSession, getBusinessCode, getProjectId, getTenantCode, getToken, PROJECT_CODE_KEY, PROJECT_ID_KEY, setUserSession, TENANT_CODE_KEY, TOKEN_KEY, } from "./lib/authStorage";
 import { useCapabilities } from "./lib/capabilities";
 import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, } from "./lib/menuPrefs";
 import { getThemePreference, isDarkResolved, setThemePreference, THEME_OPTIONS, } from "./lib/theme";
@@ -377,6 +377,10 @@ export function App() {
             window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
         }
     }, [authed]);
+    useEffect(() => {
+        if (me.data)
+            setUserSession(me.data);
+    }, [me.data]);
     const humanizeNavKey = (key) => key
         .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
         .replace(/[_-]+/g, " ")

@@ -13,6 +13,30 @@ export type WorkspaceScope = {
   projectCode?: string | null;
 };
 
+export type SessionPayload = {
+  access_token?: string | null;
+  token?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+  email?: string | null;
+  role?: string | null;
+  tenant_id?: string | null;
+  tenant_code?: string | null;
+  tenant_slug?: string | null;
+  tenant_name?: string | null;
+  default_project_id?: string | null;
+  default_project_code?: string | null;
+  default_business_code?: string | null;
+  workspace_scope?: {
+    tenant_code?: string | null;
+    business_code?: string | null;
+    project_id?: string | null;
+    project_code?: string | null;
+  } | null;
+  permissions?: Record<string, unknown> | null;
+  session_status?: string | null;
+};
+
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const part = token.split(".")[1];
   if (!part) return null;
@@ -125,6 +149,36 @@ export function setSession(token: string, projectId: string | null | undefined, 
     };
     if (tenantCode !== undefined) scope.tenantCode = tenantCode;
     setWorkspaceScope(scope);
+  } catch {
+    notifySession();
+  }
+}
+
+export function setUserSession(payload: SessionPayload) {
+  try {
+    const token = payload.token || payload.access_token;
+    if (token) localStorage.setItem(TOKEN_KEY, String(token));
+    if (payload.user_id || payload.username || payload.role || payload.tenant_id) {
+      localStorage.setItem(USER_KEY, JSON.stringify({
+        id: payload.user_id || "",
+        username: payload.username || "",
+        email: payload.email || "",
+        role: payload.role || "",
+        tenant_id: payload.tenant_id || "",
+        tenant_code: payload.tenant_code || "",
+        tenant_slug: payload.tenant_slug || "",
+        tenant_name: payload.tenant_name || "",
+        permissions: payload.permissions || null,
+        session_status: payload.session_status || "active",
+      }));
+    }
+    const ws = payload.workspace_scope || {};
+    setWorkspaceScope({
+      tenantCode: ws.tenant_code || payload.tenant_code || payload.tenant_slug || payload.tenant_id || null,
+      businessCode: ws.business_code || payload.default_business_code || null,
+      projectId: ws.project_id || payload.default_project_id || null,
+      projectCode: ws.project_code || payload.default_project_code || ws.project_id || payload.default_project_id || null,
+    });
   } catch {
     notifySession();
   }

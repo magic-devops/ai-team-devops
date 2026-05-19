@@ -465,6 +465,13 @@ class ManagerClient:
     def create_requirement(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/requirements", json_body=body)
 
+    def batch_create_requirements(self, items: Iterable[Mapping[str, Any]] | Mapping[str, Any]) -> dict[str, Any]:
+        body = dict(items) if isinstance(items, Mapping) else {"items": [dict(x) for x in items]}
+        return self._request("POST", "/api/v1/requirements/batch", json_body=body)
+
+    def parse_requirements_document(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/requirements/parse-document", json_body=dict(body))
+
     def update_requirement(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("PATCH", f"/api/v1/requirements/{req_id}", json_body=body)
 

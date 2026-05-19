@@ -153,6 +153,21 @@ def _render(items: list[dict[str, Any]], title: str) -> None:
     console.print(tbl)
 
 
+def _render_intake(items: list[dict[str, Any]], title: str) -> None:
+    tbl = Table(title=title, show_header=True, header_style="bold")
+    for col in ("priority", "agent", "tool", "title", "tags"):
+        tbl.add_column(col)
+    for r in items:
+        tbl.add_row(
+            str(r.get("priority", "")),
+            str(r.get("assigned_agent", ""))[:28],
+            str(r.get("dev_tool", ""))[:18],
+            str(r.get("title") or "")[:72],
+            ",".join(str(x) for x in (r.get("tags") or [])[:4]),
+        )
+    console.print(tbl)
+
+
 def _new_row(
     title: str,
     *,
@@ -254,6 +269,66 @@ def create_requirement(
     )
     _local_create(row)
     ok(f"local requirement queued {row['id']}")
+
+
+@app.command(name="parse-doc")
+def parse_requirement_document(
+    path: Path | None = typer.Option(None, "--file", "-f", exists=True, dir_okay=False, readable=True, help="需求文档文本文件"),
+    text: str = typer.Option("", "--text", help="直接传入需求文本；与 --file 二选一"),
+    mode: str = typer.Option("prd", "--mode", help="idea|prd|meeting|feedback|incident|data|mixed"),
+    agent: str = typer.Option("Product Analyst Agent", "--agent", help="负责解析的 Agent/角色"),
+    cli: str = typer.Option("codex", "--cli", help="建议执行 CLI/工具，如 codex/claude/cursor/openclaw/hermes-agent"),
+    assigned_agent: str = typer.Option("", "--assigned-agent", help="导入后默认负责 Agent"),
+    dev_tool: str = typer.Option("", "--dev-tool", help="导入后默认开发工具"),
+    no_auto_priority: bool = typer.Option(False, "--no-auto-priority", help="关闭自动优先级评估"),
+    no_auto_acceptance: bool = typer.Option(False, "--no-auto-acceptance", help="关闭自动验收标准生成"),
+    apply: bool = typer.Option(False, "--apply", help="解析后批量写入 Manager 需求池"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将 PRD/会议纪要/想法文本解析为结构化需求，可直接导入需求池。"""
+    content = text.strip()
+    filename = "inline.txt"
+    if path is not None:
+        filename = path.name
+        content = path.read_text(encoding="utf-8").strip()
+    if len(content) < 20:
+        err("请输入至少 20 个字符的需求文档内容")
+        raise typer.Exit(2)
+    body = {
+        "text": content,
+        "filename": filename,
+        "mode": mode,
+        "agent": agent,
+        "cli": cli,
+        "auto_priority": not no_auto_priority,
+        "auto_acceptance": not no_auto_acceptance,
+        "assigned_agent": assigned_agent or agent,
+        "dev_tool": dev_tool or cli,
+    }
+    try:
+        out = get_client().parse_requirements_document(body)
+    except Exception as e:
+        err(f"Manager requirement parse-doc 不可用: {e}")
+        raise typer.Exit(1) from e
+    if apply:
+        items = out.get("items") or []
+        if not items:
+            warn("没有可导入需求")
+        else:
+            created = get_client().batch_create_requirements(items)
+            out["created"] = created
+    if json_out:
+        console.print_json(data=out)
+        return
+    if out.get("warning"):
+        warn(str(out.get("warning")))
+    _render_intake(list(out.get("items") or []), f"parsed requirements count={out.get('count', 0)} source={out.get('source', '-')}")
+    for command in out.get("commands") or []:
+        console.print(f"{command.get('label')}: [bold]{command.get('command')}[/bold]")
+    if apply:
+        ok(f"imported requirements count={out.get('created', {}).get('count', 0)}")
+    else:
+        warn("dry-run only; add --apply to import requirements")
 
 
 @app.command(name="update")

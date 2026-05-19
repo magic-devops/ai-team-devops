@@ -46,6 +46,7 @@ import {
   getToken,
   PROJECT_CODE_KEY,
   PROJECT_ID_KEY,
+  setUserSession,
   TENANT_CODE_KEY,
   TOKEN_KEY,
 } from "./lib/authStorage";
@@ -666,6 +667,10 @@ export function App() {
       window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
     }
   }, [authed]);
+
+  useEffect(() => {
+    if (me.data) setUserSession(me.data);
+  }, [me.data]);
 
   const humanizeNavKey = (key: string) =>
     key

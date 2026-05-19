@@ -3,7 +3,7 @@
  *  - 改 BASE_URL：仅改本文件常量
  *  - 新接口：在末尾加导出 async 函数；TanStack Query 的 hooks 在 hooks/ 目录
  */
-import { clearSession, getToken, getWorkspaceScope, setWorkspaceScope } from "./authStorage";
+import { clearSession, getToken, getWorkspaceScope, setUserSession, setWorkspaceScope } from "./authStorage";
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 function authHeaders() {
     const h = { "Content-Type": "application/json" };
@@ -33,8 +33,11 @@ function isSessionUnauthorized(status, body) {
         body.includes("Token 用户加载失败") ||
         body.includes("用户不存在或已禁用"));
 }
-function clearStaleSessionOnUnauthorized(status, body) {
-    if (isSessionUnauthorized(status, body) && getToken())
+function isAuthProbePath(path) {
+    return path === "/api/v1/auth/me";
+}
+function clearStaleSessionOnUnauthorized(path, status, body) {
+    if (isAuthProbePath(path) && isSessionUnauthorized(status, body) && getToken())
         clearSession();
 }
 function redirectToLogin() {
@@ -48,6 +51,9 @@ function redirectToLogin() {
 async function bindDefaultProjectScope() {
     if (getWorkspaceScope().projectId || !getToken())
         return false;
+    const hydrated = await hydrateSessionScope();
+    if (hydrated)
+        return true;
     const r = await fetch(BASE + "/api/v1/projects", { headers: authHeaders() });
     if (!r.ok)
         return false;
@@ -63,7 +69,41 @@ async function bindDefaultProjectScope() {
     });
     return true;
 }
+let sessionHydration = null;
+async function hydrateSessionScope() {
+    if (getWorkspaceScope().projectId || !getToken())
+        return false;
+    if (!sessionHydration) {
+        sessionHydration = (async () => {
+            const token = getToken();
+            if (!token)
+                return false;
+            const r = await fetch(BASE + "/api/v1/auth/me", {
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+            });
+            if (!r.ok) {
+                const txt = await r.text().catch(() => r.statusText);
+                clearStaleSessionOnUnauthorized("/api/v1/auth/me", r.status, txt);
+                return false;
+            }
+            const data = await r.json().catch(() => null);
+            if (!data)
+                return false;
+            setUserSession(data);
+            return Boolean(data.workspace_scope?.project_id || data.default_project_id);
+        })().finally(() => {
+            sessionHydration = null;
+        });
+    }
+    return sessionHydration;
+}
 async function request(path, init, retriedProjectScope = false) {
+    if (!path.startsWith("/api/v1/auth/") && getToken() && !getWorkspaceScope().projectId) {
+        await hydrateSessionScope();
+    }
     const baseHeaders = authHeaders();
     const extra = (init?.headers || {});
     const r = await fetch(BASE + path, {
@@ -72,8 +112,8 @@ async function request(path, init, retriedProjectScope = false) {
     });
     if (!r.ok) {
         const txt = await r.text().catch(() => r.statusText);
-        const shouldRedirectLogin = isSessionUnauthorized(r.status, txt);
-        clearStaleSessionOnUnauthorized(r.status, txt);
+        const shouldRedirectLogin = isAuthProbePath(path) && isSessionUnauthorized(r.status, txt);
+        clearStaleSessionOnUnauthorized(path, r.status, txt);
         if (shouldRedirectLogin)
             redirectToLogin();
         if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
@@ -141,6 +181,14 @@ export const api = {
     requirementsSummary: () => request("/api/v1/requirements/summary"),
     requirementOpsPlan: () => request("/api/v1/requirements/ops-plan"),
     requirementOpsTasks: (body) => request("/api/v1/requirements/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
+    parseRequirementsDocument: (body) => request("/api/v1/requirements/parse-document", {
+        method: "POST",
+        body: JSON.stringify(body),
+    }),
+    batchCreateRequirements: (body) => request("/api/v1/requirements/batch", {
+        method: "POST",
+        body: JSON.stringify(body),
+    }),
     createRequirement: (body) => request("/api/v1/requirements", {
         method: "POST",
         body: JSON.stringify(body),

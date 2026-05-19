@@ -195,6 +195,13 @@ class ParseDocumentBody(BaseModel):
     """粘贴 PRD / 需求说明全文，由大模型抽取结构化需求列表（JSON）。"""
     text: str = Field(..., min_length=20, max_length=_DOC_MAX)
     filename: Optional[str] = None
+    mode: str = Field("prd", pattern="^(idea|prd|meeting|feedback|incident|data|mixed)$")
+    agent: str = Field("Product Analyst Agent", max_length=120)
+    cli: str = Field("codex", max_length=80)
+    auto_priority: bool = True
+    auto_acceptance: bool = True
+    assigned_agent: Optional[str] = Field("", max_length=120)
+    dev_tool: Optional[str] = Field("", max_length=80)
 
 
 class GeneratePrototypeBody(BaseModel):
@@ -304,6 +311,145 @@ def _normalize_items(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not out:
         raise ValueError("未解析到任何有效需求条目")
     return out
+
+
+def _infer_doc_priority(text: str, default: str = "P2") -> str:
+    t = text.lower()
+    if any(x in t for x in ("安全", "合规", "故障", "阻断", "资损", "核心", "支付", "权限", "p0")):
+        return "P0"
+    if any(x in t for x in ("必须", "关键", "重要", "审批", "上线", "调度", "自动化", "p1")):
+        return "P1"
+    if any(x in t for x in ("优化", "体验", "美化", "增强", "p3")):
+        return "P3"
+    return default if default in _PRIOS else "P2"
+
+
+def _fallback_requirements_from_text(text: str, body: ParseDocumentBody) -> List[Dict[str, Any]]:
+    lines = [x.strip(" \t-•*#0123456789.、") for x in text.splitlines() if x.strip()]
+    candidates: List[str] = []
+    current: List[str] = []
+    for raw in lines:
+        is_heading = bool(re.match(r"^(需求|功能|模块|场景|目标|问题|痛点|故事|story|feature)[:：\s]", raw, re.I))
+        is_bullet = len(raw) <= 180 and bool(re.search(r"(需要|支持|实现|提供|允许|自动|智能|管理|导入|审核|拆解|评估|生成)", raw))
+        if (is_heading or is_bullet) and current:
+            candidates.append("；".join(current))
+            current = [raw]
+        else:
+            current.append(raw)
+        if len("；".join(current)) > 700:
+            candidates.append("；".join(current))
+            current = []
+    if current:
+        candidates.append("；".join(current))
+
+    if not candidates:
+        sentences = [x.strip() for x in re.split(r"[。！？!?]\s*", text) if x.strip()]
+        candidates = sentences[:20]
+
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for idx, chunk in enumerate(candidates[:40], start=1):
+        chunk = re.sub(r"\s+", " ", chunk).strip()
+        if len(chunk) < 8:
+            continue
+        title = chunk.split("；", 1)[0][:48].strip("：:，,。 ")
+        if not title:
+            title = f"需求条目 {idx}"
+        key = title.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        pr = _infer_doc_priority(chunk) if body.auto_priority else "P2"
+        criteria = [
+            f"给定项目作用域下，用户可以完成「{title}」的主流程操作",
+            "关键输入、异常场景和权限边界均有明确提示或拦截",
+            "相关结果可被人工审核，并能进入后续任务拆解或治理流程",
+        ] if body.auto_acceptance else []
+        tags = ["doc-intake", body.mode]
+        if body.cli:
+            tags.append(str(body.cli).strip())
+        out.append(
+            {
+                "title": title,
+                "description": chunk[:8000],
+                "priority": pr,
+                "acceptance_criteria": criteria,
+                "tags": [x for x in tags if x][:12],
+            }
+        )
+    if not out:
+        raise ValueError("本地规则未解析到任何有效需求条目")
+    return out
+
+
+def _enrich_intake_items(items: List[Dict[str, Any]], body: ParseDocumentBody) -> List[Dict[str, Any]]:
+    assigned_agent = (body.assigned_agent or body.agent or "").strip()
+    dev_tool = (body.dev_tool or body.cli or "").strip()
+    enriched: List[Dict[str, Any]] = []
+    for item in items:
+        tags = list(item.get("tags") or [])
+        for tag in ("ai-intake", body.mode):
+            if tag and tag not in tags:
+                tags.append(tag)
+        enriched.append(
+            {
+                **item,
+                "assigned_agent": assigned_agent,
+                "dev_tool": dev_tool,
+                "tags": tags[:12],
+            }
+        )
+    return enriched
+
+
+def _intake_response(items: List[Dict[str, Any]], body: ParseDocumentBody, *, source: str, warning: str = "") -> Dict[str, Any]:
+    filename = body.filename or "requirements.md"
+    cli = (body.cli or "codex").strip()
+    agent = (body.agent or "Product Analyst Agent").strip()
+    scope = {
+        "tenant_code": resolved_tenant_code(),
+        "business_code": resolved_business_code(),
+        "project_id": resolved_project_id(),
+        "project_code": resolved_project_code(),
+    }
+    return {
+        "ok": True,
+        "source": source,
+        "warning": warning,
+        "items": items,
+        "count": len(items),
+        "intake_config": {
+            "filename": filename,
+            "mode": body.mode,
+            "agent": agent,
+            "cli": cli,
+            "auto_priority": body.auto_priority,
+            "auto_acceptance": body.auto_acceptance,
+            "assigned_agent": body.assigned_agent or agent,
+            "dev_tool": body.dev_tool or cli,
+        },
+        "commands": [
+            {
+                "label": "文档解析",
+                "command": f"sop requirement parse-doc --file {filename} --agent \"{agent}\" --cli {cli} --mode {body.mode}",
+            },
+            {"label": "需求池治理", "command": "sop requirement ops-plan --json"},
+            {"label": "生成治理任务", "command": "sop requirement ops-tasks --categories intake,review,generation --apply"},
+        ],
+        "agent_packet": {
+            "goal": "将想法、文档或会议纪要转成 AI/CLI 可消费的结构化需求，并进入评审、拆任务和调度闭环。",
+            "agent": agent,
+            "cli": cli,
+            "mode": body.mode,
+            "scope": scope,
+            "next_actions": [
+                "人工审核标题、优先级、验收标准和标签",
+                "批量导入需求池",
+                "运行智能评审并补齐验收标准",
+                "对高优需求生成开发任务和 DAG 依赖",
+            ],
+        },
+    }
 
 
 def _as_text_list(value: Any) -> List[str]:
@@ -1037,26 +1183,38 @@ def parse_document(body: ParseDocumentBody):
     text = body.text.strip()
     if len(text) < 20:
         raise HTTPException(400, "文档内容过短")
-    system = """你是资深产品经理。用户粘贴的是 PRD / 需求说明 / 会议纪要等文本。
+    system = f"""你是资深产品经理，也是 AI 研发平台的需求接入 Agent。
+本次接入模式：{body.mode}
+指定执行 Agent：{body.agent}
+建议 CLI/工具：{body.cli}
+是否自动评估优先级：{body.auto_priority}
+是否自动生成验收标准：{body.auto_acceptance}
+
+用户粘贴的是 PRD / 需求说明 / 会议纪要 / 反馈 / 故障复盘 / 数据需求等文本。
 请从中抽取**可交付的需求条目**，严格只输出一个 JSON 对象（不要 Markdown 围栏），格式：
-{"requirements":[
-  {"title":"短标题","description":"详细说明","priority":"P0|P1|P2|P3","acceptance_criteria":["可验收条目1"],"tags":["可选标签"]}
-]}
+{{"requirements":[
+  {{"title":"短标题","description":"详细说明","priority":"P0|P1|P2|P3","acceptance_criteria":["可验收条目1"],"tags":["可选标签"]}}
+]}}
 规则：
 - 5～40 条为宜；合并重复表述；标题简洁中文。
-- priority：核心业务/合规/安全为 P0；重要功能 P1；一般 P2；优化类 P3。
-- acceptance_criteria：每条需求 1～5 条可测标准。
+- priority：核心业务/合规/安全/资损/阻断为 P0；重要功能 P1；一般 P2；优化类 P3。
+- acceptance_criteria：每条需求 1～5 条可测标准；若 auto_acceptance=false 可返回空数组。
+- tags：至少包含业务域、能力域或来源类型，避免无意义标签。
 - 不要编造文本中不存在的功能。"""
     user = f"文件名参考: {body.filename or '未命名'}\n\n--- 文档正文 ---\n{text[:_DOC_MAX]}"
     try:
         raw_txt = _llm_text(system, user, max_tokens=8192)
         obj = _extract_json_obj(raw_txt)
-        items = _normalize_items(obj)
-        return {"ok": True, "items": items, "count": len(items)}
-    except HTTPException:
-        raise
+        items = _enrich_intake_items(_normalize_items(obj), body)
+        return _intake_response(items, body, source="llm")
     except Exception as e:
-        raise HTTPException(502, f"文档解析失败: {e}") from e
+        items = _enrich_intake_items(_fallback_requirements_from_text(text, body), body)
+        return _intake_response(
+            items,
+            body,
+            source="local_rules",
+            warning=f"AI 模型解析不可用，已使用本地规则拆解: {e}",
+        )
 
 
 class ReorderBoardBody(BaseModel):

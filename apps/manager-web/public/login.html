@@ -860,6 +860,20 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       });
   }
 
+  function safePostLoginTarget(){
+    var next = new URLSearchParams(window.location.search).get('redirect');
+    if (!next || /^https?:\/\//i.test(next) || next.indexOf('//') !== -1) return '/';
+    try {
+      var u = new URL(next, window.location.origin);
+      if (u.origin !== window.location.origin) return '/';
+      if (u.pathname.endsWith('/login.html')) return '/';
+      return u.pathname + u.search + u.hash;
+    } catch (e) {
+      if (next.indexOf('login.html') >= 0) return '/';
+      return next.charAt(0) === '/' || next.charAt(0) === '#' ? next : '/';
+    }
+  }
+
   function saveAndRedirect(d){
     [
       'sop-current-project-id',
@@ -869,34 +883,35 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
     ].forEach(function (key) {
       try { localStorage.removeItem(key); } catch (e) {}
     });
-    localStorage.setItem('sop-token', d.token);
+    localStorage.setItem('sop-token', d.token || d.access_token || '');
     localStorage.setItem('sop-user', JSON.stringify({
       id:d.user_id,
       username:d.username,
+      email:d.email,
       role:d.role,
       tenant_id:d.tenant_id,
+      tenant_code:d.tenant_code,
       tenant_slug:d.tenant_slug,
-      tenant_name:d.tenant_name
+      tenant_name:d.tenant_name,
+      permissions:d.permissions || null,
+      session_status:d.session_status || 'active'
     }));
     try {
-      var tenantCode = d.tenant_code || d.tenant_slug || d.tenant_id || '';
+      var scope = d.workspace_scope || {};
+      var tenantCode = scope.tenant_code || d.tenant_code || d.tenant_slug || d.tenant_id || '';
+      var businessCode = scope.business_code || d.default_business_code || '';
+      var projectId = scope.project_id || d.default_project_id || '';
+      var projectCode = scope.project_code || d.default_project_code || projectId || '';
       if (tenantCode) localStorage.setItem('sop-current-tenant-code', tenantCode);
-      if (d.default_business_code) localStorage.setItem('sop-current-business-code', d.default_business_code);
-      if (d.default_project_id) localStorage.setItem('sop-current-project-id', d.default_project_id);
-      if (d.default_project_code || d.default_project_id) localStorage.setItem('sop-current-project-code', d.default_project_code || d.default_project_id);
+      if (businessCode) localStorage.setItem('sop-current-business-code', businessCode);
+      if (projectId) localStorage.setItem('sop-current-project-id', projectId);
+      if (projectCode) localStorage.setItem('sop-current-project-code', projectCode);
     } catch (e) {}
-    var next = new URLSearchParams(window.location.search).get('redirect');
-    if (next && !/^https?:\/\//i.test(next) && next.indexOf('//') === -1) {
-      window.location.replace(next);
-    } else {
-      window.location.replace('console.html');
-    }
+    window.location.replace(safePostLoginTarget());
   }
 
   function postLoginTarget(){
-    var next = new URLSearchParams(window.location.search).get('redirect');
-    if (next && !/^https?:\/\//i.test(next) && next.indexOf('//') === -1) return next;
-    return 'console.html';
+    return safePostLoginTarget();
   }
 
   var loginMode = 'single';
