@@ -574,6 +574,8 @@ export function App() {
   });
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
   const [quickPanel, setQuickPanel] = useState<QuickPanelKey | null>(null);
+  const lastRecentKeyRef = useRef<string | null>(null);
+  const lastSyncedRecentSignatureRef = useRef("");
   useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
   const authed = Boolean(getToken());
   const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
@@ -810,9 +812,15 @@ export function App() {
   }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
 
   useEffect(() => {
-    if (current?.key) {
-      const next = pushRecent(current.key);
-      if (menuPrefsRemote.data?.ok) syncMenuPrefs.mutate({ recents: next.recents });
+    if (!current?.key) return;
+    const next = lastRecentKeyRef.current === current.key ? getMenuPrefs() : pushRecent(current.key);
+    lastRecentKeyRef.current = current.key;
+    if (menuPrefsRemote.data?.ok) {
+      const signature = next.recents.join("\u001f");
+      if (signature !== lastSyncedRecentSignatureRef.current) {
+        lastSyncedRecentSignatureRef.current = signature;
+        syncMenuPrefs.mutate({ recents: next.recents });
+      }
     }
   }, [current?.key, menuPrefsRemote.data?.ok]);
   const childrenByParent = useMemo(() => {
@@ -828,12 +836,13 @@ export function App() {
 
   useEffect(() => {
     if (!visibleNav.length) return;
+    if (routeMicroApp !== activeMicroApp) return;
     const activeAllowed = visibleNav.some((item) => !item.external && item.path.startsWith("#") && hash.startsWith(item.path));
     if (!activeAllowed) {
       const fallback = visibleNav.find((item) => item.path.startsWith("#")) ?? visibleNav[0];
-      if (fallback?.path?.startsWith("#")) window.location.hash = fallback.path;
+      if (fallback?.path?.startsWith("#") && window.location.hash !== fallback.path) window.location.hash = fallback.path;
     }
-  }, [hash, visibleNav]);
+  }, [activeMicroApp, hash, routeMicroApp, visibleNav]);
   const openModuleCopilot = () => {
     const label = navLabel(current.key);
     const group = String(t(`nav.group.${current.group}`));

@@ -9,7 +9,7 @@ import {
   Sparkles,
   Workflow,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getBusinessCode,
@@ -44,6 +44,18 @@ function statusLabel(status: MicroAppStatus) {
   return "规划中";
 }
 
+function createWujieLoadingNode(appName: string) {
+  const node = document.createElement("div");
+  node.style.cssText =
+    "display:flex;min-height:180px;width:100%;align-items:center;justify-content:center;gap:10px;color:var(--muted-strong);font-size:14px;background:var(--surface-muted);";
+  const marker = document.createElement("span");
+  marker.style.cssText = "width:10px;height:10px;border-radius:999px;background:var(--brand);box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 14%,transparent);";
+  const text = document.createElement("span");
+  text.textContent = `正在加载 ${appName}`;
+  node.append(marker, text);
+  return node;
+}
+
 export function MicroAppPortal({ appId }: MicroAppPortalProps) {
   const { t, i18n } = useTranslation();
   const app = getMicroApp(appId);
@@ -56,6 +68,7 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
   const leafCount = useMemo(() => filterNavByMicroApp(appId, NAV).filter((item) => item.hidden || item.parentKey).length, [appId]);
   const remoteEnabled = app.mode === "wujie" && runtimeUrl && !remoteFailed;
   const workspaceScope = getWorkspaceScope();
+  const loadingNode = useMemo(() => createWujieLoadingNode(app.name), [app.name]);
 
   if (remoteEnabled) {
     return (
@@ -82,6 +95,7 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
           url={runtimeUrl}
           sync
           alive
+          loading={loadingNode as unknown as ReactElement}
           props={{
             token: getToken(),
             locale: i18n.language,

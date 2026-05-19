@@ -129,12 +129,24 @@ def _active_user_from_payload(payload: dict, db: Session) -> User:
     if not user_id or len(user_id) > 64:
         raise HTTPException(401, "Token 用户标识无效")
     try:
-        user = db.query(User).filter(User.id == user_id).order_by(User.updated_at.desc()).first()
-    except SQLAlchemyError:
+        row = (
+            db.query(User.id, User.tenant_id, User.username, User.email, User.password_hash, User.role, User.status)
+            .filter(User.id == user_id)
+            .first()
+        )
+    except (SQLAlchemyError, ValueError, TypeError):
         db.rollback()
         raise HTTPException(401, "Token 用户加载失败，请重新登录")
-    if user and user.status == "active":
-        return user
+    if row and row.status == "active":
+        return User(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            username=row.username,
+            email=row.email,
+            password_hash=row.password_hash,
+            role=row.role,
+            status=row.status,
+        )
     raise HTTPException(401, "用户不存在或已禁用")
 
 

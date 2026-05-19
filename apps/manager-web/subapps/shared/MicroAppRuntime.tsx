@@ -1,5 +1,5 @@
 import { ArrowRight, Bot, ChevronDown, ChevronRight, ExternalLink, Layers3, Lock, Search, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BUSINESS_CODE_KEY,
@@ -75,6 +75,20 @@ function findRuntimeNavItem(hash: string, items: readonly NavItem[]): NavItem {
   return found ?? items.find((item) => !item.hidden && !item.parentKey) ?? items[0] ?? NAV[0];
 }
 
+function humanizeRuntimeKey(key: string) {
+  return key
+    .replace(/^nav\.(group|category)\./, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function safeRuntimeLabel(value: unknown, fallback: string) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || text === "undefined" || text === "null") return fallback;
+  return text;
+}
+
 export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
   const { t, i18n } = useTranslation();
   const app = getMicroApp(appId);
@@ -82,6 +96,14 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
   const [keyword, setKeyword] = useState("");
   const navItems = useMemo(() => filterNavByMicroApp(appId, NAV), [appId]);
   const visibleItems = useMemo(() => navItems.filter((item) => !item.hidden && !item.parentKey && !item.key.startsWith("microApp")), [navItems]);
+  const labelOf = useCallback(
+    (key: string) => safeRuntimeLabel(t(`nav.${key}`, { defaultValue: humanizeRuntimeKey(key) }), humanizeRuntimeKey(key)),
+    [t],
+  );
+  const i18nLabelOf = useCallback(
+    (i18nKey: string, fallbackKey: string) => safeRuntimeLabel(t(i18nKey, { defaultValue: humanizeRuntimeKey(fallbackKey) }), humanizeRuntimeKey(fallbackKey)),
+    [t],
+  );
 
   useEffect(() => {
     hydrateWujieSession();
@@ -102,10 +124,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
   }, [app.basePath]);
 
   const current = useMemo(() => findRuntimeNavItem(hash, navItems), [hash, navItems]);
-  const breadcrumb = useMemo(
-    () => buildNavBreadcrumb(hash, (key) => String(t(`nav.${key}`, { defaultValue: key })), navItems),
-    [hash, navItems, t],
-  );
+  const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, labelOf, navItems), [hash, labelOf, navItems]);
   const matchedModules = useMemo(() => {
     const needle = keyword.trim().toLowerCase();
     if (!needle) return visibleItems;
@@ -113,16 +132,16 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
       navItems
         .filter((item) => item.parentKey)
         .filter((item) => {
-          const label = String(t(`nav.${item.key}`, { defaultValue: item.key }));
+          const label = labelOf(item.key);
           return `${label} ${item.description || ""} ${item.capability || ""}`.toLowerCase().includes(needle);
         })
         .map((item) => item.parentKey as string),
     );
     return visibleItems.filter((item) => {
-      const label = String(t(`nav.${item.key}`, { defaultValue: item.key }));
+      const label = labelOf(item.key);
       return matchedParents.has(item.key) || `${label} ${item.description || ""} ${item.capability || ""}`.toLowerCase().includes(needle);
     });
-  }, [keyword, navItems, t, visibleItems]);
+  }, [keyword, labelOf, navItems, visibleItems]);
   const childrenByParent = useMemo(() => {
     const out = new Map<string, NavItem[]>();
     for (const item of navItems) {
@@ -134,7 +153,9 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
     return out;
   }, [navItems]);
 
-  const currentLabel = String(t(`nav.${current.key}`, { defaultValue: current.key }));
+  const currentLabel = labelOf(current.key);
+  const groupLabel = i18nLabelOf(breadcrumb.group.i18nKey, breadcrumb.group.key);
+  const categoryLabel = breadcrumb.category ? i18nLabelOf(breadcrumb.category.i18nKey, breadcrumb.category.key) : "";
 
   return (
     <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
@@ -179,7 +200,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{t(`nav.${item.key}`, { defaultValue: item.key })}</span>
+                  <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
                   {children.length ? (
                     open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                   ) : (
@@ -203,7 +224,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
                           title={child.capability}
                         >
                           <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{t(`nav.${child.key}`, { defaultValue: child.key })}</span>
+                          <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
                         </a>
                       );
                     })}
@@ -226,11 +247,11 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
               <h1 className="truncate text-2xl font-bold tracking-tight text-[var(--text)]">{currentLabel}</h1>
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]">
-              <span>{t(breadcrumb.group.i18nKey)}</span>
+              <span>{groupLabel}</span>
               {breadcrumb.category ? (
                 <>
                   <span>/</span>
-                  <span>{t(breadcrumb.category.i18nKey, { defaultValue: breadcrumb.category.key })}</span>
+                  <span>{categoryLabel}</span>
                 </>
               ) : null}
               <span>/</span>
@@ -269,7 +290,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
                   className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-md"
                 >
                   <Icon className="mb-3 h-5 w-5 text-[var(--brand)]" />
-                  <p className="font-semibold text-[var(--text)]">{t(`nav.${item.key}`, { defaultValue: item.key })}</p>
+                  <p className="font-semibold text-[var(--text)]">{labelOf(item.key)}</p>
                   <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">
                     {item.description || item.capability || item.path}
                   </p>
