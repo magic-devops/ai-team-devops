@@ -56,8 +56,6 @@ const AI_FOUNDATION_KEYS = [
   "aiMemory",
   "ruleCenter",
   "reflectionDistill",
-  "specs",
-  "designDocs",
   "workerOps",
   "syncOps",
   "eventStream",
@@ -132,6 +130,8 @@ const AI_RD_KEYS = [
   "vibeWorkspace",
   "globalSearch",
   "searchWorkbench",
+  "specs",
+  "designDocs",
 ] as const;
 
 const AI_DATA_KEYS = [

@@ -45,33 +45,43 @@
 
 ## 物理拆分结果
 
-当前代码已完成仓内物理隔离，不再把子应用入口放在主应用 `src/subapps`：
+当前代码已完成仓内物理隔离，不再把子应用入口或业务页面放在主应用 `src/subapps` / `src/pages`：
 
 ```text
 apps/manager-web/
   src/
     microApps.ts               # 微应用注册表
     pages/MicroAppPortal.tsx   # Wujie 容器
-    pages/governance/          # 微应用治理与系统地图
+    pages/                     # 仅保留基础管理、项目组织、共享组件和主壳页面
   subapps/
     ai-foundation/
       index.html
       src/main.tsx
+      src/appManifest.ts
+      src/pages/               # AI 底座、知识、技能、插件、Agent、模型网关、A2A
     ai-rd-center/
       index.html
       src/main.tsx
+      src/appManifest.ts
+      src/pages/               # 需求、方案、任务、AI 开发、调度、质量与交付
     ai-data-center/
       index.html
       src/main.tsx
+      src/appManifest.ts
+      src/pages/               # 数据源、接入、治理、开发、指标、标签、数据服务
     ai-ops-center/
       index.html
       src/main.tsx
+      src/appManifest.ts
+      src/pages/               # 审计、SSO、计费、通知、运行配置、智能运维
     shared/
       bootstrap.tsx
       MicroAppRuntime.tsx
 ```
 
 `tsconfig.json` 使用 `noEmit`，TypeScript 只负责类型检查，避免在源码旁生成 `.js` 干扰 Vite 入口解析。子应用共享启动器暂时位于 `subapps/shared`，用于沉淀 Wujie props、主题、登录态、水合、子应用菜单和跨应用跳转；拆独立仓时可提升为 `@hermes/micro-app-runtime` 包。
+
+主应用 `navigation.tsx` 只保留统一路由注册与懒加载引用，页面实现从各子应用目录加载。每个子应用的 `src/appManifest.ts` 是页面资产归属清单，后续治理页、扫描脚本或拆仓流程应以它为边界依据。
 
 ## 体验设计
 

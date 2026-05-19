@@ -57,121 +57,121 @@ import {
 const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const MicroAppPortalPage = lazy(() => import("./pages/MicroAppPortal").then((m) => ({ default: m.MicroAppPortal })));
 const ProjectsPage = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
-const RequirementsPage = lazy(() => import("./pages/Requirements").then((m) => ({ default: m.Requirements })));
-const TasksPage = lazy(() => import("./pages/Tasks").then((m) => ({ default: m.Tasks })));
-const WorkflowsPage = lazy(() => import("./pages/Workflows").then((m) => ({ default: m.Workflows })));
+const RequirementsPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Requirements").then((m) => ({ default: m.Requirements })));
+const TasksPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Tasks").then((m) => ({ default: m.Tasks })));
+const WorkflowsPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Workflows").then((m) => ({ default: m.Workflows })));
 const OrganizationPage = lazy(() => import("./pages/Organization").then((m) => ({ default: m.Organization })));
-const NotifyPage = lazy(() => import("./pages/Notify").then((m) => ({ default: m.Notify })));
-const AuditPage = lazy(() => import("./pages/Audit").then((m) => ({ default: m.Audit })));
-const CopilotPage = lazy(() => import("./pages/Copilot").then((m) => ({ default: m.Copilot })));
-const IntelligencePage = lazy(() => import("./pages/Intelligence").then((m) => ({ default: m.Intelligence })));
-const MarketplacePage = lazy(() => import("./pages/Marketplace").then((m) => ({ default: m.Marketplace })));
-const PlatformsPage = lazy(() => import("./pages/Platforms").then((m) => ({ default: m.Platforms })));
-const SystemMapPage = lazy(() => import("./pages/SystemMap").then((m) => ({ default: m.SystemMap })));
-const IssuesWorkbenchPage = lazy(() => import("./pages/delivery/IssuesWorkbench").then((m) => ({ default: m.IssuesWorkbench })));
-const SpecsWorkbenchPage = lazy(() => import("./pages/intelligence/SpecsWorkbench").then((m) => ({ default: m.SpecsWorkbench })));
+const NotifyPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Notify").then((m) => ({ default: m.Notify })));
+const AuditPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Audit").then((m) => ({ default: m.Audit })));
+const CopilotPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Copilot").then((m) => ({ default: m.Copilot })));
+const IntelligencePage = lazy(() => import("../subapps/ai-foundation/src/pages/Intelligence").then((m) => ({ default: m.Intelligence })));
+const MarketplacePage = lazy(() => import("../subapps/ai-foundation/src/pages/Marketplace").then((m) => ({ default: m.Marketplace })));
+const PlatformsPage = lazy(() => import("../subapps/ai-foundation/src/pages/Platforms").then((m) => ({ default: m.Platforms })));
+const SystemMapPage = lazy(() => import("../subapps/ai-ops-center/src/pages/SystemMap").then((m) => ({ default: m.SystemMap })));
+const IssuesWorkbenchPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/IssuesWorkbench").then((m) => ({ default: m.IssuesWorkbench })));
+const SpecsWorkbenchPage = lazy(() => import("../subapps/ai-rd-center/src/pages/intelligence/SpecsWorkbench").then((m) => ({ default: m.SpecsWorkbench })));
 const DesignDocsWorkbenchPage = lazy(() =>
-  import("./pages/intelligence/DesignDocsWorkbench").then((m) => ({ default: m.DesignDocsWorkbench })),
+  import("../subapps/ai-rd-center/src/pages/intelligence/DesignDocsWorkbench").then((m) => ({ default: m.DesignDocsWorkbench })),
 );
-const SkillsHubPage = lazy(() => import("./pages/ecosystem/SkillsHub").then((m) => ({ default: m.SkillsHub })));
-const DevFlowWorkbenchPage = lazy(() => import("./pages/delivery/DevFlowWorkbench").then((m) => ({ default: m.DevFlowWorkbench })));
-const VibeWorkbenchPage = lazy(() => import("./pages/ai/VibeWorkbench").then((m) => ({ default: m.VibeWorkbench })));
-const GlobalSearchWorkbenchPage = lazy(() => import("./pages/ai/GlobalSearchWorkbench").then((m) => ({ default: m.GlobalSearchWorkbench })));
-const CliToolsWorkbenchPage = lazy(() => import("./pages/ecosystem/CliToolsWorkbench").then((m) => ({ default: m.CliToolsWorkbench })));
-const EnvOpsWorkbenchPage = lazy(() => import("./pages/system/EnvOpsWorkbench").then((m) => ({ default: m.EnvOpsWorkbench })));
-const OrchestrationStudioPage = lazy(() => import("./pages/delivery/OrchestrationStudio").then((m) => ({ default: m.OrchestrationStudio })));
-const WebhooksWorkbenchPage = lazy(() => import("./pages/ecosystem/WebhooksWorkbench").then((m) => ({ default: m.WebhooksWorkbench })));
+const SkillsHubPage = lazy(() => import("../subapps/ai-foundation/src/pages/ecosystem/SkillsHub").then((m) => ({ default: m.SkillsHub })));
+const DevFlowWorkbenchPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/DevFlowWorkbench").then((m) => ({ default: m.DevFlowWorkbench })));
+const VibeWorkbenchPage = lazy(() => import("../subapps/ai-rd-center/src/pages/ai/VibeWorkbench").then((m) => ({ default: m.VibeWorkbench })));
+const GlobalSearchWorkbenchPage = lazy(() => import("../subapps/ai-rd-center/src/pages/ai/GlobalSearchWorkbench").then((m) => ({ default: m.GlobalSearchWorkbench })));
+const CliToolsWorkbenchPage = lazy(() => import("../subapps/ai-foundation/src/pages/ecosystem/CliToolsWorkbench").then((m) => ({ default: m.CliToolsWorkbench })));
+const EnvOpsWorkbenchPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/EnvOpsWorkbench").then((m) => ({ default: m.EnvOpsWorkbench })));
+const OrchestrationStudioPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/OrchestrationStudio").then((m) => ({ default: m.OrchestrationStudio })));
+const WebhooksWorkbenchPage = lazy(() => import("../subapps/ai-ops-center/src/pages/ecosystem/WebhooksWorkbench").then((m) => ({ default: m.WebhooksWorkbench })));
 const DataSourcesWorkbenchPage = lazy(() =>
-  import("./pages/intelligence/DataSourcesWorkbench").then((m) => ({ default: m.DataSourcesWorkbench })),
+  import("../subapps/ai-data-center/src/pages/intelligence/DataSourcesWorkbench").then((m) => ({ default: m.DataSourcesWorkbench })),
 );
 const LineageWorkbenchPage = lazy(() =>
-  import("./pages/data/LineageWorkbench").then((m) => ({ default: m.LineageWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/LineageWorkbench").then((m) => ({ default: m.LineageWorkbench })),
 );
 const AnalyticsOverviewWorkbenchPage = lazy(() =>
-  import("./pages/data/AnalyticsOverviewWorkbench").then((m) => ({ default: m.AnalyticsOverviewWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/AnalyticsOverviewWorkbench").then((m) => ({ default: m.AnalyticsOverviewWorkbench })),
 );
 const AnalyticsNlqWorkbenchPage = lazy(() =>
-  import("./pages/data/AnalyticsNlqWorkbench").then((m) => ({ default: m.AnalyticsNlqWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/AnalyticsNlqWorkbench").then((m) => ({ default: m.AnalyticsNlqWorkbench })),
 );
 const DataGovernanceHubPage = lazy(() =>
-  import("./pages/data/governance/DataGovernanceHub").then((m) => ({ default: m.DataGovernanceHub })),
+  import("../subapps/ai-data-center/src/pages/data/governance/DataGovernanceHub").then((m) => ({ default: m.DataGovernanceHub })),
 );
 const DataGovernanceModulePage = lazy(() =>
-  import("./pages/data/governance/DataGovernanceModulePage").then((m) => ({ default: m.DataGovernanceModulePage })),
+  import("../subapps/ai-data-center/src/pages/data/governance/DataGovernanceModulePage").then((m) => ({ default: m.DataGovernanceModulePage })),
 );
 const AnalyticsBlueprintWorkbenchPage = lazy(() =>
-  import("./pages/data/AnalyticsBlueprintWorkbench").then((m) => ({ default: m.AnalyticsBlueprintWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/AnalyticsBlueprintWorkbench").then((m) => ({ default: m.AnalyticsBlueprintWorkbench })),
 );
 const DataExchangeWorkbenchPage = lazy(() =>
-  import("./pages/data/DataExchangeWorkbench").then((m) => ({ default: m.DataExchangeWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/DataExchangeWorkbench").then((m) => ({ default: m.DataExchangeWorkbench })),
 );
 const IntelligenceHubPage = lazy(() =>
-  import("./pages/intelligence/IntelligenceHub").then((m) => ({ default: m.IntelligenceHub })),
+  import("../subapps/ai-foundation/src/pages/intelligence/IntelligenceHub").then((m) => ({ default: m.IntelligenceHub })),
 );
 const AnalyticsReportsWorkbenchPage = lazy(() =>
-  import("./pages/data/AnalyticsReportsWorkbench").then((m) => ({ default: m.AnalyticsReportsWorkbench })),
+  import("../subapps/ai-data-center/src/pages/data/AnalyticsReportsWorkbench").then((m) => ({ default: m.AnalyticsReportsWorkbench })),
 );
 const PlatformsHubPage = lazy(() =>
-  import("./pages/ecosystem/PlatformsHub").then((m) => ({ default: m.PlatformsHub })),
+  import("../subapps/ai-foundation/src/pages/ecosystem/PlatformsHub").then((m) => ({ default: m.PlatformsHub })),
 );
 const SkillsHubLandingPage = lazy(() =>
-  import("./pages/ecosystem/SkillsHubLanding").then((m) => ({ default: m.SkillsHubLanding })),
+  import("../subapps/ai-foundation/src/pages/ecosystem/SkillsHubLanding").then((m) => ({ default: m.SkillsHubLanding })),
 );
-const CopilotHubPage = lazy(() => import("./pages/ai/CopilotHub").then((m) => ({ default: m.CopilotHub })));
-const AuditHubPage = lazy(() => import("./pages/governance/AuditHub").then((m) => ({ default: m.AuditHub })));
-const SystemMapHubPage = lazy(() => import("./pages/governance/SystemMapHub").then((m) => ({ default: m.SystemMapHub })));
+const CopilotHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/ai/CopilotHub").then((m) => ({ default: m.CopilotHub })));
+const AuditHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/governance/AuditHub").then((m) => ({ default: m.AuditHub })));
+const SystemMapHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/governance/SystemMapHub").then((m) => ({ default: m.SystemMapHub })));
 const MicroAppGovernancePage = lazy(() =>
-  import("./pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
+  import("../subapps/ai-ops-center/src/pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
 );
-const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
+const SettingsPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Settings").then((m) => ({ default: m.Settings })));
 const ProjectsHubPage = lazy(() => import("./pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
 const OrganizationHubPage = lazy(() =>
   import("./pages/portfolio/OrganizationHub").then((m) => ({ default: m.OrganizationHub })),
 );
 const RequirementsHubPage = lazy(() =>
-  import("./pages/product/RequirementsHub").then((m) => ({ default: m.RequirementsHub })),
+  import("../subapps/ai-rd-center/src/pages/product/RequirementsHub").then((m) => ({ default: m.RequirementsHub })),
 );
-const TasksHubPage = lazy(() => import("./pages/delivery/TasksHub").then((m) => ({ default: m.TasksHub })));
-const WorkflowsHubPage = lazy(() => import("./pages/delivery/WorkflowsHub").then((m) => ({ default: m.WorkflowsHub })));
-const SettingsHubPage = lazy(() => import("./pages/system/SettingsHub").then((m) => ({ default: m.SettingsHub })));
+const TasksHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/TasksHub").then((m) => ({ default: m.TasksHub })));
+const WorkflowsHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/WorkflowsHub").then((m) => ({ default: m.WorkflowsHub })));
+const SettingsHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/SettingsHub").then((m) => ({ default: m.SettingsHub })));
 const DashboardHubPage = lazy(() =>
   import("./pages/overview/DashboardHub").then((m) => ({ default: m.DashboardHub })),
 );
-const DevFlowHubPage = lazy(() => import("./pages/delivery/DevFlowHub").then((m) => ({ default: m.DevFlowHub })));
-const IssuesHubPage = lazy(() => import("./pages/delivery/IssuesHub").then((m) => ({ default: m.IssuesHub })));
+const DevFlowHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/DevFlowHub").then((m) => ({ default: m.DevFlowHub })));
+const IssuesHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/IssuesHub").then((m) => ({ default: m.IssuesHub })));
 const MarketplaceHubPage = lazy(() =>
-  import("./pages/ecosystem/MarketplaceHub").then((m) => ({ default: m.MarketplaceHub })),
+  import("../subapps/ai-foundation/src/pages/ecosystem/MarketplaceHub").then((m) => ({ default: m.MarketplaceHub })),
 );
-const NotifyHubPage = lazy(() => import("./pages/ecosystem/NotifyHub").then((m) => ({ default: m.NotifyHub })));
+const NotifyHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/ecosystem/NotifyHub").then((m) => ({ default: m.NotifyHub })));
 const OrchestrationHubPage = lazy(() =>
-  import("./pages/delivery/OrchestrationHub").then((m) => ({ default: m.OrchestrationHub })),
+  import("../subapps/ai-rd-center/src/pages/delivery/OrchestrationHub").then((m) => ({ default: m.OrchestrationHub })),
 );
-const EnvOpsHubPage = lazy(() => import("./pages/system/EnvOpsHub").then((m) => ({ default: m.EnvOpsHub })));
+const EnvOpsHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/EnvOpsHub").then((m) => ({ default: m.EnvOpsHub })));
 const AnalyticsDataHubPage = lazy(() =>
-  import("./pages/data/AnalyticsDataHub").then((m) => ({ default: m.AnalyticsDataHub })),
+  import("../subapps/ai-data-center/src/pages/data/AnalyticsDataHub").then((m) => ({ default: m.AnalyticsDataHub })),
 );
-const SearchHubPage = lazy(() => import("./pages/ai/SearchHub").then((m) => ({ default: m.SearchHub })));
-const VibeHubPage = lazy(() => import("./pages/ai/VibeHub").then((m) => ({ default: m.VibeHub })));
+const SearchHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/ai/SearchHub").then((m) => ({ default: m.SearchHub })));
+const VibeHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/ai/VibeHub").then((m) => ({ default: m.VibeHub })));
 // --- new modules ---
-const AgentOpsHubPage = lazy(() => import("./pages/ai/AgentOpsHub").then((m) => ({ default: m.AgentOpsHub })));
-const LlmGatewayHubPage = lazy(() => import("./pages/ai/LlmGatewayHub").then((m) => ({ default: m.LlmGatewayHub })));
-const KnowledgeGraphHubPage = lazy(() => import("./pages/ai/KnowledgeGraphHub").then((m) => ({ default: m.KnowledgeGraphHub })));
-const A2aGatewayHubPage = lazy(() => import("./pages/ecosystem/A2aGatewayHub").then((m) => ({ default: m.A2aGatewayHub })));
-const OpsCenterHubPage = lazy(() => import("./pages/system/OpsCenterHub").then((m) => ({ default: m.OpsCenterHub })));
-const DataIngestHubPage = lazy(() => import("./pages/data/DataIngestHub").then((m) => ({ default: m.DataIngestHub })));
-const DataQualityHubPage = lazy(() => import("./pages/data/DataQualityHub").then((m) => ({ default: m.DataQualityHub })));
-const MetricsCenterHubPage = lazy(() => import("./pages/data/MetricsCenterHub").then((m) => ({ default: m.MetricsCenterHub })));
-const TagServiceHubPage = lazy(() => import("./pages/data/TagServiceHub").then((m) => ({ default: m.TagServiceHub })));
-const DataDevWorkbenchPage = lazy(() => import("./pages/data/DataDevWorkbench").then((m) => ({ default: m.DataDevWorkbench })));
-const LlmGatewayWorkbenchPage = lazy(() => import("./pages/ai/LlmGatewayWorkbench").then((m) => ({ default: m.LlmGatewayWorkbench })));
-const KnowledgeGraphWorkbenchPage = lazy(() => import("./pages/ai/KnowledgeGraphWorkbench").then((m) => ({ default: m.KnowledgeGraphWorkbench })));
-const DataIngestWorkbenchPage = lazy(() => import("./pages/data/DataIngestWorkbench").then((m) => ({ default: m.DataIngestWorkbench })));
-const DataQualityWorkbenchPage = lazy(() => import("./pages/data/DataQualityWorkbench").then((m) => ({ default: m.DataQualityWorkbench })));
-const MetricsWorkbenchPage = lazy(() => import("./pages/data/MetricsWorkbench").then((m) => ({ default: m.MetricsWorkbench })));
-const TagWorkbenchPage = lazy(() => import("./pages/data/TagWorkbench").then((m) => ({ default: m.TagWorkbench })));
-const AgentRunsWorkbenchPage = lazy(() => import("./pages/ai/AgentRunsWorkbench").then((m) => ({ default: m.AgentRunsWorkbench })));
-const A2aWorkbenchPage = lazy(() => import("./pages/ecosystem/A2aWorkbench").then((m) => ({ default: m.A2aWorkbench })));
-const OpsCenterWorkbenchPage = lazy(() => import("./pages/system/OpsCenterWorkbench").then((m) => ({ default: m.OpsCenterWorkbench })));
+const AgentOpsHubPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/AgentOpsHub").then((m) => ({ default: m.AgentOpsHub })));
+const LlmGatewayHubPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/LlmGatewayHub").then((m) => ({ default: m.LlmGatewayHub })));
+const KnowledgeGraphHubPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/KnowledgeGraphHub").then((m) => ({ default: m.KnowledgeGraphHub })));
+const A2aGatewayHubPage = lazy(() => import("../subapps/ai-foundation/src/pages/ecosystem/A2aGatewayHub").then((m) => ({ default: m.A2aGatewayHub })));
+const OpsCenterHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/OpsCenterHub").then((m) => ({ default: m.OpsCenterHub })));
+const DataIngestHubPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/DataIngestHub").then((m) => ({ default: m.DataIngestHub })));
+const DataQualityHubPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/DataQualityHub").then((m) => ({ default: m.DataQualityHub })));
+const MetricsCenterHubPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/MetricsCenterHub").then((m) => ({ default: m.MetricsCenterHub })));
+const TagServiceHubPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/TagServiceHub").then((m) => ({ default: m.TagServiceHub })));
+const DataDevWorkbenchPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/DataDevWorkbench").then((m) => ({ default: m.DataDevWorkbench })));
+const LlmGatewayWorkbenchPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench").then((m) => ({ default: m.LlmGatewayWorkbench })));
+const KnowledgeGraphWorkbenchPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench").then((m) => ({ default: m.KnowledgeGraphWorkbench })));
+const DataIngestWorkbenchPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/DataIngestWorkbench").then((m) => ({ default: m.DataIngestWorkbench })));
+const DataQualityWorkbenchPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/DataQualityWorkbench").then((m) => ({ default: m.DataQualityWorkbench })));
+const MetricsWorkbenchPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/MetricsWorkbench").then((m) => ({ default: m.MetricsWorkbench })));
+const TagWorkbenchPage = lazy(() => import("../subapps/ai-data-center/src/pages/data/TagWorkbench").then((m) => ({ default: m.TagWorkbench })));
+const AgentRunsWorkbenchPage = lazy(() => import("../subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench").then((m) => ({ default: m.AgentRunsWorkbench })));
+const A2aWorkbenchPage = lazy(() => import("../subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench").then((m) => ({ default: m.A2aWorkbench })));
+const OpsCenterWorkbenchPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench").then((m) => ({ default: m.OpsCenterWorkbench })));
 
 function pageElement<P extends Record<string, unknown> = Record<string, never>>(
   Component: ComponentType<P>,

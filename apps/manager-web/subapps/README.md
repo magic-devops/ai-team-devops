@@ -10,9 +10,15 @@
 - `ai-ops-center/`：智能运营中心，覆盖商业计费、安全审计、企业 SSO、通知、报表与运营治理。
 - `shared/`：子应用共享启动器和运行时外壳，承接 Wujie props、主题、登录态、水合、子应用内菜单和跨应用跳转。
 
+每个子应用都包含自己的 `src/pages` 与 `src/appManifest.ts`：
+
+- `src/pages`：该子应用独占页面资产，新增业务页面必须落在所属子应用目录内。
+- `src/appManifest.ts`：声明子应用页面根、模块边界和责任描述，供后续治理、扫描和拆仓使用。
+
 ## 边界规则
 
 - 子应用入口统一放在 `subapps/<app>/src/main.tsx`，不再放入主应用 `src/subapps`。
+- 子应用页面统一放在 `subapps/<app>/src/pages`，不再放入主应用 `src/pages`。
 - 主应用 `src/` 只保留微应用注册表、Wujie 容器、权限裁决和导航能力。
 - TypeScript 通过 `noEmit` 只做类型检查，避免在源码目录生成 `.js` 干扰 Vite 入口解析。
 - 新增子应用时先扩展 `src/microApps.ts` 和 `vite.config.ts` 的多页入口，再创建 `subapps/<app>/index.html` 与 `src/main.tsx`。
