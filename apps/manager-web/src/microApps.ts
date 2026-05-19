@@ -309,8 +309,7 @@ export function getMicroAppRuntimeUrl(app: MicroAppDefinition): string {
   const env = import.meta.env as Record<string, string | boolean | undefined>;
   const configured = env[app.envKey];
   if (typeof configured === "string" && configured.trim()) return configured.trim();
-  if (import.meta.env.PROD) return app.prodUrl;
-  return "";
+  return app.prodUrl;
 }
 
 export function getMicroAppIdForNavItem(item: Pick<NavItem, "key" | "parentKey" | "group">): MicroAppId {

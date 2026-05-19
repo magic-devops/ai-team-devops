@@ -33,6 +33,13 @@ export default defineConfig({
     sourcemap: true,
     outDir: "dist",
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        aiFoundation: path.resolve(__dirname, "subapps/ai-foundation/index.html"),
+        aiRdCenter: path.resolve(__dirname, "subapps/ai-rd-center/index.html"),
+        aiDataCenter: path.resolve(__dirname, "subapps/ai-data-center/index.html"),
+        aiOpsCenter: path.resolve(__dirname, "subapps/ai-ops-center/index.html"),
+      },
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;

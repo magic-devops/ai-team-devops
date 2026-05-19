@@ -7,6 +7,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import WujieReact from "wujie-react";
 import {
   Check,
   ChevronDown,
@@ -596,6 +597,22 @@ export function App() {
     h();
     window.addEventListener("hashchange", h);
     return () => window.removeEventListener("hashchange", h);
+  }, []);
+
+  useEffect(() => {
+    const bus = WujieReact.bus as unknown as {
+      $on?: (event: string, handler: (payload?: { hash?: string; href?: string }) => void) => void;
+      $off?: (event: string, handler: (payload?: { hash?: string; href?: string }) => void) => void;
+    };
+    const navigate = (payload?: { hash?: string; href?: string }) => {
+      if (payload?.hash?.startsWith("#")) {
+        window.location.hash = payload.hash;
+      } else if (payload?.href) {
+        window.location.assign(payload.href);
+      }
+    };
+    bus.$on?.("hermes:navigate", navigate);
+    return () => bus.$off?.("hermes:navigate", navigate);
   }, []);
 
   useEffect(() => {
