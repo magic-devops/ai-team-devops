@@ -2,19 +2,24 @@ import {
   Activity,
   ArrowRight,
   Bot,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock,
+  CircleDot,
   ExternalLink,
   Gauge,
   Layers3,
+  ListChecks,
   Lock,
   Pin,
   Rows3,
   Route,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Star,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -128,6 +133,24 @@ function nextDensity(current: MenuDensity): MenuDensity {
   return DENSITY_ORDER[(index + 1) % DENSITY_ORDER.length] ?? "comfortable";
 }
 
+function maturityTone(maturity: RuntimeApp["capabilities"][number]["maturity"]) {
+  if (maturity === "leading") return "bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300";
+  if (maturity === "advanced") return "bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300";
+  return "bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-300";
+}
+
+function maturityText(maturity: RuntimeApp["capabilities"][number]["maturity"]) {
+  if (maturity === "leading") return "领先";
+  if (maturity === "advanced") return "增强";
+  return "标准";
+}
+
+function priorityTone(priority: RuntimeApp["actions"][number]["priority"]) {
+  if (priority === "P0") return "bg-rose-500/10 text-rose-700 ring-rose-500/25 dark:text-rose-300";
+  if (priority === "P1") return "bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-300";
+  return "bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300";
+}
+
 function RuntimeQuickList({
   title,
   items,
@@ -183,8 +206,13 @@ function MicroAppHome({
   childrenByParent: Map<string, NavItem[]>;
   labelOf: (key: string) => string;
 }) {
+  const [capabilityMode, setCapabilityMode] = useState<"matrix" | "workflow" | "actions">("matrix");
   const childCount = Array.from(childrenByParent.values()).reduce((sum, rows) => sum + rows.length, 0);
   const focusItems = visibleItems.slice(0, 4);
+  const targetByKey = new Map(visibleItems.map((item) => [item.key, item]));
+  for (const children of childrenByParent.values()) {
+    for (const item of children) targetByKey.set(item.key, item);
+  }
   const groupedItems = visibleItems.reduce<Record<string, NavItem[]>>((out, item) => {
     const group = item.category || item.group || "workspace";
     out[group] = [...(out[group] || []), item];
@@ -234,6 +262,104 @@ function MicroAppHome({
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-[var(--text)]">能力运营台</h3>
+            <p className="mt-1 text-sm text-[var(--muted)]">把子应用能力沉淀成矩阵、流程和行动队列，方便专业团队持续运营。</p>
+          </div>
+          <div className="flex rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-1">
+            {[
+              { key: "matrix", label: "能力矩阵", icon: SlidersHorizontal },
+              { key: "workflow", label: "工作流", icon: Zap },
+              { key: "actions", label: "行动项", icon: ListChecks },
+            ].map((option) => {
+              const Icon = option.icon;
+              const active = capabilityMode === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setCapabilityMode(option.key as typeof capabilityMode)}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition ${
+                    active ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {capabilityMode === "matrix" ? (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {app.capabilities.map((capability) => (
+              <div key={capability.name} className="min-h-44 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${maturityTone(capability.maturity)}`}>{maturityText(capability.maturity)}</span>
+                  <CircleDot className="h-4 w-4 text-[var(--brand)]" />
+                </div>
+                <h4 className="text-sm font-semibold text-[var(--text)]">{capability.name}</h4>
+                <p className="mt-2 line-clamp-3 text-xs leading-5 text-[var(--muted)]">{capability.scope}</p>
+                <p className="mt-4 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--muted-strong)]">{capability.kpi}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {capabilityMode === "workflow" ? (
+          <div className="grid gap-3 lg:grid-cols-4">
+            {app.workflows.map((workflow, index) => (
+              <div key={workflow.phase} className="relative rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-sm font-bold text-[var(--brand)]">{index + 1}</span>
+                  <h4 className="text-sm font-semibold text-[var(--text)]">{workflow.phase}</h4>
+                </div>
+                <p className="text-xs leading-5 text-[var(--muted)]">{workflow.detail}</p>
+                <p className="mt-4 inline-flex rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-strong)]">{workflow.metric}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {capabilityMode === "actions" ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {app.actions.map((action) => {
+              const target = targetByKey.get(action.targetKey);
+              return (
+                <a
+                  key={action.title}
+                  href={target?.path || app.basePath}
+                  className="group rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-md"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className={`rounded-md px-2 py-1 text-xs font-semibold ring-1 ${priorityTone(action.priority)}`}>{action.priority}</span>
+                    <ArrowRight className="h-4 w-4 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--brand)]" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-[var(--text)]">{action.title}</h4>
+                  <div className="mt-4 grid gap-2 text-xs text-[var(--muted)]">
+                    <span className="inline-flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      {action.owner}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      {action.due}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--brand)]">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {target ? labelOf(target.key) : "进入工作台"}
+                    </span>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_0.82fr]">
