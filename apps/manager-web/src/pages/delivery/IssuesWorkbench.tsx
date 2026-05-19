@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography } from "antd";
+import { Alert, App, Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Statistic, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -47,6 +47,12 @@ export function IssuesWorkbench({ focused = false }: { focused?: boolean }) {
     enabled: authed && hasProject,
   });
 
+  const opsPlanQ = useQuery({
+    queryKey: ["issueOpsPlan"],
+    queryFn: api.issueOpsPlan,
+    enabled: authed && hasProject,
+  });
+
   const items = (q.data?.items ?? []) as IssueRow[];
   const metrics = useMemo(() => {
     const open = items.filter((i) => i.status === "open").length;
@@ -82,6 +88,23 @@ export function IssuesWorkbench({ focused = false }: { focused?: boolean }) {
     onSuccess: () => {
       message.success(t("page.issues.deleted"));
       void qc.invalidateQueries({ queryKey: ["issues"] });
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+
+  const opsTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.issueOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "IssueOps Agent", limit: 20 }),
+    onSuccess: (res) => {
+      const summary = res?.summary ?? {};
+      message.success(
+        t("page.issues.opsTasksResult", {
+          planned: summary.planned ?? 0,
+          created: summary.created ?? 0,
+        }),
+      );
+      void qc.invalidateQueries({ queryKey: ["issues"] });
+      void qc.invalidateQueries({ queryKey: ["issueOpsPlan"] });
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -152,6 +175,33 @@ export function IssuesWorkbench({ focused = false }: { focused?: boolean }) {
     },
   ];
 
+  const opsRiskColumns: ColumnsType<any> = [
+    {
+      title: t("page.issues.severity"),
+      dataIndex: "severity",
+      width: 90,
+      render: (v) => <Tag color={v === "P0" || v === "P1" ? "red" : "orange"}>{v}</Tag>,
+    },
+    { title: t("page.issues.category"), dataIndex: "category", width: 120 },
+    {
+      title: t("page.issues.risk"),
+      dataIndex: "title",
+      ellipsis: true,
+      render: (v, row) => (
+        <div>
+          <div className="font-medium text-[var(--text)]">{v}</div>
+          <div className="mt-1 text-xs text-[var(--muted)]">{row.description}</div>
+        </div>
+      ),
+    },
+    {
+      title: t("page.issues.command"),
+      dataIndex: "command",
+      width: 260,
+      render: (v) => <Typography.Text code copyable className="!text-xs">{v}</Typography.Text>,
+    },
+  ];
+
   if (!authed) return <NeedLogin />;
   if (!hasProject) {
     return (
@@ -183,6 +233,57 @@ export function IssuesWorkbench({ focused = false }: { focused?: boolean }) {
         />
       }
     >
+      <WorkbenchPanel
+        title={t("page.issues.opsPlan")}
+        actions={
+          <Space wrap>
+            <Button loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(true)}>
+              {t("page.issues.previewOpsTasks")}
+            </Button>
+            <Button type="primary" loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(false)}>
+              {t("page.issues.createOpsTasks")}
+            </Button>
+          </Space>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
+          <div className="rounded-md border border-[var(--border)] bg-[var(--panel-muted)] p-4">
+            <Statistic
+              title={t("page.issues.issueHealth")}
+              value={opsPlanQ.data?.health?.score ?? 0}
+              suffix="/ 100"
+              valueStyle={{ color: opsPlanQ.data?.health?.grade === "risk" ? "#dc2626" : "var(--brand)" }}
+            />
+            <Tag className="mt-3" color={opsPlanQ.data?.health?.grade === "healthy" ? "green" : opsPlanQ.data?.health?.grade === "watch" ? "gold" : "red"}>
+              {opsPlanQ.data?.health?.grade ?? "-"}
+            </Tag>
+            <div className="mt-4 space-y-1 text-xs text-[var(--muted)]">
+              <div>{t("page.issues.staleOpen")}: {opsPlanQ.data?.summary?.stale_open ?? 0}</div>
+              <div>{t("page.issues.unlinkedOpen")}: {opsPlanQ.data?.summary?.unlinked_open ?? 0}</div>
+            </div>
+          </div>
+          <div className="min-w-0">
+            <Alert
+              className="mb-3"
+              showIcon
+              type={opsPlanQ.data?.health?.grade === "risk" ? "warning" : "info"}
+              message={t("page.issues.opsHint")}
+              description={<Typography.Text code copyable>sop issue ops-plan --json</Typography.Text>}
+            />
+            <Table
+              rowKey="id"
+              size="small"
+              loading={opsPlanQ.isLoading}
+              columns={opsRiskColumns}
+              dataSource={opsPlanQ.data?.risks ?? []}
+              pagination={false}
+              scroll={{ x: 780 }}
+              locale={{ emptyText: t("page.issues.noOpsRisks") }}
+            />
+          </div>
+        </div>
+      </WorkbenchPanel>
+
       <WorkbenchPanel>
         <Space wrap className="mb-4">
           <Input.Search

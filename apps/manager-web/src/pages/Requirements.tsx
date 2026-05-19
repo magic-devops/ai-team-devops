@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, Input as AntInput, Select } from "antd";
+import { Alert, Button, Checkbox, Input as AntInput, Select, Space, Statistic, Table, Tag, Typography } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { BrainCircuit, CheckCircle2, ListTodo, Pencil, Plus, Save, Trash2, Wand2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -241,6 +242,7 @@ export function Requirements({
   const [bulkTool, setBulkTool] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [aiContextReq, setAiContextReq] = useState<RequirementRow | null>(null);
+  const [opsTaskResult, setOpsTaskResult] = useState<any>(null);
 
   const q = useQuery({
     queryKey: ["requirements", keyword, status, priority],
@@ -255,6 +257,11 @@ export function Requirements({
   const summaryQ = useQuery({
     queryKey: ["requirementsSummary"],
     queryFn: api.requirementsSummary,
+    enabled: authed && hasProject,
+  });
+  const opsPlanQ = useQuery({
+    queryKey: ["requirementOpsPlan"],
+    queryFn: api.requirementOpsPlan,
     enabled: authed && hasProject,
   });
 
@@ -392,7 +399,19 @@ export function Requirements({
     },
   });
 
-  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || reviewReq.isPending || applyReview.isPending || bulkUpdateReq.isPending;
+  const opsTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.requirementOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "RequirementOps Agent", limit: 20 }),
+    onSuccess: (data) => {
+      setOpsTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["requirements"] });
+      void qc.invalidateQueries({ queryKey: ["requirementsSummary"] });
+      void qc.invalidateQueries({ queryKey: ["requirementOpsPlan"] });
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
+  const busy = createReq.isPending || updateReq.isPending || deleteReq.isPending || generateTasks.isPending || reviewReq.isPending || applyReview.isPending || bulkUpdateReq.isPending || opsTasksMut.isPending;
   const selectedReqSet = useMemo(() => new Set(selectedReqIds), [selectedReqIds]);
   const canBulkUpdate = selectedReqIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAgent.trim() || bulkTool.trim());
 
@@ -429,9 +448,98 @@ export function Requirements({
 
   const aiReq = aiContextReq ?? requirements.find((r) => r.id === reviewReqId) ?? requirements[0] ?? null;
   const workbenchFocused = routeFocused;
+  const opsRiskColumns: ColumnsType<any> = [
+    {
+      title: t("page.requirements.opsSeverity"),
+      dataIndex: "severity",
+      width: 88,
+      render: (value) => <Tag color={value === "P0" || value === "P1" ? "red" : "orange"}>{value}</Tag>,
+    },
+    { title: t("page.requirements.opsCategory"), dataIndex: "category", width: 120 },
+    {
+      title: t("page.requirements.opsRisk"),
+      dataIndex: "title",
+      ellipsis: true,
+      render: (value, row) => (
+        <div>
+          <p className="font-medium text-[var(--text)]">{value}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{row.description}</p>
+        </div>
+      ),
+    },
+    {
+      title: t("page.requirements.opsCommand"),
+      dataIndex: "command",
+      width: 280,
+      render: (value) => <Typography.Text code copyable className="!text-xs">{value}</Typography.Text>,
+    },
+  ];
 
   const workbenchBody = (
     <>
+      <Card
+        title={t("page.requirements.opsPlan")}
+        actions={
+          <Space wrap>
+            <Button loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(true)}>
+              {t("page.requirements.opsPreview")}
+            </Button>
+            <Button type="primary" loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(false)}>
+              {t("page.requirements.opsCreate")}
+            </Button>
+          </Space>
+        }
+      >
+        <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
+          <div className="rounded-md border border-[var(--border)] bg-[var(--panel-muted)] p-4">
+            <Statistic
+              title={t("page.requirements.opsHealth")}
+              value={opsPlanQ.data?.health?.score ?? 0}
+              suffix="/ 100"
+              valueStyle={{ color: opsPlanQ.data?.health?.grade === "risk" ? "#dc2626" : "var(--brand)" }}
+            />
+            <Tag className="mt-3" color={opsPlanQ.data?.health?.grade === "healthy" ? "green" : opsPlanQ.data?.health?.grade === "watch" ? "gold" : "red"}>
+              {opsPlanQ.data?.health?.grade ?? "-"}
+            </Tag>
+            <div className="mt-4 space-y-1 text-xs text-[var(--muted)]">
+              <div>{t("page.requirements.opsAvgScore")}: {opsPlanQ.data?.health?.avg_review_score ?? 0}</div>
+              <div>{t("page.requirements.opsNeedsWork")}: {opsPlanQ.data?.summary?.needs_work ?? 0}</div>
+              <div>{t("page.requirements.opsHighNoTasks")}: {opsPlanQ.data?.summary?.high_priority_without_tasks ?? 0}</div>
+            </div>
+          </div>
+          <div className="min-w-0">
+            <Alert
+              className="mb-3"
+              showIcon
+              type={opsPlanQ.data?.health?.grade === "risk" ? "warning" : "info"}
+              message={t("page.requirements.opsHint")}
+              description={<Typography.Text code copyable>sop requirement ops-plan --json</Typography.Text>}
+            />
+            {opsTaskResult ? (
+              <Alert
+                className="mb-3"
+                type="success"
+                showIcon
+                message={t("page.requirements.opsTasksResult", {
+                  planned: opsTaskResult?.summary?.planned ?? 0,
+                  created: opsTaskResult?.summary?.created ?? 0,
+                })}
+              />
+            ) : null}
+            <Table
+              rowKey="id"
+              size="small"
+              loading={opsPlanQ.isLoading}
+              columns={opsRiskColumns}
+              dataSource={opsPlanQ.data?.risks ?? []}
+              pagination={false}
+              scroll={{ x: 820 }}
+              locale={{ emptyText: t("page.requirements.opsNoRisks") }}
+            />
+          </div>
+        </div>
+      </Card>
+
       {workbenchFocused && mode !== "pool" ? (
         <RequirementsModeWorkbench
           mode={mode}

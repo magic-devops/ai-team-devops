@@ -233,8 +233,118 @@ def ops_tasks(
     )
 
 
+@app.command("agent-runs")
+def agent_runs(
+    agent: str = typer.Option("", "--agent", help="按 Agent ID/name 过滤"),
+    status: str = typer.Option("", "--status", help="按运行状态过滤"),
+    limit: int = typer.Option(50, "--limit", help="返回数量"),
+    as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看 Agent 运行、租约、报告和心跳汇总。"""
+    data = get_client(get_config()).agents_runs(agent=agent, status=status, limit=limit)
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    tbl = Table(title=f"Agent runs total={data.get('total', 0)}", show_header=True, header_style="bold")
+    tbl.add_column("agent")
+    tbl.add_column("task")
+    tbl.add_column("status")
+    tbl.add_column("progress")
+    tbl.add_column("updated")
+    tbl.add_column("summary")
+    for row in data.get("items", []) if isinstance(data, dict) else []:
+        if isinstance(row, dict):
+            tbl.add_row(
+                str(row.get("agent", "")),
+                str(row.get("task_id", "")),
+                str(row.get("status", "")),
+                f"{row.get('progress', 0)}%",
+                str(row.get("updated_at", "")),
+                str(row.get("summary") or row.get("heartbeat_message") or "")[:64],
+            )
+    console.print(tbl)
+
+
+@app.command("agent-summary")
+def agent_summary(as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    """查看 Agent 能力画像、负载和成功率。"""
+    data = get_client(get_config()).agents_runs_summary()
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    summary = data.get("summary") if isinstance(data, dict) else {}
+    console.print(
+        f"[bold]Agent 运行中心：[/bold]注册 {summary.get('registered_agents', 0)}，活跃租约 {summary.get('active_claims', 0)}，报告 {summary.get('reports', 0)}，成功率 {summary.get('success_rate', 0)}%"
+    )
+    tbl = Table(title="Agent 画像与负载", show_header=True, header_style="bold")
+    tbl.add_column("agent")
+    tbl.add_column("role")
+    tbl.add_column("active")
+    tbl.add_column("reports")
+    tbl.add_column("success")
+    tbl.add_column("tools")
+    for row in data.get("agents", []) if isinstance(data, dict) else []:
+        if isinstance(row, dict):
+            tbl.add_row(
+                str(row.get("agent", "")),
+                str(row.get("role", "")),
+                str(row.get("active_claims", 0)),
+                str(row.get("reports", 0)),
+                f"{row.get('success_rate', 0)}%",
+                ",".join(str(x) for x in (row.get("tools") or [])[:4]),
+            )
+    console.print(tbl)
+
+
+@app.command("agent-slo")
+def agent_slo(as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    """查看 Agent SLO、健康状态和再平衡建议。"""
+    data = get_client(get_config()).agents_runs_slo()
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    summary = data.get("summary") if isinstance(data, dict) else {}
+    console.print(
+        f"[bold]Agent SLO：[/bold]评分 {summary.get('slo_score', 0)}，健康 {summary.get('healthy_agents', 0)}，观察 {summary.get('watch_agents', 0)}，风险 {summary.get('risk_agents', 0)}，建议 {summary.get('recommendations', 0)}"
+    )
+    tbl = Table(title="Agent SLO", show_header=True, header_style="bold")
+    for col in ("agent", "status", "score", "active", "success", "issues"):
+        tbl.add_column(col)
+    for row in data.get("agents", []) if isinstance(data, dict) else []:
+        if isinstance(row, dict):
+            tbl.add_row(
+                str(row.get("agent", "")),
+                str(row.get("slo_status", "")),
+                str(row.get("slo_score", "")),
+                str(row.get("active_claims", 0)),
+                f"{row.get('success_rate', 0)}%",
+                ",".join(str(x) for x in row.get("issues") or []),
+            )
+    console.print(tbl)
+
+
+@app.command("agent-rebalance-tasks")
+def agent_rebalance_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    priority: str = typer.Option("P1", "--priority", help="任务优先级"),
+    assigned_to: str = typer.Option("Coder", "--assigned-to", help="负责人"),
+    category: list[str] = typer.Option([], "--category", help="按 category/severity 过滤，可多次传入"),
+    as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将 Agent SLO/再平衡建议预览或落为治理任务。"""
+    body = {"dry_run": not apply, "priority": priority, "assigned_to": assigned_to, "categories": category}
+    data = get_client(get_config()).agents_runs_rebalance_tasks(body)
+    if as_json:
+        console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))
+        return
+    summary = data.get("summary") if isinstance(data, dict) else {}
+    ok(
+        f"{'已创建' if apply else '已预览'} Agent 再平衡任务：计划 {summary.get('planned', 0)}，创建 {summary.get('created', 0)}，SLO {summary.get('slo_score', 0)}"
+    )
+
+
 @app.callback(invoke_without_command=True)
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
-    console.print("[dim]子命令：list | doctor | init | install-shims | ops-plan | ops-tasks[/dim]")
+    console.print("[dim]子命令：list | doctor | init | install-shims | ops-plan | ops-tasks | agent-runs | agent-summary | agent-slo | agent-rebalance-tasks[/dim]")

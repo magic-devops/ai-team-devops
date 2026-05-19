@@ -165,6 +165,8 @@ def _read_artifacts(project_path: Path) -> dict[str, Any]:
         "agent_context": project_path / ".sop-runtime" / "agent_context.json",
         "env": project_path / ".sop-runtime" / "sop.env",
         "work_snapshot": project_path / ".sop-runtime" / "work_snapshot.json",
+        "pages_manifest": project_path / ".sop-runtime" / "pages_manifest.json",
+        "pages_capabilities": project_path / ".sop-runtime" / "pages_capabilities.json",
         "rule_proposals": project_path / ".sop-runtime" / "rules" / "proposals.jsonl",
         "copilot_sessions": project_path / ".sop-runtime" / "copilot" / "sessions.jsonl",
         "memory_local": project_path / ".sop-runtime" / "memory" / "local.jsonl",

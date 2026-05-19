@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Brain, Cpu, Database, FileCode, Gauge, GitBranch, Library, Search, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, Brain, Cpu, Database, FileCode, Gauge, GitBranch, Library, Search, ShieldCheck, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "../../components/Card";
@@ -14,11 +14,13 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
   rag: Search,
   memory: Brain,
   rules: ShieldCheck,
+  distill: Sparkles,
   specs: FileCode,
   "design-docs": FileCode,
   datasources: Database,
   worker: Cpu,
   sync: GitBranch,
+  events: Activity,
   usage: Gauge,
 };
 
@@ -27,11 +29,13 @@ const DOMAIN_I18N: Record<string, string> = {
   rag: "nav.ragSearch",
   memory: "nav.aiMemory",
   rules: "nav.ruleCenter",
+  distill: "nav.reflectionDistill",
   specs: "nav.specs",
   "design-docs": "nav.designDocs",
   datasources: "nav.dataSources",
   worker: "nav.workerOps",
   sync: "nav.syncOps",
+  events: "nav.eventStream",
   usage: "nav.usageOps",
 };
 

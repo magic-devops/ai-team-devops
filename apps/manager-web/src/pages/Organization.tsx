@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "antd";
-import { Building2, ShieldCheck, UserCog, Users } from "lucide-react";
+import { Building2, ClipboardCheck, ShieldCheck, UserCog, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NeedLogin, RefreshButton } from "../components/PageStates";
@@ -8,6 +8,7 @@ import { api } from "../lib/api";
 import { getToken } from "../lib/authStorage";
 import { WorkbenchShell } from "./shared/WorkbenchShell";
 import { WorkbenchStats } from "./shared/workbenchUi";
+import { AccessReviewModule } from "./organization/AccessReviewModule";
 import { BusinessLinesModule } from "./organization/BusinessLinesModule";
 import { ProjectMembersModule } from "./organization/ProjectMembersModule";
 import { RolePolicyModule } from "./organization/RolePolicyModule";
@@ -19,6 +20,7 @@ const tabs = [
   { key: "businesses", icon: Building2 },
   { key: "projectMembers", icon: Users },
   { key: "rolePolicy", icon: ShieldCheck },
+  { key: "accessReview", icon: ClipboardCheck },
 ] as const;
 
 export function Organization({ initialTab = "users", focused = false }: { initialTab?: OrgTab; focused?: boolean }) {
@@ -37,6 +39,8 @@ export function Organization({ initialTab = "users", focused = false }: { initia
   const roles = useQuery({ queryKey: ["roleConstants"], queryFn: api.roleConstants, enabled: authed });
   const orgSummary = useQuery({ queryKey: ["organizationSummary"], queryFn: api.organizationSummary, enabled: authed });
   const orgPolicy = useQuery({ queryKey: ["organizationPolicy"], queryFn: api.organizationPolicy, enabled: authed && tab === "rolePolicy" });
+  const orgPolicyHistory = useQuery({ queryKey: ["organizationPolicyHistory"], queryFn: () => api.organizationPolicyHistory(30), enabled: authed && tab === "rolePolicy" });
+  const orgAccessReview = useQuery({ queryKey: ["organizationAccessReview"], queryFn: api.organizationAccessReview, enabled: authed && tab === "accessReview" });
 
   const projectMembers = useQuery({
     queryKey: ["projectMembers", selectedProjectId],
@@ -61,6 +65,8 @@ export function Organization({ initialTab = "users", focused = false }: { initia
     void qc.invalidateQueries({ queryKey: ["roleConstants"] });
     void qc.invalidateQueries({ queryKey: ["organizationSummary"] });
     void qc.invalidateQueries({ queryKey: ["organizationPolicy"] });
+    void qc.invalidateQueries({ queryKey: ["organizationPolicyHistory"] });
+    void qc.invalidateQueries({ queryKey: ["organizationAccessReview"] });
     if (selectedProjectId) {
       void qc.invalidateQueries({ queryKey: ["projectMembers", selectedProjectId] });
       void qc.invalidateQueries({ queryKey: ["projectMemberCandidates", selectedProjectId] });
@@ -105,6 +111,23 @@ export function Organization({ initialTab = "users", focused = false }: { initia
   const removeProjectMember = useMutation({
     mutationFn: (userId: string) => api.projectRemoveMember(selectedProjectId, userId),
     onSuccess: refreshAll,
+  });
+  const updateOrgPolicy = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.organizationPolicyUpdate(body),
+    onSuccess: refreshAll,
+  });
+  const resetOrgPolicy = useMutation({
+    mutationFn: api.organizationPolicyReset,
+    onSuccess: refreshAll,
+  });
+  const checkOrgPolicy = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.organizationPolicyCheck(body),
+  });
+  const accessReviewTasks = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.organizationAccessReviewTasks(body),
+    onSuccess: (data) => {
+      if (!data?.dry_run) refreshAll();
+    },
   });
 
   const busy = projects.isFetching || businesses.isFetching || users.isFetching || roles.isFetching || orgSummary.isFetching || projectMembers.isFetching || memberCandidates.isFetching;
@@ -204,7 +227,36 @@ export function Organization({ initialTab = "users", focused = false }: { initia
       ) : null}
 
       {tab === "rolePolicy" ? (
-        <RolePolicyModule policy={orgPolicy.data} loading={orgPolicy.isLoading} error={orgPolicy.error as Error | null} />
+        <RolePolicyModule
+          policy={orgPolicy.data}
+          loading={orgPolicy.isLoading}
+          error={orgPolicy.error as Error | null}
+          savePending={updateOrgPolicy.isPending}
+          resetPending={resetOrgPolicy.isPending}
+          saveError={updateOrgPolicy.error as Error | null}
+          resetError={resetOrgPolicy.error as Error | null}
+          history={orgPolicyHistory.data?.items ?? []}
+          historyLoading={orgPolicyHistory.isLoading}
+          checkPending={checkOrgPolicy.isPending}
+          checkError={checkOrgPolicy.error as Error | null}
+          checkResult={checkOrgPolicy.data}
+          onSave={(body) => updateOrgPolicy.mutate(body)}
+          onReset={() => resetOrgPolicy.mutate()}
+          onCheck={(body) => checkOrgPolicy.mutate(body)}
+        />
+      ) : null}
+
+      {tab === "accessReview" ? (
+        <AccessReviewModule
+          review={orgAccessReview.data}
+          loading={orgAccessReview.isLoading}
+          error={orgAccessReview.error as Error | null}
+          taskPreview={accessReviewTasks.data}
+          taskPending={accessReviewTasks.isPending}
+          taskError={accessReviewTasks.error as Error | null}
+          onPreviewTasks={() => accessReviewTasks.mutate({ dry_run: true, limit: 20, assigned_to: "tenant_admin", priority: "P1" })}
+          onCreateTasks={() => accessReviewTasks.mutate({ dry_run: false, limit: 20, assigned_to: "tenant_admin", priority: "P1" })}
+        />
       ) : null}
     </WorkbenchShell>
   );

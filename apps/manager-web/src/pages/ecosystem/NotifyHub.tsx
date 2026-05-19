@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BellRing, ClipboardList, Network } from "lucide-react";
+import { ArrowRight, BellRing, ClipboardList, MessageSquareText, Network } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ const DOMAIN_I18N: Record<string, string> = {
   channels: "nav.notifyChannels",
   outbound: "nav.notifyOutbound",
   inbound: "nav.notifyInbound",
+  messages: "nav.notifyMessages",
   connectors: "nav.notifyConnectors",
   webhooks: "nav.webhooks",
 };
@@ -26,6 +27,7 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
   channels: BellRing,
   outbound: ArrowRight,
   inbound: ClipboardList,
+  messages: MessageSquareText,
   connectors: Network,
   webhooks: BellRing,
 };

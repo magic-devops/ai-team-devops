@@ -10,11 +10,20 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path
+from sop_manager.path_config import resolved_ai_memory_root, resolved_business_code, resolved_project_id, resolved_project_path, resolved_tenant_id
 from .db_sql_compat import rows
 
 router = APIRouter(prefix="/api/v1/dev-flow", tags=["dev-flow"])
+
+
+class DevFlowOpsTasksIn(BaseModel):
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = Field("FlowOps Agent", max_length=120)
+    categories: List[str] = Field(default_factory=list, max_length=20)
+    limit: int = Field(20, ge=1, le=100)
 
 
 def _design_docs_count() -> int:
@@ -206,6 +215,235 @@ def dev_flow_hub() -> Dict[str, Any]:
             {"id": "design-docs", "path": "#/intelligence/design-docs", "capability": "ai.intelligence.design-docs"},
             {"id": "workflows", "path": "#/workflows", "capability": "delivery.workflows"},
         ],
+    }
+
+
+def _severity_score(level: str) -> int:
+    return {"high": 18, "medium": 10, "low": 4}.get(level, 0)
+
+
+def _dev_flow_ops_plan() -> Dict[str, Any]:
+    summary = dev_flow_summary()
+    reqs = rows("requirements", 500)
+    tasks = rows("tasks", 800)
+    issues = rows("issues", 500)
+    sprints = rows("sprints", 80)
+    active_sprint = summary.get("sprint") or {}
+    repo = summary.get("repo_hints") or {}
+    sprint_progress = summary.get("sprint_progress") or {}
+
+    linked_tasks = int((summary.get("tasks") or {}).get("linked_to_requirement") or 0)
+    total_tasks = int((summary.get("tasks") or {}).get("total_all") or 0)
+    open_issues = [i for i in issues if (i.get("status") or "").lower() in ("open", "reopened", "new")]
+    critical_issues = [
+        i for i in open_issues
+        if str(i.get("severity") or "").upper() in {"P0", "P1", "CRITICAL", "BLOCKER"}
+    ]
+    blocked_tasks = [t for t in tasks if str(t.get("status") or "") == "blocked"]
+    stale_reqs = [
+        r for r in reqs
+        if str(r.get("status") or "").lower() in {"draft", "new", "reviewing", "pending"} and str(r.get("priority") or "").upper() in {"P0", "P1"}
+    ]
+
+    risks: List[Dict[str, Any]] = []
+
+    def add_risk(rid: str, category: str, severity: str, title: str, detail: str, command: str, action: str) -> None:
+        risks.append({
+            "id": rid,
+            "category": category,
+            "severity": severity,
+            "title": title,
+            "detail": detail,
+            "command": command,
+            "action": action,
+        })
+
+    if not active_sprint:
+        add_risk(
+            "no-active-sprint",
+            "sprint",
+            "high",
+            "缺少活跃迭代",
+            "研发流无法形成稳定交付节奏，建议创建或激活 Sprint 并将 P0/P1 任务纳入迭代。",
+            "sop sprint list --json",
+            "创建/激活 Sprint 并回收未纳入迭代任务",
+        )
+    if critical_issues:
+        add_risk(
+            "critical-issues-open",
+            "issues",
+            "high",
+            f"{len(critical_issues)} 个高优问题未关闭",
+            "高优问题会阻断发布、调度和 Agent 自主执行，建议先分诊并任务化。",
+            "sop issue list --status open --json",
+            "分诊高优问题并建立修复任务",
+        )
+    if blocked_tasks:
+        add_risk(
+            "blocked-tasks",
+            "tasks",
+            "medium" if len(blocked_tasks) < 5 else "high",
+            f"{len(blocked_tasks)} 个任务处于阻塞",
+            "阻塞任务需要明确依赖、质量卡点或负责人，否则调度器会持续跳过。",
+            "sop task deps --json",
+            "检查任务依赖和阻塞原因",
+        )
+    if total_tasks and linked_tasks / max(1, total_tasks) < 0.55:
+        add_risk(
+            "low-requirement-linkage",
+            "requirements",
+            "medium",
+            "任务与需求追溯不足",
+            f"当前仅 {linked_tasks}/{total_tasks} 个任务关联需求，影响验收、审计和 Agent 理解业务目标。",
+            "sop work export --json",
+            "补齐 req_id/source_report_id 与验收标准",
+        )
+    if stale_reqs:
+        add_risk(
+            "priority-requirements-not-ready",
+            "requirements",
+            "medium",
+            f"{len(stale_reqs)} 个高优需求仍未进入交付",
+            "高优需求停留在需求池会让任务调度缺少输入，建议智能评审后拆解任务。",
+            "sop requirement list --priority P0 --json",
+            "评审高优需求并生成任务",
+        )
+    if not (summary.get("design_docs") or {}).get("count"):
+        add_risk(
+            "missing-design-docs",
+            "design",
+            "medium",
+            "缺少技术方案资产",
+            "没有技术方案会降低 AI CLI 自主开发时的上下文质量，建议补齐架构、接口和数据设计。",
+            "sop pages manifest --write",
+            "生成或补齐技术方案文档",
+        )
+    missing_repo = [name for name, ok in {"Dockerfile": repo.get("dockerfile"), "Compose": repo.get("compose"), "specs/": repo.get("specs_dir")}.items() if not ok]
+    if missing_repo:
+        add_risk(
+            "repo-delivery-hints-missing",
+            "repo",
+            "low",
+            "仓库交付线索不完整",
+            f"缺少 {', '.join(missing_repo)}，会影响部署、环境运维和 Agent 执行前检查。",
+            "sop doctor --json",
+            "补齐部署与规约入口",
+        )
+
+    score = max(0, 100 - sum(_severity_score(str(r.get("severity") or "")) for r in risks))
+    commands = [
+        {"id": "flow-summary", "category": "inspect", "command": "sop dev-flow ops-plan --json"},
+        {"id": "work-export", "category": "context", "command": "sop work export --json"},
+        {"id": "task-schedule", "category": "dispatch", "command": "sop task schedule-insights --include-blocked --json"},
+        {"id": "dependency-governance", "category": "dispatch", "command": "sop task dep-tasks --json"},
+        {"id": "doctor", "category": "ops", "command": "sop doctor --json"},
+    ]
+    stages = [
+        {"id": "intake", "name": "需求接入", "count": len(reqs), "status": "watch" if stale_reqs else "healthy"},
+        {"id": "planning", "name": "迭代计划", "count": len(sprints), "status": "healthy" if active_sprint else "risk"},
+        {"id": "execution", "name": "任务执行", "count": total_tasks, "status": "risk" if blocked_tasks else "healthy"},
+        {"id": "quality", "name": "质量收敛", "count": len(open_issues), "status": "risk" if critical_issues else "watch" if open_issues else "healthy"},
+        {"id": "release", "name": "部署运维", "count": 3 - len(missing_repo), "status": "watch" if missing_repo else "healthy"},
+    ]
+    return {
+        "ok": True,
+        "scope": {
+            "tenant_code": resolved_tenant_id(),
+            "business_code": resolved_business_code(),
+            "project_id": resolved_project_id(),
+        },
+        "health": {
+            "score": score,
+            "grade": "excellent" if score >= 90 else "good" if score >= 75 else "watch" if score >= 60 else "risk",
+        },
+        "summary": {
+            "requirements": len(reqs),
+            "tasks": total_tasks,
+            "linked_tasks": linked_tasks,
+            "open_issues": len(open_issues),
+            "critical_issues": len(critical_issues),
+            "blocked_tasks": len(blocked_tasks),
+            "active_sprint": bool(active_sprint),
+            "sprint_completion": sprint_progress.get("completion_rate", 0),
+        },
+        "stages": stages,
+        "risks": risks,
+        "commands": commands,
+        "task_candidates": [
+            {
+                "id": r["id"],
+                "category": r["category"],
+                "severity": r["severity"],
+                "title": f"研发流程治理：{r['title']}",
+                "summary": r["detail"],
+                "action": r["action"],
+                "command": r["command"],
+            }
+            for r in risks
+        ],
+        "agent_packet": {
+            "goal": "保障需求-任务-质量-发布研发主链路健康，给 AI CLI/Agent 提供下一步治理入口。",
+            "read_apis": ["/api/v1/dev-flow/summary", "/api/v1/dev-flow/ops-plan"],
+            "write_apis": ["/api/v1/dev-flow/ops-tasks"],
+            "cli": ["sop dev-flow ops-plan --json", "sop dev-flow ops-tasks --json"],
+        },
+    }
+
+
+@router.get("/ops-plan")
+def dev_flow_ops_plan() -> Dict[str, Any]:
+    return _dev_flow_ops_plan()
+
+
+@router.post("/ops-tasks")
+def dev_flow_ops_tasks(body: DevFlowOpsTasksIn) -> Dict[str, Any]:
+    plan = _dev_flow_ops_plan()
+    categories = {str(x).strip() for x in body.categories if str(x).strip()}
+    candidates = [
+        item for item in plan.get("task_candidates") or []
+        if not categories or str(item.get("category") or "") in categories
+    ][: body.limit]
+    planned: List[Dict[str, Any]] = []
+    created: List[Dict[str, Any]] = []
+    for item in candidates:
+        task = {
+            "title": item.get("title") or "研发流程治理任务",
+            "description": "\n".join([
+                str(item.get("summary") or ""),
+                "",
+                f"Category: {item.get('category')}",
+                f"Severity: {item.get('severity')}",
+                f"Action: {item.get('action')}",
+                "",
+                "Suggested command:",
+                f"- {item.get('command')}",
+            ]),
+            "priority": "P0" if item.get("severity") == "high" else body.priority,
+            "estimate": "S",
+            "assigned_to": body.assigned_to,
+            "dev_tool": "sop-cli",
+            "source": "dev_flow_ops",
+            "source_report_id": str(item.get("id") or ""),
+            "source_report_title": str(item.get("title") or ""),
+            "debug_notes": f"dev_flow_ops category={item.get('category')} severity={item.get('severity')}",
+        }
+        planned.append(task)
+        if not body.dry_run:
+            from .tasks import TaskCreate, create_task
+
+            created.append(create_task(TaskCreate(**task)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "summary": {
+            "planned": len(planned),
+            "created": len(created),
+            "health_score": (plan.get("health") or {}).get("score", 0),
+            "risks": len(plan.get("risks") or []),
+        },
+        "items": planned,
+        "created": created,
+        "plan_summary": plan.get("summary") or {},
     }
 
 

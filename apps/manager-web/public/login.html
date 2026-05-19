@@ -861,6 +861,14 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   }
 
   function saveAndRedirect(d){
+    [
+      'sop-current-project-id',
+      'sop-current-project-code',
+      'sop-current-business-code',
+      'sop-current-tenant-code'
+    ].forEach(function (key) {
+      try { localStorage.removeItem(key); } catch (e) {}
+    });
     localStorage.setItem('sop-token', d.token);
     localStorage.setItem('sop-user', JSON.stringify({
       id:d.user_id,
@@ -871,7 +879,11 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       tenant_name:d.tenant_name
     }));
     try {
+      var tenantCode = d.tenant_code || d.tenant_slug || d.tenant_id || '';
+      if (tenantCode) localStorage.setItem('sop-current-tenant-code', tenantCode);
+      if (d.default_business_code) localStorage.setItem('sop-current-business-code', d.default_business_code);
       if (d.default_project_id) localStorage.setItem('sop-current-project-id', d.default_project_id);
+      if (d.default_project_code || d.default_project_id) localStorage.setItem('sop-current-project-code', d.default_project_code || d.default_project_id);
     } catch (e) {}
     var next = new URLSearchParams(window.location.search).get('redirect');
     if (next && !/^https?:\/\//i.test(next) && next.indexOf('//') === -1) {
@@ -889,6 +901,28 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
 
   var loginMode = 'single';
   var tenantTimer = null;
+  function isSessionUnauthorized(status, body) {
+    body = String(body || '');
+    return status === 401 && (
+      body.indexOf('Token 已过期') >= 0 ||
+      body.indexOf('Token 无效') >= 0 ||
+      body.indexOf('Token 用户标识无效') >= 0 ||
+      body.indexOf('Token 用户加载失败') >= 0 ||
+      body.indexOf('用户不存在或已禁用') >= 0
+    );
+  }
+  function clearBrowserSession() {
+    [
+      'sop-token',
+      'sop-user',
+      'sop-current-project-id',
+      'sop-current-project-code',
+      'sop-current-business-code',
+      'sop-current-tenant-code'
+    ].forEach(function (key) {
+      try { localStorage.removeItem(key); } catch (e) {}
+    });
+  }
   function refreshTenantOptionsSoon(delay) {
     clearTimeout(tenantTimer);
     tenantTimer = setTimeout(function(){
@@ -899,7 +933,14 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   var token = localStorage.getItem('sop-token');
   if(token){
     loginPublicFetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
-      .then(function(r){if(r.ok) window.location.replace(postLoginTarget());})
+      .then(function(r){
+        if(r.ok) window.location.replace(postLoginTarget());
+        else {
+          r.clone().text().then(function (txt) {
+            if (isSessionUnauthorized(r.status, txt)) clearBrowserSession();
+          }).catch(function () {});
+        }
+      })
       .catch(function(){});
   }
 

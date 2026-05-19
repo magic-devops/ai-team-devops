@@ -102,6 +102,7 @@ def platforms_hub() -> dict[str, Any]:
 
     mcp = mcp_mgr.mcp_summary()
     ag = agents.agents_summary()
+    runs = agents.agent_runs_summary()
     model_cfg = models_router.list_models()
     custom_models = model_cfg.get("custom_models") if isinstance(model_cfg.get("custom_models"), list) else []
     providers = model_cfg.get("providers") if isinstance(model_cfg.get("providers"), dict) else {}
@@ -113,6 +114,8 @@ def platforms_hub() -> dict[str, Any]:
             "mcp_enabled": mcp.get("enabled", 0),
             "agents": ag.get("agents", 0),
             "agent_groups": ag.get("groups", 0),
+            "agent_active_claims": (runs.get("summary") or {}).get("active_claims", 0),
+            "agent_success_rate": (runs.get("summary") or {}).get("success_rate", 0),
             "models_custom": len(custom_models),
             "providers": len(providers),
         },
@@ -120,6 +123,7 @@ def platforms_hub() -> dict[str, Any]:
             {"id": "tools", "path": "#/platforms/tools", "capability": "ecosystem.platforms.tools"},
             {"id": "mcp", "path": "#/platforms/mcp", "capability": "ecosystem.platforms.mcp"},
             {"id": "agents", "path": "#/platforms/agents", "capability": "ecosystem.platforms.agents"},
+            {"id": "agent-runs", "path": "#/platforms/agent-runs", "capability": "ecosystem.platforms.agent-runs"},
             {"id": "models", "path": "#/platforms/models", "capability": "ecosystem.platforms.models"},
             {"id": "cli", "path": "#/platforms/cli", "capability": "ecosystem.platforms.cli"},
             {"id": "ops", "path": "#/platforms/ops", "capability": "ecosystem.platforms.ops"},

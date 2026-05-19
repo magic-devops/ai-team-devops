@@ -55,6 +55,11 @@ export function SystemMap() {
     queryFn: api.systemPagesValidate,
     enabled: authed,
   });
+  const healthQ = useQuery({
+    queryKey: ["systemPagesHealth"],
+    queryFn: api.systemPagesHealth,
+    enabled: authed,
+  });
   const manifestQ = useQuery({
     queryKey: ["systemPagesManifestMe"],
     queryFn: api.systemPagesManifestMe,
@@ -330,6 +335,64 @@ export function SystemMap() {
         </div>
       </Card>
 
+      <Card title={t("page.systemMap.menuHealth")}>
+        <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+            <p className="text-xs text-[var(--muted)]">{t("page.systemMap.menuHealthScore")}</p>
+            <div className="mt-2 flex items-end gap-2">
+              <span className="text-4xl font-semibold text-[var(--text)]">{healthQ.data?.health?.score ?? q.data?.menu_health?.score ?? 0}</span>
+              <span className="pb-1 text-sm text-[var(--muted)]">/ 100</span>
+            </div>
+            <p className="mt-3 text-sm font-medium text-[var(--muted-strong)]">{t(`page.systemMap.healthStatus.${healthQ.data?.health?.status ?? q.data?.menu_health?.status ?? "critical"}`)}</p>
+            <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{healthQ.data?.health?.agent_consumption?.purpose}</p>
+            <code className="mt-3 block rounded-lg bg-[var(--control-bg)] px-2.5 py-1 text-xs text-[var(--text)]">
+              {healthQ.data?.health?.agent_consumption?.cli ?? "sop pages health --json"}
+            </code>
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-6">
+              <Metric label={t("page.systemMap.healthIssues")} value={healthQ.data?.health?.summary?.issues ?? q.data?.menu_health?.summary?.issues ?? 0} />
+              <Metric label={t("page.systemMap.healthCritical")} value={healthQ.data?.health?.summary?.critical ?? q.data?.menu_health?.summary?.critical ?? 0} />
+              <Metric label={t("page.systemMap.healthHigh")} value={healthQ.data?.health?.summary?.high ?? q.data?.menu_health?.summary?.high ?? 0} />
+              <Metric label={t("page.systemMap.healthMedium")} value={healthQ.data?.health?.summary?.medium ?? q.data?.menu_health?.summary?.medium ?? 0} />
+              <Metric label={t("page.systemMap.healthLow")} value={healthQ.data?.health?.summary?.low ?? q.data?.menu_health?.summary?.low ?? 0} />
+              <Metric label={t("page.systemMap.healthModules")} value={healthQ.data?.health?.summary?.modules ?? q.data?.menu_health?.summary?.modules ?? 0} />
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+              <div className="grid grid-cols-[7rem_8rem_1fr_1fr] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs font-semibold text-[var(--muted)]">
+                <span>{t("page.systemMap.severity")}</span>
+                <span>{t("page.systemMap.issueCategory")}</span>
+                <span>{t("page.systemMap.module")}</span>
+                <span>{t("page.systemMap.recommendation")}</span>
+              </div>
+              {(healthQ.data?.health?.top_issues ?? q.data?.menu_health?.top_issues ?? []).slice(0, 10).map((item: any) => (
+                <div key={item.id} className="grid grid-cols-[7rem_8rem_1fr_1fr] items-start gap-3 border-b border-[var(--border)] px-4 py-3 text-xs last:border-0">
+                  <span className={`w-fit rounded-full px-2 py-0.5 font-semibold ${
+                    item.severity === "critical"
+                      ? "bg-rose-500/10 text-rose-700 dark:text-rose-200"
+                      : item.severity === "high"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-200"
+                        : "bg-sky-500/10 text-sky-700 dark:text-sky-200"
+                  }`}>
+                    {item.severity}
+                  </span>
+                  <span className="truncate font-mono text-[var(--muted-strong)]">{item.category}</span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-[var(--text)]">{item.module_id}</p>
+                    <p className="mt-1 truncate font-mono text-[11px] text-[var(--muted)]">{item.path || item.capability}</p>
+                    <p className="mt-1 line-clamp-1 text-[var(--muted-strong)]">{item.title}</p>
+                  </div>
+                  <p className="line-clamp-3 text-[var(--muted)]">{item.recommendation}</p>
+                </div>
+              ))}
+              {!(healthQ.data?.health?.top_issues ?? q.data?.menu_health?.top_issues ?? []).length ? (
+                <div className="px-4 py-6 text-sm text-[var(--muted)]">{t("page.systemMap.noHealthIssues")}</div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </Card>
+
       <Card title={t("page.systemMap.moduleManifest")}>
         <div className="grid gap-3 lg:grid-cols-[1.1fr_1.4fr]">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -352,6 +415,31 @@ export function SystemMap() {
               <Info label={t("page.systemMap.securitySource")} value={manifestQ.data?.security?.capability_check ?? "-"} />
             </div>
           </div>
+          {manifestQ.data?.ai?.agent_consumption ? (
+            <div className="lg:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.agentConsumption")}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{manifestQ.data.ai.agent_consumption.purpose}</p>
+                </div>
+                <code className="rounded-lg bg-[var(--control-bg)] px-2.5 py-1 text-xs text-[var(--text)]">
+                  {manifestQ.data.ai.agent_consumption.refresh_command}
+                </code>
+              </div>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                {Object.entries(manifestQ.data.ai.agent_consumption.local_files ?? {}).map(([key, value]) => (
+                  <Info key={key} label={key} value={String(value)} />
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(manifestQ.data.ai.agent_consumption.selector_fields ?? []).map((field: string) => (
+                  <span key={field} className="rounded-full bg-[var(--control-bg)] px-2.5 py-1 font-mono text-[11px] text-[var(--muted-strong)]">
+                    {field}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </Card>
 

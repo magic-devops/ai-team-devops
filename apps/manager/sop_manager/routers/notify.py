@@ -565,6 +565,7 @@ def notify_hub() -> dict[str, Any]:
             {"id": "channels", "path": "#/notify/channels", "capability": "ecosystem.notify.channels"},
             {"id": "outbound", "path": "#/notify/outbound", "capability": "ecosystem.notify.outbound"},
             {"id": "inbound", "path": "#/notify/inbound", "capability": "ecosystem.notify.inbound"},
+            {"id": "messages", "path": "#/notify/messages", "capability": "ecosystem.notify.messages"},
             {"id": "connectors", "path": "#/notify/connectors", "capability": "ecosystem.notify.connectors"},
             {"id": "webhooks", "path": "#/notify/webhooks", "capability": "ecosystem.notify.webhooks"},
         ],

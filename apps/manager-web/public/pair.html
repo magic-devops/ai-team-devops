@@ -109,12 +109,38 @@ a:hover{text-decoration:underline}
     el.textContent = text;
     el.className = 'msg ok';
   }
+  function isSessionUnauthorized(status, body) {
+    body = String(body || '');
+    return status === 401 && (
+      body.indexOf('Token 已过期') >= 0 ||
+      body.indexOf('Token 无效') >= 0 ||
+      body.indexOf('Token 用户标识无效') >= 0 ||
+      body.indexOf('Token 用户加载失败') >= 0 ||
+      body.indexOf('用户不存在或已禁用') >= 0
+    );
+  }
+  function clearBrowserSession() {
+    [
+      'sop-token',
+      'sop-user',
+      'sop-current-project-id',
+      'sop-current-project-code',
+      'sop-current-business-code',
+      'sop-current-tenant-code'
+    ].forEach(function (key) {
+      try { localStorage.removeItem(key); } catch (e) {}
+    });
+  }
   function apiFetch(url, init) {
     var o = init || {};
     o.headers = o.headers || {};
     o.headers.Authorization = 'Bearer ' + token;
     return fetch(url, o).then(function (r) {
-      return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; });
+      return r.text().then(function (txt) {
+        var d = {};
+        try { d = txt ? JSON.parse(txt) : {}; } catch (e) { d = { detail: txt }; }
+        return { ok: r.ok, status: r.status, d: d, text: txt };
+      });
     });
   }
   function ready() {
@@ -137,8 +163,13 @@ a:hover{text-decoration:underline}
   }
   apiFetch(API + '/auth/me').then(function (res) {
     if (!res.ok) {
-      localStorage.removeItem('sop-token');
-      window.location.replace('login.html?redirect=' + encodeURIComponent('pair.html'));
+      if (isSessionUnauthorized(res.status, res.text || JSON.stringify(res.d || {}))) {
+        clearBrowserSession();
+        window.location.replace('login.html?redirect=' + encodeURIComponent('pair.html'));
+      } else {
+        showErr((res.d && res.d.detail) || '认证检查失败，请稍后重试');
+        ready();
+      }
       return;
     }
     ready();

@@ -12,7 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 import jwt
 
-from .sql_models import get_session, User, Tenant, Project, ProjectMember, ApiKey
+from .sql_models import get_session, User, Tenant, Business, Project, ProjectMember, ApiKey
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -220,22 +220,32 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
         raise HTTPException(401, "用户名或密码错误")
     tenant = db.query(Tenant).filter_by(id=user.tenant_id).first()
     token = _make_token(user.id, user.tenant_id, user.role, user.username)
+    tenant_code = tenant.slug if tenant and tenant.slug else user.tenant_id
     default_project_id = ""
+    default_business_code = ""
+    default_project_code = ""
     try:
+        project = None
         m = db.query(ProjectMember).filter_by(user_id=user.id).order_by(ProjectMember.project_id).first()
         if m:
-            default_project_id = m.project_id
+            project = db.get(Project, m.project_id)
         elif user.role in ("tenant_admin", "super_admin"):
-            p0 = (
+            project = (
                 db.query(Project)
                 .filter_by(tenant_id=user.tenant_id)
                 .order_by(Project.created_at.asc())
                 .first()
             )
-            if p0:
-                default_project_id = p0.id
+        if project:
+            default_project_id = project.id
+            default_project_code = project.id
+            if project.business_id:
+                business = db.get(Business, project.business_id)
+                default_business_code = business.id if business else project.business_id
     except Exception:
         default_project_id = ""
+        default_business_code = ""
+        default_project_code = ""
     return {
         "access_token": token,
         "token": token,  # 兼容 Web login.html（localStorage sop-token）
@@ -244,9 +254,12 @@ def login(body: LoginBody, db: Session = Depends(get_session)):
         "username": user.username,
         "role": user.role,
         "tenant_id": user.tenant_id,
+        "tenant_code": tenant_code,
         "tenant_slug": tenant.slug if tenant else "",
         "tenant_name": tenant.name if tenant else "",
         "default_project_id": default_project_id,
+        "default_project_code": default_project_code,
+        "default_business_code": default_business_code,
     }
 
 

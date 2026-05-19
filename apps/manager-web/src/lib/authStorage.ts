@@ -4,6 +4,7 @@ export const PROJECT_ID_KEY = "sop-current-project-id";
 export const TENANT_CODE_KEY = "sop-current-tenant-code";
 export const BUSINESS_CODE_KEY = "sop-current-business-code";
 export const PROJECT_CODE_KEY = "sop-current-project-code";
+export const USER_KEY = "sop-user";
 
 export type WorkspaceScope = {
   tenantCode?: string | null;
@@ -12,9 +13,32 @@ export type WorkspaceScope = {
   projectCode?: string | null;
 };
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isExpiredJwt(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  const exp = typeof payload?.exp === "number" ? payload.exp : Number(payload?.exp);
+  return Number.isFinite(exp) && exp <= Math.floor(Date.now() / 1000);
+}
+
 export function getToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && isExpiredJwt(token)) {
+      clearSession();
+      return null;
+    }
+    return token;
   } catch {
     return null;
   }
@@ -108,6 +132,7 @@ export function setSession(token: string, projectId: string | null | undefined, 
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PROJECT_ID_KEY);
   localStorage.removeItem(TENANT_CODE_KEY);
   localStorage.removeItem(BUSINESS_CODE_KEY);

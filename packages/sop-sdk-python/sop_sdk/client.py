@@ -198,8 +198,23 @@ class ManagerClient:
     def system_pages_manifest(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/manifest")
 
+    def system_pages_manifest_me(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/manifest/me")
+
     def system_pages_capabilities(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/capabilities")
+
+    def system_pages_capabilities_me(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/capabilities/me")
+
+    def system_pages_health(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/health")
+
+    def system_pages_menu_preferences_me(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/menu/preferences/me")
+
+    def system_pages_menu_preferences_update(self, **body: Any) -> dict[str, Any]:
+        return self._request("PUT", "/api/v1/system/pages/menu/preferences/me", json_body=body)
 
     # auth
     def login(self, username: str, password: str, tenant_slug: str | None = None) -> dict[str, Any]:
@@ -252,6 +267,13 @@ class ManagerClient:
     def project_clone_preview(self, template_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/projects/{template_id}/clone-preview", json_body=body)
 
+    # dev flow
+    def dev_flow_ops_plan(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/dev-flow/ops-plan")
+
+    def dev_flow_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/dev-flow/ops-tasks", json_body=dict(body))
+
     # workflows
     def workflow_instances(self, *, limit: int = 100, status: str = "", type: str = "", q: str = "") -> dict[str, Any]:
         params: dict[str, Any] = {"limit": limit}
@@ -303,6 +325,31 @@ class ManagerClient:
     def task_scheduler_plan(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/scheduler/plan", json_body=dict(body))
 
+    def task_scheduler_runs(self, *, limit: int = 20, q: str = "", include_archived: bool = False) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/tasks/scheduler/runs",
+            params={"limit": limit, "q": q, "include_archived": str(include_archived).lower()},
+        )
+
+    def task_scheduler_run_detail(self, schedule_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/tasks/scheduler/runs/{schedule_id}")
+
+    def task_scheduler_run_action(self, schedule_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/tasks/scheduler/runs/{schedule_id}/action", json_body=dict(body))
+
+    def task_scheduler_ops_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/tasks/scheduler/ops-summary")
+
+    def task_scheduler_runbook(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/scheduler/runbook", json_body=dict(body))
+
+    def task_scheduler_insights(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/scheduler/insights", json_body=dict(body))
+
+    def task_scheduler_insight_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/scheduler/insights/tasks", json_body=dict(body))
+
     def task_agent_feed(
         self,
         *,
@@ -321,11 +368,43 @@ class ManagerClient:
     def task_agent_claim(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/agent-feed/claim", json_body=dict(body))
 
+    def task_agent_execution_plan(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/agent-feed/execution-plan", json_body=dict(body))
+
+    def task_agent_plan(
+        self,
+        task_id: str,
+        *,
+        claim_id: str = "",
+        agent: str = "",
+        include_context: bool = True,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/api/v1/tasks/{task_id}/agent-plan",
+            params={"claim_id": claim_id, "agent": agent, "include_context": str(include_context).lower()},
+        )
+
     def task_agent_heartbeat(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/agent-feed/heartbeat", json_body=dict(body))
 
     def task_agent_report(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/tasks/{task_id}/agent-report", json_body=dict(body))
+
+    def task_agent_reports(
+        self,
+        *,
+        limit: int = 100,
+        status: str = "",
+        agent: str = "",
+        task_id: str = "",
+        q: str = "",
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/tasks/agent-feed/reports",
+            params={"limit": limit, "status": status, "agent": agent, "task_id": task_id, "q": q},
+        )
 
     def task_quality_policy(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/tasks/quality/policy")
@@ -333,11 +412,23 @@ class ManagerClient:
     def task_quality_policy_update(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("PUT", "/api/v1/tasks/quality/policy", json_body=dict(body))
 
+    def task_quality_summary(self, *, limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/tasks/quality/summary", params={"limit": limit})
+
+    def task_quality_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/quality/tasks", json_body=dict(body))
+
     def task_quality(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/tasks/{task_id}/quality")
 
     def task_quality_evaluate(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/quality/evaluate", json_body=dict(body))
+
+    def task_dependencies(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/tasks/dependencies")
+
+    def task_dependency_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/tasks/dependencies/tasks", json_body=dict(body))
 
     def delete_task(self, task_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/tasks/{task_id}")
@@ -386,6 +477,12 @@ class ManagerClient:
     def delete_requirement(self, req_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/requirements/{req_id}")
 
+    def requirement_ops_plan(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/requirements/ops-plan")
+
+    def requirement_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/requirements/ops-tasks", json_body=dict(body))
+
     # issues
     def list_issues(
         self,
@@ -414,6 +511,12 @@ class ManagerClient:
     def delete_issue(self, issue_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/issues/{issue_id}")
 
+    def issue_ops_plan(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/issues/ops-plan")
+
+    def issue_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/issues/ops-tasks", json_body=dict(body))
+
     # sprints
     def list_sprints(self, *, page: int = 1, size: int = 20) -> dict[str, Any]:
         return self._request("GET", "/api/v1/sprints", params={"page": page, "size": size})
@@ -429,6 +532,13 @@ class ManagerClient:
 
     def delete_sprint(self, sprint_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/sprints/{sprint_id}")
+
+    def sprint_ops_plan(self, *, sprint_id: str = "") -> dict[str, Any]:
+        params = {"sprint_id": sprint_id} if sprint_id else None
+        return self._request("GET", "/api/v1/sprints/ops-plan", params=params)
+
+    def sprint_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/sprints/ops-tasks", json_body=dict(body))
 
     # llm gateway
     def llm_chat(
@@ -515,6 +625,19 @@ class ManagerClient:
     def knowledge_index(self) -> dict[str, Any]:
         return self._request("POST", "/api/v1/knowledge/index")
 
+    def intelligence_hub(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/intelligence/hub")
+
+    def reflection_distill(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/reflections/distill", json_body=dict(body))
+
+    def reflection_proposals(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        r = self._request("GET", "/api/v1/reflections/proposals", params={"limit": limit})
+        return r if isinstance(r, list) else []
+
+    def reflection_review_proposal(self, proposal_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/reflections/proposals/{proposal_id}/review", json_body=dict(body))
+
     def sync_pull(
         self,
         *,
@@ -531,6 +654,12 @@ class ManagerClient:
     def sync_health(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/sync/health", retry=False)
 
+    def sync_modules(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/sync/modules")
+
+    def sync_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/sync/summary")
+
     def worker_enqueue(self, job_type: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -543,6 +672,18 @@ class ManagerClient:
 
     def worker_health(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/worker/health", retry=False)
+
+    def worker_types(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/worker/types")
+
+    def worker_jobs(self, *, limit: int = 100, status: str = "", job_type: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/worker/jobs", params={"limit": limit, "status": status, "type": job_type})
+
+    def worker_cancel(self, job_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/worker/jobs/{job_id}/cancel")
+
+    def worker_retry(self, job_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/worker/jobs/{job_id}/retry")
 
     def notify_list_channels(self) -> list[dict[str, Any]]:
         r = self._request("GET", "/api/v1/notify/channels")
@@ -584,6 +725,21 @@ class ManagerClient:
     def notify_test_channel(self, channel_name: str) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/notify/test/{channel_name}")
 
+    def notify_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/notify/summary")
+
+    def notify_messages(self, *, limit: int = 100, direction: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/notify/messages", params={"limit": limit, "direction": direction})
+
+    def notify_send(self, channel: str, title: str, content: str, level: str = "info") -> dict[str, Any]:
+        return self._request("POST", "/api/v1/notify/send", json_body={"channel": channel, "title": title, "content": content, "level": level})
+
+    def notify_inbound(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/notify/inbound", json_body=dict(body))
+
+    def notify_inbound_action(self, message_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/notify/inbound/{message_id}/action", json_body=dict(body))
+
     def list_businesses(self) -> list[dict[str, Any]]:
         r = self._request("GET", "/api/v1/businesses")
         return r if isinstance(r, list) else []
@@ -591,6 +747,27 @@ class ManagerClient:
     def list_auth_users(self) -> list[dict[str, Any]]:
         r = self._request("GET", "/api/v1/auth/users")
         return r if isinstance(r, list) else []
+
+    def organization_policy(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/organization/policy")
+
+    def organization_policy_update(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("PUT", "/api/v1/organization/policy", json_body=dict(body))
+
+    def organization_policy_reset(self) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/organization/policy/reset")
+
+    def organization_policy_check(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/organization/policy/check", json_body=dict(body))
+
+    def organization_policy_history(self, *, limit: int = 50) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/organization/policy/history", params={"limit": limit})
+
+    def organization_access_review(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/organization/access-review")
+
+    def organization_access_review_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/organization/access-review/tasks", json_body=dict(body))
 
     def data_analytics_overview(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/analytics/overview")
@@ -766,6 +943,18 @@ class ManagerClient:
     def platforms_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/platforms/ops-tasks", json_body=dict(body))
 
+    def agents_runs_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/agents/runs/summary")
+
+    def agents_runs(self, *, agent: str = "", status: str = "", limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/agents/runs", params={"agent": agent, "status": status, "limit": limit})
+
+    def agents_runs_slo(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/agents/runs/slo")
+
+    def agents_runs_rebalance_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/agents/runs/rebalance-tasks", json_body=dict(body))
+
     def copilot_ask(
         self,
         query: str,
@@ -847,6 +1036,12 @@ class ManagerClient:
 
     def usage_set_quota(self, limits: Mapping[str, float]) -> dict[str, Any]:
         return self._request("PUT", "/api/v1/usage/quota", json_body={"limits": dict(limits)})
+
+    def usage_alerts(self, *, limit: int = 5000) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/usage/alerts", params={"limit": limit})
+
+    def usage_alert_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/usage/alerts/tasks", json_body=dict(body))
 
     # 工作台驾驶舱（原 console/overview 合并至此）
     def console_overview(self) -> dict[str, Any]:

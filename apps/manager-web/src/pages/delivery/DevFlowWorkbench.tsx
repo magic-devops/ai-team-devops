@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Alert, App, Button, Card, Steps, Typography } from "antd";
+import { Alert, App, Button, Card, Space, Statistic, Steps, Table, Tag, Typography } from "antd";
 import { Suspense, lazy, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../../lib/api";
@@ -26,12 +26,32 @@ export function DevFlowWorkbench() {
   const { message } = App.useApp();
   const q = useQuery({ queryKey: ["devFlowSummary"], queryFn: api.devFlowSummary });
   const templatesQ = useQuery({ queryKey: ["devFlowTemplates"], queryFn: api.devFlowTemplates });
+  const opsPlanQ = useQuery({ queryKey: ["devFlowOpsPlan"], queryFn: api.devFlowOpsPlan });
 
   const startWfMut = useMutation({
     mutationFn: (body: { type: string; args?: Record<string, unknown> }) => api.startWorkflow(body),
     onSuccess: (data) => {
       message.success(t("page.devFlow.workflowStarted", { id: data?.workflow_id ?? "" }));
       window.location.hash = "#/workflows";
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+  const opsTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.devFlowOpsTasks({
+        dry_run: dryRun,
+        priority: "P1",
+        assigned_to: "FlowOps Agent",
+        limit: 20,
+      }),
+    onSuccess: (data) => {
+      message.success(
+        t("page.devFlow.opsTasksResult", {
+          planned: data?.summary?.planned ?? 0,
+          created: data?.summary?.created ?? 0,
+        }),
+      );
+      void opsPlanQ.refetch();
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -105,6 +125,75 @@ export function DevFlowWorkbench() {
               }
             />
           ) : null}
+
+          <WorkbenchPanel title={t("page.devFlow.opsPlan")}>
+            <div className="grid gap-3 xl:grid-cols-[16rem_minmax(0,1fr)]">
+              <Card size="small" className="border-[var(--border)]">
+                <Statistic
+                  title={t("page.devFlow.flowHealth")}
+                  value={opsPlanQ.data?.health?.score ?? 100}
+                  suffix="/100"
+                  valueStyle={{
+                    color: (opsPlanQ.data?.health?.score ?? 100) < 60 ? "#dc2626" : (opsPlanQ.data?.health?.score ?? 100) < 75 ? "#d97706" : "#059669",
+                  }}
+                />
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {(opsPlanQ.data?.stages ?? []).map((stage: any) => (
+                    <Tag key={stage.id} color={stage.status === "risk" ? "red" : stage.status === "watch" ? "gold" : "green"}>
+                      {stage.name}
+                    </Tag>
+                  ))}
+                </div>
+              </Card>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Space wrap>
+                    <Button size="small" loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(true)}>
+                      {t("page.devFlow.previewOpsTasks")}
+                    </Button>
+                    <Button size="small" type="primary" loading={opsTasksMut.isPending} onClick={() => opsTasksMut.mutate(false)}>
+                      {t("page.devFlow.createOpsTasks")}
+                    </Button>
+                  </Space>
+                  <code className="rounded bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--brand)]">sop dev-flow ops-plan --json</code>
+                </div>
+                <Table
+                  rowKey={(row: any) => String(row.id)}
+                  dataSource={opsPlanQ.data?.risks ?? []}
+                  loading={opsPlanQ.isLoading}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 820 }}
+                  locale={{ emptyText: t("page.devFlow.noOpsRisks") }}
+                  columns={[
+                    {
+                      title: t("page.devFlow.severity"),
+                      dataIndex: "severity",
+                      width: 100,
+                      render: (value: string) => <Tag color={value === "high" ? "red" : value === "medium" ? "gold" : "blue"}>{value}</Tag>,
+                    },
+                    { title: t("page.devFlow.category"), dataIndex: "category", width: 120 },
+                    {
+                      title: t("page.devFlow.risk"),
+                      dataIndex: "title",
+                      render: (value: string, row: any) => (
+                        <div>
+                          <div className="text-sm font-medium text-[var(--text)]">{value}</div>
+                          <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{row.detail}</div>
+                        </div>
+                      ),
+                    },
+                    {
+                      title: t("page.devFlow.command"),
+                      dataIndex: "command",
+                      width: 260,
+                      render: (value: string) => <code className="text-[10px] text-[var(--brand)]">{value}</code>,
+                    },
+                  ]}
+                />
+              </div>
+            </div>
+          </WorkbenchPanel>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <StatusDistributionPanel title={t("page.devFlow.reqByStatus")} byStatus={s?.requirements?.by_status} />

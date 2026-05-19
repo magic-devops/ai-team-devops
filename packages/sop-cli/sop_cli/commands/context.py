@@ -61,6 +61,8 @@ def build_project_manifest() -> dict[str, Any]:
             "event_outbox": str(rt / "events" / "outbox.jsonl"),
             "usage_outbox": str(rt / "usage" / "outbox.jsonl"),
             "db_connections": str(rt / "db_connections.json"),
+            "pages_manifest": str(rt / "pages_manifest.json"),
+            "pages_capabilities": str(rt / "pages_capabilities.json"),
             "copilot_sessions": str(rt / "copilot" / "sessions.jsonl"),
         },
         "capabilities": {
@@ -105,6 +107,12 @@ def build_project_manifest() -> dict[str, Any]:
                 "sop db-config test",
                 "sop db-config export",
             ],
+            "pages": [
+                "sop pages list --json",
+                "sop pages manifest --json",
+                "sop pages capabilities --json",
+                "sop context prepare --pages",
+            ],
             "rules": ["sop rule list --local --proposals --json", "sop rule propose", "sop rule apply", "sop rule flush"],
             "platforms": ["sop platforms init all", "sop platforms doctor"],
             "ops": ["sop doctor", "sop ops health", "sop ops stack doctor"],
@@ -131,6 +139,32 @@ def write_project_manifest(path: Path | None = None) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(build_project_manifest(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target
+
+
+def write_pages_context_cache(path: Path | None = None, capabilities_path: Path | None = None) -> tuple[Path | None, Path | None]:
+    """Cache Manager page manifest/capability maps so agents can route work without guessing menus."""
+    cfg = get_config()
+    rt = cfg.project_path / ".sop-runtime"
+    manifest_target = path or (rt / "pages_manifest.json")
+    capability_target = capabilities_path or (rt / "pages_capabilities.json")
+    try:
+        client = get_client(cfg)
+        try:
+            manifest = client.system_pages_manifest_me()
+        except Exception:
+            manifest = client.system_pages_manifest()
+        try:
+            capabilities = client.system_pages_capabilities_me()
+        except Exception:
+            capabilities = client.system_pages_capabilities()
+    except Exception as e:
+        warn(f"页面能力 Manifest 未刷新，可稍后执行 sop pages manifest --json: {e}")
+        return (manifest_target if manifest_target.is_file() else None, capability_target if capability_target.is_file() else None)
+    manifest_target.parent.mkdir(parents=True, exist_ok=True)
+    capability_target.parent.mkdir(parents=True, exist_ok=True)
+    manifest_target.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    capability_target.write_text(json.dumps(capabilities, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return manifest_target, capability_target
 
 
 def write_db_connections_cache(path: Path | None = None) -> Path | None:
@@ -195,6 +229,8 @@ def write_agent_context(
             "event_outbox": str(rt / "events" / "outbox.jsonl"),
             "usage_outbox": str(rt / "usage" / "outbox.jsonl"),
             "db_connections": str(rt / "db_connections.json"),
+            "pages_manifest": str(rt / "pages_manifest.json"),
+            "pages_capabilities": str(rt / "pages_capabilities.json"),
             "copilot_sessions": str(rt / "copilot" / "sessions.jsonl"),
         },
         "commands": {
@@ -223,6 +259,9 @@ def write_agent_context(
             "usage_check": "sop usage check llm_tokens 1000 --json",
             "db_drivers": "sop db-config drivers --json",
             "db_connections": "sop db-config list --json",
+            "pages_list": "sop pages list --json",
+            "pages_manifest": "sop pages manifest --json",
+            "pages_capabilities": "sop pages capabilities --json",
             "copilot_ask": "sop copilot ask",
             "copilot_sessions": "sop copilot sessions --json",
         },
@@ -358,6 +397,8 @@ def build_env_lines(*, export: bool = True) -> list[str]:
         "SOP_AGENT_CONTEXT": rt / "agent_context.json",
         "SOP_WORK_SNAPSHOT": rt / "work_snapshot.json",
         "SOP_DB_CONNECTIONS": rt / "db_connections.json",
+        "SOP_PAGES_MANIFEST": rt / "pages_manifest.json",
+        "SOP_PAGES_CAPABILITIES": rt / "pages_capabilities.json",
         "SOP_COPILOT_SESSIONS": rt / "copilot" / "sessions.jsonl",
         "SOP_RULE_PROPOSALS": rt / "rules" / "proposals.jsonl",
         "SOP_MEMORY_LOCAL": rt / "memory" / "local.jsonl",
@@ -393,10 +434,11 @@ def prepare_cmd(
     pull: bool = typer.Option(False, "--pull", help="先直连 Manager 拉取并物化同步数据"),
     flush: bool = typer.Option(False, "--flush", help="冲刷 sync/memory/kb/event/usage 本地 outbox"),
     db_config: bool = typer.Option(True, "--db-config/--no-db-config", help="刷新远端无密钥数据库连接配置缓存"),
+    pages: bool = typer.Option(True, "--pages/--no-pages", help="刷新页面菜单 Manifest 与能力权限缓存，供 Agent 自动选择模块"),
     platforms: bool = typer.Option(True, "--platforms/--no-platforms", help="刷新各 CLI/IDE/Agent 平台接入文件"),
     out: str = typer.Option(".sop-runtime/agent_context.json", "--out", "-o", help="Agent 上下文索引输出路径"),
 ) -> None:
-    """一键准备本地 Agent 上下文：manifest、work snapshot、平台接入和可选远端物化。"""
+    """一键准备本地 Agent 上下文：manifest、work snapshot、页面能力、平台接入和可选远端物化。"""
     cfg = get_config()
     prepared: dict[str, bool] = {}
     if pull:
@@ -429,6 +471,14 @@ def prepare_cmd(
         prepared["db_config"] = bool(db_path and db_path.is_file())
         if db_path and db_path.is_file():
             ok(f"db connections written: {db_path}")
+    if pages:
+        pages_manifest_path, pages_capabilities_path = write_pages_context_cache()
+        prepared["pages_manifest"] = bool(pages_manifest_path and pages_manifest_path.is_file())
+        prepared["pages_capabilities"] = bool(pages_capabilities_path and pages_capabilities_path.is_file())
+        if pages_manifest_path and pages_manifest_path.is_file():
+            ok(f"pages manifest written: {pages_manifest_path}")
+        if pages_capabilities_path and pages_capabilities_path.is_file():
+            ok(f"pages capabilities written: {pages_capabilities_path}")
     env_path = cfg.project_path / ".sop-runtime" / "sop.env"
     env_path.write_text("\n".join(build_env_lines(export=True)) + "\n", encoding="utf-8")
     prepared["env"] = True

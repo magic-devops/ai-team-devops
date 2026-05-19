@@ -148,6 +148,91 @@ def _render(items: list[dict[str, Any]], title: str) -> None:
     console.print(tbl)
 
 
+def _render_ops_plan(out: dict[str, Any]) -> None:
+    health = out.get("health") or {}
+    summary = out.get("summary") or {}
+    tasks = summary.get("tasks") or {}
+    kv("health_score", health.get("score", 0))
+    kv("grade", health.get("grade", ""))
+    kv("active_sprint", (out.get("sprint") or {}).get("id", "-"))
+    kv("completion_rate", tasks.get("completion_rate", 0))
+    kv("blocked", len(tasks.get("blocked") or []))
+    tbl = Table(title="sprint ops risks", show_header=True, header_style="bold")
+    for col in ("id", "severity", "category", "title", "command"):
+        tbl.add_column(col)
+    for item in out.get("risks") or []:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("severity", "")),
+            str(item.get("category", "")),
+            str(item.get("title", ""))[:64],
+            str(item.get("command", "")),
+        )
+    console.print(tbl)
+
+
+@app.command(name="ops-plan")
+def sprint_ops_plan(
+    sprint_id: str = typer.Option("", "--sprint", help="指定 Sprint ID；默认使用活跃 Sprint"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """输出迭代治理 AI/CLI 操作包。"""
+    try:
+        out = get_client().sprint_ops_plan(sprint_id=sprint_id)
+    except Exception as e:
+        warn(f"Manager sprint ops-plan 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    _render_ops_plan(out)
+
+
+@app.command(name="ops-tasks")
+def sprint_ops_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    sprint_id: str = typer.Option("", "--sprint", help="指定 Sprint ID；默认使用活跃 Sprint"),
+    priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
+    assigned_to: str = typer.Option("SprintOps Agent", "--assigned-to", help="治理任务负责人"),
+    categories: str = typer.Option("", "--categories", help="逗号分隔过滤 planning,scope,blocking,quality,delivery,retrospective"),
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将迭代风险预览或生成治理任务。"""
+    body = {
+        "dry_run": not apply,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "sprint_id": sprint_id,
+        "categories": [x.strip() for x in categories.split(",") if x.strip()],
+        "limit": limit,
+    }
+    try:
+        out = get_client().sprint_ops_tasks(body)
+    except Exception as e:
+        warn(f"Manager sprint ops-tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    tbl = Table(title="sprint governance tasks", show_header=True, header_style="bold")
+    for col in ("priority", "assigned_to", "source_report_id", "title"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("priority", "")),
+            str(item.get("assigned_to", "")),
+            str(item.get("source_report_id", "")),
+            str(item.get("title", ""))[:84],
+        )
+    console.print(tbl)
+    if not apply:
+        warn("dry-run only; add --apply to create sprint governance tasks")
+
+
 def _new_row(goal: str, *, planned_points: int, ends_at: str) -> dict[str, Any]:
     ts = _now()
     return {

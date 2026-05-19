@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Statistic, Table, Tag } from "antd";
+import { Alert, Button, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Statistic, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -148,6 +148,10 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
   const [tab, setTab] = useState<Tab>(initialTab);
   const [sprintId, setSprintId] = useState<string>("");
   const [depDraft, setDepDraft] = useState({ source: "", target: "", type: "blocks", note: "" });
+  const [depQuery, setDepQuery] = useState("");
+  const [depFilter, setDepFilter] = useState("all");
+  const [depSelectedNode, setDepSelectedNode] = useState<any>(null);
+  const [depTasksResult, setDepTasksResult] = useState<any>(null);
   const [taskQuery, setTaskQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -164,8 +168,24 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
   const [schedulerIncludeBlocked, setSchedulerIncludeBlocked] = useState(false);
   const [schedulerMaxParallel, setSchedulerMaxParallel] = useState(6);
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
+  const [schedulerRunQuery, setSchedulerRunQuery] = useState("");
+  const [schedulerIncludeArchived, setSchedulerIncludeArchived] = useState(false);
+  const [schedulerPanel, setSchedulerPanel] = useState("ops");
+  const [schedulerRunbookResult, setSchedulerRunbookResult] = useState<any>(null);
+  const [schedulerInsightTasksResult, setSchedulerInsightTasksResult] = useState<any>(null);
+  const [qualityPolicyDraft, setQualityPolicyDraft] = useState({
+    mode: "blocking",
+    required: "",
+    advisory: "",
+    minConfidence: 0.65,
+    requireArtifact: true,
+    autoBlock: true,
+    notes: "",
+  });
+  const [qualityTasksResult, setQualityTasksResult] = useState<any>(null);
   const [agentName, setAgentName] = useState("HermesAgent");
   const [claimResult, setClaimResult] = useState<any>(null);
+  const [agentPlanResult, setAgentPlanResult] = useState<any>(null);
 
   useEffect(() => {
     setTab(initialTab);
@@ -199,9 +219,39 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
     queryFn: () => api.taskAgentClaims("active", 50),
     enabled: authed && hasProject && tab === "scheduler",
   });
+  const agentReportsQ = useQuery({
+    queryKey: ["taskAgentReports"],
+    queryFn: () => api.taskAgentReports(80),
+    enabled: authed && hasProject && tab === "scheduler",
+  });
   const qualityPolicyQ = useQuery({
     queryKey: ["taskQualityPolicy"],
     queryFn: api.taskQualityPolicy,
+    enabled: authed && hasProject && tab === "scheduler",
+  });
+  const qualitySummaryQ = useQuery({
+    queryKey: ["taskQualitySummary"],
+    queryFn: () => api.taskQualitySummary(100),
+    enabled: authed && hasProject && tab === "scheduler",
+  });
+  const schedulerRunsQ = useQuery({
+    queryKey: ["taskSchedulerRuns", schedulerRunQuery, schedulerIncludeArchived],
+    queryFn: () => api.taskSchedulerRuns(20, schedulerRunQuery.trim(), schedulerIncludeArchived),
+    enabled: authed && hasProject && tab === "scheduler",
+  });
+  const schedulerOpsQ = useQuery({
+    queryKey: ["taskSchedulerOps"],
+    queryFn: api.taskSchedulerOpsSummary,
+    enabled: authed && hasProject && tab === "scheduler",
+  });
+  const schedulerInsightsQ = useQuery({
+    queryKey: ["taskSchedulerInsights", selectedTaskIds.join(","), schedulerMaxParallel, schedulerIncludeBlocked],
+    queryFn: () => api.taskSchedulerInsights({
+      ids: selectedTaskIds,
+      max_items: 80,
+      max_parallel: schedulerMaxParallel,
+      include_blocked: schedulerIncludeBlocked,
+    }),
     enabled: authed && hasProject && tab === "scheduler",
   });
 
@@ -226,6 +276,11 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
     queryKey: ["sprint-burndown", sprintId],
     queryFn: () => api.sprintBurndown(sprintId),
     enabled: authed && hasProject && tab === "sprint" && Boolean(sprintId),
+  });
+  const sprintOpsQ = useQuery({
+    queryKey: ["sprint-ops-plan", sprintId],
+    queryFn: () => api.sprintOpsPlan(sprintId),
+    enabled: authed && hasProject && tab === "sprint",
   });
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -333,7 +388,78 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
         void qc.invalidateQueries({ queryKey: ["tasks"] });
         void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
         void qc.invalidateQueries({ queryKey: ["taskAgentFeed"] });
+        void qc.invalidateQueries({ queryKey: ["taskSchedulerRuns"] });
       }
+    },
+  });
+
+  const schedulerActionMut = useMutation({
+    mutationFn: ({ scheduleId, action, dryRun }: { scheduleId: string; action: string; dryRun?: boolean }) =>
+      api.taskSchedulerRunAction(scheduleId, {
+        action,
+        dry_run: dryRun ?? false,
+        policy: schedulerPolicy,
+        max_parallel: schedulerMaxParallel,
+        include_blocked: schedulerIncludeBlocked,
+        note: "ui.scheduler.action",
+      }),
+    onSuccess: (data) => {
+      if (data?.plan) setSchedulerResult(data.plan);
+      void qc.invalidateQueries({ queryKey: ["taskSchedulerRuns"] });
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+      void qc.invalidateQueries({ queryKey: ["taskAgentFeed"] });
+    },
+  });
+
+  const schedulerRunbookMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.taskSchedulerRunbook({
+        dry_run: dryRun,
+        assigned_to: "Ops",
+        priority: "P1",
+        include_unclaimed: true,
+        include_stale_claims: true,
+        include_quality_blocks: true,
+        include_dependency_blocks: true,
+        note: "ui.scheduler.runbook",
+      }),
+    onSuccess: (data) => {
+      setSchedulerRunbookResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+      void qc.invalidateQueries({ queryKey: ["taskSchedulerOps"] });
+    },
+  });
+  const schedulerInsightTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.taskSchedulerInsightTasks({
+        dry_run: dryRun,
+        assigned_to: agentName || "Scheduler Agent",
+        priority: "P1",
+        limit: 20,
+      }),
+    onSuccess: (data) => {
+      setSchedulerInsightTasksResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["taskSchedulerInsights"] });
+    },
+  });
+
+  const sprintOpsTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.sprintOpsTasks({
+        dry_run: dryRun,
+        priority: "P1",
+        assigned_to: "SprintOps Agent",
+        sprint_id: sprintId || undefined,
+        limit: 20,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+      void qc.invalidateQueries({ queryKey: ["sprint-ops-plan"] });
+      if (sprintId) void qc.invalidateQueries({ queryKey: ["sprint-progress", sprintId] });
     },
   });
 
@@ -346,14 +472,26 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
         dev_tool: packet?.dev_tool || "codex",
         lease_seconds: 900,
         auto_start: true,
-      }),
+    }),
     onSuccess: (data) => {
       setClaimResult(data);
+      if (data?.execution_plan) setAgentPlanResult(data.execution_plan);
       void qc.invalidateQueries({ queryKey: ["taskAgentFeed"] });
       void qc.invalidateQueries({ queryKey: ["taskAgentClaims"] });
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
     },
+  });
+
+  const agentPlanMut = useMutation({
+    mutationFn: (row: any) =>
+      api.taskAgentExecutionPlan({
+        claim_id: row?.claim_id,
+        task_id: row?.task_id,
+        agent: row?.agent || agentName.trim() || "HermesAgent",
+        include_context: true,
+      }),
+    onSuccess: (data) => setAgentPlanResult(data),
   });
 
   const heartbeatMut = useMutation({
@@ -381,6 +519,41 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
       }),
   });
 
+  const qualityPolicyMut = useMutation({
+    mutationFn: () =>
+      api.taskQualityPolicyUpdate({
+        mode: qualityPolicyDraft.mode,
+        required_gate_ids: qualityPolicyDraft.required.split(",").map((x) => x.trim()).filter(Boolean),
+        advisory_gate_ids: qualityPolicyDraft.advisory.split(",").map((x) => x.trim()).filter(Boolean),
+        min_confidence_to_complete: Number(qualityPolicyDraft.minConfidence || 0),
+        require_artifact_for_complete: qualityPolicyDraft.requireArtifact,
+        auto_block_on_failed_required: qualityPolicyDraft.autoBlock,
+        notes: qualityPolicyDraft.notes,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["taskQualityPolicy"] });
+      void qc.invalidateQueries({ queryKey: ["taskQualitySummary"] });
+      void qc.invalidateQueries({ queryKey: ["taskSchedulerOps"] });
+    },
+  });
+
+  const qualityTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.taskQualityTasks({
+        dry_run: dryRun,
+        decisions: ["block", "warn"],
+        assigned_to: "QA Agent",
+        priority: "P1",
+        limit: 50,
+      }),
+    onSuccess: (data) => {
+      setQualityTasksResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+      void qc.invalidateQueries({ queryKey: ["taskQualitySummary"] });
+    },
+  });
+
   const addDependency = useMutation({
     mutationFn: () =>
       api.addTaskDependency(depDraft.source, {
@@ -400,11 +573,45 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["taskDependencies"] }),
   });
 
+  const depTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.taskDependencyTasks({
+        dry_run: dryRun,
+        assigned_to: agentName || "Dependency Agent",
+        priority: "P1",
+        limit: 30,
+        include_cycles: true,
+        include_blocked: true,
+        include_bottlenecks: true,
+        include_missing_map: true,
+      }),
+    onSuccess: (data) => {
+      setDepTasksResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
+      void qc.invalidateQueries({ queryKey: ["taskDependencies"] });
+    },
+  });
+
   const sprints = sprintsQ.data ?? [];
   const activeSprint = useMemo(
     () => sprints.find((s: any) => s.status === "active") ?? sprints[0],
     [sprints],
   );
+
+  useEffect(() => {
+    const policy = qualityPolicyQ.data?.policy;
+    if (!policy) return;
+    setQualityPolicyDraft({
+      mode: policy.mode || "blocking",
+      required: (policy.required_gate_ids || []).join(","),
+      advisory: (policy.advisory_gate_ids || []).join(","),
+      minConfidence: Number(policy.min_confidence_to_complete ?? 0.65),
+      requireArtifact: Boolean(policy.require_artifact_for_complete ?? true),
+      autoBlock: Boolean(policy.auto_block_on_failed_required ?? true),
+      notes: policy.notes || "",
+    });
+  }, [qualityPolicyQ.data?.policy]);
 
   useEffect(() => {
     if (tab === "sprint" && !sprintId && activeSprint?.id) {
@@ -435,6 +642,25 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
     return g;
   }, [tasks]);
 
+  const dependencyNodes = useMemo(() => {
+    const q = depQuery.trim().toLowerCase();
+    return (depsQ.data?.nodes ?? []).filter((node: any) => {
+      const text = `${node.id} ${node.title} ${node.status} ${node.priority} ${node.assigned_to || ""}`.toLowerCase();
+      const matchQ = !q || text.includes(q);
+      const matchFilter =
+        depFilter === "all" ||
+        (depFilter === "blocked" && node.is_dependency_blocked) ||
+        (depFilter === "ready" && !node.is_dependency_blocked && node.status !== "completed") ||
+        (depFilter === "high" && node.risk_level === "high");
+      return matchQ && matchFilter;
+    });
+  }, [depFilter, depQuery, depsQ.data?.nodes]);
+
+  const dependencyEdges = useMemo(() => {
+    const visible = new Set(dependencyNodes.map((node: any) => node.id));
+    return (depsQ.data?.edges ?? []).filter((edge: any) => visible.has(edge.source_id) || visible.has(edge.target_id));
+  }, [dependencyNodes, depsQ.data?.edges]);
+
   const commitPriorityReorder = (groups: Record<(typeof PRIORITIES)[number], string[]>) => {
     reorderBoard.mutate(groups);
   };
@@ -455,7 +681,7 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
     patchTask.mutate({ id: dragId, patch: { status: targetStatus } });
   };
 
-  const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || dispatchMut.isPending || schedulerMut.isPending;
+  const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || dispatchMut.isPending || schedulerMut.isPending || schedulerActionMut.isPending || schedulerRunbookMut.isPending || schedulerInsightTasksMut.isPending || sprintOpsTasksMut.isPending || qualityPolicyMut.isPending || qualityTasksMut.isPending;
   const canBulkUpdate = selectedTaskIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAssignee.trim());
 
   if (!authed) {
@@ -548,6 +774,33 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
           <Button size="small" danger disabled={busy}>{t("page.tasks.delete")}</Button>
         </Popconfirm>
       ),
+    },
+  ];
+
+  const sprintOpsRiskColumns: ColumnsType<any> = [
+    {
+      title: t("page.tasks.sprintOpsSeverity"),
+      dataIndex: "severity",
+      width: 88,
+      render: (value) => <Tag color={value === "P0" || value === "P1" ? "red" : "orange"}>{value}</Tag>,
+    },
+    { title: t("page.tasks.sprintOpsCategory"), dataIndex: "category", width: 120 },
+    {
+      title: t("page.tasks.sprintOpsRisk"),
+      dataIndex: "title",
+      ellipsis: true,
+      render: (value, row) => (
+        <div>
+          <p className="font-medium text-[var(--text)]">{value}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{row.description}</p>
+        </div>
+      ),
+    },
+    {
+      title: t("page.tasks.sprintOpsCommand"),
+      dataIndex: "command",
+      width: 260,
+      render: (value) => <Typography.Text code copyable className="!text-xs">{value}</Typography.Text>,
     },
   ];
 
@@ -920,9 +1173,232 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                 {!schedulerResult?.stages?.length ? <p className="text-sm text-[var(--muted)]">{t("page.tasks.schedulerRunHint")}</p> : null}
               </div>
             </Card>
+
+            <Card
+              title={t("page.tasks.schedulerRuns")}
+              actions={
+                <Space wrap>
+                  <Input.Search
+                    className="w-56"
+                    allowClear
+                    value={schedulerRunQuery}
+                    onChange={(e) => setSchedulerRunQuery(e.target.value)}
+                    placeholder={t("page.tasks.schedulerRunSearch")}
+                  />
+                  <label className="inline-flex items-center gap-2 text-sm text-[var(--muted-strong)]">
+                    <input type="checkbox" checked={schedulerIncludeArchived} onChange={(e) => setSchedulerIncludeArchived(e.target.checked)} />
+                    {t("page.tasks.includeArchived")}
+                  </label>
+                </Space>
+              }
+            >
+              {schedulerActionMut.error ? <Alert className="mb-3" type="error" showIcon message={(schedulerActionMut.error as Error).message} /> : null}
+              <div className="mb-3 grid gap-3 sm:grid-cols-4">
+                <Stat label={t("page.tasks.schedulerRunTotal")} value={schedulerRunsQ.data?.summary?.runs ?? 0} />
+                <Stat label={t("page.tasks.schedulerRunApplied")} value={schedulerRunsQ.data?.summary?.applied ?? 0} />
+                <Stat label={t("page.tasks.schedulerScheduled")} value={schedulerRunsQ.data?.summary?.scheduled ?? 0} />
+                <Stat label={t("page.tasks.schedulerBlocked")} value={schedulerRunsQ.data?.summary?.blocked ?? 0} />
+              </div>
+              <Table
+                rowKey={(row: any) => String(row.schedule_id)}
+                dataSource={schedulerRunsQ.data?.items ?? []}
+                loading={schedulerRunsQ.isLoading || schedulerActionMut.isPending}
+                size="small"
+                scroll={{ x: 1120 }}
+                pagination={{ pageSize: 6, showSizeChanger: true }}
+                locale={{ emptyText: t("page.tasks.schedulerRunsEmpty") }}
+                columns={[
+                  {
+                    title: t("page.tasks.schedulerRunId"),
+                    dataIndex: "schedule_id",
+                    width: 180,
+                    render: (value: string, row: any) => (
+                      <div>
+                        <div className="font-mono text-xs text-[var(--text)]">{value}</div>
+                        {row.parent_schedule_id ? <div className="font-mono text-[10px] text-[var(--muted)]">parent {row.parent_schedule_id}</div> : null}
+                      </div>
+                    ),
+                  },
+                  { title: t("page.tasks.runStatus"), dataIndex: "status", width: 110, render: (value: string) => <Tag>{value}</Tag> },
+                  { title: t("page.tasks.schedulerPolicy"), dataIndex: "policy", width: 130 },
+                  { title: t("page.tasks.schedulerScheduled"), dataIndex: ["summary", "scheduled"], width: 100 },
+                  { title: t("page.tasks.schedulerRunApplied"), dataIndex: "applied", width: 100 },
+                  { title: t("page.tasks.runCreatedAt"), dataIndex: "created_at", width: 180 },
+                  {
+                    title: t("page.tasks.action"),
+                    key: "action",
+                    width: 300,
+                    render: (_: unknown, row: any) => (
+                      <Space size={4} wrap>
+                        <Button size="small" onClick={() => schedulerActionMut.mutate({ scheduleId: row.schedule_id, action: "rerun", dryRun: true })}>
+                          {t("page.tasks.previewRerun")}
+                        </Button>
+                        <Button size="small" type="primary" onClick={() => schedulerActionMut.mutate({ scheduleId: row.schedule_id, action: "rerun", dryRun: false })}>
+                          {t("page.tasks.applyRerun")}
+                        </Button>
+                        {row.archived ? (
+                          <Button size="small" onClick={() => schedulerActionMut.mutate({ scheduleId: row.schedule_id, action: "restore" })}>
+                            {t("page.tasks.restoreRun")}
+                          </Button>
+                        ) : (
+                          <Button size="small" onClick={() => schedulerActionMut.mutate({ scheduleId: row.schedule_id, action: "archive" })}>
+                            {t("page.tasks.archiveRun")}
+                          </Button>
+                        )}
+                        <Button size="small" danger onClick={() => schedulerActionMut.mutate({ scheduleId: row.schedule_id, action: "cancel" })}>
+                          {t("page.tasks.cancelRun")}
+                        </Button>
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+            <Card title={t("page.tasks.schedulerConsole")}>
+              <Segmented
+                block
+                value={schedulerPanel}
+                onChange={(value) => setSchedulerPanel(String(value))}
+                options={[
+                  { label: t("page.tasks.schedulerPanelOps"), value: "ops" },
+                  { label: t("page.tasks.schedulerPanelInsights"), value: "insights" },
+                  { label: t("page.tasks.schedulerPanelAgent"), value: "agent" },
+                  { label: t("page.tasks.schedulerPanelQuality"), value: "quality" },
+                  { label: t("page.tasks.schedulerPanelEvents"), value: "events" },
+                ]}
+              />
+              <p className="mt-3 text-xs text-[var(--muted)]">{t("page.tasks.schedulerConsoleHint")}</p>
+            </Card>
+            {schedulerPanel === "ops" ? (
+            <Card
+              title={t("page.tasks.schedulerOps")}
+              actions={
+                <Space wrap>
+                  <Button size="small" loading={schedulerRunbookMut.isPending} onClick={() => schedulerRunbookMut.mutate(true)}>
+                    {t("page.tasks.previewRunbook")}
+                  </Button>
+                  <Button size="small" type="primary" loading={schedulerRunbookMut.isPending} onClick={() => schedulerRunbookMut.mutate(false)}>
+                    {t("page.tasks.createRunbookTasks")}
+                  </Button>
+                </Space>
+              }
+            >
+              {schedulerOpsQ.error ? <Alert className="mb-3" type="error" showIcon message={(schedulerOpsQ.error as Error).message} /> : null}
+              {schedulerRunbookMut.error ? <Alert className="mb-3" type="error" showIcon message={(schedulerRunbookMut.error as Error).message} /> : null}
+              {schedulerRunbookResult?.summary ? (
+                <Alert
+                  className="mb-3"
+                  type={schedulerRunbookResult.dry_run ? "info" : "success"}
+                  showIcon
+                  message={t("page.tasks.runbookResult", { steps: schedulerRunbookResult.summary.steps ?? 0, created: schedulerRunbookResult.summary.created ?? 0 })}
+                />
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label={t("page.tasks.opsHealth")} value={schedulerOpsQ.data?.summary?.health_score ?? 100} />
+                <Stat label={t("page.tasks.readyUnclaimed")} value={schedulerOpsQ.data?.summary?.ready_unclaimed ?? 0} />
+                <Stat label={t("page.tasks.staleClaims")} value={schedulerOpsQ.data?.summary?.stale_claims ?? 0} />
+                <Stat label={t("page.tasks.qualityBlocks")} value={schedulerOpsQ.data?.summary?.quality_blocks ?? 0} />
+              </div>
+              <div className="mt-3 space-y-2">
+                {(schedulerOpsQ.data?.recommendations ?? []).slice(0, 4).map((item: any) => (
+                  <div key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--text)]">{item.title}</span>
+                      <Tag color={item.severity === "high" ? "red" : "blue"}>{item.severity}</Tag>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{item.summary}</p>
+                    <code className="mt-2 block truncate rounded bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--brand)]">{item.command}</code>
+                  </div>
+                ))}
+                {!(schedulerOpsQ.data?.recommendations ?? []).length ? (
+                  <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">{t("page.tasks.schedulerOpsStable")}</p>
+                ) : null}
+              </div>
+              {schedulerRunbookResult?.steps?.length ? (
+                <div className="mt-3 space-y-2">
+                  {(schedulerRunbookResult.steps ?? []).slice(0, 5).map((step: any) => (
+                    <div key={step.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                      <div className="text-xs font-semibold text-[var(--text)]">{step.title}</div>
+                      <div className="mt-1 font-mono text-[10px] text-[var(--muted)]">{step.type} · {step.task_id || "-"}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </Card>
+            ) : null}
+
+            {schedulerPanel === "insights" ? (
+            <Card
+              title={t("page.tasks.schedulerInsights")}
+              actions={
+                <Space wrap>
+                  <Button size="small" loading={schedulerInsightTasksMut.isPending} onClick={() => schedulerInsightTasksMut.mutate(true)}>
+                    {t("page.tasks.previewInsightTasks")}
+                  </Button>
+                  <Button size="small" type="primary" loading={schedulerInsightTasksMut.isPending} onClick={() => schedulerInsightTasksMut.mutate(false)}>
+                    {t("page.tasks.createInsightTasks")}
+                  </Button>
+                </Space>
+              }
+            >
+              {schedulerInsightsQ.error ? <Alert className="mb-3" type="error" showIcon message={(schedulerInsightsQ.error as Error).message} /> : null}
+              {schedulerInsightTasksMut.error ? <Alert className="mb-3" type="error" showIcon message={(schedulerInsightTasksMut.error as Error).message} /> : null}
+              {schedulerInsightTasksResult?.summary ? (
+                <Alert
+                  className="mb-3"
+                  type={schedulerInsightTasksResult.dry_run ? "info" : "success"}
+                  showIcon
+                  message={t("page.tasks.insightTaskResult", {
+                    planned: schedulerInsightTasksResult.summary.planned ?? 0,
+                    created: schedulerInsightTasksResult.summary.created ?? 0,
+                  })}
+                />
+              ) : null}
+              <div className="grid grid-cols-2 gap-2">
+                <Stat label={t("page.tasks.insightHealth")} value={schedulerInsightsQ.data?.summary?.health_score ?? 100} />
+                <Stat label={t("page.tasks.criticalPath")} value={schedulerInsightsQ.data?.critical_path?.length ?? 0} />
+                <Stat label={t("page.tasks.bottlenecks")} value={schedulerInsightsQ.data?.summary?.bottlenecks ?? 0} />
+                <Stat label={t("page.tasks.policyCount")} value={schedulerInsightsQ.data?.summary?.policies ?? 0} />
+              </div>
+              <div className="mt-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{t("page.tasks.policyComparison")}</div>
+                <Table
+                  rowKey={(row: any) => String(row.policy)}
+                  dataSource={schedulerInsightsQ.data?.policy_comparison ?? []}
+                  loading={schedulerInsightsQ.isLoading}
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 460 }}
+                  columns={[
+                    { title: t("page.tasks.schedulerPolicy"), dataIndex: "policy", width: 120, render: (value: string) => <Tag color="blue">{value}</Tag> },
+                    { title: t("page.tasks.policyScheduled"), dataIndex: "scheduled", width: 90 },
+                    { title: t("page.tasks.policyReady"), dataIndex: "ready", width: 80 },
+                    { title: t("page.tasks.policyBlocked"), dataIndex: "blocked", width: 80 },
+                    { title: t("page.tasks.policyStages"), dataIndex: "stages", width: 90 },
+                  ]}
+                />
+              </div>
+              <div className="mt-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{t("page.tasks.schedulerRecommendations")}</div>
+                {(schedulerInsightsQ.data?.recommendations ?? []).slice(0, 4).map((item: any) => (
+                  <div key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--text)]">{item.title}</span>
+                      <Tag color={item.severity === "high" ? "red" : item.severity === "medium" ? "orange" : "blue"}>{item.severity}</Tag>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{item.summary}</p>
+                    <code className="mt-2 block truncate rounded bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--brand)]">{item.command}</code>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            ) : null}
+
+            {schedulerPanel === "agent" ? (
+            <>
             <Card title={t("page.tasks.agentFeed")}>
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Input
@@ -1003,32 +1479,200 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                   {
                     title: t("page.tasks.action"),
                     key: "action",
-                    width: 90,
+                    width: 170,
                     render: (_: unknown, row: any) => (
-                      <Button size="small" onClick={() => heartbeatMut.mutate(row)}>
-                        {t("page.tasks.heartbeat")}
-                      </Button>
+                      <Space size={6}>
+                        <Button size="small" loading={agentPlanMut.isPending} onClick={() => agentPlanMut.mutate(row)}>
+                          {t("page.tasks.agentPlan")}
+                        </Button>
+                        <Button size="small" onClick={() => heartbeatMut.mutate(row)}>
+                          {t("page.tasks.heartbeat")}
+                        </Button>
+                      </Space>
                     ),
                   },
                 ]}
               />
             </Card>
 
+            <Card title={t("page.tasks.agentExecutionPlan")}>
+              {agentPlanMut.error ? <Alert className="mb-3" type="error" showIcon message={(agentPlanMut.error as Error).message} /> : null}
+              {!agentPlanResult ? (
+                <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">{t("page.tasks.agentPlanHint")}</p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Stat label={t("page.tasks.task")} value={agentPlanResult.task?.id || "-"} />
+                    <Stat label={t("page.tasks.ready")} value={agentPlanResult.dependency_state?.ready ? "ready" : "blocked"} />
+                    <Stat label={t("page.tasks.qualityGates")} value={agentPlanResult.quality_gates?.length ?? 0} />
+                    <Stat label={t("page.tasks.agent")} value={agentPlanResult.claim?.agent || agentName || "-"} />
+                  </div>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                    <div className="text-sm font-semibold text-[var(--text)]">{agentPlanResult.task?.title}</div>
+                    <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{agentPlanResult.task?.description || t("page.tasks.noDescription")}</div>
+                    {agentPlanResult.dependency_state?.blocked_by?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {agentPlanResult.dependency_state.blocked_by.map((item: string) => <Tag key={item} color="orange">{item}</Tag>)}
+                      </div>
+                    ) : null}
+                  </div>
+                  <Table
+                    rowKey={(row: any) => String(row.id)}
+                    dataSource={agentPlanResult.execution_steps ?? []}
+                    loading={agentPlanMut.isPending}
+                    size="small"
+                    pagination={false}
+                    scroll={{ x: 640 }}
+                    columns={[
+                      { title: t("page.tasks.step"), dataIndex: "id", width: 130 },
+                      { title: t("page.tasks.required"), dataIndex: "required", width: 90, render: (value: boolean) => value ? <Tag color="red">required</Tag> : <Tag>optional</Tag> },
+                      { title: t("page.tasks.title"), dataIndex: "title", width: 200 },
+                      { title: t("page.tasks.command"), dataIndex: "command", render: (value: string) => <code className="text-[10px] text-[var(--brand)]">{value}</code> },
+                    ]}
+                  />
+                  <div className="flex flex-wrap gap-1">
+                    {(agentPlanResult.quality_gates ?? []).slice(0, 10).map((gate: any) => (
+                      <Tag key={gate.id} color={gate.severity === "blocking" ? "red" : "blue"}>{gate.id}</Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <Card title={t("page.tasks.agentReports")}>
+              {agentReportsQ.error ? <Alert className="mb-3" type="error" showIcon message={(agentReportsQ.error as Error).message} /> : null}
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                <Stat label={t("page.tasks.reportCount")} value={agentReportsQ.data?.summary?.reports ?? 0} />
+                <Stat label={t("page.tasks.reportArtifacts")} value={agentReportsQ.data?.summary?.artifacts ?? 0} />
+                <Stat label={t("page.tasks.reportFailedGates")} value={agentReportsQ.data?.summary?.failed_gates ?? 0} />
+                <Stat label={t("page.tasks.reportHeartbeats")} value={agentReportsQ.data?.summary?.heartbeats ?? 0} />
+              </div>
+              <Table
+                rowKey={(row: any) => String(row.id || `${row.task_id}-${row.created_at}`)}
+                dataSource={agentReportsQ.data?.items ?? []}
+                loading={agentReportsQ.isLoading}
+                size="small"
+                pagination={false}
+                scroll={{ x: 720 }}
+                columns={[
+                  {
+                    title: t("page.tasks.task"),
+                    dataIndex: "task_id",
+                    width: 130,
+                    render: (value: string, row: any) => (
+                      <div>
+                        <div className="font-mono text-xs text-[var(--text)]">{value || "-"}</div>
+                        <div className="text-[10px] text-[var(--muted)]">{row.created_at?.slice?.(0, 19) || ""}</div>
+                      </div>
+                    ),
+                  },
+                  { title: t("page.tasks.agent"), dataIndex: "agent", width: 110 },
+                  { title: t("page.tasks.runStatus"), dataIndex: "status", width: 100, render: (value: string) => <Tag>{value}</Tag> },
+                  { title: t("page.tasks.qualityDecisionShort"), dataIndex: "quality_decision", width: 100, render: (value: string) => <Tag color={value === "block" ? "red" : value === "warn" ? "gold" : "green"}>{value || "-"}</Tag> },
+                  { title: t("page.tasks.qualityAvgScore"), dataIndex: "quality_score", width: 90 },
+                  {
+                    title: t("page.tasks.summary"),
+                    dataIndex: "summary",
+                    render: (value: string, row: any) => (
+                      <div className="line-clamp-2 text-xs text-[var(--muted-strong)]">
+                        {value || row.status_message || (row.quality_blockers || []).join(", ") || "-"}
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            </Card>
+            </>
+            ) : null}
+
+            {schedulerPanel === "quality" ? (
             <Card title={t("page.tasks.qualityCenter")}>
               {qualityPolicyQ.error ? <Alert className="mb-3" type="error" showIcon message={(qualityPolicyQ.error as Error).message} /> : null}
-              <div className="grid grid-cols-3 gap-2">
+              {qualitySummaryQ.error ? <Alert className="mb-3" type="error" showIcon message={(qualitySummaryQ.error as Error).message} /> : null}
+              <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
                 <Stat label={t("page.tasks.qualityMode")} value={qualityPolicyQ.data?.policy?.mode || "-"} />
                 <Stat label={t("page.tasks.qualityRequired")} value={qualityPolicyQ.data?.summary?.required ?? 0} />
                 <Stat label={t("page.tasks.qualityAdvisory")} value={qualityPolicyQ.data?.summary?.advisory ?? 0} />
+                <Stat label={t("page.tasks.qualityEvaluations")} value={qualitySummaryQ.data?.summary?.evaluations ?? 0} />
+                <Stat label={t("page.tasks.qualityAvgScore")} value={qualitySummaryQ.data?.summary?.avg_score ?? 100} />
+                <Stat label={t("page.tasks.qualityBlocks")} value={qualitySummaryQ.data?.summary?.block ?? 0} />
               </div>
               <div className="mt-3 flex flex-wrap gap-1">
                 {(qualityPolicyQ.data?.default_gates ?? []).slice(0, 8).map((gate: any) => (
                   <Tag key={gate.id} color={gate.severity === "blocking" ? "red" : "blue"}>{gate.id}</Tag>
                 ))}
               </div>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{t("page.tasks.qualityPolicyEdit")}</div>
+                <div className="grid gap-2">
+                  <Select
+                    size="small"
+                    value={qualityPolicyDraft.mode}
+                    options={["blocking", "advisory", "strict"].map((value) => ({ value, label: value }))}
+                    onChange={(value) => setQualityPolicyDraft((v) => ({ ...v, mode: value }))}
+                  />
+                  <Input
+                    size="small"
+                    value={qualityPolicyDraft.required}
+                    placeholder={t("page.tasks.qualityRequiredIds")}
+                    onChange={(e) => setQualityPolicyDraft((v) => ({ ...v, required: e.target.value }))}
+                  />
+                  <Input
+                    size="small"
+                    value={qualityPolicyDraft.advisory}
+                    placeholder={t("page.tasks.qualityAdvisoryIds")}
+                    onChange={(e) => setQualityPolicyDraft((v) => ({ ...v, advisory: e.target.value }))}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <InputNumber
+                      size="small"
+                      className="w-full"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={qualityPolicyDraft.minConfidence}
+                      addonBefore={t("page.tasks.qualityMinConfidence")}
+                      onChange={(value) => setQualityPolicyDraft((v) => ({ ...v, minConfidence: Number(value ?? 0) }))}
+                    />
+                    <Select
+                      size="small"
+                      value={qualityPolicyDraft.requireArtifact ? "true" : "false"}
+                      options={[
+                        { value: "true", label: t("page.tasks.qualityRequireArtifact") },
+                        { value: "false", label: t("common.no") },
+                      ]}
+                      onChange={(value) => setQualityPolicyDraft((v) => ({ ...v, requireArtifact: value === "true" }))}
+                    />
+                  </div>
+                  <Select
+                    size="small"
+                    value={qualityPolicyDraft.autoBlock ? "true" : "false"}
+                    options={[
+                      { value: "true", label: t("page.tasks.qualityAutoBlock") },
+                      { value: "false", label: t("common.no") },
+                    ]}
+                    onChange={(value) => setQualityPolicyDraft((v) => ({ ...v, autoBlock: value === "true" }))}
+                  />
+                  <Input.TextArea
+                    rows={2}
+                    value={qualityPolicyDraft.notes}
+                    placeholder={t("page.tasks.qualityNotes")}
+                    onChange={(e) => setQualityPolicyDraft((v) => ({ ...v, notes: e.target.value }))}
+                  />
+                  <Button size="small" type="primary" loading={qualityPolicyMut.isPending} onClick={() => qualityPolicyMut.mutate()}>
+                    {t("page.tasks.qualitySavePolicy")}
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button size="small" loading={qualityEvaluateMut.isPending} disabled={!selectedTaskIds[0]} onClick={() => qualityEvaluateMut.mutate()}>
                   {t("page.tasks.qualityEvaluateSelected")}
+                </Button>
+                <Button size="small" loading={qualityTasksMut.isPending} onClick={() => qualityTasksMut.mutate(true)}>
+                  {t("page.tasks.qualityPreviewTasks")}
+                </Button>
+                <Button size="small" type="primary" loading={qualityTasksMut.isPending} onClick={() => qualityTasksMut.mutate(false)}>
+                  {t("page.tasks.qualityCreateTasks")}
                 </Button>
                 <span className="text-xs text-[var(--muted)]">{selectedTaskIds[0] || t("page.tasks.qualitySelectHint")}</span>
               </div>
@@ -1040,8 +1684,40 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                   message={t("page.tasks.qualityDecision", { decision: qualityEvaluateMut.data.quality.decision, score: qualityEvaluateMut.data.quality.score })}
                 />
               ) : null}
+              {qualityPolicyMut.data ? <Alert className="mt-3" type="success" showIcon message={t("page.tasks.qualityPolicySaved")} /> : null}
+              {qualityTasksResult ? (
+                <Alert
+                  className="mt-3"
+                  type={qualityTasksResult.dry_run ? "info" : "success"}
+                  showIcon
+                  message={t("page.tasks.qualityTasksResult", {
+                    planned: qualityTasksResult.summary?.planned ?? 0,
+                    created: qualityTasksResult.summary?.created ?? 0,
+                  })}
+                />
+              ) : null}
+              <div className="mt-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{t("page.tasks.qualityRecent")}</div>
+                {(qualitySummaryQ.data?.recent ?? []).slice(0, 4).map((row: any) => (
+                  <div key={row.id || `${row.task_id}-${row.created_at}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs text-[var(--text)]">{row.task_id || row.id}</span>
+                      <Tag color={row.decision === "block" ? "red" : row.decision === "warn" ? "gold" : "green"}>{row.decision}</Tag>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--muted-strong)]">
+                      score={row.score ?? "-"} {(row.blockers || []).join(", ")}
+                    </div>
+                  </div>
+                ))}
+                {qualitySummaryQ.data && !(qualitySummaryQ.data?.recent ?? []).length ? (
+                  <div className="text-xs text-[var(--muted)]">{t("page.tasks.qualityNoRecent")}</div>
+                ) : null}
+              </div>
             </Card>
+            ) : null}
 
+            {schedulerPanel === "events" ? (
+            <>
             <Card title={t("page.tasks.eventWakeups")}>
               <div className="space-y-2">
                 {(schedulerResult?.event_wakeups ?? agentFeedQ.data?.event_wakeups ?? []).map((event: any) => (
@@ -1061,6 +1737,8 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                 <p>{t("page.tasks.agentContractCallbacks")}</p>
               </div>
             </Card>
+            </>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1164,6 +1842,57 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
 
       {tab === "sprint" ? (
         <div className="space-y-4">
+          <Card
+            title={t("page.tasks.sprintOpsPlan")}
+            actions={
+              <Space wrap>
+                <Button loading={sprintOpsTasksMut.isPending} onClick={() => sprintOpsTasksMut.mutate(true)}>
+                  {t("page.tasks.sprintOpsPreview")}
+                </Button>
+                <Button type="primary" loading={sprintOpsTasksMut.isPending} onClick={() => sprintOpsTasksMut.mutate(false)}>
+                  {t("page.tasks.sprintOpsCreate")}
+                </Button>
+              </Space>
+            }
+          >
+            <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--panel-muted)] p-4">
+                <Statistic
+                  title={t("page.tasks.sprintOpsHealth")}
+                  value={sprintOpsQ.data?.health?.score ?? 0}
+                  suffix="/ 100"
+                  valueStyle={{ color: sprintOpsQ.data?.health?.grade === "risk" ? "#dc2626" : "var(--brand)" }}
+                />
+                <Tag className="mt-3" color={sprintOpsQ.data?.health?.grade === "healthy" ? "green" : sprintOpsQ.data?.health?.grade === "watch" ? "gold" : "red"}>
+                  {sprintOpsQ.data?.health?.grade ?? "-"}
+                </Tag>
+                <div className="mt-4 space-y-1 text-xs text-[var(--muted)]">
+                  <div>{t("page.tasks.sprintOpsActive")}: {sprintOpsQ.data?.sprint?.id ?? "-"}</div>
+                  <div>{t("page.tasks.sprintOpsDaysLeft")}: {sprintOpsQ.data?.summary?.days_left ?? "-"}</div>
+                  <div>{t("page.tasks.sprintOpsCriticalIssues")}: {sprintOpsQ.data?.summary?.critical_issues ?? 0}</div>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <Alert
+                  className="mb-3"
+                  showIcon
+                  type={sprintOpsQ.data?.health?.grade === "risk" ? "warning" : "info"}
+                  message={t("page.tasks.sprintOpsHint")}
+                  description={<Typography.Text code copyable>sop sprint ops-plan --json</Typography.Text>}
+                />
+                <Table
+                  rowKey="id"
+                  size="small"
+                  loading={sprintOpsQ.isLoading}
+                  columns={sprintOpsRiskColumns}
+                  dataSource={sprintOpsQ.data?.risks ?? []}
+                  pagination={false}
+                  scroll={{ x: 780 }}
+                  locale={{ emptyText: t("page.tasks.sprintOpsNoRisks") }}
+                />
+              </div>
+            </div>
+          </Card>
           <Card title={t("page.tasks.sprintList")}>
             <div className="mb-3 flex flex-wrap gap-2">
               <select
@@ -1216,23 +1945,119 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
       {tab === "deps" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem] 2xl:grid-cols-[minmax(0,1fr)_30rem]">
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
               <Stat label={t("page.tasks.depNodes")} value={depsQ.data?.summary?.nodes ?? 0} />
               <Stat label={t("page.tasks.depEdges")} value={depsQ.data?.summary?.edges ?? 0} />
               <Stat label={t("page.tasks.depBlocked")} value={depsQ.data?.summary?.blocked ?? 0} />
               <Stat label={t("page.tasks.depBlocks")} value={depsQ.data?.summary?.by_type?.blocks ?? 0} />
+              <Stat label={t("page.tasks.depReady")} value={depsQ.data?.summary?.ready ?? 0} />
+              <Stat label={t("page.tasks.depCycles")} value={depsQ.data?.summary?.cycles ?? 0} />
             </div>
+            <Card
+              title={t("page.tasks.depWorkbench")}
+              actions={
+                <Space wrap>
+                  <Button size="small" loading={depTasksMut.isPending} onClick={() => depTasksMut.mutate(true)}>
+                    {t("page.tasks.depPreviewTasks")}
+                  </Button>
+                  <Button size="small" type="primary" loading={depTasksMut.isPending} onClick={() => depTasksMut.mutate(false)}>
+                    {t("page.tasks.depCreateTasks")}
+                  </Button>
+                </Space>
+              }
+            >
+              {depTasksMut.error ? <Alert className="mb-3" type="error" showIcon message={(depTasksMut.error as Error).message} /> : null}
+              {depTasksResult?.summary ? (
+                <Alert
+                  className="mb-3"
+                  type={depTasksResult.dry_run ? "info" : "success"}
+                  showIcon
+                  message={t("page.tasks.depTasksResult", {
+                    planned: depTasksResult.summary.planned ?? 0,
+                    created: depTasksResult.summary.created ?? 0,
+                  })}
+                />
+              ) : null}
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_24rem]">
+                <Input.Search
+                  allowClear
+                  value={depQuery}
+                  onChange={(e) => setDepQuery(e.target.value)}
+                  placeholder={t("page.tasks.depSearch")}
+                />
+                <Segmented
+                  block
+                  value={depFilter}
+                  onChange={(value) => setDepFilter(String(value))}
+                  options={[
+                    { label: t("page.tasks.depFilterAll"), value: "all" },
+                    { label: t("page.tasks.depFilterBlocked"), value: "blocked" },
+                    { label: t("page.tasks.depFilterReady"), value: "ready" },
+                    { label: t("page.tasks.depFilterHigh"), value: "high" },
+                  ]}
+                />
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                {(depsQ.data?.recommendations ?? []).slice(0, 3).map((item: any) => (
+                  <div key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-sm font-semibold text-[var(--text)]">{item.title}</span>
+                      <Tag color={item.severity === "high" ? "red" : item.severity === "medium" ? "orange" : "blue"}>{item.severity}</Tag>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{item.summary}</p>
+                    <code className="mt-2 block truncate rounded bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--brand)]">{item.command}</code>
+                  </div>
+                ))}
+                {depsQ.isSuccess && !(depsQ.data?.recommendations ?? []).length ? (
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+                    {t("page.tasks.depNoRecommendations")}
+                  </div>
+                ) : null}
+              </div>
+              {depTasksResult?.items?.length ? (
+                <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{t("page.tasks.depTaskPreview")}</div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {(depTasksResult.items ?? []).slice(0, 6).map((item: any) => (
+                      <div key={`${item.source_report_id}-${item.title}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="line-clamp-1 text-xs font-semibold text-[var(--text)]">{item.title}</span>
+                          <Tag color={item.priority === "P0" ? "red" : "blue"}>{item.priority}</Tag>
+                        </div>
+                        <div className="mt-1 font-mono text-[10px] text-[var(--muted)]">{item.source_report_id}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </Card>
             <Card title={t("page.tasks.depGraph")}>
               {depsQ.isError ? <p className="text-sm text-rose-600">{(depsQ.error as Error).message}</p> : null}
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {(depsQ.data?.nodes ?? []).map((node: any) => (
-                  <div key={node.id} className={`rounded-lg border p-3 ${node.is_dependency_blocked ? "border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30" : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"}`}>
+                {dependencyNodes.map((node: any) => (
+                  <button
+                    key={node.id}
+                    type="button"
+                    onClick={() => setDepSelectedNode(node)}
+                    className={`rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+                      depSelectedNode?.id === node.id
+                        ? "border-sky-400 bg-sky-50 ring-2 ring-sky-100 dark:border-sky-500 dark:bg-sky-950/30 dark:ring-sky-900"
+                        : node.risk_level === "high"
+                          ? "border-rose-300 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30"
+                          : node.is_dependency_blocked
+                            ? "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
+                            : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{node.title}</p>
                         <p className="mt-0.5 font-mono text-[10px] text-slate-400">{node.id}</p>
                       </div>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] ${statusColor[node.status] || ""}`}>{node.status}</span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${statusColor[node.status] || ""}`}>{node.status}</span>
+                        <Tag color={node.risk_level === "high" ? "red" : node.risk_level === "medium" ? "orange" : "green"}>{node.risk_level}</Tag>
+                      </div>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-500">
                       <span>{t("page.tasks.depIn")}: {node.incoming}</span>
@@ -1240,18 +2065,22 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                       <span>{node.priority}</span>
                     </div>
                     {node.blocked_by?.length ? <p className="mt-2 truncate text-xs text-rose-700 dark:text-rose-200">{t("page.tasks.depBlockedBy")}: {node.blocked_by.join(", ")}</p> : null}
-                  </div>
+                  </button>
                 ))}
+                {depsQ.isSuccess && !dependencyNodes.length ? <p className="text-sm text-slate-500">{t("page.tasks.depEmpty")}</p> : null}
               </div>
             </Card>
             <Card title={t("page.tasks.depEdges")}>
               <ul className="space-y-2 text-sm">
-                {(depsQ.data?.edges ?? []).map((edge: any) => (
+                {dependencyEdges.map((edge: any) => (
                   <li key={`${edge.source_id}-${edge.target_id}-${edge.type}`} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-mono text-xs text-slate-700 dark:text-slate-200">{edge.source_id} → {edge.target_id}</span>
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">{edge.type}</span>
                     </div>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                      {(edge.source_title || edge.source_id)} → {(edge.target_title || edge.target_id)}
+                    </p>
                     {edge.note ? <p className="mt-1 text-xs text-slate-500">{edge.note}</p> : null}
                     <button
                       type="button"
@@ -1263,53 +2092,116 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
                     </button>
                   </li>
                 ))}
-                {depsQ.isSuccess && !depsQ.data?.edges?.length ? <li className="text-sm text-slate-500">{t("page.tasks.depEmpty")}</li> : null}
+                {depsQ.isSuccess && !dependencyEdges.length ? <li className="text-sm text-slate-500">{t("page.tasks.depEmpty")}</li> : null}
               </ul>
             </Card>
           </div>
-          <Card title={t("page.tasks.depCreate")}>
-            <form
-              className="space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!depDraft.source || !depDraft.target) return;
-                addDependency.mutate();
-              }}
-            >
-              <label className="block text-xs text-slate-500">
-                {t("page.tasks.depSource")}
-                <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.source} onChange={(e) => setDepDraft((v) => ({ ...v, source: e.target.value }))}>
-                  <option value="">—</option>
-                  {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
-                </select>
-              </label>
-              <label className="block text-xs text-slate-500">
-                {t("page.tasks.depTarget")}
-                <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.target} onChange={(e) => setDepDraft((v) => ({ ...v, target: e.target.value }))}>
-                  <option value="">—</option>
-                  {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
-                </select>
-              </label>
-              <label className="block text-xs text-slate-500">
-                {t("page.tasks.depType")}
-                <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.type} onChange={(e) => setDepDraft((v) => ({ ...v, type: e.target.value }))}>
-                  <option value="blocks">blocks</option>
-                  <option value="relates">relates</option>
-                  <option value="duplicates">duplicates</option>
-                </select>
-              </label>
-              <textarea className="min-h-24 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.note} onChange={(e) => setDepDraft((v) => ({ ...v, note: e.target.value }))} placeholder={t("page.tasks.depNote")} />
-              <button
-                type="submit"
-                disabled={addDependency.isPending || !depDraft.source || !depDraft.target}
-                className="w-full rounded-lg bg-sky-600 px-4 py-1.5 text-sm text-white disabled:opacity-50"
+          <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+            <Card title={t("page.tasks.depNodeDetail")}>
+              {depSelectedNode ? (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className="text-sm font-semibold text-[var(--text)]">{depSelectedNode.title}</div>
+                    <div className="mt-1 font-mono text-[10px] text-[var(--muted)]">{depSelectedNode.id}</div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <Tag>{depSelectedNode.priority}</Tag>
+                      <Tag>{depSelectedNode.status}</Tag>
+                      <Tag color={depSelectedNode.risk_level === "high" ? "red" : depSelectedNode.risk_level === "medium" ? "orange" : "green"}>{depSelectedNode.risk_level}</Tag>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Stat label={t("page.tasks.depIn")} value={depSelectedNode.incoming ?? 0} />
+                    <Stat label={t("page.tasks.depOut")} value={depSelectedNode.outgoing ?? 0} />
+                    <Stat label={t("page.tasks.depBlocked")} value={depSelectedNode.blocked_by?.length ?? 0} />
+                  </div>
+                  {depSelectedNode.blocked_by?.length ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                      {t("page.tasks.depBlockedBy")}: {depSelectedNode.blocked_by.join(", ")}
+                    </div>
+                  ) : null}
+                  <Space wrap>
+                    <Button size="small" onClick={() => setDepDraft((v) => ({ ...v, source: depSelectedNode.id }))}>
+                      {t("page.tasks.depUseAsSource")}
+                    </Button>
+                    <Button size="small" onClick={() => setDepDraft((v) => ({ ...v, target: depSelectedNode.id }))}>
+                      {t("page.tasks.depUseAsTarget")}
+                    </Button>
+                  </Space>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">{t("page.tasks.depNoSelection")}</p>
+              )}
+            </Card>
+            <Card title={t("page.tasks.depReadyQueue")}>
+              <div className="space-y-2">
+                {(depsQ.data?.ready_queue ?? []).slice(0, 8).map((task: any) => (
+                  <div key={task.id} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/20">
+                    <div className="line-clamp-1 text-xs font-semibold text-[var(--text)]">{task.title}</div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="font-mono text-[10px] text-[var(--muted)]">{task.id}</span>
+                      <Tag color="green">{task.priority}</Tag>
+                    </div>
+                  </div>
+                ))}
+                {depsQ.isSuccess && !(depsQ.data?.ready_queue ?? []).length ? <p className="text-sm text-[var(--muted)]">{t("page.tasks.schedulerEmpty")}</p> : null}
+              </div>
+            </Card>
+            <Card title={t("page.tasks.depBlockedQueue")}>
+              <div className="space-y-2">
+                {(depsQ.data?.blocked_queue ?? []).slice(0, 8).map((task: any) => (
+                  <div key={task.id} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 dark:border-rose-900 dark:bg-rose-950/20">
+                    <div className="line-clamp-1 text-xs font-semibold text-[var(--text)]">{task.title}</div>
+                    <div className="mt-1 font-mono text-[10px] text-[var(--muted)]">{task.id}</div>
+                    <div className="mt-1 line-clamp-1 text-[10px] text-rose-700 dark:text-rose-200">{(task.blocked_by ?? []).join(", ")}</div>
+                  </div>
+                ))}
+                {depsQ.isSuccess && !(depsQ.data?.blocked_queue ?? []).length ? <p className="text-sm text-[var(--muted)]">{t("page.tasks.depNoBlockedQueue")}</p> : null}
+              </div>
+            </Card>
+            <Card title={t("page.tasks.depCreate")}>
+              <form
+                className="space-y-3"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!depDraft.source || !depDraft.target) return;
+                  addDependency.mutate();
+                }}
               >
-                {t("page.tasks.depSave")}
-              </button>
-              {addDependency.error ? <p className="text-sm text-rose-600">{(addDependency.error as Error).message}</p> : null}
-              {deleteDependency.error ? <p className="text-sm text-rose-600">{(deleteDependency.error as Error).message}</p> : null}
-            </form>
-          </Card>
+                <label className="block text-xs text-slate-500">
+                  {t("page.tasks.depSource")}
+                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.source} onChange={(e) => setDepDraft((v) => ({ ...v, source: e.target.value }))}>
+                    <option value="">—</option>
+                    {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs text-slate-500">
+                  {t("page.tasks.depTarget")}
+                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.target} onChange={(e) => setDepDraft((v) => ({ ...v, target: e.target.value }))}>
+                    <option value="">—</option>
+                    {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
+                  </select>
+                </label>
+                <label className="block text-xs text-slate-500">
+                  {t("page.tasks.depType")}
+                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.type} onChange={(e) => setDepDraft((v) => ({ ...v, type: e.target.value }))}>
+                    <option value="blocks">blocks</option>
+                    <option value="relates">relates</option>
+                    <option value="duplicates">duplicates</option>
+                  </select>
+                </label>
+                <textarea className="min-h-24 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.note} onChange={(e) => setDepDraft((v) => ({ ...v, note: e.target.value }))} placeholder={t("page.tasks.depNote")} />
+                <button
+                  type="submit"
+                  disabled={addDependency.isPending || !depDraft.source || !depDraft.target}
+                  className="w-full rounded-lg bg-sky-600 px-4 py-1.5 text-sm text-white disabled:opacity-50"
+                >
+                  {t("page.tasks.depSave")}
+                </button>
+                {addDependency.error ? <p className="text-sm text-rose-600">{(addDependency.error as Error).message}</p> : null}
+                {deleteDependency.error ? <p className="text-sm text-rose-600">{(deleteDependency.error as Error).message}</p> : null}
+              </form>
+            </Card>
+          </div>
         </div>
       ) : null}
     </div>

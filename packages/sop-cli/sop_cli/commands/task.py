@@ -275,6 +275,322 @@ def schedule_tasks(
     _render_packets(list(out.get("agent_packets") or []), "hermes scheduler packets")
 
 
+@app.command(name="schedule-runs")
+def schedule_runs(
+    schedule_id: str = typer.Option("", "--id", help="查看指定调度详情"),
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+    q: str = typer.Option("", "--q", help="按调度 ID、事件、任务 ID 检索"),
+    include_archived: bool = typer.Option(False, "--include-archived", help="包含已归档调度"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看任务 DAG 调度运行历史和详情。"""
+    try:
+        out = get_client().task_scheduler_run_detail(schedule_id) if schedule_id else get_client().task_scheduler_runs(limit=limit, q=q, include_archived=include_archived)
+    except Exception as e:
+        warn(f"Manager scheduler runs 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    if schedule_id:
+        item = out.get("item") or {}
+        summary = item.get("summary") or {}
+        kv("schedule_id", item.get("schedule_id", schedule_id))
+        kv("status", item.get("status", ""))
+        kv("policy", item.get("policy", ""))
+        kv("scheduled", summary.get("scheduled", 0))
+        kv("applied", item.get("applied", 0))
+        _render_packets(list(item.get("agent_packets") or []), "scheduler run packets")
+        return
+    summary = out.get("summary") or {}
+    kv("runs", summary.get("runs", out.get("total", 0)))
+    kv("scheduled", summary.get("scheduled", 0))
+    kv("applied", summary.get("applied", 0))
+    tbl = Table(title=f"scheduler runs total={out.get('total', 0)}", show_header=True, header_style="bold")
+    for col in ("schedule_id", "status", "policy", "scheduled", "applied", "created_at"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        s = item.get("summary") or {}
+        tbl.add_row(
+            str(item.get("schedule_id", "")),
+            str(item.get("status", "")),
+            str(item.get("policy", "")),
+            str(s.get("scheduled", 0)),
+            str(item.get("applied", 0)),
+            str(item.get("created_at", "")),
+        )
+    console.print(tbl)
+
+
+@app.command(name="schedule-action")
+def schedule_action(
+    schedule_id: str = typer.Option(..., "--id", help="调度 ID"),
+    action: str = typer.Option(..., "--action", help="rerun|cancel|archive|restore"),
+    apply: bool = typer.Option(False, "--apply", help="实际执行；默认 dry-run"),
+    policy: str = typer.Option("quality_first", "--policy", help="quality_first|balanced|throughput|cost_saver"),
+    max_parallel: int = typer.Option(6, "--max-parallel", min=1, max=50),
+    include_blocked: bool = typer.Option(False, "--include-blocked", help="重放时包含阻塞任务"),
+    note: str = typer.Option("", "--note", help="治理说明"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """治理任务 DAG 调度历史：重放、取消、归档或恢复。"""
+    body = {
+        "action": action,
+        "dry_run": not apply,
+        "policy": policy,
+        "max_parallel": max_parallel,
+        "include_blocked": include_blocked,
+        "note": note,
+    }
+    try:
+        out = get_client().task_scheduler_run_action(schedule_id, body)
+    except Exception as e:
+        warn(f"Manager scheduler action 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    if action == "rerun":
+        plan = out.get("plan") or {}
+        summary = plan.get("summary") or {}
+        kv("schedule_id", plan.get("schedule_id", ""))
+        kv("parent_schedule_id", plan.get("parent_schedule_id", schedule_id))
+        kv("scheduled", summary.get("scheduled", 0))
+        kv("applied", out.get("applied", 0))
+        if not apply:
+            warn("dry-run only; add --apply to create rerun schedule")
+        _render_packets(list(plan.get("agent_packets") or []), "rerun packets")
+        return
+    ok(f"schedule {schedule_id} {action}")
+
+
+@app.command(name="schedule-ops")
+def schedule_ops(json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    """查看任务调度运营健康、未领取任务包、过期租约和质量阻断。"""
+    try:
+        out = get_client().task_scheduler_ops_summary()
+    except Exception as e:
+        warn(f"Manager scheduler ops 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("health_score", summary.get("health_score", 0))
+    kv("ready_unclaimed", summary.get("ready_unclaimed", 0))
+    kv("stale_claims", summary.get("stale_claims", 0))
+    kv("quality_blocks", summary.get("quality_blocks", 0))
+    kv("dependency_blocked", summary.get("dependency_blocked", 0))
+    tbl = Table(title="scheduler recommendations", show_header=True, header_style="bold")
+    for col in ("id", "severity", "title", "command"):
+        tbl.add_column(col)
+    for item in out.get("recommendations") or []:
+        tbl.add_row(str(item.get("id", "")), str(item.get("severity", "")), str(item.get("title", "")), str(item.get("command", "")))
+    console.print(tbl)
+
+
+@app.command(name="schedule-runbook")
+def schedule_runbook(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    include_unclaimed: bool = typer.Option(True, "--include-unclaimed/--no-include-unclaimed", help="纳入未领取 ready packet"),
+    include_stale_claims: bool = typer.Option(True, "--include-stale-claims/--no-include-stale-claims", help="纳入心跳过期租约"),
+    include_quality_blocks: bool = typer.Option(True, "--include-quality-blocks/--no-include-quality-blocks", help="纳入质量阻断"),
+    include_dependency_blocks: bool = typer.Option(True, "--include-dependency-blocks/--no-include-dependency-blocks", help="纳入依赖阻塞"),
+    stale_minutes: int = typer.Option(30, "--stale-minutes", min=5, max=1440),
+    assigned_to: str = typer.Option("Ops", "--assigned-to", help="治理任务负责人"),
+    priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
+    limit: int = typer.Option(50, "--limit", min=1, max=200),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """生成任务调度自动化 Runbook，可预览或落为治理任务。"""
+    body = {
+        "dry_run": not apply,
+        "include_unclaimed": include_unclaimed,
+        "include_stale_claims": include_stale_claims,
+        "include_quality_blocks": include_quality_blocks,
+        "include_dependency_blocks": include_dependency_blocks,
+        "stale_minutes": stale_minutes,
+        "assigned_to": assigned_to,
+        "priority": priority,
+        "limit": limit,
+        "note": "cli.task.schedule-runbook",
+    }
+    try:
+        out = get_client().task_scheduler_runbook(body)
+    except Exception as e:
+        warn(f"Manager scheduler runbook 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("health_score", summary.get("health_score", 0))
+    kv("steps", summary.get("steps", 0))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    tbl = Table(title="scheduler runbook", show_header=True, header_style="bold")
+    for col in ("id", "type", "severity", "task_id", "title"):
+        tbl.add_column(col)
+    for step in out.get("steps") or []:
+        tbl.add_row(str(step.get("id", "")), str(step.get("type", "")), str(step.get("severity", "")), str(step.get("task_id", "")), str(step.get("title", ""))[:80])
+    console.print(tbl)
+    if not apply:
+        warn("dry-run only; add --apply to create governance tasks")
+
+
+@app.command(name="schedule-insights")
+def schedule_insights(
+    ids: str = typer.Option("", "--ids", help="逗号分隔任务 ID；为空则分析整个任务池"),
+    max_items: int = typer.Option(80, "--max-items", min=1, max=300),
+    max_parallel: int = typer.Option(6, "--max-parallel", min=1, max=50),
+    include_blocked: bool = typer.Option(False, "--include-blocked", help="策略对比时包含阻塞任务"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """分析任务依赖调度关键路径、策略对比和瓶颈。"""
+    body = {
+        "ids": _csv_ids(ids),
+        "max_items": max_items,
+        "max_parallel": max_parallel,
+        "include_blocked": include_blocked,
+    }
+    try:
+        out = get_client().task_scheduler_insights(body)
+    except Exception as e:
+        warn(f"Manager scheduler insights 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("health_score", summary.get("health_score", 0))
+    kv("ready", summary.get("ready", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("cycles", summary.get("cycles", 0))
+    tbl = Table(title="scheduler policy comparison", show_header=True, header_style="bold")
+    for col in ("policy", "scheduled", "ready", "blocked", "stages", "quality_gates"):
+        tbl.add_column(col)
+    for row in out.get("policy_comparison") or []:
+        tbl.add_row(
+            str(row.get("policy", "")),
+            str(row.get("scheduled", 0)),
+            str(row.get("ready", 0)),
+            str(row.get("blocked", 0)),
+            str(row.get("stages", 0)),
+            str(row.get("quality_gates", 0)),
+        )
+    console.print(tbl)
+
+
+@app.command(name="schedule-insight-tasks")
+def schedule_insight_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    assigned_to: str = typer.Option("Scheduler Agent", "--assigned-to", help="治理任务负责人"),
+    priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将调度洞察建议预览或生成治理任务。"""
+    body = {"dry_run": not apply, "assigned_to": assigned_to, "priority": priority, "limit": limit}
+    try:
+        out = get_client().task_scheduler_insight_tasks(body)
+    except Exception as e:
+        warn(f"Manager scheduler insight tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("health_score", summary.get("health_score", 0))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    if not apply:
+        warn("dry-run only; add --apply to create governance tasks")
+
+
+@app.command(name="deps")
+def dependency_graph(json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    """查看任务依赖图、就绪队列、阻塞队列和治理建议。"""
+    try:
+        out = get_client().task_dependencies()
+    except Exception as e:
+        warn(f"Manager task dependencies 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("nodes", summary.get("nodes", 0))
+    kv("edges", summary.get("edges", 0))
+    kv("ready", summary.get("ready", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("cycles", summary.get("cycles", 0))
+    tbl = Table(title="task dependency nodes", show_header=True, header_style="bold")
+    for col in ("id", "priority", "status", "in", "out", "risk", "title"):
+        tbl.add_column(col)
+    for node in out.get("nodes") or []:
+        tbl.add_row(
+            str(node.get("id", "")),
+            str(node.get("priority", "")),
+            str(node.get("status", "")),
+            str(node.get("incoming", 0)),
+            str(node.get("outgoing", 0)),
+            str(node.get("risk_level", "")),
+            str(node.get("title", ""))[:72],
+        )
+    console.print(tbl)
+
+
+@app.command(name="dep-tasks")
+def dependency_governance_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    assigned_to: str = typer.Option("Dependency Agent", "--assigned-to", help="治理任务负责人"),
+    priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
+    limit: int = typer.Option(30, "--limit", min=1, max=100),
+    include_cycles: bool = typer.Option(True, "--include-cycles/--no-include-cycles", help="纳入依赖环路"),
+    include_blocked: bool = typer.Option(True, "--include-blocked/--no-include-blocked", help="纳入高优先级阻塞"),
+    include_bottlenecks: bool = typer.Option(True, "--include-bottlenecks/--no-include-bottlenecks", help="纳入关键上游瓶颈"),
+    include_missing_map: bool = typer.Option(True, "--include-missing-map/--no-include-missing-map", help="纳入缺依赖地图"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将任务依赖图风险预览或生成治理任务。"""
+    body = {
+        "dry_run": not apply,
+        "assigned_to": assigned_to,
+        "priority": priority,
+        "limit": limit,
+        "include_cycles": include_cycles,
+        "include_blocked": include_blocked,
+        "include_bottlenecks": include_bottlenecks,
+        "include_missing_map": include_missing_map,
+    }
+    try:
+        out = get_client().task_dependency_tasks(body)
+    except Exception as e:
+        warn(f"Manager dependency governance tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("cycles", summary.get("cycles", 0))
+    tbl = Table(title="dependency governance tasks", show_header=True, header_style="bold")
+    for col in ("priority", "assigned_to", "source_report_id", "title"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("priority", "")),
+            str(item.get("assigned_to", "")),
+            str(item.get("source_report_id", "")),
+            str(item.get("title", ""))[:88],
+        )
+    console.print(tbl)
+    if not apply:
+        warn("dry-run only; add --apply to create dependency governance tasks")
+
+
 @app.command(name="feed")
 def agent_feed(
     limit: int = typer.Option(10, "--limit", min=1, max=100),
@@ -360,6 +676,54 @@ def agent_claim(
     claim = out.get("claim") or {}
     ok(f"claimed {claim.get('task_id')} as {claim.get('agent')} claim_id={claim.get('claim_id')}")
     kv("lease_expires_at", claim.get("lease_expires_at", ""))
+    plan = out.get("execution_plan") or {}
+    if plan.get("execution_steps"):
+        kv("execution_plan", f"sop task agent-plan --task-id {claim.get('task_id')} --claim-id {claim.get('claim_id')} --json")
+
+
+@app.command(name="agent-plan")
+def agent_plan(
+    task_id: str = typer.Option("", "--task-id", help="任务 ID"),
+    claim_id: str = typer.Option("", "--claim-id", help="领取 ID；传入后自动定位任务并校验 Agent"),
+    agent: str = typer.Option("", "--agent", help="Agent 名称"),
+    no_context: bool = typer.Option(False, "--no-context", help="不返回上下文文件清单"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """获取 AI/CLI 自主开发执行包：目标、依赖、质量卡点、上下文和回写命令。"""
+    try:
+        if claim_id and not task_id:
+            out = get_client().task_agent_execution_plan({"claim_id": claim_id, "agent": agent, "include_context": not no_context})
+        else:
+            if not task_id:
+                warn("--task-id 或 --claim-id 至少需要一个")
+                raise typer.Exit(2)
+            out = get_client().task_agent_plan(task_id, claim_id=claim_id, agent=agent, include_context=not no_context)
+    except Exception as e:
+        warn(f"Manager agent-plan 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    task = out.get("task") or {}
+    deps = out.get("dependency_state") or {}
+    kv("task", f"{task.get('id')} {task.get('title')}")
+    kv("ready", deps.get("ready"))
+    if deps.get("blocked_by"):
+        warn("blocked_by: " + ", ".join(deps.get("blocked_by") or []))
+    tbl = Table(title="agent execution steps", show_header=True, header_style="bold")
+    for col in ("id", "required", "title", "command"):
+        tbl.add_column(col)
+    for step in out.get("execution_steps") or []:
+        tbl.add_row(str(step.get("id", "")), str(step.get("required", "")), str(step.get("title", "")), str(step.get("command", ""))[:100])
+    console.print(tbl)
+    gates = out.get("quality_gates") or []
+    if gates:
+        gt = Table(title="quality gates", show_header=True, header_style="bold")
+        for col in ("id", "severity", "type", "evidence"):
+            gt.add_column(col)
+        for gate in gates:
+            gt.add_row(str(gate.get("id", "")), str(gate.get("severity", "")), str(gate.get("type", "")), str(gate.get("evidence", ""))[:80])
+        console.print(gt)
 
 
 @app.command(name="heartbeat")
@@ -445,6 +809,45 @@ def agent_report(
         kv("quality_score", quality.get("score", ""))
 
 
+@app.command(name="reports")
+def agent_reports(
+    limit: int = typer.Option(50, "--limit", min=1, max=500),
+    status: str = typer.Option("", "--status", help="按报告状态过滤，如 completed/blocked/heartbeat"),
+    agent: str = typer.Option("", "--agent", help="按 Agent 名称过滤"),
+    task_id: str = typer.Option("", "--task-id", help="按任务 ID 过滤"),
+    q: str = typer.Option("", "--q", help="关键词检索摘要、阻塞原因、后续动作"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看 Agent 执行报告、质量决策、失败卡点和交付证据。"""
+    try:
+        out = get_client().task_agent_reports(limit=limit, status=status, agent=agent, task_id=task_id, q=q)
+    except Exception as e:
+        warn(f"Manager agent reports 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("reports", summary.get("reports", 0))
+    kv("failed_gates", summary.get("failed_gates", 0))
+    kv("artifacts", summary.get("artifacts", 0))
+    tbl = Table(title="agent reports", show_header=True, header_style="bold")
+    for col in ("created_at", "task_id", "agent", "status", "quality", "score", "failed_gates", "summary"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("created_at", ""))[:19],
+            str(item.get("task_id", "")),
+            str(item.get("agent", "")),
+            str(item.get("status", "")),
+            str(item.get("quality_decision", "")),
+            str(item.get("quality_score", "")),
+            ",".join(item.get("failed_gates") or [])[:60],
+            str(item.get("summary") or item.get("status_message") or "")[:80],
+        )
+    console.print(tbl)
+
+
 @app.command(name="gates")
 def quality_gates(
     task_id: str = typer.Option("", "--task-id", help="查看指定任务的质量卡点；为空则查看默认策略"),
@@ -507,6 +910,119 @@ def quality_evaluate(
     kv("score", quality.get("score", ""))
     if quality.get("blockers"):
         warn("blockers: " + ", ".join(quality.get("blockers") or []))
+
+
+@app.command(name="quality-ops")
+def quality_ops(
+    limit: int = typer.Option(100, "--limit", min=1, max=500, help="读取最近质量评估条数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看任务质量运营摘要，供 AI/CLI 判断交付风险。"""
+    try:
+        out = get_client().task_quality_summary(limit=limit)
+    except Exception as e:
+        warn(f"Manager quality ops 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("mode", summary.get("mode", "-"))
+    kv("evaluations", summary.get("evaluations", 0))
+    kv("avg_score", summary.get("avg_score", 0))
+    kv("block", summary.get("block", 0))
+    kv("warn", summary.get("warn", 0))
+    tbl = Table(title="recent quality evaluations", show_header=True, header_style="bold")
+    for col in ("task_id", "decision", "score", "blockers"):
+        tbl.add_column(col)
+    for row in (out.get("recent") or [])[:10]:
+        tbl.add_row(
+            str(row.get("task_id", "")),
+            str(row.get("decision", "")),
+            str(row.get("score", "")),
+            ",".join(row.get("blockers") or []),
+        )
+    console.print(tbl)
+
+
+@app.command(name="quality-policy-set")
+def quality_policy_set(
+    mode: str = typer.Option("blocking", "--mode", help="blocking|advisory|strict"),
+    required: str = typer.Option("", "--required", help="必需卡点 ID，逗号分隔"),
+    advisory: str = typer.Option("", "--advisory", help="建议卡点 ID，逗号分隔"),
+    min_confidence: float = typer.Option(0.65, "--min-confidence", min=0, max=1),
+    require_artifact: bool = typer.Option(True, "--require-artifact/--no-require-artifact", help="完成时是否要求产物证据"),
+    auto_block: bool = typer.Option(True, "--auto-block/--no-auto-block", help="必需卡点失败时是否自动阻断"),
+    notes: str = typer.Option("", "--notes", help="策略备注"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """更新任务质量卡点策略。"""
+    try:
+        current = get_client().task_quality_policy()
+        policy = current.get("policy") or {}
+        body = {
+            "mode": mode or policy.get("mode", "blocking"),
+            "required_gate_ids": _csv_ids(required) if required else (policy.get("required_gate_ids") or []),
+            "advisory_gate_ids": _csv_ids(advisory) if advisory else (policy.get("advisory_gate_ids") or []),
+            "auto_block_on_failed_required": auto_block,
+            "min_confidence_to_complete": min_confidence,
+            "require_artifact_for_complete": require_artifact,
+            "notes": notes or policy.get("notes", ""),
+        }
+        out = get_client().task_quality_policy_update(body)
+    except Exception as e:
+        warn(f"Manager quality policy set 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    ok("quality policy updated")
+    next_policy = out.get("policy") or {}
+    kv("mode", next_policy.get("mode", ""))
+    kv("required", ",".join(next_policy.get("required_gate_ids") or []))
+    kv("advisory", ",".join(next_policy.get("advisory_gate_ids") or []))
+
+
+@app.command(name="quality-tasks")
+def quality_tasks(
+    apply: bool = typer.Option(False, "--apply", help="真正创建质量治理任务；默认仅预览"),
+    decision: list[str] | None = typer.Option(None, "--decision", help="筛选决策：block/warn/pass，可重复"),
+    assigned_to: str = typer.Option("QA Agent", "--assigned-to", help="治理任务负责人"),
+    priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
+    limit: int = typer.Option(50, "--limit", min=1, max=200),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把质量阻断/告警评估任务化。"""
+    body = {
+        "dry_run": not apply,
+        "decisions": decision or ["block", "warn"],
+        "assigned_to": assigned_to,
+        "priority": priority,
+        "limit": limit,
+    }
+    try:
+        out = get_client().task_quality_tasks(body)
+    except Exception as e:
+        warn(f"Manager quality tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run", True))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    tbl = Table(title="quality governance tasks", show_header=True, header_style="bold")
+    for col in ("title", "priority", "assigned_to", "source_report_id"):
+        tbl.add_column(col)
+    for row in (out.get("created") or out.get("planned") or [])[:10]:
+        tbl.add_row(
+            str(row.get("title", ""))[:80],
+            str(row.get("priority", "")),
+            str(row.get("assigned_to", "")),
+            str(row.get("source_report_id", "")),
+        )
+    console.print(tbl)
 
 
 @app.command(name="list")

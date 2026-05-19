@@ -13,6 +13,7 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
   tools: Wrench,
   mcp: Blocks,
   agents: Bot,
+  "agent-runs": Bot,
   models: Brain,
   cli: TerminalIcon,
   ops: ShieldCheck,
@@ -22,6 +23,7 @@ const DOMAIN_I18N: Record<string, string> = {
   tools: "nav.platformTools",
   mcp: "nav.mcpHub",
   agents: "nav.agentRegistry",
+  "agent-runs": "nav.agentRuns",
   models: "nav.modelOps",
   cli: "nav.cliTools",
   ops: "nav.platformOps",
@@ -52,6 +54,7 @@ export function PlatformsHub() {
               { label: t("page.platforms.hubReady"), value: summary.ready ?? 0 },
               { label: t("page.platforms.hubMcp"), value: summary.mcp_total ?? 0 },
               { label: t("page.platforms.hubAgents"), value: summary.agents ?? 0 },
+              { label: t("page.platforms.runActiveClaims"), value: summary.agent_active_claims ?? 0 },
               { label: t("page.platforms.hubModels"), value: summary.models_custom ?? 0 },
             ]}
           />

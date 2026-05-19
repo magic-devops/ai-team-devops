@@ -6,7 +6,7 @@
  */
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -33,7 +33,7 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectSelector } from "./components/ProjectSelector";
 import { api } from "./lib/api";
@@ -88,6 +88,16 @@ const COLLAPSE_STORAGE_KEY = "sop-nav-collapse-v1";
 const CATEGORY_COLLAPSE_STORAGE_KEY = "sop-nav-category-collapse-v1";
 const MODULE_COLLAPSE_STORAGE_KEY = "sop-nav-module-collapse-v1";
 const SIDEBAR_STORAGE_KEY = "sop-sidebar-collapsed-v1";
+const SIDEBAR_WIDTH_STORAGE_KEY = "sop-sidebar-width-v1";
+const ROLE_DEFAULT_STORAGE_KEY = "sop-menu-role-default-v1";
+const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_MIN_WIDTH = 280;
+const SIDEBAR_MAX_WIDTH = 520;
+type QuickPanelKey = "pinned" | "favorites" | "recents";
+
+function clampSidebarWidth(value: number) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
+}
 
 function ThemeMenu() {
   const { t } = useTranslation();
@@ -508,6 +518,14 @@ export function App() {
       return false;
     }
   });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) || SIDEBAR_DEFAULT_WIDTH);
+      return clampSidebarWidth(Number.isFinite(raw) ? raw : SIDEBAR_DEFAULT_WIDTH);
+    } catch {
+      return SIDEBAR_DEFAULT_WIDTH;
+    }
+  });
   const [collapsedGroups, setCollapsedGroups] = useState<Record<NavGroupKey, boolean>>(() => {
     try {
       const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
@@ -535,9 +553,19 @@ export function App() {
     }
   });
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
+  const [quickPanel, setQuickPanel] = useState<QuickPanelKey | null>(null);
   useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
   const authed = Boolean(getToken());
   const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+  const menuPrefsRemote = useQuery({
+    queryKey: ["systemPagesMenuPreferencesMe"],
+    queryFn: api.systemPagesMenuPreferencesMe,
+    enabled: authed,
+    retry: false,
+  });
+  const syncMenuPrefs = useMutation({
+    mutationFn: api.systemPagesMenuPreferencesUpdate,
+  });
   const capabilities = useCapabilities();
 
   useEffect(() => {
@@ -578,6 +606,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!sidebarCollapsed) localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+  }, [sidebarCollapsed, sidebarWidth]);
 
   useEffect(() => {
     let lastG = 0;
@@ -643,6 +675,7 @@ export function App() {
   const navLabel = (key: string) => String(t(`nav.${key}`, { defaultValue: humanizeNavKey(key) }));
 
   const currentRole = capabilities.role || String(me.data?.role || "viewer");
+  const menuStrategy = menuPrefsRemote.data?.strategy;
   const capabilityItems = capabilities.items.length ? capabilities.items : capabilities.visibleItems;
   const visibleNav = useMemo(
     () => filterNavByRole(currentRole, capabilityItems),
@@ -661,10 +694,54 @@ export function App() {
   const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, navLabel, visibleNav), [hash, navLabel, visibleNav]);
   const densityCls = densityPadding(menuPrefs.density);
   const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
+  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : pinnedItems;
+  const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
 
   useEffect(() => {
-    if (current?.key) pushRecent(current.key);
-  }, [current?.key]);
+    const prefs = menuPrefsRemote.data?.preferences;
+    if (!authed || !prefs) return;
+    const scope = `${ROLE_DEFAULT_STORAGE_KEY}:${currentRole}:${String(me.data?.username || me.data?.user_id || "user")}`;
+    try {
+      if (localStorage.getItem(scope) === "1") return;
+      setCollapsedGroups({ ...DEFAULT_COLLAPSE, ...(prefs.collapsed_groups || {}) });
+      setCollapsedCategories({ ...DEFAULT_CATEGORY_COLLAPSE, ...(prefs.collapsed_categories || {}) });
+      setCollapsedModules(prefs.collapsed_modules || {});
+      patchMenuPrefs({
+        favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+        recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
+        density: prefs.density || menuPrefs.density,
+        showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
+        showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+      });
+      localStorage.setItem(scope, "1");
+    } catch {
+      /* ignore disabled storage */
+    }
+  }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
+
+  useEffect(() => {
+    if (!authed || !menuPrefsRemote.data?.ok) return;
+    const timer = window.setTimeout(() => {
+      syncMenuPrefs.mutate({
+        favorites: menuPrefs.favorites,
+        recents: menuPrefs.recents,
+        density: menuPrefs.density,
+        show_recents: menuPrefs.showRecents,
+        show_favorites: menuPrefs.showFavorites,
+        collapsed_groups: collapsedGroups,
+        collapsed_categories: collapsedCategories,
+        collapsed_modules: collapsedModules,
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
+
+  useEffect(() => {
+    if (current?.key) {
+      const next = pushRecent(current.key);
+      if (menuPrefsRemote.data?.ok) syncMenuPrefs.mutate({ recents: next.recents });
+    }
+  }, [current?.key, menuPrefsRemote.data?.ok]);
   const childrenByParent = useMemo(() => {
     const out = new Map<string, NavItem[]>();
     for (const item of visibleNav) {
@@ -708,15 +785,38 @@ export function App() {
   const toggleModule = (moduleKey: string) => {
     setCollapsedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
   };
+  const startSidebarResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (sidebarCollapsed) return;
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const onMove = (move: MouseEvent) => {
+      setSidebarWidth(clampSidebarWidth(startWidth + move.clientX - startX));
+    };
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   if (!authed) return null;
+  const sidebarStyle = {
+    "--sidebar-width": `${sidebarWidth}px`,
+  } as CSSProperties;
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row">
       <CommandPalette open={commandOpen} setOpen={setCommandOpen} authed={authed} />
       <aside
-        className={`flex w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${
-          sidebarCollapsed ? "lg:w-20" : "lg:w-80"
+        style={sidebarStyle}
+        className={`relative flex min-h-0 w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${
+          sidebarCollapsed ? "lg:w-20" : "lg:w-[var(--sidebar-width)]"
         }`}
       >
         <div className={`border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`}>
@@ -766,112 +866,86 @@ export function App() {
           <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{t("nav.searchHint")}</p>
         </div>
 
-        {!sidebarCollapsed && !keyword && pinnedItems.length ? (
-          <div className="mt-3 px-2">
-            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
-              <span className="inline-flex items-center gap-1">
-                <Pin className="h-3 w-3" />
-                {t("nav.pinned")}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-1">
-              {pinnedItems.map((item) => {
-                const Icon = item.icon;
-                const active = current.key === item.key || current.parentKey === item.key;
-                return (
-                  <a
-                    key={item.key}
-                    href={item.path}
-                    className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition ${
-                      active
-                        ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
-                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                    }`}
-                    title={item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key)}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{navLabel(item.key)}</span>
-                    <NavBadgeTag badge={item.badge} />
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        {!sidebarCollapsed && !keyword && menuPrefs.showFavorites && favoriteItems.length ? (
-          <div className="mt-3 px-2">
-            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
-              <span className="inline-flex items-center gap-1">
-                <Star className="h-3 w-3" />
-                {t("nav.favorites")}
-              </span>
-              <span className="rounded bg-[var(--surface-muted)] px-1 py-px text-[10px] text-[var(--muted)]">
-                {favoriteItems.length}
-              </span>
-            </div>
-            <div className="space-y-0.5">
-              {favoriteItems.map((item) => {
-                const Icon = item.icon;
-                const active = current.key === item.key || current.parentKey === item.key;
-                return (
-                  <div
-                    key={item.key}
-                    className={`group flex items-center rounded-md text-xs transition ${
-                      active
-                        ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)]"
-                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                    }`}
-                  >
-                    <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+        {!sidebarCollapsed && !keyword ? (
+          <div className="px-3 pt-2">
+            <div className="rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
+              <div className="grid grid-cols-3 gap-1">
+                {[
+                  { key: "pinned" as const, icon: Pin, label: t("nav.pinned"), count: pinnedItems.length, enabled: pinnedItems.length > 0 },
+                  { key: "favorites" as const, icon: Star, label: t("nav.favorites"), count: favoriteItems.length, enabled: menuPrefs.showFavorites },
+                  { key: "recents" as const, icon: Clock, label: t("nav.recents"), count: recentItems.length, enabled: menuPrefs.showRecents },
+                ].map((entry) => {
+                  const Icon = entry.icon;
+                  const active = quickPanel === entry.key;
+                  return (
+                    <button
+                      key={entry.key}
+                      type="button"
+                      disabled={!entry.enabled}
+                      onClick={() => setQuickPanel((value) => (value === entry.key ? null : entry.key))}
+                      className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                        active
+                          ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/25"
+                          : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                      }`}
+                      title={entry.label}
+                    >
                       <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                      <NavBadgeTag badge={item.badge} />
-                    </a>
-                    <FavoriteToggle navKey={item.key} isFav className="mr-1 opacity-60 group-hover:opacity-100" />
+                      <span className="truncate">{entry.label}</span>
+                      <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {quickPanel ? (
+                <div className="mt-1.5 border-t border-[var(--border)]/70 pt-1.5">
+                  <div className="mb-1 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
+                    <span>{quickPanelTitle}</span>
+                    {quickPanel === "recents" && recentItems.length ? (
+                      <button
+                        type="button"
+                        onClick={() => patchMenuPrefs({ recents: [] })}
+                        className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                        title={t("nav.clearRecents")}
+                        aria-label={t("nav.clearRecents")}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    ) : null}
                   </div>
-                );
-              })}
+                  <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
+                    {quickPanelItems.length ? quickPanelItems.map((item) => {
+                      const Icon = item.icon;
+                      const active = current.key === item.key || current.parentKey === item.key;
+                      return (
+                        <a
+                          key={`${quickPanel}-${item.key}`}
+                          href={item.path}
+                          className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
+                            active
+                              ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                              : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                          }`}
+                          title={item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key)}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                          <NavBadgeTag badge={item.badge} />
+                        </a>
+                      );
+                    }) : (
+                      <div className="col-span-2 rounded-md border border-dashed border-[var(--border)] px-2 py-2 text-center text-[11px] text-[var(--nav-muted)]">
+                        {t("nav.quickEmpty")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
 
-        {!sidebarCollapsed && !keyword && menuPrefs.showRecents && recentItems.length ? (
-          <div className="mt-3 px-2">
-            <div className="mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]">
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {t("nav.recents")}
-              </span>
-              <button
-                type="button"
-                onClick={() => patchMenuPrefs({ recents: [] })}
-                className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
-                title={t("nav.clearRecents")}
-                aria-label={t("nav.clearRecents")}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-            <div className="space-y-0.5">
-              {recentItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <a
-                    key={item.key}
-                    href={item.path}
-                    className="flex items-center gap-2 rounded-md px-2 py-1 text-xs text-[var(--nav-muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
-                  >
-                    <Icon className="h-3 w-3 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        <nav className={`mt-2 max-h-[42vh] flex-1 space-y-2 overflow-y-auto pb-3 lg:max-h-none ${sidebarCollapsed ? "px-2" : "px-2"}`}>
+        <nav className={`mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-3 ${sidebarCollapsed ? "px-2" : "px-2"}`}>
           {groupedNav.length === 0 ? (
             <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
               {t("nav.searchEmpty")}
@@ -908,7 +982,7 @@ export function App() {
                       {categories.map(({ category, items }) => {
                         const categoryCollapsed = !keyword && collapsedCategories[category.key];
                         return (
-                          <div key={category.key} className={!sidebarCollapsed ? "rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/35 p-1" : ""}>
+                          <div key={category.key} className={!sidebarCollapsed ? "rounded-lg border border-[var(--border)]/60 bg-[var(--surface-raised)]/30 p-1" : ""}>
                             {!sidebarCollapsed ? (
                               <button
                                 type="button"
@@ -1037,7 +1111,7 @@ export function App() {
         </nav>
 
         {!sidebarCollapsed ? (
-          <div className="border-t border-[var(--nav-border)] px-3 py-2.5">
+          <div className="shrink-0 border-t border-[var(--nav-border)] px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <DensityMenu density={menuPrefs.density} />
               <div className="flex items-center gap-1">
@@ -1063,10 +1137,53 @@ export function App() {
                 </button>
               </div>
             </div>
-            <p className="mt-1.5 px-0.5 text-[10px] text-[var(--nav-muted)]">{t("nav.shortcutHint")}</p>
+            {menuStrategy ? (
+              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[10px]">
+                <span className="min-w-0 flex-1 truncate text-[var(--nav-muted)]">
+                  <span className="font-medium text-[var(--muted-strong)]">{t("nav.roleStrategy")}</span>
+                  <span className="mx-1">·</span>
+                  <span className="font-mono text-[var(--brand)]">{currentRole}</span>
+                  <span className="mx-1">·</span>
+                  {t("nav.roleHome")}: {menuStrategy.home}
+                </span>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded px-1 text-[var(--brand)] hover:bg-[var(--surface)]"
+                    onClick={() => {
+                      const prefs = menuPrefsRemote.data?.preferences;
+                      if (!prefs) return;
+                      setCollapsedGroups({ ...DEFAULT_COLLAPSE, ...(prefs.collapsed_groups || {}) });
+                      setCollapsedCategories({ ...DEFAULT_CATEGORY_COLLAPSE, ...(prefs.collapsed_categories || {}) });
+                      setCollapsedModules(prefs.collapsed_modules || {});
+                      patchMenuPrefs({
+                        favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+                        recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
+                        density: prefs.density || menuPrefs.density,
+                        showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
+                        showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+                      });
+                    }}
+                  >
+                    {t("nav.applyRoleDefaults")}
+                  </button>
+              </div>
+            ) : null}
+            <p className="mt-1 truncate px-0.5 text-[10px] text-[var(--nav-muted)]" title={t("nav.shortcutHint")}>{t("nav.shortcutHint")}</p>
           </div>
         ) : null}
 
+        {!sidebarCollapsed ? (
+          <button
+            type="button"
+            className="group absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize items-stretch justify-center lg:flex"
+            onMouseDown={startSidebarResize}
+            onDoubleClick={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
+            title={t("nav.resizeSidebar")}
+            aria-label={t("nav.resizeSidebar")}
+          >
+            <span className="my-3 w-px rounded-full bg-transparent transition group-hover:bg-[var(--brand)] group-active:bg-[var(--brand)]" />
+          </button>
+        ) : null}
       </aside>
 
       <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10">

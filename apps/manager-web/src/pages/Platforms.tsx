@@ -58,6 +58,7 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
     agents: "",
   });
   const [agentProfile, setAgentProfile] = useState<any>(null);
+  const [runFilter, setRunFilter] = useState({ agent: "", status: "" });
   const [mcpDraft, setMcpDraft] = useState({
     name: "",
     command: "python3",
@@ -102,6 +103,21 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
   const agentGroups = useQuery({
     queryKey: ["agent-groups"],
     queryFn: api.agentGroups,
+    enabled: authed && activeModule === "agents",
+  });
+  const agentRunsSummary = useQuery({
+    queryKey: ["agent-runs-summary"],
+    queryFn: api.agentRunsSummary,
+    enabled: authed && activeModule === "agents",
+  });
+  const agentRuns = useQuery({
+    queryKey: ["agent-runs", runFilter.agent, runFilter.status],
+    queryFn: () => api.agentRuns(runFilter.agent, runFilter.status, 80),
+    enabled: authed && activeModule === "agents",
+  });
+  const agentSlo = useQuery({
+    queryKey: ["agent-slo"],
+    queryFn: api.agentRunsSlo,
     enabled: authed && activeModule === "agents",
   });
   const builtinAgents = useQuery({
@@ -189,7 +205,23 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
     void qc.invalidateQueries({ queryKey: ["agents"] });
     void qc.invalidateQueries({ queryKey: ["agents-summary"] });
     void qc.invalidateQueries({ queryKey: ["agent-groups"] });
+    void qc.invalidateQueries({ queryKey: ["agent-runs-summary"] });
+    void qc.invalidateQueries({ queryKey: ["agent-runs"] });
+    void qc.invalidateQueries({ queryKey: ["agent-slo"] });
   };
+  const agentRebalanceTasks = useMutation({
+    mutationFn: (dryRun: boolean) => api.agentRunsRebalanceTasks({ dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+    onSuccess: (data, dryRun) => {
+      setFlash({
+        kind: "ok",
+        message: dryRun
+          ? t("page.platforms.rebalancePreviewOk", { count: data?.summary?.planned ?? 0 })
+          : t("page.platforms.rebalanceApplyOk", { count: data?.summary?.created ?? 0 }),
+      });
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
   const bootstrapAgents = useMutation({
     mutationFn: () => api.agentBootstrapBuiltin(false),
     onSuccess: (data) => {
@@ -673,8 +705,121 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
             <Metric label={t("page.platforms.a2aEnabled")} value={agentSummary.data?.a2a_enabled ?? 0} />
             <Metric label={t("page.platforms.agentGroups")} value={agentSummary.data?.groups ?? 0} />
           </div>
+          <div className="grid gap-3 md:grid-cols-5">
+            <Metric label={t("page.platforms.runActiveClaims")} value={agentRunsSummary.data?.summary?.active_claims ?? 0} />
+            <Metric label={t("page.platforms.runReports")} value={agentRunsSummary.data?.summary?.reports ?? 0} />
+            <Metric label={t("page.platforms.runCompleted")} value={agentRunsSummary.data?.summary?.completed ?? 0} />
+            <Metric label={t("page.platforms.runBlocked")} value={agentRunsSummary.data?.summary?.blocked ?? 0} />
+            <Metric label={t("page.platforms.runSuccessRate")} value={agentRunsSummary.data?.summary?.success_rate ?? 0} />
+          </div>
+          <Card
+            title={t("page.platforms.agentSloCenter")}
+            actions={
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm" disabled={agentRebalanceTasks.isPending} onClick={() => agentRebalanceTasks.mutate(true)}>
+                  {t("page.platforms.previewRebalance")}
+                </button>
+                <button type="button" className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50" disabled={agentRebalanceTasks.isPending} onClick={() => agentRebalanceTasks.mutate(false)}>
+                  {t("page.platforms.createRebalanceTasks")}
+                </button>
+              </div>
+            }
+          >
+            <div className="grid gap-3 md:grid-cols-5">
+              <Metric label={t("page.platforms.sloScore")} value={agentSlo.data?.summary?.slo_score ?? 100} />
+              <Metric label={t("page.platforms.healthyAgents")} value={agentSlo.data?.summary?.healthy_agents ?? 0} />
+              <Metric label={t("page.platforms.watchAgents")} value={agentSlo.data?.summary?.watch_agents ?? 0} />
+              <Metric label={t("page.platforms.riskAgents")} value={agentSlo.data?.summary?.risk_agents ?? 0} />
+              <Metric label={t("page.platforms.rebalanceSuggestions")} value={agentSlo.data?.summary?.recommendations ?? 0} />
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+                <div className="grid grid-cols-[1fr_7rem_6rem_1fr] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--muted)]">
+                  <span>{t("page.platforms.runAgent")}</span>
+                  <span>{t("page.platforms.runStatus")}</span>
+                  <span>{t("page.platforms.sloScore")}</span>
+                  <span>{t("page.platforms.sloIssues")}</span>
+                </div>
+                {(agentSlo.data?.agents ?? []).slice(0, 8).map((row: any) => (
+                  <div key={row.agent} className="grid grid-cols-[1fr_7rem_6rem_1fr] items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-xs last:border-0">
+                    <span className="truncate font-medium text-[var(--text)]">{row.name || row.agent}</span>
+                    <span className={row.slo_status === "healthy" ? "w-fit rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-600" : row.slo_status === "risk" ? "w-fit rounded-full bg-rose-500/10 px-2 py-0.5 text-rose-600" : "w-fit rounded-full bg-amber-500/10 px-2 py-0.5 text-amber-600"}>
+                      {row.slo_status}
+                    </span>
+                    <span className="font-mono text-[var(--text)]">{row.slo_score}</span>
+                    <span className="truncate text-[var(--muted)]">{(row.issues ?? []).join(", ") || "-"}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-2">
+                {(agentSlo.data?.recommendations ?? []).slice(0, 4).map((item: any) => (
+                  <div key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-[var(--text)]">{item.title}</p>
+                      <span className="rounded bg-[var(--control-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">{item.severity}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{item.summary}</p>
+                    <code className="mt-2 block truncate rounded bg-[var(--surface)] px-2 py-1 text-[11px] text-[var(--brand)]">
+                      {item.agent_packet?.commands?.[0] || "sop platforms agent-slo --json"}
+                    </code>
+                  </div>
+                ))}
+                {!(agentSlo.data?.recommendations ?? []).length ? (
+                  <p className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">{t("page.platforms.noRebalanceSuggestions")}</p>
+                ) : null}
+              </div>
+            </div>
+          </Card>
           <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_28rem]">
             <div className="space-y-4">
+              <Card
+                title={t("page.platforms.agentRunCenter")}
+                actions={
+                  <div className="flex flex-wrap gap-2">
+                    <input className={`${inputClass} w-44`} placeholder="agent" value={runFilter.agent} onChange={(e) => setRunFilter((v) => ({ ...v, agent: e.target.value }))} />
+                    <select className={`${inputClass} w-40`} value={runFilter.status} onChange={(e) => setRunFilter((v) => ({ ...v, status: e.target.value }))}>
+                      <option value="">{t("page.platforms.runAllStatus")}</option>
+                      {["claimed", "running", "heartbeat", "reported", "completed", "blocked"].map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                }
+              >
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
+                        <th className="py-2 pr-3">{t("page.platforms.runAgent")}</th>
+                        <th className="py-2 pr-3">{t("page.platforms.runTask")}</th>
+                        <th className="py-2 pr-3">{t("page.platforms.runStatus")}</th>
+                        <th className="py-2 pr-3">{t("page.platforms.runProgress")}</th>
+                        <th className="py-2 pr-3">{t("page.platforms.runUpdated")}</th>
+                        <th className="py-2 pr-3">{t("page.platforms.runSummary")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(agentRuns.data?.items ?? []).map((row: any) => (
+                        <tr key={`${row.kind}-${row.id}-${row.updated_at}`} className="border-b border-[var(--border)] align-top">
+                          <td className="py-2 pr-3 font-mono text-xs text-[var(--text)]">{row.agent}</td>
+                          <td className="py-2 pr-3 font-mono text-xs text-[var(--muted)]">{row.task_id || "-"}</td>
+                          <td className="py-2 pr-3">
+                            <span className={row.active ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600" : "rounded-full bg-slate-500/10 px-2 py-0.5 text-xs text-[var(--muted)]"}>
+                              {row.status}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3 text-[var(--text)]">{row.progress ?? 0}%</td>
+                          <td className="py-2 pr-3 text-xs text-[var(--muted)]">{row.updated_at || "-"}</td>
+                          <td className="max-w-[26rem] py-2 pr-3 text-xs text-[var(--muted)]">
+                            <span className="line-clamp-2">{row.summary || row.heartbeat_message || "-"}</span>
+                          </td>
+                        </tr>
+                      ))}
+                      {!agentRuns.isLoading && !(agentRuns.data?.items ?? []).length ? (
+                        <tr><td className="py-4 text-sm text-[var(--muted)]" colSpan={6}>{t("page.platforms.noAgentRuns")}</td></tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
               <Card
                 title={t("page.platforms.agentRegistry")}
                 actions={
@@ -775,6 +920,19 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
                     <div key={a.id} className="rounded-xl border border-[var(--border)] px-3 py-2">
                       <p className="text-sm font-medium text-[var(--text)]">{a.name}</p>
                       <p className="text-xs text-[var(--muted)]">{a.role} · {(a.tools ?? []).join(", ")}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card title={t("page.platforms.agentProfiles")}>
+                <div className="space-y-2">
+                  {(agentRunsSummary.data?.agents ?? []).map((a: any) => (
+                    <div key={a.agent} className="rounded-xl border border-[var(--border)] px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-[var(--text)]">{a.name || a.agent}</p>
+                        <span className="rounded-full bg-[var(--control-bg)] px-2 py-0.5 text-xs text-[var(--muted)]">{a.success_rate}%</span>
+                      </div>
+                      <p className="text-xs text-[var(--muted)]">{a.role || "-"} · active {a.active_claims} · reports {a.reports} · avg {a.avg_progress}%</p>
                     </div>
                   ))}
                 </div>

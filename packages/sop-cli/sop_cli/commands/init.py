@@ -192,7 +192,7 @@ def _init_platform_onboarding(repo_tools: Path, project_path: Path, project_name
 
 def _write_project_manifest() -> None:
     try:
-        from .context import write_agent_context, write_db_connections_cache, write_project_manifest
+        from .context import write_agent_context, write_db_connections_cache, write_pages_context_cache, write_project_manifest
         from .work import _build_snapshot
 
         p = write_project_manifest()
@@ -206,10 +206,17 @@ def _write_project_manifest() -> None:
             encoding="utf-8",
         )
         db_path = write_db_connections_cache()
+        pages_manifest_path, pages_capabilities_path = write_pages_context_cache()
         ctx = write_agent_context(
             manifest_path=p,
             work_snapshot_path=ws,
-            prepared={"manifest": True, "work_snapshot": True, "db_config": bool(db_path and db_path.is_file())},
+            prepared={
+                "manifest": True,
+                "work_snapshot": True,
+                "db_config": bool(db_path and db_path.is_file()),
+                "pages_manifest": bool(pages_manifest_path and pages_manifest_path.is_file()),
+                "pages_capabilities": bool(pages_capabilities_path and pages_capabilities_path.is_file()),
+            },
         )
         ok(f"Agent 上下文索引已生成（{ctx}）")
     except Exception as e:

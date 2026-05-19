@@ -152,6 +152,85 @@ def _render(items: list[dict[str, Any]], title: str) -> None:
     console.print(tbl)
 
 
+def _render_ops_plan(out: dict[str, Any]) -> None:
+    health = out.get("health") or {}
+    summary = out.get("summary") or {}
+    console.print(f"health_score: {health.get('score', 0)}")
+    console.print(f"grade: {health.get('grade', '')}")
+    console.print(f"open: {summary.get('open', 0)}")
+    console.print(f"critical_open: {summary.get('critical_open', 0)}")
+    console.print(f"stale_open: {summary.get('stale_open', 0)}")
+    tbl = Table(title="issue ops risks", show_header=True, header_style="bold")
+    for col in ("id", "severity", "category", "title", "command"):
+        tbl.add_column(col)
+    for item in out.get("risks") or []:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("severity", "")),
+            str(item.get("category", "")),
+            str(item.get("title", ""))[:64],
+            str(item.get("command", "")),
+        )
+    console.print(tbl)
+
+
+@app.command(name="ops-plan")
+def issue_ops_plan(json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    """输出问题治理 AI/CLI 操作包。"""
+    try:
+        out = get_client().issue_ops_plan()
+    except Exception as e:
+        warn(f"Manager issue ops-plan 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    _render_ops_plan(out)
+
+
+@app.command(name="ops-tasks")
+def issue_ops_tasks(
+    apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
+    priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
+    assigned_to: str = typer.Option("IssueOps Agent", "--assigned-to", help="治理任务负责人"),
+    categories: str = typer.Option("", "--categories", help="逗号分隔过滤 severity,aging,traceability,intake"),
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """将问题治理风险预览或生成任务。"""
+    body = {
+        "dry_run": not apply,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "categories": [x.strip() for x in categories.split(",") if x.strip()],
+        "limit": limit,
+    }
+    try:
+        out = get_client().issue_ops_tasks(body)
+    except Exception as e:
+        warn(f"Manager issue ops-tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    console.print(f"planned: {summary.get('planned', 0)}")
+    console.print(f"created: {summary.get('created', 0)}")
+    tbl = Table(title="issue governance tasks", show_header=True, header_style="bold")
+    for col in ("priority", "assigned_to", "source_report_id", "title"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("priority", "")),
+            str(item.get("assigned_to", "")),
+            str(item.get("source_report_id", "")),
+            str(item.get("title", ""))[:84],
+        )
+    console.print(tbl)
+    if not apply:
+        warn("dry-run only; add --apply to create issue governance tasks")
+
+
 def _new_row(
     title: str,
     *,

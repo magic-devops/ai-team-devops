@@ -5,13 +5,22 @@
     "favorite": "Add to favorites",
     "unfavorite": "Remove favorite",
     "recents": "Recent",
+    "quickEmpty": "No entries",
     "clearRecents": "Clear recent",
     "toggleFavorites": "Show/hide favorites",
     "toggleRecents": "Show/hide recent",
     "readOnly": "Read-only",
     "readOnlyHint": "Current role only has read access; write actions disabled.",
     "shortcutHint": "Cmd/Ctrl+K palette · Cmd/Ctrl+/ collapse sidebar · g+key jump",
-    "badge": { "new": "New", "beta": "Beta", "preview": "Preview", "alpha": "Alpha" },
+    "roleStrategy": "Role menu strategy",
+    "roleHome": "Home",
+    "applyRoleDefaults": "Apply defaults",
+    "badge": {
+      "new": "New",
+      "beta": "Beta",
+      "preview": "Preview",
+      "alpha": "Alpha"
+    },
     "density": {
       "label": "Sidebar density",
       "compact": "Compact",
@@ -43,6 +52,7 @@
     "projectGovernanceOps": "Ops packet",
     "projectGovernanceActions": "Governance tasks",
     "projectGovernancePrompt": "Agent prompt",
+    "orgAccessReview": "Access review",
     "tasks": "Task center",
     "taskExecution": "Task execution",
     "taskBoard": "Task board",
@@ -108,6 +118,11 @@
     "dataExchange": "Data exchange",
     "analyticsNlq": "NLQ",
     "notify": "Communication fabric",
+    "notifyChannels": "Channels",
+    "notifyOutbound": "Outbound",
+    "notifyInbound": "Inbound",
+    "notifyConnectors": "Connectors",
+    "notifyMessages": "Message stream",
     "platforms": "Agent platform",
     "platformTools": "Tool access",
     "mcpHub": "MCP Hub",
@@ -134,7 +149,19 @@
     "setShellHome": "Always open this management platform at site root",
     "collapseSidebar": "Collapse menu",
     "expandSidebar": "Expand menu",
-    "systemMap": "Module governance"
+    "resizeSidebar": "Drag to resize menu, double-click to reset",
+    "systemMap": "Module governance",
+    "reflectionDistill": "Distillation review",
+    "eventStream": "Event stream",
+    "sub": {
+      "distill": "Distillation review",
+      "specs": "Spec documents",
+      "design_docs": "Design docs",
+      "datasources": "Data sources",
+      "events": "Event stream",
+      "agent_runs": "Agent runs"
+    },
+    "agentRuns": "Agent runs"
   },
   "dashboard": {
     "fullConsoleTitle": "Cross-project summaries and health checks live here.",
@@ -211,26 +238,66 @@
     "linkSettings": "Login & theme"
   },
   "page": {
-    "projectPortfolio": { "title": "Project portfolio" },
-    "projectBusinesses": { "title": "Business lines" },
-    "tenantUsers": { "title": "Tenant users" },
-    "projectMembers": { "title": "Project members" },
-    "projectDeliveryKit": { "title": "AI delivery kit" },
-    "projectOnboarding": { "title": "AI onboarding" },
-    "projectTemplates": { "title": "Project templates" },
-    "projectGovernance": { "title": "Project governance" },
-    "taskExecution": { "title": "Task execution" },
-    "taskBoard": { "title": "Task board" },
-    "taskSprints": { "title": "Sprints" },
-    "taskDependencies": { "title": "Task dependencies" },
-    "taskScheduler": { "title": "DAG scheduler" },
-    "knowledgeBase": { "title": "Knowledge base" },
-    "ragSearch": { "title": "RAG search" },
-    "aiMemory": { "title": "AI memory" },
-    "ruleCenter": { "title": "Rule center" },
-    "workerOps": { "title": "WorkerOps" },
-    "syncOps": { "title": "SyncOps" },
-    "usageOps": { "title": "Usage governance" },
+    "projectPortfolio": {
+      "title": "Project portfolio"
+    },
+    "projectBusinesses": {
+      "title": "Business lines"
+    },
+    "tenantUsers": {
+      "title": "Tenant users"
+    },
+    "projectMembers": {
+      "title": "Project members"
+    },
+    "projectDeliveryKit": {
+      "title": "AI delivery kit"
+    },
+    "projectOnboarding": {
+      "title": "AI onboarding"
+    },
+    "projectTemplates": {
+      "title": "Project templates"
+    },
+    "projectGovernance": {
+      "title": "Project governance"
+    },
+    "taskExecution": {
+      "title": "Task execution"
+    },
+    "taskBoard": {
+      "title": "Task board"
+    },
+    "taskSprints": {
+      "title": "Sprints"
+    },
+    "taskDependencies": {
+      "title": "Task dependencies"
+    },
+    "taskScheduler": {
+      "title": "DAG scheduler"
+    },
+    "knowledgeBase": {
+      "title": "Knowledge base"
+    },
+    "ragSearch": {
+      "title": "RAG search"
+    },
+    "aiMemory": {
+      "title": "AI memory"
+    },
+    "ruleCenter": {
+      "title": "Rule center"
+    },
+    "workerOps": {
+      "title": "WorkerOps"
+    },
+    "syncOps": {
+      "title": "SyncOps"
+    },
+    "usageOps": {
+      "title": "Usage governance"
+    },
     "dataAssets": {
       "title": "Data assets"
     },
@@ -569,6 +636,26 @@
       "depSave": "Save dependency",
       "depDelete": "Delete dependency",
       "depEmpty": "No task dependencies",
+      "depReady": "Ready queue",
+      "depCycles": "Cycle risks",
+      "depWorkbench": "Dependency governance workbench",
+      "depSearch": "Search task ID, title, status, priority, or owner",
+      "depFilterAll": "All",
+      "depFilterBlocked": "Blocked",
+      "depFilterReady": "Ready",
+      "depFilterHigh": "High risk",
+      "depNoRecommendations": "Dependencies are healthy. No governance suggestions for now.",
+      "depNodeDetail": "Node schedule detail",
+      "depUseAsSource": "Use as source",
+      "depUseAsTarget": "Use as target",
+      "depNoSelection": "Select a task node on the left to inspect dependency detail and create relations quickly.",
+      "depReadyQueue": "Schedulable ready queue",
+      "depBlockedQueue": "Dependency blocked queue",
+      "depNoBlockedQueue": "No dependency-blocked tasks",
+      "depPreviewTasks": "Preview tasks",
+      "depCreateTasks": "Create tasks",
+      "depTasksResult": "{{planned}} dependency governance tasks planned, {{created}} created",
+      "depTaskPreview": "Dependency governance task preview",
       "schedulerTitle": "Hermes DAG Scheduler",
       "schedulerPreview": "Preview schedule",
       "schedulerApply": "Apply schedule",
@@ -588,6 +675,51 @@
       "schedulerEmpty": "No schedule yet. Preview first.",
       "schedulerDag": "DAG execution stages",
       "schedulerRunHint": "Preview a schedule to inspect batches, blockers, and parallel execution lanes.",
+      "schedulerRuns": "Schedule run history",
+      "schedulerRunSearch": "Search schedule, event, or task ID",
+      "includeArchived": "Include archived",
+      "schedulerRunTotal": "Runs",
+      "schedulerRunApplied": "Applied",
+      "schedulerRunsEmpty": "No scheduler runs yet",
+      "schedulerRunId": "Schedule ID",
+      "schedulerPolicy": "Policy",
+      "runStatus": "Run status",
+      "runCreatedAt": "Created at",
+      "previewRerun": "Preview rerun",
+      "applyRerun": "Apply rerun",
+      "archiveRun": "Archive",
+      "restoreRun": "Restore",
+      "cancelRun": "Cancel",
+      "schedulerConsole": "Scheduler console",
+      "schedulerConsoleHint": "Split operations, insights, Agent, quality, and events into focused panels while keeping the full capability set.",
+      "schedulerPanelOps": "Ops",
+      "schedulerPanelInsights": "Insights",
+      "schedulerPanelAgent": "Agent",
+      "schedulerPanelQuality": "Quality",
+      "schedulerPanelEvents": "Events",
+      "schedulerOps": "Scheduler ops health",
+      "previewRunbook": "Preview Runbook",
+      "createRunbookTasks": "Create governance tasks",
+      "runbookResult": "{{steps}} Runbook steps, {{created}} tasks created",
+      "opsHealth": "Health score",
+      "readyUnclaimed": "Unclaimed",
+      "staleClaims": "Stale leases",
+      "qualityBlocks": "Quality blocks",
+      "schedulerOpsStable": "Scheduler operations are stable. No automated governance suggestions for now.",
+      "schedulerInsights": "Scheduler dependency insights",
+      "previewInsightTasks": "Preview insight tasks",
+      "createInsightTasks": "Create insight tasks",
+      "insightTaskResult": "{{planned}} insight tasks planned, {{created}} created",
+      "insightHealth": "Insight score",
+      "criticalPath": "Critical path",
+      "bottlenecks": "Bottlenecks",
+      "policyCount": "Policies",
+      "policyComparison": "Policy comparison",
+      "policyScheduled": "Scheduled",
+      "policyReady": "Ready",
+      "policyBlocked": "Blocked",
+      "policyStages": "Stages",
+      "schedulerRecommendations": "Automated recommendations",
       "stage": "Stage",
       "lane": "Lane",
       "qualityGates": "Gates",
@@ -603,6 +735,20 @@
       "progress": "Progress",
       "leaseExpires": "Lease expires",
       "heartbeat": "Heartbeat",
+      "agentPlan": "Plan",
+      "agentExecutionPlan": "Agent execution plan",
+      "agentPlanHint": "Claim a task or open a plan from an active lease to inspect the executable contract.",
+      "noDescription": "No description",
+      "step": "Step",
+      "required": "Required",
+      "command": "Command",
+      "agentReports": "Agent delivery audit",
+      "reportCount": "Reports",
+      "reportArtifacts": "Artifacts",
+      "reportFailedGates": "Failed gates",
+      "reportHeartbeats": "Heartbeats",
+      "qualityDecisionShort": "Quality",
+      "summary": "Summary",
       "action": "Action",
       "qualityCenter": "Quality gate center",
       "qualityMode": "Mode",
@@ -611,6 +757,22 @@
       "qualityEvaluateSelected": "Evaluate selected",
       "qualitySelectHint": "Select a task",
       "qualityDecision": "Decision {{decision}}, score {{score}}",
+      "qualityEvaluations": "Evaluations",
+      "qualityAvgScore": "Avg score",
+      "qualityPolicyEdit": "Quality policy",
+      "qualityRequiredIds": "Required gate IDs, comma separated",
+      "qualityAdvisoryIds": "Advisory gate IDs, comma separated",
+      "qualityMinConfidence": "Confidence",
+      "qualityRequireArtifact": "Require artifact",
+      "qualityAutoBlock": "Auto block",
+      "qualityNotes": "Policy notes",
+      "qualitySavePolicy": "Save policy",
+      "qualityPolicySaved": "Quality policy saved",
+      "qualityPreviewTasks": "Preview tasks",
+      "qualityCreateTasks": "Create tasks",
+      "qualityTasksResult": "Planned {{planned}}, created {{created}} quality governance tasks",
+      "qualityRecent": "Recent quality evaluations",
+      "qualityNoRecent": "No quality evaluations yet",
       "eventWakeups": "Event wakeup policy",
       "agentContract": "Agent execution contract",
       "agentContractScope": "Task packets carry tenant_code, business_code, and project_id so enterprise, business, and project scopes stay isolated.",
@@ -621,7 +783,20 @@
         "in_progress": "In progress",
         "blocked": "Blocked",
         "completed": "Done"
-      }
+      },
+      "sprintOpsPlan": "Sprint Ops Package",
+      "sprintOpsHealth": "Sprint Health",
+      "sprintOpsPreview": "Preview Tasks",
+      "sprintOpsCreate": "Create Tasks",
+      "sprintOpsHint": "Detects missing active sprint, empty scope, blocked tasks, critical issues, and delivery risk, then turns them into AI/CLI executable tasks.",
+      "sprintOpsNoRisks": "No sprint governance risks detected",
+      "sprintOpsActive": "Active Sprint",
+      "sprintOpsDaysLeft": "Days Left",
+      "sprintOpsCriticalIssues": "Critical Issues",
+      "sprintOpsSeverity": "Level",
+      "sprintOpsCategory": "Category",
+      "sprintOpsRisk": "Risk",
+      "sprintOpsCommand": "Command"
     },
     "workflows": {
       "title": "Workflows",
@@ -975,13 +1150,15 @@
         "users": "Tenant users",
         "businesses": "Business governance",
         "projectMembers": "Project members",
-        "rolePolicy": "Role policy"
+        "rolePolicy": "Role policy",
+        "accessReview": "Access review"
       },
       "tabHint": {
         "users": "Manage tenant accounts, roles, status, password resets, and account lifecycle.",
         "businesses": "Manage project ownership, business isolation, and future business-level access policy.",
         "projectMembers": "Manage project roles, candidate members, and AI development collaboration scope.",
-        "rolePolicy": "Inspect tenant roles, project roles, governance controls, and AI-operable capability boundaries."
+        "rolePolicy": "Inspect tenant roles, project roles, governance controls, and AI-operable capability boundaries.",
+        "accessReview": "Automatically review organization and project access risks, then turn high-risk findings into governance tasks."
       },
       "usersHint": "User admin requires tenant_admin. Disabled users cannot sign in. Password resets require at least 8 characters.",
       "businessesHint": "Business lines carry business_code isolation, project ownership, owner governance, and future business-level ABAC policy.",
@@ -992,7 +1169,103 @@
       "policyScope": "Scope",
       "policyLevel": "Level",
       "policyCapabilities": "Capabilities",
+      "policyCapabilitiesPlaceholder": "Enter capability code, press Enter",
+      "policyConfig": "Configurable role capability policy",
+      "policyUpdated": "Last updated: {{user}} / {{time}}",
+      "policyNotes": "Policy notes, boundaries, approval requirements",
+      "policySave": "Save policy",
+      "policyReset": "Restore defaults",
+      "policyResetConfirm": "Restore the platform default role capability policy?",
       "policyTenantScope": "Current tenant / business / project scope",
+      "policyCheck": "Role capability check",
+      "policyCheckHint": "Enter a scope, role, and capability code to decide whether a CLI/Agent or member may run an action.",
+      "policyCheckRun": "Check",
+      "policyCheckCapability": "Capability code, e.g. task.claim",
+      "policyCheckScopeTenant": "Tenant role",
+      "policyCheckScopeProject": "Project role",
+      "policyDecisionAllow": "Allowed",
+      "policyDecisionDeny": "Denied",
+      "policyHistory": "Policy change history",
+      "policyHistoryEmpty": "No policy changes yet",
+      "policyHistoryTime": "Time",
+      "policyHistoryAction": "Action",
+      "policyHistoryUser": "User",
+      "policyHistoryRoles": "Tenant/project roles",
+      "policyHistoryNotes": "Notes",
+      "accessReview": "Access review center",
+      "accessReviewHint": "Detect authorization risks across tenants, business lines, and project memberships, with scores, findings, AI/CLI recommendations, and governance tasks.",
+      "accessEmpty": "No access review data",
+      "accessScore": "Review score",
+      "accessFindings": "Findings",
+      "accessHigh": "High risk",
+      "accessProjects": "Projects",
+      "accessSeverity": "Severity",
+      "accessRisk": "Risk",
+      "accessKind": "Kind",
+      "accessProject": "Project",
+      "accessOwner": "Owner",
+      "accessCommand": "Suggested command",
+      "accessPreviewTasks": "Preview tasks",
+      "accessCreateTasks": "Create tasks",
+      "accessNoRisk": "No access risks",
+      "accessRecommendations": "Recommendations",
+      "accessTaskPreview": "Task preview",
+      "accessTaskCreated": "Tasks created",
+      "accessSeverityMap": {
+        "high": "High risk",
+        "medium": "Medium risk",
+        "low": "Low risk",
+        "info": "Info"
+      },
+      "accessKindMap": {
+        "tenant_admin_review": "Tenant admin review",
+        "unknown_user_role": "Unknown tenant role",
+        "disabled_user_membership": "Disabled user access",
+        "project_without_admin": "Project without admin",
+        "too_many_project_admins": "Too many project admins",
+        "unknown_project_role": "Unknown project role",
+        "disabled_project_member": "Disabled project member",
+        "empty_capability_policy": "Empty capability policy"
+      },
+      "accessFinding": {
+        "tenant_admin_review": {
+          "title": "Too many tenant administrators",
+          "description": "There are {{count}} active super_admin/tenant_admin users. Review them regularly under least-privilege rules."
+        },
+        "unknown_user_role": {
+          "title": "Member {{username}} uses an unknown tenant role",
+          "description": "Role {{role}} is not in the platform standard role set."
+        },
+        "disabled_user_membership": {
+          "title": "Disabled member still has project access: {{username}}",
+          "description": "This member is disabled but still has {{count}} project memberships. Remove access or reactivate the account before granting access again."
+        },
+        "project_without_admin": {
+          "title": "Project has no project administrator: {{projectName}}",
+          "description": "The active project has no project_admin, which leaves AI dispatch, member authorization, and quality gate approval without a clear owner."
+        },
+        "too_many_project_admins": {
+          "title": "Too many project administrators: {{projectName}}",
+          "description": "The project has {{count}} project_admin members. Review responsibility boundaries and least-privilege access."
+        },
+        "unknown_project_role": {
+          "title": "Project member uses an unknown role: {{projectName}}",
+          "description": "Member {{username}} has project role {{role}}, which is not in the standard role set."
+        },
+        "disabled_project_member": {
+          "title": "Project contains a disabled member: {{projectName}}",
+          "description": "Member {{username}} is disabled but still keeps project role {{role}}."
+        },
+        "empty_capability_policy": {
+          "title": "Empty capability role policy exists",
+          "description": "Tenant roles {{userRoles}} and project roles {{projectRoles}} do not have capability codes configured."
+        }
+      },
+      "accessRecommendation": [
+        "Handle high risks first: stale disabled-user access, projects without owners, and unknown roles.",
+        "Turn periodic access review results into tasks for tenant administrators or security auditors.",
+        "Before automatic dispatch, AI/CLI should read access-review and policy/check to avoid assigning work to roles without required capabilities."
+      ],
       "governanceControls": "Governance controls",
       "aiSurfaces": "AI-operable surfaces",
       "emptyBusiness": "No business lines",
@@ -1408,6 +1681,8 @@
       "module": {
         "connectors": "Connectors",
         "channels": "Channels",
+        "outbound": "Outbound",
+        "inbound": "Inbound actions",
         "messages": "Message stream",
         "send": "Send test"
       },
@@ -1429,6 +1704,8 @@
       "testSent": "Test message sent",
       "messages": "Message stream",
       "noMessages": "No messages",
+      "outboundMessages": "Outbound records",
+      "inboundMessages": "Inbound actions",
       "sendTest": "Outbound send test",
       "pickChannel": "Pick channel",
       "titlePh": "Message title",
@@ -1565,7 +1842,21 @@
         "ready": "Ready for delivery",
         "review": "Needs review",
         "needs_work": "Needs work"
-      }
+      },
+      "opsPlan": "Requirement Ops Package",
+      "opsHealth": "Requirement Health",
+      "opsPreview": "Preview Tasks",
+      "opsCreate": "Create Tasks",
+      "opsHint": "Detects low-quality requirements, missing acceptance criteria, high-priority items without tasks, missing agent routing, and duplicate risks, then turns them into AI/CLI executable tasks.",
+      "opsNoRisks": "No requirement governance risks detected",
+      "opsTasksResult": "Governance tasks: planned {{planned}}, created {{created}}",
+      "opsAvgScore": "Avg Review Score",
+      "opsNeedsWork": "Needs Work",
+      "opsHighNoTasks": "High Priority No Tasks",
+      "opsSeverity": "Level",
+      "opsCategory": "Category",
+      "opsRisk": "Risk",
+      "opsCommand": "Command"
     },
     "platforms": {
       "title": "AI development platforms",
@@ -1655,7 +1946,34 @@
       "customCreate": "Add custom model",
       "roleModel": "Role model binding",
       "pickModel": "Pick model",
-      "bindRole": "Bind role model"
+      "bindRole": "Bind role model",
+      "agentRunCenter": "Agent run center",
+      "runActiveClaims": "Active claims",
+      "runReports": "Run reports",
+      "runCompleted": "Completed",
+      "runBlocked": "Blocked",
+      "runSuccessRate": "Success rate",
+      "runAllStatus": "All statuses",
+      "runAgent": "Agent",
+      "runTask": "Task",
+      "runStatus": "Status",
+      "runProgress": "Progress",
+      "runUpdated": "Updated",
+      "runSummary": "Summary",
+      "noAgentRuns": "No Agent run records yet",
+      "agentProfiles": "Capability profiles and load",
+      "agentSloCenter": "Agent SLO and auto rebalancing",
+      "previewRebalance": "Preview rebalance tasks",
+      "createRebalanceTasks": "Create governance tasks",
+      "sloScore": "SLO score",
+      "healthyAgents": "Healthy agents",
+      "watchAgents": "Watch agents",
+      "riskAgents": "Risk agents",
+      "rebalanceSuggestions": "Rebalance suggestions",
+      "sloIssues": "SLO issues",
+      "noRebalanceSuggestions": "Agent operations are stable. No rebalance suggestions for now.",
+      "rebalancePreviewOk": "{{count}} Agent rebalance tasks previewed",
+      "rebalanceApplyOk": "{{count}} Agent governance tasks created"
     },
     "settings": {
       "title": "Settings",
@@ -1851,6 +2169,24 @@
       "registryScore": "Registry consistency score",
       "registryOk": "Page registry, navigation, and migration targets are aligned",
       "registryWarn": "Registry gaps or broken migration targets found",
+      "menuHealth": "Menu health score",
+      "menuHealthScore": "Product menu health",
+      "healthIssues": "Issues",
+      "healthCritical": "Critical",
+      "healthHigh": "High",
+      "healthMedium": "Medium",
+      "healthLow": "Low",
+      "healthModules": "Modules",
+      "severity": "Severity",
+      "issueCategory": "Category",
+      "recommendation": "Recommendation",
+      "noHealthIssues": "No menu health issues",
+      "healthStatus": {
+        "excellent": "Menu, capabilities, copy, APIs, and AI surfaces are in excellent shape",
+        "good": "Menu governance is healthy; low-risk details can still be polished",
+        "needs_attention": "Menu governance has gaps; high-risk issues should be handled first",
+        "critical": "Menu governance has critical gaps that affect permissions, routing, or AI development"
+      },
       "capabilityGovernance": "Permission and AI capability governance",
       "capabilityTotal": "Capabilities",
       "submoduleTotal": "Sub-capabilities",
@@ -1921,7 +2257,8 @@
         "react": "React shell",
         "legacy": "Legacy",
         "all": "All"
-      }
+      },
+      "agentConsumption": "Agent consumption"
     },
     "search": {
       "title": "Global search",
@@ -2006,7 +2343,17 @@
       "issueSeverity": "Open issue severity",
       "templates": "Flow templates",
       "runWorkflow": "Start workflow",
-      "workflowStarted": "Workflow started: {{id}}"
+      "workflowStarted": "Workflow started: {{id}}",
+      "opsPlan": "Dev flow governance package",
+      "flowHealth": "Flow health score",
+      "previewOpsTasks": "Preview governance tasks",
+      "createOpsTasks": "Create governance tasks",
+      "opsTasksResult": "{{planned}} dev-flow governance tasks planned, {{created}} created",
+      "noOpsRisks": "No dev-flow risks",
+      "severity": "Severity",
+      "category": "Category",
+      "risk": "Risk",
+      "command": "Command"
     },
     "envOps": {
       "title": "Environment ops",
@@ -2074,12 +2421,32 @@
       "openTask": "Open tasks",
       "created": "Issue created",
       "resolvedMsg": "Marked resolved",
-      "deleted": "Deleted"
+      "deleted": "Deleted",
+      "opsPlan": "Issue Ops Package",
+      "issueHealth": "Issue Health",
+      "previewOpsTasks": "Preview Tasks",
+      "createOpsTasks": "Create Tasks",
+      "opsTasksResult": "Governance tasks: planned {{planned}}, created {{created}}",
+      "opsHint": "Detects critical open, stale, and unlinked issues, then turns them into AI/CLI executable governance tasks.",
+      "noOpsRisks": "No issue governance risks detected",
+      "staleOpen": "Stale Open",
+      "unlinkedOpen": "Unlinked Open",
+      "category": "Category",
+      "risk": "Risk",
+      "command": "Command"
     },
     "skillsHub": {
-      "repoAdded": "Repository added",
-      "syncDone": "Sync completed",
-      "deleted": "Removed"
+      "title": "Skills hub",
+      "hubTitle": "Skills hub",
+      "hubDesc": "Skill catalog, Git repos, and installed skills.",
+      "domainsTitle": "Entry points",
+      "hubSkills": "Skills",
+      "hubBuiltin": "Built-in",
+      "hubRepos": "Repos",
+      "hubInstalled": "Installed",
+      "addSkill": "Register skill",
+      "skillCreated": "Skill registered",
+      "description": "Description"
     },
     "dataSources": {
       "title": "Data sources",
@@ -2124,19 +2491,6 @@
       "desc": "Configure outbound webhooks and event subscriptions.",
       "deliveries": "Delivery log",
       "noDeliveries": "No deliveries yet"
-    },
-    "skillsHub": {
-      "title": "Skills hub",
-      "hubTitle": "Skills hub",
-      "hubDesc": "Skill catalog, Git repos, and installed skills.",
-      "domainsTitle": "Entry points",
-      "hubSkills": "Skills",
-      "hubBuiltin": "Built-in",
-      "hubRepos": "Repos",
-      "hubInstalled": "Installed",
-      "addSkill": "Register skill",
-      "skillCreated": "Skill registered",
-      "description": "Description"
     }
   },
   "projectSelector": {

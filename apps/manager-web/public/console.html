@@ -513,14 +513,51 @@ const API = (typeof window !== 'undefined' && window.location && (window.locatio
   ? (window.location.origin.replace(/\/$/, '') + '/api/v1')
   : 'http://localhost:8765/api/v1';
 
+function isSessionUnauthorized(status, body) {
+  body = String(body || '');
+  return status === 401 && (
+    body.indexOf('Token 已过期') >= 0 ||
+    body.indexOf('Token 无效') >= 0 ||
+    body.indexOf('Token 用户标识无效') >= 0 ||
+    body.indexOf('Token 用户加载失败') >= 0 ||
+    body.indexOf('用户不存在或已禁用') >= 0
+  );
+}
+
+function clearBrowserSession() {
+  [
+    'sop-token',
+    'sop-user',
+    'sop-current-project-id',
+    'sop-current-project-code',
+    'sop-current-business-code',
+    'sop-current-tenant-code'
+  ].forEach(function (key) {
+    try { localStorage.removeItem(key); } catch (e) {}
+  });
+}
+
+function redirectLogin() {
+  var redirect = (window.location.pathname || '') + (window.location.search || '') + (window.location.hash || '');
+  window.location.replace('login.html?redirect=' + encodeURIComponent(redirect || 'console.html'));
+}
+
 // ── 认证：token 检查 + 自动跳转登录 ─────────────────────────────
 (function(){
   var token = '';
   try { token = localStorage.getItem('sop-token') || ''; } catch(e) {}
-  if (!token) { window.location.replace('login.html'); return; }
+  if (!token) { redirectLogin(); return; }
   // 验证 token 有效性（静默，失败则跳转）
   fetch(API + '/auth/me', { headers: { Authorization: 'Bearer ' + token } })
-    .then(function(r) { if (!r.ok) { localStorage.removeItem('sop-token'); window.location.replace('login.html'); } })
+    .then(function(r) {
+      if (r.ok) return;
+      r.clone().text().then(function (txt) {
+        if (isSessionUnauthorized(r.status, txt)) {
+          clearBrowserSession();
+          redirectLogin();
+        }
+      }).catch(function () {});
+    })
     .catch(function() {});
 })();
 
@@ -576,7 +613,14 @@ function apiFetch(input, init) {
   }
   var resolved = typeof input === 'string' ? resolveApiInput(input) : input;
   return fetch(resolved, next).then(function(r) {
-    if (r.status === 401) { localStorage.removeItem('sop-token'); window.location.replace('login.html'); }
+    if (r.status === 401) {
+      r.clone().text().then(function (txt) {
+        if (isSessionUnauthorized(r.status, txt)) {
+          clearBrowserSession();
+          redirectLogin();
+        }
+      }).catch(function () {});
+    }
     if (r.status === 403) {
       var tr403 = (typeof window.t === 'function' ? window.t : function (k) { return k; });
       r.clone().json().then(function (j) {

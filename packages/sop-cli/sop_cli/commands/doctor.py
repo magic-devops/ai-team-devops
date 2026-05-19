@@ -199,7 +199,9 @@ def _check_agent_context(cfg) -> tuple[bool, str]:
     ctx = cfg.project_path / ".sop-runtime" / "agent_context.json"
     snap = cfg.project_path / ".sop-runtime" / "work_snapshot.json"
     env = cfg.project_path / ".sop-runtime" / "sop.env"
-    missing = [str(p.relative_to(cfg.project_path)) for p in (ctx, snap, env) if not p.is_file()]
+    pages_manifest = cfg.project_path / ".sop-runtime" / "pages_manifest.json"
+    pages_capabilities = cfg.project_path / ".sop-runtime" / "pages_capabilities.json"
+    missing = [str(p.relative_to(cfg.project_path)) for p in (ctx, snap, env, pages_manifest, pages_capabilities) if not p.is_file()]
     if missing:
         return False, f"缺少 {', '.join(missing)} → sop context prepare"
     try:
@@ -211,7 +213,7 @@ def _check_agent_context(cfg) -> tuple[bool, str]:
     snap_schema = snapshot.get("schema") if isinstance(snapshot, dict) else ""
     if schema != "sop.agent-context.v1" or snap_schema != "sop.work.snapshot.v1":
         return False, f"schema 异常：context={schema or '-'} snapshot={snap_schema or '-'}"
-    return True, f"context={schema} snapshot={snap_schema} env=✓"
+    return True, f"context={schema} snapshot={snap_schema} env=✓ pages=✓"
 
 
 def _jsonl_count(path: Path) -> tuple[int, int]:

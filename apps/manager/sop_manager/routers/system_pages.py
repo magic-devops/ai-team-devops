@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from collections import Counter
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -37,6 +39,18 @@ def _action_approvals_file():
     d = resolved_ai_memory_root() / "system-pages-v4"
     d.mkdir(parents=True, exist_ok=True)
     return d / "module_action_approvals.jsonl"
+
+
+def _menu_prefs_dir() -> Path:
+    d = resolved_ai_memory_root() / "system-pages-v4" / "menu_prefs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _menu_prefs_file(user: User) -> Path:
+    tenant = str(getattr(user, "tenant_id", "") or "default").replace("/", "_")
+    uid = str(getattr(user, "id", "") or getattr(user, "username", "") or "anonymous").replace("/", "_")
+    return _menu_prefs_dir() / f"{tenant}__{uid}.json"
 
 
 def _default_action_policy() -> dict[str, Any]:
@@ -394,7 +408,7 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "projectOnboarding": [("overview", "接入总览"), ("commands", "命令清单"), ("env", "环境变量"), ("agent_toml", "agent.toml"), ("tool_profiles", "工具 Profile"), ("context_assets", "上下文资产")],
     "projectTemplates": [("overview", "模板总览"), ("template_catalog", "模板目录"), ("clone_wizard", "克隆向导"), ("capability_flags", "能力开关")],
     "projectGovernance": [("readiness", "健康评估"), ("ops_plan", "治理操作包"), ("governance_tasks", "治理任务化"), ("agent_prompt", "Agent 接手提示词")],
-    "organization": [("tenant_users", "租户成员"), ("business_lines", "业务线"), ("project_members", "项目成员"), ("role_policy", "角色策略")],
+    "organization": [("tenant_users", "租户成员"), ("business_lines", "业务线"), ("project_members", "项目成员"), ("role_policy", "角色策略"), ("access_review", "权限体检")],
     "requirements": [("requirement_pool", "需求池"), ("smart_review", "智能评审"), ("task_generation", "任务拆解"), ("batch_governance", "批量治理")],
     "tasks": [("execution_table", "执行列表"), ("kanban", "状态看板"), ("dag_dependencies", "任务依赖关系"), ("scheduler_center", "依赖调度执行"), ("agent_feed", "Agent Feed"), ("bulk_governance", "批量治理")],
     "taskExecution": [("execution_table", "执行表格"), ("filters", "筛选器"), ("bulk_update", "批量治理")],
@@ -416,17 +430,19 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "dataExchange": [("export_jobs", "导出作业"), ("import_jobs", "导入作业"), ("preview_merge", "导入预检"), ("archive", "归档治理")],
     "analyticsNlq": [("natural_query", "自然语言问数"), ("semantic_context", "语义上下文"), ("save_report", "保存报告")],
     "copilot": [("chat", "会话问答"), ("commands", "命令中心"), ("tool_plan", "工具计划"), ("plan_to_tasks", "计划转任务")],
-    "intelligence": [("knowledge", "知识库"), ("rag", "RAG 检索"), ("memory", "记忆"), ("rules", "规则"), ("worker", "WorkerOps"), ("sync", "SyncOps"), ("usage", "用量治理")],
+    "intelligence": [("knowledge", "知识库"), ("rag", "RAG 检索"), ("memory", "记忆"), ("rules", "规则"), ("distill", "蒸馏审核"), ("specs", "规范文档"), ("design_docs", "技术方案"), ("datasources", "数据源"), ("worker", "WorkerOps"), ("sync", "SyncOps"), ("events", "事件流水"), ("usage", "用量治理")],
     "knowledgeBase": [("documents", "知识文档"), ("index", "索引"), ("search", "检索")],
     "ragSearch": [("retrieval", "检索增强"), ("citations", "引用证据"), ("prompt_context", "提示词上下文")],
     "aiMemory": [("recent", "最近记忆"), ("search", "记忆检索"), ("attach_run", "运行挂载")],
     "ruleCenter": [("proposals", "规则提案"), ("apply", "规则应用"), ("sync", "规则同步")],
+    "reflectionDistill": [("run", "蒸馏运行"), ("proposal_review", "提案审核"), ("rule_apply", "规则入库")],
     "workerOps": [("job_types", "任务类型"), ("enqueue", "任务投递"), ("monitor", "运行监控")],
     "syncOps": [("modules", "同步模块"), ("pull", "拉取预览"), ("asset_push", "资产推送")],
+    "eventStream": [("cloud_events", "CloudEvents"), ("sync_events", "同步事件"), ("agent_events", "Agent 事件")],
     "usageOps": [("quota", "配额"), ("alerts", "告警"), ("governance_tasks", "治理任务")],
-    "platforms": [("tool_profiles", "工具接入"), ("mcp_hub", "MCP Hub"), ("agents", "Agent 注册"), ("models", "模型管理"), ("ops", "运行治理"), ("a2a", "A2A 专家组")],
+    "platforms": [("tool_profiles", "工具接入"), ("mcp_hub", "MCP Hub"), ("agents", "Agent 注册"), ("agent_runs", "Agent 运行中心"), ("models", "模型管理"), ("ops", "运行治理"), ("a2a", "A2A 专家组")],
     "marketplace": [("catalog", "资产目录"), ("installed", "已安装资产"), ("rating", "评分反馈"), ("signature", "签名状态")],
-    "notify": [("channels", "通道模板"), ("outbound", "出站消息"), ("inbound", "入站消息"), ("action_conversion", "消息转任务/需求")],
+    "notify": [("connectors", "连接器"), ("channels", "通道模板"), ("outbound", "出站消息"), ("inbound", "入站消息"), ("messages", "消息流水"), ("action_conversion", "消息转任务/需求")],
     "audit": [("hash_chain", "审计哈希链"), ("events", "事件检索"), ("module_actions", "模块动作审计"), ("approvals", "动作审批"), ("export", "合规导出")],
     "systemMap": [("registry", "页面注册表"), ("manifest", "模块 Manifest"), ("capabilities", "能力权限"), ("actions", "动作目录"), ("legacy", "Legacy 收敛"), ("migration", "迁移任务")],
     "settings": [("account", "账户会话"), ("runtime", "运行状态"), ("sso", "企业 SSO"), ("billing", "商业计费"), ("profiles", "环境 Profile"), ("observability", "日志观测")],
@@ -460,6 +476,7 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("organization", "business_lines"): "#/organization/businesses",
     ("organization", "project_members"): "#/organization/project-members",
     ("organization", "role_policy"): "#/organization/role-policy",
+    ("organization", "access_review"): "#/organization/access-review",
     ("requirements", "requirement_pool"): "#/requirements/pool",
     ("requirements", "smart_review"): "#/requirements/review",
     ("requirements", "task_generation"): "#/requirements/generation",
@@ -486,12 +503,18 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("intelligence", "rag"): "#/intelligence/rag",
     ("intelligence", "memory"): "#/intelligence/memory",
     ("intelligence", "rules"): "#/intelligence/rules",
+    ("intelligence", "distill"): "#/intelligence/distill",
+    ("intelligence", "specs"): "#/intelligence/specs",
+    ("intelligence", "design_docs"): "#/intelligence/design-docs",
+    ("intelligence", "datasources"): "#/intelligence/datasources",
     ("intelligence", "worker"): "#/intelligence/worker",
     ("intelligence", "sync"): "#/intelligence/sync",
+    ("intelligence", "events"): "#/intelligence/events",
     ("intelligence", "usage"): "#/intelligence/usage",
     ("platforms", "tool_profiles"): "#/platforms/tools",
     ("platforms", "mcp_hub"): "#/platforms/mcp",
     ("platforms", "agents"): "#/platforms/agents",
+    ("platforms", "agent_runs"): "#/platforms/agent-runs",
     ("platforms", "models"): "#/platforms/models",
     ("platforms", "ops"): "#/platforms/ops",
     ("marketplace", "catalog"): "#/marketplace/catalog",
@@ -500,6 +523,8 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("notify", "channels"): "#/notify/channels",
     ("notify", "outbound"): "#/notify/outbound",
     ("notify", "inbound"): "#/notify/inbound",
+    ("notify", "connectors"): "#/notify/connectors",
+    ("notify", "messages"): "#/notify/messages",
     ("audit", "hash_chain"): "#/audit/chain",
     ("audit", "events"): "#/audit/events",
     ("audit", "module_actions"): "#/audit/module-actions",
@@ -587,6 +612,17 @@ class ModuleActionApprovalReviewIn(BaseModel):
     note: str = ""
 
 
+class MenuPreferencesIn(BaseModel):
+    favorites: list[str] | None = None
+    recents: list[str] | None = None
+    density: str | None = Field(None, pattern="^(compact|comfortable|cozy)$")
+    show_recents: bool | None = None
+    show_favorites: bool | None = None
+    collapsed_groups: dict[str, bool] | None = None
+    collapsed_categories: dict[str, bool] | None = None
+    collapsed_modules: dict[str, bool] | None = None
+
+
 NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "dashboard", "path": "#/dashboard", "domain": "overview", "capability": "overview.dashboard"},
     {"id": "projects", "path": "#/projects", "domain": "portfolio", "capability": "portfolio.projects"},
@@ -648,16 +684,19 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "ragSearch", "path": "#/intelligence/rag", "domain": "ai", "capability": "ai.intelligence.rag"},
     {"id": "aiMemory", "path": "#/intelligence/memory", "domain": "ai", "capability": "ai.intelligence.memory"},
     {"id": "ruleCenter", "path": "#/intelligence/rules", "domain": "ai", "capability": "ai.intelligence.rules"},
+    {"id": "reflectionDistill", "path": "#/intelligence/distill", "domain": "ai", "capability": "ai.intelligence.distill"},
     {"id": "specs", "path": "#/intelligence/specs", "domain": "ai", "capability": "ai.intelligence.specs"},
     {"id": "designDocs", "path": "#/intelligence/design-docs", "domain": "ai", "capability": "ai.intelligence.design-docs"},
     {"id": "dataSources", "path": "#/intelligence/datasources", "domain": "ai", "capability": "ai.intelligence.datasources"},
     {"id": "workerOps", "path": "#/intelligence/worker", "domain": "ai", "capability": "ai.intelligence.worker"},
     {"id": "syncOps", "path": "#/intelligence/sync", "domain": "ai", "capability": "ai.intelligence.sync"},
+    {"id": "eventStream", "path": "#/intelligence/events", "domain": "ai", "capability": "ai.intelligence.events"},
     {"id": "usageOps", "path": "#/intelligence/usage", "domain": "ai", "capability": "ai.intelligence.usage"},
     {"id": "platforms", "path": "#/platforms", "domain": "ecosystem", "capability": "ecosystem.platforms"},
     {"id": "platformTools", "path": "#/platforms/tools", "domain": "ecosystem", "capability": "ecosystem.platforms.tools"},
     {"id": "mcpHub", "path": "#/platforms/mcp", "domain": "ecosystem", "capability": "ecosystem.platforms.mcp"},
     {"id": "agentRegistry", "path": "#/platforms/agents", "domain": "ecosystem", "capability": "ecosystem.platforms.agents"},
+    {"id": "agentRuns", "path": "#/platforms/agent-runs", "domain": "ecosystem", "capability": "ecosystem.platforms.agent-runs"},
     {"id": "modelOps", "path": "#/platforms/models", "domain": "ecosystem", "capability": "ecosystem.platforms.models"},
     {"id": "platformOps", "path": "#/platforms/ops", "domain": "ecosystem", "capability": "ecosystem.platforms.ops"},
     {"id": "cliTools", "path": "#/platforms/cli", "domain": "ecosystem", "capability": "ecosystem.platforms.cli"},
@@ -666,6 +705,11 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "skillsCatalog", "path": "#/skills-hub/skills", "domain": "ecosystem", "capability": "ecosystem.skills-hub.skills"},
     {"id": "skillsRepos", "path": "#/skills-hub/repos", "domain": "ecosystem", "capability": "ecosystem.skills-hub.repos"},
     {"id": "notify", "path": "#/notify", "domain": "ecosystem", "capability": "ecosystem.notify"},
+    {"id": "notifyConnectors", "path": "#/notify/connectors", "domain": "ecosystem", "capability": "ecosystem.notify.connectors"},
+    {"id": "notifyChannels", "path": "#/notify/channels", "domain": "ecosystem", "capability": "ecosystem.notify.channels"},
+    {"id": "notifyOutbound", "path": "#/notify/outbound", "domain": "ecosystem", "capability": "ecosystem.notify.outbound"},
+    {"id": "notifyInbound", "path": "#/notify/inbound", "domain": "ecosystem", "capability": "ecosystem.notify.inbound"},
+    {"id": "notifyMessages", "path": "#/notify/messages", "domain": "ecosystem", "capability": "ecosystem.notify.messages"},
     {"id": "webhooks", "path": "#/notify/webhooks", "domain": "ecosystem", "capability": "ecosystem.notify.webhooks"},
     {"id": "audit", "path": "#/audit", "domain": "governance", "capability": "governance.audit"},
     {"id": "systemMap", "path": "#/system-map", "domain": "governance", "capability": "governance.system-map"},
@@ -748,7 +792,12 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "devFlow", "name": "研发全流程", "domain": "delivery", "path": "#/dev-flow", "status": "active", "maturity": 92, "apis": ["/api/v1/dev-flow/summary", "/api/v1/dev-flow/charts", "/api/v1/dev-flow/burndown"], "capabilities": ["需求任务问题聚合", "ECharts 分布图", "AntV 燃尽曲线", "状态分布", "仓库线索"], "next": ["AI 流程模板", "历史燃尽归档"]},
     {"id": "orchestration", "name": "编排工作室", "domain": "delivery", "path": "#/orchestration", "status": "active", "maturity": 84, "apis": ["/api/v1/orchestration/tools", "/api/v1/orchestration/workflows"], "capabilities": ["开发工具目录", "编排工作流定义", "工具可用性", "与 Workflows 联动"], "next": ["可视化 DAG", "Temporal 执行态"]},
     {"id": "workflows", "name": "工作流", "domain": "delivery", "path": "#/workflows", "status": "active", "maturity": 92, "apis": ["/api/v1/workflows/types", "/api/v1/workflows/start", "/api/v1/workflows/instances", "/api/v1/workflows/{id}/detail", "/api/v1/workflows/engine/status", "/api/v1/workflows/events"], "capabilities": ["模板目录", "启动执行", "AntV DAG 可视化", "Temporal 状态", "事件流水", "信号/取消"], "next": ["人工审批节点表单", "Temporal 历史回放"]},
-    {"id": "organization", "name": "组织权限", "domain": "portfolio", "path": "#/organization", "status": "active", "maturity": 82, "apis": ["/api/v1/organization/summary", "/api/v1/auth/users", "/api/v1/businesses", "/api/v1/projects/{id}/members"], "capabilities": ["组织摘要", "租户成员", "业务线", "项目成员", "角色状态", "密码重置"], "next": ["ABAC 策略", "审计联动"]},
+    {"id": "workflowTemplates", "name": "流程模板", "domain": "delivery", "path": "#/workflows/templates", "status": "active", "maturity": 84, "apis": ["/api/v1/workflows/templates"], "capabilities": ["模板目录", "模板启停", "编排配置"], "next": ["模板版本", "可视化设计器"]},
+    {"id": "workflowInstances", "name": "运行实例", "domain": "delivery", "path": "#/workflows/instances", "status": "active", "maturity": 84, "apis": ["/api/v1/workflows/instances"], "capabilities": ["实例列表", "状态跟踪", "失败诊断"], "next": ["实例 SLA", "重试策略"]},
+    {"id": "workflowEvents", "name": "事件流水", "domain": "delivery", "path": "#/workflows/events", "status": "active", "maturity": 83, "apis": ["/api/v1/workflows/events"], "capabilities": ["事件查询", "事件过滤", "运行追踪"], "next": ["事件检索索引"]},
+    {"id": "workflowSignals", "name": "信号控制", "domain": "delivery", "path": "#/workflows/signals", "status": "active", "maturity": 83, "apis": ["/api/v1/workflows/instances", "/api/v1/workflows/signals"], "capabilities": ["目标实例", "信号发送", "运行干预"], "next": ["信号审批", "信号审计"]},
+    {"id": "workflowBulkOps", "name": "批量治理", "domain": "delivery", "path": "#/workflows/bulk_ops", "status": "active", "maturity": 82, "apis": ["/api/v1/workflows/ops-plan", "/api/v1/workflows/ops-tasks"], "capabilities": ["治理操作包", "批量任务化", "风险处置"], "next": ["自动化 Runbook"]},
+    {"id": "organization", "name": "组织权限", "domain": "portfolio", "path": "#/organization", "status": "active", "maturity": 86, "apis": ["/api/v1/organization/summary", "/api/v1/organization/policy", "/api/v1/organization/access-review", "/api/v1/auth/users", "/api/v1/businesses", "/api/v1/projects/{id}/members"], "capabilities": ["组织摘要", "租户成员", "业务线", "项目成员", "角色策略", "权限体检", "治理任务"], "next": ["ABAC 策略", "审批流联动"]},
     {"id": "analytics", "name": "指标概览", "domain": "data", "path": "#/analytics", "status": "active", "maturity": 92, "apis": ["/api/v1/analytics/overview"], "capabilities": ["项目指标摘要", "关键指标快照", "原始指标 JSON"], "next": ["指标权限", "趋势图", "异常阈值"]},
     {"id": "analyticsBlueprint", "name": "数据智能蓝图", "domain": "data", "path": "#/analytics/blueprint", "status": "active", "maturity": 82, "apis": ["/api/v1/analytics/blueprint", "/api/v1/analytics/blueprint/summary", "/api/v1/analytics/blueprint/charts", "/api/v1/analytics/blueprint/tasks"], "capabilities": ["数据能力地图", "成熟度评估", "技术栈矩阵", "缺口任务化"], "next": ["质量中心", "指标/标签任务模板"]},
     {"id": "analyticsReports", "name": "洞察报告", "domain": "data", "path": "#/analytics/reports", "status": "active", "maturity": 96, "apis": ["/api/v1/analytics/reports", "/api/v1/analytics/reports/summary", "/api/v1/analytics/reports/charts", "/api/v1/analytics/report-subscription", "/api/v1/analytics/report-subscription/test", "/api/v1/analytics/reports/{id}/status", "/api/v1/analytics/reports/{id}/meta", "/api/v1/analytics/reports/{id}/action-tasks", "/api/v1/analytics/reports/{id}.md", "/api/v1/analytics/reports/{id}/notify"], "capabilities": ["洞察报告沉淀", "报告运营摘要", "报告搜索筛选", "报告资产元数据治理", "报告生成执行任务", "报告发布归档", "Markdown 导出", "报告通知发送", "报告订阅策略", "订阅通道测试"], "next": ["报告订阅调度", "报告权限", "AI 自动洞察"]},
@@ -761,7 +810,12 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "analyticsLineage", "name": "数据血缘", "domain": "data", "path": "#/analytics/lineage", "status": "active", "maturity": 85, "apis": ["/api/v1/analytics/lineage", "/api/v1/analytics/lineage/impact"], "capabilities": ["血缘图谱", "影响分析", "上下游追溯", "节点筛选"], "next": ["血缘权限", "变更订阅"]},
     {"id": "dataExchange", "name": "数据交换", "domain": "data", "path": "#/analytics/exchange", "status": "active", "maturity": 88, "apis": ["/api/v1/data-exchange/summary", "/api/v1/data-exchange/charts", "/api/v1/data-exchange/export", "/api/v1/data-exchange/preview", "/api/v1/data-exchange/import", "/api/v1/data-exchange/jobs", "/api/v1/data-exchange/export-job"], "capabilities": ["数据港导入导出", "导入预检", "数据交换作业流水", "选择模块导出"], "next": ["导入任务异步化", "对象存储归档", "跨项目数据服务联邦"]},
     {"id": "analyticsNlq", "name": "NLQ 问数", "domain": "data", "path": "#/analytics/nlq", "status": "active", "maturity": 82, "apis": ["/api/v1/analytics/nlq", "/api/v1/analytics/overview"], "capabilities": ["自然语言问数", "LLM 指标解释", "问答保存为报告"], "next": ["指标语义层", "权限感知 NLQ", "SQL 生成审计"]},
-    {"id": "notify", "name": "通信集成", "domain": "ecosystem", "path": "#/notify", "status": "active", "maturity": 80, "apis": ["/api/v1/notify/summary", "/api/v1/notify/charts", "/api/v1/notify/timeline", "/api/v1/notify/channels", "/api/v1/notify/messages", "/api/v1/notify/inbound"], "capabilities": ["通道摘要", "消息时间线", "统一通道模板", "出站发送", "入站记录", "通道测试", "入站转需求/任务"], "next": ["钉钉/企微真实回调验签", "Agent 自动订阅策略"]},
+    {"id": "notify", "name": "通信集成", "domain": "ecosystem", "path": "#/notify", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/hub", "/api/v1/notify/summary", "/api/v1/notify/charts", "/api/v1/notify/timeline", "/api/v1/notify/connectors", "/api/v1/notify/channels", "/api/v1/notify/messages", "/api/v1/notify/inbound"], "capabilities": ["连接器矩阵", "通道摘要", "消息时间线", "统一通道模板", "出站发送", "入站记录", "通道测试", "入站转需求/任务", "独立子路由"], "next": ["Agent 自动订阅策略", "消息重试策略"]},
+    {"id": "notifyConnectors", "name": "连接器矩阵", "domain": "ecosystem", "path": "#/notify/connectors", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/connectors"], "capabilities": ["企业微信", "钉钉", "Webhook", "Slack", "签名模板"], "next": ["连接器健康探测"]},
+    {"id": "notifyChannels", "name": "通道管理", "domain": "ecosystem", "path": "#/notify/channels", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/channels"], "capabilities": ["通道列表", "启停配置", "模板配置"], "next": ["密钥托管"]},
+    {"id": "notifyOutbound", "name": "出站发送", "domain": "ecosystem", "path": "#/notify/outbound", "status": "active", "maturity": 83, "apis": ["/api/v1/notify/send", "/api/v1/notify/messages"], "capabilities": ["发送测试", "通知草稿", "消息落账"], "next": ["重试策略"]},
+    {"id": "notifyInbound", "name": "入站处置", "domain": "ecosystem", "path": "#/notify/inbound", "status": "active", "maturity": 83, "apis": ["/api/v1/notify/inbound", "/api/v1/notify/inbound/{message_id}/action"], "capabilities": ["入站消息", "转任务", "转需求", "处置审计"], "next": ["意图识别"]},
+    {"id": "notifyMessages", "name": "消息流水", "domain": "ecosystem", "path": "#/notify/messages", "status": "active", "maturity": 82, "apis": ["/api/v1/notify/messages", "/api/v1/notify/timeline"], "capabilities": ["全量消息表", "方向筛选", "日聚合时间线", "入站处置入口"], "next": ["消息检索索引", "死信重试"]},
     {"id": "webhooks", "name": "Webhook", "domain": "ecosystem", "path": "#/notify/webhooks", "status": "active", "maturity": 88, "apis": ["/api/v1/webhooks", "/api/v1/webhooks/events", "/api/v1/webhooks/{id}/deliveries"], "capabilities": ["出站 Webhook", "事件订阅", "HMAC 签名", "投递测试", "投递时间线"], "next": ["重试策略可视化", "死信队列"]},
     {"id": "dataSources", "name": "数据源", "domain": "ai", "path": "#/intelligence/datasources", "status": "active", "maturity": 84, "apis": ["/api/v1/db-config/connections"], "capabilities": ["连接配置", "驱动目录", "连接测试"], "next": ["SecretRef", "SCIM 同步"]},
     {"id": "envOps", "name": "环境运维", "domain": "system", "path": "#/ops/env", "status": "active", "maturity": 86, "apis": ["/api/v1/env/check/full", "/api/v1/env/docker/ps"], "capabilities": ["环境检查", "Docker 列表", "Compose 入口"], "next": ["镜像构建 UI", "受控修复向导"]},
@@ -774,8 +828,10 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "ragSearch", "name": "RAG 检索", "domain": "ai", "path": "#/intelligence/rag", "status": "active", "maturity": 84, "apis": ["/api/v1/rag/search"], "capabilities": ["检索增强", "引用证据", "提示词上下文"], "next": ["混合检索", "图谱 RAG"]},
     {"id": "aiMemory", "name": "AI 记忆", "domain": "ai", "path": "#/intelligence/memory", "status": "active", "maturity": 86, "apis": ["/api/v1/memory"], "capabilities": ["最近记忆", "记忆检索", "运行挂载", "本地优先同步"], "next": ["长期记忆压缩", "画像本体"]},
     {"id": "ruleCenter", "name": "规则中心", "domain": "ai", "path": "#/intelligence/rules", "status": "active", "maturity": 84, "apis": ["/api/v1/rules", "/api/v1/reflections/proposals"], "capabilities": ["规则提案", "规则应用", "蒸馏审核", "规则同步"], "next": ["规则评测", "灰度发布"]},
+    {"id": "reflectionDistill", "name": "蒸馏审核", "domain": "ai", "path": "#/intelligence/distill", "status": "active", "maturity": 83, "apis": ["/api/v1/reflections/distill", "/api/v1/reflections/proposals", "/api/v1/reflections/proposals/{proposal_id}/review"], "capabilities": ["反思采样", "规则蒸馏", "提案审核", "规则入库"], "next": ["模型评测", "自动化置信度策略"]},
     {"id": "workerOps", "name": "WorkerOps", "domain": "ai", "path": "#/intelligence/worker", "status": "active", "maturity": 82, "apis": ["/api/v1/worker/jobs"], "capabilities": ["任务类型", "幂等投递", "运行监控", "取消重试"], "next": ["真实执行池", "资源配额"]},
     {"id": "syncOps", "name": "SyncOps", "domain": "ai", "path": "#/intelligence/sync", "status": "active", "maturity": 82, "apis": ["/api/v1/sync/summary", "/api/v1/sync/pull"], "capabilities": ["同步模块", "拉取预览", "资产推送", "流水查看"], "next": ["冲突合并", "双向同步策略"]},
+    {"id": "eventStream", "name": "事件流水", "domain": "ai", "path": "#/intelligence/events", "status": "active", "maturity": 82, "apis": ["/api/v1/events", "/ws/events"], "capabilities": ["CloudEvents 查询", "同步事件", "Agent 事件", "实时订阅"], "next": ["事件检索索引", "事件驱动自动修复"]},
     {"id": "usageOps", "name": "用量治理", "domain": "ai", "path": "#/intelligence/usage", "status": "active", "maturity": 84, "apis": ["/api/v1/usage/summary", "/api/v1/usage/alerts", "/api/v1/usage/alerts/tasks"], "capabilities": ["配额进度", "用量告警", "治理任务", "来源分析"], "next": ["成本归因", "自动限流策略"]},
     {"id": "specs", "name": "规范文档", "domain": "ai", "path": "#/intelligence/specs", "status": "active", "maturity": 86, "apis": ["/api/v1/specs", "/api/v1/specs/content"], "capabilities": ["规约列表", "Markdown 编辑", "分类浏览", "保存同步"], "next": ["版本发布", "知识库索引"]},
     {"id": "designDocs", "name": "技术方案", "domain": "ai", "path": "#/intelligence/design-docs", "status": "active", "maturity": 84, "apis": ["/api/v1/design-docs", "/api/v1/design-docs/{id}"], "capabilities": ["方案 CRUD", "版本正文", "分类标签"], "next": ["文档索引进度", "规则提案联动"]},
@@ -783,7 +839,12 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "skillsHub", "name": "技能中心", "domain": "ecosystem", "path": "#/skills-hub", "status": "active", "maturity": 86, "apis": ["/api/v1/skills/hub", "/api/v1/skills", "/api/v1/skill-repo/repos", "/api/v1/skill-repo/installed"], "capabilities": ["治理中心", "技能目录", "技能仓库", "同步安装", "内置技能保护"], "next": ["签名校验", "技能市场评分"]},
     {"id": "skillsCatalog", "name": "技能目录", "domain": "ecosystem", "path": "#/skills-hub/skills", "status": "active", "maturity": 86, "apis": ["/api/v1/skills"], "capabilities": ["技能列表", "角色标记", "删除治理"], "next": ["技能版本", "依赖检查"]},
     {"id": "skillsRepos", "name": "技能仓库", "domain": "ecosystem", "path": "#/skills-hub/repos", "status": "active", "maturity": 84, "apis": ["/api/v1/skill-repo/repos", "/api/v1/skill-repo/repos/{id}/sync"], "capabilities": ["仓库注册", "分支同步", "已安装清单"], "next": ["仓库签名校验", "离线镜像"]},
-    {"id": "platforms", "name": "Agent 平台", "domain": "ecosystem", "path": "#/platforms", "status": "active", "maturity": 90, "apis": ["/api/v1/platforms/hub", "/api/v1/platforms", "/api/v1/platforms/ops-plan", "/api/v1/mcp", "/api/v1/models", "/api/v1/agents"], "capabilities": ["治理中心", "CLI/IDE/Agent 接入", "MCP Hub", "MCP Profile 导出", "Agent 注册表", "A2A 专家组", "运行治理", "治理任务生成", "MCP 工具 Profile", "模型提供商", "默认模型", "角色模型"], "next": ["Agent 能力包市场", "多工具健康策略", "A2A/MCP 运行态观测"]},
+    {"id": "platforms", "name": "Agent 平台", "domain": "ecosystem", "path": "#/platforms", "status": "active", "maturity": 90, "apis": ["/api/v1/platforms/hub", "/api/v1/platforms", "/api/v1/platforms/ops-plan", "/api/v1/mcp", "/api/v1/models", "/api/v1/agents", "/api/v1/agents/runs"], "capabilities": ["治理中心", "CLI/IDE/Agent 接入", "MCP Hub", "MCP Profile 导出", "Agent 注册表", "Agent 运行中心", "A2A 专家组", "运行治理", "治理任务生成", "MCP 工具 Profile", "模型提供商", "默认模型", "角色模型"], "next": ["Agent 能力包市场", "多工具健康策略", "A2A/MCP 运行态观测"]},
+    {"id": "platformTools", "name": "工具接入", "domain": "ecosystem", "path": "#/platforms/tools", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms"], "capabilities": ["CLI/IDE 接入", "工具目录", "接入 Profile"], "next": ["工具健康回传"]},
+    {"id": "mcpHub", "name": "MCP Hub", "domain": "ecosystem", "path": "#/platforms/mcp", "status": "active", "maturity": 86, "apis": ["/api/v1/mcp"], "capabilities": ["MCP 模板", "命令探测", "Profile 导出"], "next": ["MCP 运行态观测"]},
+    {"id": "agentRegistry", "name": "Agent 注册表", "domain": "ecosystem", "path": "#/platforms/agents", "status": "active", "maturity": 85, "apis": ["/api/v1/agents", "/api/v1/agents/summary"], "capabilities": ["Agent 角色", "能力画像", "A2A 专家组"], "next": ["能力包市场"]},
+    {"id": "agentRuns", "name": "Agent 运行中心", "domain": "ecosystem", "path": "#/platforms/agent-runs", "status": "active", "maturity": 84, "apis": ["/api/v1/agents/runs", "/api/v1/agents/runs/summary", "/api/v1/tasks/agent-feed/claims", "/api/v1/tasks/{id}/agent-report"], "capabilities": ["运行列表", "能力画像", "活跃租约", "负载统计", "成功率", "最近心跳"], "next": ["Run 表持久化", "Agent SLO", "自动再平衡"]},
+    {"id": "modelOps", "name": "模型管理", "domain": "ecosystem", "path": "#/platforms/models", "status": "active", "maturity": 85, "apis": ["/api/v1/models"], "capabilities": ["模型目录", "默认模型", "提供商连接", "角色绑定"], "next": ["模型评测", "成本路由"]},
     {"id": "platformOps", "name": "运行治理", "domain": "ecosystem", "path": "#/platforms/ops", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms/ops-plan", "/api/v1/platforms/ops-tasks"], "capabilities": ["健康评分", "风险清单", "治理 Runbook", "AI 操作包", "治理任务预览", "治理任务落地"], "next": ["多工具 SLO", "Agent 执行审计", "自愈策略"]},
     {"id": "cliTools", "name": "CLI 工具", "domain": "ecosystem", "path": "#/platforms/cli", "status": "active", "maturity": 86, "apis": ["/api/v1/cli", "/api/v1/cli/run"], "capabilities": ["工具目录", "受控执行", "自定义工具", "安装提示"], "next": ["执行审计", "配额策略"]},
     {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 88, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest"], "capabilities": ["治理中心", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "细粒度权限", "模块动作目录"], "next": ["页面插件清单", "按钮级权限矩阵"]},
@@ -1280,6 +1341,268 @@ def _registry_validation() -> dict[str, Any]:
     }
 
 
+def _frontend_i18n_nav_keys(locale: str) -> set[str]:
+    path = Path(__file__).resolve().parents[3] / "manager-web" / "src" / "i18n" / f"{locale}.json"
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    nav = data.get("nav") if isinstance(data, dict) else {}
+    if not isinstance(nav, dict):
+        return set()
+    keys = {str(key) for key in nav.keys()}
+    sub = nav.get("sub")
+    if isinstance(sub, dict):
+        keys.update(f"sub.{key}" for key in sub.keys())
+    return keys
+
+
+def _menu_health_issue(
+    *,
+    category: str,
+    severity: str,
+    module_id: str,
+    title: str,
+    detail: str,
+    recommendation: str,
+    path: str = "",
+    capability: str = "",
+) -> dict[str, Any]:
+    penalty = {"critical": 15, "high": 10, "medium": 5, "low": 2}.get(severity, 3)
+    issue_key = hashlib.sha1(f"{category}:{module_id}:{title}".encode("utf-8")).hexdigest()[:10]
+    return {
+        "id": f"{category}:{module_id}:{issue_key}",
+        "category": category,
+        "severity": severity,
+        "penalty": penalty,
+        "module_id": module_id,
+        "path": path,
+        "capability": capability,
+        "title": title,
+        "detail": detail,
+        "recommendation": recommendation,
+    }
+
+
+def _menu_health() -> dict[str, Any]:
+    react = _enrich_pages(REACT_PAGES)
+    registry = _capability_registry(react)
+    react_by_id = {str(item.get("id")): item for item in react}
+    react_by_path = {str(item.get("path")): item for item in react if item.get("path")}
+    nav_by_id = {str(item.get("id")): item for item in NAV_CONTRACT}
+    capability_by_id = {str(item.get("id")): item for item in registry}
+    zh_nav_keys = _frontend_i18n_nav_keys("zh-CN")
+    en_nav_keys = _frontend_i18n_nav_keys("en-US")
+    issues: list[dict[str, Any]] = []
+
+    for nav in NAV_CONTRACT:
+        module_id = str(nav.get("id") or "")
+        path = str(nav.get("path") or "")
+        capability = str(nav.get("capability") or "")
+        page = react_by_id.get(module_id)
+        if not nav.get("legacy") and page is None:
+            issues.append(
+                _menu_health_issue(
+                    category="fake_menu",
+                    severity="critical",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="菜单没有对应 React 页面注册",
+                    detail=f"{module_id} 存在导航项，但 REACT_PAGES 未注册同名模块。",
+                    recommendation="补齐 REACT_PAGES 注册，或将该导航项显式标记为 legacy/hidden 兜底入口。",
+                )
+            )
+        if not capability and not nav.get("legacy"):
+            issues.append(
+                _menu_health_issue(
+                    category="missing_capability",
+                    severity="high",
+                    module_id=module_id,
+                    path=path,
+                    title="菜单缺少 capability 能力码",
+                    detail=f"{module_id} 无法进入 RBAC/ABAC 与 AI surfaces 治理矩阵。",
+                    recommendation="为导航项补齐稳定 capability，建议按 domain.module.submodule 命名。",
+                )
+            )
+        if path and page and str(page.get("path") or "") != path:
+            issues.append(
+                _menu_health_issue(
+                    category="path_mismatch",
+                    severity="medium",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="导航路径与页面注册路径不一致",
+                    detail=f"nav={path}，page={page.get('path')}",
+                    recommendation="统一 navigation.tsx 与 system/pages 的 path，避免 Agent 和用户跳转到不同入口。",
+                )
+            )
+        nav_key = module_id
+        if nav_key not in zh_nav_keys or nav_key not in en_nav_keys:
+            missing = [locale for locale, keys in (("zh-CN", zh_nav_keys), ("en-US", en_nav_keys)) if nav_key not in keys]
+            issues.append(
+                _menu_health_issue(
+                    category="missing_i18n",
+                    severity="medium",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="菜单缺少多语言文案",
+                    detail=f"{module_id} 缺少 nav 文案: {', '.join(missing)}。",
+                    recommendation="补齐 i18n nav 键，避免菜单搜索、面包屑和页面标题退化为技术 ID。",
+                )
+            )
+
+    for page in react:
+        module_id = str(page.get("id") or "")
+        capability_item = capability_by_id.get(module_id)
+        capability = str((capability_item or {}).get("capability") or "")
+        path = str(page.get("path") or "")
+        apis = page.get("apis") or []
+        capabilities = page.get("capabilities") or []
+        if module_id not in nav_by_id:
+            issues.append(
+                _menu_health_issue(
+                    category="missing_nav",
+                    severity="high",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="页面未进入菜单导航契约",
+                    detail=f"{module_id} 已注册页面，但 NAV_CONTRACT 缺少对应入口。",
+                    recommendation="补齐导航入口或在页面注册中标明 hidden/agent-only 语义。",
+                )
+            )
+        if path not in react_by_path:
+            issues.append(
+                _menu_health_issue(
+                    category="broken_path",
+                    severity="medium",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="页面路径不可解析",
+                    detail=f"{module_id} path={path} 未进入页面路径索引。",
+                    recommendation="检查页面 path 是否为空或重复，确保浏览器、CLI 和 Agent 可直接跳转。",
+                )
+            )
+        if not apis:
+            issues.append(
+                _menu_health_issue(
+                    category="missing_api",
+                    severity="medium",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="页面缺少 API 契约",
+                    detail=f"{module_id} 没有声明 apis，Agent 无法准确判断后端依赖。",
+                    recommendation="在 REACT_PAGES 中补齐该模块实际调用的后端 API 清单。",
+                )
+            )
+        if not capabilities:
+            issues.append(
+                _menu_health_issue(
+                    category="missing_feature",
+                    severity="low",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="页面缺少功能能力描述",
+                    detail=f"{module_id} 没有声明 capabilities，菜单地图的产品语义不完整。",
+                    recommendation="补齐用户可理解的能力短语，帮助权限治理和 AI 任务拆解。",
+                )
+            )
+        ai = (capability_item or {}).get("ai") or {}
+        if not ai.get("enabled") or not ai.get("surfaces"):
+            issues.append(
+                _menu_health_issue(
+                    category="missing_ai_surface",
+                    severity="high",
+                    module_id=module_id,
+                    path=path,
+                    capability=capability,
+                    title="页面缺少 AI 能力面",
+                    detail=f"{module_id} 未声明可被 Copilot/CLI/Agent 消费的 AI surfaces。",
+                    recommendation="在能力注册中补齐 ai.surfaces 与 prompt_context，确保模块可被 AI 自动增强。",
+                )
+            )
+        for sub in (capability_item or {}).get("submodules") or []:
+            sub_id = str(sub.get("id") or "")
+            sub_path = str(sub.get("path") or "")
+            if sub_id and f"sub.{sub_id}" not in zh_nav_keys and f"sub.{sub_id}" not in en_nav_keys:
+                issues.append(
+                    _menu_health_issue(
+                        category="missing_sub_i18n",
+                        severity="low",
+                        module_id=f"{module_id}.{sub_id}",
+                        path=sub_path,
+                        capability=str(sub.get("capability") or capability),
+                        title="子菜单缺少多语言文案",
+                        detail=f"{module_id}/{sub_id} 缺少 nav.sub 文案。",
+                        recommendation="补齐 nav.sub 文案，确保多级菜单、搜索和权限面板展示专业名称。",
+                    )
+                )
+            if not sub_path:
+                issues.append(
+                    _menu_health_issue(
+                        category="missing_sub_path",
+                        severity="medium",
+                        module_id=f"{module_id}.{sub_id}",
+                        path=path,
+                        capability=str(sub.get("capability") or capability),
+                        title="子菜单缺少独立路径",
+                        detail=f"{module_id}/{sub_id} 没有 path，无法作为独立权限与 AI 开发入口。",
+                        recommendation="为子菜单补齐可跳转 path，并在前端 focused 页面中承接。",
+                    )
+                )
+
+    by_category = Counter(str(item["category"]) for item in issues)
+    by_severity = Counter(str(item["severity"]) for item in issues)
+    total_penalty = (
+        min(by_severity.get("critical", 0) * 15, 60)
+        + min(by_severity.get("high", 0) * 10, 40)
+        + min(by_severity.get("medium", 0) * 5, 30)
+        + min(by_severity.get("low", 0) * 2, 20)
+    )
+    score = max(0, 100 - total_penalty)
+    status = "excellent" if score >= 90 else "good" if score >= 75 else "needs_attention" if score >= 55 else "critical"
+    top_issues = sorted(issues, key=lambda item: ({"critical": 0, "high": 1, "medium": 2, "low": 3}.get(str(item["severity"]), 4), -int(item.get("penalty") or 0), str(item["module_id"])))
+    return {
+        "ok": score >= 75 and not by_severity.get("critical"),
+        "score": score,
+        "status": status,
+        "summary": {
+            "modules": len(react),
+            "nav_items": len(NAV_CONTRACT),
+            "issues": len(issues),
+            "critical": by_severity.get("critical", 0),
+            "high": by_severity.get("high", 0),
+            "medium": by_severity.get("medium", 0),
+            "low": by_severity.get("low", 0),
+            "categories": dict(by_category),
+        },
+        "issues": top_issues,
+        "top_issues": top_issues[:12],
+        "checks": [
+            {"id": "fake_menu", "name": "假菜单检查", "description": "导航项必须能映射到 React 页面注册或明确 legacy 语义。"},
+            {"id": "missing_capability", "name": "能力码检查", "description": "所有模块入口必须具备稳定 capability，支撑权限、审计与 AI surfaces。"},
+            {"id": "missing_i18n", "name": "多语言检查", "description": "菜单与子菜单必须具备产品化文案，避免技术 ID 进入界面。"},
+            {"id": "missing_api", "name": "API 契约检查", "description": "页面需声明 API 依赖，便于 Agent 自动理解前后端边界。"},
+            {"id": "missing_ai_surface", "name": "AI 能力面检查", "description": "模块必须能被 Copilot、CLI、Agent 或 MCP 消费。"},
+            {"id": "missing_sub_path", "name": "子菜单路径检查", "description": "可独立授权/开发的子能力需要独立可跳转路径。"},
+        ],
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 自动识别菜单治理缺口、生成修复任务、补齐权限和模块文案。",
+            "cli": "sop pages health --json",
+            "api": "/api/v1/system/pages/health",
+            "recommended_next": ["修复 critical/high 问题", "补齐 i18n 和 API 契约", "为高价值子模块补齐独立 path"],
+        },
+    }
+
+
 def _capability_registry(react: list[dict[str, Any]]) -> list[dict[str, Any]]:
     nav_by_id = {str(item.get("id")): item for item in NAV_CONTRACT}
     rows: list[dict[str, Any]] = []
@@ -1733,6 +2056,16 @@ def _module_manifest(*, role: str | None = None) -> dict[str, Any]:
             "surfaces_by_domain": AI_SURFACE_BY_DOMAIN,
             "all_modules_enabled": all(item.get("ai", {}).get("enabled") for item in capability_registry),
             "action_catalog": "/api/v1/system/pages/actions/me",
+            "agent_consumption": {
+                "purpose": "供 CLI/IDE/Agent 自动选择专业菜单、校验 capability、定位 API 与 AI surfaces",
+                "local_files": {
+                    "pages_manifest": ".sop-runtime/pages_manifest.json",
+                    "pages_capabilities": ".sop-runtime/pages_capabilities.json",
+                    "agent_context": ".sop-runtime/agent_context.json",
+                },
+                "refresh_command": "sop context prepare --pages",
+                "selector_fields": ["id", "domain", "capability", "path", "apis", "submodules", "ai.surfaces"],
+            },
         },
         "security": {
             "roles": list(USER_ROLES),
@@ -1929,6 +2262,175 @@ def system_page_action_runs(
     }
 
 
+def _role_menu_strategy(role: str) -> dict[str, Any]:
+    base_groups = {str(domain["id"]): False for domain in DOMAINS}
+    default_collapsed_categories = {"data-engineering-ops", "ai-runtime-ops"}
+    category_keys = {
+        "overview-command",
+        "project-lifecycle",
+        "org-governance",
+        "requirement-intake",
+        "requirement-ai-governance",
+        "delivery-execution",
+        "dependency-scheduling",
+        "workflow-orchestration",
+        "data-strategy",
+        "data-insight-reporting",
+        "data-asset-governance",
+        "data-engineering-ops",
+        "ai-command",
+        "ai-knowledge",
+        "ai-runtime-ops",
+        "agent-platform",
+        "asset-market",
+        "communication-integration",
+        "security-audit",
+        "module-governance",
+        "runtime-config",
+    }
+    base_categories = {key: key in default_collapsed_categories for key in category_keys}
+    presets: dict[str, dict[str, Any]] = {
+        "super_admin": {
+            "home": "#/dashboard",
+            "default_favorites": ["dashboard", "systemMap", "audit", "settings", "platforms", "agentRuns"],
+            "expanded_groups": ["overview", "portfolio", "delivery", "ai", "ecosystem", "governance", "system"],
+            "collapsed_groups": [],
+            "expanded_categories": ["overview-command", "module-governance", "agent-platform", "security-audit", "runtime-config"],
+            "density": "compact",
+        },
+        "tenant_admin": {
+            "home": "#/dashboard",
+            "default_favorites": ["dashboard", "projects", "organization", "tasks", "platforms", "settings"],
+            "expanded_groups": ["overview", "portfolio", "product", "delivery", "ai", "ecosystem"],
+            "collapsed_groups": ["governance", "system"],
+            "expanded_categories": ["project-lifecycle", "org-governance", "delivery-execution", "agent-platform"],
+            "density": "comfortable",
+        },
+        "project_admin": {
+            "home": "#/projects",
+            "default_favorites": ["projects", "projectOnboarding", "projectGovernance", "requirements", "tasks", "agentRuns"],
+            "expanded_groups": ["portfolio", "product", "delivery", "ai", "ecosystem"],
+            "collapsed_groups": ["data", "governance", "system"],
+            "expanded_categories": ["project-lifecycle", "requirement-intake", "delivery-execution", "dependency-scheduling", "agent-platform"],
+            "density": "comfortable",
+        },
+        "developer": {
+            "home": "#/tasks",
+            "default_favorites": ["tasks", "taskScheduler", "agentRuns", "copilot", "vibe", "globalSearch"],
+            "expanded_groups": ["delivery", "ai", "ecosystem"],
+            "collapsed_groups": ["portfolio", "data", "governance", "system"],
+            "expanded_categories": ["delivery-execution", "dependency-scheduling", "ai-command", "agent-platform"],
+            "density": "compact",
+        },
+        "viewer": {
+            "home": "#/dashboard",
+            "default_favorites": ["dashboard", "requirements", "tasks", "analytics", "analyticsReports"],
+            "expanded_groups": ["overview", "product", "delivery", "data"],
+            "collapsed_groups": ["portfolio", "ai", "ecosystem", "governance", "system"],
+            "expanded_categories": ["overview-command", "requirement-intake", "delivery-execution", "data-insight-reporting"],
+            "density": "comfortable",
+        },
+    }
+    preset = presets.get(role, presets["viewer"])
+    groups = {**base_groups}
+    for group in preset.get("collapsed_groups", []):
+        groups[str(group)] = True
+    for group in preset.get("expanded_groups", []):
+        groups[str(group)] = False
+    categories = {**base_categories}
+    for category in preset.get("expanded_categories", []):
+        categories[str(category)] = False
+    return {
+        "role": role,
+        "home": preset["home"],
+        "density": preset["density"],
+        "default_favorites": preset["default_favorites"],
+        "collapsed_groups": groups,
+        "collapsed_categories": categories,
+        "collapsed_modules": {},
+        "show_recents": True,
+        "show_favorites": True,
+        "recent_limit": 8,
+        "favorite_limit": 24,
+        "reason": "按角色聚焦高频工作域，降低专业化多级菜单的认知负担。",
+    }
+
+
+def _sanitize_menu_keys(keys: list[str] | None, *, limit: int) -> list[str]:
+    valid = {str(item.get("id")) for item in NAV_CONTRACT}
+    out: list[str] = []
+    for key in keys or []:
+        k = str(key)
+        if not k or k in out:
+            continue
+        if k in valid:
+            out.append(k)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _read_menu_prefs(user: User) -> dict[str, Any]:
+    path = _menu_prefs_file(user)
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _menu_preferences_payload(user: User) -> dict[str, Any]:
+    role = str(getattr(user, "role", "") or "viewer")
+    strategy = _role_menu_strategy(role)
+    stored = _read_menu_prefs(user)
+    favorites = _sanitize_menu_keys(stored.get("favorites") or strategy["default_favorites"], limit=int(strategy["favorite_limit"]))
+    recents = _sanitize_menu_keys(stored.get("recents") or [], limit=int(strategy["recent_limit"]))
+    prefs = {
+        "favorites": favorites,
+        "recents": recents,
+        "density": stored.get("density") or strategy["density"],
+        "show_recents": bool(stored.get("show_recents", strategy["show_recents"])),
+        "show_favorites": bool(stored.get("show_favorites", strategy["show_favorites"])),
+        "collapsed_groups": {**strategy["collapsed_groups"], **(stored.get("collapsed_groups") if isinstance(stored.get("collapsed_groups"), dict) else {})},
+        "collapsed_categories": {**strategy["collapsed_categories"], **(stored.get("collapsed_categories") if isinstance(stored.get("collapsed_categories"), dict) else {})},
+        "collapsed_modules": stored.get("collapsed_modules") if isinstance(stored.get("collapsed_modules"), dict) else {},
+        "updated_at": stored.get("updated_at") or "",
+    }
+    return {
+        "ok": True,
+        "role": role,
+        "strategy": strategy,
+        "preferences": prefs,
+        "agent_consumption": {
+            "purpose": "供前端、CLI 和 AI Agent 读取当前角色推荐菜单、最近访问与折叠策略。",
+            "api": "/api/v1/system/pages/menu/preferences/me",
+            "cli": "sop pages menu-prefs --json",
+            "fields": ["role", "strategy.home", "preferences.recents", "preferences.favorites", "preferences.collapsed_groups"],
+        },
+    }
+
+
+def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, Any]:
+    current = _menu_preferences_payload(user)["preferences"]
+    raw = body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
+    if "favorites" in raw:
+        current["favorites"] = _sanitize_menu_keys(raw.get("favorites"), limit=24)
+    if "recents" in raw:
+        current["recents"] = _sanitize_menu_keys(raw.get("recents"), limit=8)
+    for key in ("density", "show_recents", "show_favorites"):
+        if key in raw:
+            current[key] = raw[key]
+    for key in ("collapsed_groups", "collapsed_categories", "collapsed_modules"):
+        if isinstance(raw.get(key), dict):
+            current[key] = {str(k): bool(v) for k, v in raw[key].items()}
+    current["updated_at"] = _utc_now()
+    path = _menu_prefs_file(user)
+    path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+    return _menu_preferences_payload(user)
+
+
 @router.get("/hub")
 def system_pages_hub() -> dict[str, Any]:
     react_all = _enrich_pages(REACT_PAGES)
@@ -1936,6 +2438,7 @@ def system_pages_hub() -> dict[str, Any]:
     react_sum = _summary(react_all)
     legacy_sum = _summary(legacy_all)
     validation = _registry_validation()
+    menu_health = _menu_health()
     issues = validation.get("issues") if isinstance(validation.get("issues"), list) else []
     return {
         "ok": True,
@@ -1943,7 +2446,8 @@ def system_pages_hub() -> dict[str, Any]:
             "react_pages": react_sum.get("total", 0),
             "legacy_pages": legacy_sum.get("total", 0),
             "avg_maturity": react_sum.get("avg_maturity", 0),
-            "validation_issues": len(issues),
+            "validation_issues": len(issues) + int(menu_health.get("summary", {}).get("issues") or 0),
+            "menu_health_score": menu_health.get("score", 0),
             "domains_count": len(DOMAINS),
         },
         "stack_layers": _domain_matrix(REACT_PAGES, LEGACY_PAGES)[:8],
@@ -1964,6 +2468,21 @@ def system_page_domains() -> dict[str, Any]:
 @router.get("/validate")
 def system_page_registry_validate() -> dict[str, Any]:
     return {"ok": True, "validation": _registry_validation()}
+
+
+@router.get("/health")
+def system_page_menu_health() -> dict[str, Any]:
+    return {"ok": True, "health": _menu_health()}
+
+
+@router.get("/menu/preferences/me")
+def system_page_menu_preferences_me(user: User = Depends(current_user)) -> dict[str, Any]:
+    return _menu_preferences_payload(user)
+
+
+@router.put("/menu/preferences/me")
+def system_page_menu_preferences_update(body: MenuPreferencesIn, user: User = Depends(current_user)) -> dict[str, Any]:
+    return _write_menu_preferences(user, body)
 
 
 @router.get("/capabilities")
@@ -2108,6 +2627,7 @@ def system_pages(
             "legacy": _summary(legacy),
         },
         "validation": _registry_validation(),
+        "menu_health": _menu_health(),
         "governance": _governance_status(react_all, legacy_all),
         "active_filters": {
             "view": view,

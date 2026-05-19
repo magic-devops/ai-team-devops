@@ -225,6 +225,43 @@ class TaskSchedulerIn(BaseModel):
     agent_pool: List[str] = Field(default_factory=list, max_length=50)
 
 
+class TaskSchedulerActionIn(BaseModel):
+    action: str = Field(..., pattern="^(rerun|cancel|archive|restore)$")
+    dry_run: bool = True
+    policy: str = Field("quality_first", pattern="^(balanced|throughput|quality_first|cost_saver)$")
+    max_parallel: int = Field(6, ge=1, le=50)
+    include_blocked: bool = False
+    note: str = Field("", max_length=1000)
+
+
+class TaskSchedulerRunbookIn(BaseModel):
+    dry_run: bool = True
+    include_unclaimed: bool = True
+    include_stale_claims: bool = True
+    include_quality_blocks: bool = True
+    include_dependency_blocks: bool = True
+    stale_minutes: int = Field(30, ge=5, le=1440)
+    assigned_to: str = Field("Ops", max_length=120)
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    limit: int = Field(50, ge=1, le=200)
+    note: str = Field("", max_length=1000)
+
+
+class TaskSchedulerInsightsIn(BaseModel):
+    ids: List[str] = Field(default_factory=list, max_length=300)
+    max_items: int = Field(80, ge=1, le=300)
+    max_parallel: int = Field(6, ge=1, le=50)
+    include_blocked: bool = False
+    policies: List[str] = Field(default_factory=lambda: ["quality_first", "balanced", "throughput", "cost_saver"], max_length=8)
+
+
+class TaskSchedulerInsightTasksIn(BaseModel):
+    dry_run: bool = True
+    limit: int = Field(20, ge=1, le=100)
+    assigned_to: str = Field("Scheduler Agent", max_length=120)
+    priority: str = Field("P1", pattern="^P[0-3]$")
+
+
 class TaskAgentReportIn(BaseModel):
     claim_id: str = Field("", max_length=80)
     agent: str = Field("", max_length=120)
@@ -250,6 +287,13 @@ class TaskAgentClaimIn(BaseModel):
     force: bool = False
     auto_start: bool = True
     note: str = Field("", max_length=1000)
+
+
+class TaskAgentPlanIn(BaseModel):
+    claim_id: str = Field("", max_length=80)
+    task_id: str = ""
+    agent: str = Field("", max_length=120)
+    include_context: bool = True
 
 
 class TaskAgentHeartbeatIn(BaseModel):
@@ -283,10 +327,29 @@ class QualityEvaluateIn(BaseModel):
     source: str = Field("manual", max_length=80)
 
 
+class QualityTasksIn(BaseModel):
+    dry_run: bool = True
+    decisions: List[str] = Field(default_factory=lambda: ["block", "warn"], max_length=10)
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = Field("QA Agent", max_length=120)
+    limit: int = Field(50, ge=1, le=200)
+
+
 class TaskDependencyIn(BaseModel):
     target_id: str
     type: str = Field("blocks", pattern="^(blocks|relates|duplicates)$")
     note: str = ""
+
+
+class TaskDependencyTasksIn(BaseModel):
+    dry_run: bool = True
+    include_cycles: bool = True
+    include_blocked: bool = True
+    include_bottlenecks: bool = True
+    include_missing_map: bool = True
+    assigned_to: str = Field("Dependency Agent", max_length=120)
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    limit: int = Field(30, ge=1, le=100)
 
 
 def _task_by_id(task_id: str) -> Dict[str, Any] | None:
@@ -441,6 +504,28 @@ def _append_jsonl(path, row: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def _read_jsonl(path, limit: int = 5000) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    out: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(row, dict):
+            out.append(row)
+    return out[-limit:]
+
+
+def _write_jsonl(path, rows_in: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = "\n".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows_in)
+    path.write_text((text + "\n") if text else "", encoding="utf-8")
 
 
 def _scope_payload() -> Dict[str, str]:
@@ -899,6 +984,121 @@ def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, assigned_to: s
     }
 
 
+def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, agent: str = "", include_context: bool = True) -> Dict[str, Any]:
+    tid = _safe_task_id(task_id)
+    task_rows = [_ui_merge_row(r, _ui_load()) for r in rows("tasks", 1000)]
+    task = next((row for row in task_rows if str(row.get("id") or "") == tid), None)
+    if not task:
+        raise HTTPException(404, "任务不存在")
+    fallback_assignee, tool, reason = _dispatch_actor(task)
+    agent_name = agent.strip() or str((claim or {}).get("agent") or "") or fallback_assignee
+    packet = _agent_packet(
+        task,
+        order=1,
+        lane=1,
+        assigned_to=agent_name,
+        dev_tool=str((claim or {}).get("dev_tool") or task.get("dev_tool") or tool),
+        reason=reason,
+    )
+    snapshot = _dependency_snapshot(task_rows, {tid})
+    blocked = next((row for row in snapshot.get("blocked", []) if str(row.get("id") or "") == tid), None)
+    ready = next((row for row in snapshot.get("ready", []) if str(row.get("id") or "") == tid), None)
+    dependency_state = {
+        "ready": bool(ready) and not bool((ready or {}).get("blocked_by")),
+        "blocked_by": (blocked or ready or {}).get("blocked_by") or [],
+        "upstream": [edge for edge in snapshot.get("edges", []) if str(edge.get("target_id") or "") == tid],
+        "downstream": [edge for edge in snapshot.get("edges", []) if str(edge.get("source_id") or "") == tid],
+    }
+    gates = packet.get("quality_gates") or []
+    report_gate_args = " ".join([f"--gate {gate.get('id')}:passed:'<evidence>'" for gate in gates[:8]])
+    context_files = [
+        "AGENTS.md",
+        ".ai-memory/rules/RULES.md",
+        "memory/current_state.json",
+        ".sop-runtime/project_manifest.json",
+        ".sop-runtime/work_snapshot.json",
+        ".sop-runtime/pages_manifest.json",
+        ".sop-runtime/pages_capabilities.json",
+    ] if include_context else []
+    execution_steps = [
+        {
+            "id": "prepare-context",
+            "title": "加载项目上下文与页面能力清单",
+            "command": "sop context prepare --flush",
+            "required": True,
+        },
+        {
+            "id": "confirm-scope",
+            "title": "确认任务目标、依赖与质量卡点",
+            "command": f"sop task agent-plan --task-id {tid} --json",
+            "required": True,
+        },
+        {
+            "id": "heartbeat",
+            "title": "开发中定期心跳续约",
+            "command": f"sop task heartbeat --task-id {tid} --agent {agent_name} --progress 50 --message 'implementation in progress'",
+            "required": True,
+        },
+        {
+            "id": "verify",
+            "title": "运行与影响面匹配的测试、构建或接口验证",
+            "command": "npm run -s typecheck && npm run -s build",
+            "required": True,
+        },
+        {
+            "id": "report",
+            "title": "回写交付结果、质量证据和后续动作",
+            "command": f"sop task report {tid} --agent {agent_name} --status completed --confidence 0.8 --summary '<what changed>' {report_gate_args}".strip(),
+            "required": True,
+        },
+    ]
+    if dependency_state["blocked_by"]:
+        execution_steps.insert(2, {
+            "id": "resolve-blockers",
+            "title": "先处理依赖阻塞或改为 blocked 回写原因",
+            "command": f"sop task report {tid} --agent {agent_name} --status blocked --block-reason '<blocked by {','.join(dependency_state['blocked_by'])}>'",
+            "required": True,
+        })
+    return {
+        "ok": True,
+        "scope": _scope_payload(),
+        "task": {
+            "id": tid,
+            "title": task.get("title") or "",
+            "description": task.get("description") or "",
+            "status": task.get("status") or "pending",
+            "priority": task.get("priority") or "P3",
+            "assigned_to": task.get("assigned_to") or "",
+            "req_id": task.get("req_id") or "",
+            "sprint_id": task.get("sprint_id") or "",
+            "source": task.get("source") or "manual",
+            "source_report_id": task.get("source_report_id") or "",
+            "source_report_title": task.get("source_report_title") or "",
+            "dev_tool": task.get("dev_tool") or packet.get("dev_tool") or "",
+        },
+        "claim": claim or _active_claim_for_task(tid),
+        "packet": packet,
+        "dependency_state": dependency_state,
+        "quality_gates": gates,
+        "context_files": context_files,
+        "execution_steps": execution_steps,
+        "report_template": {
+            "status": "completed|blocked",
+            "progress": 100,
+            "confidence": 0.8,
+            "summary": "交付内容、改动范围、验证结果、风险与回滚方式",
+            "artifacts": [{"type": "diff|test|screenshot|log", "path": "<artifact path>", "summary": "<evidence summary>"}],
+            "gate_results": [{"id": gate.get("id"), "status": "passed", "evidence": gate.get("evidence")} for gate in gates],
+        },
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 领取任务后理解目标、依赖、规约、质量卡点、回写格式并持续自主开发。",
+            "api": f"/api/v1/tasks/{tid}/agent-plan",
+            "claim_plan_api": "/api/v1/tasks/agent-feed/execution-plan",
+            "cli": f"sop task agent-plan --task-id {tid} --json",
+        },
+    }
+
+
 def _scheduler_plan(task_rows: List[Dict[str, Any]], body: TaskSchedulerIn) -> Dict[str, Any]:
     selected = {_safe_task_id(str(x).strip()) for x in body.ids if str(x).strip()}
     snapshot = _dependency_snapshot(task_rows, selected)
@@ -952,6 +1152,682 @@ def _scheduler_plan(task_rows: List[Dict[str, Any]], body: TaskSchedulerIn) -> D
         ],
         "agent_packets": packets,
         "event_wakeups": event_wakeups,
+    }
+
+
+def _scheduler_run_item(record: Dict[str, Any]) -> Dict[str, Any]:
+    summary = record.get("summary") if isinstance(record.get("summary"), dict) else {}
+    return {
+        "schedule_id": record.get("schedule_id") or record.get("id") or "",
+        "created_at": record.get("created_at") or "",
+        "updated_at": record.get("updated_at") or record.get("created_at") or "",
+        "status": record.get("status") or "applied",
+        "policy": record.get("policy") or "",
+        "event": record.get("event") or "",
+        "applied": record.get("applied") or 0,
+        "summary": summary,
+        "task_ids": record.get("task_ids") or [],
+        "archived": bool(record.get("archived")),
+        "parent_schedule_id": record.get("parent_schedule_id") or "",
+        "note": record.get("note") or "",
+    }
+
+
+def _scheduler_runs(limit: int = 50, q: str = "", include_archived: bool = False) -> Dict[str, Any]:
+    q_norm = q.strip().lower()
+    records = list(reversed(_read_jsonl(_scheduler_runs_path(), limit=1000)))
+    items: List[Dict[str, Any]] = []
+    for record in records:
+        item = _scheduler_run_item(record)
+        if item.get("archived") and not include_archived:
+            continue
+        if q_norm:
+            haystack = "\n".join(
+                [
+                    str(item.get("schedule_id") or ""),
+                    str(item.get("policy") or ""),
+                    str(item.get("event") or ""),
+                    str(item.get("status") or ""),
+                    ",".join(str(x) for x in item.get("task_ids") or []),
+                ]
+            ).lower()
+            if q_norm not in haystack:
+                continue
+        items.append(item)
+    by_status: Dict[str, int] = {}
+    for item in items:
+        status = str(item.get("status") or "applied")
+        by_status[status] = by_status.get(status, 0) + 1
+    return {
+        "ok": True,
+        "scope": _scope_payload(),
+        "items": items[:limit],
+        "total": len(items),
+        "summary": {
+            "runs": len(items),
+            "applied": sum(int(x.get("applied") or 0) for x in items),
+            "scheduled": sum(int((x.get("summary") or {}).get("scheduled") or 0) for x in items),
+            "blocked": sum(int((x.get("summary") or {}).get("blocked") or 0) for x in items),
+            "by_status": by_status,
+        },
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 查看任务 DAG 调度历史、判断是否需要重放、取消或归档调度。",
+            "api": "/api/v1/tasks/scheduler/runs",
+            "cli": "sop task schedule-runs --json",
+            "actions": ["rerun", "cancel", "archive", "restore"],
+        },
+    }
+
+
+def _find_scheduler_run(schedule_id: str) -> tuple[List[Dict[str, Any]], Dict[str, Any] | None]:
+    records = _read_jsonl(_scheduler_runs_path(), limit=1000)
+    found = None
+    for record in records:
+        if str(record.get("schedule_id") or record.get("id") or "") == schedule_id:
+            found = record
+            break
+    return records, found
+
+
+def _minutes_since(value: Any) -> int | None:
+    dt = _parse_utc(value)
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0, int((_utc_dt() - dt).total_seconds() // 60))
+
+
+def _latest_quality_blocks(limit: int = 100) -> List[Dict[str, Any]]:
+    rows_in = list(reversed(_read_jsonl(_quality_evaluations_path(), limit=1000)))
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows_in:
+        tid = str(row.get("task_id") or "")
+        if not tid or tid in seen:
+            continue
+        if str(row.get("decision") or "") == "block":
+            out.append(row)
+            seen.add(tid)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _scheduler_ops_payload() -> Dict[str, Any]:
+    st = _ui_load()
+    task_rows = [_ui_merge_row(r, st) for r in rows("tasks", 1000)]
+    snapshot = _dependency_snapshot(task_rows, set())
+    feed_plan = _scheduler_plan(
+        task_rows,
+        TaskSchedulerIn(dry_run=True, max_items=100, max_parallel=20, include_blocked=False, policy="quality_first", event="scheduler.ops"),
+    )
+    claims_all = [dict(row) for row in (_load_agent_claims().get("claims") or {}).values()]
+    active_claims = [row for row in claims_all if _claim_active(row)]
+    stale_claims = [
+        {**row, "heartbeat_lag_minutes": _minutes_since(row.get("updated_at") or row.get("claimed_at")) or 0}
+        for row in active_claims
+        if (_minutes_since(row.get("updated_at") or row.get("claimed_at")) or 0) > 30
+    ]
+    quality_blocks = _latest_quality_blocks(limit=100)
+    runs_payload = _scheduler_runs(limit=100, include_archived=True)
+    runs = runs_payload.get("items") or []
+    cancelled_runs = [row for row in runs if row.get("status") == "cancelled"]
+    archived_runs = [row for row in runs if row.get("archived")]
+    ready_unclaimed = [
+        packet for packet in feed_plan.get("agent_packets") or []
+        if packet.get("ready") and not packet.get("claim")
+    ]
+    risk_score = 100
+    risk_score -= min(15, len(ready_unclaimed))
+    risk_score -= min(30, len(snapshot["blocked"]) * 5)
+    risk_score -= min(25, len(stale_claims) * 10)
+    risk_score -= min(25, len(quality_blocks) * 6)
+    risk_score -= min(10, len(cancelled_runs) * 2)
+    risk_score = max(0, risk_score)
+    recommendations: List[Dict[str, Any]] = []
+    if ready_unclaimed:
+        recommendations.append({
+            "id": "claim-ready-packets",
+            "severity": "medium",
+            "title": "存在未领取就绪任务包",
+            "summary": f"{len(ready_unclaimed)} 个 ready packet 尚未被 Agent 领取。",
+            "command": "sop task schedule-runbook --include-unclaimed --apply",
+        })
+    if stale_claims:
+        recommendations.append({
+            "id": "stale-agent-claims",
+            "severity": "high",
+            "title": "存在过期心跳风险的 Agent 租约",
+            "summary": f"{len(stale_claims)} 个活跃租约超过 30 分钟未更新。",
+            "command": "sop task schedule-runbook --include-stale-claims --apply",
+        })
+    if quality_blocks:
+        recommendations.append({
+            "id": "quality-blocks",
+            "severity": "high",
+            "title": "存在质量卡点阻断",
+            "summary": f"{len(quality_blocks)} 个任务最近质量评估为 block。",
+            "command": "sop task schedule-runbook --include-quality-blocks --apply",
+        })
+    if snapshot["blocked"]:
+        recommendations.append({
+            "id": "dependency-blocks",
+            "severity": "medium",
+            "title": "存在依赖阻塞队列",
+            "summary": f"{len(snapshot['blocked'])} 个任务受依赖或状态阻塞。",
+            "command": "sop task schedule-runbook --include-dependency-blocks --apply",
+        })
+    return {
+        "ok": True,
+        "scope": _scope_payload(),
+        "summary": {
+            "health_score": risk_score,
+            "ready_unclaimed": len(ready_unclaimed),
+            "active_claims": len(active_claims),
+            "stale_claims": len(stale_claims),
+            "quality_blocks": len(quality_blocks),
+            "dependency_blocked": len(snapshot["blocked"]),
+            "scheduler_runs": len(runs),
+            "cancelled_runs": len(cancelled_runs),
+            "archived_runs": len(archived_runs),
+            "recommendations": len(recommendations),
+        },
+        "ready_unclaimed": ready_unclaimed[:20],
+        "stale_claims": stale_claims[:20],
+        "quality_blocks": quality_blocks[:20],
+        "dependency_blocked": snapshot["blocked"][:20],
+        "recommendations": recommendations,
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 发现调度中心阻塞、未领取、过期租约和质量阻断，并生成可执行 Runbook。",
+            "api": "/api/v1/tasks/scheduler/ops-summary",
+            "cli": "sop task schedule-ops --json",
+            "runbook": "sop task schedule-runbook --json",
+        },
+    }
+
+
+def _scheduler_runbook(body: TaskSchedulerRunbookIn) -> Dict[str, Any]:
+    ops = _scheduler_ops_payload()
+    steps: List[Dict[str, Any]] = []
+    if body.include_unclaimed:
+        for packet in (ops.get("ready_unclaimed") or [])[: body.limit]:
+            steps.append({
+                "id": f"runbook-claim-{len(steps) + 1}",
+                "type": "claim_ready_packet",
+                "severity": "medium",
+                "task_id": packet.get("task_id") or "",
+                "title": f"领取并执行就绪任务包：{packet.get('title') or packet.get('task_id')}",
+                "reason": "ready packet has no active claim",
+                "commands": [
+                    f"sop task claim --task-id {packet.get('task_id')} --agent {body.assigned_to}",
+                    f"sop task heartbeat --task-id {packet.get('task_id')} --agent {body.assigned_to} --progress 50",
+                    f"sop task report {packet.get('task_id')} --status completed --confidence 0.8 --summary '<execution summary>'",
+                ],
+            })
+    if body.include_stale_claims:
+        for claim in (ops.get("stale_claims") or [])[: body.limit]:
+            if int(claim.get("heartbeat_lag_minutes") or 0) < body.stale_minutes:
+                continue
+            steps.append({
+                "id": f"runbook-stale-{len(steps) + 1}",
+                "type": "stale_claim",
+                "severity": "high",
+                "task_id": claim.get("task_id") or "",
+                "title": f"处理 Agent 租约心跳过期：{claim.get('task_id')}",
+                "reason": f"heartbeat lag {claim.get('heartbeat_lag_minutes')} minutes",
+                "commands": [
+                    f"sop task claims --status active --json",
+                    f"sop task heartbeat --claim-id {claim.get('claim_id')} --agent {claim.get('agent')} --progress {claim.get('progress') or 0} --message 'recover stale lease'",
+                    f"sop platforms agent-slo --json",
+                ],
+            })
+    if body.include_quality_blocks:
+        for row in (ops.get("quality_blocks") or [])[: body.limit]:
+            tid = str(row.get("task_id") or "")
+            steps.append({
+                "id": f"runbook-quality-{len(steps) + 1}",
+                "type": "quality_block_fix",
+                "severity": "high",
+                "task_id": tid,
+                "title": f"修复质量卡点阻断：{tid}",
+                "reason": ",".join(row.get("blockers") or []) or "quality decision block",
+                "commands": [
+                    f"sop task gates --task-id {tid} --json",
+                    f"sop task evaluate --task-id {tid} --json",
+                    f"sop task report {tid} --status blocked --summary 'quality gate remediation required'",
+                ],
+            })
+    if body.include_dependency_blocks:
+        for task in (ops.get("dependency_blocked") or [])[: body.limit]:
+            tid = str(task.get("id") or "")
+            steps.append({
+                "id": f"runbook-dep-{len(steps) + 1}",
+                "type": "dependency_unblock",
+                "severity": "medium",
+                "task_id": tid,
+                "title": f"解除任务依赖阻塞：{task.get('title') or tid}",
+                "reason": ",".join(task.get("blocked_by") or []) or "dependency blocked",
+                "commands": [
+                    "sop task schedule --include-blocked --json",
+                    f"sop task update {tid} --status pending --notes 'dependency reviewed'",
+                    "sop task schedule --apply",
+                ],
+            })
+    steps = steps[: body.limit]
+    planned: List[Dict[str, Any]] = []
+    created: List[Dict[str, Any]] = []
+    for step in steps:
+        task = {
+            "title": step["title"],
+            "description": "\n".join([
+                f"Runbook step: {step.get('id')}",
+                f"Type: {step.get('type')}",
+                f"Reason: {step.get('reason')}",
+                "",
+                "Commands:",
+                *[f"- {cmd}" for cmd in step.get("commands") or []],
+                "",
+                body.note,
+            ]).strip(),
+            "priority": "P0" if step.get("severity") == "high" else body.priority,
+            "estimate": "S",
+            "assigned_to": body.assigned_to,
+            "dev_tool": "sop-cli",
+            "source": "task_scheduler_runbook",
+            "source_report_id": str(step.get("id") or ""),
+            "source_report_title": str(step.get("title") or ""),
+            "debug_notes": f"scheduler_runbook type={step.get('type')} severity={step.get('severity')}",
+        }
+        planned.append(task)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**task)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "summary": {
+            "steps": len(steps),
+            "planned": len(planned),
+            "created": len(created),
+            "health_score": (ops.get("summary") or {}).get("health_score", 0),
+        },
+        "steps": steps,
+        "items": planned,
+        "created": created,
+        "ops_summary": ops.get("summary") or {},
+    }
+
+
+def _scheduler_insights(body: TaskSchedulerInsightsIn) -> Dict[str, Any]:
+    task_rows = [_ui_merge_row(r, _ui_load()) for r in rows("tasks", 1000)]
+    selected = {_safe_task_id(str(x).strip()) for x in body.ids if str(x).strip()}
+    snapshot = _dependency_snapshot(task_rows, selected)
+    policies = []
+    seen_policy: set[str] = set()
+    for policy in body.policies or ["quality_first", "balanced", "throughput", "cost_saver"]:
+        if policy not in {"quality_first", "balanced", "throughput", "cost_saver"} or policy in seen_policy:
+            continue
+        seen_policy.add(policy)
+        plan = _scheduler_plan(
+            task_rows,
+            TaskSchedulerIn(
+                ids=list(selected),
+                dry_run=True,
+                max_items=body.max_items,
+                max_parallel=body.max_parallel,
+                include_blocked=body.include_blocked,
+                policy=policy,
+                event="scheduler.insights",
+            ),
+        )
+        summary = plan.get("summary") or {}
+        lanes: Dict[str, int] = {}
+        for packet in plan.get("agent_packets") or []:
+            lane = f"L{packet.get('lane') or 1}"
+            lanes[lane] = lanes.get(lane, 0) + 1
+        policies.append({
+            "policy": policy,
+            "scheduled": summary.get("scheduled", 0),
+            "ready": summary.get("ready", 0),
+            "blocked": summary.get("blocked", 0),
+            "stages": summary.get("stages", 0),
+            "quality_gates": summary.get("quality_gates", 0),
+            "event_wakeups": summary.get("event_wakeups", 0),
+            "lane_load": lanes,
+            "first_packets": (plan.get("agent_packets") or [])[:5],
+        })
+
+    stages = snapshot.get("stages") or []
+    critical_path: List[Dict[str, Any]] = []
+    for stage in stages:
+        tasks_in_stage = stage.get("tasks") or []
+        if not tasks_in_stage:
+            continue
+        ranked = sorted(tasks_in_stage, key=lambda x: (_priority_rank(x), not bool(x.get("ready")), str(x.get("id") or "")))
+        item = ranked[0]
+        critical_path.append({
+            "stage": stage.get("stage"),
+            "task_id": item.get("id"),
+            "title": item.get("title"),
+            "priority": item.get("priority"),
+            "ready": item.get("ready"),
+            "blocked_by": item.get("blocked_by") or [],
+        })
+
+    blocker_counts: Dict[str, int] = {}
+    for task in snapshot.get("blocked") or []:
+        for blocker in task.get("blocked_by") or []:
+            blocker_counts[str(blocker)] = blocker_counts.get(str(blocker), 0) + 1
+    bottlenecks = [
+        {
+            "id": blocker,
+            "type": "dependency" if blocker.startswith("T-") else "status",
+            "severity": "high" if count >= 3 or blocker == "dependency_cycle" else "medium",
+            "count": count,
+            "title": f"{blocker} 阻塞 {count} 个任务",
+            "command": "sop task schedule-runbook --include-dependency-blocks --apply",
+        }
+        for blocker, count in sorted(blocker_counts.items(), key=lambda x: (-x[1], x[0]))
+    ]
+    if snapshot.get("cycle_ids"):
+        bottlenecks.insert(0, {
+            "id": "dependency_cycle",
+            "type": "cycle",
+            "severity": "high",
+            "count": len(snapshot.get("cycle_ids") or []),
+            "title": "存在任务依赖环路",
+            "command": "sop task deps --json",
+        })
+
+    ready_count = len(snapshot.get("ready") or [])
+    blocked_count = len(snapshot.get("blocked") or [])
+    cycle_count = len(snapshot.get("cycle_ids") or [])
+    health_score = max(0, 100 - blocked_count * 5 - cycle_count * 20 - max(0, ready_count - body.max_parallel * 2) * 2)
+    recommendations: List[Dict[str, Any]] = []
+    if cycle_count:
+        recommendations.append({
+            "id": "fix-cycles",
+            "severity": "high",
+            "title": "先修复依赖环路",
+            "summary": f"{cycle_count} 个任务处于依赖环路，调度器无法可靠推进关键路径。",
+            "command": "sop task deps --json",
+        })
+    if blocked_count:
+        recommendations.append({
+            "id": "unblock-dependencies",
+            "severity": "medium",
+            "title": "处理依赖阻塞队列",
+            "summary": f"{blocked_count} 个任务被依赖或 blocked 状态阻塞，建议生成调度 Runbook。",
+            "command": "sop task schedule-runbook --include-dependency-blocks --apply",
+        })
+    if ready_count > body.max_parallel * 2:
+        recommendations.append({
+            "id": "increase-parallelism",
+            "severity": "low",
+            "title": "就绪队列较长，可提升并发或扩充 Agent 池",
+            "summary": f"当前 ready={ready_count}，max_parallel={body.max_parallel}，可按 Agent SLO 增加并发。",
+            "command": "sop platforms agent-slo --json",
+        })
+    if not recommendations:
+        recommendations.append({
+            "id": "scheduler-stable",
+            "severity": "info",
+            "title": "任务依赖调度状态稳定",
+            "summary": "未发现明显依赖环、长阻塞或并发瓶颈，可按当前策略继续调度。",
+            "command": "sop task schedule --apply",
+        })
+
+    return {
+        "ok": True,
+        "scope": _scope_payload(),
+        "summary": {
+            "health_score": health_score,
+            "ready": ready_count,
+            "blocked": blocked_count,
+            "stages": len(stages),
+            "cycles": cycle_count,
+            "bottlenecks": len(bottlenecks),
+            "policies": len(policies),
+        },
+        "critical_path": critical_path[:30],
+        "bottlenecks": bottlenecks[:30],
+        "policy_comparison": policies,
+        "recommendations": recommendations,
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 在自主派单前比较调度策略、识别关键路径和依赖瓶颈。",
+            "api": "/api/v1/tasks/scheduler/insights",
+            "tasks_api": "/api/v1/tasks/scheduler/insights/tasks",
+            "cli": "sop task schedule-insights --json",
+        },
+    }
+
+
+def _scheduler_insight_tasks(body: TaskSchedulerInsightTasksIn) -> Dict[str, Any]:
+    insights = _scheduler_insights(TaskSchedulerInsightsIn(include_blocked=True, max_items=120, max_parallel=20))
+    candidates = [
+        item for item in (insights.get("recommendations") or [])
+        if str(item.get("severity") or "") in {"high", "medium", "low"}
+    ][: body.limit]
+    planned: List[Dict[str, Any]] = []
+    created: List[Dict[str, Any]] = []
+    for item in candidates:
+        task = {
+            "title": f"调度优化：{item.get('title')}",
+            "description": "\n".join([
+                str(item.get("summary") or ""),
+                "",
+                f"Severity: {item.get('severity')}",
+                "建议命令:",
+                f"- {item.get('command') or 'sop task schedule-insights --json'}",
+            ]),
+            "priority": "P0" if item.get("severity") == "high" else body.priority,
+            "estimate": "S",
+            "assigned_to": body.assigned_to,
+            "dev_tool": "sop-cli",
+            "source": "task_scheduler_insights",
+            "source_report_id": str(item.get("id") or ""),
+            "source_report_title": str(item.get("title") or ""),
+            "debug_notes": f"scheduler_insight severity={item.get('severity')}",
+        }
+        planned.append(task)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**task)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "summary": {
+            "planned": len(planned),
+            "created": len(created),
+            "health_score": (insights.get("summary") or {}).get("health_score", 0),
+        },
+        "items": planned,
+        "created": created,
+        "insights_summary": insights.get("summary") or {},
+    }
+
+
+def _quality_summary_payload(limit: int = 100) -> Dict[str, Any]:
+    policy = _load_quality_policy()
+    evaluations = list(reversed(_read_jsonl(_quality_evaluations_path(), limit=1000)))
+    recent = evaluations[:limit]
+    by_decision: Dict[str, int] = {}
+    blocked_tasks: Dict[str, Dict[str, Any]] = {}
+    warnings: List[Dict[str, Any]] = []
+    for row in recent:
+        decision = str(row.get("decision") or "unknown")
+        by_decision[decision] = by_decision.get(decision, 0) + 1
+        tid = str(row.get("task_id") or "")
+        if decision == "block" and tid and tid not in blocked_tasks:
+            blocked_tasks[tid] = row
+        if decision == "warn":
+            warnings.append(row)
+    scores = [float(row.get("score") or 0) for row in recent if row.get("score") is not None]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 100
+    return {
+        "ok": True,
+        "scope": _scope_payload(),
+        "policy": policy,
+        "summary": {
+            "evaluations": len(recent),
+            "avg_score": avg_score,
+            "pass": by_decision.get("pass", 0),
+            "warn": by_decision.get("warn", 0),
+            "block": by_decision.get("block", 0),
+            "blocked_tasks": len(blocked_tasks),
+            "required_gates": len(policy.get("required_gate_ids") or []),
+            "advisory_gates": len(policy.get("advisory_gate_ids") or []),
+            "mode": policy.get("mode"),
+        },
+        "recent": recent[:50],
+        "blocked_tasks": list(blocked_tasks.values())[:50],
+        "warnings": warnings[:50],
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 读取当前项目质量策略、最近质量评估和阻断任务，决定是否可完成任务或需要补证据。",
+            "api": "/api/v1/tasks/quality/summary",
+            "cli": "sop task quality-ops --json",
+            "policy_update": "sop task quality-policy-set --mode blocking --required scope.traceability,test.evidence",
+        },
+    }
+
+
+def _agent_reports_payload(
+    *,
+    limit: int = 100,
+    status: str = "",
+    agent: str = "",
+    task_id: str = "",
+    q: str = "",
+) -> Dict[str, Any]:
+    scope = _scope_payload()
+    status = status.strip() if isinstance(status, str) else ""
+    agent_l = agent.strip().lower() if isinstance(agent, str) else ""
+    task_id_l = task_id.strip().lower() if isinstance(task_id, str) else ""
+    q_l = q.strip().lower() if isinstance(q, str) else ""
+    rows_all = list(reversed(_read_jsonl(_agent_reports_path(), limit=5000)))
+    items: List[Dict[str, Any]] = []
+    by_status: Dict[str, int] = {}
+    by_quality: Dict[str, int] = {}
+    failed_gate_count = 0
+    artifact_count = 0
+    heartbeat_count = 0
+    for row in rows_all:
+        row_scope = row.get("scope") if isinstance(row.get("scope"), dict) else {}
+        if row_scope:
+            if str(row_scope.get("tenant_code") or "") != scope.get("tenant_code"):
+                continue
+            if str(row_scope.get("project_id") or "") != scope.get("project_id"):
+                continue
+        row_type = str(row.get("type") or "report")
+        if row_type == "heartbeat":
+            heartbeat_count += 1
+        row_status = str(row.get("status") or row.get("report_status") or row_type)
+        quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
+        decision = str(quality.get("decision") or "unknown")
+        by_status[row_status] = by_status.get(row_status, 0) + 1
+        by_quality[decision] = by_quality.get(decision, 0) + 1
+        failed_gate_count += len(row.get("failed_gates") or [])
+        if row.get("artifact_url") or row.get("artifact_path") or row.get("artifacts"):
+            artifact_count += 1
+        text = " ".join([
+            str(row.get("id") or ""),
+            str(row.get("task_id") or ""),
+            str(row.get("claim_id") or ""),
+            str(row.get("agent") or ""),
+            str(row.get("summary") or ""),
+            str(row.get("block_reason") or ""),
+            str(row.get("next_action") or ""),
+            row_status,
+            decision,
+        ]).lower()
+        if status and row_status != status:
+            continue
+        if agent_l and agent_l not in str(row.get("agent") or "").lower():
+            continue
+        if task_id_l and task_id_l != str(row.get("task_id") or "").lower():
+            continue
+        if q_l and q_l not in text:
+            continue
+        item = dict(row)
+        item["type"] = row_type
+        item["status"] = row_status
+        item["quality_decision"] = decision
+        item["quality_score"] = quality.get("score")
+        item["quality_blockers"] = quality.get("blockers") or []
+        items.append(item)
+    return {
+        "ok": True,
+        "scope": scope,
+        "summary": {
+            "reports": len(items),
+            "total_records": len(rows_all),
+            "heartbeats": heartbeat_count,
+            "artifacts": artifact_count,
+            "failed_gates": failed_gate_count,
+            "by_status": by_status,
+            "by_quality": by_quality,
+        },
+        "items": items[:limit],
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 和管理者审计自主开发交付记录、质量结果、失败卡点和后续动作。",
+            "api": "/api/v1/tasks/agent-feed/reports",
+            "cli": "sop task reports --json",
+        },
+    }
+
+
+def _quality_tasks(body: QualityTasksIn) -> Dict[str, Any]:
+    wanted = {str(x) for x in (body.decisions or [])}
+    payload = _quality_summary_payload(limit=500)
+    candidates = [
+        row for row in (payload.get("recent") or [])
+        if not wanted or str(row.get("decision") or "") in wanted
+    ][: body.limit]
+    planned: List[Dict[str, Any]] = []
+    created: List[Dict[str, Any]] = []
+    for row in candidates:
+        tid = str(row.get("task_id") or "")
+        decision = str(row.get("decision") or "")
+        blockers = row.get("blockers") or []
+        missing = row.get("missing_required") or []
+        failed = row.get("failed_required") or []
+        title = f"补齐任务质量证据：{tid or row.get('id')}"
+        task = {
+            "title": title,
+            "description": "\n".join([
+                f"质量决策: {decision}",
+                f"质量评分: {row.get('score')}",
+                f"阻断项: {', '.join(blockers) or '-'}",
+                f"缺失必需卡点: {', '.join(missing) or '-'}",
+                f"失败必需卡点: {', '.join(failed) or '-'}",
+                "",
+                "建议命令:",
+                f"- sop task gates --task-id {tid} --json",
+                f"- sop task evaluate --task-id {tid} --json",
+                f"- sop task report {tid} --status blocked --summary '补齐质量证据'",
+            ]),
+            "priority": "P0" if decision == "block" else body.priority,
+            "estimate": "S",
+            "assigned_to": body.assigned_to,
+            "dev_tool": "sop-cli",
+            "source": "task_quality_governance",
+            "source_report_id": str(row.get("id") or tid),
+            "source_report_title": title,
+            "debug_notes": f"quality_decision={decision} score={row.get('score')}",
+        }
+        planned.append(task)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**task)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "items": planned,
+        "created": created,
+        "summary": {
+            "planned": len(planned),
+            "created": len(created),
+            "candidates": len(candidates),
+            "avg_score": (payload.get("summary") or {}).get("avg_score", 0),
+        },
     }
 
 
@@ -1105,9 +1981,10 @@ def tasks_charts() -> dict[str, Any]:
 
 @router.get("/dependencies")
 def task_dependencies():
-    task_rows = rows("tasks", 1000)
-    task_ids = {str(t.get("id")) for t in task_rows if t.get("id")}
     st = _ui_load()
+    task_rows = [_ui_merge_row(r, st) for r in rows("tasks", 1000)]
+    task_by_id = {str(t.get("id")): t for t in task_rows if t.get("id")}
+    task_ids = {str(t.get("id")) for t in task_rows if t.get("id")}
     edges = [
         edge for edge in _dep_edges(st)
         if edge["source_id"] in task_ids and edge["target_id"] in task_ids
@@ -1120,11 +1997,14 @@ def task_dependencies():
         incoming[edge["target_id"]] = incoming.get(edge["target_id"], 0) + 1
         if edge["type"] == "blocks":
             blockers.setdefault(edge["target_id"], []).append(edge["source_id"])
+        edge["source_title"] = str((task_by_id.get(edge["source_id"]) or {}).get("title") or "")
+        edge["target_title"] = str((task_by_id.get(edge["target_id"]) or {}).get("title") or "")
     nodes = []
     for task in task_rows:
         tid = str(task.get("id") or "")
         if not tid:
             continue
+        is_blocked = bool(blockers.get(tid)) and task.get("status") != "completed"
         nodes.append({
             "id": tid,
             "title": task.get("title") or "",
@@ -1134,19 +2014,208 @@ def task_dependencies():
             "outgoing": outgoing.get(tid, 0),
             "incoming": incoming.get(tid, 0),
             "blocked_by": blockers.get(tid, []),
-            "is_dependency_blocked": bool(blockers.get(tid)) and task.get("status") != "completed",
+            "is_dependency_blocked": is_blocked,
+            "risk_level": "high" if is_blocked and str(task.get("priority") or "").upper() in {"P0", "P1"} else "medium" if is_blocked else "normal",
+        })
+    snapshot = _dependency_snapshot(task_rows, set())
+    recommendations: List[Dict[str, Any]] = []
+    if snapshot.get("cycle_ids"):
+        recommendations.append({
+            "id": "fix-dependency-cycle",
+            "severity": "high",
+            "title": "存在 blocks 依赖环路",
+            "summary": f"{len(snapshot.get('cycle_ids') or [])} 个任务处于环路中，调度器无法自动推进。",
+            "command": "sop task deps --json",
+        })
+    blocked_nodes = [n for n in nodes if n["is_dependency_blocked"]]
+    if blocked_nodes:
+        recommendations.append({
+            "id": "unblock-priority-chain",
+            "severity": "medium",
+            "title": "优先处理阻塞链路",
+            "summary": f"{len(blocked_nodes)} 个任务被 blocks 依赖阻塞，建议从 P0/P1 上游任务开始清理。",
+            "command": "sop task schedule-insights --include-blocked --json",
+        })
+    if not edges:
+        recommendations.append({
+            "id": "build-dependency-map",
+            "severity": "info",
+            "title": "补齐任务依赖关系",
+            "summary": "当前没有任务依赖，建议为拆解任务补充 blocks/relates/duplicates，提升调度准确性。",
+            "command": "sop task deps --json",
         })
     return {
         "ok": True,
         "nodes": nodes,
         "edges": edges,
+        "stages": snapshot.get("stages") or [],
+        "ready_queue": [
+            {"id": t.get("id"), "title": t.get("title"), "priority": t.get("priority"), "status": t.get("status")}
+            for t in _sort_scheduler_candidates(snapshot.get("ready") or [], "quality_first")
+        ],
+        "blocked_queue": [
+            {"id": t.get("id"), "title": t.get("title"), "priority": t.get("priority"), "status": t.get("status"), "blocked_by": t.get("blocked_by") or []}
+            for t in _sort_scheduler_candidates(snapshot.get("blocked") or [], "quality_first")
+        ],
+        "cycle_ids": snapshot.get("cycle_ids") or [],
+        "recommendations": recommendations,
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 和调度器理解任务依赖图、阻塞链路、可执行队列和环路风险。",
+            "api": "/api/v1/tasks/dependencies",
+            "cli": "sop task deps --json",
+            "scheduler": "sop task schedule-insights --json",
+        },
         "summary": {
             "nodes": len(nodes),
             "edges": len(edges),
             "blocked": sum(1 for n in nodes if n["is_dependency_blocked"]),
+            "ready": len(snapshot.get("ready") or []),
+            "cycles": len(snapshot.get("cycle_ids") or []),
+            "stages": len(snapshot.get("stages") or []),
             "by_type": {k: sum(1 for e in edges if e["type"] == k) for k in ("blocks", "relates", "duplicates")},
         },
     }
+
+
+def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
+    graph = task_dependencies()
+    nodes = list(graph.get("nodes") or [])
+    edges = list(graph.get("edges") or [])
+    node_by_id = {str(node.get("id")): node for node in nodes}
+    planned: List[Dict[str, Any]] = []
+
+    def _append(issue_id: str, severity: str, title: str, summary: str, commands: List[str], related_ids: List[str]) -> None:
+        if len(planned) >= body.limit:
+            return
+        priority = "P0" if severity == "high" else body.priority
+        planned.append({
+            "title": title,
+            "description": "\n".join([
+                summary,
+                "",
+                f"Severity: {severity}",
+                f"Related tasks: {', '.join([x for x in related_ids if x]) or '-'}",
+                "",
+                "Suggested commands:",
+                *[f"- {cmd}" for cmd in commands],
+            ]),
+            "priority": priority,
+            "estimate": "S",
+            "assigned_to": body.assigned_to,
+            "dev_tool": "sop-cli",
+            "source": "task_dependency_governance",
+            "source_report_id": issue_id,
+            "source_report_title": title,
+            "debug_notes": f"dependency_governance severity={severity} related={','.join(related_ids[:8])}",
+        })
+
+    if body.include_cycles and graph.get("cycle_ids"):
+        cycle_ids = [str(x) for x in graph.get("cycle_ids") or []]
+        _append(
+            "dependency-cycle",
+            "high",
+            f"修复任务依赖环路：{len(cycle_ids)} 个任务",
+            "blocks 依赖存在环路，调度器无法稳定计算拓扑批次，需要拆除错误阻塞边或改成 relates。",
+            [
+                "sop task deps --json",
+                "sop task dep-tasks --json",
+                "sop task schedule-insights --include-blocked --json",
+            ],
+            cycle_ids,
+        )
+
+    if body.include_blocked:
+        blocked_nodes = [
+            node for node in nodes
+            if node.get("is_dependency_blocked") and str(node.get("priority") or "").upper() in {"P0", "P1", "P2"}
+        ]
+        blocked_nodes.sort(key=lambda n: ({"P0": 0, "P1": 1, "P2": 2, "P3": 3}.get(str(n.get("priority")), 9), -len(n.get("blocked_by") or [])))
+        for node in blocked_nodes:
+            tid = str(node.get("id") or "")
+            blockers = [str(x) for x in node.get("blocked_by") or []]
+            severity = "high" if str(node.get("priority") or "").upper() in {"P0", "P1"} else "medium"
+            _append(
+                f"dependency-blocked-{tid}",
+                severity,
+                f"解除高优先级任务依赖阻塞：{node.get('title') or tid}",
+                f"任务 {tid} 被 {len(blockers)} 个上游 blocks 依赖阻塞，建议先检查上游完成定义、质量卡点和是否需要拆边。",
+                [
+                    f"sop task agent-plan --task-id {tid} --json",
+                    "sop task schedule --include-blocked --json",
+                    f"sop task update {tid} --status pending --notes 'dependency reviewed'",
+                ],
+                [tid, *blockers],
+            )
+
+    if body.include_bottlenecks:
+        bottlenecks = [node for node in nodes if int(node.get("outgoing") or 0) >= 3 and str(node.get("status") or "") != "completed"]
+        bottlenecks.sort(key=lambda n: (-int(n.get("outgoing") or 0), {"P0": 0, "P1": 1, "P2": 2, "P3": 3}.get(str(n.get("priority")), 9)))
+        for node in bottlenecks[: body.limit]:
+            tid = str(node.get("id") or "")
+            downstream = [str(edge.get("target_id")) for edge in edges if str(edge.get("source_id")) == tid and edge.get("type") == "blocks"]
+            _append(
+                f"dependency-bottleneck-{tid}",
+                "medium",
+                f"拆解关键上游阻塞瓶颈：{node.get('title') or tid}",
+                f"任务 {tid} 阻塞 {len(downstream)} 个下游任务，是当前 DAG 的关键上游瓶颈。",
+                [
+                    f"sop task agent-plan --task-id {tid} --json",
+                    f"sop task claim --task-id {tid} --agent {body.assigned_to}",
+                    "sop task schedule-insights --include-blocked --json",
+                ],
+                [tid, *downstream],
+            )
+
+    if body.include_missing_map and not edges:
+        high_tasks = [
+            str(node.get("id")) for node in nodes
+            if str(node.get("priority") or "").upper() in {"P0", "P1"} and str(node.get("status") or "") != "completed"
+        ]
+        if high_tasks:
+            _append(
+                "dependency-map-missing",
+                "medium",
+                "补齐高优先级任务依赖地图",
+                "当前任务池没有任何依赖边，AI 调度只能按优先级粗排，建议补充 blocks/relates/duplicates 关系。",
+                [
+                    "sop task deps --json",
+                    "sop task schedule-insights --json",
+                    "sop task schedule --apply",
+                ],
+                high_tasks[:20],
+            )
+
+    created: List[Dict[str, Any]] = []
+    if not body.dry_run:
+        for item in planned:
+            created.append(create_task(TaskCreate(**item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "scope": _scope_payload(),
+        "summary": {
+            "planned": len(planned),
+            "created": len(created),
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "blocked": (graph.get("summary") or {}).get("blocked", 0),
+            "cycles": (graph.get("summary") or {}).get("cycles", 0),
+        },
+        "items": planned,
+        "created": created,
+        "graph_summary": graph.get("summary") or {},
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 将依赖图风险转成可执行治理任务，打通依赖诊断到修复派单。",
+            "api": "/api/v1/tasks/dependencies/tasks",
+            "cli": "sop task dep-tasks --json",
+            "source": "task_dependency_governance",
+        },
+    }
+
+
+@router.post("/dependencies/tasks")
+def task_dependency_tasks(body: TaskDependencyTasksIn):
+    return _dependency_governance_tasks(body)
 
 
 @router.post("/{task_id}/dependencies")
@@ -1417,12 +2486,20 @@ def task_scheduler_plan(body: TaskSchedulerIn):
     run = {
         "schedule_id": plan["schedule_id"],
         "created_at": _utc_now(),
+        "updated_at": _utc_now(),
         "scope": plan["scope"],
+        "status": "applied",
         "policy": body.policy,
         "event": body.event,
         "applied": applied,
         "summary": plan["summary"],
+        "stages": plan.get("stages") or [],
+        "agent_packets": plan.get("agent_packets") or [],
+        "event_wakeups": plan.get("event_wakeups") or [],
+        "ready_queue": plan.get("ready_queue") or [],
+        "blocked_queue": plan.get("blocked_queue") or [],
         "task_ids": [packet.get("task_id") for packet in plan["agent_packets"]],
+        "archived": False,
     }
     _append_jsonl(_scheduler_runs_path(), run)
     notify_webhook(
@@ -1436,12 +2513,157 @@ def task_scheduler_plan(body: TaskSchedulerIn):
     return plan
 
 
+@router.get("/scheduler/runs")
+def task_scheduler_runs(limit: int = Query(20, ge=1, le=100), q: str = Query("", max_length=200), include_archived: bool = False):
+    lim = limit if isinstance(limit, int) else 20
+    query = q if isinstance(q, str) else ""
+    return _scheduler_runs(limit=lim, q=query, include_archived=bool(include_archived))
+
+
+@router.get("/scheduler/runs/{schedule_id}")
+def task_scheduler_run_detail(schedule_id: str):
+    _, record = _find_scheduler_run(schedule_id)
+    if not record:
+        raise HTTPException(404, "调度运行记录不存在")
+    return {"ok": True, "item": record, "summary": _scheduler_run_item(record)}
+
+
+@router.get("/scheduler/ops-summary")
+def task_scheduler_ops_summary():
+    return _scheduler_ops_payload()
+
+
+@router.post("/scheduler/runbook")
+def task_scheduler_runbook(body: TaskSchedulerRunbookIn):
+    return _scheduler_runbook(body)
+
+
+@router.post("/scheduler/insights")
+def task_scheduler_insights(body: TaskSchedulerInsightsIn):
+    return _scheduler_insights(body)
+
+
+@router.post("/scheduler/insights/tasks")
+def task_scheduler_insight_tasks(body: TaskSchedulerInsightTasksIn):
+    return _scheduler_insight_tasks(body)
+
+
+@router.post("/scheduler/runs/{schedule_id}/action")
+def task_scheduler_run_action(schedule_id: str, body: TaskSchedulerActionIn):
+    records, record = _find_scheduler_run(schedule_id)
+    if not record:
+        raise HTTPException(404, "调度运行记录不存在")
+    if body.action == "rerun":
+        ids = [str(x) for x in (record.get("task_ids") or []) if str(x).strip()]
+        plan = _scheduler_plan(
+            [_ui_merge_row(r, _ui_load()) for r in rows("tasks", 1000)],
+            TaskSchedulerIn(
+                ids=ids,
+                dry_run=body.dry_run,
+                max_items=max(1, len(ids) or 50),
+                max_parallel=body.max_parallel,
+                include_blocked=body.include_blocked,
+                policy=body.policy,
+                event=f"rerun:{schedule_id}",
+            ),
+        )
+        plan["parent_schedule_id"] = schedule_id
+        if body.dry_run:
+            return {"ok": True, "action": body.action, "dry_run": True, "plan": plan}
+        applied = 0
+        t = table("tasks")
+        if t is None:
+            raise HTTPException(503, "数据库不可用")
+        st = _ui_load()
+        fields = st.setdefault("fields", {})
+        ts = now()
+        for packet in plan["agent_packets"]:
+            if not packet.get("ready"):
+                continue
+            tid = _safe_task_id(str(packet.get("task_id") or ""))
+            t.update(where=f"id = '{tid}'", values={"assigned_to": packet["assigned_to"], "updated_at": ts})
+            task_fields = fields.setdefault(tid, {})
+            task_fields["dev_tool"] = packet["dev_tool"]
+            task_fields["debug_notes"] = f"Hermes 调度重放: parent={schedule_id} policy={body.policy} lane={packet['lane']} order={packet['order']}"[:2000]
+            applied += 1
+        _ui_save(st)
+        child = {
+            "schedule_id": plan["schedule_id"],
+            "parent_schedule_id": schedule_id,
+            "created_at": _utc_now(),
+            "updated_at": _utc_now(),
+            "scope": plan["scope"],
+            "status": "applied",
+            "policy": body.policy,
+            "event": f"rerun:{schedule_id}",
+            "applied": applied,
+            "summary": plan["summary"],
+            "stages": plan.get("stages") or [],
+            "agent_packets": plan.get("agent_packets") or [],
+            "event_wakeups": plan.get("event_wakeups") or [],
+            "ready_queue": plan.get("ready_queue") or [],
+            "blocked_queue": plan.get("blocked_queue") or [],
+            "task_ids": [packet.get("task_id") for packet in plan["agent_packets"]],
+            "archived": False,
+            "note": body.note,
+        }
+        _append_jsonl(_scheduler_runs_path(), child)
+        notify_webhook(
+            "task.scheduler_rerun",
+            {"schedule_id": child["schedule_id"], "parent_schedule_id": schedule_id, "applied": applied},
+            tenant_id=resolved_tenant_id(),
+            project_id=resolved_project_id(),
+        )
+        return {"ok": True, "action": body.action, "dry_run": False, "created": child, "plan": plan, "applied": applied}
+
+    if body.dry_run:
+        preview = dict(record)
+        if body.action == "cancel":
+            preview["status"] = "cancelled"
+        elif body.action == "archive":
+            preview["archived"] = True
+            preview["status"] = "archived"
+        elif body.action == "restore":
+            preview["archived"] = False
+            preview["status"] = "applied"
+        preview["note"] = body.note
+        return {"ok": True, "action": body.action, "dry_run": True, "item": preview}
+
+    now_at = _utc_now()
+    for item in records:
+        if str(item.get("schedule_id") or item.get("id") or "") != schedule_id:
+            continue
+        if body.action == "cancel":
+            item["status"] = "cancelled"
+        elif body.action == "archive":
+            item["archived"] = True
+            item["status"] = "archived"
+        elif body.action == "restore":
+            item["archived"] = False
+            item["status"] = "applied"
+        item["updated_at"] = now_at
+        item["note"] = body.note
+        events = item.setdefault("events", [])
+        if isinstance(events, list):
+            events.append({"event": f"scheduler.{body.action}", "at": now_at, "note": body.note})
+    _write_jsonl(_scheduler_runs_path(), records)
+    notify_webhook(
+        f"task.scheduler_{body.action}",
+        {"schedule_id": schedule_id, "note": body.note},
+        tenant_id=resolved_tenant_id(),
+        project_id=resolved_project_id(),
+    )
+    _, updated = _find_scheduler_run(schedule_id)
+    return {"ok": True, "action": body.action, "item": updated}
+
+
 @router.get("/quality/policy")
 def task_quality_policy():
     task_rows = [_ui_merge_row(r, _ui_load()) for r in rows("tasks", 1000)]
     sample: Dict[str, Any] = task_rows[0] if task_rows else {"id": "T-sample", "title": "sample", "description": ""}
     policy = _load_quality_policy()
     gates = _quality_gates(sample)
+    quality_summary = _quality_summary_payload(limit=200).get("summary") or {}
     return {
         "ok": True,
         "scope": _scope_payload(),
@@ -1451,8 +2673,22 @@ def task_quality_policy():
             "required": len(policy.get("required_gate_ids") or []),
             "advisory": len(policy.get("advisory_gate_ids") or []),
             "mode": policy.get("mode"),
+            "evaluations": quality_summary.get("evaluations", 0),
+            "avg_score": quality_summary.get("avg_score", 100),
+            "block": quality_summary.get("block", 0),
+            "warn": quality_summary.get("warn", 0),
         },
     }
+
+
+@router.get("/quality/summary")
+def task_quality_summary(limit: int = Query(100, ge=1, le=500)):
+    return _quality_summary_payload(limit=limit if isinstance(limit, int) else 100)
+
+
+@router.post("/quality/tasks")
+def task_quality_tasks(body: QualityTasksIn):
+    return _quality_tasks(body)
 
 
 @router.put("/quality/policy")
@@ -1634,7 +2870,48 @@ def task_agent_claim(body: TaskAgentClaimIn):
         project_id=resolved_project_id(),
     )
     packet["claim"] = claim
-    return {"ok": True, "claim": claim, "packet": packet}
+    return {"ok": True, "claim": claim, "packet": packet, "execution_plan": _agent_execution_plan(task_id, claim=claim, agent=agent)}
+
+
+@router.post("/agent-feed/execution-plan")
+def task_agent_execution_plan(body: TaskAgentPlanIn):
+    claim: Dict[str, Any] | None = None
+    task_id = body.task_id.strip()
+    if body.claim_id:
+        claim = (_load_agent_claims().get("claims") or {}).get(body.claim_id)
+        if not claim:
+            raise HTTPException(404, "领取记录不存在")
+        task_id = str(claim.get("task_id") or task_id)
+        if body.agent and str(claim.get("agent") or "") != body.agent.strip():
+            raise HTTPException(403, "Agent 与领取记录不一致")
+    if not task_id:
+        raise HTTPException(400, "task_id 或 claim_id 必填")
+    return _agent_execution_plan(task_id, claim=claim, agent=body.agent, include_context=body.include_context)
+
+
+@router.get("/agent-feed/reports")
+def task_agent_reports(
+    limit: int = Query(100, ge=1, le=500),
+    status: str = Query("", max_length=40),
+    agent: str = Query("", max_length=120),
+    task_id: str = Query("", max_length=100),
+    q: str = Query("", max_length=200),
+):
+    return _agent_reports_payload(limit=limit, status=status, agent=agent, task_id=task_id, q=q)
+
+
+@router.get("/{task_id}/agent-plan")
+def task_agent_plan(task_id: str, claim_id: str = Query("", max_length=80), agent: str = Query("", max_length=120), include_context: bool = True):
+    claim = None
+    if claim_id:
+        claim = (_load_agent_claims().get("claims") or {}).get(claim_id)
+        if not claim:
+            raise HTTPException(404, "领取记录不存在")
+        if str(claim.get("task_id") or "") != _safe_task_id(task_id):
+            raise HTTPException(400, "claim_id 与 task_id 不匹配")
+        if agent and str(claim.get("agent") or "") != agent.strip():
+            raise HTTPException(403, "Agent 与领取记录不一致")
+    return _agent_execution_plan(task_id, claim=claim, agent=agent, include_context=include_context)
 
 
 @router.post("/agent-feed/heartbeat")

@@ -3,7 +3,7 @@
  *  - 改 BASE_URL：仅改本文件常量
  *  - 新接口：在末尾加导出 async 函数；TanStack Query 的 hooks 在 hooks/ 目录
  */
-import { getToken, getWorkspaceScope } from "./authStorage";
+import { clearSession, getToken, getWorkspaceScope, setWorkspaceScope } from "./authStorage";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -19,7 +19,58 @@ function authHeaders(): Record<string, string> {
   return h;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+function isMissingProjectScopeError(status: number, body: string) {
+  return status === 400 && (
+    body.includes("X-Project-Id") ||
+    body.includes("绑定同步分区") ||
+    body.includes("绑定项目作用域")
+  );
+}
+
+function isSessionUnauthorized(status: number, body: string) {
+  return status === 401 && (
+    body.includes("Token 已过期") ||
+    body.includes("Token 无效") ||
+    body.includes("Token 用户标识无效") ||
+    body.includes("Token 用户加载失败") ||
+    body.includes("用户不存在或已禁用")
+  );
+}
+
+function clearStaleSessionOnUnauthorized(status: number, body: string) {
+  if (isSessionUnauthorized(status, body) && getToken()) clearSession();
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined" || !window.location) return;
+  if (window.location.pathname.endsWith("/login.html")) return;
+  const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
+}
+
+async function bindDefaultProjectScope(): Promise<boolean> {
+  if (getWorkspaceScope().projectId || !getToken()) return false;
+  const r = await fetch(BASE + "/api/v1/projects", { headers: authHeaders() });
+  if (!r.ok) return false;
+  const projects = await r.json().catch(() => []) as Array<{
+    id?: string;
+    tenant_code?: string;
+    business_code?: string;
+    business_id?: string;
+    project_code?: string;
+  }>;
+  const first = Array.isArray(projects) ? projects.find((item) => item?.id) : undefined;
+  if (!first?.id) return false;
+  setWorkspaceScope({
+    tenantCode: first.tenant_code || null,
+    businessCode: first.business_code || first.business_id || null,
+    projectId: first.id,
+    projectCode: first.project_code || first.id,
+  });
+  return true;
+}
+
+async function request<T>(path: string, init?: RequestInit, retriedProjectScope = false): Promise<T> {
   const baseHeaders = authHeaders();
   const extra = (init?.headers || {}) as Record<string, string>;
   const r = await fetch(BASE + path, {
@@ -28,6 +79,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => r.statusText);
+    const shouldRedirectLogin = isSessionUnauthorized(r.status, txt);
+    clearStaleSessionOnUnauthorized(r.status, txt);
+    if (shouldRedirectLogin) redirectToLogin();
+    if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
+      const bound = await bindDefaultProjectScope();
+      if (bound) return request<T>(path, init, true);
+    }
     throw new Error(`HTTP ${r.status}: ${txt}`);
   }
   return r.json() as Promise<T>;
@@ -110,6 +168,14 @@ export const api = {
     return request<any[]>(`/api/v1/requirements${suffix}`);
   },
   requirementsSummary: () => request<any>("/api/v1/requirements/summary"),
+  requirementOpsPlan: () => request<any>("/api/v1/requirements/ops-plan"),
+  requirementOpsTasks: (body: {
+    dry_run?: boolean;
+    priority?: string;
+    assigned_to?: string;
+    categories?: string[];
+    limit?: number;
+  }) => request<any>("/api/v1/requirements/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
   createRequirement: (body: {
     title: string;
     description?: string;
@@ -219,6 +285,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  taskSchedulerRuns: (limit = 20, q = "", includeArchived = false) => {
+    const qs = new URLSearchParams({ limit: String(limit), include_archived: includeArchived ? "true" : "false" });
+    if (q) qs.set("q", q);
+    return request<any>(`/api/v1/tasks/scheduler/runs?${qs}`);
+  },
+  taskSchedulerRunAction: (scheduleId: string, body: { action: string; dry_run?: boolean; policy?: string; max_parallel?: number; include_blocked?: boolean; note?: string }) =>
+    request<any>(`/api/v1/tasks/scheduler/runs/${encodeURIComponent(scheduleId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  taskSchedulerOpsSummary: () => request<any>("/api/v1/tasks/scheduler/ops-summary"),
+  taskSchedulerRunbook: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/tasks/scheduler/runbook", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  taskSchedulerInsights: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/tasks/scheduler/insights", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  taskSchedulerInsightTasks: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/tasks/scheduler/insights/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   taskAgentFeed: (limit = 10, agent = "", includeBlocked = false) => {
     const qs = new URLSearchParams({ limit: String(limit), include_blocked: includeBlocked ? "true" : "false" });
     if (agent) qs.set("agent", agent);
@@ -231,6 +323,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  taskAgentExecutionPlan: (body: { claim_id?: string; task_id?: string; agent?: string; include_context?: boolean }) =>
+    request<any>("/api/v1/tasks/agent-feed/execution-plan", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  taskAgentPlan: (taskId: string, claimId = "", agent = "", includeContext = true) => {
+    const qs = new URLSearchParams({ include_context: includeContext ? "true" : "false" });
+    if (claimId) qs.set("claim_id", claimId);
+    if (agent) qs.set("agent", agent);
+    return request<any>(`/api/v1/tasks/${encodeURIComponent(taskId)}/agent-plan?${qs.toString()}`);
+  },
   taskAgentHeartbeat: (body: { claim_id?: string; task_id?: string; agent?: string; progress?: number; state?: string; status_message?: string; extend_seconds?: number }) =>
     request<any>("/api/v1/tasks/agent-feed/heartbeat", {
       method: "POST",
@@ -241,10 +344,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  taskAgentReports: (limit = 100, status = "", agent = "", taskId = "", q = "") => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (status) qs.set("status", status);
+    if (agent) qs.set("agent", agent);
+    if (taskId) qs.set("task_id", taskId);
+    if (q) qs.set("q", q);
+    return request<any>(`/api/v1/tasks/agent-feed/reports?${qs.toString()}`);
+  },
   taskQualityPolicy: () => request<any>("/api/v1/tasks/quality/policy"),
   taskQualityPolicyUpdate: (body: Record<string, unknown>) =>
     request<any>("/api/v1/tasks/quality/policy", {
       method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  taskQualitySummary: (limit = 100) =>
+    request<any>(`/api/v1/tasks/quality/summary?limit=${encodeURIComponent(String(limit))}`),
+  taskQualityTasks: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/tasks/quality/tasks", {
+      method: "POST",
       body: JSON.stringify(body),
     }),
   taskQuality: (id: string) => request<any>(`/api/v1/tasks/${encodeURIComponent(id)}/quality`),
@@ -254,6 +372,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   taskDependencies: () => request<any>("/api/v1/tasks/dependencies"),
+  taskDependencyTasks: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/tasks/dependencies/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   addTaskDependency: (id: string, body: { target_id: string; type?: string; note?: string }) =>
     request<any>(`/api/v1/tasks/${encodeURIComponent(id)}/dependencies`, {
       method: "POST",
@@ -302,6 +425,18 @@ export const api = {
       span_days: number;
       elapsed_days: number;
     }>(`/api/v1/sprints/${encodeURIComponent(sprintId)}/burndown`),
+  sprintOpsPlan: (sprintId = "") => {
+    const qs = sprintId ? `?sprint_id=${encodeURIComponent(sprintId)}` : "";
+    return request<any>(`/api/v1/sprints/ops-plan${qs}`);
+  },
+  sprintOpsTasks: (body: {
+    dry_run?: boolean;
+    priority?: string;
+    assigned_to?: string;
+    sprint_id?: string;
+    categories?: string[];
+    limit?: number;
+  }) => request<any>("/api/v1/sprints/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
   workflowTypes: () => request<any[]>("/api/v1/workflows/types"),
   workflowSummary: () => request<any>("/api/v1/workflows/summary"),
   workflowCharts: () =>
@@ -643,6 +778,22 @@ export const api = {
     }),
   systemPagesCapabilities: () => request<any>("/api/v1/system/pages/capabilities"),
   systemPagesCapabilitiesMe: () => request<any>("/api/v1/system/pages/capabilities/me"),
+  systemPagesHealth: () => request<any>("/api/v1/system/pages/health"),
+  systemPagesMenuPreferencesMe: () => request<any>("/api/v1/system/pages/menu/preferences/me"),
+  systemPagesMenuPreferencesUpdate: (body: {
+    favorites?: string[];
+    recents?: string[];
+    density?: string;
+    show_recents?: boolean;
+    show_favorites?: boolean;
+    collapsed_groups?: Record<string, boolean>;
+    collapsed_categories?: Record<string, boolean>;
+    collapsed_modules?: Record<string, boolean>;
+  }) =>
+    request<any>("/api/v1/system/pages/menu/preferences/me", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
   systemPagesLegacyMigrationPlan: () => request<any>("/api/v1/system/pages/legacy/migration-plan"),
   systemLegacyPage: (consoleId: string) =>
     request<any>(`/api/v1/system/pages/legacy/${encodeURIComponent(consoleId)}`),
@@ -692,6 +843,16 @@ export const api = {
   agents: () => request<any[]>("/api/v1/agents"),
   agentsBuiltin: () => request<any[]>("/api/v1/agents/builtin"),
   agentsSummary: () => request<any>("/api/v1/agents/summary"),
+  agentRunsSummary: () => request<any>("/api/v1/agents/runs/summary"),
+  agentRuns: (agent = "", status = "", limit = 100) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (agent) qs.set("agent", agent);
+    if (status) qs.set("status", status);
+    return request<any>(`/api/v1/agents/runs?${qs}`);
+  },
+  agentRunsSlo: () => request<any>("/api/v1/agents/runs/slo"),
+  agentRunsRebalanceTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[] }) =>
+    request<any>("/api/v1/agents/runs/rebalance-tasks", { method: "POST", body: JSON.stringify(body) }),
   agentGroups: () => request<any[]>("/api/v1/agents/groups"),
   agentProfile: (id: string) => request<any>(`/api/v1/agents/${encodeURIComponent(id)}/profile`),
   agentBootstrapBuiltin: (overwrite = false) =>
@@ -809,6 +970,27 @@ export const api = {
     }>("/api/v1/organization/summary"),
   organizationPolicy: () =>
     request<any>("/api/v1/organization/policy"),
+  organizationPolicyUpdate: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/organization/policy", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  organizationPolicyReset: () =>
+    request<any>("/api/v1/organization/policy/reset", { method: "POST" }),
+  organizationPolicyCheck: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/organization/policy/check", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  organizationPolicyHistory: (limit = 50) =>
+    request<any>(`/api/v1/organization/policy/history?limit=${encodeURIComponent(String(limit))}`),
+  organizationAccessReview: () =>
+    request<any>("/api/v1/organization/access-review"),
+  organizationAccessReviewTasks: (body: Record<string, unknown>) =>
+    request<any>("/api/v1/organization/access-review/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   notifyMessages: (limit = 100, direction = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (direction) qs.set("direction", direction);
@@ -1101,9 +1283,12 @@ export const api = {
       username: string;
       role: string;
       tenant_id: string;
+      tenant_code?: string;
       tenant_slug?: string;
       tenant_name?: string;
       default_project_id?: string;
+      default_project_code?: string;
+      default_business_code?: string;
     }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
   authMe: () =>
     request<{
@@ -1228,6 +1413,14 @@ export const api = {
     }),
   deleteIssue: (id: string) =>
     request<{ ok: boolean }>(`/api/v1/issues/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  issueOpsPlan: () => request<any>("/api/v1/issues/ops-plan"),
+  issueOpsTasks: (body: {
+    dry_run?: boolean;
+    priority?: string;
+    assigned_to?: string;
+    categories?: string[];
+    limit?: number;
+  }) => request<any>("/api/v1/issues/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
 
   specsList: () => request<Array<{ path: string; category?: string; size?: number }>>("/api/v1/specs"),
   specsSummary: () =>
@@ -1291,6 +1484,10 @@ export const api = {
 
   devFlowTemplates: () =>
     request<{ ok: boolean; items: Array<Record<string, unknown>> }>("/api/v1/dev-flow/templates"),
+
+  devFlowOpsPlan: () => request<any>("/api/v1/dev-flow/ops-plan"),
+  devFlowOpsTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[]; limit?: number }) =>
+    request<any>("/api/v1/dev-flow/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
 
   devFlowBurndown: (sprintId?: string) => {
     const qs = sprintId ? `?sprint_id=${encodeURIComponent(sprintId)}` : "";

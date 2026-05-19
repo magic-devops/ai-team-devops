@@ -1,4 +1,4 @@
-export type OrgTab = "users" | "businesses" | "projectMembers" | "rolePolicy";
+export type OrgTab = "users" | "businesses" | "projectMembers" | "rolePolicy" | "accessReview";
 
 export type UserRow = {
   id: string;
@@ -34,9 +34,67 @@ export type ProjectMemberRow = {
 
 export type OrganizationPolicy = {
   ok: boolean;
+  configurable?: boolean;
+  version?: number;
+  notes?: string;
+  updated_at?: string;
+  updated_by?: string;
+  user_capability_map?: Record<string, string[]>;
+  project_capability_map?: Record<string, string[]>;
   tenant_scope: Record<string, string>;
   user_roles: Array<{ role: string; level: number; scope: string; capabilities: string[]; assignable: boolean }>;
   project_member_roles: Array<{ role: string; level: number; scope: string; capabilities: string[]; assignable: boolean }>;
   governance_controls: Array<{ id: string; title: string; status: string; description: string; next: string }>;
   ai_surfaces: Array<{ id: string; title: string; capability: string; path: string; description: string }>;
+};
+
+export type OrganizationPolicyCheckResult = {
+  ok: boolean;
+  allowed: boolean;
+  decision: "allow" | "deny";
+  scope: string;
+  role: string;
+  capability: string;
+  matched_capabilities: string[];
+  reason?: string;
+};
+
+export type OrganizationPolicyHistoryItem = {
+  id: string;
+  action: string;
+  created_at: string;
+  updated_by?: string;
+  notes?: string;
+  user_roles?: number;
+  project_roles?: number;
+};
+
+export type OrganizationAccessFinding = {
+  id: string;
+  kind: string;
+  severity: "high" | "medium" | "low" | "info";
+  title: string;
+  description: string;
+  params?: Record<string, string | number | boolean | null | undefined>;
+  project_id?: string;
+  project_name?: string;
+  owner?: string;
+  command?: string;
+};
+
+export type OrganizationAccessReview = {
+  ok: boolean;
+  score: number;
+  grade: string;
+  summary: {
+    users: number;
+    active_users: number;
+    tenant_admins: number;
+    projects: number;
+    project_members: number;
+    findings: number;
+    by_severity: Record<string, number>;
+  };
+  findings: OrganizationAccessFinding[];
+  recommendations: string[];
 };

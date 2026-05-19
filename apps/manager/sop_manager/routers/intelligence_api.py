@@ -51,6 +51,12 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
             "category": "ai-knowledge",
         },
         {
+            "id": "distill",
+            "path": "#/intelligence/distill",
+            "capability": "ai.intelligence.distill",
+            "category": "ai-knowledge",
+        },
+        {
             "id": "specs",
             "path": "#/intelligence/specs",
             "capability": "ai.intelligence.specs",
@@ -78,6 +84,12 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
             "id": "sync",
             "path": "#/intelligence/sync",
             "capability": "ai.intelligence.sync",
+            "category": "ai-runtime-ops",
+        },
+        {
+            "id": "events",
+            "path": "#/intelligence/events",
+            "capability": "ai.intelligence.events",
             "category": "ai-runtime-ops",
         },
         {

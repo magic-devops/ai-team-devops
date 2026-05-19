@@ -11,7 +11,14 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from sop_manager.path_config import resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
+from sop_manager.path_config import (
+    resolved_ai_memory_root,
+    resolved_business_code,
+    resolved_project_code,
+    resolved_project_id,
+    resolved_tenant_code,
+    resolved_tenant_id,
+)
 from .db_sql_compat import now, rows, table
 from .webhook import notify_webhook
 
@@ -159,6 +166,14 @@ class ReqBulkUpdate(BaseModel):
     priority: Optional[str] = None
     assigned_agent: Optional[str] = None
     dev_tool: Optional[str] = None
+
+
+class RequirementOpsTasksIn(BaseModel):
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = Field("RequirementOps Agent", max_length=120)
+    categories: List[str] = Field(default_factory=list, max_length=20)
+    limit: int = Field(20, ge=1, le=100)
 
 
 class ReorderBoardBody(BaseModel):
@@ -532,6 +547,218 @@ def _review_requirement(req: Dict[str, Any], peers: List[Dict[str, Any]]) -> Dic
         "linked_tasks": len(tasks),
         "next_actions": next_actions,
         "reviewed_at": now().isoformat(),
+    }
+
+
+def _requirements_ops_payload(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    task_rows = rows("tasks", 2000)
+    tasks_by_req: Dict[str, List[Dict[str, Any]]] = {}
+    for task in task_rows:
+        rid = str(task.get("req_id") or "")
+        if rid:
+            tasks_by_req.setdefault(rid, []).append(task)
+    reviews = [_review_requirement(req, items) for req in items]
+    by_id = {str(r.get("requirement_id") or ""): r for r in reviews}
+    needs_review = [req for req in items if (by_id.get(str(req.get("id"))) or {}).get("score", 0) < 65]
+    review_band = [req for req in items if 65 <= int((by_id.get(str(req.get("id"))) or {}).get("score", 0)) < 85]
+    high_no_tasks = [
+        req for req in items
+        if str(req.get("priority") or "").upper() in {"P0", "P1"}
+        and str(req.get("status") or "pending") != "completed"
+        and not tasks_by_req.get(str(req.get("id") or ""))
+    ]
+    missing_acceptance = [req for req in items if not _as_text_list(req.get("acceptance_criteria"))]
+    unassigned = [req for req in items if not str(req.get("assigned_agent") or "").strip() and str(req.get("status") or "pending") != "completed"]
+    duplicate_pairs = []
+    for review in reviews:
+        for dup in review.get("duplicates") or []:
+            duplicate_pairs.append({"id": review.get("requirement_id"), **dup})
+
+    risks: List[Dict[str, Any]] = []
+    if not items:
+        risks.append({
+            "id": "empty-requirement-pool",
+            "severity": "P1",
+            "category": "intake",
+            "title": "需求池尚未建立",
+            "description": "平台需要先沉淀业务想法、需求条目和验收标准，AI CLI/Agent 才能稳定拆解任务并执行。",
+            "command": "sop requirement create \"初始化需求池\" --priority P1",
+            "count": 0,
+            "requirement_ids": [],
+        })
+    if needs_review:
+        risks.append({
+            "id": "low-quality-requirements",
+            "severity": "P1",
+            "category": "review",
+            "title": f"{len(needs_review)} 个需求质量分低于 65",
+            "description": "需求描述、验收标准或边界不足，会导致 AI 生成任务偏差和验收不可控。",
+            "command": "sop requirement ops-tasks --categories review --apply",
+            "count": len(needs_review),
+            "requirement_ids": [str(x.get("id")) for x in needs_review[:10]],
+        })
+    if missing_acceptance:
+        risks.append({
+            "id": "missing-acceptance",
+            "severity": "P1" if len(missing_acceptance) >= 3 else "P2",
+            "category": "acceptance",
+            "title": f"{len(missing_acceptance)} 个需求缺少验收标准",
+            "description": "缺少验收标准会让质量卡点和 Agent 完成判定失去依据。",
+            "command": "sop requirement ops-tasks --categories acceptance --apply",
+            "count": len(missing_acceptance),
+            "requirement_ids": [str(x.get("id")) for x in missing_acceptance[:10]],
+        })
+    if high_no_tasks:
+        risks.append({
+            "id": "high-priority-no-tasks",
+            "severity": "P0" if any(str(x.get("priority")).upper() == "P0" for x in high_no_tasks) else "P1",
+            "category": "generation",
+            "title": f"{len(high_no_tasks)} 个高优需求尚未拆任务",
+            "description": "高优需求需要尽快生成可执行任务、DAG 依赖和 Agent 执行包。",
+            "command": "sop requirement ops-tasks --categories generation --apply",
+            "count": len(high_no_tasks),
+            "requirement_ids": [str(x.get("id")) for x in high_no_tasks[:10]],
+        })
+    if unassigned:
+        risks.append({
+            "id": "unassigned-requirements",
+            "severity": "P2",
+            "category": "routing",
+            "title": f"{len(unassigned)} 个未完成需求未指定 Agent",
+            "description": "缺少负责 Agent 或工具路由，会影响智能分发和后续执行跟踪。",
+            "command": "sop requirement ops-tasks --categories routing --apply",
+            "count": len(unassigned),
+            "requirement_ids": [str(x.get("id")) for x in unassigned[:10]],
+        })
+    if duplicate_pairs:
+        risks.append({
+            "id": "duplicate-requirements",
+            "severity": "P2",
+            "category": "dedupe",
+            "title": f"发现 {len(duplicate_pairs)} 条相似需求线索",
+            "description": "相似需求需要合并或明确差异，避免重复开发和验收冲突。",
+            "command": "sop requirement ops-tasks --categories dedupe --apply",
+            "count": len(duplicate_pairs),
+            "requirement_ids": [str(x.get("id")) for x in duplicate_pairs[:10]],
+        })
+
+    avg_score = round(sum(int(r.get("score") or 0) for r in reviews) / max(1, len(reviews)), 1) if reviews else 0
+    score = 100
+    score -= min(35, len(needs_review) * 8)
+    score -= min(25, len(high_no_tasks) * 10)
+    score -= min(20, len(missing_acceptance) * 4)
+    score -= min(10, len(unassigned) * 2)
+    if not items:
+        score = 50
+    score = max(0, score)
+    grade = "healthy" if score >= 85 else "watch" if score >= 65 else "risk"
+    candidates: List[Dict[str, Any]] = []
+    for risk in risks:
+        candidates.append({
+            "title": f"[需求治理] {risk['title']}",
+            "description": "\n".join([
+                str(risk.get("description") or ""),
+                "",
+                f"风险分类: {risk.get('category')}",
+                f"关联需求: {', '.join(risk.get('requirement_ids') or []) or '待梳理'}",
+                f"建议命令: {risk.get('command')}",
+            ]),
+            "priority": "P0" if risk.get("severity") == "P0" else "P1" if risk.get("severity") == "P1" else "P2",
+            "estimate": "M",
+            "assigned_to": "RequirementOps Agent",
+            "dev_tool": "codex-cli",
+            "source": "requirement_ops",
+            "source_report_id": str(risk.get("id") or ""),
+            "source_report_title": str(risk.get("title") or ""),
+            "category": str(risk.get("category") or ""),
+            "debug_notes": f"tenant_code={resolved_tenant_code()} business_code={resolved_business_code()} project_id={resolved_project_id()} project_code={resolved_project_code()}",
+        })
+    return {
+        "ok": True,
+        "health": {"score": score, "grade": grade, "avg_review_score": avg_score},
+        "summary": {
+            "total": len(items),
+            "ready": sum(1 for r in reviews if int(r.get("score") or 0) >= 85),
+            "review": len(review_band),
+            "needs_work": len(needs_review),
+            "missing_acceptance": len(missing_acceptance),
+            "high_priority_without_tasks": len(high_no_tasks),
+            "unassigned": len(unassigned),
+            "duplicate_hints": len(duplicate_pairs),
+        },
+        "risks": risks,
+        "task_candidates": candidates,
+        "commands": [
+            {"label": "查看需求治理计划", "command": "sop requirement ops-plan --json"},
+            {"label": "预览需求治理任务", "command": "sop requirement ops-tasks --limit 20 --json"},
+            {"label": "生成需求治理任务", "command": "sop requirement ops-tasks --apply --assigned-to \"RequirementOps Agent\""},
+        ],
+        "agent_packet": {
+            "purpose": "RequirementOps: keep product requirements reviewable, routable, and ready for task generation.",
+            "read_api": "/api/v1/requirements/ops-plan",
+            "task_api": "/api/v1/requirements/ops-tasks",
+            "recommended_cli": "sop requirement ops-plan --json",
+            "quality_gates": ["acceptance criteria required", "P0/P1 must have tasks", "agent routing required", "dedupe before build"],
+        },
+        "scope": {
+            "tenant_code": resolved_tenant_code(),
+            "business_code": resolved_business_code(),
+            "project_id": resolved_project_id(),
+            "project_code": resolved_project_code(),
+        },
+    }
+
+
+@router.get("/ops-plan")
+def requirements_ops_plan() -> Dict[str, Any]:
+    raw = rows("requirements", 1000)
+    st = _ui_load()
+    items = _ui_ordered_list(raw, st)
+    return _requirements_ops_payload(items)
+
+
+@router.post("/ops-tasks")
+def requirements_ops_tasks(body: RequirementOpsTasksIn) -> Dict[str, Any]:
+    plan = requirements_ops_plan()
+    categories = {x.strip() for x in body.categories if x.strip()}
+    candidates = [
+        item for item in (plan.get("task_candidates") or [])
+        if not categories
+        or str(item.get("category") or "") in categories
+        or str(item.get("source_report_id") or "") in categories
+        or str(item.get("source_report_title") or "") in categories
+    ][: body.limit]
+    items: List[Dict[str, Any]] = []
+    created: List[str] = []
+    if not body.dry_run:
+        from .tasks import TaskCreate, create_task
+
+        for item in candidates:
+            payload = dict(item)
+            payload["priority"] = body.priority or payload.get("priority") or "P1"
+            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "RequirementOps Agent"
+            out = create_task(TaskCreate(**payload))
+            task_id = str(out.get("id") or "")
+            created.append(task_id)
+            payload["task_id"] = task_id
+            items.append(payload)
+    else:
+        for item in candidates:
+            payload = dict(item)
+            payload["priority"] = body.priority or payload.get("priority") or "P1"
+            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "RequirementOps Agent"
+            items.append(payload)
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "items": items,
+        "created_task_ids": created,
+        "summary": {
+            "planned": len(candidates),
+            "created": len(created),
+            "health_score": (plan.get("health") or {}).get("score", 0),
+            "grade": (plan.get("health") or {}).get("grade", ""),
+        },
     }
 
 

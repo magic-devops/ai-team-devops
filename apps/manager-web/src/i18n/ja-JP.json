@@ -5,13 +5,19 @@
     "favorite": "お気に入りに追加",
     "unfavorite": "お気に入りを解除",
     "recents": "最近",
+    "quickEmpty": "表示できる項目はありません",
     "clearRecents": "最近をクリア",
     "toggleFavorites": "お気に入りの表示切替",
     "toggleRecents": "最近の表示切替",
     "readOnly": "読み取り専用",
     "readOnlyHint": "現在のロールは読み取り権限のみ、書き込みは無効です",
     "shortcutHint": "Cmd/Ctrl+K パレット · Cmd/Ctrl+/ サイドバー · g+キー 高速ジャンプ",
-    "badge": { "new": "New", "beta": "Beta", "preview": "Preview", "alpha": "Alpha" },
+    "badge": {
+      "new": "New",
+      "beta": "Beta",
+      "preview": "Preview",
+      "alpha": "Alpha"
+    },
     "density": {
       "label": "サイドバー密度",
       "compact": "コンパクト",
@@ -27,6 +33,7 @@
     "projectOnboarding": "AI オンボーディング",
     "projectTemplates": "プロジェクトテンプレート",
     "projectGovernance": "プロジェクトガバナンス",
+    "orgAccessReview": "アクセスレビュー",
     "tasks": "タスクスケジューリング",
     "taskExecution": "タスク実行",
     "taskBoard": "タスクボード",
@@ -96,6 +103,7 @@
     "setShellHome": "サイトの起点をこの管理プラットフォームに固定",
     "collapseSidebar": "メニューを折りたたむ",
     "expandSidebar": "メニューを展開",
+    "resizeSidebar": "ドラッグでメニュー幅を調整、ダブルクリックで既定に戻す",
     "systemMap": "モジュールガバナンス"
   },
   "dashboard": {
@@ -171,25 +179,63 @@
     "linkSettings": "ログインとテーマ"
   },
   "page": {
-    "projectPortfolio": { "title": "プロジェクトポートフォリオ" },
-    "projectBusinesses": { "title": "事業ライン" },
-    "tenantUsers": { "title": "テナントユーザー" },
-    "projectMembers": { "title": "プロジェクトメンバー" },
-    "projectOnboarding": { "title": "AI オンボーディング" },
-    "projectTemplates": { "title": "プロジェクトテンプレート" },
-    "projectGovernance": { "title": "プロジェクトガバナンス" },
-    "taskExecution": { "title": "タスク実行" },
-    "taskBoard": { "title": "タスクボード" },
-    "taskSprints": { "title": "スプリント" },
-    "taskDependencies": { "title": "タスク依存" },
-    "taskScheduler": { "title": "DAG スケジューラー" },
-    "knowledgeBase": { "title": "ナレッジベース" },
-    "ragSearch": { "title": "RAG 検索" },
-    "aiMemory": { "title": "AI メモリ" },
-    "ruleCenter": { "title": "ルールセンター" },
-    "workerOps": { "title": "WorkerOps" },
-    "syncOps": { "title": "SyncOps" },
-    "usageOps": { "title": "利用量ガバナンス" },
+    "projectPortfolio": {
+      "title": "プロジェクトポートフォリオ"
+    },
+    "projectBusinesses": {
+      "title": "事業ライン"
+    },
+    "tenantUsers": {
+      "title": "テナントユーザー"
+    },
+    "projectMembers": {
+      "title": "プロジェクトメンバー"
+    },
+    "projectOnboarding": {
+      "title": "AI オンボーディング"
+    },
+    "projectTemplates": {
+      "title": "プロジェクトテンプレート"
+    },
+    "projectGovernance": {
+      "title": "プロジェクトガバナンス"
+    },
+    "taskExecution": {
+      "title": "タスク実行"
+    },
+    "taskBoard": {
+      "title": "タスクボード"
+    },
+    "taskSprints": {
+      "title": "スプリント"
+    },
+    "taskDependencies": {
+      "title": "タスク依存"
+    },
+    "taskScheduler": {
+      "title": "DAG スケジューラー"
+    },
+    "knowledgeBase": {
+      "title": "ナレッジベース"
+    },
+    "ragSearch": {
+      "title": "RAG 検索"
+    },
+    "aiMemory": {
+      "title": "AI メモリ"
+    },
+    "ruleCenter": {
+      "title": "ルールセンター"
+    },
+    "workerOps": {
+      "title": "WorkerOps"
+    },
+    "syncOps": {
+      "title": "SyncOps"
+    },
+    "usageOps": {
+      "title": "利用量ガバナンス"
+    },
     "dataAssets": {
       "title": "データ資産"
     },
@@ -433,6 +479,26 @@
       "depSave": "依存を保存",
       "depDelete": "依存を削除",
       "depEmpty": "タスク依存はありません",
+      "depReady": "準備キュー",
+      "depCycles": "循環リスク",
+      "depWorkbench": "依存治理ワークベンチ",
+      "depSearch": "タスク ID、タイトル、状態、優先度、担当者を検索",
+      "depFilterAll": "すべて",
+      "depFilterBlocked": "ブロック",
+      "depFilterReady": "準備完了",
+      "depFilterHigh": "高リスク",
+      "depNoRecommendations": "依存関係は健全です。現時点の治理提案はありません。",
+      "depNodeDetail": "ノード調度詳細",
+      "depUseAsSource": "元に設定",
+      "depUseAsTarget": "対象に設定",
+      "depNoSelection": "左側のタスクノードを選択すると、依存詳細を確認し関係をすばやく作成できます。",
+      "depReadyQueue": "調度可能な準備キュー",
+      "depBlockedQueue": "依存ブロックキュー",
+      "depNoBlockedQueue": "依存でブロックされたタスクはありません",
+      "depPreviewTasks": "タスクをプレビュー",
+      "depCreateTasks": "治理タスクを生成",
+      "depTasksResult": "{{planned}} 件の依存治理タスクを計画、{{created}} 件を生成しました",
+      "depTaskPreview": "依存治理タスクプレビュー",
       "schedulerTitle": "Hermes DAG スケジューラ",
       "schedulerPreview": "スケジュールをプレビュー",
       "schedulerApply": "スケジュールを適用",
@@ -452,6 +518,27 @@
       "schedulerEmpty": "スケジュールはまだありません。先にプレビューしてください。",
       "schedulerDag": "DAG 実行ステージ",
       "schedulerRunHint": "プレビューすると、バッチ、ブロック関係、並列実行レーンを確認できます。",
+      "schedulerConsole": "スケジューラ操作台",
+      "schedulerConsoleHint": "運用、洞察、Agent、品質、イベントを集中パネルに分割し、機能を保ったまま縦方向の詰め込みを減らします。",
+      "schedulerPanelOps": "運用",
+      "schedulerPanelInsights": "洞察",
+      "schedulerPanelAgent": "Agent",
+      "schedulerPanelQuality": "品質",
+      "schedulerPanelEvents": "イベント",
+      "schedulerInsights": "タスク依存スケジューラ洞察",
+      "previewInsightTasks": "洞察タスクをプレビュー",
+      "createInsightTasks": "洞察タスクを作成",
+      "insightTaskResult": "{{planned}} 件の洞察タスクを計画、{{created}} 件を作成",
+      "insightHealth": "洞察スコア",
+      "criticalPath": "クリティカルパス",
+      "bottlenecks": "ボトルネック",
+      "policyCount": "ポリシー数",
+      "policyComparison": "ポリシー比較",
+      "policyScheduled": "編成済み",
+      "policyReady": "準備完了",
+      "policyBlocked": "ブロック",
+      "policyStages": "ステージ",
+      "schedulerRecommendations": "自動推奨",
       "stage": "ステージ",
       "lane": "レーン",
       "qualityGates": "ゲート",
@@ -467,6 +554,20 @@
       "progress": "進捗",
       "leaseExpires": "リース期限",
       "heartbeat": "ハートビート",
+      "agentPlan": "実行パック",
+      "agentExecutionPlan": "Agent 自律実行パック",
+      "agentPlanHint": "タスク取得後、または有効なリースから実行パックを開くと、目標、依存、規約、品質ゲート、報告コマンドを確認できます。",
+      "noDescription": "説明なし",
+      "step": "ステップ",
+      "required": "必須",
+      "command": "コマンド",
+      "agentReports": "Agent デリバリー監査",
+      "reportCount": "レポート数",
+      "reportArtifacts": "成果物数",
+      "reportFailedGates": "失敗ゲート",
+      "reportHeartbeats": "ハートビート数",
+      "qualityDecisionShort": "品質",
+      "summary": "要約",
       "action": "操作",
       "qualityCenter": "品質ゲートセンター",
       "qualityMode": "モード",
@@ -475,6 +576,22 @@
       "qualityEvaluateSelected": "選択タスクを評価",
       "qualitySelectHint": "タスクを選択",
       "qualityDecision": "判定 {{decision}}、スコア {{score}}",
+      "qualityEvaluations": "評価数",
+      "qualityAvgScore": "平均スコア",
+      "qualityPolicyEdit": "品質ポリシー",
+      "qualityRequiredIds": "必須ゲート ID、カンマ区切り",
+      "qualityAdvisoryIds": "助言ゲート ID、カンマ区切り",
+      "qualityMinConfidence": "信頼度",
+      "qualityRequireArtifact": "成果物必須",
+      "qualityAutoBlock": "自動ブロック",
+      "qualityNotes": "ポリシーメモ",
+      "qualitySavePolicy": "ポリシー保存",
+      "qualityPolicySaved": "品質ポリシーを保存しました",
+      "qualityPreviewTasks": "タスクをプレビュー",
+      "qualityCreateTasks": "タスクを生成",
+      "qualityTasksResult": "{{planned}} 件計画、{{created}} 件生成しました",
+      "qualityRecent": "最近の品質評価",
+      "qualityNoRecent": "品質評価はまだありません",
       "eventWakeups": "イベント起床ポリシー",
       "agentContract": "Agent 実行契約",
       "agentContractScope": "タスクパケットには tenant_code、business_code、project_id が含まれ、企業・業務・プロジェクトのスコープを分離します。",
@@ -485,7 +602,20 @@
         "in_progress": "進行中",
         "blocked": "ブロック",
         "completed": "完了"
-      }
+      },
+      "sprintOpsPlan": "スプリント治理操作パック",
+      "sprintOpsHealth": "スプリントヘルス",
+      "sprintOpsPreview": "治理タスクをプレビュー",
+      "sprintOpsCreate": "治理タスクを生成",
+      "sprintOpsHint": "アクティブスプリントなし、スコープ空、ブロック中タスク、高優先課題、納期リスクを検出し、AI/CLI が実行できる治理タスクへ変換します。",
+      "sprintOpsNoRisks": "明確なスプリント治理リスクはありません",
+      "sprintOpsActive": "現在のスプリント",
+      "sprintOpsDaysLeft": "残日数",
+      "sprintOpsCriticalIssues": "高優先課題",
+      "sprintOpsSeverity": "レベル",
+      "sprintOpsCategory": "分類",
+      "sprintOpsRisk": "リスク",
+      "sprintOpsCommand": "コマンド"
     },
     "workflows": {
       "title": "ワークフロー",
@@ -760,6 +890,20 @@
       "businesses": "事業ライン",
       "projects": "プロジェクト",
       "users": "テナントユーザー",
+      "tab": {
+        "users": "テナントユーザー",
+        "businesses": "事業ラインガバナンス",
+        "projectMembers": "プロジェクトメンバー",
+        "rolePolicy": "ロールポリシー",
+        "accessReview": "アクセスレビュー"
+      },
+      "tabHint": {
+        "users": "テナントアカウント、ロール、状態、パスワード再設定、アカウントライフサイクルを管理します。",
+        "businesses": "プロジェクト所属、業務分離、将来の業務単位アクセス制御を管理します。",
+        "projectMembers": "プロジェクトロール、候補メンバー、AI 開発協業スコープを管理します。",
+        "rolePolicy": "テナントロール、プロジェクトロール、ガバナンス制御、AI 操作可能な能力境界を確認します。",
+        "accessReview": "組織とプロジェクトのアクセスリスクを自動点検し、高リスク項目を治理タスク化します。"
+      },
       "usersHint": "ユーザー管理には tenant_admin が必要です。無効化されたユーザーはログインできません。",
       "emptyBusiness": "業務ラインなし",
       "emptyUsers": "メンバーデータなし",
@@ -780,6 +924,111 @@
       "businessDesc": "事業ライン説明",
       "addBusiness": "事業ライン追加",
       "projectMembers": "プロジェクトメンバー",
+      "rolePolicy": "ロールポリシーセンター",
+      "rolePolicyHint": "テナントロール、プロジェクトロール、能力コード、ガバナンス制御点、AI 操作可能入口を統合表示します。",
+      "emptyPolicy": "ロールポリシーデータがありません",
+      "policyScope": "スコープ",
+      "policyLevel": "レベル",
+      "policyCapabilities": "能力",
+      "policyCapabilitiesPlaceholder": "能力コードを入力して Enter",
+      "policyConfig": "設定可能なロール能力ポリシー",
+      "policyUpdated": "最終更新: {{user}} / {{time}}",
+      "policyNotes": "ポリシーメモ、適用境界、承認要件",
+      "policySave": "ポリシー保存",
+      "policyReset": "既定に戻す",
+      "policyResetConfirm": "プラットフォーム既定のロール能力ポリシーに戻しますか？",
+      "policyTenantScope": "現在のテナント / 業務 / プロジェクトスコープ",
+      "policyCheck": "ロール能力チェック",
+      "policyCheckHint": "スコープ、ロール、能力コードを入力し、CLI/Agent またはメンバーの実行可否を判定します。",
+      "policyCheckRun": "チェック",
+      "policyCheckCapability": "能力コード、例 task.claim",
+      "policyCheckScopeTenant": "テナントロール",
+      "policyCheckScopeProject": "プロジェクトロール",
+      "policyDecisionAllow": "許可",
+      "policyDecisionDeny": "拒否",
+      "policyHistory": "ポリシー変更履歴",
+      "policyHistoryEmpty": "ポリシー変更履歴はありません",
+      "policyHistoryTime": "時間",
+      "policyHistoryAction": "操作",
+      "policyHistoryUser": "操作者",
+      "policyHistoryRoles": "テナント/プロジェクトロール",
+      "policyHistoryNotes": "メモ",
+      "accessReview": "アクセスレビューセンター",
+      "accessReviewHint": "テナント、業務ライン、プロジェクトメンバー関係の認可リスクを検出し、スコア、リスク一覧、AI/CLI 推奨、治理タスクを出力します。",
+      "accessEmpty": "アクセスレビューデータがありません",
+      "accessScore": "レビュースコア",
+      "accessFindings": "リスク発見",
+      "accessHigh": "高リスク",
+      "accessProjects": "プロジェクト数",
+      "accessSeverity": "レベル",
+      "accessRisk": "リスク",
+      "accessKind": "種別",
+      "accessProject": "プロジェクト",
+      "accessOwner": "対象",
+      "accessCommand": "推奨コマンド",
+      "accessPreviewTasks": "治理タスクをプレビュー",
+      "accessCreateTasks": "治理タスクを生成",
+      "accessNoRisk": "アクセスリスクはありません",
+      "accessRecommendations": "治理推奨",
+      "accessTaskPreview": "タスクプレビュー",
+      "accessTaskCreated": "タスクを生成しました",
+      "accessSeverityMap": {
+        "high": "高リスク",
+        "medium": "中リスク",
+        "low": "低リスク",
+        "info": "情報"
+      },
+      "accessKindMap": {
+        "tenant_admin_review": "テナント管理者レビュー",
+        "unknown_user_role": "未知のテナントロール",
+        "disabled_user_membership": "無効ユーザーの権限",
+        "project_without_admin": "管理者不在プロジェクト",
+        "too_many_project_admins": "プロジェクト管理者過多",
+        "unknown_project_role": "未知のプロジェクトロール",
+        "disabled_project_member": "無効なプロジェクトメンバー",
+        "empty_capability_policy": "空の権限ポリシー"
+      },
+      "accessFinding": {
+        "tenant_admin_review": {
+          "title": "テナント管理者が多すぎます",
+          "description": "現在 active の super_admin/tenant_admin は {{count}} 人です。最小権限の原則に沿って定期的に確認してください。"
+        },
+        "unknown_user_role": {
+          "title": "メンバー {{username}} が未知のテナントロールを使用しています",
+          "description": "ロール {{role}} はプラットフォーム標準ロールに含まれていません。"
+        },
+        "disabled_user_membership": {
+          "title": "無効メンバーにプロジェクト権限が残っています：{{username}}",
+          "description": "このメンバーは無効ですが、{{count}} 件のプロジェクトメンバー関係が残っています。権限を削除するか、アカウントを復旧してから再付与してください。"
+        },
+        "project_without_admin": {
+          "title": "プロジェクト管理者がいません：{{projectName}}",
+          "description": "active プロジェクトに project_admin がなく、AI の割り当て、メンバー権限、品質ゲート承認の責任者が不明確です。"
+        },
+        "too_many_project_admins": {
+          "title": "プロジェクト管理者が多すぎます：{{projectName}}",
+          "description": "このプロジェクトには {{count}} 人の project_admin がいます。責任分界と最小権限を確認してください。"
+        },
+        "unknown_project_role": {
+          "title": "プロジェクトメンバーが未知のロールを使用しています：{{projectName}}",
+          "description": "メンバー {{username}} のプロジェクトロール {{role}} は標準ロールに含まれていません。"
+        },
+        "disabled_project_member": {
+          "title": "プロジェクトに無効メンバーが含まれています：{{projectName}}",
+          "description": "メンバー {{username}} は無効ですが、プロジェクトロール {{role}} が残っています。"
+        },
+        "empty_capability_policy": {
+          "title": "空の権限ロールポリシーがあります",
+          "description": "テナントロール {{userRoles}}、プロジェクトロール {{projectRoles}} に権限コードが設定されていません。"
+        }
+      },
+      "accessRecommendation": [
+        "高リスクを先に処理してください：無効メンバーの残存権限、責任者不在プロジェクト、未知ロール。",
+        "定期的なアクセスレビュー結果をタスク化し、テナント管理者またはセキュリティ監査担当者の作業に入れてください。",
+        "AI/CLI は自動割り当て前に access-review と policy/check を読み取り、必要な権限を持たないロールへタスクを割り当てないようにしてください。"
+      ],
+      "governanceControls": "ガバナンス制御",
+      "aiSurfaces": "AI 操作可能入口",
       "pickUser": "テナントユーザーを選択",
       "addMember": "メンバー追加",
       "removeMember": "メンバー削除",
@@ -1290,7 +1539,21 @@
         "ready": "デリバリー可能",
         "review": "レビュー必要",
         "needs_work": "補足必要"
-      }
+      },
+      "opsPlan": "要求治理操作パック",
+      "opsHealth": "要求ヘルス",
+      "opsPreview": "治理タスクをプレビュー",
+      "opsCreate": "治理タスクを生成",
+      "opsHint": "低品質要求、受入条件不足、高優先未タスク化、Agent 未指定、重複リスクを検出し、AI/CLI が実行できる治理タスクへ変換します。",
+      "opsNoRisks": "明確な要求治理リスクはありません",
+      "opsTasksResult": "治理タスク: 計画 {{planned}}、生成 {{created}}",
+      "opsAvgScore": "平均レビュー点",
+      "opsNeedsWork": "要レビュー",
+      "opsHighNoTasks": "高優先未タスク化",
+      "opsSeverity": "レベル",
+      "opsCategory": "分類",
+      "opsRisk": "リスク",
+      "opsCommand": "コマンド"
     },
     "platforms": {
       "title": "AI 開発プラットフォーム",
@@ -1638,6 +1901,68 @@
       "createSelectedTasks": "選択タスク生成",
       "taskResult": "{{created}} 件作成、{{skipped}} 件スキップ。",
       "aiPrompt": "legacy console モジュール {{name}}（{{id}}）を分析してください。移行先 React ページ: {{target}}。現在の移行提案: {{next}}。製品化された移行計画、前後端改修、権限と AI 連携、実行可能なタスクを提示してください。"
+    },
+    "devFlow": {
+      "title": "開発フロー",
+      "hubTitle": "開発フロー治理ハブ",
+      "hubDesc": "要件、タスク、課題、スプリント規模とワークベンチ入口を集約します。",
+      "hubWorkbench": "開発ワークベンチ",
+      "hubSprintTasks": "スプリントタスク",
+      "hubOpenIssues": "未解決課題",
+      "hubCritical": "重要未解決",
+      "hubReqChart": "要件",
+      "hubTaskChart": "タスク",
+      "domainsTitle": "ドメイン入口",
+      "desc": "要件、タスク、課題、スプリントを横断するデリバリー概要。",
+      "pipeline": "パイプライン",
+      "openTasks": "タスクを開く",
+      "quickTools": "クイックリンク",
+      "designDocs": "設計ドキュメント",
+      "criticalOpen": "重要未解決",
+      "criticalAlert": "{{count}} 件の高優先度課題に対応が必要です",
+      "viewIssues": "課題を見る",
+      "reqByStatus": "要件ステータス",
+      "taskByStatus": "スプリントタスクステータス",
+      "sprintProgress": "スプリント進捗",
+      "noSprintProgress": "アクティブなスプリントはありません",
+      "sprintBurndown": "スプリント完了度",
+      "avgConfidence": "平均信頼度",
+      "openSprintTasks": "スプリントタスク",
+      "openSprintIssues": "スプリント課題",
+      "sprintOpenIssues": "スプリント内の未解決課題 {{count}} 件",
+      "manageSprints": "スプリント管理",
+      "burndownTitle": "スプリントバーンダウン",
+      "burndownLegend": "破線: 理想 · 実線: 実残",
+      "burndownRemaining": "残タスク",
+      "burndownDay": "日",
+      "issueSeverity": "未解決課題の重大度",
+      "templates": "フローテンプレート",
+      "runWorkflow": "ワークフロー開始",
+      "workflowStarted": "ワークフロー開始: {{id}}",
+      "opsPlan": "開発フロー治理パッケージ",
+      "flowHealth": "フロー健全性スコア",
+      "previewOpsTasks": "治理タスクをプレビュー",
+      "createOpsTasks": "治理タスクを生成",
+      "opsTasksResult": "{{planned}} 件の開発フロー治理タスクを計画、{{created}} 件を生成しました",
+      "noOpsRisks": "開発フローリスクはありません",
+      "severity": "重大度",
+      "category": "分類",
+      "risk": "リスク",
+      "command": "コマンド"
+    },
+    "issues": {
+      "opsPlan": "課題ガバナンス操作パック",
+      "issueHealth": "課題ヘルススコア",
+      "previewOpsTasks": "治理タスクをプレビュー",
+      "createOpsTasks": "治理タスクを生成",
+      "opsTasksResult": "治理タスク: 計画 {{planned}}、生成 {{created}}",
+      "opsHint": "高優先未解決、長期未解決、タスク未紐付けの課題リスクを検出し、AI/CLI が実行できる治理タスクへ変換します。",
+      "noOpsRisks": "明確な課題ガバナンスリスクはありません",
+      "staleOpen": "長期未解決",
+      "unlinkedOpen": "未紐付け",
+      "category": "分類",
+      "risk": "リスク",
+      "command": "コマンド"
     }
   },
   "projectSelector": {

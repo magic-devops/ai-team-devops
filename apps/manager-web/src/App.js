@@ -7,7 +7,7 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
  */
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronRight, Bot, Clock, Command, Cpu, Laptop, Lock, Moon, PanelLeftClose, PanelLeftOpen, Palette, Pin, Rows3, Search, Sparkles, Star, Sun, ArrowRight, LogOut, Sliders, UserCircle, X, } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -23,6 +23,14 @@ const COLLAPSE_STORAGE_KEY = "sop-nav-collapse-v1";
 const CATEGORY_COLLAPSE_STORAGE_KEY = "sop-nav-category-collapse-v1";
 const MODULE_COLLAPSE_STORAGE_KEY = "sop-nav-module-collapse-v1";
 const SIDEBAR_STORAGE_KEY = "sop-sidebar-collapsed-v1";
+const SIDEBAR_WIDTH_STORAGE_KEY = "sop-sidebar-width-v1";
+const ROLE_DEFAULT_STORAGE_KEY = "sop-menu-role-default-v1";
+const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_MIN_WIDTH = 280;
+const SIDEBAR_MAX_WIDTH = 520;
+function clampSidebarWidth(value) {
+    return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)));
+}
 function ThemeMenu() {
     const { t } = useTranslation();
     const [pref, setPref] = useState(() => getThemePreference());
@@ -218,6 +226,15 @@ export function App() {
             return false;
         }
     });
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        try {
+            const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) || SIDEBAR_DEFAULT_WIDTH);
+            return clampSidebarWidth(Number.isFinite(raw) ? raw : SIDEBAR_DEFAULT_WIDTH);
+        }
+        catch {
+            return SIDEBAR_DEFAULT_WIDTH;
+        }
+    });
     const [collapsedGroups, setCollapsedGroups] = useState(() => {
         try {
             const raw = localStorage.getItem(COLLAPSE_STORAGE_KEY);
@@ -250,9 +267,19 @@ export function App() {
         }
     });
     const [menuPrefs, setMenuPrefs] = useState(() => getMenuPrefs());
+    const [quickPanel, setQuickPanel] = useState(null);
     useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
     const authed = Boolean(getToken());
     const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+    const menuPrefsRemote = useQuery({
+        queryKey: ["systemPagesMenuPreferencesMe"],
+        queryFn: api.systemPagesMenuPreferencesMe,
+        enabled: authed,
+        retry: false,
+    });
+    const syncMenuPrefs = useMutation({
+        mutationFn: api.systemPagesMenuPreferencesUpdate,
+    });
     const capabilities = useCapabilities();
     useEffect(() => {
         const h = () => {
@@ -289,6 +316,10 @@ export function App() {
     useEffect(() => {
         localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
     }, [sidebarCollapsed]);
+    useEffect(() => {
+        if (!sidebarCollapsed)
+            localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+    }, [sidebarCollapsed, sidebarWidth]);
     useEffect(() => {
         let lastG = 0;
         const isEditing = () => {
@@ -352,6 +383,7 @@ export function App() {
         .replace(/\b\w/g, (char) => char.toUpperCase());
     const navLabel = (key) => String(t(`nav.${key}`, { defaultValue: humanizeNavKey(key) }));
     const currentRole = capabilities.role || String(me.data?.role || "viewer");
+    const menuStrategy = menuPrefsRemote.data?.strategy;
     const capabilityItems = capabilities.items.length ? capabilities.items : capabilities.visibleItems;
     const visibleNav = useMemo(() => filterNavByRole(currentRole, capabilityItems), [capabilityItems, currentRole]);
     const current = findActiveNavItem(hash, visibleNav.length ? visibleNav : undefined);
@@ -364,10 +396,56 @@ export function App() {
     const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, navLabel, visibleNav), [hash, navLabel, visibleNav]);
     const densityCls = densityPadding(menuPrefs.density);
     const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
+    const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : pinnedItems;
+    const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
     useEffect(() => {
-        if (current?.key)
-            pushRecent(current.key);
-    }, [current?.key]);
+        const prefs = menuPrefsRemote.data?.preferences;
+        if (!authed || !prefs)
+            return;
+        const scope = `${ROLE_DEFAULT_STORAGE_KEY}:${currentRole}:${String(me.data?.username || me.data?.user_id || "user")}`;
+        try {
+            if (localStorage.getItem(scope) === "1")
+                return;
+            setCollapsedGroups({ ...DEFAULT_COLLAPSE, ...(prefs.collapsed_groups || {}) });
+            setCollapsedCategories({ ...DEFAULT_CATEGORY_COLLAPSE, ...(prefs.collapsed_categories || {}) });
+            setCollapsedModules(prefs.collapsed_modules || {});
+            patchMenuPrefs({
+                favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+                recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
+                density: prefs.density || menuPrefs.density,
+                showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
+                showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+            });
+            localStorage.setItem(scope, "1");
+        }
+        catch {
+            /* ignore disabled storage */
+        }
+    }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
+    useEffect(() => {
+        if (!authed || !menuPrefsRemote.data?.ok)
+            return;
+        const timer = window.setTimeout(() => {
+            syncMenuPrefs.mutate({
+                favorites: menuPrefs.favorites,
+                recents: menuPrefs.recents,
+                density: menuPrefs.density,
+                show_recents: menuPrefs.showRecents,
+                show_favorites: menuPrefs.showFavorites,
+                collapsed_groups: collapsedGroups,
+                collapsed_categories: collapsedCategories,
+                collapsed_modules: collapsedModules,
+            });
+        }, 700);
+        return () => window.clearTimeout(timer);
+    }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
+    useEffect(() => {
+        if (current?.key) {
+            const next = pushRecent(current.key);
+            if (menuPrefsRemote.data?.ok)
+                syncMenuPrefs.mutate({ recents: next.recents });
+        }
+    }, [current?.key, menuPrefsRemote.data?.ok]);
     const childrenByParent = useMemo(() => {
         const out = new Map();
         for (const item of visibleNav) {
@@ -409,29 +487,53 @@ export function App() {
     const toggleModule = (moduleKey) => {
         setCollapsedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
     };
+    const startSidebarResize = (event) => {
+        event.preventDefault();
+        if (sidebarCollapsed)
+            return;
+        const startX = event.clientX;
+        const startWidth = sidebarWidth;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        const onMove = (move) => {
+            setSidebarWidth(clampSidebarWidth(startWidth + move.clientX - startX));
+        };
+        const onUp = () => {
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+    };
     if (!authed)
         return null;
-    return (_jsxs("div", { className: "flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row", children: [_jsx(CommandPalette, { open: commandOpen, setOpen: setCommandOpen, authed: authed }), _jsxs("aside", { className: `flex w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${sidebarCollapsed ? "lg:w-20" : "lg:w-80"}`, children: [_jsx("div", { className: `border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`, children: _jsxs("div", { className: "flex items-center justify-between gap-2", children: [_jsxs("div", { className: "min-w-0", children: [_jsx("div", { className: "truncate text-lg font-bold tracking-tight text-[var(--brand)]", children: sidebarCollapsed ? "H" : "Hermes" }), !sidebarCollapsed ? (_jsx("p", { className: "mt-1 text-xs text-[var(--nav-muted)]", children: t("nav.shellNavSection") })) : null] }), _jsx("button", { type: "button", className: "hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] lg:inline-flex", onClick: () => setSidebarCollapsed((v) => !v), title: sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar"), "aria-label": sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar"), children: sidebarCollapsed ? _jsx(PanelLeftOpen, { className: "h-4 w-4" }) : _jsx(PanelLeftClose, { className: "h-4 w-4" }) })] }) }), _jsxs("div", { className: `${sidebarCollapsed ? "hidden" : "px-4 pt-3"}`, children: [_jsxs("div", { className: "relative", children: [_jsx(Search, { className: "pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" }), _jsx("input", { ref: searchRef, value: keyword, onChange: (e) => setKeyword(e.target.value), placeholder: t("nav.searchPlaceholder"), className: "w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring", "aria-label": t("nav.searchPlaceholder") }), keyword ? (_jsx("button", { type: "button", className: "absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]", onClick: () => setKeyword(""), "aria-label": t("common.cancel"), children: _jsx(X, { className: "h-4 w-4" }) })) : null] }), _jsx("p", { className: "mt-1 px-1 text-[11px] text-[var(--nav-muted)]", children: t("nav.searchHint") })] }), !sidebarCollapsed && !keyword && pinnedItems.length ? (_jsxs("div", { className: "mt-3 px-2", children: [_jsx("div", { className: "mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]", children: _jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx(Pin, { className: "h-3 w-3" }), t("nav.pinned")] }) }), _jsx("div", { className: "grid grid-cols-2 gap-1", children: pinnedItems.map((item) => {
-                                    const Icon = item.icon;
-                                    const active = current.key === item.key || current.parentKey === item.key;
-                                    return (_jsxs("a", { href: item.path, className: `flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition ${active
-                                            ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
-                                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"}`, title: item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key), children: [_jsx(Icon, { className: "h-3.5 w-3.5 shrink-0" }), _jsx("span", { className: "truncate", children: navLabel(item.key) }), _jsx(NavBadgeTag, { badge: item.badge })] }, item.key));
-                                }) })] })) : null, !sidebarCollapsed && !keyword && menuPrefs.showFavorites && favoriteItems.length ? (_jsxs("div", { className: "mt-3 px-2", children: [_jsxs("div", { className: "mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]", children: [_jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx(Star, { className: "h-3 w-3" }), t("nav.favorites")] }), _jsx("span", { className: "rounded bg-[var(--surface-muted)] px-1 py-px text-[10px] text-[var(--muted)]", children: favoriteItems.length })] }), _jsx("div", { className: "space-y-0.5", children: favoriteItems.map((item) => {
-                                    const Icon = item.icon;
-                                    const active = current.key === item.key || current.parentKey === item.key;
-                                    return (_jsxs("div", { className: `group flex items-center rounded-md text-xs transition ${active
-                                            ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)]"
-                                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"}`, children: [_jsxs("a", { href: item.path, className: "flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5", children: [_jsx(Icon, { className: "h-3.5 w-3.5 shrink-0" }), _jsx("span", { className: "min-w-0 flex-1 truncate", children: navLabel(item.key) }), _jsx(NavBadgeTag, { badge: item.badge })] }), _jsx(FavoriteToggle, { navKey: item.key, isFav: true, className: "mr-1 opacity-60 group-hover:opacity-100" })] }, item.key));
-                                }) })] })) : null, !sidebarCollapsed && !keyword && menuPrefs.showRecents && recentItems.length ? (_jsxs("div", { className: "mt-3 px-2", children: [_jsxs("div", { className: "mb-1.5 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--nav-muted)]", children: [_jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx(Clock, { className: "h-3 w-3" }), t("nav.recents")] }), _jsx("button", { type: "button", onClick: () => patchMenuPrefs({ recents: [] }), className: "rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]", title: t("nav.clearRecents"), "aria-label": t("nav.clearRecents"), children: _jsx(X, { className: "h-3 w-3" }) })] }), _jsx("div", { className: "space-y-0.5", children: recentItems.map((item) => {
-                                    const Icon = item.icon;
-                                    return (_jsxs("a", { href: item.path, className: "flex items-center gap-2 rounded-md px-2 py-1 text-xs text-[var(--nav-muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]", children: [_jsx(Icon, { className: "h-3 w-3 shrink-0" }), _jsx("span", { className: "min-w-0 flex-1 truncate", children: navLabel(item.key) })] }, item.key));
-                                }) })] })) : null, _jsx("nav", { className: `mt-2 max-h-[42vh] flex-1 space-y-2 overflow-y-auto pb-3 lg:max-h-none ${sidebarCollapsed ? "px-2" : "px-2"}`, children: groupedNav.length === 0 ? (_jsx("div", { className: "rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400", children: t("nav.searchEmpty") })) : (groupedNav.map(({ group, categories }) => {
+    const sidebarStyle = {
+        "--sidebar-width": `${sidebarWidth}px`,
+    };
+    return (_jsxs("div", { className: "flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row", children: [_jsx(CommandPalette, { open: commandOpen, setOpen: setCommandOpen, authed: authed }), _jsxs("aside", { style: sidebarStyle, className: `relative flex min-h-0 w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${sidebarCollapsed ? "lg:w-20" : "lg:w-[var(--sidebar-width)]"}`, children: [_jsx("div", { className: `border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`, children: _jsxs("div", { className: "flex items-center justify-between gap-2", children: [_jsxs("div", { className: "min-w-0", children: [_jsx("div", { className: "truncate text-lg font-bold tracking-tight text-[var(--brand)]", children: sidebarCollapsed ? "H" : "Hermes" }), !sidebarCollapsed ? (_jsx("p", { className: "mt-1 text-xs text-[var(--nav-muted)]", children: t("nav.shellNavSection") })) : null] }), _jsx("button", { type: "button", className: "hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] lg:inline-flex", onClick: () => setSidebarCollapsed((v) => !v), title: sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar"), "aria-label": sidebarCollapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar"), children: sidebarCollapsed ? _jsx(PanelLeftOpen, { className: "h-4 w-4" }) : _jsx(PanelLeftClose, { className: "h-4 w-4" }) })] }) }), _jsxs("div", { className: `${sidebarCollapsed ? "hidden" : "px-4 pt-3"}`, children: [_jsxs("div", { className: "relative", children: [_jsx(Search, { className: "pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" }), _jsx("input", { ref: searchRef, value: keyword, onChange: (e) => setKeyword(e.target.value), placeholder: t("nav.searchPlaceholder"), className: "w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring", "aria-label": t("nav.searchPlaceholder") }), keyword ? (_jsx("button", { type: "button", className: "absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]", onClick: () => setKeyword(""), "aria-label": t("common.cancel"), children: _jsx(X, { className: "h-4 w-4" }) })) : null] }), _jsx("p", { className: "mt-1 px-1 text-[11px] text-[var(--nav-muted)]", children: t("nav.searchHint") })] }), !sidebarCollapsed && !keyword ? (_jsx("div", { className: "px-3 pt-2", children: _jsxs("div", { className: "rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5", children: [_jsx("div", { className: "grid grid-cols-3 gap-1", children: [
+                                        { key: "pinned", icon: Pin, label: t("nav.pinned"), count: pinnedItems.length, enabled: pinnedItems.length > 0 },
+                                        { key: "favorites", icon: Star, label: t("nav.favorites"), count: favoriteItems.length, enabled: menuPrefs.showFavorites },
+                                        { key: "recents", icon: Clock, label: t("nav.recents"), count: recentItems.length, enabled: menuPrefs.showRecents },
+                                    ].map((entry) => {
+                                        const Icon = entry.icon;
+                                        const active = quickPanel === entry.key;
+                                        return (_jsxs("button", { type: "button", disabled: !entry.enabled, onClick: () => setQuickPanel((value) => (value === entry.key ? null : entry.key)), className: `flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${active
+                                                ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/25"
+                                                : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"}`, title: entry.label, children: [_jsx(Icon, { className: "h-3.5 w-3.5 shrink-0" }), _jsx("span", { className: "truncate", children: entry.label }), _jsx("span", { className: "rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]", children: entry.count })] }, entry.key));
+                                    }) }), quickPanel ? (_jsxs("div", { className: "mt-1.5 border-t border-[var(--border)]/70 pt-1.5", children: [_jsxs("div", { className: "mb-1 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]", children: [_jsx("span", { children: quickPanelTitle }), quickPanel === "recents" && recentItems.length ? (_jsx("button", { type: "button", onClick: () => patchMenuPrefs({ recents: [] }), className: "rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]", title: t("nav.clearRecents"), "aria-label": t("nav.clearRecents"), children: _jsx(X, { className: "h-3 w-3" }) })) : null] }), _jsx("div", { className: "grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1", children: quickPanelItems.length ? quickPanelItems.map((item) => {
+                                                const Icon = item.icon;
+                                                const active = current.key === item.key || current.parentKey === item.key;
+                                                return (_jsxs("a", { href: item.path, className: `group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${active
+                                                        ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                                        : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"}`, title: item.shortcut ? `${navLabel(item.key)} (${item.shortcut})` : navLabel(item.key), children: [_jsx(Icon, { className: "h-3.5 w-3.5 shrink-0" }), _jsx("span", { className: "min-w-0 flex-1 truncate", children: navLabel(item.key) }), _jsx(NavBadgeTag, { badge: item.badge })] }, `${quickPanel}-${item.key}`));
+                                            }) : (_jsx("div", { className: "col-span-2 rounded-md border border-dashed border-[var(--border)] px-2 py-2 text-center text-[11px] text-[var(--nav-muted)]", children: t("nav.quickEmpty") })) })] })) : null] }) })) : null, _jsx("nav", { className: `mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-3 ${sidebarCollapsed ? "px-2" : "px-2"}`, children: groupedNav.length === 0 ? (_jsx("div", { className: "rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400", children: t("nav.searchEmpty") })) : (groupedNav.map(({ group, categories }) => {
                             const collapsed = collapsedGroups[group.key];
                             const groupCount = categories.reduce((sum, category) => sum + category.items.length, 0);
                             return (_jsxs("section", { className: "border-l-2 pl-1", style: { borderLeftColor: NAV_GROUP_ACCENT[group.key] }, children: [_jsxs("button", { type: "button", onClick: () => toggleGroup(group.key), className: `flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] ${sidebarCollapsed ? "justify-center" : ""}`, children: [!sidebarCollapsed ? _jsx("span", { children: t(group.i18nKey) }) : _jsx("span", { className: "sr-only", children: t(group.i18nKey) }), !sidebarCollapsed ? (_jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx("span", { className: "rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted-strong)]", children: groupCount }), collapsed ? _jsx(ChevronRight, { className: "h-3.5 w-3.5" }) : _jsx(ChevronDown, { className: "h-3.5 w-3.5" })] })) : null] }), !collapsed ? (_jsx("div", { className: "mt-1 space-y-2", children: categories.map(({ category, items }) => {
                                             const categoryCollapsed = !keyword && collapsedCategories[category.key];
-                                            return (_jsxs("div", { className: !sidebarCollapsed ? "rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/35 p-1" : "", children: [!sidebarCollapsed ? (_jsxs("button", { type: "button", onClick: () => toggleCategory(category.key), className: "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]", children: [_jsx("span", { className: "min-w-0 truncate", children: t(category.i18nKey, { defaultValue: humanizeNavKey(category.key) }) }), _jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx("span", { className: "rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]", children: items.length }), categoryCollapsed ? _jsx(ChevronRight, { className: "h-3 w-3" }) : _jsx(ChevronDown, { className: "h-3 w-3" })] })] })) : null, !categoryCollapsed ? (_jsx("div", { className: "mt-1 space-y-1", children: items.map((n) => {
+                                            return (_jsxs("div", { className: !sidebarCollapsed ? "rounded-lg border border-[var(--border)]/60 bg-[var(--surface-raised)]/30 p-1" : "", children: [!sidebarCollapsed ? (_jsxs("button", { type: "button", onClick: () => toggleCategory(category.key), className: "flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]", children: [_jsx("span", { className: "min-w-0 truncate", children: t(category.i18nKey, { defaultValue: humanizeNavKey(category.key) }) }), _jsxs("span", { className: "inline-flex items-center gap-1", children: [_jsx("span", { className: "rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]", children: items.length }), categoryCollapsed ? _jsx(ChevronRight, { className: "h-3 w-3" }) : _jsx(ChevronDown, { className: "h-3 w-3" })] })] })) : null, !categoryCollapsed ? (_jsx("div", { className: "mt-1 space-y-1", children: items.map((n) => {
                                                             const Icon = n.icon;
                                                             const children = childrenByParent.get(n.key) ?? [];
                                                             const parentActive = current.key === n.key || current.parentKey === n.key;
@@ -451,5 +553,19 @@ export function App() {
                                                                         }) })) : null] }, n.key));
                                                         }) })) : null] }, category.key));
                                         }) })) : null] }, group.key));
-                        })) }), !sidebarCollapsed ? (_jsxs("div", { className: "border-t border-[var(--nav-border)] px-3 py-2.5", children: [_jsxs("div", { className: "flex items-center justify-between gap-2", children: [_jsx(DensityMenu, { density: menuPrefs.density }), _jsxs("div", { className: "flex items-center gap-1", children: [_jsx("button", { type: "button", onClick: () => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites }), className: `inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${menuPrefs.showFavorites ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"} hover:bg-[var(--surface-muted)]`, title: t("nav.toggleFavorites"), children: _jsx(Star, { className: "h-3 w-3" }) }), _jsx("button", { type: "button", onClick: () => patchMenuPrefs({ showRecents: !menuPrefs.showRecents }), className: `inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${menuPrefs.showRecents ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"} hover:bg-[var(--surface-muted)]`, title: t("nav.toggleRecents"), children: _jsx(Clock, { className: "h-3 w-3" }) })] })] }), _jsx("p", { className: "mt-1.5 px-0.5 text-[10px] text-[var(--nav-muted)]", children: t("nav.shortcutHint") })] })) : null] }), _jsxs("main", { className: "min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10", children: [_jsxs("header", { className: "mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4", children: [_jsxs("div", { children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "inline-block h-5 w-1 rounded", style: { background: NAV_GROUP_ACCENT[current.group] }, "aria-hidden": true }), _jsx("h1", { className: "text-2xl font-bold tracking-tight text-[var(--text)]", children: t(`page.${current.key}.title`, { defaultValue: navLabel(current.key) }) }), _jsx(NavBadgeTag, { badge: current.badge }), !canWriteCurrent ? (_jsxs("span", { className: "inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", title: t("nav.readOnlyHint"), children: [_jsx(Lock, { className: "h-3 w-3" }), t("nav.readOnly")] })) : null, current.pinnable !== false ? (_jsx(FavoriteToggle, { navKey: current.key, isFav: currentFavorite, size: "md" })) : null] }), _jsxs("p", { className: "mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]", children: [_jsx("span", { children: t(breadcrumb.group.i18nKey) }), breadcrumb.category ? (_jsxs(_Fragment, { children: [_jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { children: t(breadcrumb.category.i18nKey, { defaultValue: humanizeNavKey(breadcrumb.category.key) }) })] })) : null, breadcrumb.parent ? (_jsxs(_Fragment, { children: [_jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { children: navLabel(breadcrumb.parent.key) })] })) : null, _jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { className: "font-medium text-[var(--muted-strong)]", children: navLabel(breadcrumb.item.key) }), current.shortcut ? (_jsxs("span", { className: "ml-2 hidden items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-px font-mono text-[10px] text-[var(--muted-strong)] md:inline-flex", children: [_jsx(Sparkles, { className: "h-3 w-3" }), current.shortcut] })) : null] })] }), _jsxs("div", { className: "ml-auto flex items-center gap-3", children: [_jsxs("button", { type: "button", className: "hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)] lg:inline-flex", onClick: () => setCommandOpen(true), title: t("command.title"), children: [_jsx(Command, { className: "h-4 w-4" }), _jsx("span", { children: t("command.short") })] }), _jsx(ProjectSelector, {}), _jsxs("button", { type: "button", className: "inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]", onClick: openModuleCopilot, title: t("command.moduleAi"), children: [_jsx(Bot, { className: "h-4 w-4 text-[var(--brand)]" }), _jsx("span", { className: "hidden xl:inline", children: t("command.moduleAi") })] }), _jsx(ThemeMenu, {}), _jsxs("select", { className: "rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 py-1.5 text-sm text-[var(--text)] shadow-sm", value: i18n.language, onChange: (e) => i18n.changeLanguage(e.target.value), "aria-label": "language", children: [_jsx("option", { value: "zh-CN", children: "\u4E2D\u6587" }), _jsx("option", { value: "en-US", children: "English" }), _jsx("option", { value: "ja-JP", children: "\u65E5\u672C\u8A9E" })] }), _jsx(UserMenu, { authed: authed })] })] }), _jsx("div", { className: "w-full", children: current.el })] })] }));
+                        })) }), !sidebarCollapsed ? (_jsxs("div", { className: "shrink-0 border-t border-[var(--nav-border)] px-3 py-2", children: [_jsxs("div", { className: "flex items-center justify-between gap-2", children: [_jsx(DensityMenu, { density: menuPrefs.density }), _jsxs("div", { className: "flex items-center gap-1", children: [_jsx("button", { type: "button", onClick: () => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites }), className: `inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${menuPrefs.showFavorites ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"} hover:bg-[var(--surface-muted)]`, title: t("nav.toggleFavorites"), children: _jsx(Star, { className: "h-3 w-3" }) }), _jsx("button", { type: "button", onClick: () => patchMenuPrefs({ showRecents: !menuPrefs.showRecents }), className: `inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] px-2 text-[11px] ${menuPrefs.showRecents ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"} hover:bg-[var(--surface-muted)]`, title: t("nav.toggleRecents"), children: _jsx(Clock, { className: "h-3 w-3" }) })] })] }), menuStrategy ? (_jsxs("div", { className: "mt-1.5 flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[10px]", children: [_jsxs("span", { className: "min-w-0 flex-1 truncate text-[var(--nav-muted)]", children: [_jsx("span", { className: "font-medium text-[var(--muted-strong)]", children: t("nav.roleStrategy") }), _jsx("span", { className: "mx-1", children: "\u00B7" }), _jsx("span", { className: "font-mono text-[var(--brand)]", children: currentRole }), _jsx("span", { className: "mx-1", children: "\u00B7" }), t("nav.roleHome"), ": ", menuStrategy.home] }), _jsx("button", { type: "button", className: "shrink-0 rounded px-1 text-[var(--brand)] hover:bg-[var(--surface)]", onClick: () => {
+                                            const prefs = menuPrefsRemote.data?.preferences;
+                                            if (!prefs)
+                                                return;
+                                            setCollapsedGroups({ ...DEFAULT_COLLAPSE, ...(prefs.collapsed_groups || {}) });
+                                            setCollapsedCategories({ ...DEFAULT_CATEGORY_COLLAPSE, ...(prefs.collapsed_categories || {}) });
+                                            setCollapsedModules(prefs.collapsed_modules || {});
+                                            patchMenuPrefs({
+                                                favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+                                                recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
+                                                density: prefs.density || menuPrefs.density,
+                                                showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
+                                                showFavorites: typeof prefs.show_favorites === "boolean" ? prefs.show_favorites : menuPrefs.showFavorites,
+                                            });
+                                        }, children: t("nav.applyRoleDefaults") })] })) : null, _jsx("p", { className: "mt-1 truncate px-0.5 text-[10px] text-[var(--nav-muted)]", title: t("nav.shortcutHint"), children: t("nav.shortcutHint") })] })) : null, !sidebarCollapsed ? (_jsx("button", { type: "button", className: "group absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize items-stretch justify-center lg:flex", onMouseDown: startSidebarResize, onDoubleClick: () => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH), title: t("nav.resizeSidebar"), "aria-label": t("nav.resizeSidebar"), children: _jsx("span", { className: "my-3 w-px rounded-full bg-transparent transition group-hover:bg-[var(--brand)] group-active:bg-[var(--brand)]" }) })) : null] }), _jsxs("main", { className: "min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10", children: [_jsxs("header", { className: "mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4", children: [_jsxs("div", { children: [_jsxs("div", { className: "flex items-center gap-2", children: [_jsx("span", { className: "inline-block h-5 w-1 rounded", style: { background: NAV_GROUP_ACCENT[current.group] }, "aria-hidden": true }), _jsx("h1", { className: "text-2xl font-bold tracking-tight text-[var(--text)]", children: t(`page.${current.key}.title`, { defaultValue: navLabel(current.key) }) }), _jsx(NavBadgeTag, { badge: current.badge }), !canWriteCurrent ? (_jsxs("span", { className: "inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300", title: t("nav.readOnlyHint"), children: [_jsx(Lock, { className: "h-3 w-3" }), t("nav.readOnly")] })) : null, current.pinnable !== false ? (_jsx(FavoriteToggle, { navKey: current.key, isFav: currentFavorite, size: "md" })) : null] }), _jsxs("p", { className: "mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]", children: [_jsx("span", { children: t(breadcrumb.group.i18nKey) }), breadcrumb.category ? (_jsxs(_Fragment, { children: [_jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { children: t(breadcrumb.category.i18nKey, { defaultValue: humanizeNavKey(breadcrumb.category.key) }) })] })) : null, breadcrumb.parent ? (_jsxs(_Fragment, { children: [_jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { children: navLabel(breadcrumb.parent.key) })] })) : null, _jsx("span", { "aria-hidden": true, children: "/" }), _jsx("span", { className: "font-medium text-[var(--muted-strong)]", children: navLabel(breadcrumb.item.key) }), current.shortcut ? (_jsxs("span", { className: "ml-2 hidden items-center gap-1 rounded border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-px font-mono text-[10px] text-[var(--muted-strong)] md:inline-flex", children: [_jsx(Sparkles, { className: "h-3 w-3" }), current.shortcut] })) : null] })] }), _jsxs("div", { className: "ml-auto flex items-center gap-3", children: [_jsxs("button", { type: "button", className: "hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)] lg:inline-flex", onClick: () => setCommandOpen(true), title: t("command.title"), children: [_jsx(Command, { className: "h-4 w-4" }), _jsx("span", { children: t("command.short") })] }), _jsx(ProjectSelector, {}), _jsxs("button", { type: "button", className: "inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]", onClick: openModuleCopilot, title: t("command.moduleAi"), children: [_jsx(Bot, { className: "h-4 w-4 text-[var(--brand)]" }), _jsx("span", { className: "hidden xl:inline", children: t("command.moduleAi") })] }), _jsx(ThemeMenu, {}), _jsxs("select", { className: "rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 py-1.5 text-sm text-[var(--text)] shadow-sm", value: i18n.language, onChange: (e) => i18n.changeLanguage(e.target.value), "aria-label": "language", children: [_jsx("option", { value: "zh-CN", children: "\u4E2D\u6587" }), _jsx("option", { value: "en-US", children: "English" }), _jsx("option", { value: "ja-JP", children: "\u65E5\u672C\u8A9E" })] }), _jsx(UserMenu, { authed: authed })] })] }), _jsx("div", { className: "w-full", children: current.el })] })] }));
 }
