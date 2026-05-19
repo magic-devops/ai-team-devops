@@ -101,6 +101,7 @@ const SIDEBAR_STORAGE_KEY = "sop-sidebar-collapsed-v1";
 const SIDEBAR_WIDTH_STORAGE_KEY = "sop-sidebar-width-v1";
 const ROLE_DEFAULT_STORAGE_KEY = "sop-menu-role-default-v1";
 const MICRO_APP_STORAGE_KEY = "sop-active-micro-app-v1";
+const MICRO_APP_EXPANDED_STORAGE_KEY = "sop-expanded-micro-apps-v1";
 const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 280;
 const SIDEBAR_MAX_WIDTH = 520;
@@ -572,6 +573,13 @@ export function App() {
       return {};
     }
   });
+  const [expandedMicroApps, setExpandedMicroApps] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(MICRO_APP_EXPANDED_STORAGE_KEY) || "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
   const [quickPanel, setQuickPanel] = useState<QuickPanelKey | null>(null);
   const lastRecentKeyRef = useRef<string | null>(null);
@@ -640,6 +648,14 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(MODULE_COLLAPSE_STORAGE_KEY, JSON.stringify(collapsedModules));
   }, [collapsedModules]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MICRO_APP_EXPANDED_STORAGE_KEY, JSON.stringify(expandedMicroApps));
+    } catch {
+      /* ignore disabled storage */
+    }
+  }, [expandedMicroApps]);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarCollapsed ? "1" : "0");
@@ -723,11 +739,11 @@ export function App() {
     () => filterNavByRole(currentRole, capabilityItems),
     [capabilityItems, currentRole],
   );
-  const routeMicroApp = useMemo(() => getMicroAppIdFromHash(hash, roleVisibleNav.length ? roleVisibleNav : NAV), [hash, roleVisibleNav]);
+  const navSource = roleVisibleNav.length ? roleVisibleNav : NAV;
+  const routeMicroApp = useMemo(() => getMicroAppIdFromHash(hash, navSource), [hash, navSource]);
   const visibleNav = useMemo(() => {
-    const source = roleVisibleNav.length ? roleVisibleNav : NAV;
-    return filterNavByMicroApp(activeMicroApp, source);
-  }, [activeMicroApp, roleVisibleNav]);
+    return filterNavByMicroApp(activeMicroApp, navSource);
+  }, [activeMicroApp, navSource]);
   const current = findActiveNavItem(hash, visibleNav.length ? visibleNav : undefined);
   const activeAppDefinition = useMemo(
     () => MICRO_APPS.find((app) => app.id === activeMicroApp) ?? MICRO_APPS[0],
@@ -746,6 +762,26 @@ export function App() {
       return `${label} ${item.description || ""} ${item.capability || ""} ${item.path}`.toLowerCase().includes(normalized);
     });
   }, [keyword, t, visibleNav]);
+  const microAppMenuById = useMemo(() => {
+    const map = new Map<MicroAppId, NavItem[]>();
+    for (const app of MICRO_APPS) {
+      map.set(
+        app.id,
+        filterNavByMicroApp(app.id, navSource).filter((item) => !item.hidden && !item.parentKey && !item.key.startsWith("microApp")),
+      );
+    }
+    return map;
+  }, [navSource]);
+  const microAppChildrenByParent = useMemo(() => {
+    const out = new Map<string, NavItem[]>();
+    for (const item of navSource) {
+      if (!item.parentKey || item.hidden) continue;
+      const rows = out.get(item.parentKey) ?? [];
+      rows.push(item);
+      out.set(item.parentKey, rows);
+    }
+    return out;
+  }, [navSource]);
   const pinnedItems = useMemo(() => pinnedNavItems(visibleNav), [visibleNav]);
   const favoriteItems = useMemo(() => resolveNavKeys(menuPrefs.favorites, visibleNav), [menuPrefs.favorites, visibleNav]);
   const recentItems = useMemo(
@@ -863,9 +899,13 @@ export function App() {
   };
   const chooseMicroApp = (appId: MicroAppId, route: string) => {
     setActiveMicroApp(appId);
+    setExpandedMicroApps((prev) => ({ ...prev, [appId]: true }));
     setKeyword("");
     setQuickPanel(null);
     window.location.hash = route;
+  };
+  const toggleMicroAppMenu = (appId: MicroAppId) => {
+    setExpandedMicroApps((prev) => ({ ...prev, [appId]: !prev[appId] }));
   };
   const startSidebarResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -934,30 +974,129 @@ export function App() {
                 {t("nav.microAppMode")}
               </span>
             </div>
-            <div className="grid gap-1">
+            <div className="grid max-h-[42vh] gap-1 overflow-y-auto pr-1">
               {MICRO_APPS.map((app) => {
                 const active = app.id === activeMicroApp;
-                const count = (roleVisibleNav.length ? roleVisibleNav : NAV).filter((item) => !item.hidden && !item.parentKey && getMicroAppIdForNavItem(item) === app.id).length;
+                const appMenus = microAppMenuById.get(app.id) ?? [];
+                const expanded = Boolean(expandedMicroApps[app.id] ?? active);
+                const portalItem = navSource.find((item) => item.key.startsWith("microApp") && getMicroAppIdForNavItem(item) === app.id);
                 return (
-                  <button
+                  <div
                     key={app.id}
-                    type="button"
-                    onClick={() => chooseMicroApp(app.id, app.route)}
-                    className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition ${
-                      active
-                        ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/35"
-                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                    className={`rounded-xl border transition ${
+                      active ? "border-[var(--brand)]/45 bg-[var(--nav-active)] ring-1 ring-[var(--brand)]/25" : "border-transparent bg-transparent hover:border-[var(--border)] hover:bg-[var(--surface-raised)]/45"
                     }`}
-                    title={app.name}
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate">{app.shortName}</span>
-                      <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{app.owner}</span>
-                    </span>
-                    <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]">
-                      {count}
-                    </span>
-                  </button>
+                    <div className="flex min-w-0 items-center gap-1 p-1">
+                      <button
+                        type="button"
+                        onClick={() => chooseMicroApp(app.id, app.route)}
+                        className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs transition ${
+                          active ? "font-semibold text-[var(--brand)]" : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                        }`}
+                        title={app.name}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate">{app.shortName}</span>
+                          <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{app.owner}</span>
+                        </span>
+                        <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]">
+                          {appMenus.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleMicroAppMenu(app.id)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                        title={expanded ? "收起子应用菜单" : "展开子应用菜单"}
+                        aria-label={expanded ? "收起子应用菜单" : "展开子应用菜单"}
+                      >
+                        {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {expanded ? (
+                      <div className="mx-1 mb-2 grid gap-1 border-t border-[var(--border)]/70 pt-2">
+                        {portalItem ? (
+                          <a
+                            href={portalItem.path}
+                            onClick={() => {
+                              setActiveMicroApp(app.id);
+                              setKeyword("");
+                              setQuickPanel(null);
+                            }}
+                            className={`mx-1 flex items-center justify-between rounded-lg px-2 py-2 text-xs font-semibold ${
+                              active ? "bg-[var(--brand)] text-white hover:opacity-90" : "bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--surface-muted)]"
+                            }`}
+                          >
+                            <span>{app.mode === "wujie" ? "进入子应用工作台" : "进入应用管理台"}</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                        <div className="grid gap-0.5">
+                          {appMenus.slice(0, active ? 10 : 6).map((item) => {
+                            const Icon = item.icon;
+                            const itemActive = current.key === item.key || current.parentKey === item.key;
+                            const children = microAppChildrenByParent.get(item.key) ?? [];
+                            const itemFav = favoriteSet.has(item.key);
+                            return (
+                              <div key={item.key}>
+                                <div
+                                  className={`group/appmenu flex items-center rounded-lg text-xs ${
+                                    itemActive
+                                      ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                      : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                  }`}
+                                >
+                                  <a href={item.path} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                                    <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                                    <NavBadgeTag badge={item.badge} />
+                                  </a>
+                                  {item.pinnable !== false ? (
+                                    <FavoriteToggle
+                                      navKey={item.key}
+                                      isFav={itemFav}
+                                      className={`mr-1 ${itemFav ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}`}
+                                    />
+                                  ) : null}
+                                </div>
+                                {itemActive && children.length ? (
+                                  <div className="ml-5 mt-0.5 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                                    {children.slice(0, 4).map((child) => {
+                                      const ChildIcon = child.icon;
+                                      const childActive = current.key === child.key;
+                                      return (
+                                        <a
+                                          key={child.key}
+                                          href={child.path}
+                                          className={`flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] ${
+                                            childActive ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                                          }`}
+                                        >
+                                          <ChildIcon className="h-3 w-3 shrink-0" />
+                                          <span className="min-w-0 flex-1 truncate">{navLabel(child.key)}</span>
+                                        </a>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                          {appMenus.length > (active ? 10 : 6) ? (
+                            <button
+                              type="button"
+                              onClick={() => chooseMicroApp(app.id, app.route)}
+                              className="mx-1 rounded-md px-2 py-1 text-left text-[11px] font-medium text-[var(--brand)] hover:bg-[var(--surface-muted)]"
+                            >
+                              查看全部 {appMenus.length} 个模块
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 );
               })}
             </div>
