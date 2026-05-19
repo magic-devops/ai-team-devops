@@ -177,23 +177,23 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
             </div>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Application Boundary</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">应用职责</p>
             <dl className="mt-3 grid gap-3 text-sm">
               <div>
-                <dt className="text-[var(--muted)]">Owner</dt>
+                <dt className="text-[var(--muted)]">负责团队</dt>
                 <dd className="mt-0.5 font-semibold text-[var(--text)]">{app.owner}</dd>
               </div>
               <div>
-                <dt className="text-[var(--muted)]">Remote URL Env</dt>
-                <dd className="mt-0.5 font-mono text-xs text-[var(--brand)]">{app.envKey}</dd>
+                <dt className="text-[var(--muted)]">运行方式</dt>
+                <dd className="mt-0.5 font-semibold text-[var(--text)]">{app.mode === "wujie" ? "独立子应用" : "主应用控制面"}</dd>
               </div>
               <div>
-                <dt className="text-[var(--muted)]">Production Path</dt>
-                <dd className="mt-0.5 font-mono text-xs text-[var(--text)]">{app.prodUrl}</dd>
+                <dt className="text-[var(--muted)]">核心边界</dt>
+                <dd className="mt-0.5 text-[var(--text)]">{app.highlights.slice(0, 2).join(" / ")}</dd>
               </div>
               <div>
-                <dt className="text-[var(--muted)]">Local Dev URL</dt>
-                <dd className="mt-0.5 font-mono text-xs text-[var(--text)]">{app.devUrl}</dd>
+                <dt className="text-[var(--muted)]">管理定位</dt>
+                <dd className="mt-0.5 text-[var(--text)]">{app.mode === "wujie" ? "专业能力独立运营，统一接入权限与审计" : "统一承载登录、权限、组织与服务治理"}</dd>
               </div>
             </dl>
           </div>
