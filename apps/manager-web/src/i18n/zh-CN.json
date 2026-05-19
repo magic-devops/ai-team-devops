@@ -27,6 +27,13 @@
       "comfortable": "标准",
       "cozy": "宽松"
     },
+    "microAppView": "应用视图",
+    "microAppMode": "Wujie",
+    "microAppMainAdmin": "主应用 · 基础管理",
+    "microAppAiFoundation": "智能基础服务",
+    "microAppAiRdCenter": "智能研发中心",
+    "microAppAiDataCenter": "智能数据中心",
+    "microAppAiOpsCenter": "智能运营中心",
     "dashboard": "运营驾驶舱",
     "projects": "项目管理",
     "projectPortfolio": "项目组合",

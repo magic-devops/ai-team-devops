@@ -24,6 +24,13 @@
       "comfortable": "標準",
       "cozy": "ゆったり"
     },
+    "microAppView": "アプリビュー",
+    "microAppMode": "Wujie",
+    "microAppMainAdmin": "メイン · 基盤管理",
+    "microAppAiFoundation": "AI 基盤サービス",
+    "microAppAiRdCenter": "AI 研究開発センター",
+    "microAppAiDataCenter": "AI データセンター",
+    "microAppAiOpsCenter": "AI 運用センター",
     "dashboard": "運用コックピット",
     "projects": "ポートフォリオ",
     "projectPortfolio": "プロジェクトポートフォリオ",

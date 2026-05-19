@@ -27,6 +27,13 @@
       "comfortable": "Comfortable",
       "cozy": "Cozy"
     },
+    "microAppView": "App view",
+    "microAppMode": "Wujie",
+    "microAppMainAdmin": "Main · Admin",
+    "microAppAiFoundation": "AI Foundation",
+    "microAppAiRdCenter": "AI R&D Center",
+    "microAppAiDataCenter": "AI Data Center",
+    "microAppAiOpsCenter": "AI Ops Center",
     "dashboard": "Operations cockpit",
     "projects": "Project hub",
     "projectPortfolio": "Project portfolio",

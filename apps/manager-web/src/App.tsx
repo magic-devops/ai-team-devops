@@ -15,6 +15,7 @@ import {
   Clock,
   Command,
   Cpu,
+  Layers3,
   Laptop,
   Lock,
   Moon,
@@ -70,6 +71,14 @@ import {
 } from "./lib/theme";
 import { applyHashNormalization } from "./lib/routeAliases";
 import {
+  DEFAULT_MICRO_APP_ID,
+  MICRO_APPS,
+  filterNavByMicroApp,
+  getMicroAppIdForNavItem,
+  getMicroAppIdFromHash,
+  type MicroAppId,
+} from "./microApps";
+import {
   buildNavBreadcrumb,
   DEFAULT_CATEGORY_COLLAPSE,
   DEFAULT_COLLAPSE,
@@ -91,6 +100,7 @@ const MODULE_COLLAPSE_STORAGE_KEY = "sop-nav-module-collapse-v1";
 const SIDEBAR_STORAGE_KEY = "sop-sidebar-collapsed-v1";
 const SIDEBAR_WIDTH_STORAGE_KEY = "sop-sidebar-width-v1";
 const ROLE_DEFAULT_STORAGE_KEY = "sop-menu-role-default-v1";
+const MICRO_APP_STORAGE_KEY = "sop-active-micro-app-v1";
 const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 280;
 const SIDEBAR_MAX_WIDTH = 520;
@@ -512,6 +522,15 @@ export function App() {
   const [keyword, setKeyword] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [activeMicroApp, setActiveMicroApp] = useState<MicroAppId>(() => {
+    try {
+      const stored = localStorage.getItem(MICRO_APP_STORAGE_KEY);
+      const matched = MICRO_APPS.find((app) => app.id === stored);
+      return matched?.id ?? DEFAULT_MICRO_APP_ID;
+    } catch {
+      return DEFAULT_MICRO_APP_ID;
+    }
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
@@ -682,10 +701,15 @@ export function App() {
   const currentRole = capabilities.role || String(me.data?.role || "viewer");
   const menuStrategy = menuPrefsRemote.data?.strategy;
   const capabilityItems = capabilities.items.length ? capabilities.items : capabilities.visibleItems;
-  const visibleNav = useMemo(
+  const roleVisibleNav = useMemo(
     () => filterNavByRole(currentRole, capabilityItems),
     [capabilityItems, currentRole],
   );
+  const routeMicroApp = useMemo(() => getMicroAppIdFromHash(hash, roleVisibleNav.length ? roleVisibleNav : NAV), [hash, roleVisibleNav]);
+  const visibleNav = useMemo(() => {
+    const source = roleVisibleNav.length ? roleVisibleNav : NAV;
+    return filterNavByMicroApp(activeMicroApp, source);
+  }, [activeMicroApp, roleVisibleNav]);
   const current = findActiveNavItem(hash, visibleNav.length ? visibleNav : undefined);
   const groupedNav = useMemo(() => groupNavItems(keyword, navLabel, visibleNav), [keyword, t, visibleNav]);
   const pinnedItems = useMemo(() => pinnedNavItems(visibleNav), [visibleNav]);
@@ -701,6 +725,18 @@ export function App() {
   const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
   const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : pinnedItems;
   const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
+
+  useEffect(() => {
+    if (routeMicroApp && routeMicroApp !== activeMicroApp) setActiveMicroApp(routeMicroApp);
+  }, [activeMicroApp, routeMicroApp]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MICRO_APP_STORAGE_KEY, activeMicroApp);
+    } catch {
+      /* ignore disabled storage */
+    }
+  }, [activeMicroApp]);
 
   useEffect(() => {
     const prefs = menuPrefsRemote.data?.preferences;
@@ -790,6 +826,12 @@ export function App() {
   const toggleModule = (moduleKey: string) => {
     setCollapsedModules((prev) => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
   };
+  const chooseMicroApp = (appId: MicroAppId, route: string) => {
+    setActiveMicroApp(appId);
+    setKeyword("");
+    setQuickPanel(null);
+    window.location.hash = route;
+  };
   const startSidebarResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     if (sidebarCollapsed) return;
@@ -845,6 +887,47 @@ export function App() {
             </button>
           </div>
         </div>
+
+        {!sidebarCollapsed ? (
+          <div className="border-b border-[var(--nav-border)] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
+                <Layers3 className="h-3.5 w-3.5" />
+                {t("nav.microAppView")}
+              </span>
+              <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-strong)]">
+                {t("nav.microAppMode")}
+              </span>
+            </div>
+            <div className="grid gap-1">
+              {MICRO_APPS.map((app) => {
+                const active = app.id === activeMicroApp;
+                const count = (roleVisibleNav.length ? roleVisibleNav : NAV).filter((item) => !item.hidden && !item.parentKey && getMicroAppIdForNavItem(item) === app.id).length;
+                return (
+                  <button
+                    key={app.id}
+                    type="button"
+                    onClick={() => chooseMicroApp(app.id, app.route)}
+                    className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition ${
+                      active
+                        ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/35"
+                        : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                    }`}
+                    title={app.name}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate">{app.shortName}</span>
+                      <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{app.owner}</span>
+                    </span>
+                    <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted-strong)]">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
 
         <div className={`${sidebarCollapsed ? "hidden" : "px-4 pt-3"}`}>
           <div className="relative">

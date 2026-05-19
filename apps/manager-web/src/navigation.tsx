@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 
 const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const MicroAppPortalPage = lazy(() => import("./pages/MicroAppPortal").then((m) => ({ default: m.MicroAppPortal })));
 const ProjectsPage = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
 const RequirementsPage = lazy(() => import("./pages/Requirements").then((m) => ({ default: m.Requirements })));
 const TasksPage = lazy(() => import("./pages/Tasks").then((m) => ({ default: m.Tasks })));
@@ -503,6 +504,11 @@ function subnav(pageKey: string, ...keys: string[]): readonly NavSubmodule[] {
 }
 
 export const NAV: readonly NavItem[] = [
+  { key: "microAppMainAdmin", path: "#/apps/main-admin", el: pageElement(MicroAppPortalPage, { appId: "main-admin" }), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.apps.main-admin", badge: "new", description: "主应用能力边界：基础管理、账号、权限、组织、服务与模块治理" },
+  { key: "microAppAiFoundation", path: "#/apps/ai-foundation", el: pageElement(MicroAppPortalPage, { appId: "ai-foundation" }), group: "ai", icon: Brain, category: "ai-command", capability: "ai.apps.foundation", badge: "new", description: "智能基础服务：开发环境、CLI、知识、记忆、技能、插件、Agent 与 MCP/A2A" },
+  { key: "microAppAiRdCenter", path: "#/apps/ai-rd-center", el: pageElement(MicroAppPortalPage, { appId: "ai-rd-center" }), group: "delivery", icon: GitBranch, category: "delivery-execution", capability: "delivery.apps.rd-center", badge: "new", description: "智能研发中心：需求、方案、任务、AI 开发、调度、监控、质量评审与运维" },
+  { key: "microAppAiDataCenter", path: "#/apps/ai-data-center", el: pageElement(MicroAppPortalPage, { appId: "ai-data-center" }), group: "data", icon: Database, category: "data-strategy", capability: "data.apps.data-center", badge: "new", description: "智能数据中心：数据源、接入、元数据、开发、调度、指标、标签与数据服务" },
+  { key: "microAppAiOpsCenter", path: "#/apps/ai-ops-center", el: pageElement(MicroAppPortalPage, { appId: "ai-ops-center" }), group: "system", icon: ShieldCheck, category: "smart-ops", capability: "system.apps.ops-center", badge: "new", description: "智能运营中心：计费、安全审计、企业 SSO、通信集成与智能运维" },
   { key: "dashboard", path: "#/dashboard", el: pageElement(DashboardHubPage), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.dashboard", shortcut: "g d", description: "运营指挥治理中心：全局指标、风险与跨域入口", submodules: subnav("dashboard", "executive_overview", "platform_blueprint", "risk_board", "technology_upgrade", "next_actions") },
   { key: "dashboardCockpit", path: "#/dashboard/cockpit", el: pageElement(DashboardPage), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.dashboard.cockpit", description: "完整运营驾驶舱：趋势、蓝图与行动项" },
   { key: "projects", path: "#/projects", el: pageElement(ProjectsHubPage), group: "portfolio", icon: FolderKanban, category: "project-lifecycle", capability: "portfolio.projects", description: "项目组合治理中心：组合、成员与 AI 交付套件", submodules: subnav("projects", "portfolio", "businesses", "tenants", "tenant_users", "project_members", "delivery-kit") },
