@@ -99,7 +99,7 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
           </a>
         </div>
         <div className="min-h-[calc(100vh-12rem)]">
-          <MicroAppRuntime appId={appId} />
+          <MicroAppRuntime appId={appId} embedded />
         </div>
       </section>
     );

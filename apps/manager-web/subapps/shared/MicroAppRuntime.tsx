@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, ChevronDown, ChevronRight, ExternalLink, Layers3, Lock, Search, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, Bot, ChevronDown, ChevronRight, ExternalLink, Gauge, Layers3, Lock, Route, Search, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -75,6 +75,8 @@ function findRuntimeNavItem(hash: string, items: readonly NavItem[]): NavItem {
   return found ?? items.find((item) => !item.hidden && !item.parentKey) ?? items[0] ?? NAV[0];
 }
 
+type RuntimeApp = ReturnType<typeof getMicroApp>;
+
 function humanizeRuntimeKey(key: string) {
   return key
     .replace(/^nav\.(group|category)\./, "")
@@ -89,7 +91,150 @@ function safeRuntimeLabel(value: unknown, fallback: string) {
   return text;
 }
 
-export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
+function MicroAppHome({
+  app,
+  current,
+  visibleItems,
+  childrenByParent,
+  labelOf,
+}: {
+  app: RuntimeApp;
+  current: NavItem;
+  visibleItems: NavItem[];
+  childrenByParent: Map<string, NavItem[]>;
+  labelOf: (key: string) => string;
+}) {
+  const childCount = Array.from(childrenByParent.values()).reduce((sum, rows) => sum + rows.length, 0);
+  const focusItems = visibleItems.slice(0, 4);
+  const groupedItems = visibleItems.reduce<Record<string, NavItem[]>>((out, item) => {
+    const group = item.category || item.group || "workspace";
+    out[group] = [...(out[group] || []), item];
+    return out;
+  }, {});
+
+  return (
+    <section className="space-y-5">
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <div className="grid gap-5 p-5 xl:grid-cols-[1.15fr_0.85fr]">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--brand)]">
+              <Layers3 className="h-4 w-4" />
+              {app.shortName} 工作台
+            </span>
+            <h2 className="mt-4 text-2xl font-bold tracking-tight text-[var(--text)]">{app.name}</h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-[var(--muted-strong)]">{app.description}</p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {app.highlights.map((item) => (
+                <div key={item} className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+                  <ShieldCheck className="mb-2 h-4 w-4 text-[var(--brand)]" />
+                  <p className="text-sm font-semibold text-[var(--text)]">{item}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <Layers3 className="mb-3 h-5 w-5 text-[var(--brand)]" />
+              <p className="text-2xl font-bold text-[var(--text)]">{visibleItems.length}</p>
+              <p className="text-sm text-[var(--muted)]">专业主模块</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <Route className="mb-3 h-5 w-5 text-[var(--brand)]" />
+              <p className="text-2xl font-bold text-[var(--text)]">{childCount}</p>
+              <p className="text-sm text-[var(--muted)]">细化子能力</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <Activity className="mb-3 h-5 w-5 text-[var(--brand)]" />
+              <p className="text-2xl font-bold text-[var(--text)]">{app.groups.length}</p>
+              <p className="text-sm text-[var(--muted)]">能力域</p>
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <Gauge className="mb-3 h-5 w-5 text-[var(--brand)]" />
+              <p className="text-2xl font-bold text-[var(--text)]">{app.mode === "wujie" ? "独立" : "统一"}</p>
+              <p className="text-sm text-[var(--muted)]">运行模式</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.82fr]">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-semibold text-[var(--text)]">核心工作流</h3>
+              <p className="mt-1 text-sm text-[var(--muted)]">按当前子应用的专业场景组织入口。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => openModuleCopilot(current, app.name, labelOf(current.key))}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+            >
+              <Bot className="h-4 w-4 text-[var(--brand)]" />
+              工作台 AI
+            </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {focusItems.map((item) => {
+              const Icon = item.icon;
+              const children = childrenByParent.get(item.key) ?? [];
+              return (
+                <a
+                  key={item.key}
+                  href={item.path}
+                  className="group min-h-32 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-[var(--text)]">{labelOf(item.key)}</span>
+                      <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted)]">{item.description || item.capability || item.path}</span>
+                    </span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--brand)]" />
+                  </div>
+                  {children.length ? (
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {children.slice(0, 4).map((child) => (
+                        <span key={child.key} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)]">
+                          {labelOf(child.key)}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
+          <h3 className="text-lg font-semibold text-[var(--text)]">能力地图</h3>
+          <p className="mt-1 text-sm text-[var(--muted)]">从能力域进入对应模块，保持子应用边界清晰。</p>
+          <div className="mt-4 grid gap-3">
+            {Object.entries(groupedItems).slice(0, 5).map(([group, items]) => (
+              <div key={group} className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[var(--text)]">{humanizeRuntimeKey(group)}</p>
+                  <span className="rounded-md bg-[var(--brand-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--brand)]">{items.length}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {items.slice(0, 6).map((item) => (
+                    <a key={item.key} href={item.path} className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)] hover:text-[var(--brand)]">
+                      {labelOf(item.key)}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId; embedded?: boolean }) {
   const { t, i18n } = useTranslation();
   const app = getMicroApp(appId);
   const [hash, setHash] = useState(window.location.hash || app.basePath);
@@ -159,7 +304,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
 
   return (
     <div className="flex min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
-      <aside className="hidden w-72 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block">
+      <aside className={`${embedded ? "hidden" : "hidden w-72 shrink-0 border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:block"}`}>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
@@ -280,27 +425,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
         </header>
 
         {current.key.startsWith("microApp") ? (
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {visibleItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <a
-                  key={item.key}
-                  href={item.path}
-                  className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-md"
-                >
-                  <Icon className="mb-3 h-5 w-5 text-[var(--brand)]" />
-                  <p className="font-semibold text-[var(--text)]">{labelOf(item.key)}</p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">
-                    {item.description || item.capability || item.path}
-                  </p>
-                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
-                    进入 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                  </span>
-                </a>
-              );
-            })}
-          </section>
+          <MicroAppHome app={app} current={current} visibleItems={visibleItems} childrenByParent={childrenByParent} labelOf={labelOf} />
         ) : (
           <div className="w-full">{current.el}</div>
         )}
