@@ -27,6 +27,7 @@ import {
   type MicroAppStatus,
 } from "../microApps";
 import { NAV } from "../navigation";
+import { MicroAppRuntime } from "../../subapps/shared/MicroAppRuntime";
 
 type MicroAppPortalProps = {
   appId: MicroAppId;
@@ -56,6 +57,14 @@ function createWujieLoadingNode(appName: string) {
   return node;
 }
 
+function isSameOriginRuntime(runtimeUrl: string) {
+  try {
+    return new URL(runtimeUrl, window.location.origin).origin === window.location.origin;
+  } catch {
+    return true;
+  }
+}
+
 export function MicroAppPortal({ appId }: MicroAppPortalProps) {
   const { t, i18n } = useTranslation();
   const app = getMicroApp(appId);
@@ -66,9 +75,35 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
     [appId],
   );
   const leafCount = useMemo(() => filterNavByMicroApp(appId, NAV).filter((item) => item.hidden || item.parentKey).length, [appId]);
-  const remoteEnabled = app.mode === "wujie" && runtimeUrl && !remoteFailed;
+  const sameOriginRuntime = runtimeUrl ? isSameOriginRuntime(runtimeUrl) : true;
+  const remoteEnabled = app.mode === "wujie" && runtimeUrl && !remoteFailed && !sameOriginRuntime;
   const workspaceScope = getWorkspaceScope();
   const loadingNode = useMemo(() => createWujieLoadingNode(app.name), [app.name]);
+
+  if (app.mode === "wujie" && runtimeUrl && sameOriginRuntime && !remoteFailed) {
+    return (
+      <section className="min-h-[70vh] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">LOCAL MICRO APP</p>
+            <h2 className="mt-0.5 text-lg font-semibold text-[var(--text)]">{app.name}</h2>
+          </div>
+          <a
+            href={runtimeUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-2 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+          >
+            <ExternalLink className="h-4 w-4" />
+            打开独立应用
+          </a>
+        </div>
+        <div className="min-h-[calc(100vh-12rem)]">
+          <MicroAppRuntime appId={appId} />
+        </div>
+      </section>
+    );
+  }
 
   if (remoteEnabled) {
     return (
