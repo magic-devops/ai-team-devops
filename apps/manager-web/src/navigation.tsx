@@ -120,6 +120,9 @@ const SkillsHubLandingPage = lazy(() =>
 const CopilotHubPage = lazy(() => import("./pages/ai/CopilotHub").then((m) => ({ default: m.CopilotHub })));
 const AuditHubPage = lazy(() => import("./pages/governance/AuditHub").then((m) => ({ default: m.AuditHub })));
 const SystemMapHubPage = lazy(() => import("./pages/governance/SystemMapHub").then((m) => ({ default: m.SystemMapHub })));
+const MicroAppGovernancePage = lazy(() =>
+  import("./pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
+);
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.Settings })));
 const ProjectsHubPage = lazy(() => import("./pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
 const OrganizationHubPage = lazy(() =>
@@ -689,7 +692,7 @@ export const NAV: readonly NavItem[] = [
   { key: "auditModuleActions", path: "#/audit/module-actions", el: pageElement(AuditPage), group: "governance", icon: Command, category: "security-audit", capability: "governance.audit.module-actions" },
   { key: "auditApprovals", path: "#/audit/approvals", el: pageElement(AuditPage), group: "governance", icon: Check, category: "security-audit", capability: "governance.audit.approvals" },
   { key: "systemMap", path: "#/system-map", el: pageElement(SystemMapHubPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.system-map", description: "模块治理中心：页面注册、能力矩阵与 Legacy 承接", submodules: subnav("systemMap", "registry", "manifest", "capabilities", "actions", "migration") },
-  { key: "microAppGovernance", path: "#/micro-apps", el: pageElement(SystemMapHubPage), group: "governance", icon: Layers3, category: "module-governance", capability: "governance.micro-apps", badge: "new", description: "独立子应用管理：应用边界、Wujie 入口、模块归属、能力覆盖与运行状态" },
+  { key: "microAppGovernance", path: "#/micro-apps", el: pageElement(MicroAppGovernancePage), group: "governance", icon: Layers3, category: "module-governance", capability: "governance.micro-apps", badge: "new", description: "独立子应用管理：应用边界、Wujie 入口、模块归属、能力覆盖与运行状态" },
   { key: "pageRegistry", path: "#/system-map/registry", el: pageElement(SystemMapPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.system-map.registry" },
   { key: "moduleManifest", path: "#/system-map/manifest", el: pageElement(SystemMapPage), group: "governance", icon: FileText, category: "module-governance", capability: "governance.system-map.manifest" },
   { key: "capabilityGovernance", path: "#/system-map/capabilities", el: pageElement(SystemMapPage), group: "governance", icon: ShieldCheck, category: "module-governance", capability: "governance.system-map.capabilities" },

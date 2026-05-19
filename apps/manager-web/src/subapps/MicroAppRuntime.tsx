@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, ChevronRight, ExternalLink, Layers3, Lock, Search, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, ChevronDown, ChevronRight, ExternalLink, Layers3, Lock, Search, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -81,7 +81,7 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
   const [hash, setHash] = useState(window.location.hash || app.basePath);
   const [keyword, setKeyword] = useState("");
   const navItems = useMemo(() => filterNavByMicroApp(appId, NAV), [appId]);
-  const visibleItems = useMemo(() => navItems.filter((item) => !item.hidden && !item.parentKey), [navItems]);
+  const visibleItems = useMemo(() => navItems.filter((item) => !item.hidden && !item.parentKey && !item.key.startsWith("microApp")), [navItems]);
 
   useEffect(() => {
     hydrateWujieSession();
@@ -109,11 +109,30 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
   const matchedModules = useMemo(() => {
     const needle = keyword.trim().toLowerCase();
     if (!needle) return visibleItems;
+    const matchedParents = new Set(
+      navItems
+        .filter((item) => item.parentKey)
+        .filter((item) => {
+          const label = String(t(`nav.${item.key}`, { defaultValue: item.key }));
+          return `${label} ${item.description || ""} ${item.capability || ""}`.toLowerCase().includes(needle);
+        })
+        .map((item) => item.parentKey as string),
+    );
     return visibleItems.filter((item) => {
       const label = String(t(`nav.${item.key}`, { defaultValue: item.key }));
-      return `${label} ${item.description || ""} ${item.capability || ""}`.toLowerCase().includes(needle);
+      return matchedParents.has(item.key) || `${label} ${item.description || ""} ${item.capability || ""}`.toLowerCase().includes(needle);
     });
-  }, [keyword, t, visibleItems]);
+  }, [keyword, navItems, t, visibleItems]);
+  const childrenByParent = useMemo(() => {
+    const out = new Map<string, NavItem[]>();
+    for (const item of navItems) {
+      if (!item.parentKey) continue;
+      const rows = out.get(item.parentKey) ?? [];
+      rows.push(item);
+      out.set(item.parentKey, rows);
+    }
+    return out;
+  }, [navItems]);
 
   const currentLabel = String(t(`nav.${current.key}`, { defaultValue: current.key }));
 
@@ -147,20 +166,50 @@ export function MicroAppRuntime({ appId }: { appId: MicroAppId }) {
           {matchedModules.map((item) => {
             const Icon = item.icon;
             const active = current.key === item.key || current.parentKey === item.key;
+            const children = childrenByParent.get(item.key) ?? [];
+            const open = Boolean(keyword) || active;
             return (
-              <a
-                key={item.key}
-                href={item.path}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                  active
-                    ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
-                    : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
-                }`}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 flex-1 truncate">{t(`nav.${item.key}`, { defaultValue: item.key })}</span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-              </a>
+              <div key={item.key}>
+                <a
+                  href={item.path}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                    active
+                      ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
+                      : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{t(`nav.${item.key}`, { defaultValue: item.key })}</span>
+                  {children.length ? (
+                    open ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+                  )}
+                </a>
+                {children.length && open ? (
+                  <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                    {children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const childActive = current.key === child.key;
+                      return (
+                        <a
+                          key={child.key}
+                          href={child.path}
+                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
+                            childActive
+                              ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                              : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                          }`}
+                          title={child.capability}
+                        >
+                          <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{t(`nav.${child.key}`, { defaultValue: child.key })}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </nav>
