@@ -19,7 +19,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
-  Rows3,
   Route,
   Search,
   Settings2,
@@ -174,79 +173,141 @@ function buildRuntimeMenuTree(items: readonly NavItem[], labelOf: (i18nKey: stri
   return domains;
 }
 
-const DENSITY_ORDER: MenuDensity[] = ["comfortable", "compact", "cozy"];
 const SIDEBAR_WIDTH: Record<RuntimeSidebarSize, number> = {
   compact: 280,
   standard: 320,
   wide: 360,
 };
 
-function densityText(density: MenuDensity) {
-  if (density === "compact") return "紧凑";
-  if (density === "cozy") return "宽松";
-  return "标准";
+function densityText(density: MenuDensity, isEn = false) {
+  if (density === "compact") return isEn ? "Compact" : "紧凑";
+  if (density === "cozy") return isEn ? "Loose" : "宽松";
+  return isEn ? "Standard" : "标准";
 }
 
-function nextDensity(current: MenuDensity): MenuDensity {
-  const index = DENSITY_ORDER.indexOf(current);
-  return DENSITY_ORDER[(index + 1) % DENSITY_ORDER.length] ?? "comfortable";
-}
-
-function RuntimeMenuDisplayButton({ prefs }: { prefs: MenuPrefs }) {
+function RuntimeMenuDisplayButton({
+  prefs,
+  sidebarSize,
+  onSidebarSizeChange,
+}: {
+  prefs: MenuPrefs;
+  sidebarSize: RuntimeSidebarSize;
+  onSidebarSizeChange: (size: RuntimeSidebarSize) => void;
+}) {
+  const { i18n } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const isEn = i18n.language?.startsWith("en");
   const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  const widthOptions: Array<{ key: RuntimeSidebarSize; label: string }> = [
+    { key: "compact", label: isEn ? "Narrow" : "窄栏" },
+    { key: "standard", label: isEn ? "Normal" : "标准" },
+    { key: "wide", label: isEn ? "Wide" : "宽栏" },
+  ];
   const layoutOptions: Array<{ key: MenuLayout; label: string }> = [
-    { key: "grouped", label: "分组" },
-    { key: "stream", label: "列表" },
-    { key: "minimal", label: "极简" },
+    { key: "grouped", label: isEn ? "Grouped" : "分组" },
+    { key: "stream", label: isEn ? "List" : "列表" },
+    { key: "minimal", label: isEn ? "Minimal" : "极简" },
   ];
   const effectOptions: Array<{ key: MenuEffect; label: string }> = [
-    { key: "soft", label: "柔和" },
-    { key: "outline", label: "描边" },
-    { key: "quiet", label: "安静" },
+    { key: "soft", label: isEn ? "Soft" : "柔和" },
+    { key: "outline", label: isEn ? "Outline" : "描边" },
+    { key: "quiet", label: isEn ? "Quiet" : "安静" },
   ];
   const toggleBoolean = (key: "showQuickPanel" | "showMenuCounts" | "showMenuMeta") => patchMenuPrefs({ [key]: !prefs[key] });
 
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [open]);
+
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
-          <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
-          显示设置
-        </span>
-        <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{densityText(prefs.density)}</span>
-      </div>
-      <div className="grid grid-cols-3 gap-1">
-        {densityOptions.map((item) => (
-          <button key={item} type="button" onClick={() => patchMenuPrefs({ density: item })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.density === item ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
-            {densityText(item)}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-1">
-        {layoutOptions.map((item) => (
-          <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuLayout: item.key })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.menuLayout === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-1">
-        {effectOptions.map((item) => (
-          <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuEffect: item.key })} className={`rounded-md px-1.5 py-1 text-[11px] ${prefs.menuEffect === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {[
-          { key: "showQuickPanel" as const, label: "快捷" },
-          { key: "showMenuCounts" as const, label: "徽标" },
-          { key: "showMenuMeta" as const, label: "说明" },
-        ].map((item) => (
-          <button key={item.key} type="button" onClick={() => toggleBoolean(item.key)} className={`rounded-md px-2 py-1 text-[11px] ${prefs[item.key] ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
-            {item.label}
-          </button>
-        ))}
-      </div>
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
+          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+        }`}
+        aria-expanded={open}
+      >
+        <SlidersHorizontal className="mb-1 h-4 w-4" />
+        {isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
+              {isEn ? "Menu display" : "菜单显示"}
+            </span>
+            <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{widthOptions.find((item) => item.key === sidebarSize)?.label}</span>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">{isEn ? "Density" : "密度"}</p>
+              <div className="grid grid-cols-3 gap-1">
+                {densityOptions.map((item) => (
+                  <button key={item} type="button" onClick={() => patchMenuPrefs({ density: item })} className={`rounded-md px-1.5 py-1.5 text-[11px] ${prefs.density === item ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+                    {densityText(item, isEn)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">{isEn ? "Sidebar width" : "侧栏宽度"}</p>
+              <div className="grid grid-cols-3 gap-1">
+                {widthOptions.map((item) => (
+                  <button key={item.key} type="button" onClick={() => onSidebarSizeChange(item.key)} className={`rounded-md px-1.5 py-1.5 text-[11px] ${sidebarSize === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">{isEn ? "Layout" : "布局"}</p>
+                <div className="grid gap-1">
+                  {layoutOptions.map((item) => (
+                    <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuLayout: item.key })} className={`rounded-md px-1.5 py-1.5 text-[11px] ${prefs.menuLayout === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold text-[var(--muted)]">{isEn ? "Style" : "效果"}</p>
+                <div className="grid gap-1">
+                  {effectOptions.map((item) => (
+                    <button key={item.key} type="button" onClick={() => patchMenuPrefs({ menuEffect: item.key })} className={`rounded-md px-1.5 py-1.5 text-[11px] ${prefs.menuEffect === item.key ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"}`}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-1">
+              {[
+                { key: "showQuickPanel" as const, label: isEn ? "Quick" : "快捷" },
+                { key: "showMenuCounts" as const, label: isEn ? "Badges" : "徽标" },
+                { key: "showMenuMeta" as const, label: isEn ? "Notes" : "说明" },
+              ].map((item) => (
+                <button key={item.key} type="button" onClick={() => toggleBoolean(item.key)} className={`rounded-md px-2 py-1.5 text-[11px] ${prefs[item.key] ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -831,7 +892,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const groupLabel = i18nLabelOf(breadcrumb.group.i18nKey, breadcrumb.group.key);
   const categoryLabel = breadcrumb.category ? i18nLabelOf(breadcrumb.category.i18nKey, breadcrumb.category.key) : "";
   const currentIsFavorite = menuPrefs.favorites.includes(current.key);
-  const cycleMenuDensity = () => patchMenuPrefs({ density: nextDensity(menuPrefs.density) });
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
   const openCurrentCopilot = () => openModuleCopilot(current, app.name, currentLabel);
   const showMenuCounts = menuPrefs.showMenuCounts;
@@ -937,27 +997,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
               {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
           </div>
-          {!sidebarCollapsed && showMenuMeta ? <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
-          {!sidebarCollapsed ? (
-            <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-[var(--surface-muted)] p-1">
-              {[
-                { key: "compact" as const, label: "紧凑" },
-                { key: "standard" as const, label: "标准" },
-                { key: "wide" as const, label: "宽松" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setSidebarSize(item.key)}
-                  className={`rounded-md px-2 py-1 text-[11px] ${
-                    sidebarSize === item.key ? "bg-[var(--surface)] font-semibold text-[var(--brand)] shadow-sm" : "text-[var(--muted-strong)] hover:bg-[var(--surface-raised)]"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {!sidebarCollapsed && showMenuMeta ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
         </div>
 
         {!sidebarCollapsed ? <div className="relative mt-4">
@@ -991,17 +1031,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             <Clock className="mb-1 h-4 w-4" />
             最近 {showMenuCounts ? recentItems.length : ""}
           </button>
-          <button
-            type="button"
-            onClick={cycleMenuDensity}
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-2 text-left text-xs text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)]"
-          >
-            <Rows3 className="mb-1 h-4 w-4" />
-            {densityText(menuPrefs.density)}
-          </button>
-        </div> : null}
-        {!sidebarCollapsed ? <div className="mt-3">
-          <RuntimeMenuDisplayButton prefs={menuPrefs} />
+          <RuntimeMenuDisplayButton prefs={menuPrefs} sidebarSize={sidebarSize} onSidebarSizeChange={setSidebarSize} />
         </div> : null}
 
         {!sidebarCollapsed ? <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
