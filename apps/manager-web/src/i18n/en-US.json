@@ -4,6 +4,8 @@
     "favorites": "Favorites",
     "favorite": "Add to favorites",
     "unfavorite": "Remove favorite",
+    "quickAdd": "Add to quick access",
+    "quickRemove": "Remove from quick access",
     "recents": "Recent",
     "quickEmpty": "No entries",
     "clearRecents": "Clear recent",

@@ -844,6 +844,7 @@ export const api = {
   systemPagesMenuPreferencesMe: () => request<any>("/api/v1/system/pages/menu/preferences/me"),
   systemPagesMenuPreferencesUpdate: (body: {
     favorites?: string[];
+    quick_access?: string[];
     recents?: string[];
     density?: string;
     menu_layout?: string;

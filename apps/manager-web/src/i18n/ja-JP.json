@@ -4,6 +4,8 @@
     "favorites": "お気に入り",
     "favorite": "お気に入りに追加",
     "unfavorite": "お気に入りを解除",
+    "quickAdd": "クイックアクセスに追加",
+    "quickRemove": "クイックアクセスから削除",
     "recents": "最近",
     "quickEmpty": "表示できる項目はありません",
     "clearRecents": "最近をクリア",

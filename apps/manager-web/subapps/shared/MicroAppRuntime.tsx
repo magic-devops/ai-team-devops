@@ -52,7 +52,7 @@ import {
 import { ProjectSelector } from "../../src/components/ProjectSelector";
 import { api } from "../../src/lib/api";
 import { getThemePreference, initTheme, isDarkResolved, setThemePreference, THEME_OPTIONS, type ThemePreference } from "../../src/lib/theme";
-import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuEffect, type MenuLayout, type MenuPrefs } from "../../src/lib/menuPrefs";
+import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, toggleQuickAccess, type MenuDensity, type MenuEffect, type MenuLayout, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
 import { buildNavBreadcrumb, NAV, NAV_CATEGORIES, type NavItem } from "../../src/navigation";
 
@@ -1003,7 +1003,9 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const favoriteItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.favorites, navItems), [menuPrefs.favorites, navItems]);
   const recentItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.recents, navItems).filter((item) => item.key !== current.key), [current.key, menuPrefs.recents, navItems]);
   const isEnglish = i18n.language?.startsWith("en");
-  const quickItems = useMemo(() => {
+  const quickAccessItems = useMemo(() => {
+    const manualItems = resolveRuntimeNavKeys(menuPrefs.quickAccess, navItems);
+    if (manualItems.length) return manualItems;
     const seen = new Set<string>();
     return [...favoriteItems, ...recentItems, ...visibleItems]
       .filter((item) => {
@@ -1012,14 +1014,15 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         return true;
       })
       .slice(0, 6);
-  }, [favoriteItems, recentItems, visibleItems]);
-  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickItems;
+  }, [favoriteItems, menuPrefs.quickAccess, navItems, recentItems, visibleItems]);
+  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickAccessItems;
   const quickPanelTitle = quickPanel === "favorites" ? (isEnglish ? "Favorites" : "我的收藏") : quickPanel === "recents" ? (isEnglish ? "Recent" : "最近访问") : (isEnglish ? "Quick access" : "快捷入口");
 
   const currentLabel = labelOf(current.key);
   const groupLabel = i18nLabelOf(breadcrumb.group.i18nKey, breadcrumb.group.key);
   const categoryLabel = breadcrumb.category ? i18nLabelOf(breadcrumb.category.i18nKey, breadcrumb.category.key) : "";
   const currentIsFavorite = menuPrefs.favorites.includes(current.key);
+  const currentIsQuickAccess = menuPrefs.quickAccess.includes(current.key);
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
   const openCurrentCopilot = () => openModuleCopilot(current, app.name, currentLabel);
   const showMenuCounts = menuPrefs.showMenuCounts;
@@ -1215,7 +1218,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
               <div className="mt-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
                 <div className="grid grid-cols-3 gap-1">
                   {[
-                    { key: "pinned" as const, icon: Pin, label: isEnglish ? "Quick" : "快捷入口", count: quickItems.length, enabled: quickItems.length > 0 },
+                    { key: "pinned" as const, icon: Pin, label: isEnglish ? "Quick" : "快捷入口", count: quickAccessItems.length, enabled: quickAccessItems.length > 0 },
                     { key: "favorites" as const, icon: Star, label: isEnglish ? "Favorites" : "我的收藏", count: favoriteItems.length, enabled: menuPrefs.showFavorites },
                     { key: "recents" as const, icon: Clock, label: isEnglish ? "Recent" : "最近访问", count: recentItems.length, enabled: menuPrefs.showRecents },
                   ].map((entry) => {
@@ -1341,6 +1344,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                 const moduleKey = `module:${item.key}`;
                                 const open = Boolean(keyword) || active || !collapsedGroups[moduleKey];
                                 const itemFavorite = menuPrefs.favorites.includes(item.key);
+                                const itemQuick = menuPrefs.quickAccess.includes(item.key);
                                 return (
                                   <div key={item.key}>
                                     <div
@@ -1354,6 +1358,15 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                         <Icon className="h-4 w-4 shrink-0" />
                                         {!sidebarCollapsed ? <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span> : null}
                                       </a>
+                                      {!sidebarCollapsed ? <button
+                                        type="button"
+                                        onClick={() => toggleQuickAccess(item.key)}
+                                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover:opacity-100 ${itemQuick ? "opacity-100 text-[var(--brand)]" : "opacity-70"}`}
+                                        aria-label={itemQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                        title={itemQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                      >
+                                        <Pin className="h-3.5 w-3.5" fill={itemQuick ? "currentColor" : "none"} />
+                                      </button> : null}
                                       {!sidebarCollapsed ? <button
                                         type="button"
                                         onClick={() => toggleFavorite(item.key)}
@@ -1381,6 +1394,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                           const ChildIcon = child.icon;
                                           const childActive = current.key === child.key;
                                           const childFavorite = menuPrefs.favorites.includes(child.key);
+                                          const childQuick = menuPrefs.quickAccess.includes(child.key);
                                           return (
                                             <div
                                               key={child.key}
@@ -1395,6 +1409,15 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                                 <ChildIcon className="h-3.5 w-3.5 shrink-0" />
                                                 <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
                                               </a>
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleQuickAccess(child.key)}
+                                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100 ${childQuick ? "opacity-100 text-[var(--brand)]" : "opacity-70"}`}
+                                                aria-label={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                                title={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                              >
+                                                <Pin className="h-3 w-3" fill={childQuick ? "currentColor" : "none"} />
+                                              </button>
                                               <button
                                                 type="button"
                                                 onClick={() => toggleFavorite(child.key)}
@@ -1502,6 +1525,20 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {!current.key.startsWith("microApp") ? (
+              <button
+                type="button"
+                onClick={() => toggleQuickAccess(current.key)}
+                className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium ${
+                  currentIsQuickAccess
+                    ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]"
+                    : "border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                }`}
+              >
+                <Pin className="h-4 w-4" fill={currentIsQuickAccess ? "currentColor" : "none"} />
+                {currentIsQuickAccess ? (isEnglish ? "Quicked" : "已快捷") : (isEnglish ? "Quick" : "快捷入口")}
+              </button>
+            ) : null}
             {!current.key.startsWith("microApp") ? (
               <button
                 type="button"

@@ -9,7 +9,7 @@
  *   4. AI 安全 — 字段稳定，新增字段需 bump SCHEMA_VERSION 并提供 migrate。
  */
 
-export const MENU_PREFS_SCHEMA_VERSION = 2;
+export const MENU_PREFS_SCHEMA_VERSION = 3;
 const STORAGE_KEY = "sop-menu-prefs-v1";
 const MENU_PREFS_EVENT = "sop-menu-prefs";
 
@@ -21,6 +21,8 @@ export type MenuPrefs = {
   schema: number;
   /** 用户收藏的菜单 key，顺序即展示顺序 */
   favorites: string[];
+  /** 用户手动加入快捷入口的菜单 key，顺序即展示顺序 */
+  quickAccess: string[];
   /** 最近访问菜单 key，最新在前，最多 8 个 */
   recents: string[];
   /** 侧栏密度 */
@@ -46,6 +48,7 @@ export type MenuPrefs = {
 const DEFAULT_PREFS: MenuPrefs = {
   schema: MENU_PREFS_SCHEMA_VERSION,
   favorites: [],
+  quickAccess: [],
   recents: [],
   density: "comfortable",
   showRecents: true,
@@ -74,6 +77,7 @@ function migrate(raw: Partial<MenuPrefs>): MenuPrefs {
     ...raw,
     schema: MENU_PREFS_SCHEMA_VERSION,
     favorites: Array.isArray(raw.favorites) ? raw.favorites.slice(0, 24) : [],
+    quickAccess: Array.isArray(raw.quickAccess) ? raw.quickAccess.slice(0, 12) : [],
     recents: Array.isArray(raw.recents) ? raw.recents.slice(0, 8) : [],
     menuLayout: raw.menuLayout === "stream" || raw.menuLayout === "minimal" ? raw.menuLayout : "grouped",
     menuEffect: raw.menuEffect === "outline" || raw.menuEffect === "quiet" ? raw.menuEffect : "soft",
@@ -111,6 +115,15 @@ export function toggleFavorite(key: string): MenuPrefs {
   return next;
 }
 
+export function toggleQuickAccess(key: string): MenuPrefs {
+  const cur = readRaw();
+  const has = cur.quickAccess.includes(key);
+  const quickAccess = has ? cur.quickAccess.filter((k) => k !== key) : [key, ...cur.quickAccess].slice(0, 12);
+  const next = { ...cur, quickAccess };
+  write(next);
+  return next;
+}
+
 export function moveFavorite(from: number, to: number): MenuPrefs {
   const cur = readRaw();
   if (from < 0 || to < 0 || from >= cur.favorites.length || to >= cur.favorites.length) return cur;
@@ -140,6 +153,10 @@ export function clearRecents(): MenuPrefs {
 
 export function isFavorite(key: string): boolean {
   return readRaw().favorites.includes(key);
+}
+
+export function isQuickAccess(key: string): boolean {
+  return readRaw().quickAccess.includes(key);
 }
 
 /** 订阅菜单偏好变更；返回反订阅函数。 */

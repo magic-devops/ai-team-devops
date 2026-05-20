@@ -677,6 +677,7 @@ class ModuleActionApprovalReviewIn(BaseModel):
 
 class MenuPreferencesIn(BaseModel):
     favorites: list[str] | None = None
+    quick_access: list[str] | None = None
     recents: list[str] | None = None
     density: str | None = Field(None, pattern="^(compact|comfortable|cozy)$")
     menu_layout: str | None = Field(None, pattern="^(grouped|stream|minimal)$")
@@ -2460,9 +2461,11 @@ def _menu_preferences_payload(user: User) -> dict[str, Any]:
     strategy = _role_menu_strategy(role)
     stored = _read_menu_prefs(user)
     favorites = _sanitize_menu_keys(stored.get("favorites") or strategy["default_favorites"], limit=int(strategy["favorite_limit"]))
+    quick_access = _sanitize_menu_keys(stored.get("quick_access") or [], limit=12)
     recents = _sanitize_menu_keys(stored.get("recents") or [], limit=int(strategy["recent_limit"]))
     prefs = {
         "favorites": favorites,
+        "quick_access": quick_access,
         "recents": recents,
         "density": stored.get("density") or strategy["density"],
         "menu_layout": stored.get("menu_layout") or "grouped",
@@ -2486,7 +2489,7 @@ def _menu_preferences_payload(user: User) -> dict[str, Any]:
             "purpose": "供前端、CLI 和 AI Agent 读取当前角色推荐菜单、最近访问与折叠策略。",
             "api": "/api/v1/system/pages/menu/preferences/me",
             "cli": "sop pages menu-prefs --json",
-            "fields": ["role", "strategy.home", "preferences.recents", "preferences.favorites", "preferences.collapsed_groups"],
+            "fields": ["role", "strategy.home", "preferences.quick_access", "preferences.recents", "preferences.favorites", "preferences.collapsed_groups"],
         },
     }
 
@@ -2539,6 +2542,8 @@ def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, An
     raw = body.model_dump(exclude_none=True) if hasattr(body, "model_dump") else body.dict(exclude_none=True)
     if "favorites" in raw:
         current["favorites"] = _sanitize_menu_keys(raw.get("favorites"), limit=24)
+    if "quick_access" in raw:
+        current["quick_access"] = _sanitize_menu_keys(raw.get("quick_access"), limit=12)
     if "recents" in raw:
         current["recents"] = _sanitize_menu_keys(raw.get("recents"), limit=8)
     for key in ("density", "menu_layout", "menu_effect", "show_recents", "show_favorites", "show_menu_counts", "show_menu_meta", "show_quick_panel"):

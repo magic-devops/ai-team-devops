@@ -4,6 +4,8 @@
     "favorites": "我的收藏",
     "favorite": "收藏",
     "unfavorite": "取消收藏",
+    "quickAdd": "加入快捷入口",
+    "quickRemove": "移出快捷入口",
     "recents": "最近访问",
     "quickEmpty": "暂无可展示入口",
     "clearRecents": "清空最近访问",

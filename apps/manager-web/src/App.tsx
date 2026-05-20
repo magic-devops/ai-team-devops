@@ -59,6 +59,7 @@ import {
   pushRecent,
   subscribeMenuPrefs,
   toggleFavorite,
+  toggleQuickAccess,
   type MenuEffect,
   type MenuDensity,
   type MenuLayout,
@@ -306,6 +307,38 @@ function FavoriteToggle({
   );
 }
 
+function QuickAccessToggle({
+  navKey,
+  isQuick,
+  size = "sm",
+  className = "",
+}: {
+  navKey: string;
+  isQuick: boolean;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const sz = size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleQuickAccess(navKey);
+      }}
+      aria-pressed={isQuick}
+      title={isQuick ? t("nav.quickRemove") : t("nav.quickAdd")}
+      className={`inline-flex shrink-0 items-center justify-center rounded-md p-1 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--brand)] ${
+        isQuick ? "text-[var(--brand)]" : ""
+      } ${className}`}
+    >
+      <Pin className={sz} fill={isQuick ? "currentColor" : "none"} strokeWidth={1.75} />
+    </button>
+  );
+}
+
 type AppMenuCategory = { key: string; label: string; items: NavItem[] };
 type AppMenuDomain = { key: string; label: string; categories: AppMenuCategory[]; count: number };
 
@@ -331,17 +364,18 @@ function buildAppMenuTree(items: readonly NavItem[], labelOf: (kind: "group" | "
 }
 
 function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = i18n.language?.startsWith("en");
   const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
   const layoutOptions: Array<{ key: MenuLayout; label: string; desc: string }> = [
-    { key: "grouped", label: "分组卡片", desc: "层级最清晰，适合模块多的应用" },
-    { key: "stream", label: "连续列表", desc: "减少卡片边界，浏览更顺滑" },
-    { key: "minimal", label: "极简模式", desc: "弱化装饰，保留路径和层级" },
+    { key: "grouped", label: isEn ? "Grouped cards" : "分组卡片", desc: isEn ? "Clear hierarchy for module-rich apps" : "层级最清晰，适合模块多的应用" },
+    { key: "stream", label: isEn ? "Continuous list" : "连续列表", desc: isEn ? "Fewer card edges, smoother scanning" : "减少卡片边界，浏览更顺滑" },
+    { key: "minimal", label: isEn ? "Minimal" : "极简模式", desc: isEn ? "Quiet chrome, keep path and levels" : "弱化装饰，保留路径和层级" },
   ];
   const effectOptions: Array<{ key: MenuEffect; label: string }> = [
-    { key: "soft", label: "柔和" },
-    { key: "outline", label: "描边" },
-    { key: "quiet", label: "安静" },
+    { key: "soft", label: isEn ? "Soft" : "柔和" },
+    { key: "outline", label: isEn ? "Outline" : "描边" },
+    { key: "quiet", label: isEn ? "Quiet" : "安静" },
   ];
   return (
     <DropdownMenu.Root>
@@ -363,12 +397,12 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
           align="end"
         >
           <div className="mb-2 px-1">
-            <p className="text-sm font-semibold text-[var(--text)]">菜单显示</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">控制密度、布局和辅助信息显示。</p>
+            <p className="text-sm font-semibold text-[var(--text)]">{isEn ? "Menu display" : "菜单显示"}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{isEn ? "Control density, layout and helper information." : "控制密度、布局和辅助信息显示。"}</p>
           </div>
 
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
-            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">密度</p>
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{isEn ? "Density" : "密度"}</p>
             <div className="grid grid-cols-3 gap-1">
               {densityOptions.map((opt) => (
                 <button
@@ -384,7 +418,7 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
           </div>
 
           <div className="mt-2 grid gap-1">
-            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">布局</p>
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{isEn ? "Layout" : "布局"}</p>
             {layoutOptions.map((opt) => (
               <button
                 key={opt.key}
@@ -403,7 +437,7 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
           </div>
 
           <div className="mt-2 rounded-xl border border-[var(--border)] p-2">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">效果</p>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{isEn ? "Style" : "效果"}</p>
             <div className="grid grid-cols-3 gap-1">
               {effectOptions.map((opt) => (
                 <button
@@ -418,9 +452,9 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
             </div>
             <div className="mt-2 grid gap-1">
               {[
-                { key: "showQuickPanel", label: "快捷区" },
-                { key: "showMenuCounts", label: "计数徽标" },
-                { key: "showMenuMeta", label: "能力说明" },
+                { key: "showQuickPanel", label: isEn ? "Quick panel" : "快捷区" },
+                { key: "showMenuCounts", label: isEn ? "Badges" : "计数徽标" },
+                { key: "showMenuMeta", label: isEn ? "Descriptions" : "能力说明" },
               ].map((item) => (
                 <button
                   key={item.key}
@@ -879,17 +913,23 @@ export function App() {
     return out;
   }, [navSource]);
   const pinnedItems = useMemo(() => pinnedNavItems(visibleNav), [visibleNav]);
+  const quickAccessItems = useMemo(() => {
+    const manual = resolveNavKeys(menuPrefs.quickAccess, visibleNav);
+    return manual.length ? manual : pinnedItems;
+  }, [menuPrefs.quickAccess, pinnedItems, visibleNav]);
   const favoriteItems = useMemo(() => resolveNavKeys(menuPrefs.favorites, visibleNav), [menuPrefs.favorites, visibleNav]);
   const recentItems = useMemo(
     () => resolveNavKeys(menuPrefs.recents, visibleNav).filter((item) => item.key !== current.key).slice(0, 6),
     [menuPrefs.recents, visibleNav, current.key],
   );
   const favoriteSet = useMemo(() => new Set(menuPrefs.favorites), [menuPrefs.favorites]);
+  const quickAccessSet = useMemo(() => new Set(menuPrefs.quickAccess), [menuPrefs.quickAccess]);
   const currentFavorite = favoriteSet.has(current.key);
+  const currentQuickAccess = quickAccessSet.has(current.key);
   const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, navLabel, visibleNav), [hash, navLabel, visibleNav]);
   const densityCls = densityPadding(menuPrefs.density);
   const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
-  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : pinnedItems;
+  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickAccessItems;
   const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
 
   useEffect(() => {
@@ -915,6 +955,7 @@ export function App() {
       setCollapsedModules(prefs.collapsed_modules || {});
       patchMenuPrefs({
         favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+        quickAccess: Array.isArray(prefs.quick_access) ? prefs.quick_access : menuPrefs.quickAccess,
         recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
         density: prefs.density || menuPrefs.density,
         showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
@@ -929,13 +970,14 @@ export function App() {
     } catch {
       /* ignore disabled storage */
     }
-  }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
+  }, [authed, currentRole, me.data?.user_id, me.data?.username, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.quickAccess, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.preferences]);
 
   useEffect(() => {
     if (!authed || !menuPrefsRemote.data?.ok) return;
     const timer = window.setTimeout(() => {
       syncMenuPrefs.mutate({
         favorites: menuPrefs.favorites,
+        quick_access: menuPrefs.quickAccess,
         recents: menuPrefs.recents,
         density: menuPrefs.density,
         show_recents: menuPrefs.showRecents,
@@ -951,7 +993,7 @@ export function App() {
       });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
+  }, [authed, collapsedCategories, collapsedGroups, collapsedModules, menuPrefs.density, menuPrefs.favorites, menuPrefs.menuEffect, menuPrefs.menuLayout, menuPrefs.quickAccess, menuPrefs.recents, menuPrefs.showFavorites, menuPrefs.showMenuCounts, menuPrefs.showMenuMeta, menuPrefs.showQuickPanel, menuPrefs.showRecents, menuPrefsRemote.data?.ok]);
 
   useEffect(() => {
     if (!current?.key) return;
@@ -1117,7 +1159,7 @@ export function App() {
               <div className="mt-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
                 <div className="grid grid-cols-3 gap-1">
                   {[
-                    { key: "pinned" as const, icon: Pin, label: t("nav.pinned"), count: pinnedItems.length, enabled: pinnedItems.length > 0 },
+                    { key: "pinned" as const, icon: Pin, label: t("nav.pinned"), count: quickAccessItems.length, enabled: quickAccessItems.length > 0 },
                     { key: "favorites" as const, icon: Star, label: t("nav.favorites"), count: favoriteItems.length, enabled: menuPrefs.showFavorites },
                     { key: "recents" as const, icon: Clock, label: t("nav.recents"), count: recentItems.length, enabled: menuPrefs.showRecents },
                   ].map((entry) => {
@@ -1301,6 +1343,7 @@ export function App() {
                                                 const itemActive = current.key === item.key || current.parentKey === item.key;
                                                 const children = microAppChildrenByParent.get(item.key) ?? [];
                                                 const itemFav = favoriteSet.has(item.key);
+                                                const itemQuick = quickAccessSet.has(item.key);
                                                 return (
                                                   <div key={item.key}>
                                                     <div
@@ -1316,11 +1359,18 @@ export function App() {
                                                         {showMenuCounts ? <NavBadgeTag badge={item.badge} /> : null}
                                                       </a>
                                                       {item.pinnable !== false ? (
-                                                        <FavoriteToggle
-                                                          navKey={item.key}
-                                                          isFav={itemFav}
-                                                          className={`mr-1 ${itemFav ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}`}
-                                                        />
+                                                        <div className="mr-1 flex shrink-0 items-center">
+                                                          <QuickAccessToggle
+                                                            navKey={item.key}
+                                                            isQuick={itemQuick}
+                                                            className={itemQuick ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}
+                                                          />
+                                                          <FavoriteToggle
+                                                            navKey={item.key}
+                                                            isFav={itemFav}
+                                                            className={itemFav ? "opacity-100" : "opacity-0 group-hover/appmenu:opacity-100 focus-visible:opacity-100"}
+                                                          />
+                                                        </div>
                                                       ) : null}
                                                     </div>
                                                     {itemActive && children.length ? (
@@ -1403,6 +1453,7 @@ export function App() {
                 const parentActive = current.key === n.key || current.parentKey === n.key;
                 const moduleOpen = Boolean(keyword) || parentActive || !collapsedModules[n.key];
                 const isFav = favoriteSet.has(n.key);
+                const isQuick = quickAccessSet.has(n.key);
                 const canWrite = n.capability ? capabilities.can(n.capability, "write") : true;
               return (
                 <div key={n.key} className="group/nav">
@@ -1427,6 +1478,15 @@ export function App() {
                         </span>
                       ) : null}
                     </a>
+                    {!sidebarCollapsed && n.pinnable !== false ? (
+                      <QuickAccessToggle
+                        navKey={n.key}
+                        isQuick={isQuick}
+                        className={`transition ${
+                          isQuick ? "opacity-100" : "opacity-0 group-hover/nav:opacity-100 focus-visible:opacity-100"
+                        }`}
+                      />
+                    ) : null}
                     {!sidebarCollapsed && n.pinnable !== false ? (
                       <FavoriteToggle
                         navKey={n.key}
@@ -1454,6 +1514,7 @@ export function App() {
                         const ChildIcon = child.icon;
                         const childActive = current.key === child.key;
                         const childFav = favoriteSet.has(child.key);
+                        const childQuick = quickAccessSet.has(child.key);
                         const childCanWrite = child.capability ? capabilities.can(child.capability, "write") : true;
                         return (
                           <div
@@ -1474,6 +1535,15 @@ export function App() {
                               {!childCanWrite ? <Lock className="h-3 w-3 shrink-0 text-[var(--muted)]" aria-label={t("nav.readOnly")} /> : null}
                               {showMenuCounts ? <NavBadgeTag badge={child.badge} /> : null}
                             </a>
+                            {child.pinnable !== false ? (
+                              <QuickAccessToggle
+                                navKey={child.key}
+                                isQuick={childQuick}
+                                className={`mr-0.5 ${
+                                  childQuick ? "opacity-100" : "opacity-0 group-hover/child:opacity-100 focus-visible:opacity-100"
+                                }`}
+                              />
+                            ) : null}
                             {child.pinnable !== false ? (
                               <FavoriteToggle
                                 navKey={child.key}
@@ -1543,6 +1613,7 @@ export function App() {
                       setCollapsedModules(prefs.collapsed_modules || {});
                       patchMenuPrefs({
                         favorites: Array.isArray(prefs.favorites) ? prefs.favorites : menuPrefs.favorites,
+                        quickAccess: Array.isArray(prefs.quick_access) ? prefs.quick_access : menuPrefs.quickAccess,
                         recents: Array.isArray(prefs.recents) ? prefs.recents : menuPrefs.recents,
                         density: prefs.density || menuPrefs.density,
                         showRecents: typeof prefs.show_recents === "boolean" ? prefs.show_recents : menuPrefs.showRecents,
@@ -1600,7 +1671,10 @@ export function App() {
                 </span>
               ) : null}
               {current.pinnable !== false ? (
-                <FavoriteToggle navKey={current.key} isFav={currentFavorite} size="md" />
+                <>
+                  <QuickAccessToggle navKey={current.key} isQuick={currentQuickAccess} size="md" />
+                  <FavoriteToggle navKey={current.key} isFav={currentFavorite} size="md" />
+                </>
               ) : null}
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]">
