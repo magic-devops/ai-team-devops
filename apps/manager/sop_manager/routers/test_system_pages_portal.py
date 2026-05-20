@@ -2,7 +2,7 @@ from sop_manager.routers.sql_models import User
 from sop_manager.routers.system_pages import system_pages_hub
 
 
-def test_system_pages_hub_exposes_hermes_portal_contract():
+def test_system_pages_hub_exposes_portal_management_contract():
     user = User(
         id="u-test",
         tenant_id="default",
@@ -15,8 +15,9 @@ def test_system_pages_hub_exposes_hermes_portal_contract():
     payload = system_pages_hub(user)
 
     assert payload["ok"] is True
-    assert payload["portal"]["name"] == "Hermes Portal"
+    assert payload["portal"]["name"] == "门户管理"
     assert payload["portal"]["mode"] == "portal_control_plane"
+    assert "微应用注册" in payload["portal"]["capabilities"]
     assert payload["identity"]["username"] == "admin"
     assert payload["identity"]["role"] == "super_admin"
     assert payload["contracts"]["menu"]["nav_items"] > 0

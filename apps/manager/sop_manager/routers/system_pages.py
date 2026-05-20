@@ -2609,10 +2609,11 @@ def system_pages_hub(user: User = Depends(current_user)) -> dict[str, Any]:
     return {
         "ok": True,
         "portal": {
-            "name": "Hermes Portal",
+            "name": "门户管理",
             "positioning": "统一身份、统一上下文、统一菜单权限契约、统一微应用注册与运行治理的主应用控制面。",
             "mode": "portal_control_plane",
             "shell": "portal-only",
+            "capabilities": ["统一身份", "统一上下文", "菜单权限契约", "微应用注册", "运行治理"],
             "updated_at": _utc_now(),
         },
         "identity": {

@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowRight,
   CheckCircle2,
+  ClipboardCheck,
   Command,
   DatabaseZap,
   ExternalLink,
@@ -82,6 +83,7 @@ export function HermesPortal() {
   const capabilitiesQuery = useQuery({ queryKey: ["systemPagesCapabilitiesMe"], queryFn: api.systemPagesCapabilitiesMe, retry: false });
 
   const portal = asRecord(portalQuery.data);
+  const portalMeta = asRecord(portal.portal);
   const portalIdentity = asRecord(portal.identity);
   const portalContracts = asRecord(portal.contracts);
   const portalMenuContract = asRecord(portalContracts.menu);
@@ -131,6 +133,7 @@ export function HermesPortal() {
   const capabilitySummary = asRecord(capabilitiesQuery.data);
   const visibleCapabilityCount = numberFrom(portalPermissionContract.visible ?? capabilitySummary.summary?.visible ?? capabilitySummary.visible_count, totalCapabilities);
   const backendGovernanceActions = Array.isArray(portal.governance_actions) ? portal.governance_actions : [];
+  const portalName = String(portalMeta.name || t("nav.hermesPortal", { defaultValue: "门户管理" }));
 
   const contractRows = [
     { label: "统一身份", value: username, detail: `${role} · ${tenant}`, icon: UserCircle2 },
@@ -141,7 +144,7 @@ export function HermesPortal() {
 
   const governanceLinks = backendGovernanceActions.length ? backendGovernanceActions.map((item: QueryRecord, index: number) => ({
     title: String(item.title || item.id || "治理动作"),
-    desc: String(item.description || item.metric || "来自 Hermes Portal 后端治理控制面。"),
+    desc: String(item.description || item.metric || "来自门户管理后端治理控制面。"),
     href: String(item.path || "#/admin/menu"),
     icon: [PanelTop, ShieldCheck, Layers3][index % 3],
     metric: String(item.metric || item.priority || ""),
@@ -157,6 +160,19 @@ export function HermesPortal() {
     { title: "运行时通信协议", desc: "统一 shell、tenant、business、project、workspace 参数，后续可扩展事件总线和操作审计。", icon: GitBranch },
     { title: "运行治理与观测", desc: "集中展示健康分、错误/告警、模块数、能力域和独立微应用状态。", icon: Activity },
   ];
+  const readinessRows = [
+    { label: "身份会话", ready: Boolean(portalReadiness.identity_context), desc: "登录态、角色、租户与 SSO 状态", href: "#/settings" },
+    { label: "上下文传播", ready: Boolean(portalReadiness.workspace_context), desc: "tenant/business/project/workspace 注入", href: "#/portal" },
+    { label: "菜单契约", ready: Boolean(portalReadiness.menu_contract), desc: "页面树、域、路径与能力码健康", href: "#/admin/menu" },
+    { label: "权限矩阵", ready: Boolean(portalReadiness.permission_contract), desc: "角色与 read/write/admin 权限点", href: "#/admin/permissions" },
+    { label: "微应用注册", ready: Boolean(portalReadiness.micro_apps), desc: "独立应用入口、模块归属与运行模式", href: "#/admin/micro-app-registry" },
+  ];
+  const managementTracks = [
+    { title: "统一身份管理", desc: "查看当前角色、租户会话、SSO 来源和可见能力范围。", metric: role, href: "#/settings", icon: UserCircle2 },
+    { title: "上下文管理", desc: "确认 tenant、business、project 和 workspace 参数在各微应用间一致传递。", metric: String(project), href: "#/portal", icon: KeyRound },
+    { title: "菜单权限治理", desc: "检查导航注册表、能力码、i18n、隐藏策略和批量治理任务。", metric: `${healthScore}%`, href: "#/admin/menu", icon: ClipboardCheck },
+    { title: "微应用运行治理", desc: "维护 5 个独立微应用的入口、模块清单、沙箱配置和通信协议。", metric: `${MICRO_APPS.length} apps`, href: "#/admin/micro-app-registry", icon: Network },
+  ];
 
   return (
     <section className="space-y-5">
@@ -165,11 +181,11 @@ export function HermesPortal() {
           <div className="max-w-4xl">
             <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-1.5 text-sm font-semibold text-[var(--brand)]">
               <Network className="h-4 w-4" />
-              Hermes Portal
+              {portalName}
             </span>
-            <h2 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text)]">统一微应用治理门户</h2>
+            <h2 className="mt-4 text-3xl font-bold tracking-tight text-[var(--text)]">门户管理控制台</h2>
             <p className="mt-3 text-sm leading-6 text-[var(--muted-strong)]">
-              主应用定位为 Portal 和控制面：统一身份、统一上下文、统一菜单权限契约、统一微应用注册与运行治理；各业务能力进入独立微应用承载，权限隔离和菜单体系按应用边界独立演进。
+              主应用定位为门户管理和控制面：统一身份、统一上下文、统一菜单权限契约、统一微应用注册与运行治理；各业务能力进入独立微应用承载，权限隔离和菜单体系按应用边界独立演进。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -197,6 +213,62 @@ export function HermesPortal() {
         ))}
       </div>
 
+      <div className="grid gap-5 xl:grid-cols-[1fr_0.9fr]">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-bold text-[var(--text)]">门户管理能力</h3>
+              <p className="mt-1 text-sm text-[var(--muted)]">把主应用职责收敛为可配置、可检查、可追踪的控制面能力。</p>
+            </div>
+            <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand-soft)] px-3 py-2 text-xs font-semibold text-[var(--brand)]">
+              <ShieldCheck className="h-4 w-4" />
+              {portalReadiness.score ? `${portalReadiness.score}% ready` : "实时校验"}
+            </span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {managementTracks.map((item) => {
+              const Icon = item.icon;
+              return (
+                <a key={item.title} href={item.href} className="group rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-md">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs font-semibold text-[var(--muted-strong)]">{item.metric}</span>
+                  </div>
+                  <h4 className="mt-3 text-sm font-semibold text-[var(--text)]">{item.title}</h4>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.desc}</p>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand)]">
+                    进入管理 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                  </span>
+                </a>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+          <h3 className="text-xl font-bold text-[var(--text)]">控制面就绪度</h3>
+          <p className="mt-1 text-sm text-[var(--muted)]">后端 `/system/pages/hub` 返回的门户管理运行状态。</p>
+          <div className="mt-4 space-y-2">
+            {readinessRows.map((item) => (
+              <a key={item.label} href={item.href} className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 hover:bg-[var(--surface-muted)]">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${item.ready ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"}`}>
+                  {item.ready ? <CheckCircle2 className="h-4 w-4" /> : <Gauge className="h-4 w-4" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[var(--text)]">{item.label}</span>
+                  <span className="line-clamp-1 text-xs text-[var(--muted)]">{item.desc}</span>
+                </span>
+                <span className={`rounded-md px-2 py-1 text-[11px] font-semibold ${item.ready ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
+                  {item.ready ? "已就绪" : "待治理"}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -208,7 +280,7 @@ export function HermesPortal() {
             </div>
             <span className="inline-flex items-center gap-2 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--muted-strong)] ring-1 ring-[var(--border)]">
               <CheckCircle2 className="h-4 w-4 text-[var(--brand)]" />
-              Portal-only shell
+              门户控制面
             </span>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">

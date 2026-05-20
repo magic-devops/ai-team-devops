@@ -168,8 +168,8 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
         </div>
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
           <ShieldCheck className="mb-3 h-5 w-5 text-[var(--brand)]" />
-          <p className="text-2xl font-bold text-[var(--text)]">门户</p>
-          <p className="text-sm text-[var(--muted)]">主应用不再内嵌 iframe，仅管理入口与契约</p>
+          <p className="text-2xl font-bold text-[var(--text)]">门户管理</p>
+          <p className="text-sm text-[var(--muted)]">门户管理只维护入口、身份、权限与契约</p>
         </div>
       </div>
 
@@ -177,7 +177,7 @@ export function MicroAppPortal({ appId }: MicroAppPortalProps) {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-[var(--text)]">微应用模块入口</h3>
-            <p className="mt-1 text-sm text-[var(--muted)]">从门户直接打开独立微应用对应模块，主应用只保留治理、授权、注册和发现能力。</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">从门户管理直接打开独立微应用对应模块，主应用只保留治理、授权、注册和发现能力。</p>
           </div>
           <div className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
