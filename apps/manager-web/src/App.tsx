@@ -1159,7 +1159,7 @@ export function App() {
                         </button>
                       ) : null}
                     </div>
-                    <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
+                    <div className="hermes-scrollbar grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
                       {quickPanelItems.length ? quickPanelItems.map((item) => {
                         const Icon = item.icon;
                         const active = current.key === item.key || current.parentKey === item.key;
@@ -1203,7 +1203,7 @@ export function App() {
                 {t("nav.microAppMode")}
               </span>
             </div>
-            <div className="grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
+            <div className="hermes-scrollbar hermes-scroll-shadow grid min-h-0 flex-1 gap-1 overflow-y-auto py-1 pr-2">
               {MICRO_APPS.map((app) => {
                 const active = app.id === activeMicroApp;
                 const appMenus = microAppMenuById.get(app.id) ?? [];
@@ -1367,7 +1367,7 @@ export function App() {
         ) : null}
 
         {sidebarCollapsed || keyword ? (
-        <nav className={`mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-3 ${sidebarCollapsed ? "px-2" : "px-2"}`}>
+        <nav className={`hermes-scrollbar hermes-scroll-shadow mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto py-1 pb-3 ${sidebarCollapsed ? "px-2" : "px-2 pr-3"}`}>
           {!sidebarCollapsed && keyword ? (
             <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
               <div className="flex items-center justify-between gap-2">
@@ -1577,7 +1577,7 @@ export function App() {
         ) : null}
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10">
+      <main className="hermes-scrollbar min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div>
             <div className="flex items-center gap-2">

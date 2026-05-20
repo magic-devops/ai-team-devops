@@ -256,7 +256,7 @@ function RuntimeMenuDisplayButton({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className={`z-50 max-h-[min(640px,calc(100vh-6rem))] ${panelWidth} overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl`}
+          className={`hermes-scrollbar z-50 max-h-[min(640px,calc(100vh-6rem))] ${panelWidth} overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl`}
           side={placement === "up" ? "top" : "bottom"}
           sideOffset={8}
           align={variant === "footer" ? "start" : "end"}
@@ -1083,7 +1083,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
     embedded ? "h-full min-h-0 overflow-visible" : "sticky top-[4.75rem] h-[calc(100vh-4.75rem)] overflow-visible",
   ].join(" ");
   const mainClass = embedded
-    ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
+    ? "hermes-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
     : "min-w-0 flex-1 overflow-visible px-4 py-5 pb-12 sm:px-6 xl:px-8";
   const runtimeSectionClass =
     menuPrefs.menuLayout === "minimal"
@@ -1114,7 +1114,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
       />
 
       {mobileMenuOpen ? (
-        <div className="max-h-[45vh] shrink-0 overflow-y-auto border-b border-[var(--nav-border)] bg-[var(--nav-bg)] p-3 lg:hidden">
+        <div className="hermes-scrollbar max-h-[45vh] shrink-0 overflow-y-auto border-b border-[var(--nav-border)] bg-[var(--nav-bg)] p-3 lg:hidden">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
             <input
@@ -1257,7 +1257,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                         </button>
                       ) : null}
                     </div>
-                    <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
+                    <div className="hermes-scrollbar grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
                       {quickPanelItems.length ? quickPanelItems.map((item) => {
                         const Icon = item.icon;
                         const active = current.key === item.key || current.parentKey === item.key;
@@ -1300,7 +1300,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             </div>
           ) : null}
 
-        <nav className={`grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 ${sidebarCollapsed ? "gap-1 pr-0" : ""}`}>
+        <nav className={`hermes-scrollbar hermes-scroll-shadow grid min-h-0 flex-1 content-start gap-3 overflow-y-auto py-1 pr-2 ${sidebarCollapsed ? "gap-1 pr-0" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
