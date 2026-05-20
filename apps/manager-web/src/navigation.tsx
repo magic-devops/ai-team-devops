@@ -123,15 +123,9 @@ const SystemMapHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/g
 const MicroAppGovernancePage = lazy(() =>
   import("../subapps/ai-ops-center/src/pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
 );
-const MenuManagementPage = lazy(() =>
-  import("../subapps/main-admin/src/pages/admin/MenuManagement").then((m) => ({ default: m.MenuManagement })),
-);
-const PermissionMatrixPage = lazy(() =>
-  import("../subapps/main-admin/src/pages/admin/PermissionMatrix").then((m) => ({ default: m.PermissionMatrix })),
-);
-const MicroAppRegistryPage = lazy(() =>
-  import("../subapps/main-admin/src/pages/admin/MicroAppRegistry").then((m) => ({ default: m.MicroAppRegistry })),
-);
+const MenuManagementPage = lazy(() => import("./pages/admin/MenuManagement").then((m) => ({ default: m.MenuManagement })));
+const PermissionMatrixPage = lazy(() => import("./pages/admin/PermissionMatrix").then((m) => ({ default: m.PermissionMatrix })));
+const MicroAppRegistryPage = lazy(() => import("./pages/admin/MicroAppRegistry").then((m) => ({ default: m.MicroAppRegistry })));
 const SettingsPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Settings").then((m) => ({ default: m.Settings })));
 const ProjectsHubPage = lazy(() => import("../subapps/main-admin/src/pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
 const OrganizationHubPage = lazy(() =>
