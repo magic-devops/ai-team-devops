@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-20T08:54:28Z",
+  "updated_at": "2026-05-20T11:35:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -234,7 +234,8 @@
       "完成智能运维自愈策略产品化增强第一轮：Manager OpsCenter 新增 self-heal evaluate/evaluations/tasks，基于监控信号、RCA、流水线与 Runbook 评估策略命中、风险等级、审批决策和执行步骤，并可预览或生成 source=ops_center_self_heal 治理任务；新增 ops_center_core 纯函数测试覆盖阈值命中、生产高危动作审批、任务草稿和运维健康摘要；OpsCenter 自愈页新增健康指标、信号评估、决策预览、任务化与最近评估记录；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
       "完成 A2A 协议网关产品化增强第一轮：Manager A2A 新增协议核心评分、能力归一化、智能协商解释、dispatch 协议包、证据质量评估、/health 协议健康和 /governance-tasks 治理任务预览/生成；新增 a2a_gateway_core 纯函数测试覆盖能力匹配、繁忙/缺能力复核、协议包、健康摘要和治理任务草稿；A2A 前端工作台升级为协议健康、Agent 注册、能力协商、任务分发、协议包预览和执行证据质量五段式控制台，Hub 展示协议健康分；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
       "完成 LLM Gateway 产品化增强第一轮：Manager 模型网关新增 llm_gateway_core 路由决策核心，支持任务类型精确/兜底路由、RPM/TPM 限流判断、主模型不可用时 fallback、成本估算、网关健康评分和 source=llm_gateway_governance 治理任务预览/生成；后端新增 /decision、/health、/governance-tasks，summary 升级为健康摘要；前端 LLM Gateway 工作台升级为健康治理、模型路由、调用决策、成本统计和限流策略五段式控制台，Hub 展示网关健康分并新增健康/决策入口；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
-      "完成智能报表与归因分析产品化增强第一轮：Manager Analytics 新增 analytics_report_core 归因引擎，支持任务/需求/问题指标归因、风险评分、驱动因素解释、洞察报告 Markdown 生成和 source=analytics_attribution 治理任务草稿；后端报表新增 /reports/insight、/reports/{id}/attribution、/reports/{id}/attribution-tasks，summary 增加 insight_reports、attribution_reports、high_risk_reports；前端 AnalyticsReports 与 Analytics 报表卡片新增一键生成智能洞察、归因风险标签、驱动因素、刷新归因、预览/生成归因任务，并补齐中英文文案；已通过核心测试函数直接调用、py_compile、Vitest、i18n JSON 校验和生产构建验证"
+      "完成智能报表与归因分析产品化增强第一轮：Manager Analytics 新增 analytics_report_core 归因引擎，支持任务/需求/问题指标归因、风险评分、驱动因素解释、洞察报告 Markdown 生成和 source=analytics_attribution 治理任务草稿；后端报表新增 /reports/insight、/reports/{id}/attribution、/reports/{id}/attribution-tasks，summary 增加 insight_reports、attribution_reports、high_risk_reports；前端 AnalyticsReports 与 Analytics 报表卡片新增一键生成智能洞察、归因风险标签、驱动因素、刷新归因、预览/生成归因任务，并补齐中英文文案；已通过核心测试函数直接调用、py_compile、Vitest、i18n JSON 校验和生产构建验证",
+      "完成基础管理子应用治理页同源化与菜单任务闭环：main-admin 子应用的菜单管理、权限矩阵、子应用注册管理统一复用主应用产品化治理页面，消除旧实现分叉；菜单管理工作台新增后端 Backlog 治理任务预览/生成入口，支持优先级、负责人、结果摘要和任务预览；已通过前端生产构建、Vitest 与后端 system_pages 路由 py_compile 验证"
     ],
     "in_progress": [],
     "blocked": [],

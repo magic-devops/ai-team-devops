@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -69,6 +69,24 @@ export function MenuManagement() {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(NAV.filter((item) => !item.parentKey).slice(0, 8).map((item) => item.key)));
   const [editing, setEditing] = useState<EditForm | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [taskPreview, setTaskPreview] = useState<any | null>(null);
+  const [taskPriority, setTaskPriority] = useState<"P0" | "P1" | "P2" | "P3">("P1");
+  const [taskAssignee, setTaskAssignee] = useState("Coder");
+  const backlogTasks = useMutation({
+    mutationFn: (dryRun: boolean) => api.systemPagesBacklogTasks({ dry_run: dryRun, priority: taskPriority, assigned_to: taskAssignee.trim() || "Coder" }),
+    onSuccess: (data, dryRun) => {
+      setTaskPreview(data);
+      const summary = data?.summary ?? {};
+      setToast(
+        dryRun
+          ? `已预览 ${summary.planned ?? 0} 个治理任务，跳过 ${summary.skipped ?? 0} 个已存在任务`
+          : `已生成 ${summary.created ?? 0} 个治理任务，跳过 ${summary.skipped ?? 0} 个已存在任务`,
+      );
+    },
+    onError: (error: unknown) => {
+      setToast(`治理任务处理失败：${error instanceof Error ? error.message : "后端接口暂不可用"}`);
+    },
+  });
 
   const labelOf = (item: ManagedNavItem) => item.label || t(`nav.${item.key}`, { defaultValue: item.key });
   const groupLabel = (key: NavGroupKey) => t(`nav.group.${key}`, { defaultValue: key });
@@ -328,6 +346,16 @@ export function MenuManagement() {
 
         <div className="space-y-4">
           <HealthPanel issues={healthIssues} />
+          <GovernanceTaskPanel
+            preview={taskPreview}
+            loading={backlogTasks.isPending}
+            priority={taskPriority}
+            assignedTo={taskAssignee}
+            onPriorityChange={setTaskPriority}
+            onAssignedToChange={setTaskAssignee}
+            onPreview={() => backlogTasks.mutate(true)}
+            onCreate={() => backlogTasks.mutate(false)}
+          />
           <BackendHealthPanel
             health={backendHealth.data?.health}
             validation={backendValidation.data?.validation}
@@ -402,6 +430,92 @@ export function MenuManagement() {
         </div>
       ) : null}
     </WorkbenchShell>
+  );
+}
+
+function GovernanceTaskPanel({
+  preview,
+  loading,
+  priority,
+  assignedTo,
+  onPriorityChange,
+  onAssignedToChange,
+  onPreview,
+  onCreate,
+}: {
+  preview: any | null;
+  loading: boolean;
+  priority: "P0" | "P1" | "P2" | "P3";
+  assignedTo: string;
+  onPriorityChange: (value: "P0" | "P1" | "P2" | "P3") => void;
+  onAssignedToChange: (value: string) => void;
+  onPreview: () => void;
+  onCreate: () => void;
+}) {
+  const planned = Array.isArray(preview?.planned) ? preview.planned : [];
+  const skipped = Array.isArray(preview?.skipped) ? preview.skipped : [];
+  const created = Array.isArray(preview?.created) ? preview.created : [];
+  return (
+    <aside className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)]">
+      <div className="border-b border-[var(--border)] p-4">
+        <div className="flex items-center gap-2 text-base font-semibold text-[var(--text)]">
+          <CheckSquare size={18} className="text-[var(--accent)]" />
+          治理任务生成
+        </div>
+        <p className="mt-1 text-sm text-[var(--muted)]">基于后端迁移 Backlog 生成可追踪任务，让菜单契约、legacy 收敛和微应用治理进入任务闭环。</p>
+      </div>
+      <div className="space-y-3 p-4">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
+            优先级
+            <select
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
+              value={priority}
+              onChange={(event) => onPriorityChange(event.target.value as "P0" | "P1" | "P2" | "P3")}
+            >
+              {["P0", "P1", "P2", "P3"].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
+            负责人
+            <input
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
+              value={assignedTo}
+              onChange={(event) => onAssignedToChange(event.target.value)}
+              placeholder="Coder"
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button className={secondaryButton} type="button" disabled={loading} onClick={onPreview}>
+            <Eye size={16} /> 预览任务
+          </button>
+          <button className={primaryButton} type="button" disabled={loading} onClick={onCreate}>
+            <CheckSquare size={16} /> 生成任务
+          </button>
+        </div>
+        {preview ? (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+            <div className="grid grid-cols-3 gap-2 text-center text-sm">
+              <div><div className="text-[var(--muted)]">待生成</div><div className="text-lg font-semibold text-[var(--text)]">{planned.length}</div></div>
+              <div><div className="text-[var(--muted)]">已生成</div><div className="text-lg font-semibold text-[var(--text)]">{created.length}</div></div>
+              <div><div className="text-[var(--muted)]">已跳过</div><div className="text-lg font-semibold text-[var(--text)]">{skipped.length}</div></div>
+            </div>
+            <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1">
+              {planned.slice(0, 6).map((task: any) => (
+                <div key={`${task.title}-${task.priority}`} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs">
+                  <div className="font-semibold text-[var(--text)]">{task.title}</div>
+                  <div className="mt-1 text-[var(--muted)]">{task.description ?? task.status ?? "等待生成"}</div>
+                </div>
+              ))}
+              {!planned.length ? <div className="text-xs text-[var(--muted)]">暂无新的可生成任务。</div> : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 
