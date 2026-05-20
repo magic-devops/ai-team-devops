@@ -1260,6 +1260,18 @@ export const api = {
     request<any>("/api/v1/analytics/report-subscription/test", { method: "POST" }),
   analyticsCreateReport: (body: { title?: string; question?: string; answer?: string; metrics_snapshot?: Record<string, unknown> }) =>
     request<any>("/api/v1/analytics/reports", { method: "POST", body: JSON.stringify(body) }),
+  analyticsCreateInsightReport: (body: { title?: string; publish?: boolean }) =>
+    request<any>("/api/v1/analytics/reports/insight", { method: "POST", body: JSON.stringify(body) }),
+  analyticsRefreshReportAttribution: (reportId: string) =>
+    request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/attribution`, { method: "POST" }),
+  analyticsReportAttributionTasks: (
+    reportId: string,
+    body: { preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string },
+  ) =>
+    request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/attribution-tasks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   analyticsUpdateReportStatus: (reportId: string, status: "draft" | "published" | "archived") =>
     request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/status`, {
       method: "PATCH",
@@ -1313,6 +1325,32 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ query, limit, hybrid: true, rerank: true }),
     }),
+  knowledgeGraphSummary: () => request<any>("/api/v1/knowledge-graph/summary"),
+  knowledgeGraphBuild: (body: { entity_types?: string[]; rebuild?: boolean; documents?: Array<Record<string, unknown>> }) =>
+    request<any>("/api/v1/knowledge-graph/build", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  knowledgeGraphQuery: (body: { query: string; top_k?: number }) =>
+    request<any>("/api/v1/knowledge-graph/query", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  knowledgeGraphLineage: (body: { entity_id: string; depth?: number }) =>
+    request<any>("/api/v1/knowledge-graph/lineage", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  knowledgeGraphEntities: (limit = 200, entityType = "") => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (entityType) qs.set("entity_type", entityType);
+    return request<any>(`/api/v1/knowledge-graph/entities?${qs}`);
+  },
+  knowledgeGraphEdges: (limit = 300, edgeType = "") => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (edgeType) qs.set("edge_type", edgeType);
+    return request<any>(`/api/v1/knowledge-graph/edges?${qs}`);
+  },
   workerEnqueue: (type: string, payload: Record<string, unknown> = {}) =>
     request<any>("/api/v1/worker/jobs", {
       method: "POST",
@@ -1726,19 +1764,24 @@ export const api = {
     request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}`, { method: "DELETE" }),
   a2aAgentStatus: (id: string, status: string) =>
     request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
-  a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[] }) =>
+  a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[]; priority?: string }) =>
     request<any>("/api/v1/a2a/negotiate", { method: "POST", body: JSON.stringify(body) }),
   a2aDispatch: (body: { agent_id: string; task_id: string; payload?: Record<string, unknown> }) =>
     request<any>("/api/v1/a2a/dispatch", { method: "POST", body: JSON.stringify(body) }),
+  a2aDispatchPacket: (dispatchId: string) =>
+    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/packet`),
   a2aDispatches: (agentId = "", status = "") => request<any>(`/api/v1/a2a/dispatch?agent_id=${agentId}&status=${status}`),
   a2aEvidence: (agentId = "") => request<any>(`/api/v1/a2a/evidence?agent_id=${agentId}`),
-  a2aReceiveEvidence: (body: { dispatch_id: string; status: string; artifact?: Record<string, unknown>; confidence?: number }) =>
+  a2aReceiveEvidence: (body: { dispatch_id: string; status: string; artifact?: Record<string, unknown>; confidence?: number; quality_gate_results?: Array<Record<string, unknown>> }) =>
     request<any>("/api/v1/a2a/evidence", { method: "POST", body: JSON.stringify(body) }),
   a2aSummary: () => request<any>("/api/v1/a2a/summary"),
+  a2aHealth: () => request<any>("/api/v1/a2a/health"),
+  a2aGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/a2a/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
 
   // ── LLM Gateway v2 ──────────────────────────────────────────────────────
   llmRoutes: () => request<any>("/api/v1/llm-gateway/routes"),
-  llmRouteCreate: (body: { name: string; task_type?: string; model_id: string; priority?: number; fallback_model_id?: string }) =>
+  llmRouteCreate: (body: { name: string; task_type?: string; model_id: string; priority?: number; fallback_model_id?: string; enabled?: boolean }) =>
     request<any>("/api/v1/llm-gateway/routes", { method: "POST", body: JSON.stringify(body) }),
   llmRouteUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/llm-gateway/routes/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -1746,18 +1789,23 @@ export const api = {
     request<any>(`/api/v1/llm-gateway/routes/${encodeURIComponent(id)}`, { method: "DELETE" }),
   llmResolveRoute: (taskType = "general") =>
     request<any>(`/api/v1/llm-gateway/resolve?task_type=${encodeURIComponent(taskType)}`, { method: "POST" }),
+  llmDecision: (body: { task_type?: string; estimated_prompt_tokens?: number; estimated_completion_tokens?: number; required_quality?: string; allow_fallback?: boolean }) =>
+    request<any>("/api/v1/llm-gateway/decision", { method: "POST", body: JSON.stringify(body) }),
   llmCostStats: (modelId = "", period = "7d") =>
     request<any>(`/api/v1/llm-gateway/cost?model_id=${modelId}&period=${period}`),
   llmRecordCost: (body: { model_id: string; prompt_tokens?: number; completion_tokens?: number; cost_usd?: number; latency_ms?: number; task_type?: string }) =>
     request<any>("/api/v1/llm-gateway/cost", { method: "POST", body: JSON.stringify(body) }),
   llmThrottle: () => request<any>("/api/v1/llm-gateway/throttle"),
-  llmThrottleCreate: (body: { model_id: string; rpm_limit?: number; tpm_limit?: number }) =>
+  llmThrottleCreate: (body: { model_id: string; rpm_limit?: number; tpm_limit?: number; enabled?: boolean }) =>
     request<any>("/api/v1/llm-gateway/throttle", { method: "POST", body: JSON.stringify(body) }),
   llmThrottleUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/llm-gateway/throttle/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   llmThrottleDelete: (id: string) =>
     request<any>(`/api/v1/llm-gateway/throttle/${encodeURIComponent(id)}`, { method: "DELETE" }),
   llmGatewaySummary: () => request<any>("/api/v1/llm-gateway/summary"),
+  llmGatewayHealth: () => request<any>("/api/v1/llm-gateway/health"),
+  llmGatewayGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/llm-gateway/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
 
   // ── Ops Center ──────────────────────────────────────────────────────────
   opsPipelines: () => request<any>("/api/v1/ops-center/pipelines"),
@@ -1786,6 +1834,12 @@ export const api = {
     request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   opsSelfHealApply: (id: string) =>
     request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}/apply`, { method: "POST" }),
+  opsSelfHealEvaluate: (body: { signals?: Record<string, unknown>; persist?: boolean }) =>
+    request<any>("/api/v1/ops-center/self-heal/evaluate", { method: "POST", body: JSON.stringify(body) }),
+  opsSelfHealEvaluations: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/self-heal/evaluations?limit=${encodeURIComponent(String(limit))}`),
+  opsSelfHealTasks: (body: { signals?: Record<string, unknown>; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/ops-center/self-heal/tasks", { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealDelete: (id: string) =>
     request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "DELETE" }),
   opsCenterSummary: () => request<any>("/api/v1/ops-center/summary"),

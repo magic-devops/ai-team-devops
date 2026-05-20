@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
+from sop_manager.routers.ops_center_core import build_self_heal_tasks, evaluate_self_heal, summarize_ops_health
 
 router = APIRouter(prefix="/api/v1/ops-center", tags=["ops-center"])
 
@@ -53,6 +54,17 @@ class SelfHealCreate(BaseModel):
     trigger_condition: str
     action: str
     enabled: bool = True
+
+class SelfHealEvaluateIn(BaseModel):
+    signals: dict = Field(default_factory=dict)
+    persist: bool = True
+
+class SelfHealTasksIn(BaseModel):
+    signals: dict = Field(default_factory=dict)
+    dry_run: bool = True
+    priority: str = "P1"
+    assigned_to: str = "Ops Agent"
+    dev_tool: str = "codex"
 
 class PipelineStatus(BaseModel):
     status: str
@@ -183,6 +195,49 @@ def apply_self_heal(policy_id: str):
     _save("self_heal", item)
     return {**_scope(), "policy_id": policy_id, "applied_at": item["last_applied_at"], "action": item.get("action")}
 
+@router.post("/self-heal/evaluate")
+def evaluate_self_heal_policies(body: SelfHealEvaluateIn):
+    policies = _load_all("self_heal")
+    pipelines = _load_all("pipelines")
+    rca = _load_all("rca")
+    runbooks = _load_all("runbooks")
+    result = evaluate_self_heal(policies, body.signals or {}, rca, pipelines, runbooks)
+    item = {**_scope(), "id": str(uuid4()), **result, "created_at": _now()}
+    if body.persist:
+        _save("self_heal_evaluations", item)
+    return {**_scope(), **item}
+
+@router.get("/self-heal/evaluations")
+def list_self_heal_evaluations(limit: int = 30):
+    items = _load_all("self_heal_evaluations")[: max(1, min(limit, 100))]
+    return {**_scope(), "items": items, "total": len(items)}
+
+@router.post("/self-heal/tasks")
+def self_heal_tasks(body: SelfHealTasksIn):
+    policies = _load_all("self_heal")
+    pipelines = _load_all("pipelines")
+    rca = _load_all("rca")
+    runbooks = _load_all("runbooks")
+    evaluation = evaluate_self_heal(policies, body.signals or {}, rca, pipelines, runbooks)
+    planned = build_self_heal_tasks(
+        evaluation,
+        dry_run=body.dry_run,
+        priority=body.priority,
+        assigned_to=body.assigned_to,
+        dev_tool=body.dev_tool,
+    )
+    if body.dry_run:
+        return {**_scope(), "evaluation": evaluation, **planned}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+
+    created = []
+    for task in planned.get("tasks") or []:
+        created.append(create_task(TaskCreate(**task)))
+    out = {**planned, "dry_run": False, "summary": {**planned.get("summary", {}), "created": len(created)}, "items": created, "tasks": created}
+    history = {**_scope(), "id": str(uuid4()), "evaluation": evaluation, "created_task_ids": [x.get("id") for x in created if x.get("id")], "created_at": _now()}
+    _save("self_heal_task_runs", history)
+    return {**_scope(), **out, "evaluation": evaluation}
+
 @router.delete("/self-heal/{policy_id}")
 def delete_self_heal(policy_id: str):
     p = _dir("self_heal") / f"{policy_id}.json"
@@ -197,6 +252,11 @@ def summary():
     rca = _load_all("rca")
     runbooks = _load_all("runbooks")
     self_heal = _load_all("self_heal")
-    return {**_scope(), "summary": {
-        "pipelines": len(pipelines), "rca_open": sum(1 for r in rca if r.get("status") == "open"),
-        "runbooks": len(runbooks), "self_heal_active": sum(1 for s in self_heal if s.get("enabled"))}}
+    evaluations = _load_all("self_heal_evaluations")[:10]
+    return {**_scope(), "summary": summarize_ops_health(
+        pipelines=pipelines,
+        rca=rca,
+        runbooks=runbooks,
+        self_heal=self_heal,
+        evaluations=evaluations,
+    )}

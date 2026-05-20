@@ -26,6 +26,12 @@ from sop_manager.path_config import (
     resolved_tenant_code,
     resolved_tenant_id,
 )
+from sop_manager.routers.analytics_report_core import (
+    analyze_metric_attribution,
+    build_attribution_tasks,
+    generate_insight_report,
+    summarize_report_intelligence,
+)
 from sop_manager.routers.auth_sql import User, current_user
 from sop_manager.routers.db_sql_compat import now, rows, table
 from sop_manager.routers.sql_models import Issue, Requirement, Task, get_session
@@ -879,6 +885,7 @@ def _reports_summary() -> dict[str, Any]:
     subscription_health = "ready" if sub.get("enabled") and sub.get("channels") else "inactive"
     if sub.get("enabled") and not sub.get("channels"):
         subscription_health = "missing_channel"
+    intelligence = summarize_report_intelligence(items)
     return {
         "total": len(items),
         "by_status": by_status,
@@ -894,6 +901,8 @@ def _reports_summary() -> dict[str, Any]:
         "last_notified_at": last_notified,
         "subscription": sub,
         "subscription_health": subscription_health,
+        "intelligence": intelligence,
+        **intelligence,
     }
 
 
@@ -2946,6 +2955,11 @@ class ReportIn(BaseModel):
     metrics_snapshot: dict[str, Any] | None = None
 
 
+class InsightReportIn(BaseModel):
+    title: str = Field("项目智能洞察与归因报告", max_length=160)
+    publish: bool = False
+
+
 class ReportStatusIn(BaseModel):
     status: str = Field(..., pattern="^(draft|published|archived)$")
 
@@ -2964,6 +2978,13 @@ class ReportActionTasksIn(BaseModel):
     priority: str = Field("P2", pattern="^P[0-3]$")
     assigned_to: str = Field("AI-DevOps", max_length=80)
     dev_tool: str = Field("sop", max_length=80)
+
+
+class AttributionTasksIn(BaseModel):
+    preview: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = Field("DataOps", max_length=80)
+    dev_tool: str = Field("codex", max_length=80)
 
 
 class ReportNotifyIn(BaseModel):
@@ -3078,7 +3099,7 @@ def analytics_nlq(body: NlqIn, db: Session = Depends(get_session)) -> dict[str, 
 def analytics_reports(
     limit: int = Query(30, ge=1, le=200),
     status: str = Query("", pattern="^(|draft|published|archived)$"),
-    source: str = Query("", pattern="^(|overview|nlq)$"),
+    source: str = Query("", pattern="^(|overview|nlq|insight)$"),
     q: str = Query("", max_length=200),
     _: User = Depends(current_user),
 ) -> dict[str, Any]:
@@ -3168,6 +3189,7 @@ def create_analytics_report(
     pid = _require_scope()
     metrics = body.metrics_snapshot if isinstance(body.metrics_snapshot, dict) else _build_metrics(db, pid)
     highlights = _report_highlights(metrics)
+    attribution = analyze_metric_attribution(metrics)
     title = (body.title or "").strip() or (body.question[:80] if body.question else "项目数据洞察报告")
     answer = (body.answer or "").strip() or "\n".join(highlights)
     report = {
@@ -3180,6 +3202,7 @@ def create_analytics_report(
         "question": body.question.strip(),
         "answer": answer,
         "highlights": highlights,
+        "attribution": attribution,
         "metrics_snapshot": metrics,
         "source": "nlq" if body.question else "overview",
         "status": "draft",
@@ -3193,6 +3216,100 @@ def create_analytics_report(
     path = _reports_file()
     path.open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
     return {"ok": True, "report": report}
+
+
+@router.post("/reports/insight")
+def create_analytics_insight_report(
+    body: InsightReportIn,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    pid = _require_scope()
+    metrics = _build_metrics(db, pid)
+    insight = generate_insight_report(metrics, title=body.title.strip() or "项目智能洞察与归因报告")
+    status = "published" if body.publish else "draft"
+    report = {
+        "id": f"ar-{uuid4().hex[:12]}",
+        "tenant_id": resolved_tenant_id(),
+        "project_id": pid,
+        "created_at": _utc_now(),
+        "actor": getattr(user, "username", "") or getattr(user, "id", ""),
+        "title": insight["title"],
+        "question": "请基于当前项目指标生成智能洞察和归因分析",
+        "answer": insight["answer"],
+        "highlights": insight["highlights"],
+        "metrics_snapshot": metrics,
+        "attribution": insight["attribution"],
+        "source": "insight",
+        "status": status,
+        "owner": getattr(user, "username", "") or "DataOps",
+        "tags": insight["tags"],
+        "note": "",
+        "pinned": bool(insight["attribution"].get("risk_level") in {"high", "critical"}),
+        "published_at": _utc_now() if status == "published" else "",
+        "archived_at": "",
+    }
+    _reports_file().open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
+    return {"ok": True, "report": report, "attribution": insight["attribution"]}
+
+
+@router.post("/reports/{report_id}/attribution")
+def refresh_report_attribution(
+    report_id: str,
+    _: User = Depends(current_user),
+) -> dict[str, Any]:
+    _require_scope()
+    report = _find_scoped_report(report_id)
+    if not report:
+        raise HTTPException(404, "报告不存在")
+    metrics = report.get("metrics_snapshot") if isinstance(report.get("metrics_snapshot"), dict) else {}
+    attribution = analyze_metric_attribution(metrics)
+    existing_tags = [str(x) for x in report.get("tags", []) if str(x).strip()]
+    updated = _replace_scoped_report(
+        report_id,
+        {
+            "attribution": attribution,
+            "updated_at": _utc_now(),
+            "tags": list(dict.fromkeys([*existing_tags, "归因分析", f"risk:{attribution['risk_level']}"])),
+        },
+    )
+    return {"ok": True, "report": updated, "attribution": attribution}
+
+
+@router.post("/reports/{report_id}/attribution-tasks")
+def create_report_attribution_tasks(
+    report_id: str,
+    body: AttributionTasksIn,
+    _: User = Depends(current_user),
+) -> dict[str, Any]:
+    _require_scope()
+    report = _find_scoped_report(report_id)
+    if not report:
+        raise HTTPException(404, "报告不存在")
+    attribution = report.get("attribution") if isinstance(report.get("attribution"), dict) else analyze_metric_attribution(report.get("metrics_snapshot") or {})
+    candidates = build_attribution_tasks(
+        attribution,
+        priority=body.priority,
+        assigned_to=body.assigned_to,
+        dev_tool=body.dev_tool,
+    )
+    if body.preview:
+        return {"ok": True, "preview": True, "items": candidates, "total": len(candidates), "attribution": attribution}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+    created = []
+    for item in candidates:
+        created.append(create_task(TaskCreate(**{**item, "source_report_id": report_id, "source_report_title": str(report.get("title") or "")})))
+    previous = [str(x) for x in report.get("action_task_ids", []) if str(x).strip()]
+    created_ids = [str(x.get("id") or "") for x in created if x.get("id")]
+    updated = _replace_scoped_report(
+        report_id,
+        {
+            "action_task_ids": list(dict.fromkeys([*previous, *created_ids])),
+            "attribution_tasks_created_at": _utc_now(),
+            "updated_at": _utc_now(),
+        },
+    )
+    return {"ok": True, "preview": False, "items": candidates, "created": created, "report": updated, "attribution": attribution}
 
 
 @router.patch("/reports/{report_id}/status")

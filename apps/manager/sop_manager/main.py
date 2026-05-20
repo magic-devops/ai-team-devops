@@ -179,6 +179,12 @@ except Exception as _e:
     app_logger.warning("rag 路由未启用: %s", _e)
 
 try:
+    from sop_manager.routers import knowledge_graph as _knowledge_graph
+except Exception as _e:
+    _knowledge_graph = None
+    app_logger.warning("knowledge_graph 路由未启用: %s", _e)
+
+try:
     from sop_manager.routers import events_ingest as _events_ingest
 except Exception as _e:
     _events_ingest = None
@@ -285,6 +291,8 @@ if _llm_gateway is not None:
     app.include_router(_llm_gateway.router)
 if _rag is not None:
     app.include_router(_rag.router)
+if _knowledge_graph is not None:
+    app.include_router(_knowledge_graph.router)
 if _events_ingest is not None:
     app.include_router(_events_ingest.router)
 if _copilot is not None:

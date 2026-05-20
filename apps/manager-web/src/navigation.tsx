@@ -460,7 +460,9 @@ const ITEM_CATEGORY: Record<string, string> = {
   agentOpsProfiles: "ai-agent-ops",
   agentOpsRetry: "ai-agent-ops",
   llmGateway: "ai-model-ops",
+  llmGatewayHealth: "ai-model-ops",
   llmGatewayRoutes: "ai-model-ops",
+  llmGatewayDecision: "ai-model-ops",
   llmGatewayCost: "ai-model-ops",
   llmGatewayThrottle: "ai-model-ops",
   knowledgeGraph: "ai-knowledge",
@@ -731,8 +733,10 @@ export const NAV: readonly NavItem[] = [
   { key: "agentOpsRetry", path: "#/ai/agent-ops/retry", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "runs" }), group: "ai", icon: Bot, category: "ai-agent-ops", capability: "ai.agent-ops.retry", hidden: true, parentKey: "agentOps" },
   // ── LLM 模型网关 ──────────────────────────────────────────────────────────
   { key: "llmGatewayWorkbench", path: "#/ai/llm-gateway/workbench", el: pageElement(LlmGatewayWorkbenchPage, { focused: true }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.workbench", hidden: true, parentKey: "llmGateway" },
-    { key: "llmGateway", path: "#/ai/llm-gateway", el: pageElement(LlmGatewayHubPage), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway", badge: "new", description: "模型网关：路由规则、成本统计与限流策略", submodules: subnav("ai/llm-gateway", "routes", "cost", "throttle") },
+    { key: "llmGateway", path: "#/ai/llm-gateway", el: pageElement(LlmGatewayHubPage), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway", badge: "new", description: "模型网关：路由规则、调用决策、成本统计与限流策略", submodules: subnav("ai/llm-gateway", "health", "routes", "decision", "cost", "throttle") },
+  { key: "llmGatewayHealth", path: "#/ai/llm-gateway/health", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "health" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.health", hidden: true, parentKey: "llmGateway" },
   { key: "llmGatewayRoutes", path: "#/ai/llm-gateway/routes", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "routes" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.routes", hidden: true, parentKey: "llmGateway" },
+  { key: "llmGatewayDecision", path: "#/ai/llm-gateway/decision", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "decision" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.decision", hidden: true, parentKey: "llmGateway" },
   { key: "llmGatewayCost", path: "#/ai/llm-gateway/cost", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "cost" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.cost", hidden: true, parentKey: "llmGateway" },
   { key: "llmGatewayThrottle", path: "#/ai/llm-gateway/throttle", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "throttle" }), group: "ai", icon: Brain, category: "ai-model-ops", capability: "ai.llm-gateway.throttle", hidden: true, parentKey: "llmGateway" },
   // ── 知识图谱 ──────────────────────────────────────────────────────────────
@@ -747,7 +751,7 @@ export const NAV: readonly NavItem[] = [
   { key: "a2aRegistry", path: "#/ecosystem/a2a/registry", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "registry" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.registry", hidden: true, parentKey: "a2aGateway" },
   { key: "a2aNegotiate", path: "#/ecosystem/a2a/negotiate", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "negotiate" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.negotiate", hidden: true, parentKey: "a2aGateway" },
   { key: "a2aDispatch", path: "#/ecosystem/a2a/dispatch", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "dispatches" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.dispatch", hidden: true, parentKey: "a2aGateway" },
-  { key: "a2aEvidence", path: "#/ecosystem/a2a/evidence", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "dispatches" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.evidence", hidden: true, parentKey: "a2aGateway" },
+  { key: "a2aEvidence", path: "#/ecosystem/a2a/evidence", el: pageElement(A2aWorkbenchPage, { focused: true, initialTab: "evidence" }), group: "ecosystem", icon: Blocks, category: "a2a-protocol", capability: "ecosystem.a2a.evidence", hidden: true, parentKey: "a2aGateway" },
   // ── 数据接入中心 ──────────────────────────────────────────────────────────
   { key: "dataIngest", path: "#/data/ingest", el: pageElement(DataIngestHubPage), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest", badge: "new", description: "数据接入中心：连接器、Schema Registry、CDC 与批量作业", submodules: subnav("data/ingest", "connectors", "schema", "cdc", "batch") },
   { key: "dataIngestWorkbench", path: "#/data/ingest/workbench", el: pageElement(DataIngestWorkbenchPage, { focused: true }), group: "data", icon: Database, category: "data-ingest", capability: "data.ingest.workbench", hidden: true, parentKey: "dataIngest" },

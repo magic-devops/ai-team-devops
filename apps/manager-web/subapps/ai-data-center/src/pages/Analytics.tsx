@@ -66,6 +66,7 @@ export function Analytics({
   const [reportMetaDrafts, setReportMetaDrafts] = useState<Record<string, { title: string; owner: string; tags: string; note: string; pinned: boolean }>>({});
   const [reportActionDrafts, setReportActionDrafts] = useState<Record<string, { max_tasks: number; priority: string; assigned_to: string; dev_tool: string }>>({});
   const [reportActionPreviews, setReportActionPreviews] = useState<Record<string, any[]>>({});
+  const [reportAttributionPreviews, setReportAttributionPreviews] = useState<Record<string, any[]>>({});
   const [selectedDataGaps, setSelectedDataGaps] = useState<string[]>([]);
   const [catalogPanel, setCatalogPanel] = useState<CatalogPanel>(initialCatalogPanel);
   const [assetQuery, setAssetQuery] = useState("");
@@ -226,6 +227,13 @@ export function Analytics({
       void reportsSummary.refetch();
     },
   });
+  const createInsightReport = useMutation({
+    mutationFn: () => api.analyticsCreateInsightReport({ title: t("page.analytics.insightReportTitle"), publish: false }),
+    onSuccess: () => {
+      void reports.refetch();
+      void reportsSummary.refetch();
+    },
+  });
   const deleteReport = useMutation({
     mutationFn: (id: string) => api.analyticsDeleteReport(id),
     onSuccess: () => {
@@ -278,6 +286,29 @@ export function Analytics({
       api.analyticsReportActionTasks(id, { ...draft, preview: false }),
     onSuccess: (data, vars) => {
       setReportActionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
+      void reports.refetch();
+      void reportsSummary.refetch();
+    },
+  });
+  const refreshAttribution = useMutation({
+    mutationFn: (id: string) => api.analyticsRefreshReportAttribution(id),
+    onSuccess: () => {
+      void reports.refetch();
+      void reportsSummary.refetch();
+    },
+  });
+  const previewAttributionTasks = useMutation({
+    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; assigned_to: string; dev_tool: string } }) =>
+      api.analyticsReportAttributionTasks(id, { ...draft, preview: true }),
+    onSuccess: (data, vars) => {
+      setReportAttributionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
+    },
+  });
+  const createAttributionTasks = useMutation({
+    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; assigned_to: string; dev_tool: string } }) =>
+      api.analyticsReportAttributionTasks(id, { ...draft, preview: false }),
+    onSuccess: (data, vars) => {
+      setReportAttributionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
       void reports.refetch();
       void reportsSummary.refetch();
     },
@@ -729,13 +760,24 @@ export function Analytics({
         <Card
         title={t("page.analytics.reports")}
         actions={
-          <RefreshButton
-            onClick={() => {
-              void reports.refetch();
-              void reportsSummary.refetch();
-            }}
-            pending={reports.isFetching || reportsSummary.isFetching}
-          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              disabled={createInsightReport.isPending}
+              onClick={() => createInsightReport.mutate()}
+            >
+              <Brain className="h-4 w-4" />
+              {t("page.analytics.generateInsight")}
+            </button>
+            <RefreshButton
+              onClick={() => {
+                void reports.refetch();
+                void reportsSummary.refetch();
+              }}
+              pending={reports.isFetching || reportsSummary.isFetching}
+            />
+          </div>
         }
       >
         {reports.error ? <ErrorBlock message={(reports.error as Error).message} /> : null}
@@ -747,7 +789,7 @@ export function Analytics({
           <MetricTile label={t("page.analytics.reportDraft")} value={reportsSummary.data?.summary?.draft ?? 0} />
           <MetricTile label={t("page.analytics.reportNotified")} value={reportsSummary.data?.summary?.notified ?? 0} />
           <MetricTile label={t("page.analytics.reportPinned")} value={reportsSummary.data?.summary?.pinned ?? 0} />
-          <MetricTile label={t("page.analytics.subscriptionHealth")} value={t(`page.analytics.subscriptionHealthValue.${reportsSummary.data?.summary?.subscription_health ?? "inactive"}`)} />
+          <MetricTile label={t("page.analytics.attributionReports")} value={reportsSummary.data?.summary?.attribution_reports ?? 0} />
         </div>
         ) : null}
         <div className="mb-4 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
@@ -775,6 +817,7 @@ export function Analytics({
             <option value="">{t("page.analytics.allSources")}</option>
             <option value="overview">{t("page.analytics.sourceOverview")}</option>
             <option value="nlq">{t("page.analytics.sourceNlq")}</option>
+            <option value="insight">{t("page.analytics.sourceInsight")}</option>
           </select>
         </div>
         <div className="mb-4 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
@@ -842,6 +885,8 @@ export function Analytics({
             const draft = reportMetaDraft(report);
             const actionDraft = reportActionDraft(report);
             const actionPreview = reportActionPreviews[String(report.id)] ?? [];
+            const attribution = report.attribution && typeof report.attribution === "object" ? report.attribution : null;
+            const attributionPreview = reportAttributionPreviews[String(report.id)] ?? [];
             return (
             <article key={report.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="flex items-start justify-between gap-3">
@@ -870,6 +915,11 @@ export function Analytics({
                 {report.owner ? (
                   <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs text-[var(--muted-strong)]">
                     {t("page.analytics.reportOwner")}: {report.owner}
+                  </span>
+                ) : null}
+                {attribution ? (
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${attribution.risk_level === "high" ? "bg-red-50 text-red-700" : attribution.risk_level === "medium" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+                    {t("page.analytics.attributionBadge", { score: attribution.score ?? 0, level: attribution.risk_level })}
                   </span>
                 ) : null}
                 <a
@@ -907,6 +957,63 @@ export function Analytics({
                   </span>
                 ))}
               </div>
+              {attribution ? (
+                <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text)]">
+                      <Brain className="h-3.5 w-3.5 text-[var(--brand)]" />
+                      {t("page.analytics.smartAttribution")}
+                    </h4>
+                    <span className="text-xs text-[var(--muted)]">{t("page.analytics.healthScore", { score: attribution.score ?? 0 })}</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {(attribution.drivers ?? []).slice(0, 3).map((driver: any) => (
+                      <p key={driver.factor || driver.label} className="text-xs leading-5 text-[var(--muted-strong)]">
+                        <span className={driver.impact === "negative" ? "text-red-600" : "text-emerald-600"}>{driver.label}</span>
+                        <span className="mx-1">·</span>
+                        {driver.explanation}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
+                      disabled={refreshAttribution.isPending}
+                      onClick={() => refreshAttribution.mutate(String(report.id))}
+                    >
+                      {t("page.analytics.refreshAttribution")}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
+                      disabled={previewAttributionTasks.isPending}
+                      onClick={() => previewAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                    >
+                      {t("page.analytics.previewAttributionTasks")}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                      disabled={createAttributionTasks.isPending}
+                      onClick={() => createAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                    >
+                      {t("page.analytics.createAttributionTasks")}
+                    </button>
+                  </div>
+                  {attributionPreview.length ? (
+                    <ul className="mt-3 space-y-1 rounded-lg bg-[var(--surface)] p-2">
+                      {attributionPreview.map((item: any) => (
+                        <li key={item.source_report_id || item.title} className="text-xs text-[var(--muted-strong)]">
+                          <span className="font-mono text-[var(--brand)]">{item.priority}</span>
+                          <span className="mx-1">·</span>
+                          {item.title}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
                 <button
                   type="button"

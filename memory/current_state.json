@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-19T10:26:35Z",
+  "updated_at": "2026-05-20T08:54:28Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -228,7 +228,13 @@
       "完成统一登录与权限会话修复：Manager /auth/login 与 /auth/me 统一返回用户、租户、默认工作区、workspace_scope 和权限入口，React 新平台启动时自动从 /auth/me 校准本地 token/user/project/business/tenant 作用域，请求层在业务接口前自动补水缺失项目作用域，登录页阻断 redirect 回登录页导致的循环退出并写入统一会话；已通过 py_compile、真实本地 DB 登录/me/dashboard 烟测、TypeScript 与生产构建验证",
       "修复登录后一会儿被踢回登录页的问题：前端不再让任意业务/权限接口的 401 清空会话，只有统一会话探活 /api/v1/auth/me 明确返回 Token 过期、无效、用户无效或禁用时才清理 token 并跳转登录；普通模块接口失败只保留页面错误，避免登录后被单个模块错误误退出；已通过 TypeScript、生产构建和真实本地 DB 登录/me/dashboard 烟测验证",
       "修复新增前后端模块运行失败并补齐功能闭环：修复 DataIngest/DataQuality/Metrics/Tag/A2A/OpsCenter Workbench JSX 结构错误、未使用严格类型错误和 AgentRuns AI 助手接线；补齐 AgentOps、LLM Gateway、知识图谱、A2A、数据接入、数据质量、指标、标签、数据开发、智能运维等二级菜单真实路由与聚焦 Tab；后端新增模块完成路由导入、summary 与核心创建接口验证；已通过 py_compile、前端生产构建、8765 health 与 5173 静态入口验证",
-      "完成新增模块全面可用化升级：数据接入支持连接器测试、Schema 发现、作业创建/运行/完成/删除；数据质量支持规则维护、运行完成、告警处置；指标中心支持指标预览、API 发布和查询；标签服务支持标签、打标规则和本体实体维护；A2A 支持 Agent 启停、能力协商、任务分发和证据回写；AgentRuns 支持新建、开始、心跳、成功、证据和删除；LLM Gateway 支持路由解析、成本记录、限流规则维护；OpsCenter 支持流水线触发/完成/删除、RCA 解决、Runbook 删除和自愈策略应用/启停/删除；前端 API 封装与 TS/JS 双入口同步；已通过端到端工作流验证覆盖创建、状态流转、证据回写、查询和删除"
+      "完成新增模块全面可用化升级：数据接入支持连接器测试、Schema 发现、作业创建/运行/完成/删除；数据质量支持规则维护、运行完成、告警处置；指标中心支持指标预览、API 发布和查询；标签服务支持标签、打标规则和本体实体维护；A2A 支持 Agent 启停、能力协商、任务分发和证据回写；AgentRuns 支持新建、开始、心跳、成功、证据和删除；LLM Gateway 支持路由解析、成本记录、限流规则维护；OpsCenter 支持流水线触发/完成/删除、RCA 解决、Runbook 删除和自愈策略应用/启停/删除；前端 API 封装与 TS/JS 双入口同步；已通过端到端工作流验证覆盖创建、状态流转、证据回写、查询和删除",
+      "完成数据开发工作台产品化增强第一轮：DataDevWorkbench 从静态 SQL/Spark/Flink 表单升级为开发模板、调度运行、Agent 执行包、质量证据和 Runbook 五段式工作台，接入 analytics development 现有 API；新增 dataDevModel 纯函数与 Vitest 覆盖模板选择、调度 payload 和 packet 统计；清理 admin 页面既有未使用类型项使前端 typecheck 通过；已通过 Vitest、TypeScript、生产构建和本地浏览器交互验证",
+      "完成知识图谱 / Graph RAG 产品化增强第一轮：Manager 新增 /api/v1/knowledge-graph summary/build/query/lineage/entities/edges，基于需求、任务、问题、知识库、规约/架构文档和 Agent 配置构建项目级实体关系图；新增 knowledge_graph_core 纯函数测试覆盖实体抽取、语义查询和血缘 BFS；KnowledgeGraph Hub/Workbench 接入真实 API，支持图谱构建配置、Graph RAG 查询、实体血缘分析和关系证据表；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
+      "完成智能运维自愈策略产品化增强第一轮：Manager OpsCenter 新增 self-heal evaluate/evaluations/tasks，基于监控信号、RCA、流水线与 Runbook 评估策略命中、风险等级、审批决策和执行步骤，并可预览或生成 source=ops_center_self_heal 治理任务；新增 ops_center_core 纯函数测试覆盖阈值命中、生产高危动作审批、任务草稿和运维健康摘要；OpsCenter 自愈页新增健康指标、信号评估、决策预览、任务化与最近评估记录；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
+      "完成 A2A 协议网关产品化增强第一轮：Manager A2A 新增协议核心评分、能力归一化、智能协商解释、dispatch 协议包、证据质量评估、/health 协议健康和 /governance-tasks 治理任务预览/生成；新增 a2a_gateway_core 纯函数测试覆盖能力匹配、繁忙/缺能力复核、协议包、健康摘要和治理任务草稿；A2A 前端工作台升级为协议健康、Agent 注册、能力协商、任务分发、协议包预览和执行证据质量五段式控制台，Hub 展示协议健康分；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
+      "完成 LLM Gateway 产品化增强第一轮：Manager 模型网关新增 llm_gateway_core 路由决策核心，支持任务类型精确/兜底路由、RPM/TPM 限流判断、主模型不可用时 fallback、成本估算、网关健康评分和 source=llm_gateway_governance 治理任务预览/生成；后端新增 /decision、/health、/governance-tasks，summary 升级为健康摘要；前端 LLM Gateway 工作台升级为健康治理、模型路由、调用决策、成本统计和限流策略五段式控制台，Hub 展示网关健康分并新增健康/决策入口；已通过核心测试函数直接调用、py_compile、Vitest、生产构建验证",
+      "完成智能报表与归因分析产品化增强第一轮：Manager Analytics 新增 analytics_report_core 归因引擎，支持任务/需求/问题指标归因、风险评分、驱动因素解释、洞察报告 Markdown 生成和 source=analytics_attribution 治理任务草稿；后端报表新增 /reports/insight、/reports/{id}/attribution、/reports/{id}/attribution-tasks，summary 增加 insight_reports、attribution_reports、high_risk_reports；前端 AnalyticsReports 与 Analytics 报表卡片新增一键生成智能洞察、归因风险标签、驱动因素、刷新归因、预览/生成归因任务，并补齐中英文文案；已通过核心测试函数直接调用、py_compile、Vitest、i18n JSON 校验和生产构建验证"
     ],
     "in_progress": [],
     "blocked": [],

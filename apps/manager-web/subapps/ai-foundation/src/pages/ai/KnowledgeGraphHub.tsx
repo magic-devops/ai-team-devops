@@ -3,6 +3,7 @@ import { ArrowRight, GitBranch, Layers, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
+import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
@@ -16,7 +17,7 @@ const MODULES = [
 export function KnowledgeGraphHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
-  const q = useQuery({ queryKey: ["knowledgeGraphSummary"], queryFn: () => Promise.resolve({ summary: { nodes: 0, edges: 0, entity_types: 0, last_built_at: null } }), enabled: authed });
+  const q = useQuery({ queryKey: ["knowledgeGraphSummary"], queryFn: api.knowledgeGraphSummary, enabled: authed });
 
   if (!authed) return <NeedLogin />;
   if (q.isLoading) return <LoadingBlock />;

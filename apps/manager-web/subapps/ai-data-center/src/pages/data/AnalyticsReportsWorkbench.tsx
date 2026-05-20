@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
@@ -24,6 +24,7 @@ export function AnalyticsReportsWorkbench() {
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
   const [aiOpen, setAiOpen] = useState(false);
+  const qc = useQueryClient();
 
   const summaryQ = useQuery({
     queryKey: ["analyticsReportsSummary"],
@@ -34,6 +35,14 @@ export function AnalyticsReportsWorkbench() {
     queryKey: ["analyticsReportsCharts"],
     queryFn: api.analyticsReportsCharts,
     enabled: authed && hasProject,
+  });
+  const createInsight = useMutation({
+    mutationFn: () => api.analyticsCreateInsightReport({ title: t("page.analytics.insightReportTitle"), publish: false }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["analyticsReports"] });
+      void qc.invalidateQueries({ queryKey: ["analyticsReportsSummary"] });
+      void qc.invalidateQueries({ queryKey: ["analyticsReportsCharts"] });
+    },
   });
 
   const summary = summaryQ.data?.summary ?? {};
@@ -49,6 +58,14 @@ export function AnalyticsReportsWorkbench() {
         actions={
           <>
             <AiAssistButton onClick={() => setAiOpen(true)} />
+            <button
+              type="button"
+              className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              disabled={createInsight.isPending}
+              onClick={() => createInsight.mutate()}
+            >
+              {createInsight.isPending ? t("common.loading") : t("page.analytics.generateInsight")}
+            </button>
             <RefreshButton
               onClick={() => {
                 void summaryQ.refetch();
@@ -66,6 +83,8 @@ export function AnalyticsReportsWorkbench() {
               { label: t("page.analytics.reportDraft"), value: summary.draft ?? 0 },
               { label: t("page.analytics.reportNotified"), value: summary.notified ?? 0 },
               { label: t("page.analytics.reportPinned"), value: summary.pinned ?? 0 },
+              { label: t("page.analytics.attributionReports"), value: summary.attribution_reports ?? 0 },
+              { label: t("page.analytics.highRiskReports"), value: summary.high_risk_reports ?? 0 },
               {
                 label: t("page.analytics.subscriptionHealth"),
                 value: t(`page.analytics.subscriptionHealthValue.${summary.subscription_health ?? "inactive"}`),

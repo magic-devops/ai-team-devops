@@ -5,6 +5,11 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
+from sop_manager.routers.llm_gateway_core import (
+    build_gateway_governance_tasks,
+    select_llm_route,
+    summarize_gateway_health,
+)
 
 router = APIRouter(prefix="/api/v1/llm-gateway", tags=["llm-gateway"])
 
@@ -55,6 +60,18 @@ class UsageRecord(BaseModel):
     latency_ms: int = 0
     task_type: str = "general"
 
+class DecisionIn(BaseModel):
+    task_type: str = "general"
+    estimated_prompt_tokens: int = 0
+    estimated_completion_tokens: int = 0
+    required_quality: str = "balanced"
+    allow_fallback: bool = True
+
+class GovernanceTasksIn(BaseModel):
+    dry_run: bool = True
+    assigned_to: str = "AI Platform"
+    dev_tool: str = "codex"
+
 @router.get("/routes")
 def list_routes():
     return {**_scope(), "items": _load_all("routes"), "total": len(_load_all("routes"))}
@@ -93,6 +110,20 @@ def resolve_route(task_type: str = "general"):
     if not candidates:
         raise HTTPException(404, "no enabled route")
     return {**_scope(), "task_type": task_type, "route": candidates[0]}
+
+@router.post("/decision")
+def route_decision(body: DecisionIn):
+    decision = select_llm_route(body.model_dump(), _load_all("routes"), _load_all("throttle"), _load_all("usage"))
+    return {
+        **_scope(),
+        "decision": decision,
+        "agent_consumption": {
+            "purpose": "供 Copilot/Agent 调用模型前选择路由、评估成本、判断 fallback 和限流风险",
+            "selected_model_id": decision.get("selected_model_id"),
+            "status": decision.get("status"),
+            "risk_level": decision.get("risk_level"),
+        },
+    }
 
 @router.get("/cost")
 def cost_stats(model_id: str = "", period: str = "7d"):
@@ -152,9 +183,32 @@ def summary():
     routes = _load_all("routes")
     throttle = _load_all("throttle")
     usage = _load_all("usage")
-    total_tokens = sum(int(r.get("prompt_tokens") or 0) + int(r.get("completion_tokens") or 0) for r in usage)
-    latencies = [int(r.get("latency_ms") or 0) for r in usage if r.get("latency_ms") is not None]
-    return {**_scope(), "summary": {
-        "total_requests": len(usage), "total_tokens": total_tokens, "total_cost_usd": round(sum(float(r.get("cost_usd") or 0) for r in usage), 6),
-        "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0, "active_routes": sum(1 for r in routes if r.get("enabled")),
-        "throttle_rules": len(throttle)}}
+    return {**_scope(), "summary": summarize_gateway_health(routes, throttle, usage)}
+
+@router.get("/health")
+def health():
+    summary_payload = summarize_gateway_health(_load_all("routes"), _load_all("throttle"), _load_all("usage"))
+    return {
+        **_scope(),
+        "summary": summary_payload,
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 判断模型网关路由、成本、fallback 和限流健康状态",
+            "apis": ["/api/v1/llm-gateway/decision", "/api/v1/llm-gateway/cost", "/api/v1/llm-gateway/throttle"],
+            "task_source": "llm_gateway_governance",
+        },
+    }
+
+@router.post("/governance-tasks")
+def governance_tasks(body: GovernanceTasksIn):
+    summary_payload = summarize_gateway_health(_load_all("routes"), _load_all("throttle"), _load_all("usage"))
+    drafts = build_gateway_governance_tasks(summary_payload)
+    for draft in drafts:
+        draft["assigned_to"] = body.assigned_to or draft["assigned_to"]
+        draft["dev_tool"] = body.dev_tool or draft["dev_tool"]
+    if body.dry_run:
+        return {**_scope(), "dry_run": True, "items": drafts, "created": []}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+    created = []
+    for draft in drafts:
+        created.append(create_task(TaskCreate(**draft)))
+    return {**_scope(), "dry_run": False, "items": drafts, "created": created}

@@ -18,7 +18,7 @@ const MODULES = [
 export function A2aGatewayHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
-  const q = useQuery({ queryKey: ["a2aSummary"], queryFn: () => api.a2aSummary(), enabled: authed });
+  const q = useQuery({ queryKey: ["a2aHealth"], queryFn: () => api.a2aHealth(), enabled: authed });
 
   if (!authed) return <NeedLogin />;
   if (q.isLoading) return <LoadingBlock />;
@@ -36,7 +36,7 @@ export function A2aGatewayHub() {
             { label: "已注册 Agent", value: s.registered_agents ?? 0 },
             { label: "活跃", value: s.active ?? 0, trend: "up" },
             { label: "已分发任务", value: s.dispatched_tasks ?? 0 },
-            { label: "证据回写", value: s.evidence_received ?? 0 },
+            { label: "协议健康分", value: s.health_score ?? 0 },
           ]} />
         }
       />
