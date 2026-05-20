@@ -1,7 +1,9 @@
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   Activity,
   ArrowRight,
   Bot,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -11,10 +13,12 @@ import {
   Gauge,
   Globe2,
   Layers3,
+  Laptop,
   ListChecks,
   Lock,
   LogOut,
   Menu,
+  Moon,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,6 +30,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Star,
+  Sun,
   UserCircle,
   X,
   Zap,
@@ -46,7 +51,7 @@ import {
 } from "../../src/lib/authStorage";
 import { ProjectSelector } from "../../src/components/ProjectSelector";
 import { api } from "../../src/lib/api";
-import { getThemePreference, initTheme, setThemePreference, THEME_OPTIONS, type ThemePreference } from "../../src/lib/theme";
+import { getThemePreference, initTheme, isDarkResolved, setThemePreference, THEME_OPTIONS, type ThemePreference } from "../../src/lib/theme";
 import { densityPadding, getMenuPrefs, patchMenuPrefs, pushRecent, subscribeMenuPrefs, toggleFavorite, type MenuDensity, type MenuEffect, type MenuLayout, type MenuPrefs } from "../../src/lib/menuPrefs";
 import { filterNavByMicroApp, getMicroApp, type MicroAppId } from "../../src/microApps";
 import { buildNavBreadcrumb, NAV, NAV_CATEGORIES, type NavItem } from "../../src/navigation";
@@ -375,6 +380,59 @@ function RuntimeMenuDisplayButton({
   );
 }
 
+function RuntimeThemeMenu() {
+  const { t } = useTranslation();
+  const [pref, setPref] = useState<ThemePreference>(() => getThemePreference());
+
+  useEffect(() => {
+    const sync = () => setPref(getThemePreference());
+    window.addEventListener("sop-theme", sync);
+    return () => window.removeEventListener("sop-theme", sync);
+  }, []);
+
+  const dark = isDarkResolved(pref);
+  const Icon = pref === "system" ? Laptop : dark ? Moon : Palette;
+  const choose = (next: ThemePreference) => {
+    setThemePreference(next);
+    setPref(next);
+  };
+  const itemClass =
+    "flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--text)] outline-none data-[highlighted]:bg-[var(--surface-muted)] data-[state=open]:bg-[var(--surface-muted)]";
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]"
+          title={t("theme.label")}
+          aria-label={t("theme.label")}
+        >
+          <Icon className="h-4 w-4" strokeWidth={1.75} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="z-50 min-w-[12rem] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-lg"
+          sideOffset={6}
+          align="end"
+        >
+          {THEME_OPTIONS.map((theme) => {
+            const ItemIcon = theme === "system" ? Laptop : theme === "dark" || theme === "graphite" ? Moon : theme === "light" ? Sun : Palette;
+            return (
+              <DropdownMenu.Item key={theme} className={itemClass} onSelect={() => choose(theme)}>
+                <ItemIcon className="h-4 w-4 shrink-0 text-[var(--brand)]" strokeWidth={1.75} />
+                <span className="flex-1">{t(`theme.${theme}`)}</span>
+                {pref === theme ? <Check className="h-4 w-4 shrink-0 text-[var(--brand)]" /> : null}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 function RuntimeTopBar({
   app,
   currentLabel,
@@ -390,7 +448,6 @@ function RuntimeTopBar({
 }) {
   const { i18n } = useTranslation();
   const qc = useQueryClient();
-  const [theme, setTheme] = useState<ThemePreference>(() => getThemePreference());
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
   const authed = Boolean(getToken());
@@ -405,12 +462,6 @@ function RuntimeTopBar({
   });
 
   useEffect(() => {
-    const syncTheme = () => setTheme(getThemePreference());
-    window.addEventListener("sop-theme", syncTheme);
-    return () => window.removeEventListener("sop-theme", syncTheme);
-  }, []);
-
-  useEffect(() => {
     if (!accountOpen) return;
     const close = (event: MouseEvent) => {
       if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
@@ -418,11 +469,6 @@ function RuntimeTopBar({
     window.addEventListener("mousedown", close);
     return () => window.removeEventListener("mousedown", close);
   }, [accountOpen]);
-
-  const chooseTheme = (value: ThemePreference) => {
-    setTheme(value);
-    setThemePreference(value);
-  };
 
   const chooseLanguage = (value: string) => {
     void i18n.changeLanguage(value);
@@ -469,19 +515,7 @@ function RuntimeTopBar({
             <Bot className="h-4 w-4 text-[var(--brand)]" />
             模块 AI
           </button>
-          <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2 text-sm text-[var(--muted-strong)] shadow-sm">
-            <Palette className="h-4 w-4" />
-            <select
-              value={theme}
-              onChange={(event) => chooseTheme(event.target.value as ThemePreference)}
-              className="max-w-[7rem] bg-transparent text-[var(--text)] outline-none"
-              aria-label="外观主题"
-            >
-              {THEME_OPTIONS.map((item) => (
-                <option key={item} value={item}>{item}</option>
-              ))}
-            </select>
-          </label>
+          <RuntimeThemeMenu />
           <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2 text-sm text-[var(--muted-strong)] shadow-sm">
             <Globe2 className="h-4 w-4" />
             <select
