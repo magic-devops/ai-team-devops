@@ -27,11 +27,12 @@ import {
   SlidersHorizontal,
   Star,
   UserCircle,
+  X,
   Zap,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BUSINESS_CODE_KEY,
@@ -132,6 +133,7 @@ type RuntimeMenuCategory = { key: string; label: string; items: NavItem[] };
 type RuntimeMenuDomain = { key: string; label: string; categories: RuntimeMenuCategory[]; count: number };
 type RuntimeSidebarSize = "compact" | "standard" | "wide" | "custom";
 type RuntimeSidebarPreset = Exclude<RuntimeSidebarSize, "custom">;
+type RuntimeQuickPanelKey = "pinned" | "favorites" | "recents";
 
 const RUNTIME_CATEGORY_I18N_BY_KEY = new Map(NAV_CATEGORIES.map((category) => [category.key, category.i18nKey]));
 
@@ -244,7 +246,7 @@ function RuntimeMenuDisplayButton({
           open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
         }`;
   const panelPosition = variant === "footer" ? "left-0" : "right-0";
-  const panelWidth = variant === "footer" ? "w-[32rem] max-w-[calc(100vw-2rem)]" : "w-80 max-w-[calc(100vw-2rem)]";
+  const panelWidth = variant === "footer" ? "min-w-[28rem] w-[34rem] max-w-[calc(100vw-2rem)]" : "w-80 max-w-[calc(100vw-2rem)]";
 
   useEffect(() => {
     if (!open) return;
@@ -607,48 +609,6 @@ function priorityTone(priority: RuntimeApp["actions"][number]["priority"]) {
   return "bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300";
 }
 
-function RuntimeQuickList({
-  title,
-  items,
-  labelOf,
-  emptyText,
-  icon,
-}: {
-  title: string;
-  items: NavItem[];
-  labelOf: (key: string) => string;
-  emptyText: string;
-  icon: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
-          {icon}
-          {title}
-        </p>
-        <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--muted)]">{items.length}</span>
-      </div>
-      {items.length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {items.slice(0, 6).map((item) => (
-            <a
-              key={item.key}
-              href={item.path}
-              className="max-w-full truncate rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)] hover:text-[var(--brand)]"
-              title={labelOf(item.key)}
-            >
-              {labelOf(item.key)}
-            </a>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs leading-5 text-[var(--muted)]">{emptyText}</p>
-      )}
-    </div>
-  );
-}
-
 function MicroAppHome({
   app,
   current,
@@ -902,6 +862,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const [keyword, setKeyword] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [quickPanel, setQuickPanel] = useState<RuntimeQuickPanelKey | null>(null);
   const [sidebarSize, setSidebarSize] = useState<RuntimeSidebarSize>(() => {
     try {
       const stored = localStorage.getItem(`sop-subapp-${appId}-sidebar-size`);
@@ -1021,6 +982,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const menuTree = useMemo(() => buildRuntimeMenuTree(matchedModules, i18nLabelOf), [i18nLabelOf, matchedModules]);
   const favoriteItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.favorites, navItems), [menuPrefs.favorites, navItems]);
   const recentItems = useMemo(() => resolveRuntimeNavKeys(menuPrefs.recents, navItems).filter((item) => item.key !== current.key), [current.key, menuPrefs.recents, navItems]);
+  const isEnglish = i18n.language?.startsWith("en");
   const quickItems = useMemo(() => {
     const seen = new Set<string>();
     return [...favoriteItems, ...recentItems, ...visibleItems]
@@ -1031,6 +993,8 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
       })
       .slice(0, 6);
   }, [favoriteItems, recentItems, visibleItems]);
+  const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickItems;
+  const quickPanelTitle = quickPanel === "favorites" ? (isEnglish ? "Favorites" : "我的收藏") : quickPanel === "recents" ? (isEnglish ? "Recent" : "最近访问") : (isEnglish ? "Quick access" : "快捷入口");
 
   const currentLabel = labelOf(current.key);
   const groupLabel = i18nLabelOf(breadcrumb.group.i18nKey, breadcrumb.group.key);
@@ -1041,7 +1005,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const showMenuCounts = menuPrefs.showMenuCounts;
   const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
-  const isEnglish = i18n.language?.startsWith("en");
   const sidebarWidth = sidebarCollapsed ? 72 : sidebarWidthValue;
   const chooseSidebarPreset = (size: RuntimeSidebarPreset) => {
     setSidebarSize(size);
@@ -1097,7 +1060,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
   const sidebarClass = [
     "relative hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
-    embedded ? "min-h-0 overflow-visible px-4 pt-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-visible px-4 pt-4",
+    embedded ? "h-full min-h-0 overflow-visible" : "sticky top-[4.75rem] h-[calc(100vh-4.75rem)] overflow-visible",
   ].join(" ");
   const mainClass = embedded
     ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
@@ -1173,49 +1136,159 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           maxWidth: sidebarCollapsed ? 72 : SIDEBAR_MAX_WIDTH,
         }}
       >
-        <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] ${sidebarCollapsed ? "p-2" : "p-4"}`}>
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
+        <div className={`shrink-0 border-b border-[var(--nav-border)] px-3 py-3 ${sidebarCollapsed ? "px-2" : ""}`}>
+          <div className={`flex items-center gap-3 rounded-xl bg-[var(--surface-raised)]/65 ${sidebarCollapsed ? "justify-center p-2" : "p-2"}`}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
               <Layers3 className="h-5 w-5" />
             </span>
-            {!sidebarCollapsed ? <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
-              <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
-            </div> : null}
+            {!sidebarCollapsed ? (
+              <>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
+                  <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                  title={isEnglish ? "Collapse menu" : "收起菜单"}
+                  aria-label={isEnglish ? "Collapse menu" : "收起菜单"}
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
+              </>
+            ) : null}
+          </div>
+          {!sidebarCollapsed && showMenuMeta ? <p className="mt-2 line-clamp-2 px-1 text-[11px] leading-5 text-[var(--nav-muted)]">{app.description}</p> : null}
+          {sidebarCollapsed ? (
             <button
               type="button"
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-              title={sidebarCollapsed ? "展开菜单" : "收起菜单"}
-              aria-label={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+              onClick={() => setSidebarCollapsed(false)}
+              className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+              title={isEnglish ? "Expand menu" : "展开菜单"}
+              aria-label={isEnglish ? "Expand menu" : "展开菜单"}
             >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              <PanelLeftOpen className="h-4 w-4" />
             </button>
-          </div>
-          {!sidebarCollapsed && showMenuMeta ? <p className="mt-2 line-clamp-2 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
+          ) : null}
         </div>
 
-        {!sidebarCollapsed ? <div className="relative mt-4">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
-          <input
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索应用模块"
-            className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-3 text-sm outline-none ring-[var(--brand)] focus:ring"
-          />
-        </div> : null}
+        {!sidebarCollapsed ? (
+          <div className="shrink-0 border-b border-[var(--nav-border)] px-3 py-3">
+            <div className="px-1">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
+                <input
+                  value={keyword}
+                  onChange={(event) => setKeyword(event.target.value)}
+                  placeholder={isEnglish ? "Search modules" : "搜索应用模块"}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] shadow-sm outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring"
+                  aria-label={isEnglish ? "Search modules" : "搜索应用模块"}
+                />
+                {keyword ? (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                    onClick={() => setKeyword("")}
+                    aria-label={isEnglish ? "Clear search" : "清空搜索"}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <p className="mt-1 px-1 text-[11px] text-[var(--nav-muted)]">{isEnglish ? "Filter this micro app by name, capability or path." : "按名称、能力码和路径筛选当前子应用模块。"}</p>
+            </div>
 
-        {!sidebarCollapsed ? <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
-          <RuntimeQuickList title="快捷入口" items={quickItems} labelOf={labelOf} emptyText="暂无可用快捷入口" icon={<Pin className="h-3.5 w-3.5" />} />
-          {menuPrefs.showFavorites ? (
-            <RuntimeQuickList title="我的收藏" items={favoriteItems} labelOf={labelOf} emptyText="点击页面右上角星标收藏常用模块" icon={<Star className="h-3.5 w-3.5" />} />
-          ) : null}
-          {menuPrefs.showRecents ? (
-            <RuntimeQuickList title="最近访问" items={recentItems} labelOf={labelOf} emptyText="访问子应用模块后会自动记录" icon={<Clock className="h-3.5 w-3.5" />} />
-          ) : null}
-        </div> : null}
+            {!keyword && showQuickPanel ? (
+              <div className="mt-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface-raised)]/45 p-1.5">
+                <div className="grid grid-cols-3 gap-1">
+                  {[
+                    { key: "pinned" as const, icon: Pin, label: isEnglish ? "Quick" : "快捷入口", count: quickItems.length, enabled: quickItems.length > 0 },
+                    { key: "favorites" as const, icon: Star, label: isEnglish ? "Favorites" : "我的收藏", count: favoriteItems.length, enabled: menuPrefs.showFavorites },
+                    { key: "recents" as const, icon: Clock, label: isEnglish ? "Recent" : "最近访问", count: recentItems.length, enabled: menuPrefs.showRecents },
+                  ].map((entry) => {
+                    const Icon = entry.icon;
+                    const active = quickPanel === entry.key;
+                    return (
+                      <button
+                        key={entry.key}
+                        type="button"
+                        disabled={!entry.enabled}
+                        onClick={() => setQuickPanel((value) => (value === entry.key ? null : entry.key))}
+                        className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                          active
+                            ? "bg-[var(--nav-active)] text-[var(--brand)] ring-1 ring-[var(--brand)]/25"
+                            : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                        }`}
+                        title={entry.label}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{entry.label}</span>
+                        {showMenuCounts ? <span className="rounded bg-[var(--surface-muted)] px-1 font-mono text-[10px] text-[var(--muted-strong)]">{entry.count}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                {quickPanel ? (
+                  <div className="mt-1.5 border-t border-[var(--border)]/70 pt-1.5">
+                    <div className="mb-1 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
+                      <span>{quickPanelTitle}</span>
+                      {quickPanel === "recents" && recentItems.length ? (
+                        <button
+                          type="button"
+                          onClick={() => patchMenuPrefs({ recents: [] })}
+                          className="rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                          title={isEnglish ? "Clear recent modules" : "清空最近访问"}
+                          aria-label={isEnglish ? "Clear recent modules" : "清空最近访问"}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto pr-1">
+                      {quickPanelItems.length ? quickPanelItems.map((item) => {
+                        const Icon = item.icon;
+                        const active = current.key === item.key || current.parentKey === item.key;
+                        return (
+                          <a
+                            key={`${quickPanel}-${item.key}`}
+                            href={item.path}
+                            className={`group flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
+                              active
+                                ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                                : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
+                            }`}
+                            title={labelOf(item.key)}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
+                          </a>
+                        );
+                      }) : (
+                        <div className="col-span-2 rounded-md border border-dashed border-[var(--border)] px-2 py-2 text-center text-[11px] text-[var(--nav-muted)]">
+                          {isEnglish ? "No modules yet" : "暂无模块"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
-        <nav className={`mt-4 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pb-3 pr-1 ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
+        <div className={`flex min-h-0 flex-1 flex-col overflow-hidden ${sidebarCollapsed ? "px-2 py-3" : "border-b border-[var(--nav-border)] px-3 py-3"}`}>
+          {!sidebarCollapsed ? (
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--nav-muted)]">
+                <Layers3 className="h-3.5 w-3.5" />
+                {isEnglish ? "App menu" : "应用菜单"}
+              </span>
+              {showMenuCounts ? <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-strong)]">{visibleItems.length}</span> : null}
+            </div>
+          ) : null}
+
+        <nav className={`grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 ${sidebarCollapsed ? "gap-1 pr-0" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
@@ -1337,9 +1410,10 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             );
           })}
         </nav>
+        </div>
 
         {!sidebarCollapsed ? (
-          <div className="-mx-4 shrink-0 border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-4 py-2">
+          <div className="shrink-0 border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <RuntimeMenuDisplayButton
                 prefs={menuPrefs}
