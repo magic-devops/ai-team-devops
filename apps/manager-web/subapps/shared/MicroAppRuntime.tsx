@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
+  RefreshCw,
   Route,
   Search,
   Settings2,
@@ -371,6 +372,8 @@ function RuntimeTopBar({
   const { i18n } = useTranslation();
   const qc = useQueryClient();
   const [theme, setTheme] = useState<ThemePreference>(() => getThemePreference());
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
   const authed = Boolean(getToken());
   const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
   const logout = useMutation({
@@ -387,6 +390,15 @@ function RuntimeTopBar({
     window.addEventListener("sop-theme", syncTheme);
     return () => window.removeEventListener("sop-theme", syncTheme);
   }, []);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [accountOpen]);
 
   const chooseTheme = (value: ThemePreference) => {
     setTheme(value);
@@ -405,6 +417,7 @@ function RuntimeTopBar({
   const storedUser = getStoredRuntimeUser();
   const username = String(me.data?.username || me.data?.user_id || storedUser.username || "admin");
   const tenantName = String(me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || storedUser.tenantName || "default");
+  const isEn = i18n.language?.startsWith("en");
 
   return (
     <div className="sticky top-0 z-40 shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur xl:px-5">
@@ -469,31 +482,86 @@ function RuntimeTopBar({
           >
             <Settings2 className="h-4 w-4" />
           </a>
-          <div className="group relative">
-            <a
-              href="/#/organization/users"
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--text)] shadow-sm hover:bg-[var(--surface-muted)]"
+          <div ref={accountRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setAccountOpen((value) => !value)}
+              className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium shadow-sm transition ${
+                accountOpen ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--control-bg)] text-[var(--text)] hover:bg-[var(--surface-muted)]"
+              }`}
               title={`${tenantName} / ${username}`}
+              aria-expanded={accountOpen}
             >
               <UserCircle className="h-4 w-4 text-[var(--brand)]" />
               <span className="max-w-[8rem] truncate">{username}</span>
-            </a>
-            <div className="invisible absolute right-0 top-10 z-30 w-64 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm opacity-0 shadow-xl transition group-hover:visible group-hover:opacity-100">
-              <p className="truncate font-semibold text-[var(--text)]">{username}</p>
-              <p className="mt-1 truncate text-xs text-[var(--muted)]">{tenantName}</p>
-              <div className="mt-3 grid gap-1">
-                <a href="/#/organization/users" className="rounded-lg px-2 py-2 text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]">用户与账号管理</a>
-                <a href="/#/organization/role-policy" className="rounded-lg px-2 py-2 text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]">角色权限策略</a>
+              <ChevronDown className={`h-3.5 w-3.5 transition ${accountOpen ? "rotate-180" : ""}`} />
+            </button>
+            {accountOpen ? (
+              <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-80 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] text-sm shadow-2xl">
+                <div className="border-b border-[var(--border)] bg-[var(--surface-muted)]/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+                      <UserCircle className="h-6 w-6" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-bold text-[var(--text)]">{username}</p>
+                      <p className="mt-1 truncate text-xs text-[var(--muted)]">{tenantName}</p>
+                      <p className="mt-2 inline-flex max-w-full items-center rounded-md bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--muted-strong)]">
+                        <span className="truncate">{tenantName} / {username}</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-2 p-3">
+                  <a
+                    href="/#/organization/users"
+                    onClick={() => setAccountOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                  >
+                    <UserCircle className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block whitespace-nowrap font-semibold">{isEn ? "Users and accounts" : "用户与账号管理"}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{isEn ? "Members, accounts, tenant session" : "成员、账号、租户会话"}</span>
+                    </span>
+                  </a>
+                  <a
+                    href="/#/organization/role-policy"
+                    onClick={() => setAccountOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                  >
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block whitespace-nowrap font-semibold">{isEn ? "Role permission policy" : "角色权限策略"}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{isEn ? "Roles, capability boundaries, access control" : "角色、能力边界、访问控制"}</span>
+                    </span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void me.refetch();
+                      setAccountOpen(false);
+                    }}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                  >
+                    <RefreshCw className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block whitespace-nowrap font-semibold">{isEn ? "Refresh account state" : "刷新账户状态"}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{isEn ? "Sync tenant and permission info" : "同步当前租户和权限信息"}</span>
+                    </span>
+                  </button>
+                </div>
+                <div className="border-t border-[var(--border)] p-3">
                 <button
                   type="button"
                   onClick={() => logout.mutate()}
-                  className="inline-flex items-center gap-2 rounded-lg px-2 py-2 text-left text-rose-600 hover:bg-rose-500/10"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500/10 px-3 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/15"
                 >
                   <LogOut className="h-4 w-4" />
-                  退出登录
+                  {isEn ? "Sign out" : "退出登录"}
                 </button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       </div>
