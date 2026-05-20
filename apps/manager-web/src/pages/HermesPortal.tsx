@@ -75,12 +75,19 @@ export function HermesPortal() {
   const { t } = useTranslation();
   const scope = getWorkspaceScope();
   const meQuery = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, retry: false });
+  const portalQuery = useQuery({ queryKey: ["systemPagesHub"], queryFn: api.systemPagesHub, retry: false });
   const healthQuery = useQuery({ queryKey: ["systemPagesHealth"], queryFn: api.systemPagesHealth, retry: false });
   const validationQuery = useQuery({ queryKey: ["systemPagesValidate"], queryFn: api.systemPagesValidate, retry: false });
   const microAppsQuery = useQuery({ queryKey: ["systemPagesMicroApps"], queryFn: api.systemPagesMicroApps, retry: false });
   const capabilitiesQuery = useQuery({ queryKey: ["systemPagesCapabilitiesMe"], queryFn: api.systemPagesCapabilitiesMe, retry: false });
 
-  const user = asRecord(meQuery.data);
+  const portal = asRecord(portalQuery.data);
+  const portalIdentity = asRecord(portal.identity);
+  const portalContracts = asRecord(portal.contracts);
+  const portalMenuContract = asRecord(portalContracts.menu);
+  const portalPermissionContract = asRecord(portalContracts.permission);
+  const portalReadiness = asRecord(portal.readiness);
+  const user = { ...portalIdentity, ...asRecord(meQuery.data) };
   const health = asRecord(asRecord(healthQuery.data).health ?? healthQuery.data);
   const backendApps = asRecord(microAppsQuery.data);
   const backendAppItems = Array.isArray(backendApps.items) ? backendApps.items : Array.isArray(backendApps.apps) ? backendApps.apps : [];
@@ -115,23 +122,30 @@ export function HermesPortal() {
 
   const totalModules = NAV.filter((item) => !item.hidden && !item.key.startsWith("microApp")).length;
   const totalCapabilities = NAV.filter((item) => item.capability).length;
-  const healthScore = numberFrom(health.score ?? health.summary?.score, issueSummary.error ? 72 : issueSummary.warn ? 88 : 96);
+  const healthScore = numberFrom(portalMenuContract.health_score ?? health.score ?? health.summary?.score, issueSummary.error ? 72 : issueSummary.warn ? 88 : 96);
   const role = String(user.role ?? "super_admin");
   const tenant = scope.tenantCode || user.tenant_slug || user.tenant_code || "default";
   const business = scope.businessCode || user.default_business_code || "all";
   const project = scope.projectCode || scope.projectId || user.default_project_code || "default";
   const username = String(user.username ?? user.email ?? "admin");
   const capabilitySummary = asRecord(capabilitiesQuery.data);
-  const visibleCapabilityCount = numberFrom(capabilitySummary.summary?.visible ?? capabilitySummary.visible_count, totalCapabilities);
+  const visibleCapabilityCount = numberFrom(portalPermissionContract.visible ?? capabilitySummary.summary?.visible ?? capabilitySummary.visible_count, totalCapabilities);
+  const backendGovernanceActions = Array.isArray(portal.governance_actions) ? portal.governance_actions : [];
 
   const contractRows = [
     { label: "统一身份", value: username, detail: `${role} · ${tenant}`, icon: UserCircle2 },
     { label: "统一上下文", value: String(project), detail: `业务域 ${business} · 租户 ${tenant}`, icon: KeyRound },
-    { label: "菜单权限契约", value: `${totalModules}`, detail: `${totalCapabilities} 个能力码 · ${NAV_GROUPS.length} 个域`, icon: ShieldCheck },
+    { label: "菜单权限契约", value: `${numberFrom(portalMenuContract.nav_items, totalModules)}`, detail: `${numberFrom(portalPermissionContract.total, totalCapabilities)} 个能力码 · ${numberFrom(portalMenuContract.domains, NAV_GROUPS.length)} 个域`, icon: ShieldCheck },
     { label: "运行治理", value: `${healthScore}%`, detail: issueSummary.total ? `${issueSummary.error} error / ${issueSummary.warn} warn` : "本地与后端校验通过", icon: Gauge },
   ];
 
-  const governanceLinks = [
+  const governanceLinks = backendGovernanceActions.length ? backendGovernanceActions.map((item: QueryRecord, index: number) => ({
+    title: String(item.title || item.id || "治理动作"),
+    desc: String(item.description || item.metric || "来自 Hermes Portal 后端治理控制面。"),
+    href: String(item.path || "#/admin/menu"),
+    icon: [PanelTop, ShieldCheck, Layers3][index % 3],
+    metric: String(item.metric || item.priority || ""),
+  })) : [
     { title: "菜单管理工作台", desc: "统一维护页面树、能力码、域、隐藏状态与健康检查。", href: "#/admin/menu", icon: PanelTop },
     { title: "权限矩阵", desc: "按角色横向对比 read/write/admin 权限点。", href: "#/admin/permissions", icon: ShieldCheck },
     { title: "微应用注册管理", desc: "注册 5 个独立微应用，管理运行模式、模块清单与沙箱配置。", href: "#/admin/micro-app-registry", icon: Layers3 },
@@ -280,6 +294,7 @@ export function HermesPortal() {
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-[var(--text)]">{item.title}</span>
                       <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted)]">{item.desc}</span>
+                      {"metric" in item && item.metric ? <span className="mt-2 inline-flex rounded-md bg-[var(--brand-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--brand)]">{item.metric}</span> : null}
                     </span>
                     <ArrowRight className="ml-auto mt-1 h-4 w-4 shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--brand)]" />
                   </a>
@@ -306,7 +321,7 @@ export function HermesPortal() {
             { label: "身份来源", value: role, desc: "统一角色、用户、租户与 SSO" },
             { label: "上下文来源", value: `${tenant}/${business}/${project}`, desc: "微应用打开时注入同一 workspace" },
             { label: "菜单来源", value: `${totalModules} modules`, desc: "主应用注册，子应用消费自己的切片" },
-            { label: "运行状态", value: issueSummary.total ? "需处理" : "健康", desc: issueSummary.total ? `${issueSummary.total} 个校验项` : "导航注册表校验通过" },
+            { label: "运行状态", value: portalReadiness.score ? `${portalReadiness.score}%` : issueSummary.total ? "需处理" : "健康", desc: issueSummary.total ? `${issueSummary.total} 个校验项` : "导航注册表校验通过" },
           ].map((item) => (
             <div key={item.label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{item.label}</p>

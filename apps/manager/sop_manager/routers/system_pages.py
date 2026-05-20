@@ -2559,7 +2559,7 @@ def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, An
 
 
 @router.get("/hub")
-def system_pages_hub() -> dict[str, Any]:
+def system_pages_hub(user: User = Depends(current_user)) -> dict[str, Any]:
     react_all = _enrich_pages(REACT_PAGES)
     legacy_all = _enrich_pages(LEGACY_PAGES)
     react_sum = _summary(react_all)
@@ -2567,9 +2567,91 @@ def system_pages_hub() -> dict[str, Any]:
     validation = _registry_validation()
     menu_health = _menu_health()
     micro_apps = _micro_app_registry()
+    role = str(getattr(user, "role", "") or "viewer")
+    tenant_id = str(getattr(user, "tenant_id", "") or "default")
+    capability_payload = _capability_payload(_capability_registry(react_all), role=role)
+    menu_preferences = _menu_preferences_payload(user)
     issues = validation.get("issues") if isinstance(validation.get("issues"), list) else []
+    health_summary = menu_health.get("summary", {}) if isinstance(menu_health.get("summary"), dict) else {}
+    readiness = {
+        "identity": bool(getattr(user, "id", None) or getattr(user, "username", None)),
+        "context": bool(tenant_id),
+        "menu_contract": int(health_summary.get("critical") or 0) == 0,
+        "permission_contract": bool(capability_payload.get("summary", {}).get("visible")),
+        "micro_apps": bool(micro_apps) and all(str(app.get("mode") or "") == "standalone" for app in micro_apps),
+    }
+    governance_actions = [
+        {
+            "id": "menu-contract",
+            "title": "菜单权限契约治理",
+            "path": "#/admin/menu",
+            "priority": "P0" if int(health_summary.get("critical") or 0) else "P1",
+            "metric": f"{menu_health.get('score', 0)} 分",
+            "description": "统一页面树、能力码、域、隐藏状态、i18n 和 API 契约健康检查。",
+        },
+        {
+            "id": "permission-matrix",
+            "title": "权限矩阵治理",
+            "path": "#/admin/permissions",
+            "priority": "P1",
+            "metric": f"{capability_payload.get('summary', {}).get('visible', 0)} 可见能力",
+            "description": "按 super_admin/tenant_admin/project_admin/developer/viewer 对比 read/write/admin。",
+        },
+        {
+            "id": "micro-app-registry",
+            "title": "微应用注册治理",
+            "path": "#/admin/micro-app-registry",
+            "priority": "P1",
+            "metric": f"{len(micro_apps)} 个应用",
+            "description": "统一维护独立微应用入口、模块清单、运行模式、沙箱配置和通信协议。",
+        },
+    ]
     return {
         "ok": True,
+        "portal": {
+            "name": "Hermes Portal",
+            "positioning": "统一身份、统一上下文、统一菜单权限契约、统一微应用注册与运行治理的主应用控制面。",
+            "mode": "portal_control_plane",
+            "shell": "portal-only",
+            "updated_at": _utc_now(),
+        },
+        "identity": {
+            "user_id": str(getattr(user, "id", "") or ""),
+            "username": str(getattr(user, "username", "") or ""),
+            "role": role,
+            "tenant_id": tenant_id,
+            "session_status": "active",
+        },
+        "workspace_context": {
+            "tenant_id": tenant_id,
+            "tenant_code": tenant_id,
+            "business_code": "all",
+            "project_id": "",
+            "project_code": "",
+            "propagation": {
+                "query_keys": ["tenant", "business", "projectId", "project", "workspace", "shell"],
+                "shell": "hermes-portal",
+                "description": "独立微应用打开时由 Portal 注入同一工作区上下文，避免各应用自行复制上下文。",
+            },
+        },
+        "readiness": {
+            **readiness,
+            "score": round(sum(1 for enabled in readiness.values() if enabled) / max(1, len(readiness)) * 100, 1),
+        },
+        "contracts": {
+            "menu": {
+                "nav_items": len(NAV_CONTRACT),
+                "react_pages": react_sum.get("total", 0),
+                "domains": len(DOMAINS),
+                "health_score": menu_health.get("score", 0),
+                "issues": int(health_summary.get("issues") or 0),
+                "critical": int(health_summary.get("critical") or 0),
+                "high": int(health_summary.get("high") or 0),
+            },
+            "permission": capability_payload.get("summary", {}),
+            "menu_preferences": menu_preferences.get("preferences", {}),
+        },
+        "governance_actions": governance_actions,
         "summary": {
             "react_pages": react_sum.get("total", 0),
             "legacy_pages": legacy_sum.get("total", 0),
