@@ -221,8 +221,6 @@ function RuntimeMenuDisplayButton({
   variant?: "card" | "footer";
 }) {
   const { i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const isEn = i18n.language?.startsWith("en");
   const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
   const widthOptions: Array<{ key: RuntimeSidebarPreset; label: string }> = [
@@ -244,37 +242,25 @@ function RuntimeMenuDisplayButton({
   const toggleBoolean = (key: "showQuickPanel" | "showMenuCounts" | "showMenuMeta") => patchMenuPrefs({ [key]: !prefs[key] });
   const buttonClass =
     variant === "footer"
-      ? `inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border px-3 text-xs font-medium transition ${
-          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)] shadow-sm" : "border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-        }`
-      : `rounded-lg border px-2 py-2 text-left text-xs transition ${
-          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-        }`;
-  const panelPosition = variant === "footer" ? "left-0" : "right-0";
+      ? "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-xs font-medium text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] data-[state=open]:border-[var(--brand)]/40 data-[state=open]:bg-[var(--brand-soft)] data-[state=open]:text-[var(--brand)] data-[state=open]:shadow-sm"
+      : "rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] px-2 py-2 text-left text-xs text-[var(--muted-strong)] transition hover:bg-[var(--surface-muted)] data-[state=open]:border-[var(--brand)]/40 data-[state=open]:bg-[var(--brand-soft)] data-[state=open]:text-[var(--brand)]";
   const panelWidth = variant === "footer" ? "min-w-[28rem] w-[34rem] max-w-[calc(100vw-2rem)]" : "w-80 max-w-[calc(100vw-2rem)]";
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    return () => window.removeEventListener("mousedown", close);
-  }, [open]);
-
   return (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className={buttonClass}
-        aria-expanded={open}
-      >
-        <SlidersHorizontal className={variant === "footer" ? "h-4 w-4" : "mb-1 h-4 w-4"} />
-        <span>{isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}</span>
-      </button>
-      {open ? (
-        <div className={`absolute ${panelPosition} z-50 max-h-[min(620px,calc(100vh-7rem))] ${panelWidth} overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl ${placement === "up" ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]"}`}>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button type="button" className={buttonClass}>
+          <SlidersHorizontal className={variant === "footer" ? "h-4 w-4" : "mb-1 h-4 w-4"} />
+          <span>{isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}</span>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className={`z-50 max-h-[min(640px,calc(100vh-6rem))] ${panelWidth} overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl`}
+          side={placement === "up" ? "top" : "bottom"}
+          sideOffset={8}
+          align={variant === "footer" ? "start" : "end"}
+        >
           <div className="mb-4 flex items-start justify-between gap-3">
             <span className="min-w-0">
               <span className="inline-flex items-center gap-2 text-base font-bold text-[var(--text)]">
@@ -374,9 +360,9 @@ function RuntimeMenuDisplayButton({
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 
@@ -1170,40 +1156,32 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           maxWidth: sidebarCollapsed ? 72 : SIDEBAR_MAX_WIDTH,
         }}
       >
-        <div className={`shrink-0 border-b border-[var(--nav-border)] px-3 py-3 ${sidebarCollapsed ? "px-2" : ""}`}>
-          <div className={`flex items-center gap-3 rounded-xl bg-[var(--surface-raised)]/65 ${sidebarCollapsed ? "justify-center p-2" : "p-2"}`}>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
-              <Layers3 className="h-5 w-5" />
-            </span>
-            {!sidebarCollapsed ? (
-              <>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
-                  <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-                  title={isEnglish ? "Collapse menu" : "收起菜单"}
-                  aria-label={isEnglish ? "Collapse menu" : "收起菜单"}
-                >
-                  <PanelLeftClose className="h-4 w-4" />
-                </button>
-              </>
-            ) : null}
-          </div>
-          {!sidebarCollapsed && showMenuMeta ? <p className="mt-2 line-clamp-2 px-1 text-[11px] leading-5 text-[var(--nav-muted)]">{app.description}</p> : null}
-          {sidebarCollapsed ? (
+        <div className={`shrink-0 border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-lg font-bold tracking-tight text-[var(--brand)]">
+                {sidebarCollapsed ? app.shortName.slice(0, 1) : app.name}
+              </div>
+              {!sidebarCollapsed ? (
+                <p className="mt-1 truncate text-xs text-[var(--nav-muted)]">
+                  {app.owner} · {isEnglish ? `${visibleItems.length} modules` : `${visibleItems.length} 个模块`}
+                </p>
+              ) : null}
+            </div>
             <button
               type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className="mt-2 flex h-8 w-full items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-              title={isEnglish ? "Expand menu" : "展开菜单"}
-              aria-label={isEnglish ? "Expand menu" : "展开菜单"}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+              title={sidebarCollapsed ? (isEnglish ? "Expand menu" : "展开菜单") : (isEnglish ? "Collapse menu" : "收起菜单")}
+              aria-label={sidebarCollapsed ? (isEnglish ? "Expand menu" : "展开菜单") : (isEnglish ? "Collapse menu" : "收起菜单")}
             >
-              <PanelLeftOpen className="h-4 w-4" />
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
+          </div>
+          {!sidebarCollapsed && showMenuMeta ? (
+            <p className="mt-2 line-clamp-2 rounded-lg bg-[var(--surface-raised)]/55 px-3 py-2 text-[11px] leading-5 text-[var(--nav-muted)]">
+              {app.description}
+            </p>
           ) : null}
         </div>
 
