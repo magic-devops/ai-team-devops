@@ -199,6 +199,20 @@ function densityText(density: MenuDensity, isEn = false) {
   return isEn ? "Standard" : "标准";
 }
 
+function RuntimeMenuItemHint({ item, label, show }: { item: NavItem; label: string; show: boolean }) {
+  if (!show || (!item.description && !item.capability && !item.path)) return null;
+  return (
+    <div className="mt-1 hidden max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px] font-normal leading-5 text-[var(--muted-strong)] shadow-sm group-hover/menuitem:block group-focus-within/menuitem:block">
+      {item.description ? <p className="whitespace-normal break-words">{item.description}</p> : null}
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-[10px] text-[var(--muted)]">
+        <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5">{label}</span>
+        {item.capability ? <span className="min-w-0 max-w-full truncate font-mono">{item.capability}</span> : null}
+        {!item.capability && item.path ? <span className="min-w-0 max-w-full truncate font-mono">{item.path}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function RuntimeMenuDisplayButton({
   prefs,
   sidebarSize,
@@ -1317,11 +1331,11 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             </div>
           ) : null}
 
-        <nav className={`hermes-scrollbar hermes-scroll-shadow grid min-h-0 flex-1 content-start gap-3 overflow-y-auto py-1 pr-2 ${sidebarCollapsed ? "gap-1 pr-0" : ""}`}>
+        <nav className={`hermes-scrollbar hermes-scroll-shadow grid min-h-0 flex-1 content-start gap-3 overflow-x-hidden overflow-y-auto py-1 pr-2 ${sidebarCollapsed ? "gap-1 pr-0" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
-              <section key={domain.key} className={sidebarCollapsed ? "grid gap-1" : runtimeSectionClass}>
+              <section key={domain.key} className={`${sidebarCollapsed ? "grid gap-1" : runtimeSectionClass} min-w-0 max-w-full`}>
                 <button
                   type="button"
                   onClick={() => toggleGroup(`domain:${domain.key}`)}
@@ -1333,12 +1347,12 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                   {!sidebarCollapsed && showMenuCounts ? <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span> : null}
                 </button>
                 {domainCollapsed ? null : (
-                  <div className="mt-1 grid gap-2">
+                  <div className="mt-1 grid min-w-0 gap-2">
                     {domain.categories.map((category) => {
                       const categoryKey = `category:${domain.key}:${category.key}`;
                       const categoryCollapsed = collapsedGroups[categoryKey] && !keyword;
                       return (
-                        <div key={category.key} className={sidebarCollapsed ? "grid gap-1" : runtimeCategoryClass}>
+                        <div key={category.key} className={`${sidebarCollapsed ? "grid gap-1" : runtimeCategoryClass} min-w-0 max-w-full`}>
                           <button
                             type="button"
                             onClick={() => toggleGroup(categoryKey)}
@@ -1350,7 +1364,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                             {!sidebarCollapsed && showMenuCounts ? <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span> : null}
                           </button>
                           {categoryCollapsed ? null : (
-                            <div className="mt-1 grid gap-1">
+                            <div className="mt-1 grid min-w-0 gap-1">
                               {category.items.map((item) => {
                                 const Icon = item.icon;
                                 const active = current.key === item.key || current.parentKey === item.key;
@@ -1359,23 +1373,21 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                 const open = Boolean(keyword) || active || !collapsedGroups[moduleKey];
                                 const itemFavorite = menuPrefs.favorites.includes(item.key);
                                 const itemQuick = menuPrefs.quickAccess.includes(item.key);
+                                const itemLabel = labelOf(item.key);
                                 return (
-                                  <div key={item.key}>
+                                  <div key={item.key} className="group/menuitem min-w-0 max-w-full">
                                     <div
-                                      className={`group flex items-center gap-1 rounded-lg px-2 text-sm transition ${
+                                      className={`group flex min-w-0 items-center gap-1 rounded-lg px-2 text-sm transition ${
                                         active
                                           ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)] ring-1 ring-[var(--brand)]/30"
                                           : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
                                       }`}
                                     >
-                                      <a href={item.path} title={labelOf(item.key)} className={`flex min-w-0 flex-1 items-center gap-2 ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
+                                      <a href={item.path} title={item.description || item.capability || itemLabel} className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
                                         <Icon className="h-4 w-4 shrink-0" />
                                         {!sidebarCollapsed ? (
-                                          <span className="min-w-0 flex-1">
-                                            <span className="block truncate">{labelOf(item.key)}</span>
-                                            {showMenuMeta && item.description ? (
-                                              <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{item.description}</span>
-                                            ) : null}
+                                          <span className="min-w-0 flex-1 overflow-hidden">
+                                            <span className="block truncate">{itemLabel}</span>
                                           </span>
                                         ) : null}
                                       </a>
@@ -1409,44 +1421,49 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                                       ) : null}
                                     </div>
+                                    {!sidebarCollapsed ? <RuntimeMenuItemHint item={item} label={itemLabel} show={showMenuMeta} /> : null}
                                     {!sidebarCollapsed && children.length && open ? (
-                                      <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
+                                      <div className="ml-5 mt-1 grid min-w-0 gap-0.5 border-l border-[var(--border)] pl-2">
                                         {children.map((child) => {
                                           const ChildIcon = child.icon;
                                           const childActive = current.key === child.key;
                                           const childFavorite = menuPrefs.favorites.includes(child.key);
                                           const childQuick = menuPrefs.quickAccess.includes(child.key);
+                                          const childLabel = labelOf(child.key);
                                           return (
                                             <div
                                               key={child.key}
-                                              className={`group/child flex items-center gap-1 rounded-md px-1.5 text-xs ${
+                                              className={`group/child group/menuitem min-w-0 rounded-md px-1.5 text-xs ${
                                                 childActive
                                                   ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
                                                   : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
                                               }`}
-                                              title={child.capability}
+                                              title={child.description || child.capability || childLabel}
                                             >
-                                              <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.child}`}>
-                                                <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                                                <span className="min-w-0 flex-1 truncate">{labelOf(child.key)}</span>
-                                              </a>
-                                              <button
-                                                type="button"
-                                                onClick={() => toggleQuickAccess(child.key)}
-                                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100 ${childQuick ? "opacity-100 text-[var(--brand)]" : "opacity-70"}`}
-                                                aria-label={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
-                                                title={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
-                                              >
-                                                <Pin className="h-3 w-3" fill={childQuick ? "currentColor" : "none"} />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => toggleFavorite(child.key)}
-                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-70 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100"
-                                                aria-label={childFavorite ? "取消收藏" : "收藏模块"}
-                                              >
-                                                <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
-                                              </button>
+                                              <div className="flex min-w-0 items-center gap-1">
+                                                <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${densityCls.child}`}>
+                                                  <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                                                  <span className="min-w-0 flex-1 truncate">{childLabel}</span>
+                                                </a>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleQuickAccess(child.key)}
+                                                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100 ${childQuick ? "opacity-100 text-[var(--brand)]" : "opacity-70"}`}
+                                                  aria-label={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                                  title={childQuick ? (isEnglish ? "Remove from quick access" : "移出快捷入口") : (isEnglish ? "Add to quick access" : "加入快捷入口")}
+                                                >
+                                                  <Pin className="h-3 w-3" fill={childQuick ? "currentColor" : "none"} />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleFavorite(child.key)}
+                                                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-70 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover/child:opacity-100"
+                                                  aria-label={childFavorite ? "取消收藏" : "收藏模块"}
+                                                >
+                                                  <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
+                                                </button>
+                                              </div>
+                                              <RuntimeMenuItemHint item={child} label={childLabel} show={showMenuMeta} />
                                             </div>
                                           );
                                         })}
