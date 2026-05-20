@@ -1079,15 +1079,19 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
     });
     setCollapsedGroups({});
   };
-  const shellRootClass = embedded ? "h-full min-h-0 overflow-hidden" : "min-h-screen overflow-visible";
-  const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
+  const shellRootClass = embedded
+    ? "h-full min-h-0 overflow-hidden"
+    : "min-h-screen overflow-visible lg:h-screen lg:min-h-0 lg:overflow-hidden";
+  const shellBodyClass = embedded
+    ? "flex min-h-0 flex-1 overflow-hidden"
+    : "flex min-h-0 flex-1 items-start overflow-visible lg:h-[calc(100vh-4.75rem)] lg:items-stretch lg:overflow-hidden";
   const sidebarClass = [
-    "relative hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
-    embedded ? "h-full min-h-0 overflow-visible" : "sticky top-[4.75rem] h-[calc(100vh-4.75rem)] overflow-visible",
+    "relative hidden min-h-0 shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
+    embedded ? "h-full overflow-visible" : "h-[calc(100vh-4.75rem)] overflow-visible",
   ].join(" ");
   const mainClass = embedded
     ? "hermes-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
-    : "min-w-0 flex-1 overflow-visible px-4 py-5 pb-12 sm:px-6 xl:px-8";
+    : "hermes-scrollbar min-w-0 flex-1 overflow-visible px-4 py-5 pb-12 sm:px-6 lg:h-[calc(100vh-4.75rem)] lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto xl:px-8";
   const runtimeSectionClass =
     menuPrefs.menuLayout === "minimal"
       ? "rounded-lg border border-transparent bg-transparent p-0"
