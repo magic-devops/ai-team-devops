@@ -56,6 +56,7 @@ import {
 
 const DashboardPage = lazy(() => import("../subapps/main-admin/src/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const MicroAppPortalPage = lazy(() => import("./pages/MicroAppPortal").then((m) => ({ default: m.MicroAppPortal })));
+const HermesPortalPage = lazy(() => import("./pages/HermesPortal").then((m) => ({ default: m.HermesPortal })));
 const ProjectsPage = lazy(() => import("../subapps/main-admin/src/pages/Projects").then((m) => ({ default: m.Projects })));
 const RequirementsPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Requirements").then((m) => ({ default: m.Requirements })));
 const TasksPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Tasks").then((m) => ({ default: m.Tasks })));
@@ -247,7 +248,7 @@ export type NavGroupDefinition = {
 };
 
 /** 侧栏顶部固定高频入口（不受域折叠影响） */
-export const PINNED_NAV_KEYS = ["dashboard", "requirements", "tasks", "copilot"] as const;
+export const PINNED_NAV_KEYS = ["hermesPortal", "dashboard", "requirements", "tasks"] as const;
 
 export const NAV_GROUP_ACCENT: Record<NavGroupKey, string> = {
   overview: "var(--nav-accent-overview)",
@@ -514,6 +515,7 @@ function subnav(pageKey: string, ...keys: string[]): readonly NavSubmodule[] {
 }
 
 export const NAV: readonly NavItem[] = [
+  { key: "hermesPortal", path: "#/portal", el: pageElement(HermesPortalPage), group: "overview", icon: Network, category: "overview-command", capability: "overview.hermes.portal.read", badge: "new", description: "Hermes Portal：统一身份、统一上下文、统一菜单权限契约、统一微应用注册与运行治理" },
   { key: "microAppMainAdmin", path: "#/apps/main-admin", el: pageElement(MicroAppPortalPage, { appId: "main-admin" }), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.apps.main-admin", badge: "new", description: "基础管理中心：账号、权限、组织、项目、服务、菜单契约与微应用注册治理" },
   { key: "microAppAiFoundation", path: "#/apps/ai-foundation", el: pageElement(MicroAppPortalPage, { appId: "ai-foundation" }), group: "ai", icon: Brain, category: "ai-command", capability: "ai.apps.foundation", badge: "new", description: "智能基础服务：开发环境、CLI、知识、记忆、技能、插件、Agent 与 MCP/A2A" },
   { key: "microAppAiRdCenter", path: "#/apps/ai-rd-center", el: pageElement(MicroAppPortalPage, { appId: "ai-rd-center" }), group: "delivery", icon: GitBranch, category: "delivery-execution", capability: "delivery.apps.rd-center", badge: "new", description: "智能研发中心：需求、方案、任务、AI 开发、调度、监控、质量评审与运维" },
