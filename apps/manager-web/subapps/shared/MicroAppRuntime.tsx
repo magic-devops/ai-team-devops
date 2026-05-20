@@ -199,15 +199,6 @@ function densityText(density: MenuDensity, isEn = false) {
   return isEn ? "Standard" : "标准";
 }
 
-function RuntimeMenuItemHint({ item, show }: { item: NavItem; show: boolean }) {
-  if (!show || !item.description) return null;
-  return (
-    <div className="mt-1 hidden max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px] font-normal leading-5 text-[var(--muted-strong)] shadow-sm group-hover/menuitem:block group-focus-within/menuitem:block">
-      <p className="whitespace-normal break-words">{item.description}</p>
-    </div>
-  );
-}
-
 function RuntimeMenuDisplayButton({
   prefs,
   sidebarSize,
@@ -1073,7 +1064,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const toggleGroup = (key: string) => setCollapsedGroups((currentGroups) => ({ ...currentGroups, [key]: !currentGroups[key] }));
   const openCurrentCopilot = () => openModuleCopilot(current, app.name, currentLabel);
   const showMenuCounts = menuPrefs.showMenuCounts;
-  const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
   const sidebarWidth = sidebarCollapsed ? 72 : sidebarWidthValue;
   const chooseSidebarPreset = (size: RuntimeSidebarPreset) => {
@@ -1370,7 +1360,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                 const itemQuick = menuPrefs.quickAccess.includes(item.key);
                                 const itemLabel = labelOf(item.key);
                                 return (
-                                  <div key={item.key} className="group/menuitem min-w-0 max-w-full">
+                                  <div key={item.key} className="min-w-0 max-w-full">
                                     <div
                                       className={`group flex min-w-0 items-center gap-1 rounded-lg px-2 text-sm transition ${
                                         active
@@ -1378,7 +1368,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                           : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
                                       }`}
                                     >
-                                      <a href={item.path} title={item.description || item.capability || itemLabel} className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
+                                      <a href={item.path} title={item.description ? `${itemLabel}${isEnglish ? ": " : "："}${item.description}` : itemLabel} className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
                                         <Icon className="h-4 w-4 shrink-0" />
                                         {!sidebarCollapsed ? (
                                           <span className="min-w-0 flex-1 overflow-hidden">
@@ -1416,7 +1406,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                                       ) : null}
                                     </div>
-                                    {!sidebarCollapsed ? <RuntimeMenuItemHint item={item} show={showMenuMeta} /> : null}
                                     {!sidebarCollapsed && children.length && open ? (
                                       <div className="ml-5 mt-1 grid min-w-0 gap-0.5 border-l border-[var(--border)] pl-2">
                                         {children.map((child) => {
@@ -1428,12 +1417,12 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                           return (
                                             <div
                                               key={child.key}
-                                              className={`group/child group/menuitem min-w-0 rounded-md px-1.5 text-xs ${
+                                              className={`group/child min-w-0 rounded-md px-1.5 text-xs ${
                                                 childActive
                                                   ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
                                                   : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--nav-text)]"
                                               }`}
-                                              title={child.description || child.capability || childLabel}
+                                              title={child.description ? `${childLabel}${isEnglish ? ": " : "："}${child.description}` : childLabel}
                                             >
                                               <div className="flex min-w-0 items-center gap-1">
                                                 <a href={child.path} className={`flex min-w-0 flex-1 items-center gap-2 overflow-hidden ${densityCls.child}`}>
@@ -1458,7 +1447,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                                   <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
                                                 </button>
                                               </div>
-                                              <RuntimeMenuItemHint item={child} show={showMenuMeta} />
                                             </div>
                                           );
                                         })}
