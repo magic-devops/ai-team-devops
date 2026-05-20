@@ -18,6 +18,9 @@ function getOrCreateRoot() {
 }
 
 export function bootstrapMicroApp(appId: MicroAppId) {
+  document.documentElement.dataset.shell = "micro-app";
+  document.body.classList.add("sop-micro-app-standalone");
+
   const qc = new QueryClient({
     defaultOptions: {
       queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 },

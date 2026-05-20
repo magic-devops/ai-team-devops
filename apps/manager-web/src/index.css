@@ -164,6 +164,18 @@ body,
   body {
     overflow: hidden;
   }
+
+  html[data-shell="micro-app"],
+  html[data-shell="micro-app"] body,
+  html[data-shell="micro-app"] #root {
+    height: auto;
+    min-height: 100%;
+  }
+
+  html[data-shell="micro-app"] body {
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }
 
 ::selection {
