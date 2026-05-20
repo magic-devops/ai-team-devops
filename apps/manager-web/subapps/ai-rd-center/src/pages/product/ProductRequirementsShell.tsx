@@ -3,7 +3,6 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { RequirementMode } from "../Requirements";
-import { Metric } from "@/pages/projects/ui";
 import { requirementsPhaseHref } from "./requirementsNav";
 
 const PHASE_META: Record<
@@ -15,6 +14,15 @@ const PHASE_META: Record<
   generation: { icon: Sparkles, step: 3, navKey: "requirementGeneration" },
   batch: { icon: Rows3, step: 4, navKey: "requirementBatch" },
 };
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-[var(--text)]">{value}</p>
+    </div>
+  );
+}
 
 export function ProductRequirementsShell(props: {
   phase: RequirementMode;

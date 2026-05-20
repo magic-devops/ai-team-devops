@@ -54,13 +54,13 @@ import {
   Wrench,
 } from "lucide-react";
 
-const DashboardPage = lazy(() => import("./pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const DashboardPage = lazy(() => import("../subapps/main-admin/src/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const MicroAppPortalPage = lazy(() => import("./pages/MicroAppPortal").then((m) => ({ default: m.MicroAppPortal })));
-const ProjectsPage = lazy(() => import("./pages/Projects").then((m) => ({ default: m.Projects })));
+const ProjectsPage = lazy(() => import("../subapps/main-admin/src/pages/Projects").then((m) => ({ default: m.Projects })));
 const RequirementsPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Requirements").then((m) => ({ default: m.Requirements })));
 const TasksPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Tasks").then((m) => ({ default: m.Tasks })));
 const WorkflowsPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Workflows").then((m) => ({ default: m.Workflows })));
-const OrganizationPage = lazy(() => import("./pages/Organization").then((m) => ({ default: m.Organization })));
+const OrganizationPage = lazy(() => import("../subapps/main-admin/src/pages/Organization").then((m) => ({ default: m.Organization })));
 const NotifyPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Notify").then((m) => ({ default: m.Notify })));
 const AuditPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Audit").then((m) => ({ default: m.Audit })));
 const CopilotPage = lazy(() => import("../subapps/ai-rd-center/src/pages/Copilot").then((m) => ({ default: m.Copilot })));
@@ -124,18 +124,18 @@ const MicroAppGovernancePage = lazy(() =>
   import("../subapps/ai-ops-center/src/pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
 );
 const MenuManagementPage = lazy(() =>
-  import("./pages/admin/MenuManagement").then((m) => ({ default: m.MenuManagement })),
+  import("../subapps/main-admin/src/pages/admin/MenuManagement").then((m) => ({ default: m.MenuManagement })),
 );
 const PermissionMatrixPage = lazy(() =>
-  import("./pages/admin/PermissionMatrix").then((m) => ({ default: m.PermissionMatrix })),
+  import("../subapps/main-admin/src/pages/admin/PermissionMatrix").then((m) => ({ default: m.PermissionMatrix })),
 );
 const MicroAppRegistryPage = lazy(() =>
-  import("./pages/admin/MicroAppRegistry").then((m) => ({ default: m.MicroAppRegistry })),
+  import("../subapps/main-admin/src/pages/admin/MicroAppRegistry").then((m) => ({ default: m.MicroAppRegistry })),
 );
 const SettingsPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Settings").then((m) => ({ default: m.Settings })));
-const ProjectsHubPage = lazy(() => import("./pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
+const ProjectsHubPage = lazy(() => import("../subapps/main-admin/src/pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
 const OrganizationHubPage = lazy(() =>
-  import("./pages/portfolio/OrganizationHub").then((m) => ({ default: m.OrganizationHub })),
+  import("../subapps/main-admin/src/pages/portfolio/OrganizationHub").then((m) => ({ default: m.OrganizationHub })),
 );
 const RequirementsHubPage = lazy(() =>
   import("../subapps/ai-rd-center/src/pages/product/RequirementsHub").then((m) => ({ default: m.RequirementsHub })),
@@ -144,7 +144,7 @@ const TasksHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delive
 const WorkflowsHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/WorkflowsHub").then((m) => ({ default: m.WorkflowsHub })));
 const SettingsHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/system/SettingsHub").then((m) => ({ default: m.SettingsHub })));
 const DashboardHubPage = lazy(() =>
-  import("./pages/overview/DashboardHub").then((m) => ({ default: m.DashboardHub })),
+  import("../subapps/main-admin/src/pages/overview/DashboardHub").then((m) => ({ default: m.DashboardHub })),
 );
 const DevFlowHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/DevFlowHub").then((m) => ({ default: m.DevFlowHub })));
 const IssuesHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/IssuesHub").then((m) => ({ default: m.IssuesHub })));
@@ -520,7 +520,7 @@ function subnav(pageKey: string, ...keys: string[]): readonly NavSubmodule[] {
 }
 
 export const NAV: readonly NavItem[] = [
-  { key: "microAppMainAdmin", path: "#/apps/main-admin", el: pageElement(MicroAppPortalPage, { appId: "main-admin" }), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.apps.main-admin", badge: "new", description: "主应用能力边界：基础管理、账号、权限、组织、服务与模块治理" },
+  { key: "microAppMainAdmin", path: "#/apps/main-admin", el: pageElement(MicroAppPortalPage, { appId: "main-admin" }), group: "overview", icon: LayoutDashboard, category: "overview-command", capability: "overview.apps.main-admin", badge: "new", description: "基础管理中心：账号、权限、组织、项目、服务、菜单契约与微应用注册治理" },
   { key: "microAppAiFoundation", path: "#/apps/ai-foundation", el: pageElement(MicroAppPortalPage, { appId: "ai-foundation" }), group: "ai", icon: Brain, category: "ai-command", capability: "ai.apps.foundation", badge: "new", description: "智能基础服务：开发环境、CLI、知识、记忆、技能、插件、Agent 与 MCP/A2A" },
   { key: "microAppAiRdCenter", path: "#/apps/ai-rd-center", el: pageElement(MicroAppPortalPage, { appId: "ai-rd-center" }), group: "delivery", icon: GitBranch, category: "delivery-execution", capability: "delivery.apps.rd-center", badge: "new", description: "智能研发中心：需求、方案、任务、AI 开发、调度、监控、质量评审与运维" },
   { key: "microAppAiDataCenter", path: "#/apps/ai-data-center", el: pageElement(MicroAppPortalPage, { appId: "ai-data-center" }), group: "data", icon: Database, category: "data-strategy", capability: "data.apps.data-center", badge: "new", description: "智能数据中心：数据源、接入、元数据、开发、调度、指标、标签与数据服务" },

@@ -35,6 +35,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "index.html"),
+        mainAdmin: path.resolve(__dirname, "subapps/main-admin/index.html"),
         aiFoundation: path.resolve(__dirname, "subapps/ai-foundation/index.html"),
         aiRdCenter: path.resolve(__dirname, "subapps/ai-rd-center/index.html"),
         aiDataCenter: path.resolve(__dirname, "subapps/ai-data-center/index.html"),
