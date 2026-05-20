@@ -295,14 +295,14 @@ function RuntimeTopBar({
   const tenantName = String(me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || storedUser.tenantName || "default");
 
   return (
-    <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur xl:px-5">
+    <div className="sticky top-0 z-40 shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur xl:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
             onClick={onToggleMenu}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] lg:hidden"
-            aria-label="打开子应用菜单"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]"
+            aria-label="切换子应用菜单"
           >
             <Menu className="h-4 w-4" />
           </button>
@@ -383,17 +383,6 @@ function RuntimeTopBar({
               </div>
             </div>
           </div>
-          {!window.__POWERED_BY_WUJIE__ ? (
-            <a
-              href={app.basePath}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm font-medium text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-            >
-              <ExternalLink className="h-4 w-4" />
-              独立打开
-            </a>
-          ) : null}
         </div>
       </div>
       <p className="mt-2 hidden truncate text-xs text-[var(--muted)] lg:block">
@@ -715,6 +704,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const [hash, setHash] = useState(window.location.hash || app.basePath);
   const [keyword, setKeyword] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -823,6 +813,16 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const showMenuCounts = menuPrefs.showMenuCounts;
   const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
+  const shellRootClass = embedded ? "h-full min-h-0 overflow-hidden" : "min-h-screen overflow-visible";
+  const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
+  const sidebarClass = [
+    "hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] lg:flex",
+    embedded ? "min-h-0 p-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-y-auto p-4",
+    sidebarCollapsed ? "w-20" : "w-80",
+  ].join(" ");
+  const mainClass = embedded
+    ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
+    : "min-w-0 flex-1 overflow-visible px-4 py-5 pb-12 sm:px-6 xl:px-8";
   const runtimeSectionClass =
     menuPrefs.menuLayout === "minimal"
       ? "rounded-lg border border-transparent bg-transparent p-0"
@@ -839,13 +839,16 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         : "rounded-lg bg-[var(--surface-muted)]/45 p-1.5";
 
   return (
-    <div className={`flex flex-col bg-[var(--app-bg)] text-[var(--text)] ${embedded ? "h-full min-h-0 overflow-hidden" : "h-screen min-h-0 overflow-hidden"}`}>
+    <div className={`flex flex-col bg-[var(--app-bg)] text-[var(--text)] ${shellRootClass}`}>
       <RuntimeTopBar
         app={app}
         current={current}
         currentLabel={currentLabel}
         onOpenCopilot={openCurrentCopilot}
-        onToggleMenu={() => setMobileMenuOpen((open) => !open)}
+        onToggleMenu={() => {
+          setSidebarCollapsed((collapsed) => !collapsed);
+          setMobileMenuOpen((open) => !open);
+        }}
       />
 
       {mobileMenuOpen ? (
@@ -882,22 +885,22 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-      <aside className="hidden min-h-0 w-80 shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] p-4 lg:flex">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <div className={shellBodyClass}>
+      <aside className={sidebarClass}>
+        <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] ${sidebarCollapsed ? "p-2" : "p-4"}`}>
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
               <Layers3 className="h-5 w-5" />
             </span>
-            <div className="min-w-0">
+            {!sidebarCollapsed ? <div className="min-w-0">
               <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
               <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
-            </div>
+            </div> : null}
           </div>
-          {showMenuMeta ? <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
+          {!sidebarCollapsed && showMenuMeta ? <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
         </div>
 
-        <div className="relative mt-4">
+        {!sidebarCollapsed ? <div className="relative mt-4">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
           <input
             value={keyword}
@@ -905,9 +908,9 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             placeholder="搜索应用模块"
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-3 text-sm outline-none ring-[var(--brand)] focus:ring"
           />
-        </div>
+        </div> : null}
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        {!sidebarCollapsed ? <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites })}
@@ -936,12 +939,12 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             <Rows3 className="mb-1 h-4 w-4" />
             {densityText(menuPrefs.density)}
           </button>
-        </div>
-        <div className="mt-3">
+        </div> : null}
+        {!sidebarCollapsed ? <div className="mt-3">
           <RuntimeMenuDisplayButton prefs={menuPrefs} />
-        </div>
+        </div> : null}
 
-        <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
+        {!sidebarCollapsed ? <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
           <RuntimeQuickList title="快捷入口" items={quickItems} labelOf={labelOf} emptyText="暂无可用快捷入口" icon={<Pin className="h-3.5 w-3.5" />} />
           {menuPrefs.showFavorites ? (
             <RuntimeQuickList title="我的收藏" items={favoriteItems} labelOf={labelOf} emptyText="点击页面右上角星标收藏常用模块" icon={<Star className="h-3.5 w-3.5" />} />
@@ -949,21 +952,22 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           {menuPrefs.showRecents ? (
             <RuntimeQuickList title="最近访问" items={recentItems} labelOf={labelOf} emptyText="访问子应用模块后会自动记录" icon={<Clock className="h-3.5 w-3.5" />} />
           ) : null}
-        </div>
+        </div> : null}
 
-        <nav className="mt-4 grid min-h-0 flex-1 gap-3 overflow-y-auto pr-1">
+        <nav className={`mt-4 grid gap-3 ${embedded ? "min-h-0 flex-1 overflow-y-auto pr-1" : "pr-1"} ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
-              <section key={domain.key} className={runtimeSectionClass}>
+              <section key={domain.key} className={sidebarCollapsed ? "grid gap-1" : runtimeSectionClass}>
                 <button
                   type="button"
                   onClick={() => toggleGroup(`domain:${domain.key}`)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] ${sidebarCollapsed ? "justify-center" : ""}`}
+                  title={domain.label}
                 >
                   {domainCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  <span className="min-w-0 flex-1 truncate">{domain.label}</span>
-                  {showMenuCounts ? <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span> : null}
+                  {!sidebarCollapsed ? <span className="min-w-0 flex-1 truncate">{domain.label}</span> : null}
+                  {!sidebarCollapsed && showMenuCounts ? <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{domain.count}</span> : null}
                 </button>
                 {domainCollapsed ? null : (
                   <div className="mt-1 grid gap-2">
@@ -971,15 +975,16 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                       const categoryKey = `category:${domain.key}:${category.key}`;
                       const categoryCollapsed = collapsedGroups[categoryKey] && !keyword;
                       return (
-                        <div key={category.key} className={runtimeCategoryClass}>
+                        <div key={category.key} className={sidebarCollapsed ? "grid gap-1" : runtimeCategoryClass}>
                           <button
                             type="button"
                             onClick={() => toggleGroup(categoryKey)}
-                            className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+                            className={`flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] font-semibold text-[var(--muted-strong)] hover:bg-[var(--surface-muted)] ${sidebarCollapsed ? "justify-center" : ""}`}
+                            title={category.label}
                           >
                             {categoryCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            <span className="min-w-0 flex-1 truncate">{category.label}</span>
-                            {showMenuCounts ? <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span> : null}
+                            {!sidebarCollapsed ? <span className="min-w-0 flex-1 truncate">{category.label}</span> : null}
+                            {!sidebarCollapsed && showMenuCounts ? <span className="rounded bg-[var(--surface-raised)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{category.items.length}</span> : null}
                           </button>
                           {categoryCollapsed ? null : (
                             <div className="mt-1 grid gap-1">
@@ -999,19 +1004,19 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                           : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
                                       }`}
                                     >
-                                      <a href={item.path} className={`flex min-w-0 flex-1 items-center gap-2 ${densityCls.item}`}>
+                                      <a href={item.path} title={labelOf(item.key)} className={`flex min-w-0 flex-1 items-center gap-2 ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
                                         <Icon className="h-4 w-4 shrink-0" />
-                                        <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span>
+                                        {!sidebarCollapsed ? <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span> : null}
                                       </a>
-                                      <button
+                                      {!sidebarCollapsed ? <button
                                         type="button"
                                         onClick={() => toggleFavorite(item.key)}
                                         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted)] opacity-80 hover:bg-[var(--surface-raised)] hover:text-[var(--brand)] group-hover:opacity-100"
                                         aria-label={itemFavorite ? "取消收藏" : "收藏模块"}
                                       >
                                         <Star className="h-3.5 w-3.5" fill={itemFavorite ? "currentColor" : "none"} />
-                                      </button>
-                                      {children.length ? (
+                                      </button> : null}
+                                      {!sidebarCollapsed && children.length ? (
                                         <button
                                           type="button"
                                           onClick={() => toggleGroup(moduleKey)}
@@ -1020,11 +1025,11 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                         >
                                           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                                         </button>
-                                      ) : (
+                                      ) : !sidebarCollapsed ? (
                                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
-                                      )}
+                                      ) : null}
                                     </div>
-                                    {children.length && open ? (
+                                    {!sidebarCollapsed && children.length && open ? (
                                       <div className="ml-5 mt-1 grid gap-0.5 border-l border-[var(--border)] pl-2">
                                         {children.map((child) => {
                                           const ChildIcon = child.icon;
@@ -1073,7 +1078,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </nav>
       </aside>
 
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8">
+      <main className={mainClass}>
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
