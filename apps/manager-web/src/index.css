@@ -168,13 +168,19 @@ body,
   html[data-shell="micro-app"],
   html[data-shell="micro-app"] body,
   html[data-shell="micro-app"] #root {
-    height: auto;
+    height: 100%;
     min-height: 100%;
   }
 
   html[data-shell="micro-app"] body {
-    overflow-y: auto;
+    overflow-y: hidden;
     overflow-x: hidden;
+  }
+
+  html[data-shell="micro-app"] #root > .ant-app {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 }
 
