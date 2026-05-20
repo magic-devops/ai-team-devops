@@ -189,10 +189,12 @@ function RuntimeMenuDisplayButton({
   prefs,
   sidebarSize,
   onSidebarSizeChange,
+  placement = "down",
 }: {
   prefs: MenuPrefs;
   sidebarSize: RuntimeSidebarSize;
   onSidebarSizeChange: (size: RuntimeSidebarSize) => void;
+  placement?: "up" | "down";
 }) {
   const { i18n } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -239,7 +241,7 @@ function RuntimeMenuDisplayButton({
         {isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}
       </button>
       {open ? (
-        <div className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl">
+        <div className={`absolute right-0 z-30 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl ${placement === "up" ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]"}`}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
               <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
@@ -897,12 +899,13 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const showMenuCounts = menuPrefs.showMenuCounts;
   const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
+  const isEnglish = i18n.language?.startsWith("en");
   const sidebarWidth = sidebarCollapsed ? 72 : SIDEBAR_WIDTH[sidebarSize];
   const shellRootClass = embedded ? "h-full min-h-0 overflow-hidden" : "min-h-screen overflow-visible";
   const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
   const sidebarClass = [
     "hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
-    embedded ? "min-h-0 p-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-y-auto p-4",
+    embedded ? "min-h-0 overflow-hidden p-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-hidden p-4",
   ].join(" ");
   const mainClass = embedded
     ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
@@ -1010,30 +1013,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           />
         </div> : null}
 
-        {!sidebarCollapsed ? <div className="mt-4 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites })}
-            className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
-              menuPrefs.showFavorites ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]"
-            }`}
-          >
-            <Star className="mb-1 h-4 w-4" />
-            收藏 {showMenuCounts ? favoriteItems.length : ""}
-          </button>
-          <button
-            type="button"
-            onClick={() => patchMenuPrefs({ showRecents: !menuPrefs.showRecents })}
-            className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
-              menuPrefs.showRecents ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)]"
-            }`}
-          >
-            <Clock className="mb-1 h-4 w-4" />
-            最近 {showMenuCounts ? recentItems.length : ""}
-          </button>
-          <RuntimeMenuDisplayButton prefs={menuPrefs} sidebarSize={sidebarSize} onSidebarSizeChange={setSidebarSize} />
-        </div> : null}
-
         {!sidebarCollapsed ? <div className={`mt-3 grid gap-2 ${showQuickPanel ? "" : "hidden"}`}>
           <RuntimeQuickList title="快捷入口" items={quickItems} labelOf={labelOf} emptyText="暂无可用快捷入口" icon={<Pin className="h-3.5 w-3.5" />} />
           {menuPrefs.showFavorites ? (
@@ -1044,7 +1023,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           ) : null}
         </div> : null}
 
-        <nav className={`mt-4 grid gap-3 ${embedded ? "min-h-0 flex-1 overflow-y-auto pr-1" : "pr-1"} ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
+        <nav className={`mt-4 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
@@ -1166,6 +1145,38 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
             );
           })}
         </nav>
+
+        {!sidebarCollapsed ? (
+          <div className="shrink-0 border-t border-[var(--nav-border)] px-1 pt-2">
+            <div className="flex items-center justify-between gap-2">
+              <RuntimeMenuDisplayButton prefs={menuPrefs} sidebarSize={sidebarSize} onSidebarSizeChange={setSidebarSize} placement="up" />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => patchMenuPrefs({ showFavorites: !menuPrefs.showFavorites })}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-xs transition ${
+                    menuPrefs.showFavorites ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"
+                  } hover:bg-[var(--surface-muted)]`}
+                  title={isEnglish ? "Show or hide favorites" : "显示/隐藏我的收藏"}
+                  aria-label={isEnglish ? "Show or hide favorites" : "显示/隐藏我的收藏"}
+                >
+                  <Star className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => patchMenuPrefs({ showRecents: !menuPrefs.showRecents })}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-xs transition ${
+                    menuPrefs.showRecents ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "bg-[var(--control-bg)] text-[var(--muted-strong)]"
+                  } hover:bg-[var(--surface-muted)]`}
+                  title={isEnglish ? "Show or hide recents" : "显示/隐藏最近访问"}
+                  aria-label={isEnglish ? "Show or hide recents" : "显示/隐藏最近访问"}
+                >
+                  <Clock className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </aside>
 
       <main className={mainClass}>
