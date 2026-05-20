@@ -199,16 +199,11 @@ function densityText(density: MenuDensity, isEn = false) {
   return isEn ? "Standard" : "标准";
 }
 
-function RuntimeMenuItemHint({ item, label, show }: { item: NavItem; label: string; show: boolean }) {
-  if (!show || (!item.description && !item.capability && !item.path)) return null;
+function RuntimeMenuItemHint({ item, show }: { item: NavItem; show: boolean }) {
+  if (!show || !item.description) return null;
   return (
     <div className="mt-1 hidden max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-[11px] font-normal leading-5 text-[var(--muted-strong)] shadow-sm group-hover/menuitem:block group-focus-within/menuitem:block">
-      {item.description ? <p className="whitespace-normal break-words">{item.description}</p> : null}
-      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-[10px] text-[var(--muted)]">
-        <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5">{label}</span>
-        {item.capability ? <span className="min-w-0 max-w-full truncate font-mono">{item.capability}</span> : null}
-        {!item.capability && item.path ? <span className="min-w-0 max-w-full truncate font-mono">{item.path}</span> : null}
-      </div>
+      <p className="whitespace-normal break-words">{item.description}</p>
     </div>
   );
 }
@@ -1421,7 +1416,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                                       ) : null}
                                     </div>
-                                    {!sidebarCollapsed ? <RuntimeMenuItemHint item={item} label={itemLabel} show={showMenuMeta} /> : null}
+                                    {!sidebarCollapsed ? <RuntimeMenuItemHint item={item} show={showMenuMeta} /> : null}
                                     {!sidebarCollapsed && children.length && open ? (
                                       <div className="ml-5 mt-1 grid min-w-0 gap-0.5 border-l border-[var(--border)] pl-2">
                                         {children.map((child) => {
@@ -1463,7 +1458,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                                   <Star className="h-3 w-3" fill={childFavorite ? "currentColor" : "none"} />
                                                 </button>
                                               </div>
-                                              <RuntimeMenuItemHint item={child} label={childLabel} show={showMenuMeta} />
+                                              <RuntimeMenuItemHint item={child} show={showMenuMeta} />
                                             </div>
                                           );
                                         })}
