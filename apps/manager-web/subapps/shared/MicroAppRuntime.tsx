@@ -189,12 +189,20 @@ function RuntimeMenuDisplayButton({
   prefs,
   sidebarSize,
   onSidebarSizeChange,
+  onExpandAll,
+  onCollapseAll,
+  onResetDisplay,
   placement = "down",
+  variant = "card",
 }: {
   prefs: MenuPrefs;
   sidebarSize: RuntimeSidebarSize;
   onSidebarSizeChange: (size: RuntimeSidebarSize) => void;
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
+  onResetDisplay?: () => void;
   placement?: "up" | "down";
+  variant?: "card" | "footer";
 }) {
   const { i18n } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -217,6 +225,14 @@ function RuntimeMenuDisplayButton({
     { key: "quiet", label: isEn ? "Quiet" : "安静" },
   ];
   const toggleBoolean = (key: "showQuickPanel" | "showMenuCounts" | "showMenuMeta") => patchMenuPrefs({ [key]: !prefs[key] });
+  const buttonClass =
+    variant === "footer"
+      ? `inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border px-3 text-xs font-medium transition ${
+          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)] shadow-sm" : "border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+        }`
+      : `rounded-lg border px-2 py-2 text-left text-xs transition ${
+          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+        }`;
 
   useEffect(() => {
     if (!open) return;
@@ -232,16 +248,14 @@ function RuntimeMenuDisplayButton({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`rounded-lg border px-2 py-2 text-left text-xs transition ${
-          open ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--border)] bg-[var(--surface-raised)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-        }`}
+        className={buttonClass}
         aria-expanded={open}
       >
-        <SlidersHorizontal className="mb-1 h-4 w-4" />
-        {isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}
+        <SlidersHorizontal className={variant === "footer" ? "h-4 w-4" : "mb-1 h-4 w-4"} />
+        <span>{isEn ? "Menu" : "菜单"} · {densityText(prefs.density, isEn)}</span>
       </button>
       {open ? (
-        <div className={`absolute right-0 z-30 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl ${placement === "up" ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]"}`}>
+        <div className={`absolute right-0 z-50 max-h-[min(560px,calc(100vh-7rem))] w-80 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-2xl ${placement === "up" ? "bottom-[calc(100%+0.5rem)]" : "top-[calc(100%+0.5rem)]"}`}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted-strong)]">
               <SlidersHorizontal className="h-3.5 w-3.5 text-[var(--brand)]" />
@@ -306,6 +320,33 @@ function RuntimeMenuDisplayButton({
                   {item.label}
                 </button>
               ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 border-t border-[var(--border)] pt-3">
+              <button
+                type="button"
+                onClick={onExpandAll}
+                className="rounded-md bg-[var(--surface-muted)] px-2 py-1.5 text-[11px] font-medium text-[var(--muted-strong)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!onExpandAll}
+              >
+                {isEn ? "Expand" : "展开全部"}
+              </button>
+              <button
+                type="button"
+                onClick={onCollapseAll}
+                className="rounded-md bg-[var(--surface-muted)] px-2 py-1.5 text-[11px] font-medium text-[var(--muted-strong)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!onCollapseAll}
+              >
+                {isEn ? "Collapse" : "收起全部"}
+              </button>
+              <button
+                type="button"
+                onClick={onResetDisplay}
+                className="rounded-md bg-[var(--surface-muted)] px-2 py-1.5 text-[11px] font-medium text-[var(--muted-strong)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!onResetDisplay}
+              >
+                {isEn ? "Reset" : "恢复默认"}
+              </button>
             </div>
           </div>
         </div>
@@ -901,11 +942,37 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const showQuickPanel = menuPrefs.showQuickPanel;
   const isEnglish = i18n.language?.startsWith("en");
   const sidebarWidth = sidebarCollapsed ? 72 : SIDEBAR_WIDTH[sidebarSize];
+  const expandAllMenus = () => setCollapsedGroups({});
+  const collapseAllMenus = () => {
+    const next: Record<string, boolean> = {};
+    for (const domain of menuTree) {
+      next[`domain:${domain.key}`] = true;
+      for (const category of domain.categories) next[`category:${domain.key}:${category.key}`] = true;
+    }
+    for (const item of visibleItems) {
+      if ((childrenByParent.get(item.key) ?? []).length) next[`module:${item.key}`] = true;
+    }
+    setCollapsedGroups(next);
+  };
+  const resetMenuDisplay = () => {
+    setSidebarSize("standard");
+    patchMenuPrefs({
+      density: "comfortable",
+      menuLayout: "grouped",
+      menuEffect: "soft",
+      showQuickPanel: true,
+      showMenuCounts: true,
+      showMenuMeta: true,
+      showFavorites: true,
+      showRecents: true,
+    });
+    setCollapsedGroups({});
+  };
   const shellRootClass = embedded ? "h-full min-h-0 overflow-hidden" : "min-h-screen overflow-visible";
   const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
   const sidebarClass = [
     "hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
-    embedded ? "min-h-0 overflow-hidden p-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-hidden p-4",
+    embedded ? "min-h-0 overflow-visible px-4 pt-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-visible px-4 pt-4",
   ].join(" ");
   const mainClass = embedded
     ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
@@ -1023,7 +1090,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           ) : null}
         </div> : null}
 
-        <nav className={`mt-4 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pr-1 ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
+        <nav className={`mt-4 grid min-h-0 flex-1 content-start gap-3 overflow-y-auto pb-3 pr-1 ${sidebarCollapsed ? "mt-3 gap-1" : ""}`}>
           {menuTree.map((domain) => {
             const domainCollapsed = collapsedGroups[`domain:${domain.key}`] && !keyword;
             return (
@@ -1147,9 +1214,18 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         </nav>
 
         {!sidebarCollapsed ? (
-          <div className="shrink-0 border-t border-[var(--nav-border)] px-1 pt-2">
+          <div className="-mx-4 shrink-0 border-t border-[var(--nav-border)] bg-[var(--nav-bg)] px-4 py-2">
             <div className="flex items-center justify-between gap-2">
-              <RuntimeMenuDisplayButton prefs={menuPrefs} sidebarSize={sidebarSize} onSidebarSizeChange={setSidebarSize} placement="up" />
+              <RuntimeMenuDisplayButton
+                prefs={menuPrefs}
+                sidebarSize={sidebarSize}
+                onSidebarSizeChange={setSidebarSize}
+                onExpandAll={expandAllMenus}
+                onCollapseAll={collapseAllMenus}
+                onResetDisplay={resetMenuDisplay}
+                placement="up"
+                variant="footer"
+              />
               <div className="flex items-center gap-1">
                 <button
                   type="button"
