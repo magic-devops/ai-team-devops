@@ -20,8 +20,6 @@ import {
   Menu,
   Moon,
   Palette,
-  PanelLeftClose,
-  PanelLeftOpen,
   Pin,
   RefreshCw,
   Route,
@@ -423,12 +421,14 @@ function RuntimeTopBar({
   app,
   currentLabel,
   current,
+  moduleCount,
   onToggleMenu,
   onOpenCopilot,
 }: {
   app: RuntimeApp;
   currentLabel: string;
   current: NavItem;
+  moduleCount: number;
   onToggleMenu: () => void;
   onOpenCopilot: () => void;
 }) {
@@ -469,6 +469,11 @@ function RuntimeTopBar({
   const username = String(me.data?.username || me.data?.user_id || storedUser.username || "admin");
   const tenantName = String(me.data?.tenant_name || me.data?.tenant_slug || me.data?.tenant_id || storedUser.tenantName || "default");
   const isEn = i18n.language?.startsWith("en");
+  const appInfoTitle = isEn ? "Micro app profile" : "子应用信息";
+  const appModeLabel = isEn ? "Standalone runtime" : "子应用独立运行态";
+  const ownerLabel = isEn ? "Owner" : "负责人";
+  const modulesLabel = isEn ? "Modules" : "模块";
+  const capabilityLabel = isEn ? "Current capability" : "当前能力码";
 
   return (
     <div className="sticky top-0 z-40 shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-4 py-3 backdrop-blur xl:px-5">
@@ -485,9 +490,45 @@ function RuntimeTopBar({
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
             <Layers3 className="h-5 w-5" />
           </span>
-          <div className="min-w-0">
+          <div
+            className="group relative min-w-0 rounded-xl px-1 py-0.5 outline-none"
+            tabIndex={0}
+            aria-label={appInfoTitle}
+          >
             <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
             <p className="truncate text-xs text-[var(--muted)]">{app.shortName} / {currentLabel}</p>
+            <div className="pointer-events-none absolute left-0 top-[calc(100%+0.65rem)] z-50 hidden w-[24rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-2xl group-hover:block group-focus:block">
+              <div className="mb-3 flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]">
+                  <Layers3 className="h-5 w-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-[var(--muted)]">{app.shortName} · {app.owner}</p>
+                </div>
+              </div>
+              <p className="text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p>
+              <div className="mt-3 grid gap-2 text-xs text-[var(--muted-strong)]">
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+                  <span>{appModeLabel}</span>
+                  <span className="font-mono text-[var(--brand)]">{current.capability || current.key}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+                    <span className="block text-[10px] uppercase tracking-wide text-[var(--muted)]">{ownerLabel}</span>
+                    <span className="mt-1 block truncate font-semibold text-[var(--text)]">{app.owner}</span>
+                  </div>
+                  <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+                    <span className="block text-[10px] uppercase tracking-wide text-[var(--muted)]">{modulesLabel}</span>
+                    <span className="mt-1 block font-semibold text-[var(--text)]">{moduleCount}</span>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+                  <span className="block text-[10px] uppercase tracking-wide text-[var(--muted)]">{capabilityLabel}</span>
+                  <span className="mt-1 block truncate font-mono text-[var(--text)]">{current.capability || current.key}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -604,9 +645,6 @@ function RuntimeTopBar({
           </div>
         </div>
       </div>
-      <p className="mt-2 hidden truncate text-xs text-[var(--muted)] lg:block">
-        子应用独立运行态 · {current.capability || current.key} · {app.owner}
-      </p>
     </div>
   );
 }
@@ -1113,6 +1151,7 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
         app={app}
         current={current}
         currentLabel={currentLabel}
+        moduleCount={visibleItems.length}
         onOpenCopilot={openCurrentCopilot}
         onToggleMenu={() => {
           setSidebarCollapsed((collapsed) => !collapsed);
@@ -1163,35 +1202,6 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
           maxWidth: sidebarCollapsed ? 72 : SIDEBAR_MAX_WIDTH,
         }}
       >
-        <div className={`shrink-0 border-b border-[var(--nav-border)] ${sidebarCollapsed ? "px-3 py-4" : "px-5 py-4"}`}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-lg font-bold tracking-tight text-[var(--brand)]">
-                {sidebarCollapsed ? app.shortName.slice(0, 1) : app.name}
-              </div>
-              {!sidebarCollapsed ? (
-                <p className="mt-1 truncate text-xs text-[var(--nav-muted)]">
-                  {app.owner} · {isEnglish ? `${visibleItems.length} modules` : `${visibleItems.length} 个模块`}
-                </p>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-              title={sidebarCollapsed ? (isEnglish ? "Expand menu" : "展开菜单") : (isEnglish ? "Collapse menu" : "收起菜单")}
-              aria-label={sidebarCollapsed ? (isEnglish ? "Expand menu" : "展开菜单") : (isEnglish ? "Collapse menu" : "收起菜单")}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
-          </div>
-          {!sidebarCollapsed && showMenuMeta ? (
-            <p className="mt-2 line-clamp-2 rounded-lg bg-[var(--surface-raised)]/55 px-3 py-2 text-[11px] leading-5 text-[var(--nav-muted)]">
-              {app.description}
-            </p>
-          ) : null}
-        </div>
-
         {!sidebarCollapsed ? (
           <div className="shrink-0 border-b border-[var(--nav-border)] px-3 py-3">
             <div className="px-1">
@@ -1360,7 +1370,14 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
                                     >
                                       <a href={item.path} title={labelOf(item.key)} className={`flex min-w-0 flex-1 items-center gap-2 ${sidebarCollapsed ? "justify-center py-2" : densityCls.item}`}>
                                         <Icon className="h-4 w-4 shrink-0" />
-                                        {!sidebarCollapsed ? <span className="min-w-0 flex-1 truncate">{labelOf(item.key)}</span> : null}
+                                        {!sidebarCollapsed ? (
+                                          <span className="min-w-0 flex-1">
+                                            <span className="block truncate">{labelOf(item.key)}</span>
+                                            {showMenuMeta && item.description ? (
+                                              <span className="mt-0.5 block truncate text-[10px] font-normal text-[var(--nav-muted)]">{item.description}</span>
+                                            ) : null}
+                                          </span>
+                                        ) : null}
                                       </a>
                                       {!sidebarCollapsed ? <button
                                         type="button"
