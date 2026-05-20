@@ -16,6 +16,8 @@ import {
   LogOut,
   Menu,
   Palette,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pin,
   Rows3,
   Route,
@@ -128,6 +130,7 @@ function findRuntimeNavItem(hash: string, items: readonly NavItem[]): NavItem {
 type RuntimeApp = ReturnType<typeof getMicroApp>;
 type RuntimeMenuCategory = { key: string; label: string; items: NavItem[] };
 type RuntimeMenuDomain = { key: string; label: string; categories: RuntimeMenuCategory[]; count: number };
+type RuntimeSidebarSize = "compact" | "standard" | "wide";
 
 const RUNTIME_CATEGORY_I18N_BY_KEY = new Map(NAV_CATEGORIES.map((category) => [category.key, category.i18nKey]));
 
@@ -172,6 +175,11 @@ function buildRuntimeMenuTree(items: readonly NavItem[], labelOf: (i18nKey: stri
 }
 
 const DENSITY_ORDER: MenuDensity[] = ["comfortable", "compact", "cozy"];
+const SIDEBAR_WIDTH: Record<RuntimeSidebarSize, number> = {
+  compact: 280,
+  standard: 320,
+  wide: 360,
+};
 
 function densityText(density: MenuDensity) {
   if (density === "compact") return "紧凑";
@@ -705,6 +713,14 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const [keyword, setKeyword] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarSize, setSidebarSize] = useState<RuntimeSidebarSize>(() => {
+    try {
+      const stored = localStorage.getItem(`sop-subapp-${appId}-sidebar-size`);
+      return stored === "compact" || stored === "wide" || stored === "standard" ? stored : "standard";
+    } catch {
+      return "standard";
+    }
+  });
   const [menuPrefs, setMenuPrefs] = useState<MenuPrefs>(() => getMenuPrefs());
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -727,6 +743,14 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   );
 
   useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`sop-subapp-${appId}-sidebar-size`, sidebarSize);
+    } catch {
+      /* ignore sandboxed storage */
+    }
+  }, [appId, sidebarSize]);
 
   useEffect(() => {
     try {
@@ -813,12 +837,12 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
   const showMenuCounts = menuPrefs.showMenuCounts;
   const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
+  const sidebarWidth = sidebarCollapsed ? 72 : SIDEBAR_WIDTH[sidebarSize];
   const shellRootClass = embedded ? "h-full min-h-0 overflow-hidden" : "min-h-screen overflow-visible";
   const shellBodyClass = embedded ? "flex min-h-0 flex-1 overflow-hidden" : "flex min-h-[calc(100vh-4.75rem)] flex-1 items-start overflow-visible";
   const sidebarClass = [
-    "hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] lg:flex",
+    "hidden shrink-0 flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] transition-[width,flex-basis] duration-200 lg:flex",
     embedded ? "min-h-0 p-4" : "sticky top-[4.75rem] max-h-[calc(100vh-4.75rem)] overflow-y-auto p-4",
-    sidebarCollapsed ? "w-20" : "w-80",
   ].join(" ");
   const mainClass = embedded
     ? "min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 xl:px-8"
@@ -886,18 +910,54 @@ export function MicroAppRuntime({ appId, embedded = false }: { appId: MicroAppId
       ) : null}
 
       <div className={shellBodyClass}>
-      <aside className={sidebarClass}>
+      <aside
+        className={sidebarClass}
+        style={{
+          width: sidebarWidth,
+          flexBasis: sidebarWidth,
+          maxWidth: sidebarCollapsed ? 72 : "min(360px, 28vw)",
+        }}
+      >
         <div className={`rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] ${sidebarCollapsed ? "p-2" : "p-4"}`}>
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
               <Layers3 className="h-5 w-5" />
             </span>
-            {!sidebarCollapsed ? <div className="min-w-0">
+            {!sidebarCollapsed ? <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-[var(--text)]">{app.name}</p>
               <p className="truncate text-xs text-[var(--muted)]">{app.owner}</p>
             </div> : null}
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
+              title={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+              aria-label={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
           </div>
           {!sidebarCollapsed && showMenuMeta ? <p className="mt-3 text-xs leading-5 text-[var(--muted-strong)]">{app.description}</p> : null}
+          {!sidebarCollapsed ? (
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-lg bg-[var(--surface-muted)] p-1">
+              {[
+                { key: "compact" as const, label: "紧凑" },
+                { key: "standard" as const, label: "标准" },
+                { key: "wide" as const, label: "宽松" },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setSidebarSize(item.key)}
+                  className={`rounded-md px-2 py-1 text-[11px] ${
+                    sidebarSize === item.key ? "bg-[var(--surface)] font-semibold text-[var(--brand)] shadow-sm" : "text-[var(--muted-strong)] hover:bg-[var(--surface-raised)]"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {!sidebarCollapsed ? <div className="relative mt-4">
