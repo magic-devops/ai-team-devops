@@ -123,6 +123,15 @@ const SystemMapHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/g
 const MicroAppGovernancePage = lazy(() =>
   import("../subapps/ai-ops-center/src/pages/governance/MicroAppGovernance").then((m) => ({ default: m.MicroAppGovernance })),
 );
+const MenuManagementPage = lazy(() =>
+  import("./pages/admin/MenuManagement").then((m) => ({ default: m.MenuManagement })),
+);
+const PermissionMatrixPage = lazy(() =>
+  import("./pages/admin/PermissionMatrix").then((m) => ({ default: m.PermissionMatrix })),
+);
+const MicroAppRegistryPage = lazy(() =>
+  import("./pages/admin/MicroAppRegistry").then((m) => ({ default: m.MicroAppRegistry })),
+);
 const SettingsPage = lazy(() => import("../subapps/ai-ops-center/src/pages/Settings").then((m) => ({ default: m.Settings })));
 const ProjectsHubPage = lazy(() => import("./pages/portfolio/ProjectsHub").then((m) => ({ default: m.ProjectsHub })));
 const OrganizationHubPage = lazy(() =>
@@ -405,6 +414,9 @@ const ITEM_CATEGORY: Record<string, string> = {
   moduleManifest: "module-governance",
   capabilityGovernance: "module-governance",
   moduleActionCatalog: "module-governance",
+  menuManagement: "module-governance",
+  permissionMatrix: "module-governance",
+  microAppRegistry: "module-governance",
   settings: "runtime-config",
   settingsAccount: "runtime-config",
   settingsRuntime: "runtime-config",
@@ -692,7 +704,10 @@ export const NAV: readonly NavItem[] = [
   { key: "auditModuleActions", path: "#/audit/module-actions", el: pageElement(AuditPage), group: "governance", icon: Command, category: "security-audit", capability: "governance.audit.module-actions" },
   { key: "auditApprovals", path: "#/audit/approvals", el: pageElement(AuditPage), group: "governance", icon: Check, category: "security-audit", capability: "governance.audit.approvals" },
   { key: "systemMap", path: "#/system-map", el: pageElement(SystemMapHubPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.system-map", description: "模块治理中心：页面注册、能力矩阵与 Legacy 承接", submodules: subnav("systemMap", "registry", "manifest", "capabilities", "actions", "migration") },
-  { key: "microAppGovernance", path: "#/micro-apps", el: pageElement(MicroAppGovernancePage), group: "governance", icon: Layers3, category: "module-governance", capability: "governance.micro-apps", badge: "new", description: "独立子应用管理：应用边界、Wujie 入口、模块归属、能力覆盖与运行状态" },
+  { key: "microAppGovernance", path: "#/micro-apps", el: pageElement(MicroAppGovernancePage), group: "governance", icon: Layers3, category: "module-governance", capability: "governance.micro-apps", badge: "new", description: "独立子应用管理：应用边界、门户入口、模块归属、能力覆盖与运行状态" },
+  { key: "menuManagement", path: "#/admin/menu", el: pageElement(MenuManagementPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.menu-management", badge: "new", description: "菜单管理：树形结构、能力码绑定、分组策略、可见性规则与健康检查" },
+  { key: "permissionMatrix", path: "#/admin/permissions", el: pageElement(PermissionMatrixPage), group: "governance", icon: ShieldCheck, category: "module-governance", capability: "governance.permission-matrix", badge: "new", description: "权限矩阵：角色×能力码可视化，支持角色预览与批量策略配置" },
+  { key: "microAppRegistry", path: "#/admin/micro-app-registry", el: pageElement(MicroAppRegistryPage), group: "governance", icon: Layers3, category: "module-governance", capability: "governance.micro-app-registry", badge: "new", description: "子应用注册管理：独立入口、菜单分组、SSO 权限契约与运行状态监控" },
   { key: "pageRegistry", path: "#/system-map/registry", el: pageElement(SystemMapPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.system-map.registry" },
   { key: "moduleManifest", path: "#/system-map/manifest", el: pageElement(SystemMapPage), group: "governance", icon: FileText, category: "module-governance", capability: "governance.system-map.manifest" },
   { key: "capabilityGovernance", path: "#/system-map/capabilities", el: pageElement(SystemMapPage), group: "governance", icon: ShieldCheck, category: "module-governance", capability: "governance.system-map.capabilities" },

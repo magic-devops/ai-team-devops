@@ -527,7 +527,7 @@ function MicroAppHome({
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
               <Gauge className="mb-3 h-5 w-5 text-[var(--brand)]" />
-              <p className="text-2xl font-bold text-[var(--text)]">{app.mode === "wujie" ? "独立" : "统一"}</p>
+              <p className="text-2xl font-bold text-[var(--text)]">{app.mode === "standalone" ? "独立" : "统一"}</p>
               <p className="text-sm text-[var(--muted)]">运行模式</p>
             </div>
           </div>

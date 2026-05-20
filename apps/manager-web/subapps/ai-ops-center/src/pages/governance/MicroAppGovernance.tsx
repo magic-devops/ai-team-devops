@@ -51,13 +51,13 @@ export function MicroAppGovernance() {
     <div className="space-y-5">
       <WorkbenchShell
         title="独立子应用管理"
-        description="统一治理主应用与四个 Wujie 子应用的边界、入口、模块归属、能力覆盖、成熟度和 Agent 消费信息。"
+        description="统一治理主应用与独立微应用的边界、入口、模块归属、SSO、权限、菜单契约和 Agent 消费信息。"
         actions={<RefreshButton onClick={() => void appsQ.refetch()} pending={appsQ.isFetching} />}
         metrics={
           <WorkbenchStats
             items={[
               { label: "应用数", value: summary.total ?? apps.length },
-              { label: "Wujie 子应用", value: summary.wujie ?? 0 },
+              { label: "独立微应用", value: summary.standalone ?? 0 },
               { label: "治理模块", value: summary.module_count ?? 0 },
               { label: "能力覆盖", value: summary.capability_count ?? 0 },
             ]}

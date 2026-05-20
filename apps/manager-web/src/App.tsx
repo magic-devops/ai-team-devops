@@ -7,7 +7,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import WujieReact from "wujie-react";
 import {
   Check,
   ChevronDown,
@@ -711,22 +710,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const bus = WujieReact.bus as unknown as {
-      $on?: (event: string, handler: (payload?: { hash?: string; href?: string }) => void) => void;
-      $off?: (event: string, handler: (payload?: { hash?: string; href?: string }) => void) => void;
-    };
-    const navigate = (payload?: { hash?: string; href?: string }) => {
-      if (payload?.hash?.startsWith("#")) {
-        window.location.hash = payload.hash;
-      } else if (payload?.href) {
-        window.location.assign(payload.href);
-      }
-    };
-    bus.$on?.("hermes:navigate", navigate);
-    return () => bus.$off?.("hermes:navigate", navigate);
-  }, []);
-
-  useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if ([TOKEN_KEY, PROJECT_ID_KEY, TENANT_CODE_KEY, BUSINESS_CODE_KEY, PROJECT_CODE_KEY].includes(e.key || "")) bump((x) => x + 1);
     };
@@ -1276,7 +1259,7 @@ export function App() {
                               active ? "bg-[var(--brand)] text-white hover:opacity-90" : "bg-[var(--brand-soft)] text-[var(--brand)] hover:bg-[var(--surface-muted)]"
                             }`}
                           >
-                            <span>{app.mode === "wujie" ? "进入子应用工作台" : "进入应用管理台"}</span>
+                            <span>{app.mode === "standalone" ? "打开微应用门户" : "进入应用管理台"}</span>
                             <ArrowRight className="h-3.5 w-3.5" />
                           </a>
                         ) : null}
@@ -1402,7 +1385,7 @@ export function App() {
                   href={appPortalItem.path}
                   className="mt-3 flex items-center justify-between rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
                 >
-                  <span>{activeAppDefinition.mode === "wujie" ? "进入独立子应用" : "进入应用管理台"}</span>
+                  <span>{activeAppDefinition.mode === "standalone" ? "打开微应用门户" : "进入应用管理台"}</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </a>
               ) : null}

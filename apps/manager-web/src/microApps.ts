@@ -1,7 +1,7 @@
 import type { NavGroupKey, NavItem } from "./navigation";
 
 export type MicroAppId = "main-admin" | "ai-foundation" | "ai-rd-center" | "ai-data-center" | "ai-ops-center";
-export type MicroAppMode = "native" | "wujie";
+export type MicroAppMode = "native" | "standalone";
 export type MicroAppStatus = "ready" | "migrating" | "planned";
 
 export type MicroAppCapability = {
@@ -63,6 +63,9 @@ const MAIN_ADMIN_KEYS = [
   "orgAccessReview",
   "systemMap",
   "microAppGovernance",
+  "menuManagement",
+  "permissionMatrix",
+  "microAppRegistry",
   "pageRegistry",
   "moduleManifest",
   "capabilityGovernance",
@@ -276,7 +279,7 @@ export const MICRO_APPS: readonly MicroAppDefinition[] = [
     basePath: "#/ai-foundation",
     description: "沉淀开发环境、CLI 工具、知识库、记忆、技能、插件、模型、Agent、MCP/A2A 等可复用 AI 底座能力。",
     owner: "AI Platform",
-    mode: "wujie",
+    mode: "standalone",
     status: "migrating",
     envKey: "VITE_SUB_APP_AI_FOUNDATION_URL",
     prodUrl: "/subapps/ai-foundation/",
@@ -310,7 +313,7 @@ export const MICRO_APPS: readonly MicroAppDefinition[] = [
     basePath: "#/ai-rd",
     description: "覆盖需求、方案、任务、AI 开发、任务下发、调度、监控、质量评审与研发运维的一栈式平台。",
     owner: "Engineering AI",
-    mode: "wujie",
+    mode: "standalone",
     status: "migrating",
     envKey: "VITE_SUB_APP_AI_RD_CENTER_URL",
     prodUrl: "/subapps/ai-rd-center/",
@@ -344,7 +347,7 @@ export const MICRO_APPS: readonly MicroAppDefinition[] = [
     basePath: "#/ai-data",
     description: "覆盖数据源、数据接入、元数据、数据开发、调度中心、任务运维、指标、标签与数据服务。",
     owner: "Data Platform",
-    mode: "wujie",
+    mode: "standalone",
     status: "migrating",
     envKey: "VITE_SUB_APP_AI_DATA_CENTER_URL",
     prodUrl: "/subapps/ai-data-center/",
@@ -378,7 +381,7 @@ export const MICRO_APPS: readonly MicroAppDefinition[] = [
     basePath: "#/ai-ops",
     description: "统一商业计费、安全审计、企业 SSO、消息通信、环境运维和自愈 Runbook 等运营治理能力。",
     owner: "Operations",
-    mode: "wujie",
+    mode: "standalone",
     status: "migrating",
     envKey: "VITE_SUB_APP_AI_OPS_CENTER_URL",
     prodUrl: "/subapps/ai-ops-center/",
