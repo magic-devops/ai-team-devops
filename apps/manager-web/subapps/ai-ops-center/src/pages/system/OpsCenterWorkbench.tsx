@@ -176,6 +176,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     created_by: "Ops Lead",
     note: "基于策略 A/B 对比、SLO 风险和升级记录生成灰度准入审计。",
   });
+  const [alertStrategyCanaryDrawerOpen, setAlertStrategyCanaryDrawerOpen] = useState(false);
   const [opsStrategyLinkageResult, setOpsStrategyLinkageResult] = useState<any>(null);
   const [opsStrategyLinkageForm, setOpsStrategyLinkageForm] = useState({
     actions: "create_task,im_notify",
@@ -542,6 +543,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
       setAlertStrategyCanaryResult(data);
       void qc.invalidateQueries({ queryKey: ["opsAlertStrategyCanaryAudits"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setAlertStrategyCanaryDrawerOpen(false);
     },
   });
   const updateAlertStrategyCanary = useMutation({
@@ -1236,9 +1238,12 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                         <p className="text-xs font-semibold text-[var(--muted-strong)]">策略灰度应用审计</p>
                         <p className="mt-1 text-xs text-[var(--muted)]">汇总策略 A/B 对比、SLO 风险、自动升级记录和灰度护栏，形成可审批的准入结论。</p>
                       </div>
-                      <button onClick={() => runAlertStrategyCanaryAudit.mutate()} disabled={runAlertStrategyCanaryAudit.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
-                        {runAlertStrategyCanaryAudit.isPending ? "审计中..." : "生成灰度审计"}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setAlertStrategyCanaryDrawerOpen(true)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">配置审计</button>
+                        <button onClick={() => runAlertStrategyCanaryAudit.mutate()} disabled={runAlertStrategyCanaryAudit.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
+                          {runAlertStrategyCanaryAudit.isPending ? "审计中..." : "生成灰度审计"}
+                        </button>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-4">
                       <div className="rounded-lg bg-[var(--surface-muted)] p-3">
@@ -1260,24 +1265,26 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                     </div>
                     <div className="mt-3 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
                       <div className="rounded-lg border border-[var(--border)] p-3">
-                        <p className="text-xs font-semibold text-[var(--muted-strong)]">审计参数</p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <select className="input-base" value={alertStrategyCanaryForm.policy_id} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, policy_id: e.target.value }))}>
-                            <option value="">自动选择候选策略</option>
-                            {(alertNoiseQ.data?.items ?? []).map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                          </select>
-                          <select className="input-base" value={alertStrategyCanaryForm.candidate_id} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, candidate_id: e.target.value }))}>
-                            <option value="">使用 A/B 胜出策略</option>
-                            {(latestStrategyCompare?.items ?? []).slice(0, 8).map((item: any) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                          </select>
-                          <input className="input-base" placeholder="灰度流量 %" value={alertStrategyCanaryForm.traffic_percent} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, traffic_percent: e.target.value }))} />
-                          <input className="input-base" placeholder="审批人" value={alertStrategyCanaryForm.created_by} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, created_by: e.target.value }))} />
+                        <p className="text-xs font-semibold text-[var(--muted-strong)]">审计配置摘要</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">策略来源</p>
+                            <p className="text-sm font-semibold">{alertStrategyCanaryForm.policy_id || "自动选择"}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">候选策略</p>
+                            <p className="text-sm font-semibold">{alertStrategyCanaryForm.candidate_id || "A/B 胜出"}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">灰度流量</p>
+                            <p className="text-sm font-semibold">{alertStrategyCanaryForm.traffic_percent}%</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">审批人</p>
+                            <p className="text-sm font-semibold">{alertStrategyCanaryForm.created_by}</p>
+                          </div>
                         </div>
-                        <textarea className="input-base mt-2 min-h-16 w-full text-xs" value={alertStrategyCanaryForm.note} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, note: e.target.value }))} />
-                        <label className="mt-2 flex items-center gap-2 text-xs text-[var(--muted-strong)]">
-                          <input type="checkbox" checked={alertStrategyCanaryForm.refresh_inputs} onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, refresh_inputs: e.target.checked }))} />
-                          审计时刷新策略对比和 SLO 风险
-                        </label>
+                        <p className="mt-2 text-[11px] text-[var(--muted)]">{alertStrategyCanaryForm.refresh_inputs ? "审计会刷新策略对比和 SLO 风险。" : "审计复用当前已生成证据。"}</p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {(["approve", "start", "rollback", "archive", "reject", "reopen"] as const).map(action => (
                             <button
@@ -1858,6 +1865,112 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 {(saveAlertSloEscalationPolicy.error || runAlertSloEscalation.error) && (
                   <p className="mt-3 text-xs text-red-600">{((saveAlertSloEscalationPolicy.error || runAlertSloEscalation.error) as Error).message}</p>
                 )}
+              </Form>
+            </div>
+          </Drawer>
+          <Drawer
+            title="配置策略灰度审计"
+            open={alertStrategyCanaryDrawerOpen}
+            onClose={() => setAlertStrategyCanaryDrawerOpen(false)}
+            width="min(680px, 100vw)"
+          >
+            <div className="alertStrategyCanaryFocusedDrawer space-y-5">
+              <Steps
+                size="small"
+                current={1}
+                items={[
+                  { title: "候选" },
+                  { title: "灰度" },
+                  { title: "审批" },
+                ]}
+              />
+              <Form layout="vertical" requiredMark={false} onFinish={() => runAlertStrategyCanaryAudit.mutate()}>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">候选策略</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="基准策略">
+                      <Select
+                        value={alertStrategyCanaryForm.policy_id}
+                        onChange={value => setAlertStrategyCanaryForm(f => ({ ...f, policy_id: value }))}
+                        options={[
+                          { label: "自动选择候选策略", value: "" },
+                          ...(alertNoiseQ.data?.items ?? []).map((item: any) => ({ label: item.name, value: item.id })),
+                        ]}
+                      />
+                    </Form.Item>
+                    <Form.Item label="候选策略">
+                      <Select
+                        value={alertStrategyCanaryForm.candidate_id}
+                        onChange={value => setAlertStrategyCanaryForm(f => ({ ...f, candidate_id: value }))}
+                        options={[
+                          { label: "使用 A/B 胜出策略", value: "" },
+                          ...(latestStrategyCompare?.items ?? []).slice(0, 8).map((item: any) => ({ label: item.name, value: item.id })),
+                        ]}
+                      />
+                    </Form.Item>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">灰度参数</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="灰度流量">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={alertStrategyCanaryForm.traffic_percent}
+                        onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, traffic_percent: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="审批人">
+                      <Input
+                        value={alertStrategyCanaryForm.created_by}
+                        onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, created_by: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+                  <Form.Item label="审计备注">
+                    <Input.TextArea
+                      autoSize={{ minRows: 3, maxRows: 5 }}
+                      value={alertStrategyCanaryForm.note}
+                      onChange={e => setAlertStrategyCanaryForm(f => ({ ...f, note: e.target.value }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label="刷新输入证据">
+                    <Switch
+                      checked={alertStrategyCanaryForm.refresh_inputs}
+                      onChange={checked => setAlertStrategyCanaryForm(f => ({ ...f, refresh_inputs: checked }))}
+                    />
+                    <span className="ml-2 text-xs text-[var(--muted)]">重新计算策略对比和 SLO 风险。</span>
+                  </Form.Item>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <p className="text-sm font-semibold">审批证据</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">准入分</p>
+                      <p className="text-sm font-semibold">{latestStrategyCanary?.summary?.readiness_score ?? alertStrategyCanaryAuditsQ.data?.summary?.latest_readiness_score ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">建议流量</p>
+                      <p className="text-sm font-semibold">{latestStrategyCanary?.summary?.recommended_percent ?? alertStrategyCanaryAuditsQ.data?.summary?.latest_recommended_percent ?? 0}%</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">结论</p>
+                      <p className="text-sm font-semibold">{latestStrategyCanary?.summary?.decision ?? alertStrategyCanaryAuditsQ.data?.summary?.latest_decision ?? "-"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Space className="mt-4" wrap>
+                  <Button type="primary" htmlType="submit" loading={runAlertStrategyCanaryAudit.isPending}>
+                    生成灰度审计
+                  </Button>
+                  <Button onClick={() => setAlertStrategyCanaryDrawerOpen(false)}>取消</Button>
+                </Space>
+                {runAlertStrategyCanaryAudit.error && <p className="mt-3 text-xs text-red-600">{(runAlertStrategyCanaryAudit.error as Error).message}</p>}
               </Form>
             </div>
           </Drawer>

@@ -63,4 +63,16 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<select className=\"input-base\" value={alertSloEscalationForm.min_risk_level}");
     expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertSloEscalationForm.note}");
   });
+
+  it("keeps strategy canary audit setup in a focused drawer flow", () => {
+    expect(source).toContain("alertStrategyCanaryDrawerOpen");
+    expect(source).toContain("alertStrategyCanaryFocusedDrawer");
+    expect(source).toContain("setAlertStrategyCanaryDrawerOpen(true)");
+    expect(source).toContain("配置策略灰度审计");
+    expect(source).toContain("审计配置摘要");
+    expect(source).toContain("runAlertStrategyCanaryAudit.mutate()");
+    expect(source).toContain("updateAlertStrategyCanary.mutate");
+    expect(source).not.toContain("<select className=\"input-base\" value={alertStrategyCanaryForm.policy_id}");
+    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertStrategyCanaryForm.note}");
+  });
 });
