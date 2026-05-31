@@ -173,6 +173,7 @@ export function Settings() {
     force: false,
   });
   const [ssoRiskEscalationResult, setSsoRiskEscalationResult] = useState<any>(null);
+  const [ssoRiskEscalationDrawerOpen, setSsoRiskEscalationDrawerOpen] = useState(false);
   const [ssoRiskRunbookDraft, setSsoRiskRunbookDraft] = useState({ include_low: false, limit: "6", priority: "P1", assigned_to: "SecurityOps", dev_tool: "codex", owner: "SecurityOps", channels: [] as string[], title: "", notes: "" });
   const [ssoRiskRunbookDetail, setSsoRiskRunbookDetail] = useState<any>(null);
   const selectedSsoProvider = ssoDraft.provider.trim();
@@ -659,9 +660,10 @@ export function Settings() {
         title: ssoRiskEscalationDraft.title,
         owner: ssoRiskEscalationDraft.owner,
         notes: ssoRiskEscalationDraft.notes,
-      }),
+    }),
     onSuccess: (data) => {
       setSsoRiskEscalationResult(data);
+      setSsoRiskEscalationDrawerOpen(false);
       void qc.invalidateQueries({ queryKey: ["ssoRiskEscalation"] });
     },
   });
@@ -675,6 +677,7 @@ export function Settings() {
       }),
     onSuccess: (data, dryRun) => {
       setSsoRiskEscalationResult(data);
+      if (!dryRun) setSsoRiskEscalationDrawerOpen(false);
       void qc.invalidateQueries({ queryKey: ["ssoRiskEscalation"] });
       void qc.invalidateQueries({ queryKey: ["ssoRiskReport"] });
       if (!dryRun) {
@@ -4169,81 +4172,134 @@ export function Settings() {
                   <HintLine message={t("page.settings.ssoRiskNoProvider")} />
                 ) : (
                   <>
-                    <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
+                    <div className="ssoRiskEscalationQuickSummary mt-4 grid gap-3 sm:grid-cols-4">
+                      <Info label={t("page.settings.ssoRiskEscalationActions")} value={ssoRiskEscalationDraft.actions.map((action) => String(t(`page.settings.ssoRiskEscalationAction.${action}`, { defaultValue: action }))).join(", ")} />
+                      <Info label={t("page.settings.ssoRiskEscalationScoreThreshold")} value={ssoRiskEscalationDraft.score_threshold} />
+                      <Info label={t("page.settings.ssoRiskEscalationCooldown")} value={ssoRiskEscalationDraft.cooldown_minutes} />
+                      <Info label={t("page.settings.ssoRiskEscalationChannels")} value={String(ssoRiskEscalationDraft.channels.length || (notifyChannels.data || []).length || 0)} />
+                    </div>
+                    <Button className="mt-3" block type="primary" icon={<Rocket className="h-4 w-4" />} disabled={!selectedSsoProviderExists} onClick={() => setSsoRiskEscalationDrawerOpen(true)}>
+                      {t("page.settings.ssoRiskEscalationOpenDrawer", { defaultValue: "配置自动升级策略" })}
+                    </Button>
+                    <Drawer
+                      title={t("page.settings.ssoRiskEscalationTitle")}
+                      open={ssoRiskEscalationDrawerOpen}
+                      onClose={() => setSsoRiskEscalationDrawerOpen(false)}
+                      width={620}
+                      destroyOnClose={false}
+                      extra={
+                        <Space>
+                          <Button onClick={() => setSsoRiskEscalationDrawerOpen(false)}>{t("common.cancel")}</Button>
+                          <Button loading={saveSsoRiskEscalation.isPending} disabled={!selectedSsoProviderExists} onClick={() => saveSsoRiskEscalation.mutate()}>{t("page.settings.ssoRiskEscalationSave")}</Button>
+                          <Button type="primary" loading={runSsoRiskEscalation.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskEscalation.mutate(false)}>{t("page.settings.ssoRiskEscalationRun")}</Button>
+                        </Space>
+                      }
+                    >
                       <div className="space-y-4">
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                          {ssoRiskEscalationBooleanControls.map((item) => (
-                            <label key={item.key} className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--muted-strong)]">
-                              <input
-                                type="checkbox"
-                                checked={ssoRiskEscalationDraft[item.key]}
-                                onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, [item.key]: e.target.checked })}
-                              />
-                              {t(`page.settings.${item.label}`)}
-                            </label>
-                          ))}
-                          {ssoRiskEscalationActions.map((action) => (
-                            <label key={action} className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--muted-strong)]">
-                              <input
-                                type="checkbox"
-                                checked={ssoRiskEscalationDraft.actions.includes(action)}
-                                onChange={(e) => setSsoRiskEscalationDraft({
-                                  ...ssoRiskEscalationDraft,
-                                  actions: e.target.checked
-                                    ? Array.from(new Set([...ssoRiskEscalationDraft.actions, action]))
-                                    : ssoRiskEscalationDraft.actions.filter((item) => item !== action),
-                                })}
-                              />
-                              {String(t(`page.settings.ssoRiskEscalationAction.${action}`, { defaultValue: action }))}
-                            </label>
-                          ))}
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                          <select className={inputClass} value={ssoRiskEscalationDraft.min_severity} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, min_severity: e.target.value })}>
-                            {["high", "medium", "low"].map((severity) => <option key={severity} value={severity}>{String(t(`page.settings.ssoRiskSubscriptionSeverity.${severity}`, { defaultValue: severity }))}</option>)}
-                          </select>
-                          <input className={inputClass} type="number" min={0} max={100} value={ssoRiskEscalationDraft.score_threshold} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, score_threshold: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationScoreThreshold")} />
-                          <input className={inputClass} type="number" min={0} max={10080} value={ssoRiskEscalationDraft.cooldown_minutes} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, cooldown_minutes: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationCooldown")} />
-                          <input className={inputClass} type="number" min={1} max={20} value={ssoRiskEscalationDraft.limit} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, limit: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationLimit")} />
-                          <select className={inputClass} value={ssoRiskEscalationDraft.priority} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, priority: e.target.value })}>{["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                          <input className={inputClass} value={ssoRiskEscalationDraft.assigned_to} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, assigned_to: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationAssignee")} />
-                          <input className={inputClass} value={ssoRiskEscalationDraft.dev_tool} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, dev_tool: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationDevTool")} />
-                          <input className={inputClass} value={ssoRiskEscalationDraft.owner} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, owner: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationOwner")} />
-                          <input className={inputClass} value={ssoRiskEscalationDraft.title} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, title: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationTitlePh")} />
-                        </div>
-                        <textarea className={`${inputClass} min-h-20 resize-y`} value={ssoRiskEscalationDraft.notes} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, notes: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationNotes")} />
-                        <div>
-                          <p className="text-xs font-semibold text-[var(--text)]">{t("page.settings.ssoRiskEscalationChannels")}</p>
-                          <div className="mt-2 grid gap-2 md:grid-cols-2">
-                            {(notifyChannels.data || []).map((channel: any) => {
-                              const checked = ssoRiskEscalationDraft.channels.includes(channel.name);
-                              return (
-                                <label key={channel.name} className="flex min-h-16 items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted-strong)]">
-                                  <input className="mt-1" type="checkbox" checked={checked} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, channels: e.target.checked ? Array.from(new Set([...ssoRiskEscalationDraft.channels, channel.name])) : ssoRiskEscalationDraft.channels.filter((name) => name !== channel.name) })} />
-                                  <span className="min-w-0">
-                                    <span className="flex items-center gap-2"><span className="truncate font-semibold text-[var(--text)]">{channel.name}</span><span className="font-mono text-[10px]">{channel.type}</span></span>
-                                    <span className="mt-1 block truncate text-[11px] text-[var(--muted)]">{(channel.events || []).join(", ") || "-"}</span>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskEscalationNoChannels")} /> : null}
+                        <Steps
+                          size="small"
+                          current={ssoRiskEscalationResult?.triggered ? 2 : ssoRiskEscalationResult ? 1 : 0}
+                          items={[
+                            { title: t("page.settings.ssoRiskEscalationSave", { defaultValue: "保存" }) },
+                            { title: t("page.settings.ssoRiskEscalationPreview", { defaultValue: "预览" }) },
+                            { title: t("page.settings.ssoRiskEscalationRun", { defaultValue: "执行" }) },
+                          ]}
+                        />
+                        <Form layout="vertical">
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            {ssoRiskEscalationBooleanControls.map((item) => (
+                              <Form.Item key={item.key} label={t(`page.settings.${item.label}`)}>
+                                <Switch checked={ssoRiskEscalationDraft[item.key]} onChange={(checked) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, [item.key]: checked })} />
+                              </Form.Item>
+                            ))}
                           </div>
-                        </div>
+                          <Form.Item label={t("page.settings.ssoRiskEscalationActions")} required>
+                            <Select
+                              mode="multiple"
+                              value={ssoRiskEscalationDraft.actions}
+                              onChange={(actions) => setSsoRiskEscalationDraft({
+                                ...ssoRiskEscalationDraft,
+                                actions: (actions as string[]).filter((action): action is SsoRiskEscalationAction => ssoRiskEscalationActions.includes(action as SsoRiskEscalationAction)),
+                              })}
+                              options={ssoRiskEscalationActions.map((action) => ({
+                                value: action,
+                                label: String(t(`page.settings.ssoRiskEscalationAction.${action}`, { defaultValue: action })),
+                              }))}
+                            />
+                          </Form.Item>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Form.Item label={t("page.settings.ssoRiskSubscriptionMinSeverity")}>
+                              <Select
+                                value={ssoRiskEscalationDraft.min_severity}
+                                onChange={(min_severity) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, min_severity })}
+                                options={["high", "medium", "low"].map((severity) => ({ value: severity, label: String(t(`page.settings.ssoRiskSubscriptionSeverity.${severity}`, { defaultValue: severity })) }))}
+                              />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationPriority", { defaultValue: "优先级" })}>
+                              <Select value={ssoRiskEscalationDraft.priority} onChange={(priority) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, priority })} options={["P0", "P1", "P2", "P3"].map((priority) => ({ value: priority, label: priority }))} />
+                            </Form.Item>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <Form.Item label={t("page.settings.ssoRiskEscalationScoreThreshold")} required>
+                              <Input type="number" min={0} max={100} value={ssoRiskEscalationDraft.score_threshold} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, score_threshold: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationCooldown")} required>
+                              <Input type="number" min={0} max={10080} value={ssoRiskEscalationDraft.cooldown_minutes} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, cooldown_minutes: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationLimit")} required>
+                              <Input type="number" min={1} max={20} value={ssoRiskEscalationDraft.limit} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, limit: e.target.value })} />
+                            </Form.Item>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Form.Item label={t("page.settings.ssoRiskEscalationAssignee")}>
+                              <Input value={ssoRiskEscalationDraft.assigned_to} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, assigned_to: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationDevTool")}>
+                              <Input value={ssoRiskEscalationDraft.dev_tool} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, dev_tool: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationOwner")}>
+                              <Input value={ssoRiskEscalationDraft.owner} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, owner: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationTitlePh")}>
+                              <Input value={ssoRiskEscalationDraft.title} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, title: e.target.value })} />
+                            </Form.Item>
+                          </div>
+                          <Form.Item label={t("page.settings.ssoRiskEscalationChannels")}>
+                            <Select
+                              mode="multiple"
+                              allowClear
+                              value={ssoRiskEscalationDraft.channels}
+                              onChange={(channels) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, channels })}
+                              placeholder={t("page.settings.selectNotifyChannel")}
+                              options={(notifyChannels.data || []).map((channel: any) => ({
+                                value: channel.name,
+                                label: `${channel.name} · ${channel.type}`,
+                              }))}
+                            />
+                          </Form.Item>
+                          {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskEscalationNoChannels")} /> : null}
+                          <Form.Item label={t("page.settings.ssoRiskEscalationNotes")}>
+                            <Input.TextArea rows={3} value={ssoRiskEscalationDraft.notes} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, notes: e.target.value })} />
+                          </Form.Item>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <Button loading={saveSsoRiskEscalation.isPending} disabled={!selectedSsoProviderExists} onClick={() => saveSsoRiskEscalation.mutate()}>
+                              {t("page.settings.ssoRiskEscalationSave")}
+                            </Button>
+                            <Button loading={runSsoRiskEscalation.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskEscalation.mutate(true)}>
+                              {t("page.settings.ssoRiskEscalationPreview")}
+                            </Button>
+                            <Button type="primary" loading={runSsoRiskEscalation.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskEscalation.mutate(false)}>
+                              {t("page.settings.ssoRiskEscalationRun")}
+                            </Button>
+                          </div>
+                        </Form>
                       </div>
-                      <div className="space-y-3">
-                        <Info label={t("page.settings.ssoRiskEscalationLastRun")} value={String(ssoRiskEscalation.data?.policy?.last_run_at || "-")} />
-                        <Info label={t("page.settings.ssoRiskEscalationLastTriggered")} value={String(ssoRiskEscalation.data?.policy?.last_triggered_at || "-")} />
-                        <Info label={t("page.settings.ssoRiskEscalationTriggered")} value={ssoRiskEscalationResult ? String(Boolean(ssoRiskEscalationResult.triggered)) : "-"} />
-                        <Info label={t("page.settings.ssoRiskEscalationReason")} value={ssoRiskEscalationResult ? String(t(`page.settings.ssoRiskEscalationReasonValue.${ssoRiskEscalationResult.reason || "no_matching_risk"}`, { defaultValue: ssoRiskEscalationResult.reason || "-" })) : "-"} />
-                        <div className="grid gap-2">
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!selectedSsoProviderExists || saveSsoRiskEscalation.isPending} onClick={() => saveSsoRiskEscalation.mutate()}><ShieldCheck className="h-4 w-4" />{t("page.settings.ssoRiskEscalationSave")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!selectedSsoProviderExists || runSsoRiskEscalation.isPending} onClick={() => runSsoRiskEscalation.mutate(true)}><ListChecks className="h-4 w-4" />{t("page.settings.ssoRiskEscalationPreview")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!selectedSsoProviderExists || runSsoRiskEscalation.isPending} onClick={() => runSsoRiskEscalation.mutate(false)}><Rocket className="h-4 w-4" />{t("page.settings.ssoRiskEscalationRun")}</button>
-                        </div>
-                      </div>
+                    </Drawer>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                      <Info label={t("page.settings.ssoRiskEscalationLastRun")} value={String(ssoRiskEscalation.data?.policy?.last_run_at || "-")} />
+                      <Info label={t("page.settings.ssoRiskEscalationLastTriggered")} value={String(ssoRiskEscalation.data?.policy?.last_triggered_at || "-")} />
+                      <Info label={t("page.settings.ssoRiskEscalationTriggered")} value={ssoRiskEscalationResult ? String(Boolean(ssoRiskEscalationResult.triggered)) : "-"} />
+                      <Info label={t("page.settings.ssoRiskEscalationReason")} value={ssoRiskEscalationResult ? String(t(`page.settings.ssoRiskEscalationReasonValue.${ssoRiskEscalationResult.reason || "no_matching_risk"}`, { defaultValue: ssoRiskEscalationResult.reason || "-" })) : "-"} />
                     </div>
                     {ssoRiskEscalation.error ? <ErrorLine message={(ssoRiskEscalation.error as Error).message} /> : null}
                     {saveSsoRiskEscalation.error ? <ErrorLine message={(saveSsoRiskEscalation.error as Error).message} /> : null}

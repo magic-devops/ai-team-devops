@@ -49,4 +49,16 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("runSsoRiskIm.mutate(true)");
     expect(source).toContain("runSsoRiskIm.mutate(false)");
   });
+
+  it("keeps SSO risk auto escalation in a focused drawer flow", () => {
+    expect(source).toContain("ssoRiskEscalationDrawerOpen");
+    expect(source).toContain("ssoRiskEscalationQuickSummary");
+    expect(source).toContain("ssoRiskEscalationOpenDrawer");
+    expect(source).toContain("setSsoRiskEscalationDrawerOpen(true)");
+    expect(source).toContain("Switch checked={ssoRiskEscalationDraft[item.key]}");
+    expect(source).toContain("ssoRiskEscalationDraft.actions");
+    expect(source).toContain("saveSsoRiskEscalation.mutate()");
+    expect(source).toContain("runSsoRiskEscalation.mutate(true)");
+    expect(source).toContain("runSsoRiskEscalation.mutate(false)");
+  });
 });
