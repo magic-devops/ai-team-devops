@@ -24,4 +24,17 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("AI 分析当前模块");
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
   });
+
+  it("keeps alert source setup in a focused drawer flow", () => {
+    expect(source).toContain("alertSourceDrawerOpen");
+    expect(source).toContain("alertSourceFocusedDrawer");
+    expect(source).toContain("setAlertSourceDrawerOpen(true)");
+    expect(source).toContain("配置生产告警源");
+    expect(source).toContain("<Steps");
+    expect(source).toContain("<Form");
+    expect(source).toContain("createAlertSource.mutate()");
+    expect(source).toContain("只保存 SecretRef，不保存明文密钥");
+    expect(source).not.toContain("告警源名称 *");
+    expect(source).not.toContain("<textarea className=\"input-base min-h-32 w-full font-mono text-xs\" placeholder=\"样例 payload JSON，用于无外网或 Webhook dry-run 测试\"");
+  });
 });

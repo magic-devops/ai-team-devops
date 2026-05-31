@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Segmented } from "antd";
+import { Button, Drawer, Form, Input, Select, Segmented, Space, Steps, Switch } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
@@ -128,6 +128,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     timeout_s: "5",
     enabled: true,
   });
+  const [alertSourceDrawerOpen, setAlertSourceDrawerOpen] = useState(false);
   const [alertSourceResult, setAlertSourceResult] = useState<any>(null);
   const [alertNoisePolicyForm, setAlertNoisePolicyForm] = useState({
     name: "生产告警降噪策略",
@@ -355,6 +356,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
       void qc.invalidateQueries({ queryKey: ["opsAlertSources"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
       setShowForm(false);
+      setAlertSourceDrawerOpen(false);
     },
   });
   const syncAlertSources = useMutation({
@@ -913,43 +915,15 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
         )}
 
         {tab === "alert-sources" && (
+          <>
           <div className="grid gap-4 xl:grid-cols-[minmax(420px,0.9fr)_minmax(520px,1.1fr)]">
             <WorkbenchPanel title="生产告警源" actions={
               <div className="flex flex-wrap gap-2">
                 <RefreshButton onClick={() => { void alertSourcesQ.refetch(); void externalAlertsQ.refetch(); void alertNoiseQ.refetch(); void alertNoiseHistoryQ.refetch(); void alertStrategyQ.refetch(); void alertStrategyCompareRunsQ.refetch(); void alertSloPredictionRunsQ.refetch(); void alertSloEscalationPolicyQ.refetch(); void alertSloEscalationRunsQ.refetch(); void alertStrategyCanaryAuditsQ.refetch(); void opsStrategyLinkageRunsQ.refetch(); }} pending={alertSourcesQ.isFetching || externalAlertsQ.isFetching || alertNoiseQ.isFetching || alertNoiseHistoryQ.isFetching || alertStrategyQ.isFetching || alertStrategyCompareRunsQ.isFetching || alertSloPredictionRunsQ.isFetching || alertSloEscalationPolicyQ.isFetching || alertSloEscalationRunsQ.isFetching || alertStrategyCanaryAuditsQ.isFetching || opsStrategyLinkageRunsQ.isFetching} />
                 <button onClick={() => syncAlertSources.mutate()} disabled={syncAlertSources.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">同步告警</button>
-                <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white">+ 告警源</button>
+                <button onClick={() => setAlertSourceDrawerOpen(true)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white">+ 告警源</button>
               </div>
             }>
-              {showForm && (
-                <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <input className="input-base" placeholder="告警源名称 *" value={alertSourceForm.name} onChange={e => setAlertSourceForm(f => ({ ...f, name: e.target.value }))} />
-                    <select className="input-base" value={alertSourceForm.source_type} onChange={e => setAlertSourceForm(f => ({ ...f, source_type: e.target.value }))}>
-                      {["prometheus", "grafana", "datadog", "webhook", "generic_json", "manual"].map(type => <option key={type} value={type}>{type}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
-                    <input className="input-base" placeholder="Endpoint（可选，http/https）" value={alertSourceForm.endpoint} onChange={e => setAlertSourceForm(f => ({ ...f, endpoint: e.target.value }))} />
-                    <input className="input-base" inputMode="numeric" placeholder="超时秒" value={alertSourceForm.timeout_s} onChange={e => setAlertSourceForm(f => ({ ...f, timeout_s: e.target.value }))} />
-                  </div>
-                  <input className="input-base w-full" placeholder="密钥引用（env://PROM_TOKEN，可选）" value={alertSourceForm.auth_ref} onChange={e => setAlertSourceForm(f => ({ ...f, auth_ref: e.target.value }))} />
-                  <textarea className="input-base min-h-20 w-full font-mono text-xs" placeholder="标签（key=value，每行一个）" value={alertSourceForm.labels} onChange={e => setAlertSourceForm(f => ({ ...f, labels: e.target.value }))} />
-                  <textarea className="input-base min-h-32 w-full font-mono text-xs" placeholder="样例 payload JSON，用于无外网或 Webhook dry-run 测试" value={alertSourceForm.sample_payload} onChange={e => setAlertSourceForm(f => ({ ...f, sample_payload: e.target.value }))} />
-                  <label className="flex items-center gap-2 text-xs text-[var(--muted-strong)]">
-                    <input type="checkbox" checked={alertSourceForm.enabled} onChange={e => setAlertSourceForm(f => ({ ...f, enabled: e.target.checked }))} />
-                    启用后参与同步和 RCA 智能归因
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={() => createAlertSource.mutate()} disabled={!alertSourceForm.name || createAlertSource.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                      {createAlertSource.isPending ? "保存中..." : "保存告警源"}
-                    </button>
-                    <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                  </div>
-                  {createAlertSource.error && <p className="text-xs text-red-600">{(createAlertSource.error as Error).message}</p>}
-                </div>
-              )}
-
               <div className="grid gap-2 sm:grid-cols-4">
                 <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">源数量</p><p className="text-lg font-semibold">{alertSourcesQ.data?.summary?.sources ?? 0}</p></div>
                 <div className="rounded-lg bg-[var(--surface-muted)] p-3"><p className="text-xs text-[var(--muted)]">启用</p><p className="text-lg font-semibold">{alertSourcesQ.data?.summary?.enabled_sources ?? 0}</p></div>
@@ -1512,6 +1486,110 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
               </div>
             </WorkbenchPanel>
           </div>
+          <Drawer
+            title="配置生产告警源"
+            open={alertSourceDrawerOpen}
+            onClose={() => setAlertSourceDrawerOpen(false)}
+            width="min(640px, 100vw)"
+          >
+            <div className="alertSourceFocusedDrawer space-y-5">
+              <Steps
+                size="small"
+                current={alertSourceForm.sample_payload.trim() ? 2 : (alertSourceForm.endpoint.trim() || alertSourceForm.auth_ref.trim()) ? 1 : 0}
+                items={[
+                  { title: "来源" },
+                  { title: "连接" },
+                  { title: "样例" },
+                ]}
+              />
+              <Form layout="vertical" requiredMark={false} onFinish={() => createAlertSource.mutate()}>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">来源身份</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="告警源名称" required>
+                      <Input
+                        value={alertSourceForm.name}
+                        onChange={e => setAlertSourceForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="production-prometheus"
+                      />
+                    </Form.Item>
+                    <Form.Item label="来源类型">
+                      <Select
+                        value={alertSourceForm.source_type}
+                        onChange={value => setAlertSourceForm(f => ({ ...f, source_type: value }))}
+                        options={["prometheus", "grafana", "datadog", "webhook", "generic_json", "manual"].map(type => ({ label: type, value: type }))}
+                      />
+                    </Form.Item>
+                  </div>
+                  <Form.Item label="启用同步">
+                    <Switch
+                      checked={alertSourceForm.enabled}
+                      onChange={checked => setAlertSourceForm(f => ({ ...f, enabled: checked }))}
+                    />
+                    <span className="ml-2 text-xs text-[var(--muted)]">启用后参与同步和 RCA 智能归因。</span>
+                  </Form.Item>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">连接与密钥</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_120px]">
+                    <Form.Item label="Endpoint">
+                      <Input
+                        value={alertSourceForm.endpoint}
+                        onChange={e => setAlertSourceForm(f => ({ ...f, endpoint: e.target.value }))}
+                        placeholder="https://alerts.example.com/api"
+                      />
+                    </Form.Item>
+                    <Form.Item label="超时秒">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={alertSourceForm.timeout_s}
+                        onChange={e => setAlertSourceForm(f => ({ ...f, timeout_s: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+                  <Form.Item label="密钥引用">
+                    <Input
+                      value={alertSourceForm.auth_ref}
+                      onChange={e => setAlertSourceForm(f => ({ ...f, auth_ref: e.target.value }))}
+                      placeholder="env://PROM_TOKEN"
+                    />
+                  </Form.Item>
+                  <p className="text-xs text-[var(--muted)]">只保存 SecretRef，不保存明文密钥。</p>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">标签与样例</p>
+                  <Form.Item label="标签">
+                    <Input.TextArea
+                      autoSize={{ minRows: 3, maxRows: 5 }}
+                      value={alertSourceForm.labels}
+                      onChange={e => setAlertSourceForm(f => ({ ...f, labels: e.target.value }))}
+                      placeholder="environment=production"
+                    />
+                  </Form.Item>
+                  <Form.Item label="样例 payload JSON">
+                    <Input.TextArea
+                      autoSize={{ minRows: 6, maxRows: 10 }}
+                      value={alertSourceForm.sample_payload}
+                      onChange={e => setAlertSourceForm(f => ({ ...f, sample_payload: e.target.value }))}
+                      placeholder="用于无外网或 Webhook dry-run 测试"
+                    />
+                  </Form.Item>
+                </div>
+
+                <Space className="mt-4" wrap>
+                  <Button type="primary" htmlType="submit" loading={createAlertSource.isPending} disabled={!alertSourceForm.name.trim()}>
+                    保存告警源
+                  </Button>
+                  <Button onClick={() => setAlertSourceDrawerOpen(false)}>取消</Button>
+                </Space>
+                {createAlertSource.error && <p className="mt-3 text-xs text-red-600">{(createAlertSource.error as Error).message}</p>}
+              </Form>
+            </div>
+          </Drawer>
+          </>
         )}
 
         {tab === "rca" && (
