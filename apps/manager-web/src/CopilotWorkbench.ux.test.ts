@@ -14,6 +14,10 @@ describe("Copilot workbench UX contract", () => {
     expect(navigationSource).toContain('initialMode: "tool-plan"');
     expect(copilotSource).toContain('type CopilotMode = "chat" | "commands" | "tool-plan"');
     expect(copilotSource).toContain("MODE_WORKFLOWS");
+    expect(copilotSource).toContain("MODE_SURFACE_CLASS");
+    expect(copilotSource).toContain("copilotChatSurface");
+    expect(copilotSource).toContain("copilotCommandSurface");
+    expect(copilotSource).toContain("copilotToolPlanSurface");
     expect(copilotSource).toContain("copilotModeIdentity");
     expect(copilotSource).toContain('mode === "commands"');
     expect(copilotSource).toContain('mode === "tool-plan"');
@@ -24,12 +28,15 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("Segmented");
     expect(copilotSource).toContain("Input.Search");
     expect(copilotSource).toContain("Input.TextArea");
+    expect(copilotSource).toContain("Steps");
+    expect(copilotSource).toContain("Switch");
     expect(copilotSource).toContain("Table");
     expect(copilotSource).toContain("copilotPlanTasks");
     expect(copilotSource).toContain("copilotExecuteCommand");
     expect(copilotSource).toContain("commandResult");
     expect(copilotSource).toContain("commandStats");
     expect(copilotSource).toContain("SearchCheck");
+    expect(copilotSource).toContain("commandCenterIdentity");
     expect(copilotSource).toContain("计划不是聊天记录");
     expect(copilotSource).toContain("会话用于持续思考");
   });
@@ -37,6 +44,9 @@ describe("Copilot workbench UX contract", () => {
   it("keeps the AI command hub as a distinct cockpit entry", () => {
     expect(hubSource).toContain("DOMAIN_DESC");
     expect(hubSource).toContain("DOMAIN_USAGE");
+    expect(hubSource).toContain("DOMAIN_OUTCOME");
+    expect(hubSource).toContain("decisionLanes");
+    expect(hubSource).toContain("copilotHubDecisionLane");
     expect(hubSource).toContain("cockpitTiles");
     expect(hubSource).toContain("copilotCommands");
     expect(hubSource).toContain("hubCommands");

@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T04:01:28Z",
+  "updated_at": "2026-05-31T04:36:18Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -347,12 +347,13 @@
       "完成 Task 86 Settings SSO 风险治理任务交互抽屉化：SSO 风险治理任务化从主页面五列 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主工作区只展示风险分、行动计划、任务化草稿摘要和生成结果，抽屉内承接 include_low、limit、priority、assigned_to、dev_tool 以及 preview/create 操作，生成成功自动关闭并刷新风险报告。",
       "完成 Task 87 Copilot AI 指挥台深度差异化：回应 AI 指挥台、AI 会话、命令中心、工具计划体验近似问题，#/copilot 升级为总览态势 cockpit，展示会话、命令、工具计划和作用域摘要；#/copilot/chat 强化持续对话与上下文用途提示，#/copilot/commands 强化命令分类统计、快捷筛选、预览/执行/转计划，#/copilot/tool-plan 强化目标输入、计划生成、任务化证据三步流，三语种文案与 UX 契约测试同步更新。",
       "完成 Task 88 Settings SSO 风险 IM 通知交互抽屉化：SSO 风险 IM 通知从主页面通道勾选、标题输入、低风险开关、条数上限和预览/发送 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主工作区只展示通知草稿摘要、目标通道数量、条数上限、低风险状态和投递结果，抽屉内承接标题、通道多选、低风险纳入、条数上限、preview/send 操作，发送成功自动关闭并刷新消息与风险报告。",
-      "完成 Task 89 Settings SSO 自动升级策略交互抽屉化：SSO 自动升级从主页面布满开关、动作勾选、阈值、冷却、负责人、通道和执行按钮的 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主工作区只展示自动升级动作、风险阈值、冷却窗口、通道数量、最近运行、触发原因、执行结果和历史，抽屉内承接启停、低风险纳入、强制执行、动作多选、严重级别、优先级、阈值、冷却、任务负责人、执行工具、Owner、标题、通道多选、备注以及 save/preview/run 操作。"
+      "完成 Task 89 Settings SSO 自动升级策略交互抽屉化：SSO 自动升级从主页面布满开关、动作勾选、阈值、冷却、负责人、通道和执行按钮的 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主工作区只展示自动升级动作、风险阈值、冷却窗口、通道数量、最近运行、触发原因、执行结果和历史，抽屉内承接启停、低风险纳入、强制执行、动作多选、严重级别、优先级、阈值、冷却、任务负责人、执行工具、Owner、标题、通道多选、备注以及 save/preview/run 操作。",
+      "完成 Task 90 Copilot AI 指挥台二次差异化增强：回应 AI 指挥台、AI 会话、命令中心、工具计划仍然像同一页面的问题；Copilot 工作区新增按模式切换的专业身份区、职责标签和 Ant Design Steps 进度，使 chat/commands/tool-plan 三个入口在首屏职责、视觉结构和操作路径上明显区分；AI 会话使用 Ant Design Input/Switch 和快捷追问，命令中心增加命令中心职责提示与快捷筛选常量，工具计划继续保留目标-计划-任务化步骤闭环；AI 指挥台 Hub 新增入口分工卡，明确会话输出 transcript、命令输出 dry-run/audit、工具计划输出 plan/tasks。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 89 Settings SSO 自动升级策略交互抽屉化已完成：系统配置页继续把低频复杂配置迁入聚焦 Drawer/Steps；下一步继续推进 Settings SSO Runbook、计费策略，以及 OpsCenter 大工作台模块化和自适配体验治理。"
+    "current": "Task 90 Copilot AI 指挥台二次差异化增强已完成：AI 指挥台、AI 会话、命令中心、工具计划的首屏身份、职责标签、步骤进度和核心操作已进一步拉开；下一步继续推进 Settings SSO Runbook、计费策略，以及 OpsCenter 大工作台模块化和自适配体验治理。"
   },
   "metrics": {
     "completion_rate": 100,

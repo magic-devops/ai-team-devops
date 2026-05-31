@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Input, Segmented, Space, Table, Tag } from "antd";
+import { Alert, Button, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
 import { Bot, CheckCircle2, ClipboardCheck, Command, Loader2, MessageSquareText, Network, Plus, SearchCheck } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
@@ -56,6 +56,38 @@ const MODE_WORKFLOWS: Record<CopilotMode, Array<{ title: string; desc: string }>
     { title: "任务化", desc: "预览后再写入任务中心，形成跟进闭环。" },
   ],
 };
+
+const MODE_SURFACE_CLASS: Record<CopilotMode, string> = {
+  chat: "copilotChatSurface",
+  commands: "copilotCommandSurface",
+  "tool-plan": "copilotToolPlanSurface",
+};
+
+const MODE_GUARDRAILS: Record<CopilotMode, Array<{ label: string; value: string }>> = {
+  chat: [
+    { label: "核心用途", value: "持续问答" },
+    { label: "输出证据", value: "transcript" },
+    { label: "下一步", value: "转工具计划" },
+  ],
+  commands: [
+    { label: "核心用途", value: "查找与执行" },
+    { label: "输出证据", value: "dry-run / audit" },
+    { label: "下一步", value: "转计划或跳转" },
+  ],
+  "tool-plan": [
+    { label: "核心用途", value: "目标拆解" },
+    { label: "输出证据", value: "plan / tasks" },
+    { label: "下一步", value: "预览或落库" },
+  ],
+};
+
+const CHAT_QUICK_PROMPTS = [
+  "总结当前项目状态、主要风险和下一步行动",
+  "解释当前模块如何接入 CLI / Agent 能力",
+  "基于最近会话整理可执行待办",
+];
+
+const COMMAND_QUICK_FILTERS = ["任务", "审计", "健康", "计费", "页面地图"];
 
 export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode }) {
   const { t } = useTranslation();
@@ -218,14 +250,23 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
     chat: {
       title: t("copilot.chatTitle", { defaultValue: t("page.copilot.title") }),
       description: t("copilot.chatIntro", { defaultValue: "持续对话、注入项目上下文，并保留会话记录。" }),
+      icon: MessageSquareText,
+      badge: t("copilot.chatBadge", { defaultValue: "上下文会话" }),
+      action: t("copilot.chatPrimaryAction", { defaultValue: "继续追问" }),
     },
     commands: {
       title: t("copilot.commandTitle", { defaultValue: t("nav.copilotCommands") }),
       description: t("copilot.commandIntro", { defaultValue: "统一搜索页面导航、运营动作和 AI 命令，适合快速到达与转计划。" }),
+      icon: Command,
+      badge: t("copilot.commandBadge", { defaultValue: "可控动作目录" }),
+      action: t("copilot.commandPrimaryAction", { defaultValue: "搜索命令" }),
     },
     "tool-plan": {
       title: t("copilot.toolPlanTitle", { defaultValue: t("nav.copilotToolPlan") }),
       description: t("copilot.toolPlanIntro", { defaultValue: "把自然语言目标转成工具调用计划，再预览或创建执行任务。" }),
+      icon: ClipboardCheck,
+      badge: t("copilot.toolPlanBadge", { defaultValue: "计划到任务" }),
+      action: t("copilot.toolPlanPrimaryAction", { defaultValue: "生成计划" }),
     },
   }[mode];
   const commandRows = commandsQuery.data?.items ?? [];
@@ -235,6 +276,8 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
     copilot: commandRows.filter((x: any) => x.type === "copilot").length,
   };
   const workflow = MODE_WORKFLOWS[mode];
+  const ModeIcon = modeMeta.icon;
+  const modeCurrentStep = mode === "tool-plan" ? (planTaskResult ? 2 : planResult ? 1 : 0) : mode === "commands" ? (commandResult ? 2 : commandSearch ? 1 : 0) : currentTurns.length ? 2 : q.trim() ? 1 : 0;
 
   return (
     <div className="w-full space-y-4">
@@ -260,33 +303,63 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         }
       />
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
-        <Segmented
-          value={mode}
-          onChange={(value) => switchMode(value as CopilotMode)}
-          options={[
-            { label: t("copilot.chatTab", { defaultValue: "AI 会话" }), value: "chat", icon: <Bot className="h-4 w-4" /> },
-            { label: t("copilot.commandsTab", { defaultValue: "命令中心" }), value: "commands", icon: <Command className="h-4 w-4" /> },
-            { label: t("copilot.toolPlanTab", { defaultValue: "工具计划" }), value: "tool-plan", icon: <Network className="h-4 w-4" /> },
-          ]}
-        />
-      </div>
-
-      <div className="copilotModeIdentity grid gap-3 md:grid-cols-3">
-        {workflow.map((item, index) => (
-          <div key={item.title} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-soft)] text-xs font-semibold text-[var(--brand)]">{index + 1}</span>
-              <p className="text-sm font-semibold text-[var(--text)]">{item.title}</p>
+      <div className={`copilotFocusedSurface ${MODE_SURFACE_CLASS[mode]} rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4`}>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[var(--brand-soft)] px-3 py-1 text-xs font-semibold text-[var(--brand)]">
+                <ModeIcon className="h-3.5 w-3.5" />
+                {modeMeta.badge}
+              </span>
+              {MODE_GUARDRAILS[mode].map((item) => (
+                <Tag key={item.label} bordered={false}>
+                  {item.label}: {item.value}
+                </Tag>
+              ))}
             </div>
-            <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{item.desc}</p>
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-lg font-semibold text-[var(--text)]">{modeMeta.title}</p>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">{modeMeta.description}</p>
+              </div>
+              <div className="max-w-full overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                <Segmented
+                  value={mode}
+                  onChange={(value) => switchMode(value as CopilotMode)}
+                  options={[
+                    { label: t("copilot.chatTab", { defaultValue: "AI 会话" }), value: "chat", icon: <Bot className="h-4 w-4" /> },
+                    { label: t("copilot.commandsTab", { defaultValue: "命令中心" }), value: "commands", icon: <Command className="h-4 w-4" /> },
+                    { label: t("copilot.toolPlanTab", { defaultValue: "工具计划" }), value: "tool-plan", icon: <Network className="h-4 w-4" /> },
+                  ]}
+                />
+              </div>
+            </div>
           </div>
-        ))}
+          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-[var(--text)]">{modeMeta.action}</p>
+              <Tag color={mode === "commands" ? "orange" : mode === "tool-plan" ? "blue" : "green"}>{mode}</Tag>
+            </div>
+            <Steps
+              className="copilotModeIdentity"
+              size="small"
+              direction="vertical"
+              current={modeCurrentStep}
+              items={workflow.map((item) => ({ title: item.title, description: item.desc }))}
+            />
+          </div>
+        </div>
       </div>
 
       {mode === "commands" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card title={t("copilot.commandCatalog", { defaultValue: "命令目录" })}>
+            <Alert
+              className="mb-4"
+              type="info"
+              showIcon
+              message={t("copilot.commandCenterIdentity", { defaultValue: "命令中心只负责找能力、预览操作和留存执行证据；需要推理拆解时转入工具计划。" })}
+            />
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <Input.Search
                 allowClear
@@ -302,7 +375,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               </Space>
             </div>
             <div className="mb-3 flex flex-wrap gap-2">
-              {["任务", "审计", "健康", "计费", "页面地图"].map((keyword) => (
+              {COMMAND_QUICK_FILTERS.map((keyword) => (
                 <Button key={keyword} size="small" icon={<SearchCheck className="h-3.5 w-3.5" />} onClick={() => setCommandSearch(keyword)}>
                   {keyword}
                 </Button>
@@ -450,10 +523,10 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                   <span className={done ? "text-[var(--text)]" : ""}>{label}</span>
                 </div>
               ))}
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={withProject} onChange={(e) => setWithProject(e.target.checked)} />
-                {t("copilot.withProject")}
-              </label>
+              <div className="flex items-center gap-2">
+                <Switch size="small" checked={withProject} onChange={(checked) => setWithProject(checked)} />
+                <span>{t("copilot.withProject")}</span>
+              </div>
               <div>
                 <p className="text-xs text-[var(--muted)]">{t("copilot.session")}</p>
                 <p className="mt-1 break-all font-mono text-xs text-[var(--text)]">{sessionId}</p>
@@ -482,17 +555,24 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
           <div className="mb-3 grid gap-2 md:grid-cols-2">
             <label className="text-xs text-slate-500">
               {t("copilot.session")}
-              <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs dark:border-slate-600 dark:bg-slate-900" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+              <Input className="mt-1 font-mono text-xs" value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
             </label>
             <label className="text-xs text-slate-500">
               run_id
-              <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs dark:border-slate-600 dark:bg-slate-900" value={runId} onChange={(e) => setRunId(e.target.value)} />
+              <Input className="mt-1 font-mono text-xs" value={runId} onChange={(e) => setRunId(e.target.value)} />
             </label>
           </div>
-          <label className="mb-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={withProject} onChange={(e) => setWithProject(e.target.checked)} />
-            {t("copilot.withProject")}
-          </label>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <Switch size="small" checked={withProject} onChange={(checked) => setWithProject(checked)} />
+            <span>{t("copilot.withProject")}</span>
+          </div>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {CHAT_QUICK_PROMPTS.map((prompt) => (
+              <Button key={prompt} size="small" onClick={() => setQ(prompt)}>
+                {prompt.slice(0, 16)}
+              </Button>
+            ))}
+          </div>
 
           <CopilotChatPanel
             key={sessionId}

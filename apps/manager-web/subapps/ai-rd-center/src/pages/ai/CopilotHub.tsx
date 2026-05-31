@@ -39,6 +39,12 @@ const DOMAIN_ACTION_LABEL: Record<string, string> = {
   "tool-plan": "生成计划",
 };
 
+const DOMAIN_OUTCOME: Record<string, string> = {
+  chat: "上下文、问答证据、transcript",
+  commands: "命令、dry-run、执行证据",
+  "tool-plan": "工具调用计划、任务预览、任务落库",
+};
+
 export function CopilotHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
@@ -58,6 +64,11 @@ export function CopilotHub() {
     { label: "命令中心", value: commandTotal, hint: "统一导航、操作和 AI 命令", icon: Command, href: "#/copilot/commands" },
     { label: "工具计划", value: summary.skills ?? 0, hint: "把目标转为计划和任务", icon: ClipboardCheck, href: "#/copilot/tool-plan" },
     { label: "当前作用域", value: summary.scope || "default", hint: "权限与审计按作用域隔离", icon: Gauge, href: "#/system-map" },
+  ];
+  const decisionLanes = [
+    { id: "chat", label: "AI 会话", path: "#/copilot/chat", intent: "问、解释、总结、追问", outcome: DOMAIN_OUTCOME.chat, icon: MessageSquareText },
+    { id: "commands", label: "命令中心", path: "#/copilot/commands", intent: "找入口、预览操作、执行低风险动作", outcome: DOMAIN_OUTCOME.commands, icon: Command },
+    { id: "tool-plan", label: "工具计划", path: "#/copilot/tool-plan", intent: "把目标拆成计划并任务化", outcome: DOMAIN_OUTCOME["tool-plan"], icon: ClipboardCheck },
   ];
 
   return (
@@ -117,6 +128,33 @@ export function CopilotHub() {
           );
         })}
       </div>
+
+      <Card title={t("page.copilot.decisionTitle", { defaultValue: "入口分工" })}>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {decisionLanes.map((lane) => {
+            const Icon = lane.icon;
+            return (
+              <a
+                key={lane.id}
+                href={lane.path}
+                className="copilotHubDecisionLane group rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                    <span className="rounded-lg bg-[var(--brand-soft)] p-2 text-[var(--brand)]">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    {lane.label}
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-[var(--muted)] opacity-60 transition group-hover:opacity-100" />
+                </span>
+                <span className="mt-3 block text-xs text-[var(--muted)]">{lane.intent}</span>
+                <span className="mt-2 block rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs leading-5 text-[var(--muted-strong)]">{lane.outcome}</span>
+              </a>
+            );
+          })}
+        </div>
+      </Card>
 
       <Card title={t("page.copilot.domainsTitle", { defaultValue: "专业入口" })}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
