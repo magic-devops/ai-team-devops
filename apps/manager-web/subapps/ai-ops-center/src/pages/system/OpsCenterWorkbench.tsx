@@ -190,6 +190,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   });
   const [opsStrategyLinkageDrawerOpen, setOpsStrategyLinkageDrawerOpen] = useState(false);
   const [rbForm, setRbForm] = useState({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" });
+  const [runbookEditorDrawerOpen, setRunbookEditorDrawerOpen] = useState(false);
   const [selectedRunbookId, setSelectedRunbookId] = useState("");
   const [runbookDiffResult, setRunbookDiffResult] = useState<any>(null);
   const [runbookEvidenceResult, setRunbookEvidenceResult] = useState<any>(null);
@@ -629,6 +630,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
         void qc.invalidateQueries({ queryKey: ["opsRunbookVersions", id] });
       }
       setShowForm(false);
+      setRunbookEditorDrawerOpen(false);
       setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" });
     },
   });
@@ -2457,7 +2459,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 {backfillRunbookEvidence.isPending ? "回填中..." : "自动回填证据"}
               </button>
               <button
-                onClick={() => { setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" }); setShowForm(v => !v); }}
+                onClick={() => { setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" }); setRunbookEditorDrawerOpen(true); }}
                 className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90"
               >
                 + 新建
@@ -2479,23 +2481,84 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 </div>
               ))}
             </div>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="Runbook 名称 *" value={rbForm.name} onChange={e => setRbForm(f => ({ ...f, name: e.target.value }))} />
-                  <input className="input-base" placeholder="标签 (逗号分隔)" value={rbForm.tags} onChange={e => setRbForm(f => ({ ...f, tags: e.target.value }))} />
-                  <input className="input-base" placeholder="负责人" value={rbForm.owner} onChange={e => setRbForm(f => ({ ...f, owner: e.target.value }))} />
-                  <input className="input-base" placeholder="变更说明" value={rbForm.change_note} onChange={e => setRbForm(f => ({ ...f, change_note: e.target.value }))} />
-                </div>
-                <textarea className="input-base w-full h-24 resize-none" placeholder="操作步骤（每行一步）" value={rbForm.steps} onChange={e => setRbForm(f => ({ ...f, steps: e.target.value }))} />
-                <div className="flex gap-2">
-                  <button onClick={() => saveRb.mutate()} disabled={!rbForm.name || saveRb.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {saveRb.isPending ? "保存中..." : rbForm.id ? "保存并生成版本" : "创建首个版本"}
-                  </button>
-                  <button onClick={() => { setShowForm(false); setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" }); }} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
+            <Drawer
+              title={rbForm.id ? "编辑 Runbook 版本" : "新建 Runbook"}
+              open={runbookEditorDrawerOpen}
+              onClose={() => setRunbookEditorDrawerOpen(false)}
+              width="min(700px, 100vw)"
+            >
+              <div className="runbookEditorFocusedDrawer space-y-5">
+                <Steps
+                  size="small"
+                  current={rbForm.name && rbForm.steps ? 1 : 0}
+                  items={[
+                    { title: "身份" },
+                    { title: "步骤" },
+                    { title: "版本" },
+                  ]}
+                />
+                <Form layout="vertical" requiredMark={false} onFinish={() => saveRb.mutate()}>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">Runbook 身份</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="Runbook 名称" required>
+                        <Input value={rbForm.name} onChange={e => setRbForm(f => ({ ...f, name: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="负责人">
+                        <Input value={rbForm.owner} onChange={e => setRbForm(f => ({ ...f, owner: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="标签">
+                        <Input value={rbForm.tags} onChange={e => setRbForm(f => ({ ...f, tags: e.target.value }))} placeholder="incident,api" />
+                      </Form.Item>
+                      <Form.Item label="变更说明">
+                        <Input value={rbForm.change_note} onChange={e => setRbForm(f => ({ ...f, change_note: e.target.value }))} />
+                      </Form.Item>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">执行步骤</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">每行一个步骤，保存后生成不可变版本快照。</p>
+                    <Form.Item className="mt-3" label="操作步骤" required>
+                      <Input.TextArea
+                        autoSize={{ minRows: 5, maxRows: 8 }}
+                        value={rbForm.steps}
+                        onChange={e => setRbForm(f => ({ ...f, steps: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <p className="text-sm font-semibold">版本证据</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">保存后会刷新 Runbook 列表与版本历史；编辑已有 Runbook 时会生成新版本，便于差异对比、恢复和归档。</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">模式</p>
+                        <p className="text-sm font-semibold">{rbForm.id ? "新版本" : "首版本"}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">步骤数</p>
+                        <p className="text-sm font-semibold">{rbForm.steps.split("\n").filter(Boolean).length}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">当前版本数</p>
+                        <p className="text-sm font-semibold">{rbVersionsQ.data?.total ?? 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Space className="mt-4" wrap>
+                    <Button type="primary" htmlType="submit" loading={saveRb.isPending} disabled={!rbForm.name}>
+                      {rbForm.id ? "保存并生成版本" : "创建首个版本"}
+                    </Button>
+                    <Button onClick={() => { setRunbookEditorDrawerOpen(false); setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" }); }}>
+                      取消
+                    </Button>
+                  </Space>
+                  {saveRb.error && <p className="mt-3 text-xs text-red-600">{(saveRb.error as Error).message}</p>}
+                </Form>
               </div>
-            )}
+            </Drawer>
             <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.9fr)_minmax(460px,1.1fr)]">
               <div className="space-y-3">
                 {(rbQ.data?.items ?? []).length === 0 && <p className="py-8 text-center text-sm text-[var(--muted)]">暂无 Runbook</p>}
@@ -2516,7 +2579,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                         onClick={() => {
                           setRbForm({ id: r.id, name: r.name || "", steps: (r.steps || []).join("\n"), tags: (r.tags || []).join(", "), owner: r.owner || "Ops Lead", change_note: "" });
                           setSelectedRunbookId(r.id);
-                          setShowForm(true);
+                          setRunbookEditorDrawerOpen(true);
                         }}
                         className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs"
                       >

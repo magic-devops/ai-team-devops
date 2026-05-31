@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T06:33:20Z",
+  "updated_at": "2026-05-31T06:37:45Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -359,12 +359,13 @@
       "完成 Task 98 OpsCenter 跨模块联动配置抽屉化：跨模块运维策略联动的动作、最大联动项、优先级、负责人、执行工具和联动说明从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Steps/Button；主页面只保留联动指标、配置摘要、预览/执行入口和联动结果。",
       "完成 Task 99 Copilot AI 指挥台三次差异化增强：进一步回应 AI 指挥台、AI 会话、命令中心、工具计划体验近似问题；AI 指挥台新增推荐下一步卡，命令中心新增命令类型筛选、过滤后的命令表和“先找能力 -> 再看风险 -> 最后留证”执行路径，工具计划新增交付推进、治理闭环、生产排障目标模板，继续用 Ant Design Segmented/Table/Button 等成熟组件保持简单高效。",
       "完成 Task 100 OpsCenter RCA 智能归因配置抽屉化：智能根因归因的 Agent Run、Trace、Correlation、采样数量、任务优先级、负责人和执行工具从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Steps/Button；主 RCA 页面只保留归因范围摘要、生成归因、预览/创建任务入口、候选结果和任务/RCA 证据。",
-      "完成 Task 101 OpsCenter 手工 RCA 创建抽屉化：手工 RCA 创建的事件 ID、影响范围、根因描述和解决方案从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Steps/Button；主 RCA 页面只保留新建入口、智能归因摘要、候选结果、验证闭环和 RCA 列表。"
+      "完成 Task 101 OpsCenter 手工 RCA 创建抽屉化：手工 RCA 创建的事件 ID、影响范围、根因描述和解决方案从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Steps/Button；主 RCA 页面只保留新建入口、智能归因摘要、候选结果、验证闭环和 RCA 列表。",
+      "完成 Task 102 OpsCenter Runbook 版本编辑抽屉化：Runbook 首版创建、编辑生成新版本的名称、负责人、标签、变更说明和操作步骤从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Steps/Button；主 Runbook 页面只保留版本治理、证据回填、差异对比、版本动作和 Runbook 列表。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 101 OpsCenter 手工 RCA 创建抽屉化已完成：下一步继续把 Runbook 版本治理和自愈动作中的复杂 inline 表单拆成 Drawer/Steps，并继续做移动端截图检查。"
+    "current": "Task 102 OpsCenter Runbook 版本编辑抽屉化已完成：下一步继续把自愈动作中的复杂 inline 表单拆成 Drawer/Steps，并继续做移动端截图检查。"
   },
   "metrics": {
     "completion_rate": 100,

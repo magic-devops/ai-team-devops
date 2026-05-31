@@ -114,4 +114,18 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base\" placeholder=\"事件 ID *\" value={rcaForm.incident_id}");
     expect(source).not.toContain("<textarea className=\"input-base w-full h-16 resize-none\" placeholder=\"根因描述 *\"");
   });
+
+  it("keeps Runbook version editing in a focused drawer flow", () => {
+    expect(source).toContain("runbookEditorDrawerOpen");
+    expect(source).toContain("runbookEditorFocusedDrawer");
+    expect(source).toContain("setRunbookEditorDrawerOpen(true)");
+    expect(source).toContain("新建 Runbook");
+    expect(source).toContain("编辑 Runbook 版本");
+    expect(source).toContain("Runbook 身份");
+    expect(source).toContain("执行步骤");
+    expect(source).toContain("版本证据");
+    expect(source).toContain("saveRb.mutate()");
+    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Runbook 名称 *\" value={rbForm.name}");
+    expect(source).not.toContain("<textarea className=\"input-base w-full h-24 resize-none\" placeholder=\"操作步骤（每行一步）\"");
+  });
 });
