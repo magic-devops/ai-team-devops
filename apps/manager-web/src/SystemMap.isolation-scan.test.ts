@@ -78,8 +78,10 @@ describe("SystemMap isolation source scanner", () => {
     expect(navigationSource).toContain('key: "threeCodeIsolationGovernance"');
     expect(navigationSource).toContain('capability: "governance.system-map.three-code-isolation"');
     expect(navigationSource).toContain('key: "sourceIsolationScan"');
+    expect(navigationSource).toContain('initialSection: "source-scan"');
     expect(navigationSource).toContain('capability: "governance.system-map.source-scan"');
     expect(navigationSource).toContain('key: "isolationBaselineCompare"');
+    expect(navigationSource).toContain('initialSection: "baseline-compare"');
     expect(navigationSource).toContain('capability: "governance.system-map.baseline-compare"');
     expect(navigationSource).toContain('key: "systemMapGovernanceTasks"');
     expect(navigationSource).toContain('capability: "governance.system-map.governance-tasks"');

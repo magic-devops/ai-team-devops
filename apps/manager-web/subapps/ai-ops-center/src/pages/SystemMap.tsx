@@ -20,6 +20,8 @@ type SystemMapSection =
   | "registry"
   | "readiness"
   | "isolation"
+  | "source-scan"
+  | "baseline-compare"
   | "tasks"
   | "manifest"
   | "actions"
@@ -375,6 +377,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     { label: t("nav.pageRegistry"), value: "registry" },
     { label: t("nav.moduleReadinessGovernance"), value: "readiness" },
     { label: t("nav.threeCodeIsolationGovernance"), value: "isolation" },
+    { label: t("nav.sourceIsolationScan"), value: "source-scan" },
+    { label: t("nav.isolationBaselineCompare"), value: "baseline-compare" },
     { label: t("nav.systemMapGovernanceTasks"), value: "tasks" },
     { label: t("nav.moduleManifest"), value: "manifest" },
     { label: t("nav.moduleActionCatalog"), value: "actions" },
@@ -384,7 +388,10 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const showOverview = !focused && section === "overview";
   const showRegistry = !focused || section === "registry";
   const showReadiness = !focused || section === "readiness";
-  const showIsolation = !focused || section === "isolation";
+  const showIsolationGovernance = !focused || section === "isolation";
+  const showSourceScan = !focused || section === "source-scan";
+  const showBaselineCompare = !focused || section === "baseline-compare";
+  const showIsolation = showIsolationGovernance || showSourceScan || showBaselineCompare;
   const showTasks = !focused || section === "tasks";
   const showManifest = !focused || section === "manifest";
   const showActions = !focused || section === "actions";
@@ -570,7 +577,13 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
               return;
             }
             setSection(value as SystemMapSection);
-            const nextPath = String(value).replace("isolation", "three-code-isolation").replace("tasks", "governance-tasks");
+            const pathBySection: Partial<Record<SystemMapSection, string>> = {
+              "baseline-compare": "baseline-compare",
+              "source-scan": "source-scan",
+              isolation: "three-code-isolation",
+              tasks: "governance-tasks",
+            };
+            const nextPath = pathBySection[value as SystemMapSection] ?? String(value);
             window.location.hash = `#/system-map/${nextPath}`;
           }}
           options={[
@@ -979,8 +992,14 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
 
       {showIsolation ? (
       <Card
-        title={t("page.systemMap.isolationTitle")}
-        actions={
+        title={
+          section === "source-scan"
+            ? t("page.systemMap.isolationSourceScan")
+            : section === "baseline-compare"
+              ? t("page.systemMap.isolationScanCompareTitle")
+              : t("page.systemMap.isolationTitle")
+        }
+        actions={showIsolationGovernance ? (
           <div className="flex flex-wrap items-center gap-2">
             <Checkbox
               checked={includeProtectedIsolation}
@@ -1006,7 +1025,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
               {t("page.systemMap.createIsolationTasks")}
             </button>
           </div>
-        }
+        ) : null}
       >
         <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -1031,7 +1050,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
             </div>
           </div>
           <div className="space-y-3">
-            {isolationTaskResult ? (
+            {showIsolationGovernance && isolationTaskResult ? (
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted-strong)]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
@@ -1055,7 +1074,9 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                 ) : null}
               </div>
             ) : null}
+            {(showSourceScan || showBaselineCompare) ? (
             <IsolationSourceScanPanel
+              variant={showBaselineCompare && !showSourceScan ? "compare" : showSourceScan && !showBaselineCompare ? "scan" : "full"}
               scanData={isolationScanQ.data}
               taskResult={isolationScanTaskResult}
               runResult={isolationScanRunResult}
@@ -1074,6 +1095,9 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
               onPreviewCompareTasks={() => isolationScanCompareTasks.mutate({ dryRun: true })}
               onCreateCompareTasks={() => isolationScanCompareTasks.mutate({ dryRun: false })}
             />
+            ) : null}
+            {showIsolationGovernance ? (
+            <>
             <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
               <div className="grid grid-cols-[1fr_8rem_1.2fr_1.2fr] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs font-semibold text-[var(--muted)]">
                 <span>{t("page.systemMap.domain")}</span>
@@ -1114,6 +1138,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                   </article>
                 ))}
               </div>
+            ) : null}
+            </>
             ) : null}
           </div>
         </div>

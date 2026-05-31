@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { IsolationBaselineComparePanel } from "./IsolationBaselineComparePanel";
 
 type IsolationSourceScanPanelProps = {
+  variant?: "full" | "scan" | "compare";
   scanData: any;
   taskResult: any;
   runResult: any;
@@ -23,6 +24,7 @@ type IsolationSourceScanPanelProps = {
 };
 
 export function IsolationSourceScanPanel({
+  variant = "full",
   scanData,
   taskResult,
   runResult,
@@ -44,9 +46,13 @@ export function IsolationSourceScanPanel({
   const { t } = useTranslation();
   const items = scanData?.items ?? [];
   const runRows = Array.isArray(scanRuns) ? scanRuns : [];
+  const showScan = variant === "full" || variant === "scan";
+  const showCompare = variant === "full" || variant === "compare";
 
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+      {showScan ? (
+      <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.isolationSourceScan")}</p>
         <div className="flex flex-wrap items-center gap-2">
@@ -146,6 +152,9 @@ export function IsolationSourceScanPanel({
       ) : (
         <p className="mt-3 text-xs text-[var(--muted)]">{t("page.systemMap.isolationNoScanIssues")}</p>
       )}
+      </>
+      ) : null}
+      {showCompare ? (
       <IsolationBaselineComparePanel
         compareData={isolationScanCompare}
         compareTaskResult={compareTaskResult}
@@ -154,6 +163,7 @@ export function IsolationSourceScanPanel({
         onPreviewCompareTasks={onPreviewCompareTasks}
         onCreateCompareTasks={onCreateCompareTasks}
       />
+      ) : null}
       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.isolationScanRunHistory")}</p>

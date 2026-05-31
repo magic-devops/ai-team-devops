@@ -58,10 +58,14 @@ describe("SystemMap governance task operations", () => {
     expect(systemMapSource).toContain("showRegistry");
     expect(systemMapSource).toContain("showReadiness");
     expect(systemMapSource).toContain("showIsolation");
+    expect(systemMapSource).toContain("showSourceScan");
+    expect(systemMapSource).toContain("showBaselineCompare");
     expect(navigationSource).toContain('key: "pageRegistry"');
     expect(navigationSource).toContain('initialSection: "registry"');
     expect(navigationSource).toContain('initialSection: "manifest"');
     expect(navigationSource).toContain('initialSection: "capabilities"');
+    expect(navigationSource).toContain('initialSection: "source-scan"');
+    expect(navigationSource).toContain('initialSection: "baseline-compare"');
     expect(navigationSource).toContain('path: "#/system-map/migration"');
     expect(navigationSource).toContain('initialSection: "migration"');
   });
