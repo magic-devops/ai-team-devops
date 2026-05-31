@@ -106,6 +106,7 @@ export function Settings() {
   const [overageDraft, setOverageDraft] = useState({ mode: "approval_required", grace_percent: "5", approval_threshold_percent: "100", invoice_due_days: "14", suspend_after_days: "30" });
   const [entitlementDraft, setEntitlementDraft] = useState({ feature: "team_rbac", metric: "llm_tokens", delta: "1000", subject: "agent-run" });
   const [entitlementResult, setEntitlementResult] = useState<any>(null);
+  const [billingDrawerOpen, setBillingDrawerOpen] = useState(false);
   const [auditInvoiceId, setAuditInvoiceId] = useState("");
   const [ssoDraft, setSsoDraft] = useState({
     provider: "okta",
@@ -491,6 +492,7 @@ export function Settings() {
       }),
     onSuccess: () => {
       setPaymentDraft({ invoice_id: "", amount_usd: "", method: "manual", external_ref: "" });
+      setBillingDrawerOpen(false);
       void qc.invalidateQueries({ queryKey: ["billingInvoices"] });
       void qc.invalidateQueries({ queryKey: ["billingPayments"] });
       void qc.invalidateQueries({ queryKey: ["billingAlerts"] });
@@ -4681,22 +4683,24 @@ export function Settings() {
           <BillingMetric label={t("page.settings.outstanding")} value={`$${formatMoney(billingSummary.data?.outstanding_usd)}`} />
         </div>
         <div className="mb-5 grid gap-4 xl:grid-cols-3">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.overagePolicy")}</p>
-            <div className="mt-3 space-y-2">
-              <select className={inputClass} value={overageDraft.mode} onChange={(e) => setOverageDraft({ ...overageDraft, mode: e.target.value })}>
-                {["approval_required", "block", "allow"].map((mode) => <option key={mode} value={mode}>{t(`page.settings.overageMode.${mode}`)}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-2">
-                <input className={inputClass} value={overageDraft.grace_percent} onChange={(e) => setOverageDraft({ ...overageDraft, grace_percent: e.target.value })} placeholder={t("page.settings.gracePercent")} inputMode="decimal" />
-                <input className={inputClass} value={overageDraft.invoice_due_days} onChange={(e) => setOverageDraft({ ...overageDraft, invoice_due_days: e.target.value })} placeholder={t("page.settings.invoiceDueDays")} inputMode="numeric" />
+          <div className="billingControlQuickSummary rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.billingOperationsTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t("page.settings.billingOperationsDesc")}</p>
               </div>
-              <input className={inputClass} value={overageDraft.suspend_after_days} onChange={(e) => setOverageDraft({ ...overageDraft, suspend_after_days: e.target.value })} placeholder={t("page.settings.suspendAfterDays")} inputMode="numeric" />
-              <button type="button" className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={updateOveragePolicy.isPending} onClick={() => updateOveragePolicy.mutate()}>
-                {t("page.settings.saveOveragePolicy")}
-              </button>
-              {updateOveragePolicy.error ? <ErrorLine message={(updateOveragePolicy.error as Error).message} /> : null}
+              <BadgeDollarSign className="h-5 w-5 text-[var(--brand)]" />
             </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Info label={t("page.settings.plan")} value={planDraft || String(billing.data?.subscription?.plan || "-")} />
+              <Info label={t("page.settings.overagePolicy")} value={t(`page.settings.overageMode.${overageDraft.mode}`)} />
+              <Info label={t("page.settings.billingEmail")} value={billingEmail || "-"} />
+              <Info label={t("page.settings.openInvoices")} value={String(billingDunning.data?.summary?.open_invoices ?? 0)} />
+            </div>
+            <Button className="mt-4 w-full" type="primary" onClick={() => setBillingDrawerOpen(true)}>
+              {t("page.settings.billingOpenDrawer")}
+            </Button>
+            {billing.isError ? <ErrorLine message={(billing.error as Error).message} /> : null}
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.entitlementCheck")}</p>
@@ -4752,41 +4756,13 @@ export function Settings() {
                 <p className="text-xs text-[var(--muted)]">{t("page.settings.billingDesc")}</p>
               </div>
             </div>
-            <div className="mt-4 space-y-3">
-              <label className="block text-xs font-medium text-[var(--muted)]">
-                {t("page.settings.plan")}
-                <select
-                  className="mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
-                  value={planDraft}
-                  onChange={(e) => setPlanDraft(e.target.value)}
-                >
-                  {Object.entries(billing.data?.catalog || {}).map(([id, plan]: [string, any]) => (
-                    <option key={id} value={id}>
-                      {plan.name || id}
-                    </option>
-                  ))}
-                  {!billing.data?.catalog ? <option value="starter">Starter</option> : null}
-                </select>
-              </label>
-              <label className="block text-xs font-medium text-[var(--muted)]">
-                {t("page.settings.billingEmail")}
-                <input
-                  className="mt-1 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
-                  value={billingEmail}
-                  onChange={(e) => setBillingEmail(e.target.value)}
-                  placeholder="billing@example.com"
-                />
-              </label>
-              <button
-                type="button"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={updateBilling.isPending}
-                onClick={() => updateBilling.mutate()}
-              >
-                {t("page.settings.applyPlan")}
-              </button>
-              {updateBilling.error ? <ErrorLine message={(updateBilling.error as Error).message} /> : null}
-              {billing.isError ? <ErrorLine message={(billing.error as Error).message} /> : null}
+            <div className="mt-4 grid gap-3">
+              <Info label={t("page.settings.plan")} value={planDraft || String(billing.data?.subscription?.plan || "-")} />
+              <Info label={t("page.settings.status")} value={String(billing.data?.subscription?.status || "-")} />
+              <Info label={t("page.settings.billingEmail")} value={billingEmail || "-"} />
+              <Button block onClick={() => setBillingDrawerOpen(true)}>
+                {t("page.settings.billingOpenDrawer")}
+              </Button>
             </div>
           </div>
 
@@ -4908,53 +4884,18 @@ export function Settings() {
           </div>
         ) : null}
         <div className="mt-5 grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
-          <form
-            className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!paymentDraft.invoice_id || Number(paymentDraft.amount_usd) <= 0) return;
-              recordPayment.mutate();
-            }}
-          >
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.recordPayment")}</p>
-            <div className="mt-4 space-y-3">
-              <select
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text)]"
-                value={paymentDraft.invoice_id}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const row = (invoices.data?.items || []).find((x: any) => x.id === id);
-                  setPaymentDraft({ ...paymentDraft, invoice_id: id, amount_usd: row ? String(row.total_due_usd || "") : paymentDraft.amount_usd });
-                }}
-              >
-                <option value="">{t("page.settings.pickInvoice")}</option>
-                {(invoices.data?.items || []).map((row: any) => (
-                  <option key={row.id} value={row.id}>{row.period} · {row.id}</option>
-                ))}
-              </select>
-              <input
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text)]"
-                value={paymentDraft.amount_usd}
-                onChange={(e) => setPaymentDraft({ ...paymentDraft, amount_usd: e.target.value })}
-                placeholder={t("page.settings.paymentAmount")}
-                inputMode="decimal"
-              />
-              <input
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-sm text-[var(--text)]"
-                value={paymentDraft.external_ref}
-                onChange={(e) => setPaymentDraft({ ...paymentDraft, external_ref: e.target.value })}
-                placeholder={t("page.settings.paymentRef")}
-              />
-              <button
-                type="submit"
-                className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={recordPayment.isPending || !paymentDraft.invoice_id || Number(paymentDraft.amount_usd) <= 0}
-              >
-                {t("page.settings.savePayment")}
-              </button>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t("page.settings.paymentDrawerDesc")}</p>
+            <div className="mt-4 grid gap-3">
+              <Info label={t("page.settings.openInvoices")} value={String(billingDunning.data?.summary?.open_invoices ?? 0)} />
+              <Info label={t("page.settings.outstanding")} value={`$${formatMoney(billingSummary.data?.outstanding_usd)}`} />
+              <Button block type="primary" onClick={() => setBillingDrawerOpen(true)}>
+                {t("page.settings.recordPayment")}
+              </Button>
               {recordPayment.error ? <ErrorLine message={(recordPayment.error as Error).message} /> : null}
             </div>
-          </form>
+          </div>
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <div className="grid grid-cols-[1fr_7rem_8rem] gap-3 border-b border-[var(--border)] px-4 py-3 text-xs font-semibold text-[var(--muted)]">
               <span>{t("page.settings.paymentHistory")}</span>
@@ -4976,6 +4917,160 @@ export function Settings() {
             ) : null}
           </div>
         </div>
+        <Drawer
+          title={t("page.settings.billingOperationsTitle")}
+          open={billingDrawerOpen}
+          onClose={() => setBillingDrawerOpen(false)}
+          width="min(640px, 100vw)"
+        >
+          <div className="space-y-5">
+            <Steps
+              size="small"
+              current={paymentDraft.invoice_id ? 2 : 0}
+              items={[
+                { title: t("page.settings.billingSubscriptionStep") },
+                { title: t("page.settings.billingOverageStep") },
+                { title: t("page.settings.billingPaymentStep") },
+              ]}
+            />
+            <Form layout="vertical" className="space-y-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.subscription")}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <Form.Item label={t("page.settings.plan")} required className="mb-0">
+                    <Select
+                      value={planDraft}
+                      onChange={(value) => setPlanDraft(value)}
+                      options={[
+                        ...Object.entries(billing.data?.catalog || {}).map(([id, plan]: [string, any]) => ({
+                          value: id,
+                          label: plan.name || id,
+                        })),
+                        ...(!billing.data?.catalog ? [{ value: "starter", label: "Starter" }] : []),
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.billingEmail")} required className="mb-0">
+                    <Input
+                      type="email"
+                      value={billingEmail}
+                      onChange={(e) => setBillingEmail(e.target.value)}
+                      placeholder="billing@example.com"
+                    />
+                  </Form.Item>
+                </div>
+                <Button className="mt-4" type="primary" loading={updateBilling.isPending} onClick={() => updateBilling.mutate()}>
+                  {t("page.settings.applyPlan")}
+                </Button>
+                {updateBilling.error ? <ErrorLine message={(updateBilling.error as Error).message} /> : null}
+                {billing.isError ? <ErrorLine message={(billing.error as Error).message} /> : null}
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.overagePolicy")}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <Form.Item label={t("page.settings.overagePolicy")} required className="mb-0">
+                    <Select
+                      value={overageDraft.mode}
+                      onChange={(value) => setOverageDraft({ ...overageDraft, mode: value })}
+                      options={["approval_required", "block", "allow"].map((mode) => ({
+                        value: mode,
+                        label: t(`page.settings.overageMode.${mode}`),
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.gracePercent")} className="mb-0">
+                    <Input
+                      type="number"
+                      value={overageDraft.grace_percent}
+                      onChange={(e) => setOverageDraft({ ...overageDraft, grace_percent: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.approvalThresholdPercent")} className="mb-0">
+                    <Input
+                      type="number"
+                      value={overageDraft.approval_threshold_percent}
+                      onChange={(e) => setOverageDraft({ ...overageDraft, approval_threshold_percent: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.invoiceDueDays")} className="mb-0">
+                    <Input
+                      type="number"
+                      value={overageDraft.invoice_due_days}
+                      onChange={(e) => setOverageDraft({ ...overageDraft, invoice_due_days: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.suspendAfterDays")} className="mb-0 md:col-span-2">
+                    <Input
+                      type="number"
+                      value={overageDraft.suspend_after_days}
+                      onChange={(e) => setOverageDraft({ ...overageDraft, suspend_after_days: e.target.value })}
+                    />
+                  </Form.Item>
+                </div>
+                <Button className="mt-4" loading={updateOveragePolicy.isPending} onClick={() => updateOveragePolicy.mutate()}>
+                  {t("page.settings.saveOveragePolicy")}
+                </Button>
+                {updateOveragePolicy.error ? <ErrorLine message={(updateOveragePolicy.error as Error).message} /> : null}
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.recordPayment")}</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{t("page.settings.paymentDrawerDesc")}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <Form.Item label={t("page.settings.pickInvoice")} required className="mb-0 md:col-span-2">
+                    <Select
+                      value={paymentDraft.invoice_id || undefined}
+                      placeholder={t("page.settings.pickInvoice")}
+                      onChange={(id) => {
+                        const row = (invoices.data?.items || []).find((x: any) => x.id === id);
+                        setPaymentDraft({ ...paymentDraft, invoice_id: id, amount_usd: row ? String(row.total_due_usd || "") : paymentDraft.amount_usd });
+                      }}
+                      options={(invoices.data?.items || []).map((row: any) => ({
+                        value: row.id,
+                        label: `${row.period} · ${row.id}`,
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.paymentAmount")} required className="mb-0">
+                    <Input
+                      type="number"
+                      value={paymentDraft.amount_usd}
+                      onChange={(e) => setPaymentDraft({ ...paymentDraft, amount_usd: e.target.value })}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.paymentMethod")} className="mb-0">
+                    <Select
+                      value={paymentDraft.method}
+                      onChange={(value) => setPaymentDraft({ ...paymentDraft, method: value })}
+                      options={["manual", "bank_transfer", "stripe"].map((method) => ({
+                        value: method,
+                        label: t(`page.settings.paymentMethodValue.${method}`),
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label={t("page.settings.paymentRef")} className="mb-0 md:col-span-2">
+                    <Input
+                      value={paymentDraft.external_ref}
+                      onChange={(e) => setPaymentDraft({ ...paymentDraft, external_ref: e.target.value })}
+                      placeholder={t("page.settings.paymentRef")}
+                    />
+                  </Form.Item>
+                </div>
+                <Space className="mt-4">
+                  <Button
+                    type="primary"
+                    loading={recordPayment.isPending}
+                    disabled={!paymentDraft.invoice_id || Number(paymentDraft.amount_usd) <= 0}
+                    onClick={() => recordPayment.mutate()}
+                  >
+                    {t("page.settings.savePayment")}
+                  </Button>
+                  <Button onClick={() => setBillingDrawerOpen(false)}>{t("common.cancel")}</Button>
+                </Space>
+                {recordPayment.error ? <ErrorLine message={(recordPayment.error as Error).message} /> : null}
+              </div>
+            </Form>
+          </div>
+        </Drawer>
       </Card>
       ) : null}
       </section>

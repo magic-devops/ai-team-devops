@@ -76,4 +76,19 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain('action: "verify"');
     expect(source).toContain('action: "archive"');
   });
+
+  it("keeps billing subscription policy and payment in a focused drawer flow", () => {
+    expect(source).toContain("billingDrawerOpen");
+    expect(source).toContain("billingControlQuickSummary");
+    expect(source).toContain("billingOpenDrawer");
+    expect(source).toContain("setBillingDrawerOpen(true)");
+    expect(source).toContain("billingSubscriptionStep");
+    expect(source).toContain("billingOverageStep");
+    expect(source).toContain("billingPaymentStep");
+    expect(source).toContain("updateBilling.mutate()");
+    expect(source).toContain("updateOveragePolicy.mutate()");
+    expect(source).toContain("recordPayment.mutate()");
+    expect(source).toContain("overageDraft.approval_threshold_percent");
+    expect(source).toContain("paymentDraft.method");
+  });
 });
