@@ -82,6 +82,48 @@ const A2A_TAB_PATHS: Record<Tab, string> = {
   dispatches: "#/ecosystem/a2a/dispatch",
   evidence: "#/ecosystem/a2a/evidence",
 };
+const A2A_TAB_META: Record<Tab, { title: string; description: string; focus: string }> = {
+  health: {
+    title: "A2A 协议健康",
+    description: "集中查看协议健康、运行风险、IM 简报和治理任务，适合作为 A2A 网关总览入口。",
+    focus: "健康态势、风险简报、治理任务",
+  },
+  registry: {
+    title: "A2A Agent 注册",
+    description: "管理外部 Agent 注册、凭证轮换、心跳、信任策略和任务拉取，支撑真实 Agent 接入。",
+    focus: "注册、凭证、心跳、信任准入",
+  },
+  negotiate: {
+    title: "A2A 能力协商",
+    description: "按任务目标、能力、优先级和风险策略推荐可执行 Agent，并生成可追溯分发候选。",
+    focus: "任务目标、能力匹配、推荐分发",
+  },
+  sessions: {
+    title: "A2A 协商时间线",
+    description: "追踪协商、分发、重试、证据和质量事件，帮助定位跨 Agent 执行过程。",
+    focus: "会话、事件、执行轨迹",
+  },
+  sla: {
+    title: "A2A 外部 SLA",
+    description: "治理外部 Agent 执行时效、缺证据、超时升级和 SLA 策略，避免分发后失控。",
+    focus: "SLA、升级、缺证据治理",
+  },
+  windows: {
+    title: "A2A 执行窗口",
+    description: "审计租约、确认、进度停滞和自动动作，确保 Agent 执行窗口可续租、可回收、可重派。",
+    focus: "租约、停滞、自动动作",
+  },
+  dispatches: {
+    title: "A2A 任务分发",
+    description: "查看分发记录、协议包、重试、重派和 Agent Run 关联，支撑任务级运行追踪。",
+    focus: "分发记录、协议包、重试重派",
+  },
+  evidence: {
+    title: "A2A 执行证据",
+    description: "沉淀执行证据、质量评分和 Agent Run 状态同步，形成外部 Agent 可审计交付闭环。",
+    focus: "证据、质量、Run 状态",
+  },
+};
 
 function tabFromHash(fallback: Tab): Tab {
   const hash = window.location.hash || A2A_TAB_PATHS[fallback];
@@ -103,7 +145,7 @@ function badgeClass(level: string) {
   return "bg-emerald-50 text-emerald-700 ring-emerald-100";
 }
 
-export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { focused?: boolean; initialTab?: Tab }) {
+export function A2aWorkbench({ focused = false, initialTab = "health" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
@@ -165,6 +207,8 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   const agents = registryQ.data?.items ?? [];
   const risks = summary.risks ?? [];
   const topCapabilities = summary.capability_coverage?.top_capabilities ?? [];
+  const activeMeta = A2A_TAB_META[tab];
+  const showGlobalMetrics = !focused || tab === "health";
   const enabledChannels = useMemo(() => (channelsQ.data ?? []).filter((ch: any) => ch.enabled), [channelsQ.data]);
   const switchTab = (next: Tab, updateHash = true) => {
     setTab(next);
@@ -619,11 +663,11 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title="A2A 网关"
-        description="标准 A2A 协议：注册、能力协商、协议包分发、执行证据与治理任务"
+        title={focused ? activeMeta.title : "A2A 网关"}
+        description={focused ? activeMeta.description : "标准 A2A 协议：注册、能力协商、协议包分发、执行证据与治理任务"}
         actions={<><AiAssistButton onClick={() => setAiOpen(true)} />
           <RefreshButton onClick={() => { void registryQ.refetch(); void healthQ.refetch(); void trustQ.refetch(); void trustPolicyQ.refetch(); void dispatchQ.refetch(); void slaQ.refetch(); void windowsQ.refetch(); void windowPolicyQ.refetch(); }} pending={registryQ.isFetching || healthQ.isFetching || trustQ.isFetching || trustPolicyQ.isFetching || slaQ.isFetching || windowsQ.isFetching || windowPolicyQ.isFetching} /></>}
-        metrics={
+        metrics={showGlobalMetrics ? (
           <WorkbenchStats items={[
             { label: "协议健康分", value: summary.health_score ?? 0, trend: (summary.health_score ?? 0) >= 80 ? "up" : "down" },
             { label: "已注册 Agent", value: summary.registered_agents ?? 0 },
@@ -631,16 +675,24 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
             { label: "SLA 超时", value: slaQ.data?.summary?.overdue ?? 0, trend: (slaQ.data?.summary?.overdue ?? 0) > 0 ? "down" : "up" },
             { label: "窗口风险", value: (windowsQ.data?.summary?.expired_leases ?? 0) + (windowsQ.data?.summary?.stale_progress ?? 0) + (windowsQ.data?.summary?.blocked ?? 0), trend: ((windowsQ.data?.summary?.expired_leases ?? 0) + (windowsQ.data?.summary?.stale_progress ?? 0) + (windowsQ.data?.summary?.blocked ?? 0)) > 0 ? "down" : "up" },
           ]} />
-        }
+        ) : undefined}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
-        <Segmented
-          className="min-w-max"
-          options={tabOptions}
-          value={tab}
-          onChange={(value) => switchTab(value as Tab)}
-        />
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        {focused ? (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
+            <span className="text-xs font-medium text-[var(--muted)]">当前聚焦：{activeMeta.focus}</span>
+            <a href="#/ecosystem/a2a" className="text-xs text-[var(--brand)] hover:underline">返回 A2A 网关</a>
+          </div>
+        ) : null}
+        <div className="overflow-x-auto">
+          <Segmented
+            className="min-w-max"
+            options={tabOptions}
+            value={tab}
+            onChange={(value) => switchTab(value as Tab)}
+          />
+        </div>
       </div>
 
       {tab === "health" && (
