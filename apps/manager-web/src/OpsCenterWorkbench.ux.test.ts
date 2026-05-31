@@ -50,4 +50,17 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"策略名称\"");
     expect(source).not.toContain("<textarea className=\"input-base min-h-16 w-full font-mono text-xs\" placeholder=\"匹配器 key=value，每行一个\"");
   });
+
+  it("keeps SLO escalation setup in a focused drawer flow", () => {
+    expect(source).toContain("alertSloEscalationDrawerOpen");
+    expect(source).toContain("alertSloEscalationFocusedDrawer");
+    expect(source).toContain("setAlertSloEscalationDrawerOpen(true)");
+    expect(source).toContain("配置 SLO 自动升级");
+    expect(source).toContain("当前升级策略");
+    expect(source).toContain("saveAlertSloEscalationPolicy.mutate()");
+    expect(source).toContain("runAlertSloEscalation.mutate(true)");
+    expect(source).toContain("runAlertSloEscalation.mutate(false)");
+    expect(source).not.toContain("<select className=\"input-base\" value={alertSloEscalationForm.min_risk_level}");
+    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertSloEscalationForm.note}");
+  });
 });

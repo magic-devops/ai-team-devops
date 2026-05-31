@@ -166,6 +166,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     owner: "Ops Lead",
     note: "高风险 SLO 预测自动升级为任务和 IM 风险简报。",
   });
+  const [alertSloEscalationDrawerOpen, setAlertSloEscalationDrawerOpen] = useState(false);
   const [alertStrategyCanaryResult, setAlertStrategyCanaryResult] = useState<any>(null);
   const [alertStrategyCanaryForm, setAlertStrategyCanaryForm] = useState({
     policy_id: "",
@@ -506,6 +507,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["opsAlertSloEscalationPolicy"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setAlertSloEscalationDrawerOpen(false);
     },
   });
   const runAlertSloEscalation = useMutation({
@@ -1153,7 +1155,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                         <p className="mt-1 text-xs text-[var(--muted)]">把跨源 SLO 预测中的高风险对象自动升级为治理任务和 IM 风险简报，保留运行记录。</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <button onClick={() => saveAlertSloEscalationPolicy.mutate()} disabled={saveAlertSloEscalationPolicy.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">保存策略</button>
+                        <button onClick={() => setAlertSloEscalationDrawerOpen(true)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">配置策略</button>
                         <button onClick={() => runAlertSloEscalation.mutate(true)} disabled={runAlertSloEscalation.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">预览升级</button>
                         <button onClick={() => runAlertSloEscalation.mutate(false)} disabled={runAlertSloEscalation.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">执行升级</button>
                       </div>
@@ -1178,27 +1180,31 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                     </div>
                     <div className="mt-3 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
                       <div className="rounded-lg border border-[var(--border)] p-3">
-                        <p className="text-xs font-semibold text-[var(--muted-strong)]">升级策略</p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <select className="input-base" value={alertSloEscalationForm.min_risk_level} onChange={e => setAlertSloEscalationForm(f => ({ ...f, min_risk_level: e.target.value }))}>
-                            {["critical", "high", "watch", "healthy"].map(item => <option key={item} value={item}>{item}</option>)}
-                          </select>
-                          <input className="input-base" placeholder="违约概率阈值" value={alertSloEscalationForm.min_breach_probability} onChange={e => setAlertSloEscalationForm(f => ({ ...f, min_breach_probability: e.target.value }))} />
-                          <input className="input-base" placeholder="最大升级对象" value={alertSloEscalationForm.max_targets} onChange={e => setAlertSloEscalationForm(f => ({ ...f, max_targets: e.target.value }))} />
-                          <input className="input-base" placeholder="冷却分钟" value={alertSloEscalationForm.cooldown_minutes} onChange={e => setAlertSloEscalationForm(f => ({ ...f, cooldown_minutes: e.target.value }))} />
-                          <input className="input-base" placeholder="动作 create_task,im_notify" value={alertSloEscalationForm.actions} onChange={e => setAlertSloEscalationForm(f => ({ ...f, actions: e.target.value }))} />
-                          <select className="input-base" value={alertSloEscalationForm.priority} onChange={e => setAlertSloEscalationForm(f => ({ ...f, priority: e.target.value }))}>
-                            {["P0", "P1", "P2", "P3"].map(item => <option key={item} value={item}>{item}</option>)}
-                          </select>
-                          <input className="input-base" placeholder="负责人" value={alertSloEscalationForm.assigned_to} onChange={e => setAlertSloEscalationForm(f => ({ ...f, assigned_to: e.target.value }))} />
-                          <input className="input-base" placeholder="执行工具" value={alertSloEscalationForm.dev_tool} onChange={e => setAlertSloEscalationForm(f => ({ ...f, dev_tool: e.target.value }))} />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-[var(--muted-strong)]">当前升级策略</p>
+                          <span className={`rounded px-2 py-0.5 text-[11px] ${alertSloEscalationPolicyQ.data?.item?.enabled === false ? "bg-gray-100 text-gray-500" : "bg-green-50 text-green-700"}`}>
+                            {alertSloEscalationPolicyQ.data?.item?.enabled === false ? "停用" : "启用"}
+                          </span>
                         </div>
-                        <textarea className="input-base mt-2 min-h-16 w-full text-xs" value={alertSloEscalationForm.note} onChange={e => setAlertSloEscalationForm(f => ({ ...f, note: e.target.value }))} />
-                        <label className="mt-2 flex items-center gap-2 text-xs text-[var(--muted-strong)]">
-                          <input type="checkbox" checked={alertSloEscalationForm.enabled} onChange={e => setAlertSloEscalationForm(f => ({ ...f, enabled: e.target.checked }))} />
-                          启用自动升级策略
-                        </label>
-                        <p className="mt-2 text-[11px] text-[var(--muted)]">当前持久化策略：{alertSloEscalationPolicyQ.data?.item?.enabled === false ? "停用" : "启用"} / {alertSloEscalationPolicyQ.data?.item?.min_risk_level ?? "high"} / {Math.round(((alertSloEscalationPolicyQ.data?.item?.min_breach_probability ?? 0.35) as number) * 100)}%</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">最低风险</p>
+                            <p className="text-sm font-semibold">{alertSloEscalationPolicyQ.data?.item?.min_risk_level ?? alertSloEscalationForm.min_risk_level}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">违约阈值</p>
+                            <p className="text-sm font-semibold">{Math.round(((alertSloEscalationPolicyQ.data?.item?.min_breach_probability ?? Number(alertSloEscalationForm.min_breach_probability || 0)) as number) * 100)}%</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">最大对象</p>
+                            <p className="text-sm font-semibold">{alertSloEscalationPolicyQ.data?.item?.max_targets ?? alertSloEscalationForm.max_targets}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">冷却窗口</p>
+                            <p className="text-sm font-semibold">{alertSloEscalationPolicyQ.data?.item?.cooldown_minutes ?? alertSloEscalationForm.cooldown_minutes} 分钟</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-[var(--muted)]">动作：{(alertSloEscalationPolicyQ.data?.item?.actions ?? alertSloEscalationForm.actions.split(",")).join(", ")} / Owner：{alertSloEscalationPolicyQ.data?.item?.owner ?? alertSloEscalationForm.owner}</p>
                       </div>
                       <div className="rounded-lg border border-[var(--border)] p-3">
                         <p className="text-xs font-semibold text-[var(--muted-strong)]">升级结果</p>
@@ -1708,6 +1714,151 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                   {createAlertNoisePolicy.error && <p className="mt-3 text-xs text-red-600">{(createAlertNoisePolicy.error as Error).message}</p>}
                 </Form>
               )}
+            </div>
+          </Drawer>
+          <Drawer
+            title="配置 SLO 自动升级"
+            open={alertSloEscalationDrawerOpen}
+            onClose={() => setAlertSloEscalationDrawerOpen(false)}
+            width="min(680px, 100vw)"
+          >
+            <div className="alertSloEscalationFocusedDrawer space-y-5">
+              <Steps
+                size="small"
+                current={1}
+                items={[
+                  { title: "阈值" },
+                  { title: "动作" },
+                  { title: "证据" },
+                ]}
+              />
+              <Form layout="vertical" requiredMark={false} onFinish={() => saveAlertSloEscalationPolicy.mutate()}>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">升级阈值</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="最低风险">
+                      <Select
+                        value={alertSloEscalationForm.min_risk_level}
+                        onChange={value => setAlertSloEscalationForm(f => ({ ...f, min_risk_level: value }))}
+                        options={["critical", "high", "watch", "healthy"].map(item => ({ label: item, value: item }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="违约概率阈值">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step="0.05"
+                        value={alertSloEscalationForm.min_breach_probability}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, min_breach_probability: e.target.value }))}
+                        placeholder="0.35"
+                      />
+                    </Form.Item>
+                    <Form.Item label="最大升级对象">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={alertSloEscalationForm.max_targets}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, max_targets: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="冷却分钟">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={alertSloEscalationForm.cooldown_minutes}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, cooldown_minutes: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">动作与责任人</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="动作">
+                      <Input
+                        value={alertSloEscalationForm.actions}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, actions: e.target.value }))}
+                        placeholder="create_task,im_notify"
+                      />
+                    </Form.Item>
+                    <Form.Item label="优先级">
+                      <Select
+                        value={alertSloEscalationForm.priority}
+                        onChange={value => setAlertSloEscalationForm(f => ({ ...f, priority: value }))}
+                        options={["P0", "P1", "P2", "P3"].map(item => ({ label: item, value: item }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="负责人">
+                      <Input
+                        value={alertSloEscalationForm.assigned_to}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, assigned_to: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="执行工具">
+                      <Input
+                        value={alertSloEscalationForm.dev_tool}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, dev_tool: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="Owner">
+                      <Input
+                        value={alertSloEscalationForm.owner}
+                        onChange={e => setAlertSloEscalationForm(f => ({ ...f, owner: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="启用策略">
+                      <Switch
+                        checked={alertSloEscalationForm.enabled}
+                        onChange={checked => setAlertSloEscalationForm(f => ({ ...f, enabled: checked }))}
+                      />
+                    </Form.Item>
+                  </div>
+                  <Form.Item label="说明">
+                    <Input.TextArea
+                      autoSize={{ minRows: 3, maxRows: 5 }}
+                      value={alertSloEscalationForm.note}
+                      onChange={e => setAlertSloEscalationForm(f => ({ ...f, note: e.target.value }))}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <p className="text-sm font-semibold">执行证据</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">保存只更新策略；预览和执行会复用当前表单参数、IM 通道和 24 小时预测窗口。</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">最近候选</p>
+                      <p className="text-sm font-semibold">{latestSloEscalation?.summary?.candidates ?? alertSloEscalationRunsQ.data?.summary?.latest_candidates ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">已建任务</p>
+                      <p className="text-sm font-semibold">{latestSloEscalation?.summary?.created ?? alertSloEscalationRunsQ.data?.summary?.latest_created ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">IM 通道</p>
+                      <p className="text-sm font-semibold">{imChannels.length}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Space className="mt-4" wrap>
+                  <Button type="primary" htmlType="submit" loading={saveAlertSloEscalationPolicy.isPending}>
+                    保存策略
+                  </Button>
+                  <Button onClick={() => runAlertSloEscalation.mutate(true)} loading={runAlertSloEscalation.isPending}>
+                    预览升级
+                  </Button>
+                  <Button danger onClick={() => runAlertSloEscalation.mutate(false)} loading={runAlertSloEscalation.isPending}>
+                    执行升级
+                  </Button>
+                  <Button onClick={() => setAlertSloEscalationDrawerOpen(false)}>取消</Button>
+                </Space>
+                {(saveAlertSloEscalationPolicy.error || runAlertSloEscalation.error) && (
+                  <p className="mt-3 text-xs text-red-600">{((saveAlertSloEscalationPolicy.error || runAlertSloEscalation.error) as Error).message}</p>
+                )}
+              </Form>
             </div>
           </Drawer>
           </>
