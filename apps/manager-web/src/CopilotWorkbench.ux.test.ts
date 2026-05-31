@@ -37,6 +37,9 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("Popconfirm");
     expect(copilotSource).toContain("copilotPlanTasks");
     expect(copilotSource).toContain("copilotExecuteCommand");
+    expect(copilotSource).toContain("copilotCommandApprovals");
+    expect(copilotSource).toContain("copilotReviewCommandApproval");
+    expect(copilotSource).toContain("copilotCommandApprovalQueue");
     expect(copilotSource).toContain("commandResult");
     expect(copilotSource).toContain("commandStats");
     expect(copilotSource).toContain("CommandTypeFilter");
@@ -60,6 +63,7 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("commandRequiresApproval");
     expect(copilotSource).toContain("commandRiskColor");
     expect(copilotTypesSource).toContain("CommandPolicy");
+    expect(copilotTypesSource).toContain("CommandApproval");
     expect(mobileCardsSource).toContain("approval_required");
     expect(copilotSource).toContain("CopilotModeActionDock");
     expect(copilotSource).toContain("CopilotCommandMobileCards");

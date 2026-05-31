@@ -9,5 +9,19 @@ export type CommandPolicy = {
   reason?: string;
 };
 export type CommandCandidate = { id?: string; label?: string; description?: string; type?: string; target?: string; prompt?: string; policy?: CommandPolicy; risk_level?: string; approval_required?: boolean; required_capability?: string };
+export type CommandApproval = {
+  id: string;
+  status: "pending" | "approved" | "rejected" | "executed" | string;
+  command_id?: string;
+  command_label?: string;
+  target?: string;
+  policy?: CommandPolicy;
+  session_id?: string;
+  run_id?: string;
+  requested_at?: string;
+  updated_at?: string;
+  reviewer?: string;
+  note?: string;
+};
 export type QuickPrompt = { label: string; prompt: string };
 export type PlanTemplate = { label: string; prompt: string };

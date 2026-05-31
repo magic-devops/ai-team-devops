@@ -4208,7 +4208,13 @@
     "confirmCommandTitle": "确认执行该命令？",
     "confirmCommandDesc": "该命令需要确认后才会执行并写入审计证据。",
     "confirmExecute": "确认执行",
-    "commandApprovalRequiredHint": "该命令需要确认后执行。请先预览影响范围，再点击确认执行。"
+    "submitApproval": "提交审批",
+    "commandApprovalQueue": "审批队列",
+    "commandApprovalPending": "{{count}} 个待审批命令",
+    "approveCommand": "批准",
+    "rejectCommand": "驳回",
+    "commandApprovalEmpty": "暂无待审批命令。",
+    "commandApprovalRequiredHint": "已生成审批记录，请在审批队列批准或驳回。"
   },
   "command": {
     "title": "AI 命令中心",

@@ -655,6 +655,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ query, limit }),
     }),
+  copilotCommandApprovals: (status = "pending", limit = 30) => {
+    const qs = new URLSearchParams({ status, limit: String(limit) });
+    return request<{ ok: boolean; items: any[]; total: number; counts?: Record<string, number> }>(`/api/v1/copilot/commands/approvals?${qs}`);
+  },
+  copilotReviewCommandApproval: (approvalId: string, body: { status: "approved" | "rejected"; reviewer?: string; note?: string }) =>
+    request<any>(`/api/v1/copilot/commands/approvals/${encodeURIComponent(approvalId)}/review`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   copilotExecuteCommand: (body: { command_id: string; dry_run?: boolean; approval_confirmed?: boolean; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>
     request<any>("/api/v1/copilot/commands/execute", { method: "POST", body: JSON.stringify(body) }),
   copilotPlan: (body: { query: string; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>

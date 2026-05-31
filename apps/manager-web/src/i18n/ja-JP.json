@@ -3329,7 +3329,13 @@
     "confirmCommandTitle": "このコマンドを実行しますか？",
     "confirmCommandDesc": "このコマンドは確認後に実行され、監査証跡を書き込みます。",
     "confirmExecute": "確認して実行",
-    "commandApprovalRequiredHint": "このコマンドは確認が必要です。影響範囲をプレビューしてから実行してください。"
+    "submitApproval": "承認申請",
+    "commandApprovalQueue": "承認キュー",
+    "commandApprovalPending": "承認待ちコマンド {{count}} 件",
+    "approveCommand": "承認",
+    "rejectCommand": "却下",
+    "commandApprovalEmpty": "承認待ちコマンドはありません。",
+    "commandApprovalRequiredHint": "承認レコードを作成しました。キューで承認または却下してください。"
   },
   "command": {
     "title": "AI コマンドセンター",

@@ -14,7 +14,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -292,6 +292,10 @@ def _sessions_file() -> Path:
     return _copilot_dir() / f"{_scope_key()}.sessions.jsonl"
 
 
+def _command_approvals_file() -> Path:
+    return _copilot_dir() / f"{_scope_key()}.command_approvals.json"
+
+
 def _turns_file(session_id: str) -> Path:
     sid = _safe_id(session_id, "cp")
     d = _copilot_dir() / _scope_key()
@@ -354,6 +358,115 @@ def _record_turn(session_id: str, row: dict[str, Any]) -> None:
     _append_jsonl(_turns_file(session_id), row)
 
 
+def _load_command_approvals() -> list[dict[str, Any]]:
+    path = _command_approvals_file()
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return [x for x in data if isinstance(x, dict)] if isinstance(data, list) else []
+
+
+def _save_command_approvals(rows: list[dict[str, Any]]) -> None:
+    path = _command_approvals_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    recent = rows[-1000:]
+    path.write_text(json.dumps(recent, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _public_command_approval(item: dict[str, Any]) -> dict[str, Any]:
+    keep = [
+        "id", "status", "command_id", "command_label", "command_type", "target", "policy",
+        "session_id", "run_id", "requested_at", "updated_at", "reviewed_at", "reviewer",
+        "note", "executed_at", "execution_status", "audit_hash", "context", "plan",
+    ]
+    return {key: item.get(key) for key in keep if key in item}
+
+
+def _find_command_approval(rows: list[dict[str, Any]], approval_id: str) -> dict[str, Any] | None:
+    return next((item for item in rows if str(item.get("id") or "") == approval_id), None)
+
+
+def _create_or_update_command_approval(
+    cmd: dict[str, Any],
+    policy: dict[str, Any],
+    body: "CommandExecuteIn",
+    session_id: str,
+    run_id: str,
+    planned: dict[str, Any],
+) -> dict[str, Any]:
+    rows = _load_command_approvals()
+    command_id = str(cmd.get("id") or body.command_id)
+    now = _now()
+    existing = next((
+        item for item in rows
+        if item.get("status") == "pending"
+        and str(item.get("command_id") or "") == command_id
+        and str(item.get("session_id") or "") == session_id
+        and str(item.get("run_id") or "") == run_id
+    ), None)
+    if existing:
+        existing.update({
+            "updated_at": now,
+            "context": body.context or {},
+            "plan": planned,
+            "policy": policy,
+        })
+        _save_command_approvals(rows)
+        return _public_command_approval(existing)
+
+    row = {
+        "id": f"cpa-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:10]}",
+        "status": "pending",
+        "command_id": command_id,
+        "command_label": str(cmd.get("label") or command_id),
+        "command_type": str(cmd.get("type") or ""),
+        "target": str(cmd.get("target") or ""),
+        "policy": policy,
+        "session_id": session_id,
+        "run_id": run_id,
+        "context": body.context or {},
+        "plan": planned,
+        "requested_at": now,
+        "updated_at": now,
+        "tenant_code": resolved_tenant_code(),
+        "business_code": resolved_business_code(),
+        "project_id": resolved_project_id(),
+        "project_code": resolved_project_code(),
+    }
+    rows.append(row)
+    _save_command_approvals(rows)
+    return _public_command_approval(row)
+
+
+def _mark_command_approval_executed(
+    approval_id: str,
+    *,
+    status: str,
+    audit_chain: dict[str, Any] | None,
+    operation_result: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not approval_id:
+        return None
+    rows = _load_command_approvals()
+    item = _find_command_approval(rows, approval_id)
+    if not item:
+        return None
+    item["status"] = "executed"
+    item["execution_status"] = status
+    item["executed_at"] = _now()
+    item["updated_at"] = item["executed_at"]
+    item["audit_hash"] = (audit_chain or {}).get("hash")
+    item["result_summary"] = {
+        "ok": bool(operation_result.get("ok", True)) if isinstance(operation_result, dict) else True,
+        "keys": sorted(operation_result.keys())[:12] if isinstance(operation_result, dict) else [],
+    }
+    _save_command_approvals(rows)
+    return _public_command_approval(item)
+
+
 # ── Schemas ──────────────────────────────────────────────────────
 class AskIn(BaseModel):
     query: str
@@ -387,6 +500,12 @@ class CommandExecuteIn(BaseModel):
     context: dict[str, Any] | None = None
     session_id: str = ""
     run_id: str = ""
+
+
+class CommandApprovalReviewIn(BaseModel):
+    status: Literal["approved", "rejected"]
+    reviewer: str = Field("manager-web", min_length=1, max_length=80)
+    note: str = Field("", max_length=1000)
 
 
 class PlanIn(BaseModel):
@@ -532,6 +651,42 @@ def copilot_resolve_command(body: CommandResolveIn) -> dict[str, Any]:
     return {"ok": True, "query": body.query, "best": best, "items": items, "total": len(items)}
 
 
+@router.get("/commands/approvals")
+def copilot_command_approvals(status: str = Query("pending"), limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+    """命令审批队列：敏感 operation 命令从本地确认升级为可追踪审批对象。"""
+    rows = list(reversed(_load_command_approvals()))
+    if status and status != "all":
+        rows = [item for item in rows if str(item.get("status") or "") == status]
+    items = [_public_command_approval(item) for item in rows[:limit]]
+    counts: dict[str, int] = {}
+    for item in _load_command_approvals():
+        key = str(item.get("status") or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return {"ok": True, "items": items, "total": len(items), "counts": counts}
+
+
+@router.post("/commands/approvals/{approval_id}/review")
+def copilot_review_command_approval(approval_id: str, body: CommandApprovalReviewIn) -> dict[str, Any]:
+    """审批或驳回敏感命令执行请求。"""
+    rows = _load_command_approvals()
+    item = _find_command_approval(rows, approval_id)
+    if not item:
+        raise HTTPException(404, "approval not found")
+    current = str(item.get("status") or "pending")
+    if current not in {"pending", body.status}:
+        raise HTTPException(409, f"approval already {current}")
+    now = _now()
+    item.update({
+        "status": body.status,
+        "reviewer": body.reviewer.strip() or "manager-web",
+        "note": body.note,
+        "reviewed_at": now,
+        "updated_at": now,
+    })
+    _save_command_approvals(rows)
+    return {"ok": True, "item": _public_command_approval(item)}
+
+
 @router.post("/commands/execute")
 async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
     """受控命令执行：导航/AI 命令只返回计划，operation 命令支持 dry-run 与审计证据。"""
@@ -581,6 +736,7 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
         raise HTTPException(400, "unsupported command type")
 
     if not body.dry_run and policy["approval_required"] and not body.approval_confirmed:
+        approval = _create_or_update_command_approval(cmd, policy, body, session_id, run_id, planned)
         result = {
             "ok": True,
             "dry_run": False,
@@ -588,9 +744,10 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
             "command": cmd,
             "evidence": {
                 "plan": planned,
+                "approval": approval,
                 "result": None,
                 "audit_chain": None,
-                "next_action": "confirm_execution",
+                "next_action": "review_approval",
             },
             "session_id": session_id,
             "run_id": run_id,
@@ -606,6 +763,22 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
         })
         _upsert_session(session_id, title=str(cmd.get("label") or body.command_id), run_id=run_id)
         return result
+
+    approval_id = ""
+    approval_snapshot: dict[str, Any] | None = None
+    if policy["approval_required"] and body.approval_confirmed:
+        approval_id = str((body.context or {}).get("approval_id") or "")
+        if approval_id:
+            rows = _load_command_approvals()
+            approval_item = _find_command_approval(rows, approval_id)
+            if not approval_item:
+                raise HTTPException(404, "approval not found")
+            approval_status = str(approval_item.get("status") or "pending")
+            if approval_status == "rejected":
+                raise HTTPException(409, "approval rejected")
+            if approval_status == "pending":
+                raise HTTPException(409, "approval pending review")
+            approval_snapshot = _public_command_approval(approval_item)
 
     operation_result: dict[str, Any] | None = None
     if not body.dry_run:
@@ -646,6 +819,14 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
         except Exception as err:  # pragma: no cover - audit chain must not hide command result
             audit_chain = {"error": str(err)}
 
+    if approval_id:
+        approval_snapshot = _mark_command_approval_executed(
+            approval_id,
+            status="succeeded" if not body.dry_run else "planned",
+            audit_chain=audit_chain,
+            operation_result=operation_result,
+        ) or approval_snapshot
+
     result = {
         "ok": True,
         "dry_run": body.dry_run,
@@ -653,6 +834,7 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
         "command": cmd,
         "evidence": {
             "plan": planned,
+            "approval": approval_snapshot,
             "result": operation_result,
             "audit_chain": audit_chain,
         },
@@ -776,7 +958,7 @@ def copilot_plan_tasks(body: PlanTasksIn) -> dict[str, Any]:
 
 @router.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest", "sessions", "commands", "plan", "plan_tasks"]}
+    return {"ok": True, "skills": ["ask", "classify", "summarize", "suggest", "sessions", "commands", "command_approvals", "plan", "plan_tasks"]}
 
 
 @router.get("/hub")
@@ -788,7 +970,7 @@ def copilot_hub(limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
         "ok": True,
         "summary": {
             "sessions": len(rows),
-            "skills": 8,
+            "skills": 9,
             "commands": len(commands),
             "scope": _scope_key(),
         },
@@ -805,8 +987,8 @@ def copilot_hub(limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
                 "id": "commands",
                 "path": "#/copilot/commands",
                 "capability": "ai.copilot.commands",
-                "description": "统一检索导航、运营动作和 AI 命令，适合快速到达与执行。",
-                "primary_action": "search_command_catalog",
+                "description": "统一检索导航、运营动作和 AI 命令，承接敏感命令审批与执行留证。",
+                "primary_action": "search_review_execute",
             },
             {
                 "id": "tool-plan",

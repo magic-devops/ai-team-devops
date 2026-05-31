@@ -3868,7 +3868,13 @@
     "confirmCommandTitle": "Confirm this command?",
     "confirmCommandDesc": "This command runs only after confirmation and writes audit evidence.",
     "confirmExecute": "Confirm run",
-    "commandApprovalRequiredHint": "This command requires confirmation. Preview impact first, then confirm execution."
+    "submitApproval": "Submit approval",
+    "commandApprovalQueue": "Approval queue",
+    "commandApprovalPending": "{{count}} pending command approvals",
+    "approveCommand": "Approve",
+    "rejectCommand": "Reject",
+    "commandApprovalEmpty": "No pending command approvals.",
+    "commandApprovalRequiredHint": "An approval record was created. Approve or reject it in the queue."
   },
   "command": {
     "title": "AI Command Center",
