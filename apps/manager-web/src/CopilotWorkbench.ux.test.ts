@@ -56,6 +56,10 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("copilotCommandMobileCards");
     expect(copilotSource).toContain("copilotChatEvidence");
     expect(copilotSource).toContain("copilotPlanPipeline");
+    expect(copilotSource).toContain("copilotModeActionDock");
+    expect(copilotSource).toContain("copilotChatSessionDock");
+    expect(copilotSource).toContain("copilotCommandHeroSearch");
+    expect(copilotSource).toContain("copilotPlanDraftCard");
     expect(copilotSource).toContain("计划产出");
     expect(copilotSource).toContain("命令操作台");
     expect(copilotSource).toContain("FileSearch");

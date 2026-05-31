@@ -7,6 +7,7 @@ const root = resolve(__dirname, "..");
 describe("SystemMap readiness task generation", () => {
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
   const experiencePrioritySource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/SystemExperiencePriorityPanel.tsx"), "utf8");
+  const productionPanelSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/SystemProductionReadinessPanel.tsx"), "utf8");
   const apiSource = readFileSync(resolve(root, "src/lib/api.ts"), "utf8");
   const zhSource = readFileSync(resolve(root, "src/i18n/zh-CN.json"), "utf8");
 
@@ -20,8 +21,12 @@ describe("SystemMap readiness task generation", () => {
     expect(apiSource).toContain("systemPagesProductionReadiness");
     expect(apiSource).toContain("/api/v1/system/pages/production-readiness");
     expect(systemMapSource).toContain("api.systemPagesProductionReadiness");
-    expect(systemMapSource).toContain("productionReadinessTitle");
-    expect(systemMapSource).toContain("productionColumns");
+    expect(systemMapSource).toContain("SystemProductionReadinessPanel");
+    expect(productionPanelSource).toContain("productionReadinessTitle");
+    expect(productionPanelSource).toContain("export function SystemProductionReadinessPanel");
+    expect(productionPanelSource).toContain("systemProductionReadinessPanel");
+    expect(productionPanelSource).toContain("productionDimensions");
+    expect(productionPanelSource).toContain("productionStageValue");
   });
 
   it("adds focused experience governance instead of extending the page as one long matrix", () => {

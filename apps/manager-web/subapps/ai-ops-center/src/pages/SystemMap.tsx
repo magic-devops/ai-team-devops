@@ -12,6 +12,7 @@ import { useCapabilities } from "@/lib/capabilities";
 import { IsolationSourceScanPanel } from "./system/IsolationSourceScanPanel";
 import { SystemExperiencePriorityPanel } from "./system/SystemExperiencePriorityPanel";
 import { SystemGovernanceTasksPanel } from "./system/SystemGovernanceTasksPanel";
+import { SystemProductionReadinessPanel } from "./system/SystemProductionReadinessPanel";
 
 type ViewMode = "react" | "legacy" | "all";
 
@@ -441,68 +442,6 @@ export function SystemMap() {
       ),
     },
   ];
-  const productionColumns: ColumnsType<any> = [
-    {
-      title: t("page.systemMap.module"),
-      dataIndex: "name",
-      render: (_value, row) => (
-        <div className="min-w-0">
-          <a className="truncate text-sm font-semibold text-[var(--text)] hover:text-[var(--brand)]" href={row.path}>{row.name}</a>
-          <p className="mt-1 truncate font-mono text-[11px] text-[var(--muted)]">{row.id} · {domainLabel(row.domain)}</p>
-        </div>
-      ),
-    },
-    {
-      title: t("page.systemMap.productionStage"),
-      dataIndex: "stage",
-      width: 150,
-      render: (value) => {
-        const stage = String(value || "gap");
-        const color = stage === "production_ready" ? "green" : stage === "runtime_ready" ? "blue" : stage === "contract_complete" ? "gold" : "red";
-        return <Tag color={color}>{t(`page.systemMap.productionStageValue.${stage}`)}</Tag>;
-      },
-    },
-    {
-      title: t("page.systemMap.productionScore"),
-      dataIndex: "production_score",
-      width: 120,
-      render: (value, row) => (
-        <div>
-          <p className="font-mono text-sm font-semibold text-[var(--brand)]">{value}</p>
-          <p className="text-[11px] text-[var(--muted)]">{row.readiness_score} contract</p>
-        </div>
-      ),
-    },
-    {
-      title: t("page.systemMap.productionDimensions"),
-      dataIndex: "dimensions",
-      render: (value) => (
-        <Space size={[4, 4]} wrap>
-          {Object.entries(value ?? {}).slice(0, 7).map(([key, dim]: [string, any]) => {
-            const statusValue = String(dim.status || "gap");
-            const color = statusValue === "ready" || statusValue === "not_required" ? "green" : statusValue === "partial" ? "gold" : "red";
-            return (
-              <Tag key={key} color={color}>
-                {t(`page.systemMap.productionDimension.${key}`)} {dim.score}
-              </Tag>
-            );
-          })}
-        </Space>
-      ),
-    },
-    {
-      title: t("page.systemMap.recommendation"),
-      dataIndex: "recommendations",
-      render: (value) => (
-        <div className="max-w-lg space-y-1">
-          {(value ?? []).slice(0, 2).map((item: string, index: number) => (
-            <p key={`${item}-${index}`} className="line-clamp-1 text-xs text-[var(--muted-strong)]">{item}</p>
-          ))}
-          {!(value ?? []).length ? <span className="text-xs text-emerald-600 dark:text-emerald-300">{t("page.systemMap.productionNoGap")}</span> : null}
-        </div>
-      ),
-    },
-  ];
   const experienceColumns: ColumnsType<any> = [
     {
       title: t("page.systemMap.module"),
@@ -915,38 +854,15 @@ export function SystemMap() {
             </div>
             ) : null}
             {readinessDetailView === "production" ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.productionReadinessTitle")}</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{productionReadinessQ.data?.agent_consumption?.purpose}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Metric label={t("page.systemMap.productionReady")} value={productionReadinessQ.data?.summary?.production_ready ?? 0} />
-                  <Metric label={t("page.systemMap.runtimeReady")} value={productionReadinessQ.data?.summary?.runtime_ready ?? 0} />
-                  <Metric label={t("page.systemMap.productionAvgScore")} value={productionReadinessQ.data?.summary?.avg_production_score ?? 0} />
-                  <Segmented
-                    value={productionStage}
-                    onChange={(value) => setProductionStage(value as string)}
-                    options={["all", "gap", "contract_complete", "runtime_ready", "production_ready"].map((value) => ({
-                      label: t(`page.systemMap.productionStageValue.${value}`),
-                      value,
-                    }))}
-                  />
-                </div>
-              </div>
-              {productionReadinessQ.isError ? <ErrorBlock message={(productionReadinessQ.error as Error).message} /> : null}
-              <Table
-                rowKey="id"
-                size="small"
-                columns={productionColumns}
-                dataSource={productionRows.slice(0, 12)}
+              <SystemProductionReadinessPanel
+                rows={productionRows}
+                data={productionReadinessQ.data}
+                stage={productionStage}
                 loading={productionReadinessQ.isLoading || productionReadinessQ.isFetching}
-                pagination={false}
-                scroll={{ x: 980 }}
-                locale={{ emptyText: t("page.systemMap.noProductionRows") }}
+                errorMessage={productionReadinessQ.isError ? (productionReadinessQ.error as Error).message : undefined}
+                domainLabel={domainLabel}
+                onStageChange={setProductionStage}
               />
-            </div>
             ) : null}
             {readinessDetailView === "readiness" ? (
             <div className="overflow-hidden rounded-2xl border border-[var(--border)]">

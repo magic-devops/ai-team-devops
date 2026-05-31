@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T09:37:42Z",
+  "updated_at": "2026-05-31T09:52:05Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -368,12 +368,14 @@
       "完成 Task 107 OpsCenter 自愈护栏动作处置抽屉化：生产护栏动作队列主页面只展示动作数、待审批、已应用、已验证摘要和动作状态卡；审批通过、应用动作、验证通过、回滚并留证收敛到 Ant Design Drawer/Steps/Button 聚焦处置流，审计载荷在抽屉内查看。",
       "完成 Task 108 Copilot AI 指挥台五次差异化增强：继续回应 AI 指挥台、AI 会话、命令中心、工具计划仍容易看成同一页的问题；AI 指挥台职责矩阵改为可点击入口并增加差异化色彩语义；AI 会话新增会话证据区、当前轮次/本地缓存摘要、最近上下文回填和转工具计划动作；命令中心新增移动端命令卡片，保留桌面 Ant Design Table；工具计划新增计划产出侧栏，展示匹配意图、候选命令和任务条目。",
       "完成 Task 109 SystemMap 体验治理优先队列增强：体验治理详情新增优先队列和 AI 改造包，自动展示 complex/watch 模块、最低体验维度、首条改造建议、移动端风险、权限缺口、AI 可改缺口、API/任务 API 和 Agent 字段；单模块支持聚焦、预览体验任务和生成体验任务，减少长表格筛选成本。",
-      "完成 Task 110 SystemMap 体验治理模块化拆分：将体验治理优先队列与 AI 改造包从 SystemMap 大页面抽离为 system/SystemExperiencePriorityPanel 独立组件，父页面只保留取数、筛选和动作编排，降低工作台维护复杂度并方便后续 AI 快速改造。"
+      "完成 Task 110 SystemMap 体验治理模块化拆分：将体验治理优先队列与 AI 改造包从 SystemMap 大页面抽离为 system/SystemExperiencePriorityPanel 独立组件，父页面只保留取数、筛选和动作编排，降低工作台维护复杂度并方便后续 AI 快速改造。",
+      "完成 Task 111 SystemMap 生产就绪矩阵模块化拆分：将生产就绪矩阵从 SystemMap 大页面抽离为 system/SystemProductionReadinessPanel 独立组件，封装阶段筛选、生产就绪指标、维度表格和错误态，父页面只负责数据查询和筛选状态。",
+      "完成 Task 112 Copilot AI 指挥台六次差异化增强：回应 AI 指挥台、AI 会话、命令中心、工具计划仍容易看成同一页的问题；Copilot 工作区首屏新增按模式切换的 Action Dock，AI 会话聚焦上下文接入、快捷追问和证据摘要，命令中心聚焦搜索、快捷筛选和类型分段，工具计划聚焦目标模板与生成计划；移动端命令卡片补齐查看/预览和转计划动作，减少进入侧栏二次查找。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 110 SystemMap 体验治理模块化拆分已完成；下一步继续做真实移动端截图检查和大工作台子路由懒加载拆分。"
+    "current": "Task 112 Copilot AI 指挥台六次差异化增强已完成；下一步继续做真实移动端截图检查、命令权限审批策略和大工作台子路由懒加载拆分。"
   },
   "metrics": {
     "completion_rate": 100,
