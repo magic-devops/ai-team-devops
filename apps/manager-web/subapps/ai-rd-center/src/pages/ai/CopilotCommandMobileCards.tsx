@@ -21,6 +21,10 @@ function commandTone(type?: string) {
   return type === "navigate" ? "green" : type === "operation" ? "orange" : "blue";
 }
 
+function riskTone(risk?: string) {
+  return risk === "high" ? "red" : risk === "medium" ? "gold" : "green";
+}
+
 export function CopilotCommandMobileCards({ rows, selectedKey, executing, onSelect, onRun, onPreview, onPlan }: Props) {
   const { t } = useTranslation();
 
@@ -39,9 +43,15 @@ export function CopilotCommandMobileCards({ rows, selectedKey, executing, onSele
                   <span className="block truncate text-sm font-semibold text-[var(--text)]">{row.label}</span>
                   <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted)]">{row.description}</span>
                 </span>
-                <Tag color={commandTone(row.type)}>{row.type}</Tag>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <Tag color={commandTone(row.type)}>{row.type}</Tag>
+                  <Tag color={riskTone(row.policy?.risk_level || row.risk_level)}>{row.policy?.risk_level || row.risk_level || "low"}</Tag>
+                </span>
               </span>
               <span className="mt-2 block break-all font-mono text-[11px] text-[var(--muted)]">{row.target || row.prompt || "-"}</span>
+              <span className="mt-2 block truncate text-[11px] text-[var(--muted)]">
+                {row.policy?.approval_required || row.approval_required ? t("copilot.approvalRequired", { defaultValue: "需确认" }) : t("copilot.noApprovalRequired", { defaultValue: "免审批" })} · {row.policy?.required_capability || row.required_capability || "ai.copilot.commands"}
+              </span>
             </button>
             <span className="mt-3 flex flex-wrap gap-2">
               {row.type === "operation" ? (

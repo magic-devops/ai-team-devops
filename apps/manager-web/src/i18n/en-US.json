@@ -3861,7 +3861,14 @@
     "openToolPlan": "Open tool plan",
     "toolPlanInput": "Natural-language goal",
     "quickIterationPlan": "Iteration plan",
-    "quickProjectSummary": "Project summary"
+    "quickProjectSummary": "Project summary",
+    "commandPolicy": "Policy",
+    "approvalRequired": "Confirm",
+    "noApprovalRequired": "No approval",
+    "confirmCommandTitle": "Confirm this command?",
+    "confirmCommandDesc": "This command runs only after confirmation and writes audit evidence.",
+    "confirmExecute": "Confirm run",
+    "commandApprovalRequiredHint": "This command requires confirmation. Preview impact first, then confirm execution."
   },
   "command": {
     "title": "AI Command Center",

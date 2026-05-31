@@ -77,6 +77,84 @@ def _command_catalog() -> list[dict[str, Any]]:
     ]
 
 
+_OPERATION_COMMAND_POLICIES: dict[str, dict[str, Any]] = {
+    "ops.health": {
+        "required_capability": "ai.copilot.commands.health",
+        "risk_level": "low",
+        "approval_required": False,
+        "approval_mode": "none",
+        "reason": "Read-only health probe.",
+    },
+    "ops.workflow_summary": {
+        "required_capability": "ai.copilot.commands.workflow.read",
+        "risk_level": "medium",
+        "approval_required": False,
+        "approval_mode": "none",
+        "reason": "Read-only operational summary.",
+    },
+    "ops.audit_verify": {
+        "required_capability": "governance.audit.verify",
+        "risk_level": "medium",
+        "approval_required": True,
+        "approval_mode": "confirm",
+        "reason": "Audit integrity checks must leave explicit operator confirmation.",
+    },
+    "ops.billing_summary": {
+        "required_capability": "system.billing.summary",
+        "risk_level": "high",
+        "approval_required": True,
+        "approval_mode": "confirm",
+        "reason": "Commercial and receivable data require explicit confirmation before execution.",
+    },
+}
+
+
+def _command_policy(cmd: dict[str, Any]) -> dict[str, Any]:
+    cmd_type = str(cmd.get("type") or "")
+    command_id = str(cmd.get("id") or "")
+    if cmd_type == "operation":
+        policy = _OPERATION_COMMAND_POLICIES.get(command_id, {
+            "required_capability": "ai.copilot.commands.execute",
+            "risk_level": "medium",
+            "approval_required": True,
+            "approval_mode": "confirm",
+            "reason": "Operation commands require explicit confirmation unless allowlisted as low risk.",
+        })
+    elif cmd_type == "copilot":
+        policy = {
+            "required_capability": "ai.copilot.chat",
+            "risk_level": "low",
+            "approval_required": False,
+            "approval_mode": "none",
+            "reason": "AI prompt command opens Copilot chat without platform-side apply.",
+        }
+    else:
+        policy = {
+            "required_capability": "ai.copilot.commands.navigate",
+            "risk_level": "low",
+            "approval_required": False,
+            "approval_mode": "none",
+            "reason": "Navigation command changes UI route only.",
+        }
+    return {
+        "required_capability": str(policy.get("required_capability") or "ai.copilot.commands"),
+        "risk_level": str(policy.get("risk_level") or "low"),
+        "approval_required": bool(policy.get("approval_required", False)),
+        "approval_mode": str(policy.get("approval_mode") or "none"),
+        "reason": str(policy.get("reason") or ""),
+    }
+
+
+def _public_command(cmd: dict[str, Any]) -> dict[str, Any]:
+    item = dict(cmd)
+    policy = _command_policy(cmd)
+    item["policy"] = policy
+    item["required_capability"] = policy["required_capability"]
+    item["risk_level"] = policy["risk_level"]
+    item["approval_required"] = policy["approval_required"]
+    return item
+
+
 def _score_command(cmd: dict[str, Any], query: str) -> int:
     q = query.strip().lower()
     if not q:
@@ -104,13 +182,14 @@ def _resolve_commands(query: str, limit: int = 8) -> list[dict[str, Any]]:
         key=lambda x: x[1],
         reverse=True,
     )
-    picked = [dict(cmd, score=score) for cmd, score in rows if score > 0]
+    picked = [dict(_public_command(cmd), score=score) for cmd, score in rows if score > 0]
     return picked[:limit]
 
 
 def _command_by_id(command_id: str) -> dict[str, Any] | None:
     target = command_id.strip()
-    return next((cmd for cmd in _command_catalog() if str(cmd.get("id") or "") == target), None)
+    cmd = next((cmd for cmd in _command_catalog() if str(cmd.get("id") or "") == target), None)
+    return _public_command(cmd) if cmd else None
 
 
 def _parse_jsonish(text: str) -> dict[str, Any] | None:
@@ -304,6 +383,7 @@ class CommandResolveIn(BaseModel):
 class CommandExecuteIn(BaseModel):
     command_id: str = Field(..., min_length=1)
     dry_run: bool = True
+    approval_confirmed: bool = False
     context: dict[str, Any] | None = None
     session_id: str = ""
     run_id: str = ""
@@ -440,7 +520,7 @@ def copilot_suggest(body: SuggestIn) -> dict[str, Any]:
 @router.get("/commands")
 def copilot_commands(q: str = "", limit: int = Query(30, ge=1, le=100)) -> dict[str, Any]:
     """统一命令注册表：React CmdK、CLI 和 Agent 可复用。"""
-    items = _resolve_commands(q, limit=limit) if q.strip() else _command_catalog()[:limit]
+    items = _resolve_commands(q, limit=limit) if q.strip() else [_public_command(cmd) for cmd in _command_catalog()[:limit]]
     return {"ok": True, "items": items, "total": len(items)}
 
 
@@ -462,12 +542,14 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
     run_id = _safe_id(body.run_id, "run")
     cmd_type = str(cmd.get("type") or "")
     target = str(cmd.get("target") or "")
+    policy = _command_policy(cmd)
     planned = {
         "command_id": cmd.get("id"),
         "label": cmd.get("label"),
         "type": cmd_type,
         "target": target,
-        "guards": ["registered_command_only", "no_arbitrary_url", "audit_chain_on_apply"],
+        "policy": policy,
+        "guards": ["registered_command_only", "no_arbitrary_url", "capability_policy_visible", "approval_confirmed_when_required", "audit_chain_on_apply"],
         "safe_to_execute": cmd_type in {"navigate", "copilot", "operation"},
     }
     if cmd_type in {"navigate", "copilot"}:
@@ -498,6 +580,33 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
     if cmd_type != "operation":
         raise HTTPException(400, "unsupported command type")
 
+    if not body.dry_run and policy["approval_required"] and not body.approval_confirmed:
+        result = {
+            "ok": True,
+            "dry_run": False,
+            "status": "approval_required",
+            "command": cmd,
+            "evidence": {
+                "plan": planned,
+                "result": None,
+                "audit_chain": None,
+                "next_action": "confirm_execution",
+            },
+            "session_id": session_id,
+            "run_id": run_id,
+        }
+        _record_turn(session_id, {
+            "ts": _now(),
+            "session_id": session_id,
+            "run_id": run_id,
+            "query": f"execute command {body.command_id}",
+            "context": body.context or {},
+            "ok": True,
+            "response": result,
+        })
+        _upsert_session(session_id, title=str(cmd.get("label") or body.command_id), run_id=run_id)
+        return result
+
     operation_result: dict[str, Any] | None = None
     if not body.dry_run:
         if body.command_id == "ops.health":
@@ -525,6 +634,7 @@ async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
                 details={
                     "command": planned,
                     "context": body.context or {},
+                    "approval_confirmed": bool(body.approval_confirmed),
                     "result_summary": {
                         "ok": bool(operation_result.get("ok", True)) if isinstance(operation_result, dict) else True,
                         "keys": sorted(operation_result.keys())[:12] if isinstance(operation_result, dict) else [],

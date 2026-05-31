@@ -1,6 +1,13 @@
 export type Turn = { ts: string; sessionId: string; runId: string; query: string; response?: unknown; error?: string };
 export type CopilotMode = "chat" | "commands" | "tool-plan";
 export type CommandTypeFilter = "all" | "navigate" | "operation" | "copilot";
-export type CommandCandidate = { id?: string; label?: string; description?: string; type?: string; target?: string; prompt?: string };
+export type CommandPolicy = {
+  required_capability?: string;
+  risk_level?: "low" | "medium" | "high" | string;
+  approval_required?: boolean;
+  approval_mode?: "none" | "confirm" | string;
+  reason?: string;
+};
+export type CommandCandidate = { id?: string; label?: string; description?: string; type?: string; target?: string; prompt?: string; policy?: CommandPolicy; risk_level?: string; approval_required?: boolean; required_capability?: string };
 export type QuickPrompt = { label: string; prompt: string };
 export type PlanTemplate = { label: string; prompt: string };

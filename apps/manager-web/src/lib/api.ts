@@ -655,7 +655,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ query, limit }),
     }),
-  copilotExecuteCommand: (body: { command_id: string; dry_run?: boolean; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>
+  copilotExecuteCommand: (body: { command_id: string; dry_run?: boolean; approval_confirmed?: boolean; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>
     request<any>("/api/v1/copilot/commands/execute", { method: "POST", body: JSON.stringify(body) }),
   copilotPlan: (body: { query: string; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>
     request<any>("/api/v1/copilot/plan", { method: "POST", body: JSON.stringify(body) }),

@@ -4201,7 +4201,14 @@
     "openToolPlan": "打开工具计划",
     "toolPlanInput": "自然语言目标",
     "quickIterationPlan": "迭代计划",
-    "quickProjectSummary": "项目总结"
+    "quickProjectSummary": "项目总结",
+    "commandPolicy": "策略",
+    "approvalRequired": "需确认",
+    "noApprovalRequired": "免审批",
+    "confirmCommandTitle": "确认执行该命令？",
+    "confirmCommandDesc": "该命令需要确认后才会执行并写入审计证据。",
+    "confirmExecute": "确认执行",
+    "commandApprovalRequiredHint": "该命令需要确认后执行。请先预览影响范围，再点击确认执行。"
   },
   "command": {
     "title": "AI 命令中心",

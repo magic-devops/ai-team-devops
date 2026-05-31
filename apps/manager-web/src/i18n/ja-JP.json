@@ -3322,7 +3322,14 @@
     "openToolPlan": "ツール計画を開く",
     "toolPlanInput": "自然言語の目標",
     "quickIterationPlan": "イテレーション計画",
-    "quickProjectSummary": "プロジェクト要約"
+    "quickProjectSummary": "プロジェクト要約",
+    "commandPolicy": "ポリシー",
+    "approvalRequired": "確認必要",
+    "noApprovalRequired": "承認不要",
+    "confirmCommandTitle": "このコマンドを実行しますか？",
+    "confirmCommandDesc": "このコマンドは確認後に実行され、監査証跡を書き込みます。",
+    "confirmExecute": "確認して実行",
+    "commandApprovalRequiredHint": "このコマンドは確認が必要です。影響範囲をプレビューしてから実行してください。"
   },
   "command": {
     "title": "AI コマンドセンター",

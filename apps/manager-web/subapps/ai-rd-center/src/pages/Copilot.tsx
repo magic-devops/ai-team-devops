@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Empty, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
+import { Alert, Button, Empty, Input, Popconfirm, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
 import { Bot, CheckCircle2, ClipboardCheck, Command, FileSearch, Loader2, MessageSquareText, Network, Plus, ShieldCheck, Workflow } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
@@ -157,6 +157,14 @@ const PLAN_TEMPLATES = [
   },
 ];
 
+function commandRiskColor(risk?: string) {
+  return risk === "high" ? "red" : risk === "medium" ? "gold" : "green";
+}
+
+function commandRequiresApproval(command?: CommandCandidate | null) {
+  return Boolean(command?.policy?.approval_required ?? command?.approval_required);
+}
+
 export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -257,10 +265,11 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
   });
 
   const executeCommand = useMutation({
-    mutationFn: async ({ commandId, dryRun }: { commandId: string; dryRun: boolean }) =>
+    mutationFn: async ({ commandId, dryRun, approvalConfirmed = false }: { commandId: string; dryRun: boolean; approvalConfirmed?: boolean }) =>
       api.copilotExecuteCommand({
         command_id: commandId,
         dry_run: dryRun,
+        approval_confirmed: approvalConfirmed,
         context: withProject ? { project_id: getProjectId(), source: "manager-web" } : { source: "manager-web" },
         session_id: sessionId,
         run_id: runId,
@@ -502,7 +511,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                   onClick: () => setSelectedCommandId(String(row.id || row.label)),
                 })}
                 pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
-                scroll={{ x: 820 }}
+                scroll={{ x: 980 }}
                 locale={{ emptyText: t("command.empty") }}
                 columns={[
                   {
@@ -522,6 +531,16 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                     render: (value: string) => <Tag color={value === "navigate" ? "green" : value === "operation" ? "orange" : "blue"}>{value}</Tag>,
                   },
                   {
+                    title: t("copilot.commandPolicy", { defaultValue: "策略" }),
+                    width: 170,
+                    render: (_: unknown, row: CommandCandidate) => (
+                      <Space size={4} wrap>
+                        <Tag color={commandRiskColor(row.policy?.risk_level || row.risk_level)}>{row.policy?.risk_level || row.risk_level || "low"}</Tag>
+                        {commandRequiresApproval(row) ? <Tag color="red">{t("copilot.approvalRequired", { defaultValue: "需确认" })}</Tag> : <Tag color="green">{t("copilot.noApprovalRequired", { defaultValue: "免审批" })}</Tag>}
+                      </Space>
+                    ),
+                  },
+                  {
                     title: t("copilot.target", { defaultValue: "目标" }),
                     dataIndex: "target",
                     width: 220,
@@ -538,9 +557,23 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                             <Button size="small" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: true })}>
                               {t("common.preview")}
                             </Button>
-                            <Button size="small" type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false })}>
-                              {t("copilot.execute", { defaultValue: "执行" })}
-                            </Button>
+                            {commandRequiresApproval(row) ? (
+                              <Popconfirm
+                                title={t("copilot.confirmCommandTitle", { defaultValue: "确认执行该命令？" })}
+                                description={row.policy?.reason || t("copilot.confirmCommandDesc", { defaultValue: "该命令需要确认后才会执行并写入审计证据。" })}
+                                okText={t("copilot.confirmExecute", { defaultValue: "确认执行" })}
+                                cancelText={t("common.cancel", { defaultValue: "取消" })}
+                                onConfirm={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false, approvalConfirmed: true })}
+                              >
+                                <Button size="small" type="primary" loading={executeCommand.isPending}>
+                                  {t("copilot.confirmExecute", { defaultValue: "确认执行" })}
+                                </Button>
+                              </Popconfirm>
+                            ) : (
+                              <Button size="small" type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false })}>
+                                {t("copilot.execute", { defaultValue: "执行" })}
+                              </Button>
+                            )}
                           </>
                         ) : (
                           <Button size="small" onClick={() => runCommand(row)}>
@@ -567,18 +600,40 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                       <p className="truncate text-sm font-semibold text-[var(--text)]">{selectedCommand.label || selectedCommand.id}</p>
                       <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{selectedCommand.description || "选择命令后可预览目标、执行低风险动作或转成工具计划。"}</p>
                     </div>
-                    <Tag color={selectedCommand.type === "operation" ? "orange" : selectedCommand.type === "copilot" ? "blue" : "green"}>{selectedCommand.type || "navigate"}</Tag>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <Tag color={selectedCommand.type === "operation" ? "orange" : selectedCommand.type === "copilot" ? "blue" : "green"}>{selectedCommand.type || "navigate"}</Tag>
+                      <Tag color={commandRiskColor(selectedCommand.policy?.risk_level || selectedCommand.risk_level)}>{selectedCommand.policy?.risk_level || selectedCommand.risk_level || "low"}</Tag>
+                    </span>
                   </div>
                   <p className="mt-3 break-all rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--muted)]">{selectedCommand.target || selectedCommand.prompt || "-"}</p>
+                  <div className="mt-3 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs">
+                    <p className="font-semibold text-[var(--text)]">{commandRequiresApproval(selectedCommand) ? t("copilot.approvalRequired", { defaultValue: "需确认" }) : t("copilot.noApprovalRequired", { defaultValue: "免审批" })}</p>
+                    <p className="mt-1 break-all text-[var(--muted)]">{selectedCommand.policy?.required_capability || selectedCommand.required_capability || "ai.copilot.commands"}</p>
+                    {selectedCommand.policy?.reason ? <p className="mt-1 text-[var(--muted)]">{selectedCommand.policy.reason}</p> : null}
+                  </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
                     {selectedCommand.type === "operation" ? (
                       <>
                         <Button block icon={<ShieldCheck className="h-4 w-4" />} loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: true })}>
                           {t("common.preview")}
                         </Button>
-                        <Button block type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: false })}>
-                          {t("copilot.execute", { defaultValue: "执行" })}
-                        </Button>
+                        {commandRequiresApproval(selectedCommand) ? (
+                          <Popconfirm
+                            title={t("copilot.confirmCommandTitle", { defaultValue: "确认执行该命令？" })}
+                            description={selectedCommand.policy?.reason || t("copilot.confirmCommandDesc", { defaultValue: "该命令需要确认后才会执行并写入审计证据。" })}
+                            okText={t("copilot.confirmExecute", { defaultValue: "确认执行" })}
+                            cancelText={t("common.cancel", { defaultValue: "取消" })}
+                            onConfirm={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: false, approvalConfirmed: true })}
+                          >
+                            <Button block type="primary" loading={executeCommand.isPending}>
+                              {t("copilot.confirmExecute", { defaultValue: "确认执行" })}
+                            </Button>
+                          </Popconfirm>
+                        ) : (
+                          <Button block type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: false })}>
+                            {t("copilot.execute", { defaultValue: "执行" })}
+                          </Button>
+                        )}
                       </>
                     ) : (
                       <Button block icon={<FileSearch className="h-4 w-4" />} onClick={() => runCommand(selectedCommand)}>
@@ -597,9 +652,12 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-[var(--text)]">{commandResult.command?.label || commandResult.command?.id}</p>
-                    <Tag color={commandResult.dry_run ? "blue" : "green"}>{commandResult.status}</Tag>
+                    <Tag color={commandResult.status === "approval_required" ? "red" : commandResult.dry_run ? "blue" : "green"}>{commandResult.status}</Tag>
                   </div>
                   <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">{commandResult.command?.target}</p>
+                  {commandResult.status === "approval_required" ? (
+                    <Alert className="mt-2" type="warning" showIcon message={t("copilot.commandApprovalRequiredHint", { defaultValue: "该命令需要确认后执行。请先预览影响范围，再点击确认执行。" })} />
+                  ) : null}
                   {commandResult.evidence?.audit_chain?.hash ? (
                     <p className="mt-2 break-all rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--muted)]">audit: {commandResult.evidence.audit_chain.hash}</p>
                   ) : null}
