@@ -138,6 +138,7 @@ export function Settings() {
     dev_tool: "codex",
   });
   const [ssoRiskTaskResult, setSsoRiskTaskResult] = useState<any>(null);
+  const [ssoRiskTaskDrawerOpen, setSsoRiskTaskDrawerOpen] = useState(false);
   const [ssoRiskImDraft, setSsoRiskImDraft] = useState({ channels: [] as string[], include_low: false, limit: "6", title: "" });
   const [ssoRiskImResult, setSsoRiskImResult] = useState<any>(null);
   const [ssoRiskSubscriptionDraft, setSsoRiskSubscriptionDraft] = useState({
@@ -581,6 +582,7 @@ export function Settings() {
       }),
     onSuccess: (data, dryRun) => {
       setSsoRiskTaskResult(data);
+      if (!dryRun) setSsoRiskTaskDrawerOpen(false);
       if (!dryRun) void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["ssoRiskReport"] });
     },
@@ -3695,60 +3697,19 @@ export function Settings() {
                           label={ssoRiskTaskResult ? `${ssoRiskTaskResult.summary?.planned || 0}/${ssoRiskTaskResult.summary?.created || 0}` : "TASK"}
                         />
                       </div>
-                      <div className="mt-3 grid gap-3 md:grid-cols-5">
-                        <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs text-[var(--muted-strong)] md:col-span-1">
-                          <input
-                            type="checkbox"
-                            checked={ssoRiskTaskDraft.include_low}
-                            onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, include_low: e.target.checked })}
-                          />
-                          {t("page.settings.ssoRiskTaskIncludeLow")}
-                        </label>
-                        <input
-                          className={inputClass}
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={ssoRiskTaskDraft.limit}
-                          onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, limit: e.target.value })}
-                          placeholder={t("page.settings.ssoRiskTaskLimit")}
-                        />
-                        <select className={inputClass} value={ssoRiskTaskDraft.priority} onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, priority: e.target.value })}>
-                          {["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{priority}</option>)}
-                        </select>
-                        <input
-                          className={inputClass}
-                          value={ssoRiskTaskDraft.assigned_to}
-                          onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, assigned_to: e.target.value })}
-                          placeholder={t("page.settings.ssoRiskTaskAssignee")}
-                        />
-                        <input
-                          className={inputClass}
-                          value={ssoRiskTaskDraft.dev_tool}
-                          onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, dev_tool: e.target.value })}
-                          placeholder={t("page.settings.ssoRiskTaskDevTool")}
-                        />
+                      <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                        <Info label={t("page.settings.ssoRiskTaskLimit")} value={ssoRiskTaskDraft.limit} />
+                        <Info label={t("page.settings.ssoRiskTaskPriority", { defaultValue: "优先级" })} value={ssoRiskTaskDraft.priority} />
+                        <Info label={t("page.settings.ssoRiskTaskAssignee")} value={ssoRiskTaskDraft.assigned_to || "-"} />
+                        <Info label={t("page.settings.ssoRiskTaskDevTool")} value={ssoRiskTaskDraft.dev_tool || "-"} />
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
-                          disabled={!selectedSsoProviderExists || runSsoRiskTasks.isPending}
-                          onClick={() => runSsoRiskTasks.mutate(true)}
-                        >
-                          <ListChecks className="h-4 w-4" />
-                          {t("page.settings.ssoRiskTaskPreview")}
-                        </button>
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                          disabled={!selectedSsoProviderExists || runSsoRiskTasks.isPending}
-                          onClick={() => runSsoRiskTasks.mutate(false)}
-                        >
-                          <ShieldCheck className="h-4 w-4" />
-                          {t("page.settings.ssoRiskTaskCreate")}
-                        </button>
+                      <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <p className="text-xs font-semibold text-[var(--text)]">{t("page.settings.ssoRiskTaskQuickSummary", { defaultValue: "任务化草稿" })}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{ssoRiskTaskDraft.include_low ? t("page.settings.ssoRiskTaskIncludeLow") : t("page.settings.ssoRiskTaskSkipLow", { defaultValue: "默认只处理中高风险项" })}</p>
                       </div>
+                      <Button className="mt-3" block type="primary" icon={<ListChecks className="h-4 w-4" />} disabled={!selectedSsoProviderExists} onClick={() => setSsoRiskTaskDrawerOpen(true)}>
+                        {t("page.settings.ssoRiskTaskOpenDrawer", { defaultValue: "配置风险任务" })}
+                      </Button>
                       {runSsoRiskTasks.error ? <ErrorLine message={(runSsoRiskTasks.error as Error).message} /> : null}
                       {ssoRiskTaskResult ? (
                         <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -3776,6 +3737,73 @@ export function Settings() {
                         </div>
                       ) : null}
                     </div>
+                    <Drawer
+                      title={t("page.settings.ssoRiskTaskTitle")}
+                      open={ssoRiskTaskDrawerOpen}
+                      onClose={() => setSsoRiskTaskDrawerOpen(false)}
+                      width={620}
+                      destroyOnHidden
+                      extra={
+                        <Space>
+                          <Button onClick={() => setSsoRiskTaskDrawerOpen(false)}>{t("common.cancel")}</Button>
+                          <Button loading={runSsoRiskTasks.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskTasks.mutate(true)}>
+                            {t("page.settings.ssoRiskTaskPreview")}
+                          </Button>
+                          <Button type="primary" loading={runSsoRiskTasks.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskTasks.mutate(false)}>
+                            {t("page.settings.ssoRiskTaskCreate")}
+                          </Button>
+                        </Space>
+                      }
+                    >
+                      <div className="space-y-4">
+                        <Steps
+                          size="small"
+                          current={ssoRiskTaskResult?.summary?.created ? 2 : ssoRiskTaskResult?.summary?.planned ? 1 : 0}
+                          items={[
+                            { title: t("page.settings.ssoRiskTaskPreview", { defaultValue: "预览" }) },
+                            { title: t("page.settings.ssoRiskTaskCreate", { defaultValue: "生成" }) },
+                            { title: t("page.settings.pipelineEvidence", { defaultValue: "证据" }) },
+                          ]}
+                        />
+                        <Form layout="vertical">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Form.Item label={t("page.settings.ssoRiskTaskIncludeLow")}>
+                              <Switch checked={ssoRiskTaskDraft.include_low} onChange={(checked) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, include_low: checked })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskTaskLimit")} required>
+                              <Input type="number" min={1} max={20} value={ssoRiskTaskDraft.limit} onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, limit: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskTaskPriority", { defaultValue: "优先级" })} required>
+                              <Select value={ssoRiskTaskDraft.priority} onChange={(value) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, priority: value })} options={["P0", "P1", "P2", "P3"].map((value) => ({ value, label: value }))} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskTaskAssignee")} required>
+                              <Input value={ssoRiskTaskDraft.assigned_to} onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, assigned_to: e.target.value })} />
+                            </Form.Item>
+                          </div>
+                          <Form.Item label={t("page.settings.ssoRiskTaskDevTool")}>
+                            <Input value={ssoRiskTaskDraft.dev_tool} onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, dev_tool: e.target.value })} />
+                          </Form.Item>
+                          {runSsoRiskTasks.error ? <ErrorLine message={(runSsoRiskTasks.error as Error).message} /> : null}
+                          {ssoRiskTaskResult ? (
+                            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <Info label={t("page.settings.ssoRiskTaskPlanned")} value={String(ssoRiskTaskResult.summary?.planned || 0)} />
+                                <Info label={t("page.settings.ssoRiskTaskCreated")} value={String(ssoRiskTaskResult.summary?.created || 0)} />
+                                <Info label={t("page.settings.ssoRiskTaskSkipped")} value={String(ssoRiskTaskResult.summary?.skipped_low || 0)} />
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Button loading={runSsoRiskTasks.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskTasks.mutate(true)}>
+                              {t("page.settings.ssoRiskTaskPreview")}
+                            </Button>
+                            <Button type="primary" loading={runSsoRiskTasks.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskTasks.mutate(false)}>
+                              {t("page.settings.ssoRiskTaskCreate")}
+                            </Button>
+                          </div>
+                        </Form>
+                      </div>
+                    </Drawer>
                     <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex items-start gap-3">

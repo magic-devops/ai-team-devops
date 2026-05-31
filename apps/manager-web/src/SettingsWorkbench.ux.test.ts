@@ -28,4 +28,14 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("createDeploymentPipeline.mutate(true)");
     expect(source).toContain("createDeploymentPipeline.mutate(false)");
   });
+
+  it("keeps SSO risk governance tasking in a focused drawer flow", () => {
+    expect(source).toContain("ssoRiskTaskDrawerOpen");
+    expect(source).toContain("ssoRiskTaskQuickSummary");
+    expect(source).toContain("ssoRiskTaskOpenDrawer");
+    expect(source).toContain("setSsoRiskTaskDrawerOpen(true)");
+    expect(source).toContain("Switch checked={ssoRiskTaskDraft.include_low}");
+    expect(source).toContain("runSsoRiskTasks.mutate(true)");
+    expect(source).toContain("runSsoRiskTasks.mutate(false)");
+  });
 });
