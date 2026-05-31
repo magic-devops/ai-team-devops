@@ -46,10 +46,10 @@ const DOMAIN_OUTCOME: Record<string, string> = {
 };
 
 const CONTROL_BOARD_LANES = [
-  { label: "AI 指挥台", role: "看全局、做分流", action: "进入最合适的专业工作区", evidence: "会话数、命令数、最近证据" },
-  { label: "AI 会话", role: "连续问答与上下文沉淀", action: "追问、总结、转工具计划", evidence: "session / run / transcript" },
-  { label: "命令中心", role: "平台能力搜索与受控操作", action: "检索、预览、执行、留证", evidence: "dry-run / audit hash" },
-  { label: "工具计划", role: "复杂目标拆解与任务化", action: "生成计划、预览任务、创建任务", evidence: "plan / commands / task items" },
+  { label: "AI 指挥台", role: "看全局、做分流", action: "进入最合适的专业工作区", evidence: "会话数、命令数、最近证据", href: "#/copilot", tone: "border-violet-200 bg-violet-50/70 dark:border-violet-900/50 dark:bg-violet-950/20" },
+  { label: "AI 会话", role: "连续问答与上下文沉淀", action: "追问、总结、转工具计划", evidence: "session / run / transcript", href: "#/copilot/chat", tone: "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20" },
+  { label: "命令中心", role: "平台能力搜索与受控操作", action: "检索、预览、执行、留证", evidence: "dry-run / audit hash", href: "#/copilot/commands", tone: "border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20" },
+  { label: "工具计划", role: "复杂目标拆解与任务化", action: "生成计划、预览任务、创建任务", evidence: "plan / commands / task items", href: "#/copilot/tool-plan", tone: "border-sky-200 bg-sky-50/70 dark:border-sky-900/50 dark:bg-sky-950/20" },
 ];
 
 export function CopilotHub() {
@@ -133,17 +133,20 @@ export function CopilotHub() {
         }
       />
 
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="copilotHubRoleBoard grid gap-3 lg:grid-cols-4">
         {CONTROL_BOARD_LANES.map((lane) => (
-          <div key={lane.label} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <p className="text-sm font-semibold text-[var(--text)]">{lane.label}</p>
+          <a key={lane.label} href={lane.href} className={`group rounded-xl border p-4 transition hover:-translate-y-0.5 hover:border-[var(--brand)] ${lane.tone}`}>
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-[var(--text)]">{lane.label}</span>
+              <ArrowRight className="h-4 w-4 text-[var(--muted)] opacity-60 transition group-hover:opacity-100" />
+            </span>
             <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{lane.role}</p>
             <div className="mt-3 rounded-lg bg-[var(--surface-muted)] px-3 py-2">
               <p className="text-[11px] font-semibold text-[var(--muted)]">核心动作</p>
               <p className="mt-1 text-xs text-[var(--muted-strong)]">{lane.action}</p>
             </div>
             <p className="mt-3 truncate font-mono text-[11px] text-[var(--muted)]">{lane.evidence}</p>
-          </div>
+          </a>
         ))}
       </div>
 

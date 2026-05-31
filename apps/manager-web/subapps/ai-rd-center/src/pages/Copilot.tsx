@@ -107,6 +107,24 @@ const MODE_FOCUS: Record<CopilotMode, Array<{ label: string; value: string }>> =
   ],
 };
 
+const MODE_BOUNDARY: Record<CopilotMode, Array<{ label: string; value: string }>> = {
+  chat: [
+    { label: "入口职责", value: "围绕一个 session 连续问答" },
+    { label: "高频操作", value: "追问、总结、带项目上下文" },
+    { label: "转出位置", value: "工具计划或命令中心" },
+  ],
+  commands: [
+    { label: "入口职责", value: "检索平台能力并做受控动作" },
+    { label: "高频操作", value: "搜索、dry-run、跳转、留证" },
+    { label: "转出位置", value: "工具计划或目标页面" },
+  ],
+  "tool-plan": [
+    { label: "入口职责", value: "把目标拆成工具计划和任务" },
+    { label: "高频操作", value: "模板、生成计划、预览任务" },
+    { label: "转出位置", value: "任务中心和审计证据" },
+  ],
+};
+
 const CHAT_QUICK_PROMPTS = [
   "总结当前项目状态、主要风险和下一步行动",
   "解释当前模块如何接入 CLI / Agent 能力",
@@ -418,6 +436,14 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
             </div>
           ))}
         </div>
+        <div className="copilotModeBoundary mt-3 grid gap-2 md:grid-cols-3">
+          {MODE_BOUNDARY[mode].map((item) => (
+            <div key={item.label} className="rounded-lg bg-[var(--surface)] px-3 py-2 text-xs">
+              <span className="font-semibold text-[var(--muted)]">{item.label}</span>
+              <span className="mt-1 block text-[var(--muted-strong)]">{item.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {mode === "commands" ? (
@@ -457,69 +483,91 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                 options={COMMAND_TYPE_FILTERS}
               />
             </div>
-            <Table
-              rowKey={(row: any) => String(row.id || row.label)}
-              size="small"
-              loading={commandsQuery.isLoading || commandsQuery.isFetching}
-              dataSource={filteredCommandRows}
-              rowClassName={(row: any) => (String(row.id || row.label) === String(selectedCommand?.id || selectedCommand?.label) ? "bg-[var(--brand-soft)]" : "")}
-              onRow={(row: any) => ({
-                onClick: () => setSelectedCommandId(String(row.id || row.label)),
-              })}
-              pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
-              scroll={{ x: 820 }}
-              locale={{ emptyText: t("command.empty") }}
-              columns={[
-                {
-                  title: t("copilot.command", { defaultValue: "命令" }),
-                  dataIndex: "label",
-                  render: (value: string, row: any) => (
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-[var(--text)]">{value}</div>
-                      <div className="mt-1 truncate text-xs text-[var(--muted)]">{row.description}</div>
-                    </div>
-                  ),
-                },
-                {
-                  title: t("copilot.intent", { defaultValue: "意图" }),
-                  dataIndex: "type",
-                  width: 120,
-                  render: (value: string) => <Tag color={value === "navigate" ? "green" : value === "operation" ? "orange" : "blue"}>{value}</Tag>,
-                },
-                {
-                  title: t("copilot.target", { defaultValue: "目标" }),
-                  dataIndex: "target",
-                  width: 220,
-                  ellipsis: true,
-                  render: (value: string) => <span className="font-mono text-xs">{value}</span>,
-                },
-                {
-                  title: t("common.actions"),
-                  width: 280,
-                  render: (_: unknown, row: any) => (
-                    <Space>
-                      {row.type === "operation" ? (
-                        <>
-                          <Button size="small" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: true })}>
-                            {t("common.preview")}
+            <div className="copilotCommandMobileCards space-y-2 md:hidden">
+              {filteredCommandRows.slice(0, 8).map((row: any) => (
+                <button
+                  key={String(row.id || row.label)}
+                  type="button"
+                  className={`block w-full rounded-xl border px-3 py-3 text-left ${String(row.id || row.label) === String(selectedCommand?.id || selectedCommand?.label) ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--border)] bg-[var(--surface)]"}`}
+                  onClick={() => setSelectedCommandId(String(row.id || row.label))}
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-[var(--text)]">{row.label}</span>
+                      <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted)]">{row.description}</span>
+                    </span>
+                    <Tag color={row.type === "navigate" ? "green" : row.type === "operation" ? "orange" : "blue"}>{row.type}</Tag>
+                  </span>
+                  <span className="mt-2 block break-all font-mono text-[11px] text-[var(--muted)]">{row.target || row.prompt || "-"}</span>
+                </button>
+              ))}
+              {!filteredCommandRows.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("command.empty")} /> : null}
+            </div>
+            <div className="hidden md:block">
+              <Table
+                rowKey={(row: any) => String(row.id || row.label)}
+                size="small"
+                loading={commandsQuery.isLoading || commandsQuery.isFetching}
+                dataSource={filteredCommandRows}
+                rowClassName={(row: any) => (String(row.id || row.label) === String(selectedCommand?.id || selectedCommand?.label) ? "bg-[var(--brand-soft)]" : "")}
+                onRow={(row: any) => ({
+                  onClick: () => setSelectedCommandId(String(row.id || row.label)),
+                })}
+                pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
+                scroll={{ x: 820 }}
+                locale={{ emptyText: t("command.empty") }}
+                columns={[
+                  {
+                    title: t("copilot.command", { defaultValue: "命令" }),
+                    dataIndex: "label",
+                    render: (value: string, row: any) => (
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-[var(--text)]">{value}</div>
+                        <div className="mt-1 truncate text-xs text-[var(--muted)]">{row.description}</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    title: t("copilot.intent", { defaultValue: "意图" }),
+                    dataIndex: "type",
+                    width: 120,
+                    render: (value: string) => <Tag color={value === "navigate" ? "green" : value === "operation" ? "orange" : "blue"}>{value}</Tag>,
+                  },
+                  {
+                    title: t("copilot.target", { defaultValue: "目标" }),
+                    dataIndex: "target",
+                    width: 220,
+                    ellipsis: true,
+                    render: (value: string) => <span className="font-mono text-xs">{value}</span>,
+                  },
+                  {
+                    title: t("common.actions"),
+                    width: 280,
+                    render: (_: unknown, row: any) => (
+                      <Space>
+                        {row.type === "operation" ? (
+                          <>
+                            <Button size="small" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: true })}>
+                              {t("common.preview")}
+                            </Button>
+                            <Button size="small" type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false })}>
+                              {t("copilot.execute", { defaultValue: "执行" })}
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="small" onClick={() => runCommand(row)}>
+                            {row.type === "navigate" ? t("common.view") : t("copilot.execute", { defaultValue: "执行" })}
                           </Button>
-                          <Button size="small" type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false })}>
-                            {t("copilot.execute", { defaultValue: "执行" })}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button size="small" onClick={() => runCommand(row)}>
-                          {row.type === "navigate" ? t("common.view") : t("copilot.execute", { defaultValue: "执行" })}
+                        )}
+                        <Button size="small" type={row.type === "operation" ? "default" : "primary"} onClick={() => createPlanFromCommand(row)}>
+                          {t("copilot.toPlan", { defaultValue: "转计划" })}
                         </Button>
-                      )}
-                      <Button size="small" type={row.type === "operation" ? "default" : "primary"} onClick={() => createPlanFromCommand(row)}>
-                        {t("copilot.toPlan", { defaultValue: "转计划" })}
-                      </Button>
-                    </Space>
-                  ),
-                },
-              ]}
-            />
+                      </Space>
+                    ),
+                  },
+                ]}
+              />
+            </div>
           </Card>
           <Card title={t("copilot.commandUsage", { defaultValue: "命令操作台" })}>
             <div className="space-y-3 text-sm text-[var(--muted)]">
@@ -648,7 +696,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               </div>
               {plan.error ? <Alert className="mt-3" type="error" showIcon message={(plan.error as Error).message} /> : null}
             </div>
-            <div className="space-y-3 rounded-xl bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+            <div className="copilotPlanPipeline space-y-3 rounded-xl bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
               {[
                 ["输入目标", Boolean(q.trim())],
                 ["生成计划", Boolean(planResult)],
@@ -659,6 +707,23 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                   <span className={done ? "text-[var(--text)]" : ""}>{label}</span>
                 </div>
               ))}
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs font-semibold text-[var(--text)]">计划产出</p>
+                <div className="mt-2 space-y-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>匹配意图</span>
+                    <span className="max-w-[10rem] truncate text-[var(--text)]">{planResult?.plan?.intent || "待生成"}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>候选命令</span>
+                    <span className="font-semibold text-[var(--text)]">{planResult?.commands?.length ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>任务条目</span>
+                    <span className="font-semibold text-[var(--text)]">{planTaskResult?.items?.length ?? 0}</span>
+                  </div>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <Switch size="small" checked={withProject} onChange={(checked) => setWithProject(checked)} />
                 <span>{t("copilot.withProject")}</span>
@@ -740,7 +805,45 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         </Card>
 
         <Card title={t("copilot.sessions")}>
-          <div className="space-y-2 text-sm">
+          <div className="copilotChatEvidence space-y-3 text-sm">
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                ["会话", sessionsQuery.data?.items?.length ?? 0],
+                ["当前轮次", currentTurns.length],
+                ["本地缓存", turns.length],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-lg bg-[var(--surface-muted)] px-2 py-2 text-center">
+                  <p className="text-base font-semibold text-[var(--text)]">{value}</p>
+                  <p className="mt-0.5 text-[11px] text-[var(--muted)]">{label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+              <p className="text-xs font-semibold text-[var(--text)]">最近上下文</p>
+              <div className="mt-2 space-y-2">
+                {currentTurns.slice(-3).reverse().map((turn) => (
+                  <button key={`${turn.ts}-${turn.runId}-brief`} type="button" className="block w-full rounded-lg bg-[var(--surface-muted)] px-2 py-1.5 text-left" onClick={() => setQ(turn.query)}>
+                    <span className="block truncate text-xs font-medium text-[var(--text)]">{turn.query}</span>
+                    <span className="mt-0.5 block font-mono text-[10px] text-[var(--muted)]">{turn.runId || turn.ts}</span>
+                  </button>
+                ))}
+                {!currentTurns.length ? <p className="text-xs text-[var(--muted)]">暂无当前会话上下文。</p> : null}
+              </div>
+              <Button
+                block
+                className="mt-3"
+                icon={<ClipboardCheck className="h-4 w-4" />}
+                disabled={!q.trim() || plan.isPending}
+                onClick={() => {
+                  setMode("tool-plan");
+                  window.location.hash = "#/copilot/tool-plan";
+                  plan.mutate(q);
+                }}
+              >
+                转成工具计划
+              </Button>
+            </div>
+            <div className="space-y-2">
             {[
               ...new Set([
                 ...(sessionsQuery.data?.items ?? []).map((x: any) => String(x.session_id ?? "")),
@@ -749,6 +852,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
             ].slice(-20).reverse().map((sid) => (
               <button key={sid} type="button" className={`block w-full rounded-lg px-2 py-1.5 text-left font-mono text-xs ${sid === sessionId ? "bg-brand-600 text-white" : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200"}`} onClick={() => setSessionId(sid)}>{sid}</button>
             ))}
+            </div>
             {sessionsQuery.isError ? <p className="text-xs text-amber-600">{(sessionsQuery.error as Error).message}</p> : null}
           </div>
         </Card>

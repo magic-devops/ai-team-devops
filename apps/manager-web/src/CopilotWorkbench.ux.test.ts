@@ -48,9 +48,15 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("计划不是聊天记录");
     expect(copilotSource).toContain("会话用于持续思考");
     expect(copilotSource).toContain("MODE_FOCUS");
+    expect(copilotSource).toContain("MODE_BOUNDARY");
+    expect(copilotSource).toContain("copilotModeBoundary");
     expect(copilotSource).toContain("MODE_SURFACE_TONE");
     expect(copilotSource).toContain("selectedCommandId");
     expect(copilotSource).toContain("selectedCommand");
+    expect(copilotSource).toContain("copilotCommandMobileCards");
+    expect(copilotSource).toContain("copilotChatEvidence");
+    expect(copilotSource).toContain("copilotPlanPipeline");
+    expect(copilotSource).toContain("计划产出");
     expect(copilotSource).toContain("命令操作台");
     expect(copilotSource).toContain("FileSearch");
     expect(copilotSource).toContain("ShieldCheck");
@@ -66,8 +72,10 @@ describe("Copilot workbench UX contract", () => {
     expect(hubSource).toContain("copilotHubNextActions");
     expect(hubSource).toContain("推荐下一步");
     expect(hubSource).toContain("copilotHubDecisionLane");
+    expect(hubSource).toContain("copilotHubRoleBoard");
     expect(hubSource).toContain("cockpitTiles");
     expect(hubSource).toContain("CONTROL_BOARD_LANES");
+    expect(hubSource).toContain("href: \"#/copilot/chat\"");
     expect(hubSource).toContain("指挥台只做态势和分流");
     expect(hubSource).toContain("AI 指挥台");
     expect(hubSource).toContain("AI 会话");

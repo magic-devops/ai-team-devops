@@ -99,6 +99,13 @@ function actionStateClass(state?: string) {
   return "bg-slate-50 text-slate-700";
 }
 
+function actionStepIndex(state?: string) {
+  if (state === "verified" || state === "rolled_back") return 3;
+  if (state === "applied") return 2;
+  if (state === "approved") return 1;
+  return 0;
+}
+
 function parseJsonPayload(value: string) {
   const text = value.trim();
   if (!text) return {};
@@ -201,6 +208,8 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const [healResult, setHealResult] = useState<any>(null);
   const [healTasksResult, setHealTasksResult] = useState<any>(null);
   const [healActionResult, setHealActionResult] = useState<any>(null);
+  const [selfHealActionDrawerOpen, setSelfHealActionDrawerOpen] = useState(false);
+  const [selectedHealActionId, setSelectedHealActionId] = useState("");
   const [imResult, setImResult] = useState<any>(null);
   const [imChannels, setImChannels] = useState<string[]>([]);
 
@@ -770,6 +779,12 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
       }
     },
   });
+
+  const selfHealActions = useMemo(() => actionsQ.data?.items ?? [], [actionsQ.data?.items]);
+  const selectedHealAction = useMemo(
+    () => selfHealActions.find((item: any) => String(item.id) === selectedHealActionId) ?? null,
+    [selectedHealActionId, selfHealActions],
+  );
 
   if (!authed) return <NeedLogin />;
 
@@ -2992,12 +3007,103 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
 
             <WorkbenchPanel title="生产护栏动作队列">
               <div className="space-y-3">
-                {(actionsQ.data?.items ?? []).length === 0 ? (
+                <Drawer
+                  title="处置自愈护栏动作"
+                  open={selfHealActionDrawerOpen}
+                  onClose={() => setSelfHealActionDrawerOpen(false)}
+                  width="min(720px, 100vw)"
+                >
+                  {selectedHealAction ? (
+                    <div className="selfHealActionFocusedDrawer space-y-5">
+                      <Steps
+                        size="small"
+                        current={actionStepIndex(selectedHealAction.state)}
+                        items={[
+                          { title: "审批" },
+                          { title: "应用" },
+                          { title: "验证" },
+                          { title: "证据" },
+                        ]}
+                      />
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold">{selectedHealAction.trigger_condition}</p>
+                            <p className="mt-1 break-all text-xs text-[var(--muted)]">{selectedHealAction.action}</p>
+                          </div>
+                          <span className={`rounded px-2 py-0.5 text-xs ${actionStateClass(selectedHealAction.state)}`}>
+                            {selectedHealAction.state} · {selectedHealAction.risk_level}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">审批：{selectedHealAction.requires_approval ? selectedHealAction.approved_by || "待审批" : "无需审批"}</div>
+                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">回滚：{selectedHealAction.rollback_required ? selectedHealAction.rollback_command || "需人工回滚" : "无需回滚"}</div>
+                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">验证：{selectedHealAction.verified_by || "待验证"}</div>
+                          <div className="rounded-lg bg-[var(--surface)] px-3 py-2">审计：{selectedHealAction.audit_payload?.state || selectedHealAction.state}</div>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <p className="text-sm font-semibold">下一步动作</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedHealAction.state === "approval_required" ? (
+                            <Button type="primary" loading={approveAction.isPending} onClick={() => approveAction.mutate(selectedHealAction.id)}>
+                              审批通过
+                            </Button>
+                          ) : null}
+                          {selectedHealAction.state === "preview" || selectedHealAction.state === "approved" ? (
+                            <Button loading={applyAction.isPending} onClick={() => applyAction.mutate(selectedHealAction.id)}>
+                              应用动作
+                            </Button>
+                          ) : null}
+                          {selectedHealAction.state === "applied" ? (
+                            <Button loading={verifyAction.isPending} onClick={() => verifyAction.mutate(selectedHealAction.id)}>
+                              验证通过
+                            </Button>
+                          ) : null}
+                          {(selectedHealAction.state === "applied" || selectedHealAction.state === "verified") && selectedHealAction.rollback_required ? (
+                            <Button danger loading={rollbackAction.isPending} onClick={() => rollbackAction.mutate(selectedHealAction.id)}>
+                              回滚并留证
+                            </Button>
+                          ) : null}
+                          <Button onClick={() => setSelfHealActionDrawerOpen(false)}>关闭</Button>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <p className="text-sm font-semibold">审计载荷</p>
+                        <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5">
+                          {JSON.stringify(healActionResult?.action?.audit_payload ?? selectedHealAction.audit_payload ?? selectedHealAction, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-6 text-center text-sm text-[var(--muted)]">
+                      请选择一个护栏动作。
+                    </div>
+                  )}
+                </Drawer>
+
+                {selfHealActions.length ? (
+                  <div className="grid gap-3 sm:grid-cols-4">
+                    {[
+                      ["动作数", selfHealActions.length],
+                      ["待审批", selfHealActions.filter((item: any) => item.state === "approval_required").length],
+                      ["已应用", selfHealActions.filter((item: any) => item.state === "applied").length],
+                      ["已验证", selfHealActions.filter((item: any) => item.state === "verified").length],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-[11px] uppercase text-[var(--muted)]">{label}</p>
+                        <p className="mt-1 text-lg font-semibold">{String(value)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {selfHealActions.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-6 text-center text-sm text-[var(--muted)]">
                     暂无自愈动作。执行评估后会生成 preview 或 approval_required 状态的动作。
                   </div>
                 ) : null}
-                {(actionsQ.data?.items ?? []).map((item: any) => (
+                {selfHealActions.map((item: any) => (
                   <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -3013,10 +3119,15 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                       <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2">审计：{item.audit_payload?.state || item.state}</div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {item.state === "approval_required" ? <button onClick={() => approveAction.mutate(item.id)} disabled={approveAction.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">审批通过</button> : null}
-                      {item.state === "preview" || item.state === "approved" ? <button onClick={() => applyAction.mutate(item.id)} disabled={applyAction.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">应用动作</button> : null}
-                      {item.state === "applied" ? <button onClick={() => verifyAction.mutate(item.id)} disabled={verifyAction.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-green-700 disabled:opacity-50">验证通过</button> : null}
-                      {(item.state === "applied" || item.state === "verified") && item.rollback_required ? <button onClick={() => rollbackAction.mutate(item.id)} disabled={rollbackAction.isPending} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 disabled:opacity-50">回滚并留证</button> : null}
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setSelectedHealActionId(String(item.id));
+                          setSelfHealActionDrawerOpen(true);
+                        }}
+                      >
+                        处理动作
+                      </Button>
                     </div>
                   </div>
                 ))}

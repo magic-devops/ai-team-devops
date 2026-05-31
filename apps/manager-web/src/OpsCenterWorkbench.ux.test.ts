@@ -145,4 +145,22 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"触发条件 * (如 cpu > 90)\"");
     expect(source).not.toContain("<textarea\n                  className=\"input-base min-h-32 w-full font-mono text-xs\"");
   });
+
+  it("keeps self-heal guarded action handling in a focused drawer flow", () => {
+    expect(source).toContain("selfHealActionDrawerOpen");
+    expect(source).toContain("selectedHealActionId");
+    expect(source).toContain("selectedHealAction");
+    expect(source).toContain("selfHealActionFocusedDrawer");
+    expect(source).toContain("处置自愈护栏动作");
+    expect(source).toContain("处理动作");
+    expect(source).toContain("actionStepIndex");
+    expect(source).toContain("approveAction.mutate(selectedHealAction.id)");
+    expect(source).toContain("applyAction.mutate(selectedHealAction.id)");
+    expect(source).toContain("verifyAction.mutate(selectedHealAction.id)");
+    expect(source).toContain("rollbackAction.mutate(selectedHealAction.id)");
+    expect(source).not.toContain("onClick={() => approveAction.mutate(item.id)}");
+    expect(source).not.toContain("onClick={() => applyAction.mutate(item.id)}");
+    expect(source).not.toContain("onClick={() => verifyAction.mutate(item.id)}");
+    expect(source).not.toContain("onClick={() => rollbackAction.mutate(item.id)}");
+  });
 });
