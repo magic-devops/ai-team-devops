@@ -5,6 +5,9 @@ import { resolve } from "node:path";
 const root = resolve(__dirname, "..");
 const copilotSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/Copilot.tsx"), "utf8");
 const hubSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotHub.tsx"), "utf8");
+const actionDockSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotModeActionDock.tsx"), "utf8");
+const mobileCardsSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotCommandMobileCards.tsx"), "utf8");
+const copilotTypesSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/copilotTypes.ts"), "utf8");
 const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8");
 
 describe("Copilot workbench UX contract", () => {
@@ -12,7 +15,7 @@ describe("Copilot workbench UX contract", () => {
     expect(navigationSource).toContain('initialMode: "chat"');
     expect(navigationSource).toContain('initialMode: "commands"');
     expect(navigationSource).toContain('initialMode: "tool-plan"');
-    expect(copilotSource).toContain('type CopilotMode = "chat" | "commands" | "tool-plan"');
+    expect(copilotTypesSource).toContain('type CopilotMode = "chat" | "commands" | "tool-plan"');
     expect(copilotSource).toContain("MODE_WORKFLOWS");
     expect(copilotSource).toContain("MODE_SURFACE_CLASS");
     expect(copilotSource).toContain("copilotChatSurface");
@@ -26,7 +29,7 @@ describe("Copilot workbench UX contract", () => {
 
   it("uses mature components for command catalog and tool-plan tasking", () => {
     expect(copilotSource).toContain("Segmented");
-    expect(copilotSource).toContain("Input.Search");
+    expect(actionDockSource).toContain("Input.Search");
     expect(copilotSource).toContain("Input.TextArea");
     expect(copilotSource).toContain("Steps");
     expect(copilotSource).toContain("Switch");
@@ -38,12 +41,12 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("CommandTypeFilter");
     expect(copilotSource).toContain("COMMAND_TYPE_FILTERS");
     expect(copilotSource).toContain("filteredCommandRows");
-    expect(copilotSource).toContain("copilotCommandTypeFilter");
+    expect(actionDockSource).toContain("copilotCommandTypeFilter");
     expect(copilotSource).toContain("copilotCommandPlaybook");
     expect(copilotSource).toContain("命令执行路径");
     expect(copilotSource).toContain("PLAN_TEMPLATES");
     expect(copilotSource).toContain("copilotPlanTemplates");
-    expect(copilotSource).toContain("SearchCheck");
+    expect(actionDockSource).toContain("SearchCheck");
     expect(copilotSource).toContain("commandCenterIdentity");
     expect(copilotSource).toContain("计划不是聊天记录");
     expect(copilotSource).toContain("会话用于持续思考");
@@ -53,18 +56,20 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("MODE_SURFACE_TONE");
     expect(copilotSource).toContain("selectedCommandId");
     expect(copilotSource).toContain("selectedCommand");
-    expect(copilotSource).toContain("copilotCommandMobileCards");
+    expect(copilotSource).toContain("CopilotModeActionDock");
+    expect(copilotSource).toContain("CopilotCommandMobileCards");
+    expect(mobileCardsSource).toContain("copilotCommandMobileCards");
     expect(copilotSource).toContain("copilotChatEvidence");
     expect(copilotSource).toContain("copilotPlanPipeline");
-    expect(copilotSource).toContain("copilotModeActionDock");
-    expect(copilotSource).toContain("copilotChatSessionDock");
-    expect(copilotSource).toContain("copilotCommandHeroSearch");
-    expect(copilotSource).toContain("copilotPlanDraftCard");
+    expect(actionDockSource).toContain("copilotModeActionDock");
+    expect(actionDockSource).toContain("copilotChatSessionDock");
+    expect(actionDockSource).toContain("copilotCommandHeroSearch");
+    expect(actionDockSource).toContain("copilotPlanDraftCard");
     expect(copilotSource).toContain("计划产出");
     expect(copilotSource).toContain("命令操作台");
-    expect(copilotSource).toContain("FileSearch");
-    expect(copilotSource).toContain("ShieldCheck");
-    expect(copilotSource).toContain("Workflow");
+    expect(mobileCardsSource).toContain("FileSearch");
+    expect(mobileCardsSource).toContain("ShieldCheck");
+    expect(mobileCardsSource).toContain("Workflow");
   });
 
   it("keeps the AI command hub as a distinct cockpit entry", () => {

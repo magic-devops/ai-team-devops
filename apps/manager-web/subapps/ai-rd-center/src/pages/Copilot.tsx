@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Button, Empty, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
-import { Bot, CheckCircle2, ClipboardCheck, Command, FileSearch, Loader2, MessageSquareText, Network, Plus, SearchCheck, ShieldCheck, Workflow } from "lucide-react";
+import { Bot, CheckCircle2, ClipboardCheck, Command, FileSearch, Loader2, MessageSquareText, Network, Plus, ShieldCheck, Workflow } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
 import { MarkdownView } from "@/components/MarkdownView";
@@ -11,11 +11,10 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { api } from "@/lib/api";
 import { formatCopilotResponse } from "@/lib/copilotFormat";
 import { getProjectId, getToken } from "@/lib/authStorage";
+import { CopilotCommandMobileCards } from "./ai/CopilotCommandMobileCards";
+import { CopilotModeActionDock } from "./ai/CopilotModeActionDock";
+import type { CommandCandidate, CommandTypeFilter, CopilotMode, Turn } from "./ai/copilotTypes";
 
-type Turn = { ts: string; sessionId: string; runId: string; query: string; response?: unknown; error?: string };
-type CopilotMode = "chat" | "commands" | "tool-plan";
-type CommandTypeFilter = "all" | "navigate" | "operation" | "copilot";
-type CommandCandidate = { id?: string; label?: string; description?: string; type?: string; target?: string; prompt?: string };
 const STORAGE_KEY = "sop-copilot-transcript-v1";
 
 function loadTurns(): Turn[] {
@@ -444,81 +443,24 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
             </div>
           ))}
         </div>
-        <div className="copilotModeActionDock mt-4 rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm dark:border-white/10 dark:bg-slate-950/40">
-          {mode === "chat" ? (
-            <div className="copilotChatSessionDock grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">接入会话上下文</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {CHAT_QUICK_PROMPTS.map((item) => (
-                    <Button key={item.label} size="small" icon={<MessageSquareText className="h-3.5 w-3.5" />} onClick={() => setQ(item.prompt)}>
-                      {item.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                {[
-                  ["会话", sessionsQuery.data?.items?.length ?? 0],
-                  ["当前", currentTurns.length],
-                  ["缓存", turns.length],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="rounded-lg bg-[var(--surface-muted)] px-2 py-2">
-                    <p className="text-base font-semibold text-[var(--text)]">{value}</p>
-                    <p className="text-[11px] text-[var(--muted)]">{label}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {mode === "commands" ? (
-            <div className="copilotCommandHeroSearch grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <Input.Search
-                allowClear
-                value={commandSearch}
-                onChange={(event) => setCommandSearch(event.target.value)}
-                onSearch={(value) => setCommandSearch(value)}
-                placeholder={t("command.placeholder")}
-              />
-              <Space wrap>
-                {COMMAND_QUICK_FILTERS.map((keyword) => (
-                  <Button key={keyword} size="small" icon={<SearchCheck className="h-3.5 w-3.5" />} onClick={() => setCommandSearch(keyword)}>
-                    {keyword}
-                  </Button>
-                ))}
-              </Space>
-              <div className="max-w-full overflow-x-auto lg:col-span-2">
-                <Segmented
-                  value={commandTypeFilter}
-                  onChange={(value) => setCommandTypeFilter(value as CommandTypeFilter)}
-                  options={COMMAND_TYPE_FILTERS}
-                />
-              </div>
-            </div>
-          ) : null}
-          {mode === "tool-plan" ? (
-            <div className="copilotPlanDraftCard grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">选择目标模板</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {PLAN_TEMPLATES.map((item) => (
-                    <Button key={item.label} size="small" icon={<ClipboardCheck className="h-3.5 w-3.5" />} onClick={() => setQ(item.prompt)}>
-                      {item.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <Button
-                type="primary"
-                icon={plan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Workflow className="h-4 w-4" />}
-                disabled={!q.trim() || plan.isPending}
-                onClick={() => plan.mutate(q)}
-              >
-                {t("copilot.plan")}
-              </Button>
-            </div>
-          ) : null}
-        </div>
+        <CopilotModeActionDock
+          mode={mode}
+          chatPrompts={CHAT_QUICK_PROMPTS}
+          sessionsCount={sessionsQuery.data?.items?.length ?? 0}
+          currentTurnsCount={currentTurns.length}
+          cachedTurnsCount={turns.length}
+          onSelectPrompt={setQ}
+          commandSearch={commandSearch}
+          onCommandSearchChange={setCommandSearch}
+          commandQuickFilters={COMMAND_QUICK_FILTERS}
+          commandTypeFilter={commandTypeFilter}
+          commandTypeFilters={COMMAND_TYPE_FILTERS}
+          onCommandTypeFilterChange={setCommandTypeFilter}
+          planTemplates={PLAN_TEMPLATES}
+          canGeneratePlan={Boolean(q.trim())}
+          planPending={plan.isPending}
+          onGeneratePlan={() => plan.mutate(q)}
+        />
       </div>
 
       {mode === "commands" ? (
@@ -530,68 +472,25 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               showIcon
               message={t("copilot.commandCenterIdentity", { defaultValue: "命令中心只负责找能力、预览操作和留存执行证据；需要推理拆解时转入工具计划。" })}
             />
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Input.Search
-                allowClear
-                value={commandSearch}
-                onChange={(event) => setCommandSearch(event.target.value)}
-                placeholder={t("command.placeholder")}
-                className="max-w-xl"
-              />
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <Space wrap>
                 <Tag color="green">{commandStats.navigate} nav</Tag>
                 <Tag color="orange">{commandStats.operation} ops</Tag>
                 <Tag color="blue">{commandStats.copilot} ai</Tag>
               </Space>
+              <span className="rounded-full bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--muted-strong)]">
+                {commandSearch || commandTypeFilter !== "all" ? `${commandSearch || "全部"} / ${commandTypeFilter}` : "全部命令"}
+              </span>
             </div>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {COMMAND_QUICK_FILTERS.map((keyword) => (
-                <Button key={keyword} size="small" icon={<SearchCheck className="h-3.5 w-3.5" />} onClick={() => setCommandSearch(keyword)}>
-                  {keyword}
-                </Button>
-              ))}
-            </div>
-            <div className="copilotCommandTypeFilter mb-4 max-w-full overflow-x-auto">
-              <Segmented
-                value={commandTypeFilter}
-                onChange={(value) => setCommandTypeFilter(value as CommandTypeFilter)}
-                options={COMMAND_TYPE_FILTERS}
-              />
-            </div>
-            <div className="copilotCommandMobileCards space-y-2 md:hidden">
-              {filteredCommandRows.slice(0, 8).map((row: any) => (
-                <div
-                  key={String(row.id || row.label)}
-                  className={`rounded-xl border px-3 py-3 ${String(row.id || row.label) === String(selectedCommand?.id || selectedCommand?.label) ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--border)] bg-[var(--surface)]"}`}
-                >
-                  <button type="button" className="block w-full text-left" onClick={() => setSelectedCommandId(String(row.id || row.label))}>
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-[var(--text)]">{row.label}</span>
-                        <span className="mt-1 line-clamp-2 block text-xs leading-5 text-[var(--muted)]">{row.description}</span>
-                      </span>
-                      <Tag color={row.type === "navigate" ? "green" : row.type === "operation" ? "orange" : "blue"}>{row.type}</Tag>
-                    </span>
-                    <span className="mt-2 block break-all font-mono text-[11px] text-[var(--muted)]">{row.target || row.prompt || "-"}</span>
-                  </button>
-                  <span className="mt-3 flex flex-wrap gap-2">
-                    {row.type === "operation" ? (
-                      <Button size="small" icon={<ShieldCheck className="h-3.5 w-3.5" />} loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: true })}>
-                        {t("common.preview")}
-                      </Button>
-                    ) : (
-                      <Button size="small" icon={<FileSearch className="h-3.5 w-3.5" />} onClick={() => runCommand(row)}>
-                        {row.type === "navigate" ? t("common.view") : t("copilot.execute", { defaultValue: "执行" })}
-                      </Button>
-                    )}
-                    <Button size="small" type="primary" icon={<Workflow className="h-3.5 w-3.5" />} onClick={() => createPlanFromCommand(row)}>
-                      {t("copilot.toPlan", { defaultValue: "转计划" })}
-                    </Button>
-                  </span>
-                </div>
-              ))}
-              {!filteredCommandRows.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("command.empty")} /> : null}
-            </div>
+            <CopilotCommandMobileCards
+              rows={filteredCommandRows}
+              selectedKey={String(selectedCommand?.id || selectedCommand?.label || "")}
+              executing={executeCommand.isPending}
+              onSelect={setSelectedCommandId}
+              onRun={runCommand}
+              onPreview={(commandId) => executeCommand.mutate({ commandId, dryRun: true })}
+              onPlan={createPlanFromCommand}
+            />
             <div className="hidden md:block">
               <Table
                 rowKey={(row: any) => String(row.id || row.label)}
