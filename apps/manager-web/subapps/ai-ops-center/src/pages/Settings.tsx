@@ -176,6 +176,7 @@ export function Settings() {
   const [ssoRiskEscalationDrawerOpen, setSsoRiskEscalationDrawerOpen] = useState(false);
   const [ssoRiskRunbookDraft, setSsoRiskRunbookDraft] = useState({ include_low: false, limit: "6", priority: "P1", assigned_to: "SecurityOps", dev_tool: "codex", owner: "SecurityOps", channels: [] as string[], title: "", notes: "" });
   const [ssoRiskRunbookDetail, setSsoRiskRunbookDetail] = useState<any>(null);
+  const [ssoRiskRunbookDrawerOpen, setSsoRiskRunbookDrawerOpen] = useState(false);
   const selectedSsoProvider = ssoDraft.provider.trim();
   const selectedSsoProviderExists = Boolean((ssoConfig.data?.items || []).some((item: any) => item.name === selectedSsoProvider));
   const [profileDraft, setProfileDraft] = useState({
@@ -728,6 +729,9 @@ export function Settings() {
       }),
     onSuccess: (data, vars) => {
       setSsoRiskRunbookDetail(data);
+      if (!vars.dryRun && ["create_tasks", "archive"].includes(vars.action)) {
+        setSsoRiskRunbookDrawerOpen(false);
+      }
       void qc.invalidateQueries({ queryKey: ["ssoRiskRunbooks"] });
       void qc.invalidateQueries({ queryKey: ["ssoRiskReport"] });
       if (!vars.dryRun || vars.action === "mark_step_done" || vars.action === "mark_step_failed") {
@@ -4351,54 +4355,106 @@ export function Settings() {
                   <HintLine message={t("page.settings.ssoRiskNoProvider")} />
                 ) : (
                   <>
-                    <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                    <div className="ssoRiskRunbookQuickSummary mt-4 grid gap-3 sm:grid-cols-4">
+                      <Info label={t("page.settings.ssoRiskRunbookLimit")} value={ssoRiskRunbookDraft.limit} />
+                      <Info label={t("tasks.priority")} value={ssoRiskRunbookDraft.priority} />
+                      <Info label={t("page.settings.ssoRiskRunbookAssignee")} value={ssoRiskRunbookDraft.assigned_to || "-"} />
+                      <Info label={t("page.settings.ssoRiskRunbookChannels")} value={String(ssoRiskRunbookDraft.channels.length || (notifyChannels.data || []).length || 0)} />
+                    </div>
+                    <Button className="mt-3" block type="primary" icon={<FileText className="h-4 w-4" />} disabled={!selectedSsoProviderExists} onClick={() => setSsoRiskRunbookDrawerOpen(true)}>
+                      {t("page.settings.ssoRiskRunbookOpenDrawer", { defaultValue: "配置处置 Runbook" })}
+                    </Button>
+                    <Drawer
+                      title={t("page.settings.ssoRiskRunbookTitle")}
+                      open={ssoRiskRunbookDrawerOpen}
+                      onClose={() => setSsoRiskRunbookDrawerOpen(false)}
+                      width={620}
+                      destroyOnClose={false}
+                      extra={
+                        <Space>
+                          <Button onClick={() => setSsoRiskRunbookDrawerOpen(false)}>{t("common.cancel")}</Button>
+                          <Button type="primary" loading={createSsoRiskRunbook.isPending} disabled={!selectedSsoProviderExists} onClick={() => createSsoRiskRunbook.mutate()}>{t("page.settings.ssoRiskRunbookCreate")}</Button>
+                        </Space>
+                      }
+                    >
                       <div className="space-y-4">
-                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                          <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--muted-strong)]">
-                            <input type="checkbox" checked={ssoRiskRunbookDraft.include_low} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, include_low: e.target.checked })} />
-                            {t("page.settings.ssoRiskRunbookIncludeLow")}
-                          </label>
-                          <input className={inputClass} type="number" min={1} max={20} value={ssoRiskRunbookDraft.limit} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, limit: e.target.value })} placeholder={t("page.settings.ssoRiskRunbookLimit")} />
-                          <select className={inputClass} value={ssoRiskRunbookDraft.priority} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, priority: e.target.value })}>{["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{priority}</option>)}</select>
-                          <input className={inputClass} value={ssoRiskRunbookDraft.assigned_to} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, assigned_to: e.target.value })} placeholder={t("page.settings.ssoRiskRunbookAssignee")} />
-                          <input className={inputClass} value={ssoRiskRunbookDraft.dev_tool} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, dev_tool: e.target.value })} placeholder={t("page.settings.ssoRiskEscalationDevTool")} />
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-[12rem_minmax(0,1fr)]">
-                          <input className={inputClass} value={ssoRiskRunbookDraft.owner} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, owner: e.target.value })} placeholder={t("page.settings.ssoRiskRunbookOwner")} />
-                          <input className={inputClass} value={ssoRiskRunbookDraft.title} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, title: e.target.value })} placeholder={t("page.settings.ssoRiskRunbookTitlePh")} />
-                        </div>
-                        <textarea className={`${inputClass} min-h-20 resize-y`} value={ssoRiskRunbookDraft.notes} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, notes: e.target.value })} placeholder={t("page.settings.ssoRiskRunbookNotes")} />
-                        <div>
-                          <p className="text-xs font-semibold text-[var(--text)]">{t("page.settings.ssoRiskRunbookChannels")}</p>
-                          <div className="mt-2 grid gap-2 md:grid-cols-2">
-                            {(notifyChannels.data || []).map((channel: any) => {
-                              const checked = ssoRiskRunbookDraft.channels.includes(channel.name);
-                              return (
-                                <label key={channel.name} className="flex min-h-16 items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted-strong)]">
-                                  <input className="mt-1" type="checkbox" checked={checked} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, channels: e.target.checked ? Array.from(new Set([...ssoRiskRunbookDraft.channels, channel.name])) : ssoRiskRunbookDraft.channels.filter((name) => name !== channel.name) })} />
-                                  <span className="min-w-0">
-                                    <span className="flex items-center gap-2"><span className="truncate font-semibold text-[var(--text)]">{channel.name}</span><span className="font-mono text-[10px]">{channel.type}</span></span>
-                                    <span className="mt-1 block truncate text-[11px] text-[var(--muted)]">{(channel.events || []).join(", ") || "-"}</span>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskRunbookNoChannels")} /> : null}
+                        <Steps
+                          size="small"
+                          current={ssoRiskRunbookDetail?.item?.task_count ? 2 : ssoRiskRunbookDetail?.item?.id ? 1 : 0}
+                          items={[
+                            { title: t("page.settings.ssoRiskRunbookCreate", { defaultValue: "生成 Runbook" }) },
+                            { title: t("page.settings.ssoRiskRunbookPreviewTasks", { defaultValue: "预览任务" }) },
+                            { title: t("page.settings.ssoRiskRunbookCreateTasks", { defaultValue: "生成任务" }) },
+                          ]}
+                        />
+                        <Form layout="vertical">
+                          <Form.Item label={t("page.settings.ssoRiskRunbookIncludeLow")}>
+                            <Switch checked={ssoRiskRunbookDraft.include_low} onChange={(include_low) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, include_low })} />
+                          </Form.Item>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <Form.Item label={t("page.settings.ssoRiskRunbookLimit")} required>
+                              <Input type="number" min={1} max={20} value={ssoRiskRunbookDraft.limit} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, limit: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("tasks.priority")}>
+                              <Select value={ssoRiskRunbookDraft.priority} onChange={(priority) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, priority })} options={["P0", "P1", "P2", "P3"].map((priority) => ({ value: priority, label: priority }))} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskRunbookAssignee")}>
+                              <Input value={ssoRiskRunbookDraft.assigned_to} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, assigned_to: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskEscalationDevTool")}>
+                              <Input value={ssoRiskRunbookDraft.dev_tool} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, dev_tool: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskRunbookOwner")}>
+                              <Input value={ssoRiskRunbookDraft.owner} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, owner: e.target.value })} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskRunbookTitlePh")}>
+                              <Input value={ssoRiskRunbookDraft.title} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, title: e.target.value })} />
+                            </Form.Item>
                           </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!selectedSsoProviderExists || createSsoRiskRunbook.isPending} onClick={() => createSsoRiskRunbook.mutate()}><FileText className="h-4 w-4" />{t("page.settings.ssoRiskRunbookCreate")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!ssoRiskRunbookDetail?.item?.id || applySsoRiskRunbookAction.isPending} onClick={() => applySsoRiskRunbookAction.mutate({ action: "preview_tasks", dryRun: true })}><ListChecks className="h-4 w-4" />{t("page.settings.ssoRiskRunbookPreviewTasks")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!ssoRiskRunbookDetail?.item?.id || applySsoRiskRunbookAction.isPending} onClick={() => applySsoRiskRunbookAction.mutate({ action: "create_tasks", dryRun: false })}><ListChecks className="h-4 w-4" />{t("page.settings.ssoRiskRunbookCreateTasks")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!ssoRiskRunbookDetail?.item?.id || applySsoRiskRunbookAction.isPending} onClick={() => applySsoRiskRunbookAction.mutate({ action: "send_im", dryRun: true })}><MessageSquare className="h-4 w-4" />{t("page.settings.ssoRiskRunbookPreviewIm")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!ssoRiskRunbookDetail?.item?.id || applySsoRiskRunbookAction.isPending} onClick={() => applySsoRiskRunbookAction.mutate({ action: "verify", dryRun: true })}><ShieldCheck className="h-4 w-4" />{t("page.settings.ssoRiskRunbookVerify")}</button>
-                          <button type="button" className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!ssoRiskRunbookDetail?.item?.id || applySsoRiskRunbookAction.isPending} onClick={() => applySsoRiskRunbookAction.mutate({ action: "archive", dryRun: false })}>{t("page.settings.ssoRiskRunbookArchive")}</button>
-                        </div>
+                          <Form.Item label={t("page.settings.ssoRiskRunbookChannels")}>
+                            <Select
+                              mode="multiple"
+                              allowClear
+                              value={ssoRiskRunbookDraft.channels}
+                              onChange={(channels) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, channels })}
+                              placeholder={t("page.settings.selectNotifyChannel")}
+                              options={(notifyChannels.data || []).map((channel: any) => ({
+                                value: channel.name,
+                                label: `${channel.name} · ${channel.type}`,
+                              }))}
+                            />
+                          </Form.Item>
+                          {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskRunbookNoChannels")} /> : null}
+                          <Form.Item label={t("page.settings.ssoRiskRunbookNotes")}>
+                            <Input.TextArea rows={3} value={ssoRiskRunbookDraft.notes} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, notes: e.target.value })} />
+                          </Form.Item>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Button type="primary" icon={<FileText className="h-4 w-4" />} loading={createSsoRiskRunbook.isPending} disabled={!selectedSsoProviderExists} onClick={() => createSsoRiskRunbook.mutate()}>
+                              {t("page.settings.ssoRiskRunbookCreate")}
+                            </Button>
+                            <Button icon={<ListChecks className="h-4 w-4" />} loading={applySsoRiskRunbookAction.isPending} disabled={!ssoRiskRunbookDetail?.item?.id} onClick={() => applySsoRiskRunbookAction.mutate({ action: "preview_tasks", dryRun: true })}>
+                              {t("page.settings.ssoRiskRunbookPreviewTasks")}
+                            </Button>
+                            <Button icon={<ListChecks className="h-4 w-4" />} loading={applySsoRiskRunbookAction.isPending} disabled={!ssoRiskRunbookDetail?.item?.id} onClick={() => applySsoRiskRunbookAction.mutate({ action: "create_tasks", dryRun: false })}>
+                              {t("page.settings.ssoRiskRunbookCreateTasks")}
+                            </Button>
+                            <Button icon={<MessageSquare className="h-4 w-4" />} loading={applySsoRiskRunbookAction.isPending} disabled={!ssoRiskRunbookDetail?.item?.id} onClick={() => applySsoRiskRunbookAction.mutate({ action: "send_im", dryRun: true })}>
+                              {t("page.settings.ssoRiskRunbookPreviewIm")}
+                            </Button>
+                            <Button type="primary" icon={<ShieldCheck className="h-4 w-4" />} loading={applySsoRiskRunbookAction.isPending} disabled={!ssoRiskRunbookDetail?.item?.id} onClick={() => applySsoRiskRunbookAction.mutate({ action: "verify", dryRun: true })}>
+                              {t("page.settings.ssoRiskRunbookVerify")}
+                            </Button>
+                            <Button danger loading={applySsoRiskRunbookAction.isPending} disabled={!ssoRiskRunbookDetail?.item?.id} onClick={() => applySsoRiskRunbookAction.mutate({ action: "archive", dryRun: false })}>
+                              {t("page.settings.ssoRiskRunbookArchive")}
+                            </Button>
+                          </div>
+                        </Form>
                         {createSsoRiskRunbook.error ? <ErrorLine message={(createSsoRiskRunbook.error as Error).message} /> : null}
                         {loadSsoRiskRunbook.error ? <ErrorLine message={(loadSsoRiskRunbook.error as Error).message} /> : null}
                         {applySsoRiskRunbookAction.error ? <ErrorLine message={(applySsoRiskRunbookAction.error as Error).message} /> : null}
                       </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    </Drawer>
+                    <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                         <p className="text-sm font-semibold text-[var(--text)]">{t("page.settings.ssoRiskRunbookRecent")}</p>
                         <div className="mt-3 space-y-2">
                           {(ssoRiskRunbooks.data?.items || []).map((runbook: any) => (
@@ -4414,7 +4470,6 @@ export function Settings() {
                         </div>
                         {ssoRiskRunbooks.error ? <ErrorLine message={(ssoRiskRunbooks.error as Error).message} /> : null}
                       </div>
-                    </div>
                     {ssoRiskRunbookDetail ? (
                       <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
                         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">

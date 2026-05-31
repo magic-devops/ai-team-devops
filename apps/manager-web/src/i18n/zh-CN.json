@@ -3149,6 +3149,7 @@
       "ssoRiskRunbookNotes": "处置背景、窗口、验证标准或协作说明",
       "ssoRiskRunbookChannels": "通知通道",
       "ssoRiskRunbookNoChannels": "暂无可用通道，可先配置 Notify 企业 IM 通道。",
+      "ssoRiskRunbookOpenDrawer": "配置处置 Runbook",
       "ssoRiskRunbookCreate": "生成 Runbook",
       "ssoRiskRunbookPreviewTasks": "预览任务",
       "ssoRiskRunbookCreateTasks": "生成任务",

@@ -61,4 +61,19 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("runSsoRiskEscalation.mutate(true)");
     expect(source).toContain("runSsoRiskEscalation.mutate(false)");
   });
+
+  it("keeps SSO risk Runbook in a focused drawer flow", () => {
+    expect(source).toContain("ssoRiskRunbookDrawerOpen");
+    expect(source).toContain("ssoRiskRunbookQuickSummary");
+    expect(source).toContain("ssoRiskRunbookOpenDrawer");
+    expect(source).toContain("setSsoRiskRunbookDrawerOpen(true)");
+    expect(source).toContain("Switch checked={ssoRiskRunbookDraft.include_low}");
+    expect(source).toContain("ssoRiskRunbookDraft.channels");
+    expect(source).toContain("createSsoRiskRunbook.mutate()");
+    expect(source).toContain('action: "preview_tasks"');
+    expect(source).toContain('action: "create_tasks"');
+    expect(source).toContain('action: "send_im"');
+    expect(source).toContain('action: "verify"');
+    expect(source).toContain('action: "archive"');
+  });
 });

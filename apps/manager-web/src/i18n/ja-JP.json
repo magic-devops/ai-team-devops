@@ -2616,6 +2616,7 @@
       "ssoRiskRunbookNotes": "対応背景、作業時間、検証基準、連携メモ",
       "ssoRiskRunbookChannels": "通知チャネル",
       "ssoRiskRunbookNoChannels": "利用可能なチャネルがありません。先に Notify 企業 IM チャネルを設定してください。",
+      "ssoRiskRunbookOpenDrawer": "対応 Runbook を設定",
       "ssoRiskRunbookCreate": "Runbook を生成",
       "ssoRiskRunbookPreviewTasks": "タスクをプレビュー",
       "ssoRiskRunbookCreateTasks": "タスクを作成",

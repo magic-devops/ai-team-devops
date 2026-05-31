@@ -2993,6 +2993,7 @@
       "ssoRiskRunbookNotes": "Context, window, verification criteria, or collaboration notes",
       "ssoRiskRunbookChannels": "Notification channels",
       "ssoRiskRunbookNoChannels": "No usable channels yet. Configure Notify enterprise IM channels first.",
+      "ssoRiskRunbookOpenDrawer": "Configure response Runbook",
       "ssoRiskRunbookCreate": "Generate Runbook",
       "ssoRiskRunbookPreviewTasks": "Preview tasks",
       "ssoRiskRunbookCreateTasks": "Create tasks",
