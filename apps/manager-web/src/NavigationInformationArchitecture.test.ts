@@ -30,4 +30,18 @@ describe("navigation information architecture", () => {
     expect(systemMapSource).toContain('const showRegistry = section === "registry"');
     expect(systemMapSource).toContain('activeContractPanel === "capabilities"');
   });
+
+  it("keeps data ingest professional routes focused instead of reusing one generic tab", () => {
+    expect(navigationSource).toContain('key: "dataIngest"');
+    expect(navigationSource).toContain('path: "#/data/ingest"');
+    expect(navigationSource).toContain('subnav("data/ingest", "connectors", "schema", "cdc", "batch")');
+    expect(navigationSource).toContain('path: "#/data/ingest/connectors"');
+    expect(navigationSource).toContain('initialTab: "connectors"');
+    expect(navigationSource).toContain('path: "#/data/ingest/schema"');
+    expect(navigationSource).toContain('initialTab: "schemas"');
+    expect(navigationSource).toContain('path: "#/data/ingest/cdc"');
+    expect(navigationSource).toContain('initialTab: "runs"');
+    expect(navigationSource).toContain('path: "#/data/ingest/batch"');
+    expect(navigationSource).toContain('initialTab: "jobs"');
+  });
 });

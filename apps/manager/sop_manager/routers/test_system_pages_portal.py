@@ -958,14 +958,40 @@ def test_system_pages_data_ingest_contract_exposes_runtime_control_plane():
 
     ingest = next(item for item in payload["items"] if item["id"] == "dataIngest")
     apis = set(ingest["implementation_contract"]["apis"])
+    assert ingest["path"] == "#/data/ingest"
     assert "/api/v1/data-ingest/connectors/{id}/dry-run" in apis
+    assert "/api/v1/data-ingest/connectors/{id}/schema" in apis
     assert "/api/v1/data-ingest/schema-registry" in apis
     assert "/api/v1/data-ingest/runs" in apis
     assert "/api/v1/data-ingest/cdc-cursors" in apis
+    assert ingest["implementation_contract"]["submodule_count"] >= 6
+    assert ingest["implementation_contract"]["action_count"] >= 18
     assert "连接器 Dry-run" in ingest["capabilities"]
     assert "Schema Registry" in ingest["capabilities"]
     assert "CDC 游标" in ingest["capabilities"]
     assert "运行历史" in ingest["capabilities"]
+
+
+def test_system_pages_data_ingest_exposes_focused_submodule_paths():
+    payload = system_page_capabilities()
+    ingest = next(item for item in payload["items"] if item["id"] == "dataIngest")
+    submodules = {item["id"]: item for item in ingest["submodules"]}
+
+    assert {"connectors", "dry_run", "schema_registry", "cdc_cursors", "batch_jobs", "run_history"} <= set(submodules)
+    assert submodules["connectors"]["path"] == "#/data/ingest/connectors"
+    assert submodules["schema_registry"]["path"] == "#/data/ingest/schema"
+    assert submodules["cdc_cursors"]["path"] == "#/data/ingest/cdc"
+    assert submodules["batch_jobs"]["path"] == "#/data/ingest/batch"
+    assert submodules["schema_registry"]["capability"] == "data.ingest.schema_registry"
+
+
+def test_system_pages_experience_review_scores_data_ingest_route_density():
+    payload = system_pages_experience_review(q="数据接入")
+    ingest = next(item for item in payload["items"] if item["id"] == "dataIngest")
+
+    assert ingest["implementation_contract"]["submodule_count"] >= 6
+    assert "密度" in ingest["dimensions"]["simplicity"]["detail"]
+    assert ingest["status"] == "simple"
 
 
 def test_system_pages_data_sources_contract_exposes_metadata_sync_control_plane():

@@ -405,6 +405,11 @@
       "eval": "モデル評価",
       "audit": "Prompt監査",
       "connectors": "コネクタ",
+      "dry_run": "Dry-run",
+      "schema_registry": "Schema Registry",
+      "cdc_cursors": "CDC カーソル",
+      "batch_jobs": "バッチジョブ",
+      "run_history": "実行履歴",
       "channels": "チャネルテンプレート",
       "outbound": "送信メッセージ",
       "inbound": "受信メッセージ",
@@ -3427,7 +3432,32 @@
     },
     "dataIngest": {
       "hubTitle": "データ取り込みセンター",
-      "hubDesc": "コネクタ、スキーマレジストリ、CDC、バッチジョブ"
+      "hubDesc": "コネクタ、スキーマレジストリ、CDC、バッチジョブ",
+      "modulesTitle": "機能モジュール",
+      "metrics": {
+        "connectors": "コネクタ",
+        "activeJobs": "実行中ジョブ",
+        "rowsToday": "本日の取込行数",
+        "cdcStreams": "CDC ストリーム"
+      },
+      "modules": {
+        "connectors": {
+          "label": "コネクタ管理",
+          "desc": "データベース、メッセージキュー、API コネクタ"
+        },
+        "schema": {
+          "label": "Schema Registry",
+          "desc": "スキーマ登録とバージョン管理"
+        },
+        "cdc": {
+          "label": "CDC 取り込み",
+          "desc": "カーソル、実行履歴、進捗コールバック"
+        },
+        "batch": {
+          "label": "バッチジョブ",
+          "desc": "バッチ取り込み、実行、完了コールバック"
+        }
+      }
     },
     "metricsCenter": {
       "hubTitle": "メトリクスセンター",

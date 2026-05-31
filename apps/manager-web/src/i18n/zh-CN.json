@@ -430,6 +430,11 @@
       "rating": "评分反馈",
       "signature": "签名状态",
       "connectors": "连接器",
+      "dry_run": "Dry-run",
+      "schema_registry": "Schema Registry",
+      "cdc_cursors": "CDC 游标",
+      "batch_jobs": "批量作业",
+      "run_history": "运行历史",
       "channels": "通道模板",
       "outbound": "出站消息",
       "inbound": "入站消息",
@@ -4253,7 +4258,32 @@
     },
     "dataIngest": {
       "hubTitle": "数据接入中心",
-      "hubDesc": "连接器管理、Schema Registry、CDC 实时接入与批量作业"
+      "hubDesc": "连接器管理、Schema Registry、CDC 实时接入与批量作业",
+      "modulesTitle": "功能模块",
+      "metrics": {
+        "connectors": "连接器",
+        "activeJobs": "运行中作业",
+        "rowsToday": "今日接入行数",
+        "cdcStreams": "CDC 流"
+      },
+      "modules": {
+        "connectors": {
+          "label": "连接器管理",
+          "desc": "数据库、消息队列与 API 连接器"
+        },
+        "schema": {
+          "label": "Schema Registry",
+          "desc": "数据结构注册与版本管理"
+        },
+        "cdc": {
+          "label": "CDC 实时接入",
+          "desc": "游标、运行历史与进度回写"
+        },
+        "batch": {
+          "label": "批量接入作业",
+          "desc": "批处理接入、运行和完成回写"
+        }
+      }
     },
     "metricsCenter": {
       "hubTitle": "指标中心",

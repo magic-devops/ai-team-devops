@@ -332,6 +332,11 @@
       "eval": "Model evaluation",
       "audit": "Prompt audit",
       "connectors": "Connectors",
+      "dry_run": "Dry-run",
+      "schema_registry": "Schema Registry",
+      "cdc_cursors": "CDC cursors",
+      "batch_jobs": "Batch jobs",
+      "run_history": "Run history",
       "channels": "Channel templates",
       "outbound": "Outbound messages",
       "inbound": "Inbound messages",
@@ -3924,7 +3929,32 @@
     },
     "dataIngest": {
       "hubTitle": "Data Ingest Center",
-      "hubDesc": "Connectors, Schema Registry, CDC and batch jobs"
+      "hubDesc": "Connectors, Schema Registry, CDC and batch jobs",
+      "modulesTitle": "Modules",
+      "metrics": {
+        "connectors": "Connectors",
+        "activeJobs": "Active jobs",
+        "rowsToday": "Rows today",
+        "cdcStreams": "CDC streams"
+      },
+      "modules": {
+        "connectors": {
+          "label": "Connectors",
+          "desc": "Database, message queue and API connectors"
+        },
+        "schema": {
+          "label": "Schema Registry",
+          "desc": "Schema registration and version management"
+        },
+        "cdc": {
+          "label": "CDC ingest",
+          "desc": "Cursors, run history and progress callbacks"
+        },
+        "batch": {
+          "label": "Batch jobs",
+          "desc": "Batch ingest, runs and completion callbacks"
+        }
+      }
     },
     "metricsCenter": {
       "hubTitle": "Metrics Center",
