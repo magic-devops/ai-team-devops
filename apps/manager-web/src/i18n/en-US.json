@@ -3874,6 +3874,7 @@
     "approveCommand": "Approve",
     "rejectCommand": "Reject",
     "commandApprovalEmpty": "No pending command approvals.",
+    "externalApprovalCallback": "External callback",
     "commandApprovalRequiredHint": "An approval record was created. Approve or reject it in the queue."
   },
   "command": {

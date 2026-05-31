@@ -664,6 +664,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  copilotCommandApprovalCallback: (body: { approval_id: string; status: "approved" | "rejected"; reviewer?: string; note?: string; external_system?: string; external_ref?: string }) =>
+    request<any>("/api/v1/copilot/commands/approvals/callback", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   copilotExecuteCommand: (body: { command_id: string; dry_run?: boolean; approval_confirmed?: boolean; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>
     request<any>("/api/v1/copilot/commands/execute", { method: "POST", body: JSON.stringify(body) }),
   copilotPlan: (body: { query: string; context?: Record<string, unknown>; session_id?: string; run_id?: string }) =>

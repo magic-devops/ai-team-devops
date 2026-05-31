@@ -380,7 +380,8 @@ def _public_command_approval(item: dict[str, Any]) -> dict[str, Any]:
     keep = [
         "id", "status", "command_id", "command_label", "command_type", "target", "policy",
         "session_id", "run_id", "requested_at", "updated_at", "reviewed_at", "reviewer",
-        "note", "executed_at", "execution_status", "audit_hash", "context", "plan",
+        "note", "review_source", "external_system", "external_ref", "callback_received_at",
+        "callback", "executed_at", "execution_status", "audit_hash", "context", "plan",
     ]
     return {key: item.get(key) for key in keep if key in item}
 
@@ -435,10 +436,53 @@ def _create_or_update_command_approval(
         "business_code": resolved_business_code(),
         "project_id": resolved_project_id(),
         "project_code": resolved_project_code(),
+        "callback": {
+            "method": "POST",
+            "path": "/api/v1/copilot/commands/approvals/callback",
+            "fields": ["approval_id", "status", "reviewer", "external_system", "external_ref", "note"],
+        },
     }
     rows.append(row)
     _save_command_approvals(rows)
     return _public_command_approval(row)
+
+
+def _review_command_approval(
+    approval_id: str,
+    *,
+    status: str,
+    reviewer: str,
+    note: str,
+    source: str,
+    external_system: str = "",
+    external_ref: str = "",
+) -> tuple[dict[str, Any], bool]:
+    rows = _load_command_approvals()
+    item = _find_command_approval(rows, approval_id)
+    if not item:
+        raise HTTPException(404, "approval not found")
+    current = str(item.get("status") or "pending")
+    if current == status:
+        return _public_command_approval(item), True
+    if current == "executed" and status == "approved":
+        return _public_command_approval(item), True
+    if current != "pending":
+        raise HTTPException(409, f"approval already {current}")
+    now = _now()
+    item.update({
+        "status": status,
+        "reviewer": reviewer.strip() or source,
+        "note": note,
+        "review_source": source,
+        "reviewed_at": now,
+        "updated_at": now,
+    })
+    if source == "external_callback":
+        item["external_system"] = external_system.strip() or "external_approval"
+        item["external_ref"] = external_ref.strip()
+        item["callback_received_at"] = now
+    _save_command_approvals(rows)
+    return _public_command_approval(item), False
 
 
 def _mark_command_approval_executed(
@@ -506,6 +550,15 @@ class CommandApprovalReviewIn(BaseModel):
     status: Literal["approved", "rejected"]
     reviewer: str = Field("manager-web", min_length=1, max_length=80)
     note: str = Field("", max_length=1000)
+
+
+class CommandApprovalCallbackIn(BaseModel):
+    approval_id: str = Field(..., min_length=1)
+    status: Literal["approved", "rejected"]
+    reviewer: str = Field("external-approval", min_length=1, max_length=120)
+    note: str = Field("", max_length=1000)
+    external_system: str = Field("external_approval", max_length=120)
+    external_ref: str = Field("", max_length=160)
 
 
 class PlanIn(BaseModel):
@@ -665,26 +718,32 @@ def copilot_command_approvals(status: str = Query("pending"), limit: int = Query
     return {"ok": True, "items": items, "total": len(items), "counts": counts}
 
 
+@router.post("/commands/approvals/callback")
+def copilot_command_approval_callback(body: CommandApprovalCallbackIn) -> dict[str, Any]:
+    """外部审批系统回调：不执行命令，只更新审批状态，执行仍由受控 command apply 完成。"""
+    item, idempotent = _review_command_approval(
+        body.approval_id,
+        status=body.status,
+        reviewer=body.reviewer,
+        note=body.note,
+        source="external_callback",
+        external_system=body.external_system,
+        external_ref=body.external_ref,
+    )
+    return {"ok": True, "idempotent": idempotent, "item": item}
+
+
 @router.post("/commands/approvals/{approval_id}/review")
 def copilot_review_command_approval(approval_id: str, body: CommandApprovalReviewIn) -> dict[str, Any]:
     """审批或驳回敏感命令执行请求。"""
-    rows = _load_command_approvals()
-    item = _find_command_approval(rows, approval_id)
-    if not item:
-        raise HTTPException(404, "approval not found")
-    current = str(item.get("status") or "pending")
-    if current not in {"pending", body.status}:
-        raise HTTPException(409, f"approval already {current}")
-    now = _now()
-    item.update({
-        "status": body.status,
-        "reviewer": body.reviewer.strip() or "manager-web",
-        "note": body.note,
-        "reviewed_at": now,
-        "updated_at": now,
-    })
-    _save_command_approvals(rows)
-    return {"ok": True, "item": _public_command_approval(item)}
+    item, idempotent = _review_command_approval(
+        approval_id,
+        status=body.status,
+        reviewer=body.reviewer,
+        note=body.note,
+        source="manager-web",
+    )
+    return {"ok": True, "idempotent": idempotent, "item": item}
 
 
 @router.post("/commands/execute")

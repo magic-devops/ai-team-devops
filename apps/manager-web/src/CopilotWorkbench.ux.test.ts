@@ -7,6 +7,7 @@ const copilotSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages
 const hubSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotHub.tsx"), "utf8");
 const actionDockSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotModeActionDock.tsx"), "utf8");
 const mobileCardsSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotCommandMobileCards.tsx"), "utf8");
+const approvalQueueSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/CopilotCommandApprovalQueue.tsx"), "utf8");
 const copilotTypesSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/ai/copilotTypes.ts"), "utf8");
 const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8");
 
@@ -34,12 +35,13 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("Steps");
     expect(copilotSource).toContain("Switch");
     expect(copilotSource).toContain("Table");
-    expect(copilotSource).toContain("Popconfirm");
+    expect(approvalQueueSource).toContain("Popconfirm");
     expect(copilotSource).toContain("copilotPlanTasks");
     expect(copilotSource).toContain("copilotExecuteCommand");
     expect(copilotSource).toContain("copilotCommandApprovals");
     expect(copilotSource).toContain("copilotReviewCommandApproval");
-    expect(copilotSource).toContain("copilotCommandApprovalQueue");
+    expect(approvalQueueSource).toContain("copilotCommandApprovalQueue");
+    expect(approvalQueueSource).toContain("externalApprovalCallback");
     expect(copilotSource).toContain("commandResult");
     expect(copilotSource).toContain("commandStats");
     expect(copilotSource).toContain("CommandTypeFilter");
@@ -67,6 +69,7 @@ describe("Copilot workbench UX contract", () => {
     expect(mobileCardsSource).toContain("approval_required");
     expect(copilotSource).toContain("CopilotModeActionDock");
     expect(copilotSource).toContain("CopilotCommandMobileCards");
+    expect(copilotSource).toContain("CopilotCommandApprovalQueue");
     expect(mobileCardsSource).toContain("copilotCommandMobileCards");
     expect(copilotSource).toContain("copilotChatEvidence");
     expect(copilotSource).toContain("copilotPlanPipeline");

@@ -4214,6 +4214,7 @@
     "approveCommand": "批准",
     "rejectCommand": "驳回",
     "commandApprovalEmpty": "暂无待审批命令。",
+    "externalApprovalCallback": "外部回调",
     "commandApprovalRequiredHint": "已生成审批记录，请在审批队列批准或驳回。"
   },
   "command": {

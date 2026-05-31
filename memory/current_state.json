@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T09:42:50Z",
+  "updated_at": "2026-05-31T09:50:27Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -373,12 +373,13 @@
       "完成 Task 112 Copilot AI 指挥台六次差异化增强：回应 AI 指挥台、AI 会话、命令中心、工具计划仍容易看成同一页的问题；Copilot 工作区首屏新增按模式切换的 Action Dock，AI 会话聚焦上下文接入、快捷追问和证据摘要，命令中心聚焦搜索、快捷筛选和类型分段，工具计划聚焦目标模板与生成计划；移动端命令卡片补齐查看/预览和转计划动作，减少进入侧栏二次查找。",
       "完成 Task 113 Copilot 模块化与冗余交互收敛：将 Copilot 工作区共享类型、首屏 Action Dock 和移动端命令卡片拆成 ai/copilotTypes、CopilotModeActionDock、CopilotCommandMobileCards 独立模块；命令中心主卡去掉重复搜索/筛选控件，只保留统计、当前筛选和命令列表，让主页面更短、更易维护，后续 AI 修改会话、命令或工具计划时可独立落点。",
       "完成 Task 114 Copilot 命令权限策略与确认执行闭环：Manager 命令目录为每条命令返回 required_capability、risk_level、approval_required 和 approval_mode，commands/execute 对敏感 operation 未确认执行返回 approval_required，确认后才执行并写入审计链；前端命令中心展示风险、能力码、免审批/需确认状态，并用 Ant Design Popconfirm 承接确认执行，移动端命令卡片同步展示策略信息；System Pages 同步登记命令权限策略能力。",
-      "完成 Task 115 Copilot 命令审批队列闭环：Manager 新增 /api/v1/copilot/commands/approvals 与审批 review API，敏感 operation 生成幂等审批记录，支持 pending 查询、批准、驳回、批准后携带 approval_id 执行并回写 executed/audit_hash；命令中心侧栏新增轻量审批队列卡片，提交审批后可在同页批准或驳回，批准自动执行并刷新审计证据；System Pages、三语种文案、UX 契约测试和架构计划同步登记。"
+      "完成 Task 115 Copilot 命令审批队列闭环：Manager 新增 /api/v1/copilot/commands/approvals 与审批 review API，敏感 operation 生成幂等审批记录，支持 pending 查询、批准、驳回、批准后携带 approval_id 执行并回写 executed/audit_hash；命令中心侧栏新增轻量审批队列卡片，提交审批后可在同页批准或驳回，批准自动执行并刷新审计证据；System Pages、三语种文案、UX 契约测试和架构计划同步登记。",
+      "完成 Task 116 Copilot 审批模块化与外部回调闭环：前端将命令审批队列从 Copilot 主页面抽离为 CopilotCommandApprovalQueue 独立模块，主页面只保留取数、审批动作和执行编排，降低页面复杂度并方便 AI 后续单点改造；Manager 新增 /api/v1/copilot/commands/approvals/callback，外部审批系统可幂等批准/驳回敏感命令，审批记录暴露 callback 契约、review_source、external_system 和 external_ref，执行仍由受控 command apply 携带 approval_id 完成；System Pages、三语种文案、UX 契约测试和架构计划同步登记。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 115 Copilot 命令审批队列闭环已完成；下一步继续做跨工具执行器、外部审批系统回调、真实移动端截图检查和大工作台子路由懒加载拆分。"
+    "current": "Task 116 Copilot 审批模块化与外部回调闭环已完成；下一步继续做跨工具执行器、审批凭证校验、真实移动端截图检查和大工作台子路由懒加载拆分。"
   },
   "metrics": {
     "completion_rate": 100,

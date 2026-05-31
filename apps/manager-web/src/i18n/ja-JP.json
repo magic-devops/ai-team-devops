@@ -3335,6 +3335,7 @@
     "approveCommand": "承認",
     "rejectCommand": "却下",
     "commandApprovalEmpty": "承認待ちコマンドはありません。",
+    "externalApprovalCallback": "外部コールバック",
     "commandApprovalRequiredHint": "承認レコードを作成しました。キューで承認または却下してください。"
   },
   "command": {

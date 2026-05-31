@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Empty, Input, Popconfirm, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
+import { Alert, Button, Empty, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
 import { Bot, CheckCircle2, ClipboardCheck, Command, FileSearch, Loader2, MessageSquareText, Network, Plus, ShieldCheck, Workflow } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
@@ -11,6 +11,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { api } from "@/lib/api";
 import { formatCopilotResponse } from "@/lib/copilotFormat";
 import { getProjectId, getToken } from "@/lib/authStorage";
+import { CopilotCommandApprovalQueue } from "./ai/CopilotCommandApprovalQueue";
 import { CopilotCommandMobileCards } from "./ai/CopilotCommandMobileCards";
 import { CopilotModeActionDock } from "./ai/CopilotModeActionDock";
 import type { CommandApproval, CommandCandidate, CommandTypeFilter, CopilotMode, Turn } from "./ai/copilotTypes";
@@ -663,58 +664,15 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("command.empty")} />
               )}
-              <div className="copilotCommandApprovalQueue rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">{t("copilot.commandApprovalQueue", { defaultValue: "审批队列" })}</p>
-                    <p className="mt-0.5 text-xs text-[var(--muted)]">{t("copilot.commandApprovalPending", { count: pendingCommandApprovals.length, defaultValue: "{{count}} 个待审批命令" })}</p>
-                  </div>
-                  <Tag color={pendingCommandApprovals.length ? "red" : "green"}>{pendingCommandApprovals.length}</Tag>
-                </div>
-                {commandApprovalsQ.isError ? <Alert className="mt-2" type="error" showIcon message={(commandApprovalsQ.error as Error).message} /> : null}
-                <div className="mt-3 space-y-2">
-                  {commandApprovalsQ.isLoading ? (
-                    <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">{t("common.loading", { defaultValue: "加载中..." })}</div>
-                  ) : pendingCommandApprovals.length ? (
-                    pendingCommandApprovals.slice(0, 3).map((approval) => (
-                      <div key={approval.id} className="rounded-lg bg-[var(--surface-muted)] p-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold text-[var(--text)]">{approval.command_label || approval.command_id}</p>
-                            <p className="mt-0.5 break-all font-mono text-[10px] text-[var(--muted)]">{approval.run_id || approval.id}</p>
-                          </div>
-                          <Tag color={commandRiskColor(approval.policy?.risk_level)}>{approval.policy?.risk_level || "risk"}</Tag>
-                        </div>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                          <Popconfirm
-                            title={t("copilot.approveCommand", { defaultValue: "批准执行" })}
-                            description={approval.policy?.reason || t("copilot.confirmCommandDesc", { defaultValue: "该命令需要确认后才会执行并写入审计证据。" })}
-                            okText={t("copilot.approveCommand", { defaultValue: "批准" })}
-                            cancelText={t("common.cancel", { defaultValue: "取消" })}
-                            onConfirm={() => reviewCommandApproval.mutate({ approval, status: "approved" })}
-                          >
-                            <Button block size="small" type="primary" loading={reviewCommandApproval.isPending || executeCommand.isPending}>
-                              {t("copilot.approveCommand", { defaultValue: "批准" })}
-                            </Button>
-                          </Popconfirm>
-                          <Popconfirm
-                            title={t("copilot.rejectCommand", { defaultValue: "驳回执行" })}
-                            okText={t("copilot.rejectCommand", { defaultValue: "驳回" })}
-                            cancelText={t("common.cancel", { defaultValue: "取消" })}
-                            onConfirm={() => reviewCommandApproval.mutate({ approval, status: "rejected" })}
-                          >
-                            <Button block size="small" loading={reviewCommandApproval.isPending}>
-                              {t("copilot.rejectCommand", { defaultValue: "驳回" })}
-                            </Button>
-                          </Popconfirm>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">{t("copilot.commandApprovalEmpty", { defaultValue: "暂无待审批命令。" })}</div>
-                  )}
-                </div>
-              </div>
+              <CopilotCommandApprovalQueue
+                approvals={pendingCommandApprovals}
+                loading={commandApprovalsQ.isLoading}
+                error={commandApprovalsQ.isError ? commandApprovalsQ.error : null}
+                reviewing={reviewCommandApproval.isPending}
+                executing={executeCommand.isPending}
+                onApprove={(approval) => reviewCommandApproval.mutate({ approval, status: "approved" })}
+                onReject={(approval) => reviewCommandApproval.mutate({ approval, status: "rejected" })}
+              />
               {commandResult ? (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                   <div className="flex items-center justify-between gap-2">

@@ -22,6 +22,10 @@ export type CommandApproval = {
   updated_at?: string;
   reviewer?: string;
   note?: string;
+  callback?: { method?: string; path?: string; fields?: string[] };
+  review_source?: string;
+  external_system?: string;
+  external_ref?: string;
 };
 export type QuickPrompt = { label: string; prompt: string };
 export type PlanTemplate = { label: string; prompt: string };

@@ -122,6 +122,77 @@ def test_copilot_rejected_approval_blocks_execution():
     assert confirmed.status_code == 409
 
 
+def test_copilot_external_approval_callback_is_idempotent_and_executable():
+    client = TestClient(app)
+
+    blocked = client.post(
+        "/api/v1/copilot/commands/execute",
+        json={"command_id": "ops.audit_verify", "dry_run": False, "session_id": "cp-test", "run_id": "run-callback-approval"},
+    )
+    assert blocked.status_code == 200
+    approval_id = blocked.json()["evidence"]["approval"]["id"]
+    assert blocked.json()["evidence"]["approval"]["callback"]["path"] == "/api/v1/copilot/commands/approvals/callback"
+
+    callback = client.post(
+        "/api/v1/copilot/commands/approvals/callback",
+        json={
+            "approval_id": approval_id,
+            "status": "approved",
+            "reviewer": "ops-approver",
+            "external_system": "jira_service_management",
+            "external_ref": "CHG-1001",
+            "note": "approved outside Hermes",
+        },
+    )
+    assert callback.status_code == 200
+    callback_body = callback.json()
+    assert callback_body["idempotent"] is False
+    assert callback_body["item"]["status"] == "approved"
+    assert callback_body["item"]["review_source"] == "external_callback"
+    assert callback_body["item"]["external_ref"] == "CHG-1001"
+
+    repeated_callback = client.post(
+        "/api/v1/copilot/commands/approvals/callback",
+        json={
+            "approval_id": approval_id,
+            "status": "approved",
+            "reviewer": "ops-approver",
+            "external_system": "jira_service_management",
+            "external_ref": "CHG-1001",
+        },
+    )
+    assert repeated_callback.status_code == 200
+    assert repeated_callback.json()["idempotent"] is True
+
+    confirmed = client.post(
+        "/api/v1/copilot/commands/execute",
+        json={
+            "command_id": "ops.audit_verify",
+            "dry_run": False,
+            "approval_confirmed": True,
+            "session_id": "cp-test",
+            "run_id": "run-callback-apply",
+            "context": {"approval_id": approval_id},
+        },
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["evidence"]["approval"]["status"] == "executed"
+
+    late_retry = client.post(
+        "/api/v1/copilot/commands/approvals/callback",
+        json={
+            "approval_id": approval_id,
+            "status": "approved",
+            "reviewer": "ops-approver",
+            "external_system": "jira_service_management",
+            "external_ref": "CHG-1001",
+        },
+    )
+    assert late_retry.status_code == 200
+    assert late_retry.json()["idempotent"] is True
+    assert late_retry.json()["item"]["status"] == "executed"
+
+
 def test_copilot_execute_rejects_unknown_command():
     client = TestClient(app)
 
