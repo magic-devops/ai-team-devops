@@ -28,6 +28,7 @@ type SystemMapSection =
   | "capabilities"
   | "module-contract"
   | "migration";
+type ContractPanel = "manifest" | "capabilities" | "actions";
 
 function MaturityBar({ value }: { value: number }) {
   const tone = value >= 80 ? "bg-emerald-500" : value >= 60 ? "bg-amber-500" : "bg-rose-500";
@@ -53,12 +54,15 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex h-6 w-fit items-center rounded-full px-2.5 text-xs font-medium ${cls}`}>{status}</span>;
 }
 
-export function SystemMap({ focused = false, initialSection = "overview" }: { focused?: boolean; initialSection?: SystemMapSection }) {
+export function SystemMap({ initialSection = "overview" }: { focused?: boolean; initialSection?: SystemMapSection }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const [mode, setMode] = useState<ViewMode>("react");
   const [section, setSection] = useState<SystemMapSection>(initialSection);
+  const [contractPanel, setContractPanel] = useState<ContractPanel>(
+    initialSection === "capabilities" || initialSection === "actions" ? initialSection : "manifest",
+  );
   const [domain, setDomain] = useState("all");
   const [status, setStatus] = useState("all");
   const [keyword, setKeyword] = useState("");
@@ -384,18 +388,21 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     { label: t("nav.moduleContract", { defaultValue: t("nav.moduleManifest") }), value: "module-contract" },
     { label: t("nav.sub.migration", { defaultValue: "迁移任务" }), value: "migration" },
   ];
-  const showOverview = !focused && section === "overview";
-  const showRegistry = !focused || section === "registry";
-  const showReadiness = !focused || section === "readiness";
-  const showIsolationGovernance = !focused || section === "isolation";
-  const showSourceScan = !focused || section === "source-scan";
-  const showBaselineCompare = !focused || section === "baseline-compare";
+  const isContractSection = section === "module-contract" || section === "manifest" || section === "capabilities" || section === "actions";
+  const activeContractPanel: ContractPanel =
+    section === "capabilities" || section === "actions" || section === "manifest" ? section : contractPanel;
+  const showOverview = section === "overview";
+  const showRegistry = section === "registry";
+  const showReadiness = section === "readiness";
+  const showIsolationGovernance = section === "isolation";
+  const showSourceScan = section === "source-scan";
+  const showBaselineCompare = section === "baseline-compare";
   const showIsolation = showIsolationGovernance || showSourceScan || showBaselineCompare;
-  const showTasks = !focused || section === "tasks";
-  const showManifest = !focused || section === "manifest" || section === "module-contract";
-  const showActions = !focused || section === "actions";
-  const showCapabilities = !focused || section === "capabilities";
-  const showMigration = !focused || section === "migration";
+  const showTasks = section === "tasks";
+  const showManifest = isContractSection && activeContractPanel === "manifest";
+  const showActions = isContractSection && activeContractPanel === "actions";
+  const showCapabilities = isContractSection && activeContractPanel === "capabilities";
+  const showMigration = section === "migration";
   const pageColumns: ColumnsType<any> = [
     {
       title: t("page.systemMap.page"),
@@ -569,13 +576,15 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
 
       <div className="systemMapFocusedNav overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
         <Segmented
-          value={focused && (section === "manifest" || section === "capabilities" || section === "actions") ? "module-contract" : focused ? section : "overview"}
+          value={isContractSection ? "module-contract" : section}
           onChange={(value) => {
             if (value === "overview") {
+              setSection("overview");
               window.location.hash = "#/system-map";
               return;
             }
             setSection(value as SystemMapSection);
+            if (value === "module-contract") setContractPanel("manifest");
             const pathBySection: Partial<Record<SystemMapSection, string>> = {
               "baseline-compare": "baseline-compare",
               "module-contract": "contract",
@@ -592,6 +601,30 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
           ]}
         />
       </div>
+
+      {isContractSection ? (
+        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+          <Segmented
+            value={activeContractPanel}
+            onChange={(value) => {
+              const next = value as ContractPanel;
+              setContractPanel(next);
+              setSection(next);
+              const pathByPanel: Record<ContractPanel, string> = {
+                manifest: "manifest",
+                capabilities: "capabilities",
+                actions: "actions",
+              };
+              window.location.hash = `#/system-map/${pathByPanel[next]}`;
+            }}
+            options={[
+              { label: t("nav.moduleManifest"), value: "manifest" },
+              { label: t("nav.capabilityGovernance"), value: "capabilities" },
+              { label: t("page.systemMap.moduleActions"), value: "actions" },
+            ]}
+          />
+        </div>
+      ) : null}
 
       {showOverview ? (
       <Card title={t("page.systemMap.whatIsThis")}>

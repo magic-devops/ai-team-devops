@@ -676,18 +676,27 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("settings", "storage"): "#/settings/storage",
 }
 
+SUBMODULE_PARENTS: dict[tuple[str, str], str] = {
+    ("systemMap", "manifest"): "contract",
+    ("systemMap", "capabilities"): "contract",
+    ("systemMap", "actions"): "contract",
+}
+
 
 def _submodules_for(page_id: str, capability: str, policies: dict[str, list[str]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for sub_id, name in SUBMODULES_BY_PAGE.get(page_id, []):
         sub_cap = f"{capability}.{sub_id}"
         path = SUBMODULE_PATHS.get((page_id, sub_id), f"#/{page_id}/{sub_id}")
+        parent_id = SUBMODULE_PARENTS.get((page_id, sub_id))
         rows.append(
             {
                 "id": sub_id,
                 "name": name,
                 "path": path,
                 "capability": sub_cap,
+                "parent_id": parent_id,
+                "navigation_role": "contract_tab" if parent_id else "primary",
                 "actions": [
                     {"id": "read", "name": "查看", "capability": f"{sub_cap}.read", "roles": policies["read"]},
                     {"id": "write", "name": "编辑", "capability": f"{sub_cap}.write", "roles": policies["write"]},

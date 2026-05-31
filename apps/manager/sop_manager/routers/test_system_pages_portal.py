@@ -332,6 +332,9 @@ def test_system_map_menu_groups_security_governance_units():
     assert submodules["baseline_compare"]["name"] == "智能基线对比"
     assert submodules["baseline_compare"]["path"] == "#/system-map/baseline-compare"
     assert submodules["governance_tasks"]["path"] == "#/system-map/governance-tasks"
+    assert submodules["manifest"]["parent_id"] == "contract"
+    assert submodules["capabilities"]["navigation_role"] == "contract_tab"
+    assert submodules["actions"]["parent_id"] == "contract"
 
 
 def test_system_pages_governance_tasks_aggregates_real_generated_tasks(monkeypatch):

@@ -25,5 +25,9 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('hidden: true, parentKey: "moduleContract"');
     expect(systemMapSource).toContain('"module-contract"');
     expect(systemMapSource).toContain('value: "module-contract"');
+    expect(systemMapSource).toContain('type ContractPanel = "manifest" | "capabilities" | "actions"');
+    expect(systemMapSource).toContain('const showOverview = section === "overview"');
+    expect(systemMapSource).toContain('const showRegistry = section === "registry"');
+    expect(systemMapSource).toContain('activeContractPanel === "capabilities"');
   });
 });
