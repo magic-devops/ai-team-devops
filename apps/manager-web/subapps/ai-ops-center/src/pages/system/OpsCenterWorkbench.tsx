@@ -114,6 +114,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const [pForm, setPForm] = useState({ name: "", environment: "staging", steps: "" });
   const [rcaForm, setRcaForm] = useState({ incident_id: "", root_cause: "", impact: "", resolution: "" });
   const [rcaInsightFilter, setRcaInsightFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100", priority: "P1", assigned_to: "Ops Agent", dev_tool: "codex" });
+  const [rcaInsightDrawerOpen, setRcaInsightDrawerOpen] = useState(false);
   const [rcaInsightResult, setRcaInsightResult] = useState<any>(null);
   const [rcaInsightTasksResult, setRcaInsightTasksResult] = useState<any>(null);
   const [rcaInsightCreateResult, setRcaInsightCreateResult] = useState<any>(null);
@@ -2121,22 +2122,25 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                   <p className="text-sm font-semibold">智能根因归因</p>
                   <p className="mt-1 text-xs text-[var(--muted)]">聚合 Trace、数据质量告警、计费提醒、失败流水线和未关闭 RCA，生成可任务化的根因候选。</p>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-xs ${severityClass((rcaInsightResult?.candidates ?? [])[0]?.severity)}`}>
-                  {(rcaInsightResult?.summary?.candidates ?? 0) || "待分析"} 候选
-                </span>
+                <Space wrap>
+                  <span className={`rounded-full px-2 py-1 text-xs ${severityClass((rcaInsightResult?.candidates ?? [])[0]?.severity)}`}>
+                    {(rcaInsightResult?.summary?.candidates ?? 0) || "待分析"} 候选
+                  </span>
+                  <Button size="small" onClick={() => setRcaInsightDrawerOpen(true)}>配置归因</Button>
+                </Space>
               </div>
-              <div className="mt-3 grid gap-3 lg:grid-cols-4">
-                <input className="input-base" placeholder="Agent Run ID" value={rcaInsightFilter.run_id} onChange={e => setRcaInsightFilter(f => ({ ...f, run_id: e.target.value }))} />
-                <input className="input-base" placeholder="trace_id" value={rcaInsightFilter.trace_id} onChange={e => setRcaInsightFilter(f => ({ ...f, trace_id: e.target.value }))} />
-                <input className="input-base" placeholder="correlation_id" value={rcaInsightFilter.correlation_id} onChange={e => setRcaInsightFilter(f => ({ ...f, correlation_id: e.target.value }))} />
-                <input className="input-base" inputMode="numeric" placeholder="采样数量" value={rcaInsightFilter.limit} onChange={e => setRcaInsightFilter(f => ({ ...f, limit: e.target.value }))} />
-              </div>
-              <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                <select className="input-base" value={rcaInsightFilter.priority} onChange={e => setRcaInsightFilter(f => ({ ...f, priority: e.target.value }))}>
-                  {["P0", "P1", "P2", "P3"].map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <input className="input-base" placeholder="负责人" value={rcaInsightFilter.assigned_to} onChange={e => setRcaInsightFilter(f => ({ ...f, assigned_to: e.target.value }))} />
-                <input className="input-base" placeholder="执行工具" value={rcaInsightFilter.dev_tool} onChange={e => setRcaInsightFilter(f => ({ ...f, dev_tool: e.target.value }))} />
+              <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ["Agent Run", rcaInsightFilter.run_id || "全部运行"],
+                  ["Trace", rcaInsightFilter.trace_id || "自动聚合"],
+                  ["Correlation", rcaInsightFilter.correlation_id || "自动聚合"],
+                  ["采样/任务", `${rcaInsightFilter.limit} / ${rcaInsightFilter.priority}`],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-lg bg-[var(--surface-muted)] p-3">
+                    <p className="text-[11px] uppercase text-[var(--muted)]">{label}</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-[var(--text)]">{value}</p>
+                  </div>
+                ))}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={() => analyzeRcaInsights.mutate()} disabled={analyzeRcaInsights.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
@@ -2222,6 +2226,102 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 </div>
               )}
             </div>
+            <Drawer
+              title="配置智能根因归因"
+              open={rcaInsightDrawerOpen}
+              onClose={() => setRcaInsightDrawerOpen(false)}
+              width="min(680px, 100vw)"
+            >
+              <div className="rcaInsightFocusedDrawer space-y-5">
+                <Steps
+                  size="small"
+                  current={rcaInsightTasksResult ? 2 : rcaInsightResult ? 1 : 0}
+                  items={[
+                    { title: "归因范围" },
+                    { title: "生成候选" },
+                    { title: "任务闭环" },
+                  ]}
+                />
+                <Form layout="vertical" requiredMark={false} onFinish={() => analyzeRcaInsights.mutate()}>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">归因范围</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">留空时聚合当前作用域的 Trace、流水线、告警、计费和未关闭 RCA。</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="Agent Run ID">
+                        <Input value={rcaInsightFilter.run_id} onChange={e => setRcaInsightFilter(f => ({ ...f, run_id: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="Trace ID">
+                        <Input value={rcaInsightFilter.trace_id} onChange={e => setRcaInsightFilter(f => ({ ...f, trace_id: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="Correlation ID">
+                        <Input value={rcaInsightFilter.correlation_id} onChange={e => setRcaInsightFilter(f => ({ ...f, correlation_id: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="采样数量">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={rcaInsightFilter.limit}
+                          onChange={e => setRcaInsightFilter(f => ({ ...f, limit: e.target.value }))}
+                        />
+                      </Form.Item>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">任务化参数</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <Form.Item label="优先级">
+                        <Select
+                          value={rcaInsightFilter.priority}
+                          onChange={value => setRcaInsightFilter(f => ({ ...f, priority: value }))}
+                          options={["P0", "P1", "P2", "P3"].map(item => ({ label: item, value: item }))}
+                        />
+                      </Form.Item>
+                      <Form.Item label="负责人">
+                        <Input value={rcaInsightFilter.assigned_to} onChange={e => setRcaInsightFilter(f => ({ ...f, assigned_to: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="执行工具">
+                        <Input value={rcaInsightFilter.dev_tool} onChange={e => setRcaInsightFilter(f => ({ ...f, dev_tool: e.target.value }))} />
+                      </Form.Item>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <p className="text-sm font-semibold">归因证据</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">先生成候选，再按当前任务参数预览或创建治理任务。</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">候选</p>
+                        <p className="text-sm font-semibold">{rcaInsightResult?.summary?.candidates ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">高风险</p>
+                        <p className="text-sm font-semibold">{rcaInsightResult?.summary?.high_risk ?? rcaInsightResult?.summary?.critical ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">任务</p>
+                        <p className="text-sm font-semibold">{rcaInsightTasksResult?.summary?.created ?? rcaInsightTasksResult?.summary?.planned ?? 0}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Space className="mt-4" wrap>
+                    <Button type="primary" htmlType="submit" loading={analyzeRcaInsights.isPending}>
+                      生成归因
+                    </Button>
+                    <Button onClick={() => createRcaInsightTasks.mutate(true)} disabled={!rcaInsightResult} loading={createRcaInsightTasks.isPending}>
+                      预览任务
+                    </Button>
+                    <Button danger onClick={() => createRcaInsightTasks.mutate(false)} disabled={!rcaInsightResult} loading={createRcaInsightTasks.isPending}>
+                      创建任务
+                    </Button>
+                    <Button onClick={() => setRcaInsightDrawerOpen(false)}>取消</Button>
+                  </Space>
+                  {analyzeRcaInsights.error && <p className="mt-3 text-xs text-red-600">{(analyzeRcaInsights.error as Error).message}</p>}
+                  {createRcaInsightTasks.error && <p className="mt-3 text-xs text-red-600">{(createRcaInsightTasks.error as Error).message}</p>}
+                </Form>
+              </div>
+            </Drawer>
             {rcaVerifyResult && (
               <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">

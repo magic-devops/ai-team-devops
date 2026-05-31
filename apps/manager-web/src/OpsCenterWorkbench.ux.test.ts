@@ -87,4 +87,18 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base\" placeholder=\"动作 create_task,im_notify\" value={opsStrategyLinkageForm.actions}");
     expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={opsStrategyLinkageForm.note}");
   });
+
+  it("keeps RCA insight configuration in a focused drawer flow", () => {
+    expect(source).toContain("rcaInsightDrawerOpen");
+    expect(source).toContain("rcaInsightFocusedDrawer");
+    expect(source).toContain("setRcaInsightDrawerOpen(true)");
+    expect(source).toContain("配置智能根因归因");
+    expect(source).toContain("归因范围");
+    expect(source).toContain("任务化参数");
+    expect(source).toContain("analyzeRcaInsights.mutate()");
+    expect(source).toContain("createRcaInsightTasks.mutate(true)");
+    expect(source).toContain("createRcaInsightTasks.mutate(false)");
+    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Agent Run ID\" value={rcaInsightFilter.run_id}");
+    expect(source).not.toContain("<select className=\"input-base\" value={rcaInsightFilter.priority}");
+  });
 });
