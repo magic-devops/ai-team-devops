@@ -70,6 +70,26 @@ export function CopilotHub() {
     { id: "commands", label: "命令中心", path: "#/copilot/commands", intent: "找入口、预览操作、执行低风险动作", outcome: DOMAIN_OUTCOME.commands, icon: Command },
     { id: "tool-plan", label: "工具计划", path: "#/copilot/tool-plan", intent: "把目标拆成计划并任务化", outcome: DOMAIN_OUTCOME["tool-plan"], icon: ClipboardCheck },
   ];
+  const recommendations = [
+    {
+      title: recent.length ? "继续最近会话" : "先建立 AI 上下文",
+      desc: recent.length ? "延续已有 transcript，继续追问和总结。" : "没有会话时先让 AI 了解当前项目和目标。",
+      href: "#/copilot/chat",
+      action: "进入会话",
+    },
+    {
+      title: commandTotal ? "快速找平台动作" : "等待命令注册",
+      desc: commandTotal ? "命令中心适合查入口、dry-run 和低风险执行。" : "命令目录为空时先检查后端命令注册表。",
+      href: "#/copilot/commands",
+      action: "查命令",
+    },
+    {
+      title: "复杂目标转计划",
+      desc: "涉及多步骤、多工具或需要任务跟进时，直接进入工具计划。",
+      href: "#/copilot/tool-plan",
+      action: "生成计划",
+    },
+  ];
 
   return (
     <div className="w-full space-y-5">
@@ -128,6 +148,32 @@ export function CopilotHub() {
           );
         })}
       </div>
+
+      <Card title={t("page.copilot.nextBestAction", { defaultValue: "推荐下一步" })}>
+        <div className="copilotHubNextActions grid gap-3 lg:grid-cols-3">
+          {recommendations.map((item) => (
+            <a
+              key={item.title}
+              href={item.href}
+              className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
+            >
+              <span className="flex items-start justify-between gap-3">
+                <span>
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text)]">
+                    <Sparkles className="h-4 w-4 text-[var(--brand)]" />
+                    {item.title}
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-[var(--muted)]">{item.desc}</span>
+                </span>
+                <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)] opacity-60 transition group-hover:opacity-100" />
+              </span>
+              <span className="mt-3 inline-flex rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted-strong)]">
+                {item.action}
+              </span>
+            </a>
+          ))}
+        </div>
+      </Card>
 
       <Card title={t("page.copilot.decisionTitle", { defaultValue: "入口分工" })}>
         <div className="grid gap-3 lg:grid-cols-3">

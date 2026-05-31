@@ -35,6 +35,14 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("copilotExecuteCommand");
     expect(copilotSource).toContain("commandResult");
     expect(copilotSource).toContain("commandStats");
+    expect(copilotSource).toContain("CommandTypeFilter");
+    expect(copilotSource).toContain("COMMAND_TYPE_FILTERS");
+    expect(copilotSource).toContain("filteredCommandRows");
+    expect(copilotSource).toContain("copilotCommandTypeFilter");
+    expect(copilotSource).toContain("copilotCommandPlaybook");
+    expect(copilotSource).toContain("命令执行路径");
+    expect(copilotSource).toContain("PLAN_TEMPLATES");
+    expect(copilotSource).toContain("copilotPlanTemplates");
     expect(copilotSource).toContain("SearchCheck");
     expect(copilotSource).toContain("commandCenterIdentity");
     expect(copilotSource).toContain("计划不是聊天记录");
@@ -46,6 +54,9 @@ describe("Copilot workbench UX contract", () => {
     expect(hubSource).toContain("DOMAIN_USAGE");
     expect(hubSource).toContain("DOMAIN_OUTCOME");
     expect(hubSource).toContain("decisionLanes");
+    expect(hubSource).toContain("recommendations");
+    expect(hubSource).toContain("copilotHubNextActions");
+    expect(hubSource).toContain("推荐下一步");
     expect(hubSource).toContain("copilotHubDecisionLane");
     expect(hubSource).toContain("cockpitTiles");
     expect(hubSource).toContain("copilotCommands");

@@ -14,6 +14,7 @@ import { getProjectId, getToken } from "@/lib/authStorage";
 
 type Turn = { ts: string; sessionId: string; runId: string; query: string; response?: unknown; error?: string };
 type CopilotMode = "chat" | "commands" | "tool-plan";
+type CommandTypeFilter = "all" | "navigate" | "operation" | "copilot";
 const STORAGE_KEY = "sop-copilot-transcript-v1";
 
 function loadTurns(): Turn[] {
@@ -88,6 +89,31 @@ const CHAT_QUICK_PROMPTS = [
 ];
 
 const COMMAND_QUICK_FILTERS = ["任务", "审计", "健康", "计费", "页面地图"];
+const COMMAND_TYPE_FILTERS: Array<{ label: string; value: CommandTypeFilter }> = [
+  { label: "全部", value: "all" },
+  { label: "页面导航", value: "navigate" },
+  { label: "受控操作", value: "operation" },
+  { label: "AI 命令", value: "copilot" },
+];
+const COMMAND_PLAYBOOK = [
+  { title: "先找能力", desc: "按页面、业务动作或意图检索命令。" },
+  { title: "再看风险", desc: "operation 类型必须先预览，确认影响范围。" },
+  { title: "最后留证", desc: "执行后保留状态、目标、audit hash 和结果。" },
+];
+const PLAN_TEMPLATES = [
+  {
+    label: "交付推进",
+    prompt: "基于当前项目上下文生成下一轮迭代推进计划，包含优先级、依赖、风险和可落库任务。",
+  },
+  {
+    label: "治理闭环",
+    prompt: "把当前治理目标拆成可执行工具计划，先预览影响范围，再生成任务中心可跟进事项。",
+  },
+  {
+    label: "生产排障",
+    prompt: "针对当前生产风险生成排障工具计划，覆盖健康检查、审计验证、任务分派和恢复证据。",
+  },
+];
 
 export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode }) {
   const { t } = useTranslation();
@@ -96,6 +122,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
   const [mode, setMode] = useState<CopilotMode>(initialMode);
   const [q, setQ] = useState("");
   const [commandSearch, setCommandSearch] = useState("");
+  const [commandTypeFilter, setCommandTypeFilter] = useState<CommandTypeFilter>("all");
   const [sessionId, setSessionId] = useState(() => newId("cp"));
   const [runId, setRunId] = useState(() => newId("run"));
   const [withProject, setWithProject] = useState(true);
@@ -270,6 +297,10 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
     },
   }[mode];
   const commandRows = commandsQuery.data?.items ?? [];
+  const filteredCommandRows = useMemo(
+    () => (commandTypeFilter === "all" ? commandRows : commandRows.filter((x: any) => x.type === commandTypeFilter)),
+    [commandRows, commandTypeFilter],
+  );
   const commandStats = {
     navigate: commandRows.filter((x: any) => x.type === "navigate").length,
     operation: commandRows.filter((x: any) => x.type === "operation").length,
@@ -381,12 +412,19 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                 </Button>
               ))}
             </div>
+            <div className="copilotCommandTypeFilter mb-4 max-w-full overflow-x-auto">
+              <Segmented
+                value={commandTypeFilter}
+                onChange={(value) => setCommandTypeFilter(value as CommandTypeFilter)}
+                options={COMMAND_TYPE_FILTERS}
+              />
+            </div>
             <Table
               rowKey={(row: any) => String(row.id || row.label)}
               size="small"
               loading={commandsQuery.isLoading || commandsQuery.isFetching}
-              dataSource={commandRows}
-              pagination={{ pageSize: 10, showSizeChanger: false }}
+              dataSource={filteredCommandRows}
+              pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
               scroll={{ x: 820 }}
               locale={{ emptyText: t("command.empty") }}
               columns={[
@@ -459,6 +497,22 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                   </pre>
                 </div>
               ) : null}
+              <div className="copilotCommandPlaybook rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="mb-2 text-sm font-semibold text-[var(--text)]">命令执行路径</p>
+                <div className="space-y-2">
+                  {COMMAND_PLAYBOOK.map((item, index) => (
+                    <div key={item.title} className="flex gap-2 rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+                      <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[11px] font-semibold text-[var(--brand)]">
+                        {index + 1}
+                      </span>
+                      <span>
+                        <span className="block text-xs font-semibold text-[var(--text)]">{item.title}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-[var(--muted)]">{item.desc}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                 <p className="font-semibold text-[var(--text)]">{t("command.short")}</p>
                 <p className="mt-1">{t("copilot.commandUsagePalette", { defaultValue: "全局快捷键打开命令面板，适合快速跳页和查找动作。" })}</p>
@@ -487,6 +541,13 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                     <p className="mt-1 text-xs leading-5 text-[var(--muted)]">这里专门处理“要达成什么目标”，生成可预览、可审计、可转任务的工具执行方案。</p>
                   </div>
                 </div>
+              </div>
+              <div className="copilotPlanTemplates mb-3 grid gap-2 sm:grid-cols-3">
+                {PLAN_TEMPLATES.map((item) => (
+                  <Button key={item.label} className="h-auto whitespace-normal py-2 text-left" onClick={() => setQ(item.prompt)}>
+                    {item.label}
+                  </Button>
+                ))}
               </div>
               <Input.TextArea
                 value={q}
