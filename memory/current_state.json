@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T01:28:12Z",
+  "updated_at": "2026-05-31T02:05:44Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -330,12 +330,19 @@
       "完成 Task 69 元数据管理独立核心模块：Manager 新增 /api/v1/metadata/summary、/assets、/fields、/lineage、/lineage/impact 与 /assets/{asset_id}/classify，聚合 Analytics 资产治理、Data Ingest Schema Registry 和血缘影响，支持资产/字段检索、敏感字段候选、分类治理、质量规则绑定、三码隔离与 Agent consumption；React 新增 #/data/metadata 独立工作台，并拆分 #/data/metadata/overview、assets、fields、lineage 专业子路由，system/pages、导航和三语种文案同步登记。",
       "完成 Task 70 Hermes 剩余功能补全 M0/M1 首批落地：修复 OpsCenter 策略联动治理任务同毫秒 ID 碰撞与同 scope 重复 apply 重复落库问题，按 source_report_id 幂等创建并补同 scope/跨 scope 回归测试；新增 /api/v1/system/pages/production-readiness，将 contract_complete、runtime_ready、production_ready 三档与运行数据、外部连接、异步 Worker、测试覆盖、部署证据、监控信号、权限策略维度输出给 SystemMap。",
       "完成 Task 71 Worker 与前端体验首批增强：manager-worker 的 rag.warmup 从 noop 升级为真实 RAG health/search/index 预热，Redis Stream 消费增加 retry、DLQ 和健康指标；SystemMap 接入生产就绪矩阵并使用 Ant Design Table/Segmented/Tag 展示筛选和维度，Vite manualChunks 合并 AntV 与 @ant-design 可视化包以降低循环 chunk 风险；开发计划落盘到 docs/architecture/HERMES_PLATFORM_REMAINING_DEVELOPMENT_PLAN_2026-05-31.md。",
-      "完成 Task 72 体验治理与自适配增强：新增 /api/v1/system/pages/experience-review，按简洁度、自适配、成熟组件、权限管控、AI 可改造性和商业化六维评估菜单与页面复杂度；SystemMap 将详情区收敛为体验治理/生产就绪/完整度分段视图，默认优先看体验治理，使用 Ant Design Table/Segmented/Tag 保持操作简单；i18n、架构开发计划和前端契约测试同步更新，Vite manualChunks 保留无循环的可视化/zrender/utility 拆分。"
+      "完成 Task 72 体验治理与自适配增强：新增 /api/v1/system/pages/experience-review，按简洁度、自适配、成熟组件、权限管控、AI 可改造性和商业化六维评估菜单与页面复杂度；SystemMap 将详情区收敛为体验治理/生产就绪/完整度分段视图，默认优先看体验治理，使用 Ant Design Table/Segmented/Tag 保持操作简单；i18n、架构开发计划和前端契约测试同步更新，Vite manualChunks 保留无循环的可视化/zrender/utility 拆分。",
+      "完成 Task 73 LLM Gateway 工作台交互收敛：模型网关主导航从手写按钮切换为 Ant Design Segmented，路由规则、Provider 健康和限流策略三张高频表改为 Ant Design Table，补 loading/empty/pagination/横向滚动，保留 AI 助手和治理任务入口；新增 LlmGatewayWorkbench UX 契约测试，开发计划同步记录后续 Form/Drawer/Steps 改造方向。",
+      "完成 Task 74 SystemMap 体验治理任务化闭环：新增 /api/v1/system/pages/experience-review/tasks，把体验治理 complex/watch 模块按 source_report_id=experience:{module_id} 幂等转成 source=system_page_experience 治理任务；治理任务看板新增体验治理来源；SystemMap 体验治理面板支持预览/生成体验任务并刷新任务看板；前后端契约测试、三语种文案、架构开发计划同步更新。",
+      "完成 Task 75 Settings 专业子路由与移动端模块选择体验增强：Settings 页面内部模块与 #/settings/account、runtime、observability、profiles、sso、billing 子路由双向同步，修复专业菜单进入后仍停留账户模块的问题；移动端改为紧凑模块选择器，桌面端保留独立侧栏；新增日志观测独立模块入口，使运行状态、日志 Trace、环境 Profile、SSO、计费等配置能力更简单可达。",
+      "完成 Task 76 A2A 工作台深链聚焦与成熟组件导航收敛：A2A Hub 的 Agent 注册入口修正为 #/ecosystem/a2a/registry；A2aWorkbench 支持 registry/negotiate/sla/windows/dispatch/evidence 等深链自动聚焦，内部导航从手写 tab 收敛为 Ant Design Segmented，移动端横向滚动承接，协商会话和分发成功后的跳转同步更新 hash。",
+      "完成 Task 77 A2A Agent 注册交互抽屉化：A2A 注册外部 Agent 从页面内裸 input/select 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主注册工作区只保留列表、信任策略和关键操作；保存动作走 Form submit 与必填校验，注册成功后关闭抽屉、重置表单并保留一次性凭证提示。",
+      "完成 Task 78 A2A 能力协商交互抽屉化：A2A 能力协商从主页面裸 input/select/textarea 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主协商页只保留任务摘要、能力标签、最近协商时间线入口、匹配解释和分发动作；提交后保留最近协商参数供分发 payload、SLA 和协议包复用，降低页面复杂度并增强移动端可用性。",
+      "完成 Task 79 A2A 策略配置交互统一抽屉化：A2A 信任策略、SLA 策略和执行窗口策略从主页面裸 input/select/checkbox 配置区升级为 Ant Design Drawer/Form/InputNumber/Switch/Select/Steps/Alert，主工作区只展示策略摘要、关键状态和预览/生成治理任务等高频动作；策略保存改为提交 draft 后调用接口，避免状态异步导致配置错写，提升移动端和专业运维可用性。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 72 体验治理与自适配增强已完成：SystemMap 已具备体验/生产/完整度分段治理视图和 experience-review API；下一步按计划逐一补 DLQ 管理、生产就绪任务化、复杂工作台 AntD Form/Drawer/Steps 交互和 M3-M5 生产化能力。"
+    "current": "Task 79 A2A 策略配置交互统一抽屉化已完成：信任策略、SLA 策略、执行窗口策略统一从主页面配置区收敛到 Ant Design 抽屉式步骤表单，主页面聚焦状态、摘要、治理任务和高频动作；下一步继续推进 OpsCenter 大工作台模块化和 LLM Gateway 表单抽屉化。"
   },
   "metrics": {
     "completion_rate": 100,

@@ -9,7 +9,7 @@ import { clearSession, getProjectId, getToken } from "@/lib/authStorage";
 import { getThemePreference, setThemePreference, THEME_OPTIONS, type ThemePreference } from "@/lib/theme";
 import { SettingsWorkbenchHeader } from "@/pages/admin/SettingsWorkbenchHeader";
 
-type SettingsModule = "account" | "runtime" | "workspace" | "profiles" | "storage" | "sso" | "appearance" | "billing";
+type SettingsModule = "account" | "runtime" | "observability" | "workspace" | "profiles" | "storage" | "sso" | "appearance" | "billing";
 type SsoRiskEscalationAction = "create_tasks" | "send_im";
 type SsoRiskEscalationBooleanKey = "enabled" | "include_low" | "force";
 type SsoRiskEscalationDraft = {
@@ -39,6 +39,38 @@ const ssoRiskEscalationBooleanControls: Array<{ key: SsoRiskEscalationBooleanKey
 const ssoRiskEscalationActions: SsoRiskEscalationAction[] = ["create_tasks", "send_im"];
 
 const inputClass = "w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20";
+const SETTINGS_ROUTE_MODULES: Record<string, SettingsModule> = {
+  account: "account",
+  runtime: "runtime",
+  observability: "observability",
+  workspace: "workspace",
+  profiles: "profiles",
+  storage: "storage",
+  sso: "sso",
+  appearance: "appearance",
+  billing: "billing",
+};
+const SETTINGS_MODULE_PATHS: Partial<Record<SettingsModule, string>> = {
+  account: "#/settings/account",
+  runtime: "#/settings/runtime",
+  observability: "#/settings/observability",
+  profiles: "#/settings/profiles",
+  sso: "#/settings/sso",
+  billing: "#/settings/billing",
+};
+
+function readSettingsModuleFromHash(): SettingsModule {
+  const hash = window.location.hash || "#/settings/account";
+  const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  const queryModule = new URLSearchParams(query).get("module") || "";
+  if (SETTINGS_ROUTE_MODULES[queryModule]) return SETTINGS_ROUTE_MODULES[queryModule];
+  const [, routeModule] = hash.match(/^#\/settings\/([^/?#]+)/) || [];
+  return SETTINGS_ROUTE_MODULES[routeModule] || "account";
+}
+
+function settingsModuleHref(module: SettingsModule): string {
+  return SETTINGS_MODULE_PATHS[module] || `#/settings/account?module=${module}`;
+}
 
 function currentRedirectTarget() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/?shell=1#/dashboard";
@@ -48,7 +80,8 @@ export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
-  const [activeModule, setActiveModule] = useState<SettingsModule>("account");
+  const [activeModule, setActiveModule] = useState<SettingsModule>(() => readSettingsModuleFromHash());
+  const opsModuleActive = activeModule === "runtime" || activeModule === "observability";
   const token = getToken();
   const projectId = getProjectId();
   const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: Boolean(token), retry: false });
@@ -182,7 +215,7 @@ export function Settings() {
   const opsLogs = useQuery({
     queryKey: ["opsLogs", logFilter.name, logFilter.level, logFilter.q, logFilter.limit],
     queryFn: () => api.opsLogs(logFilter.name, Number(logFilter.limit || 200), logFilter.level, logFilter.q),
-    enabled: Boolean(token) && activeModule === "runtime",
+    enabled: Boolean(token) && opsModuleActive,
     retry: false,
   });
   const opsTraceSummary = useQuery({
@@ -193,7 +226,7 @@ export function Settings() {
       correlation_id: traceFilter.correlation_id,
       limit: Number(traceFilter.limit || 100),
     }),
-    enabled: Boolean(token) && activeModule === "runtime",
+    enabled: Boolean(token) && opsModuleActive,
     retry: false,
   });
   const deploymentPackages = useQuery({
@@ -297,6 +330,13 @@ export function Settings() {
     const sync = () => setThemePref(getThemePreference());
     window.addEventListener("sop-theme", sync);
     return () => window.removeEventListener("sop-theme", sync);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setActiveModule(readSettingsModuleFromHash());
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
   }, []);
 
   useEffect(() => {
@@ -1229,6 +1269,7 @@ export function Settings() {
   const modules: Array<{ id: SettingsModule; title: string; desc: string; icon: ReactNode; tone?: "ok" | "warn" | "danger" }> = [
     { id: "account", title: t("page.settings.moduleAccount"), desc: t("page.settings.moduleAccountDesc"), icon: <ShieldCheck className="h-5 w-5" />, tone: me.isError ? "danger" : "ok" },
     { id: "runtime", title: t("page.settings.moduleRuntime"), desc: t("page.settings.moduleRuntimeDesc"), icon: <ServerCog className="h-5 w-5" />, tone: healthOk ? "ok" : health.isError ? "danger" : "warn" },
+    { id: "observability", title: t("page.settings.moduleObservability"), desc: t("page.settings.moduleObservabilityDesc"), icon: <Activity className="h-5 w-5" />, tone: opsObservability.isError ? "danger" : opsObservability.data?.doctor?.failed ? "warn" : "ok" },
     { id: "workspace", title: t("page.settings.moduleWorkspace"), desc: t("page.settings.moduleWorkspaceDesc"), icon: <ExternalLink className="h-5 w-5" /> },
     { id: "profiles", title: t("page.settings.moduleProfiles"), desc: t("page.settings.moduleProfilesDesc"), icon: <CloudCog className="h-5 w-5" />, tone: opsProfiles.data?.doctor?.ok ? "ok" : opsProfiles.isError ? "danger" : "warn" },
     { id: "storage", title: t("page.settings.moduleStorage"), desc: t("page.settings.moduleStorageDesc"), icon: <Database className="h-5 w-5" />, tone: opsStorageMigrationPlan.data?.ok ? "ok" : opsStorageMigrationPlan.isError ? "danger" : "warn" },
@@ -1240,14 +1281,36 @@ export function Settings() {
   return (
     <div className="w-full space-y-5">
       <SettingsWorkbenchHeader />
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)] p-3 xl:hidden">
+        <label className="text-xs font-semibold text-[var(--muted)]" htmlFor="settings-mobile-module">
+          {t("page.settings.mobileModule")}
+        </label>
+        <select
+          id="settings-mobile-module"
+          className={`${inputClass} mt-2`}
+          value={activeModule}
+          onChange={(event) => {
+            const next = event.target.value as SettingsModule;
+            setActiveModule(next);
+            window.location.hash = settingsModuleHref(next);
+          }}
+        >
+          {modules.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.title}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="grid w-full gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+      <aside className="hidden min-w-0 xl:sticky xl:top-4 xl:block xl:self-start">
         <Card title={t("page.settings.systemCard")}>
           <div className="space-y-2">
             {modules.map((m) => (
-              <button
+              <a
                 key={m.id}
-                type="button"
+                href={settingsModuleHref(m.id)}
+                aria-current={activeModule === m.id ? "page" : undefined}
                 onClick={() => setActiveModule(m.id)}
                 className={`flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                   activeModule === m.id
@@ -1263,7 +1326,7 @@ export function Settings() {
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">{m.desc}</span>
                 </span>
-              </button>
+              </a>
             ))}
           </div>
         </Card>
@@ -1309,9 +1372,9 @@ export function Settings() {
         </Card>
       ) : null}
 
-      {activeModule === "runtime" ? (
+      {opsModuleActive ? (
         <Card
-          title={t("page.settings.runtimeCard")}
+          title={activeModule === "observability" ? t("page.settings.logsTitle") : t("page.settings.runtimeCard")}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <button

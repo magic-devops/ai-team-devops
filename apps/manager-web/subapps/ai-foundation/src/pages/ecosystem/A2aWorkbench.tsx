@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Button, Drawer, Form, Input, InputNumber, Segmented, Select, Space, Steps, Switch } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
@@ -12,6 +13,84 @@ type Tab = "health" | "registry" | "negotiate" | "sessions" | "sla" | "windows" 
 const AGENT_TYPES = ["workbuddy", "openclaw", "hermes_agent", "custom"];
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
 const RETRYABLE_DISPATCH_STATUSES = new Set(["failed", "blocked", "cancelled", "retrying"]);
+const DEFAULT_REG_FORM = {
+  name: "",
+  agent_type: "custom",
+  endpoint: "",
+  organization_code: "",
+  trust_domain: "",
+  capabilities: "code.review, test.automation",
+};
+const DEFAULT_NEG_FORM = {
+  task_type: "code_review",
+  task_description: "Review API security and SQL access risk",
+  required_capabilities: "code.review, security.audit",
+  priority: "P1",
+};
+const DEFAULT_SLA_POLICY_FORM = {
+  default_sla_minutes: 30,
+  due_soon_ratio: 0.8,
+  p0: 15,
+  p1: 30,
+  p2: 60,
+  p3: 120,
+  auto_retry_enabled: false,
+  max_auto_retries: 1,
+  im_alert_enabled: true,
+};
+const DEFAULT_TRUST_POLICY_FORM = {
+  stale_after_minutes: 30,
+  min_success_rate: 0,
+  max_load: 10,
+  require_endpoint: false,
+  allowed_agent_types: "",
+  allowed_organization_codes: "",
+  required_capabilities: "",
+  enforce_on_negotiate: true,
+  enforce_on_dispatch: false,
+  enforce_on_pull: true,
+};
+const DEFAULT_WINDOW_POLICY_FORM = {
+  stale_after_minutes: 15,
+  due_soon_seconds: 300,
+  max_auto_reassign: 1,
+  action_mode: "guarded",
+  require_preview_for_high_risk: false,
+  auto_renew_enabled: true,
+  auto_reassign_enabled: true,
+  auto_expire_enabled: true,
+};
+const A2A_ROUTE_TABS: Record<string, Tab> = {
+  workbench: "health",
+  health: "health",
+  registry: "registry",
+  negotiate: "negotiate",
+  sessions: "sessions",
+  sla: "sla",
+  windows: "windows",
+  dispatch: "dispatches",
+  dispatches: "dispatches",
+  evidence: "evidence",
+};
+const A2A_TAB_PATHS: Record<Tab, string> = {
+  health: "#/ecosystem/a2a/workbench",
+  registry: "#/ecosystem/a2a/registry",
+  negotiate: "#/ecosystem/a2a/negotiate",
+  sessions: "#/ecosystem/a2a/negotiate?tab=sessions",
+  sla: "#/ecosystem/a2a/sla",
+  windows: "#/ecosystem/a2a/windows",
+  dispatches: "#/ecosystem/a2a/dispatch",
+  evidence: "#/ecosystem/a2a/evidence",
+};
+
+function tabFromHash(fallback: Tab): Tab {
+  const hash = window.location.hash || A2A_TAB_PATHS[fallback];
+  const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  const queryTab = new URLSearchParams(query).get("tab") || "";
+  if (A2A_ROUTE_TABS[queryTab]) return A2A_ROUTE_TABS[queryTab];
+  const [, routeTab] = hash.match(/^#\/ecosystem\/a2a\/([^/?#]+)/) || [];
+  return A2A_ROUTE_TABS[routeTab] || fallback;
+}
 
 function splitList(value: string) {
   return value.split(/[,，\n]/).map((item) => item.trim()).filter(Boolean);
@@ -28,10 +107,19 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   const authed = Boolean(getToken());
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [registerForm] = Form.useForm();
+  const [negotiateForm] = Form.useForm();
+  const [trustPolicyAntForm] = Form.useForm();
+  const [slaPolicyAntForm] = Form.useForm();
+  const [windowPolicyAntForm] = Form.useForm();
+  const [tab, setTab] = useState<Tab>(() => tabFromHash(initialTab));
   const [showForm, setShowForm] = useState(false);
-  const [regForm, setRegForm] = useState({ name: "", agent_type: "custom", endpoint: "", organization_code: "", trust_domain: "", capabilities: "code.review, test.automation" });
-  const [negForm, setNegForm] = useState({ task_type: "code_review", task_description: "Review API security and SQL access risk", required_capabilities: "code.review, security.audit", priority: "P1" });
+  const [showNegotiateDrawer, setShowNegotiateDrawer] = useState(false);
+  const [showTrustPolicyDrawer, setShowTrustPolicyDrawer] = useState(false);
+  const [showSlaPolicyDrawer, setShowSlaPolicyDrawer] = useState(false);
+  const [showWindowPolicyDrawer, setShowWindowPolicyDrawer] = useState(false);
+  const [regForm, setRegForm] = useState(DEFAULT_REG_FORM);
+  const [negForm, setNegForm] = useState(DEFAULT_NEG_FORM);
   const [negResult, setNegResult] = useState<any>(null);
   const [credentialResult, setCredentialResult] = useState<any>(null);
   const [heartbeatTokens, setHeartbeatTokens] = useState<Record<string, string>>({});
@@ -49,39 +137,9 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   const [windowTaskResult, setWindowTaskResult] = useState<any>(null);
   const [windowActionResult, setWindowActionResult] = useState<any>(null);
   const [slaEscalationResult, setSlaEscalationResult] = useState<any>(null);
-  const [slaPolicyForm, setSlaPolicyForm] = useState({
-    default_sla_minutes: 30,
-    due_soon_ratio: 0.8,
-    p0: 15,
-    p1: 30,
-    p2: 60,
-    p3: 120,
-    auto_retry_enabled: false,
-    max_auto_retries: 1,
-    im_alert_enabled: true,
-  });
-  const [trustPolicyForm, setTrustPolicyForm] = useState({
-    stale_after_minutes: 30,
-    min_success_rate: 0,
-    max_load: 10,
-    require_endpoint: false,
-    allowed_agent_types: "",
-    allowed_organization_codes: "",
-    required_capabilities: "",
-    enforce_on_negotiate: true,
-    enforce_on_dispatch: false,
-    enforce_on_pull: true,
-  });
-  const [windowPolicyForm, setWindowPolicyForm] = useState({
-    stale_after_minutes: 15,
-    due_soon_seconds: 300,
-    max_auto_reassign: 1,
-    action_mode: "guarded",
-    require_preview_for_high_risk: false,
-    auto_renew_enabled: true,
-    auto_reassign_enabled: true,
-    auto_expire_enabled: true,
-  });
+  const [slaPolicyForm, setSlaPolicyForm] = useState(DEFAULT_SLA_POLICY_FORM);
+  const [trustPolicyForm, setTrustPolicyForm] = useState(DEFAULT_TRUST_POLICY_FORM);
+  const [windowPolicyForm, setWindowPolicyForm] = useState(DEFAULT_WINDOW_POLICY_FORM);
   const [imResult, setImResult] = useState<any>(null);
   const [imChannels, setImChannels] = useState<string[]>([]);
 
@@ -108,11 +166,32 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   const risks = summary.risks ?? [];
   const topCapabilities = summary.capability_coverage?.top_capabilities ?? [];
   const enabledChannels = useMemo(() => (channelsQ.data ?? []).filter((ch: any) => ch.enabled), [channelsQ.data]);
+  const switchTab = (next: Tab, updateHash = true) => {
+    setTab(next);
+    if (updateHash && window.location.hash !== A2A_TAB_PATHS[next]) window.location.hash = A2A_TAB_PATHS[next];
+  };
+  const tabOptions = useMemo(() => [
+    { label: "协议健康", value: "health" },
+    { label: `Agent 注册 (${agents.length})`, value: "registry" },
+    { label: "能力协商", value: "negotiate" },
+    { label: "协商时间线", value: "sessions" },
+    { label: "外部 SLA", value: "sla" },
+    { label: "执行窗口", value: "windows" },
+    { label: "任务分发", value: "dispatches" },
+    { label: "执行证据", value: "evidence" },
+  ], [agents.length]);
+
+  useEffect(() => {
+    const sync = () => switchTab(tabFromHash(initialTab), false);
+    sync();
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, [initialTab]);
 
   useEffect(() => {
     const policy = slaPolicyQ.data;
     if (!policy) return;
-    setSlaPolicyForm({
+    const next = {
       default_sla_minutes: Number(policy.default_sla_minutes ?? 30),
       due_soon_ratio: Number(policy.due_soon_ratio ?? 0.8),
       p0: Number(policy.priority_sla_minutes?.P0 ?? 15),
@@ -122,13 +201,15 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
       auto_retry_enabled: Boolean(policy.auto_retry_enabled),
       max_auto_retries: Number(policy.max_auto_retries ?? 1),
       im_alert_enabled: Boolean(policy.im_alert_enabled ?? true),
-    });
-  }, [slaPolicyQ.data]);
+    };
+    setSlaPolicyForm(next);
+    slaPolicyAntForm.setFieldsValue(next);
+  }, [slaPolicyAntForm, slaPolicyQ.data]);
 
   useEffect(() => {
     const policy = trustPolicyQ.data;
     if (!policy) return;
-    setTrustPolicyForm({
+    const next = {
       stale_after_minutes: Number(policy.stale_after_minutes ?? 30),
       min_success_rate: Number(policy.min_success_rate ?? 0),
       max_load: Number(policy.max_load ?? 10),
@@ -139,13 +220,15 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
       enforce_on_negotiate: Boolean(policy.enforce_on_negotiate ?? true),
       enforce_on_dispatch: Boolean(policy.enforce_on_dispatch),
       enforce_on_pull: Boolean(policy.enforce_on_pull ?? true),
-    });
-  }, [trustPolicyQ.data]);
+    };
+    setTrustPolicyForm(next);
+    trustPolicyAntForm.setFieldsValue(next);
+  }, [trustPolicyAntForm, trustPolicyQ.data]);
 
   useEffect(() => {
     const policy = windowPolicyQ.data;
     if (!policy) return;
-    setWindowPolicyForm({
+    const next = {
       stale_after_minutes: Number(policy.stale_after_minutes ?? 15),
       due_soon_seconds: Number(policy.due_soon_seconds ?? 300),
       max_auto_reassign: Number(policy.max_auto_reassign ?? 1),
@@ -154,8 +237,10 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
       auto_renew_enabled: Boolean(policy.auto_renew_enabled ?? true),
       auto_reassign_enabled: Boolean(policy.auto_reassign_enabled ?? true),
       auto_expire_enabled: Boolean(policy.auto_expire_enabled ?? true),
-    });
-  }, [windowPolicyQ.data]);
+    };
+    setWindowPolicyForm(next);
+    windowPolicyAntForm.setFieldsValue(next);
+  }, [windowPolicyAntForm, windowPolicyQ.data]);
 
   const agentById = useMemo(() => {
     const map = new Map<string, any>();
@@ -169,9 +254,9 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
   }, [trustQ.data]);
 
   const register = useMutation({
-    mutationFn: () => api.a2aRegister({
-      ...regForm,
-      capabilities: splitList(regForm.capabilities),
+    mutationFn: (draft: typeof DEFAULT_REG_FORM = regForm) => api.a2aRegister({
+      ...draft,
+      capabilities: splitList(draft.capabilities),
     }),
     onSuccess: (data) => {
       setCredentialResult(data);
@@ -182,22 +267,26 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
       void qc.invalidateQueries({ queryKey: ["a2aHealth"] });
       void qc.invalidateQueries({ queryKey: ["a2aTrust"] });
       setShowForm(false);
+      setRegForm(DEFAULT_REG_FORM);
+      registerForm.resetFields();
     },
   });
   const updateTrustPolicy = useMutation({
-    mutationFn: () => api.a2aTrustPolicyUpdate({
-      stale_after_minutes: Number(trustPolicyForm.stale_after_minutes),
-      min_success_rate: Number(trustPolicyForm.min_success_rate),
-      max_load: Number(trustPolicyForm.max_load),
-      require_endpoint: trustPolicyForm.require_endpoint,
-      allowed_agent_types: splitList(trustPolicyForm.allowed_agent_types),
-      allowed_organization_codes: splitList(trustPolicyForm.allowed_organization_codes),
-      required_capabilities: splitList(trustPolicyForm.required_capabilities),
-      enforce_on_negotiate: trustPolicyForm.enforce_on_negotiate,
-      enforce_on_dispatch: trustPolicyForm.enforce_on_dispatch,
-      enforce_on_pull: trustPolicyForm.enforce_on_pull,
+    mutationFn: (draft: typeof DEFAULT_TRUST_POLICY_FORM = trustPolicyForm) => api.a2aTrustPolicyUpdate({
+      stale_after_minutes: Number(draft.stale_after_minutes),
+      min_success_rate: Number(draft.min_success_rate),
+      max_load: Number(draft.max_load),
+      require_endpoint: draft.require_endpoint,
+      allowed_agent_types: splitList(draft.allowed_agent_types),
+      allowed_organization_codes: splitList(draft.allowed_organization_codes),
+      required_capabilities: splitList(draft.required_capabilities),
+      enforce_on_negotiate: draft.enforce_on_negotiate,
+      enforce_on_dispatch: draft.enforce_on_dispatch,
+      enforce_on_pull: draft.enforce_on_pull,
     }),
-    onSuccess: () => {
+    onSuccess: (_, draft = trustPolicyForm) => {
+      setTrustPolicyForm(draft);
+      setShowTrustPolicyDrawer(false);
       void qc.invalidateQueries({ queryKey: ["a2aTrustPolicy"] });
       void qc.invalidateQueries({ queryKey: ["a2aTrust"] });
     },
@@ -328,15 +417,17 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
     },
   });
   const negotiate = useMutation({
-    mutationFn: () => api.a2aNegotiate({
-      task_type: negForm.task_type,
-      task_description: negForm.task_description,
-      required_capabilities: splitList(negForm.required_capabilities),
-      priority: negForm.priority,
+    mutationFn: (draft: typeof DEFAULT_NEG_FORM = negForm) => api.a2aNegotiate({
+      task_type: draft.task_type,
+      task_description: draft.task_description,
+      required_capabilities: splitList(draft.required_capabilities),
+      priority: draft.priority,
     }),
-    onSuccess: (data) => {
+    onSuccess: (data, draft = negForm) => {
+      setNegForm(draft);
       setNegResult(data);
       setSelectedSessionId(data.session_id ?? "");
+      setShowNegotiateDrawer(false);
       void qc.invalidateQueries({ queryKey: ["a2aSessions"] });
     },
   });
@@ -366,7 +457,7 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
         setSelectedSessionId(data.session_id);
         void qc.invalidateQueries({ queryKey: ["a2aSession", data.session_id] });
       }
-      setTab("dispatches");
+      switchTab("dispatches");
     },
   });
   const evidence = useMutation({
@@ -463,36 +554,40 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
     },
   });
   const updateWindowPolicy = useMutation({
-    mutationFn: () => api.a2aExecutionWindowPolicyUpdate({
-      stale_after_minutes: Number(windowPolicyForm.stale_after_minutes),
-      due_soon_seconds: Number(windowPolicyForm.due_soon_seconds),
-      max_auto_reassign: Number(windowPolicyForm.max_auto_reassign),
-      action_mode: windowPolicyForm.action_mode,
-      require_preview_for_high_risk: windowPolicyForm.require_preview_for_high_risk,
-      auto_renew_enabled: windowPolicyForm.auto_renew_enabled,
-      auto_reassign_enabled: windowPolicyForm.auto_reassign_enabled,
-      auto_expire_enabled: windowPolicyForm.auto_expire_enabled,
+    mutationFn: (draft: typeof DEFAULT_WINDOW_POLICY_FORM = windowPolicyForm) => api.a2aExecutionWindowPolicyUpdate({
+      stale_after_minutes: Number(draft.stale_after_minutes),
+      due_soon_seconds: Number(draft.due_soon_seconds),
+      max_auto_reassign: Number(draft.max_auto_reassign),
+      action_mode: draft.action_mode,
+      require_preview_for_high_risk: draft.require_preview_for_high_risk,
+      auto_renew_enabled: draft.auto_renew_enabled,
+      auto_reassign_enabled: draft.auto_reassign_enabled,
+      auto_expire_enabled: draft.auto_expire_enabled,
     }),
-    onSuccess: () => {
+    onSuccess: (_, draft = windowPolicyForm) => {
+      setWindowPolicyForm(draft);
+      setShowWindowPolicyDrawer(false);
       void qc.invalidateQueries({ queryKey: ["a2aExecutionWindowPolicy"] });
       void qc.invalidateQueries({ queryKey: ["a2aExecutionWindows"] });
     },
   });
   const updateSlaPolicy = useMutation({
-    mutationFn: () => api.a2aSlaPolicyUpdate({
-      default_sla_minutes: Number(slaPolicyForm.default_sla_minutes),
-      due_soon_ratio: Number(slaPolicyForm.due_soon_ratio),
+    mutationFn: (draft: typeof DEFAULT_SLA_POLICY_FORM = slaPolicyForm) => api.a2aSlaPolicyUpdate({
+      default_sla_minutes: Number(draft.default_sla_minutes),
+      due_soon_ratio: Number(draft.due_soon_ratio),
       priority_sla_minutes: {
-        P0: Number(slaPolicyForm.p0),
-        P1: Number(slaPolicyForm.p1),
-        P2: Number(slaPolicyForm.p2),
-        P3: Number(slaPolicyForm.p3),
+        P0: Number(draft.p0),
+        P1: Number(draft.p1),
+        P2: Number(draft.p2),
+        P3: Number(draft.p3),
       },
-      auto_retry_enabled: slaPolicyForm.auto_retry_enabled,
-      max_auto_retries: Number(slaPolicyForm.max_auto_retries),
-      im_alert_enabled: slaPolicyForm.im_alert_enabled,
+      auto_retry_enabled: draft.auto_retry_enabled,
+      max_auto_retries: Number(draft.max_auto_retries),
+      im_alert_enabled: draft.im_alert_enabled,
     }),
-    onSuccess: () => {
+    onSuccess: (_, draft = slaPolicyForm) => {
+      setSlaPolicyForm(draft);
+      setShowSlaPolicyDrawer(false);
       void qc.invalidateQueries({ queryKey: ["a2aSlaPolicy"] });
       void qc.invalidateQueries({ queryKey: ["a2aSla"] });
     },
@@ -539,13 +634,13 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
         }
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
-        {(["health", "registry", "negotiate", "sessions", "sla", "windows", "dispatches", "evidence"] as Tab[]).map((item) => (
-          <button key={item} onClick={() => setTab(item)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === item ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-            {item === "health" ? "协议健康" : item === "registry" ? `Agent 注册 (${agents.length})` : item === "negotiate" ? "能力协商" : item === "sessions" ? "协商时间线" : item === "sla" ? "外部 Agent SLA" : item === "windows" ? "执行窗口" : item === "dispatches" ? "任务分发" : "执行证据"}
-          </button>
-        ))}
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        <Segmented
+          className="min-w-max"
+          options={tabOptions}
+          value={tab}
+          onChange={(value) => switchTab(value as Tab)}
+        />
       </div>
 
       {tab === "health" && (
@@ -665,7 +760,7 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
 
       {tab === "registry" && (
         <WorkbenchPanel title="已注册 Agent" actions={
-          <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 注册 Agent</button>
+          <Button type="primary" onClick={() => setShowForm(true)}>注册 Agent</Button>
         }>
           <div className="mb-4 grid gap-3 sm:grid-cols-5">
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -698,22 +793,27 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => trustTasks.mutate(true)} disabled={trustTasks.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">预览治理任务</button>
                 <button onClick={() => trustTasks.mutate(false)} disabled={trustTasks.isPending} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs text-white disabled:opacity-50">生成治理任务</button>
-                <button onClick={() => updateTrustPolicy.mutate()} disabled={updateTrustPolicy.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">保存策略</button>
+                <Button
+                  size="small"
+                  loading={updateTrustPolicy.isPending}
+                  onClick={() => {
+                    trustPolicyAntForm.setFieldsValue(trustPolicyForm);
+                    setShowTrustPolicyDrawer(true);
+                  }}
+                >
+                  编辑策略
+                </Button>
               </div>
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <label className="text-xs text-[var(--muted)]">心跳新鲜分钟<input type="number" min={5} className="input-base mt-1 w-full" value={trustPolicyForm.stale_after_minutes} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, stale_after_minutes: Number(event.target.value) }))} /></label>
-              <label className="text-xs text-[var(--muted)]">最低成功率<input type="number" min={0} max={1} step={0.01} className="input-base mt-1 w-full" value={trustPolicyForm.min_success_rate} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, min_success_rate: Number(event.target.value) }))} /></label>
-              <label className="text-xs text-[var(--muted)]">最大负载<input type="number" min={0} className="input-base mt-1 w-full" value={trustPolicyForm.max_load} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, max_load: Number(event.target.value) }))} /></label>
-              <label className="text-xs text-[var(--muted)]">允许 Agent 类型<input className="input-base mt-1 w-full" value={trustPolicyForm.allowed_agent_types} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, allowed_agent_types: event.target.value }))} /></label>
-              <label className="text-xs text-[var(--muted)]">允许组织代码<input className="input-base mt-1 w-full" value={trustPolicyForm.allowed_organization_codes} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, allowed_organization_codes: event.target.value }))} /></label>
-              <label className="text-xs text-[var(--muted)]">必需能力<input className="input-base mt-1 w-full" value={trustPolicyForm.required_capabilities} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, required_capabilities: event.target.value }))} /></label>
-            </div>
-            <div className="mt-3 grid gap-2 text-xs text-[var(--muted)] sm:grid-cols-2 xl:grid-cols-4">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={trustPolicyForm.require_endpoint} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, require_endpoint: event.target.checked }))} />必须配置 Endpoint</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={trustPolicyForm.enforce_on_negotiate} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, enforce_on_negotiate: event.target.checked }))} />协商时过滤</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={trustPolicyForm.enforce_on_pull} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, enforce_on_pull: event.target.checked }))} />拉取时阻断</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={trustPolicyForm.enforce_on_dispatch} onChange={(event) => setTrustPolicyForm((form) => ({ ...form, enforce_on_dispatch: event.target.checked }))} />分发时阻断</label>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">最低成功率 {Math.round(Number(trustPolicyForm.min_success_rate) * 100)}%</span>
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">最大负载 {trustPolicyForm.max_load}</span>
+              <span className={`rounded-full px-2 py-1 ${trustPolicyForm.require_endpoint ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>Endpoint {trustPolicyForm.require_endpoint ? "必填" : "可选"}</span>
+              <span className={`rounded-full px-2 py-1 ${trustPolicyForm.enforce_on_negotiate ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>协商过滤 {trustPolicyForm.enforce_on_negotiate ? "开启" : "关闭"}</span>
+              <span className={`rounded-full px-2 py-1 ${trustPolicyForm.enforce_on_pull ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>拉取阻断 {trustPolicyForm.enforce_on_pull ? "开启" : "关闭"}</span>
+              <span className={`rounded-full px-2 py-1 ${trustPolicyForm.enforce_on_dispatch ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>分发阻断 {trustPolicyForm.enforce_on_dispatch ? "开启" : "关闭"}</span>
+              {splitList(trustPolicyForm.allowed_agent_types).map((item) => <span key={`type-${item}`} className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[var(--brand)]">类型 {item}</span>)}
+              {splitList(trustPolicyForm.required_capabilities).map((item) => <span key={`cap-${item}`} className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[var(--brand)]">能力 {item}</span>)}
             </div>
             {trustTaskResult ? (
               <div className="mt-3 rounded-lg bg-[var(--surface-muted)] p-3 text-xs">
@@ -820,26 +920,6 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
               进度已回写：{progressResult.dispatch_id} · {progressResult.progress?.progress ?? 0}%
             </div>
           ) : null}
-          {showForm && (
-            <div className="mb-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input className="input-base" placeholder="Agent 名称 *" value={regForm.name} onChange={(event) => setRegForm((form) => ({ ...form, name: event.target.value }))} />
-                <select className="input-base" value={regForm.agent_type} onChange={(event) => setRegForm((form) => ({ ...form, agent_type: event.target.value }))}>
-                  {AGENT_TYPES.map((item) => <option key={item}>{item}</option>)}
-                </select>
-                <input className="input-base" placeholder="Endpoint URL" value={regForm.endpoint} onChange={(event) => setRegForm((form) => ({ ...form, endpoint: event.target.value }))} />
-                <input className="input-base" placeholder="组织代码，如 partner-a" value={regForm.organization_code} onChange={(event) => setRegForm((form) => ({ ...form, organization_code: event.target.value }))} />
-                <input className="input-base" placeholder="信任域，如 external-dev" value={regForm.trust_domain} onChange={(event) => setRegForm((form) => ({ ...form, trust_domain: event.target.value }))} />
-                <input className="input-base" placeholder="能力列表 (逗号分隔)" value={regForm.capabilities} onChange={(event) => setRegForm((form) => ({ ...form, capabilities: event.target.value }))} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => register.mutate()} disabled={!regForm.name || register.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                  {register.isPending ? "注册中..." : "注册"}
-                </button>
-                <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-              </div>
-            </div>
-          )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {agents.length === 0 ? <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无注册 Agent</p> : null}
             {agents.map((agent: any) => (
@@ -885,17 +965,62 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
 
       {tab === "negotiate" && (
         <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-          <WorkbenchPanel title="任务能力协商">
+          <WorkbenchPanel
+            title="任务能力协商"
+            actions={
+              <Button
+                type="primary"
+                loading={negotiate.isPending}
+                onClick={() => {
+                  negotiateForm.setFieldsValue(negForm);
+                  setShowNegotiateDrawer(true);
+                }}
+              >
+                新建协商
+              </Button>
+            }
+          >
             <div className="space-y-3">
-              <input className="input-base w-full" placeholder="任务类型 *" value={negForm.task_type} onChange={(event) => setNegForm((form) => ({ ...form, task_type: event.target.value }))} />
-              <textarea className="input-base min-h-24 w-full" placeholder="任务描述" value={negForm.task_description} onChange={(event) => setNegForm((form) => ({ ...form, task_description: event.target.value }))} />
-              <input className="input-base w-full" placeholder="所需能力 (逗号分隔)" value={negForm.required_capabilities} onChange={(event) => setNegForm((form) => ({ ...form, required_capabilities: event.target.value }))} />
-              <select className="input-base w-full" value={negForm.priority} onChange={(event) => setNegForm((form) => ({ ...form, priority: event.target.value }))}>
-                {PRIORITIES.map((item) => <option key={item}>{item}</option>)}
-              </select>
-              <button onClick={() => negotiate.mutate()} disabled={!negForm.task_type || negotiate.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                {negotiate.isPending ? "协商中..." : "开始协商"}
-              </button>
+              <Alert
+                type="info"
+                showIcon
+                message="用任务目标自动匹配外部 Agent"
+                description="填写一次任务类型、描述、能力和优先级，平台会按能力覆盖、成功率、负载、心跳和风险策略生成推荐与分发候选。"
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div className="text-xs text-[var(--muted)]">任务类型</div>
+                  <div className="mt-1 font-mono text-sm font-semibold">{negForm.task_type || "-"}</div>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div className="text-xs text-[var(--muted)]">优先级 / SLA</div>
+                  <div className="mt-1 text-sm font-semibold">{negForm.priority} · {negForm.priority === "P0" ? 15 : negForm.priority === "P1" ? 30 : 60} 分钟</div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="text-xs text-[var(--muted)]">所需能力</div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {splitList(negForm.required_capabilities).length === 0 ? <span className="text-sm text-[var(--muted)]">未指定能力</span> : null}
+                  {splitList(negForm.required_capabilities).map((capability) => (
+                    <span key={capability} className="rounded bg-[var(--brand-soft)] px-1.5 py-0.5 text-xs text-[var(--brand)]">{capability}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">
+                {negForm.task_description || "暂无任务描述"}
+              </div>
+              {negResult?.session_id ? (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setSelectedSessionId(negResult.session_id);
+                    switchTab("sessions");
+                  }}
+                >
+                  查看最近协商时间线
+                </Button>
+              ) : null}
+              {negotiate.error ? <Alert type="error" showIcon message={(negotiate.error as Error).message} /> : null}
             </div>
           </WorkbenchPanel>
 
@@ -906,7 +1031,7 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
                 <div className="rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-sm">
                   <p>{negResult.recommendation}</p>
                   {negResult.session_id ? (
-                    <button type="button" onClick={() => { setSelectedSessionId(negResult.session_id); setTab("sessions"); }} className="mt-2 font-mono text-xs text-[var(--brand)] hover:underline">
+                    <button type="button" onClick={() => { setSelectedSessionId(negResult.session_id); switchTab("sessions"); }} className="mt-2 font-mono text-xs text-[var(--brand)] hover:underline">
                       Session {negResult.session_id}
                     </button>
                   ) : null}
@@ -1037,7 +1162,7 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
                     <span>超时：{item.minutes_overdue} 分钟</span>
                     <span>证据：{item.missing_evidence ? "未回写" : "已回写"}</span>
                     {item.agent_run_id ? <span className="font-mono">Run {String(item.agent_run_id).slice(0, 12)}</span> : null}
-                    {item.session_id ? <button type="button" onClick={() => { setSelectedSessionId(item.session_id); setTab("sessions"); }} className="text-left font-mono text-[var(--brand)] hover:underline">Session {String(item.session_id).slice(0, 12)}</button> : null}
+                    {item.session_id ? <button type="button" onClick={() => { setSelectedSessionId(item.session_id); switchTab("sessions"); }} className="text-left font-mono text-[var(--brand)] hover:underline">Session {String(item.session_id).slice(0, 12)}</button> : null}
                   </div>
                 </div>
               ))}
@@ -1050,22 +1175,28 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
                 当前策略按 Dispatch payload、优先级 SLA、默认 SLA 顺序计算；超过阈值标记即将超时，超过截止时间进入升级治理。
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold">SLA 策略配置</p>
-                  <button onClick={() => updateSlaPolicy.mutate()} disabled={updateSlaPolicy.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">保存策略</button>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">SLA 策略配置</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">默认 {slaPolicyForm.default_sla_minutes} 分钟 · 即将超时 {Math.round(Number(slaPolicyForm.due_soon_ratio) * 100)}% · P0 {slaPolicyForm.p0} 分钟</p>
+                  </div>
+                  <Button
+                    size="small"
+                    loading={updateSlaPolicy.isPending}
+                    onClick={() => {
+                      slaPolicyAntForm.setFieldsValue(slaPolicyForm);
+                      setShowSlaPolicyDrawer(true);
+                    }}
+                  >
+                    编辑策略
+                  </Button>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <label className="text-xs text-[var(--muted)]">默认 SLA 分钟<input type="number" min={5} className="input-base mt-1 w-full" value={slaPolicyForm.default_sla_minutes} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, default_sla_minutes: Number(event.target.value) }))} /></label>
-                  <label className="text-xs text-[var(--muted)]">即将超时阈值<input type="number" min={0.1} max={0.95} step={0.05} className="input-base mt-1 w-full" value={slaPolicyForm.due_soon_ratio} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, due_soon_ratio: Number(event.target.value) }))} /></label>
-                  <label className="text-xs text-[var(--muted)]">P0 SLA<input type="number" min={5} className="input-base mt-1 w-full" value={slaPolicyForm.p0} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, p0: Number(event.target.value) }))} /></label>
-                  <label className="text-xs text-[var(--muted)]">P1 SLA<input type="number" min={5} className="input-base mt-1 w-full" value={slaPolicyForm.p1} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, p1: Number(event.target.value) }))} /></label>
-                  <label className="text-xs text-[var(--muted)]">P2 SLA<input type="number" min={5} className="input-base mt-1 w-full" value={slaPolicyForm.p2} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, p2: Number(event.target.value) }))} /></label>
-                  <label className="text-xs text-[var(--muted)]">P3 SLA<input type="number" min={5} className="input-base mt-1 w-full" value={slaPolicyForm.p3} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, p3: Number(event.target.value) }))} /></label>
-                </div>
-                <div className="mt-3 grid gap-2 text-xs text-[var(--muted)]">
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={slaPolicyForm.auto_retry_enabled} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, auto_retry_enabled: event.target.checked }))} />超时后允许自动重试</label>
-                  <label className="flex items-center gap-2"><input type="checkbox" checked={slaPolicyForm.im_alert_enabled} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, im_alert_enabled: event.target.checked }))} />超时后生成 IM 提醒动作</label>
-                  <label className="flex items-center gap-2">自动重试上限<input type="number" min={0} max={5} className="input-base w-20" value={slaPolicyForm.max_auto_retries} onChange={(event) => setSlaPolicyForm((form) => ({ ...form, max_auto_retries: Number(event.target.value) }))} /></label>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">P1 {slaPolicyForm.p1} 分钟</span>
+                  <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">P2 {slaPolicyForm.p2} 分钟</span>
+                  <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">P3 {slaPolicyForm.p3} 分钟</span>
+                  <span className={`rounded-full px-2 py-1 ${slaPolicyForm.auto_retry_enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>自动重试 {slaPolicyForm.auto_retry_enabled ? `开启 · ${slaPolicyForm.max_auto_retries} 次` : "关闭"}</span>
+                  <span className={`rounded-full px-2 py-1 ${slaPolicyForm.im_alert_enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>IM 提醒 {slaPolicyForm.im_alert_enabled ? "开启" : "关闭"}</span>
                 </div>
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -1199,25 +1330,23 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
                   <p className="text-sm font-semibold">执行窗口策略</p>
                   <p className="mt-1 text-xs text-[var(--muted)]">当前模式：{windowPolicyQ.data?.action_mode ?? windowPolicyForm.action_mode} · 停滞 {windowsQ.data?.summary?.stale_after_minutes ?? windowPolicyForm.stale_after_minutes} 分钟 · 到期 {windowsQ.data?.summary?.due_soon_seconds ?? windowPolicyForm.due_soon_seconds} 秒</p>
                 </div>
-                <button onClick={() => updateWindowPolicy.mutate()} disabled={updateWindowPolicy.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">保存策略</button>
+                <Button
+                  size="small"
+                  loading={updateWindowPolicy.isPending}
+                  onClick={() => {
+                    windowPolicyAntForm.setFieldsValue(windowPolicyForm);
+                    setShowWindowPolicyDrawer(true);
+                  }}
+                >
+                  编辑策略
+                </Button>
               </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <label className="text-xs text-[var(--muted)]">停滞阈值分钟<input type="number" min={1} className="input-base mt-1 w-full" value={windowPolicyForm.stale_after_minutes} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, stale_after_minutes: Number(event.target.value) }))} /></label>
-                <label className="text-xs text-[var(--muted)]">即将到期秒数<input type="number" min={30} className="input-base mt-1 w-full" value={windowPolicyForm.due_soon_seconds} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, due_soon_seconds: Number(event.target.value) }))} /></label>
-                <label className="text-xs text-[var(--muted)]">自动重派上限<input type="number" min={0} max={10} className="input-base mt-1 w-full" value={windowPolicyForm.max_auto_reassign} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, max_auto_reassign: Number(event.target.value) }))} /></label>
-                <label className="text-xs text-[var(--muted)]">动作模式
-                  <select className="input-base mt-1 w-full" value={windowPolicyForm.action_mode} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, action_mode: event.target.value }))}>
-                    <option value="guarded">guarded</option>
-                    <option value="preview">preview</option>
-                    <option value="automatic">automatic</option>
-                  </select>
-                </label>
-              </div>
-              <div className="mt-3 grid gap-2 text-xs text-[var(--muted)] sm:grid-cols-2">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={windowPolicyForm.auto_renew_enabled} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, auto_renew_enabled: event.target.checked }))} />允许自动续租</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={windowPolicyForm.auto_reassign_enabled} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, auto_reassign_enabled: event.target.checked }))} />允许自动重派</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={windowPolicyForm.auto_expire_enabled} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, auto_expire_enabled: event.target.checked }))} />允许自动回收</label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={windowPolicyForm.require_preview_for_high_risk} onChange={(event) => setWindowPolicyForm((form) => ({ ...form, require_preview_for_high_risk: event.target.checked }))} />高风险先预览</label>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">自动重派上限 {windowPolicyForm.max_auto_reassign}</span>
+                <span className={`rounded-full px-2 py-1 ${windowPolicyForm.auto_renew_enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>自动续租 {windowPolicyForm.auto_renew_enabled ? "开启" : "关闭"}</span>
+                <span className={`rounded-full px-2 py-1 ${windowPolicyForm.auto_reassign_enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>自动重派 {windowPolicyForm.auto_reassign_enabled ? "开启" : "关闭"}</span>
+                <span className={`rounded-full px-2 py-1 ${windowPolicyForm.auto_expire_enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>自动回收 {windowPolicyForm.auto_expire_enabled ? "开启" : "关闭"}</span>
+                <span className={`rounded-full px-2 py-1 ${windowPolicyForm.require_preview_for_high_risk ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>高风险预览 {windowPolicyForm.require_preview_for_high_risk ? "开启" : "关闭"}</span>
               </div>
             </div>
             {!windowActionResult ? <p className="text-sm text-[var(--muted)]">自动动作会保守处理执行窗口风险：即将到期或进度停滞的租约续租，阻塞/拒绝任务重派给候选 Agent，过期 pending 租约回收后重新开放拉取。</p> : null}
@@ -1370,6 +1499,362 @@ export function A2aWorkbench({ focused: _focused, initialTab = "health" }: { foc
           </div>
         </WorkbenchPanel>
       )}
+
+      <Drawer
+        title="编辑信任策略"
+        width={640}
+        open={showTrustPolicyDrawer}
+        onClose={() => setShowTrustPolicyDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowTrustPolicyDrawer(false)}>取消</Button>
+            <Button type="primary" loading={updateTrustPolicy.isPending} onClick={() => trustPolicyAntForm.submit()}>
+              保存策略
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "准入条件" },
+              { title: "执行阶段" },
+              { title: "治理任务" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="信任策略会影响 Agent 协商、任务拉取和分发准入"
+            description="建议按组织代码、能力和心跳新鲜度先收紧准入，再结合治理任务处理掉线或低成功率 Agent。"
+          />
+          <Form
+            form={trustPolicyAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={trustPolicyForm}
+            onValuesChange={(_, values) => setTrustPolicyForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => updateTrustPolicy.mutate({ ...DEFAULT_TRUST_POLICY_FORM, ...trustPolicyForm, ...values })}
+          >
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Form.Item name="stale_after_minutes" label="心跳新鲜分钟">
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="min_success_rate" label="最低成功率">
+                <InputNumber min={0} max={1} step={0.01} className="w-full" />
+              </Form.Item>
+              <Form.Item name="max_load" label="最大负载">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item name="allowed_agent_types" label="允许 Agent 类型" tooltip="支持逗号、中文逗号或换行分隔">
+              <Input placeholder="workbuddy, openclaw, hermes_agent" />
+            </Form.Item>
+            <Form.Item name="allowed_organization_codes" label="允许组织代码" tooltip="支持逗号、中文逗号或换行分隔">
+              <Input placeholder="partner-a, partner-b" />
+            </Form.Item>
+            <Form.Item name="required_capabilities" label="必需能力" tooltip="支持逗号、中文逗号或换行分隔">
+              <Input.TextArea rows={3} placeholder={"code.review, security.audit\ntest.automation"} />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="require_endpoint" label="必须配置 Endpoint" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="enforce_on_negotiate" label="协商时过滤" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="enforce_on_pull" label="拉取时阻断" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="enforce_on_dispatch" label="分发时阻断" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            {updateTrustPolicy.error ? <Alert type="error" showIcon message={(updateTrustPolicy.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="编辑 SLA 策略"
+        width={600}
+        open={showSlaPolicyDrawer}
+        onClose={() => setShowSlaPolicyDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowSlaPolicyDrawer(false)}>取消</Button>
+            <Button type="primary" loading={updateSlaPolicy.isPending} onClick={() => slaPolicyAntForm.submit()}>
+              保存策略
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "设置阈值" },
+              { title: "自动处置" },
+              { title: "治理留痕" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="SLA 策略会影响超时判断、自动升级和治理任务生成"
+            description="建议生产环境先使用保守阈值和 IM 提醒，确认外部 Agent 稳定后再开启自动重试。"
+          />
+          <Form
+            form={slaPolicyAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={slaPolicyForm}
+            onValuesChange={(_, values) => setSlaPolicyForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => updateSlaPolicy.mutate({ ...DEFAULT_SLA_POLICY_FORM, ...slaPolicyForm, ...values })}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="default_sla_minutes" label="默认 SLA 分钟" rules={[{ required: true, message: "请输入默认 SLA" }]}>
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="due_soon_ratio" label="即将超时阈值">
+                <InputNumber min={0.1} max={0.95} step={0.05} className="w-full" />
+              </Form.Item>
+              <Form.Item name="p0" label="P0 SLA 分钟">
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="p1" label="P1 SLA 分钟">
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="p2" label="P2 SLA 分钟">
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="p3" label="P3 SLA 分钟">
+                <InputNumber min={5} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="auto_retry_enabled" label="超时自动重试" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="im_alert_enabled" label="超时 IM 提醒" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            <Form.Item name="max_auto_retries" label="自动重试上限">
+              <InputNumber min={0} max={5} precision={0} className="w-full" />
+            </Form.Item>
+            {updateSlaPolicy.error ? <Alert type="error" showIcon message={(updateSlaPolicy.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="编辑执行窗口策略"
+        width={600}
+        open={showWindowPolicyDrawer}
+        onClose={() => setShowWindowPolicyDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowWindowPolicyDrawer(false)}>取消</Button>
+            <Button type="primary" loading={updateWindowPolicy.isPending} onClick={() => windowPolicyAntForm.submit()}>
+              保存策略
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "窗口阈值" },
+              { title: "自动动作" },
+              { title: "风险护栏" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="执行窗口策略控制租约续期、停滞检测和重派回收"
+            description="保守模式适合生产环境，高风险预览可避免外部 Agent 异常时自动扩大影响面。"
+          />
+          <Form
+            form={windowPolicyAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={windowPolicyForm}
+            onValuesChange={(_, values) => setWindowPolicyForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => updateWindowPolicy.mutate({ ...DEFAULT_WINDOW_POLICY_FORM, ...windowPolicyForm, ...values })}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="stale_after_minutes" label="进度停滞阈值分钟">
+                <InputNumber min={1} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="due_soon_seconds" label="租约即将到期秒数">
+                <InputNumber min={30} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="max_auto_reassign" label="自动重派上限">
+                <InputNumber min={0} max={10} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="action_mode" label="动作模式">
+                <Select
+                  options={[
+                    { label: "guarded", value: "guarded" },
+                    { label: "preview", value: "preview" },
+                    { label: "automatic", value: "automatic" },
+                  ]}
+                />
+              </Form.Item>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="auto_renew_enabled" label="允许自动续租" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="auto_reassign_enabled" label="允许自动重派" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="auto_expire_enabled" label="允许自动回收" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="require_preview_for_high_risk" label="高风险先预览" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            {updateWindowPolicy.error ? <Alert type="error" showIcon message={(updateWindowPolicy.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="发起能力协商"
+        width={600}
+        open={showNegotiateDrawer}
+        onClose={() => setShowNegotiateDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowNegotiateDrawer(false)}>取消</Button>
+            <Button type="primary" loading={negotiate.isPending} onClick={() => negotiateForm.submit()} disabled={!negForm.task_type.trim()}>
+              开始协商
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "定义任务" },
+              { title: "匹配 Agent" },
+              { title: "分发取证" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="协商结果会生成会话和候选 Agent"
+            description="完成后可直接在右侧结果中分发任务，并自动生成协议包、SLA 信息和后续证据回写入口。"
+          />
+          <Form
+            form={negotiateForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={negForm}
+            onValuesChange={(_, values) => setNegForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => negotiate.mutate({ ...DEFAULT_NEG_FORM, ...values })}
+          >
+            <Form.Item name="task_type" label="任务类型" rules={[{ required: true, message: "请输入任务类型" }]}>
+              <Input placeholder="code_review" />
+            </Form.Item>
+            <Form.Item name="task_description" label="任务描述">
+              <Input.TextArea rows={4} placeholder="说明任务目标、输入范围、希望 Agent 返回的证据类型" />
+            </Form.Item>
+            <Form.Item name="required_capabilities" label="所需能力" tooltip="支持逗号、中文逗号或换行分隔">
+              <Input.TextArea rows={3} placeholder={"code.review, security.audit\ntest.automation"} />
+            </Form.Item>
+            <Form.Item name="priority" label="优先级">
+              <Select options={PRIORITIES.map((item) => ({ label: item, value: item }))} />
+            </Form.Item>
+            {negotiate.error ? <Alert type="error" showIcon message={(negotiate.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="注册外部 Agent"
+        width={560}
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowForm(false)}>取消</Button>
+            <Button type="primary" loading={register.isPending} onClick={() => registerForm.submit()} disabled={!regForm.name.trim()}>
+              保存并签发凭证
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "配置 Agent" },
+              { title: "签发凭证" },
+              { title: "心跳接入" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="注册后只展示一次凭证 token"
+            description="请在外部 Agent 中保存该凭证，并通过心跳、拉取任务、确认租约和证据回写完成接入验证。"
+          />
+          <Form
+            form={registerForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={DEFAULT_REG_FORM}
+            onValuesChange={(_, values) => setRegForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => register.mutate({ ...DEFAULT_REG_FORM, ...values })}
+          >
+            <Form.Item name="name" label="Agent 名称" rules={[{ required: true, message: "请输入 Agent 名称" }]}>
+              <Input placeholder="例如 WorkBuddy Security Reviewer" />
+            </Form.Item>
+            <Form.Item name="agent_type" label="Agent 类型">
+              <Select
+                options={AGENT_TYPES.map((item) => ({ label: item, value: item }))}
+              />
+            </Form.Item>
+            <Form.Item name="endpoint" label="Endpoint URL">
+              <Input placeholder="https://agent.example.com/a2a" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="organization_code" label="组织代码">
+                <Input placeholder="partner-a" />
+              </Form.Item>
+              <Form.Item name="trust_domain" label="信任域">
+                <Input placeholder="external-dev" />
+              </Form.Item>
+            </div>
+            <Form.Item name="capabilities" label="能力列表" tooltip="支持逗号、中文逗号或换行分隔">
+              <Input.TextArea
+                rows={4}
+                placeholder={"code.review, security.audit\ntest.automation"}
+              />
+            </Form.Item>
+            {register.error ? <Alert type="error" showIcon message={(register.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
 
       <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="a2a-gateway" title="AI 智能助手" initialPrompt="分析 A2A 协议健康、能力覆盖、协商风险和治理任务建议" />
     </div>

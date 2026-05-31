@@ -187,11 +187,25 @@ flowchart TB
   OLAP --> SEM
   SEM --> QUALITY["质量规则 / SLO / 异常归因"]
   SEM --> SERVING["数据 API / 指标服务 / 标签服务"]
-  SEM --> AI["NLQ / RAG / Graph RAG / 画像记忆"]
+  SEM --> AI["NLQ / 规则兜底 / RAG / Graph RAG / 画像记忆"]
   QUALITY --> TASK["告警转任务 / 修复 DAG"]
   AI --> REPORT["智能报表 / 洞察报告 / 归因"]
   REPORT --> TASK
 ```
+
+数据源管理已从智能中枢附属入口提升为数据域核心模块：`GET /api/v1/db-config/connections/summary` 输出连接目录健康、角色/类型/能力覆盖和 Agent consumption；`POST /api/v1/db-config/connections/{name}/metadata-preview` 基于无明文密钥的连接元数据生成表结构、字段和敏感候选预览；`POST /api/v1/db-config/connections/{name}/metadata-sync` 可创建/更新数据接入连接器并同步到 Schema Registry。前端新增 `#/data/sources` 独立工作台，覆盖连接目录、SecretRef、连接测试、元数据发现和接入同步，原 `#/intelligence/datasources` 保留兼容深链。
+
+元数据管理已拆为数据域独立核心模块：`GET /api/v1/metadata/summary` 聚合资产、字段、Schema Registry、敏感字段、血缘和治理缺口；`GET /api/v1/metadata/assets` 与 `/fields` 分别提供资产目录和字段目录检索；`GET /api/v1/metadata/lineage/impact` 基于资产 source 复用血缘图谱输出上下游影响；`POST /api/v1/metadata/assets/{asset_id}/classify` 支持负责人、密级、标签、质量规则和血缘声明更新。前端新增 `#/data/metadata` 独立工作台，并拆分 `overview/assets/fields/lineage` 子路由，避免资产、字段和血缘能力混在单个治理大页。
+
+NLQ 问数采用 LLM Gateway 优先、规则指标引擎兜底的双路径：复杂归因和自由推理走网关，网关不可用或 Provider 失败时仍基于当前项目指标快照返回可解释答案、置信度、关键指标卡、降级原因和 Provider 错误摘要，确保前端、CLI 和 Agent 在离线/限额/故障场景下仍能完成基础问数。
+
+LLM Gateway 生产控制面已补齐 Prompt 审计闭环：`POST /api/v1/llm-gateway/prompt-audit/run` 在模型调用前检测明文密钥、Bearer Token、PII、提示词注入、上下文过长和代码上下文结构化问题，只保存 prompt hash 与脱敏预览，不落库原文；`GET /prompt-audit/runs` 提供审计历史和阻断摘要，`POST /prompt-audit/tasks` 可把高风险发现生成 `source=llm_gateway_prompt_audit` 治理任务。
+
+模型网关前端新增独立“Prompt 审计”单元，支持任务类型、模型、调用角色、最大 token、PII/Secret 策略、负责人和执行工具配置；审计结果展示决策、评分、风险发现、脱敏预览、任务化结果和历史统计，避免把安全治理能力散落在成本或路由页面。
+
+LLM Gateway 跨 Provider 成本归因已形成可执行控制面：`POST /api/v1/llm-gateway/cost-attribution/run` 读取真实 usage ledger 与模型策略，按 Provider、模型、任务类型和调用来源聚合 token/cost/budget ratio，识别预算超限、Provider 集中度过高和高均价模型风险；`GET /cost-attribution/runs` 提供归因历史，`POST /cost-attribution/tasks` 可将发现生成 `source=llm_gateway_cost_attribution` 治理任务。前端模型网关新增独立“成本归因”单元，支持 dry-run 预览、真实持久化、任务化、负责人和执行工具配置，避免成本治理停留在静态统计卡片。
+
+LLM Gateway 模型评测控制面已补齐第一版：`POST /api/v1/llm-gateway/model-evals/run` 支持配置候选模型、评测用例、期望关键词、实际输出、通过阈值、成本预算和延迟 SLO，综合质量、Prompt 安全、Provider 健康、限流、成本效率与延迟评分生成模型排名；`GET /model-evals/runs` 提供评测历史，`POST /model-evals/tasks` 可把低分模型、阻断用例或最优模型未进入主路由等问题生成 `source=llm_gateway_model_eval` 治理任务。前端模型网关新增独立“模型评测”单元，支持 JSON suite、实际输出评分、评测落库和历史回看，为模型路由、fallback 和成本策略提供可复用依据。
 
 技术选型：
 
@@ -214,7 +228,7 @@ flowchart TB
 | 批流一体数据底座 | Flink CDC、Spark、Paimon、StarRocks、Hologres、Greenplum | P1 | 数据接入、数据开发、质量评估、指标服务和标签服务统一控制面 | Schema Registry、血缘、质量 SLO、告警转任务 |
 | 知识图谱与多模态记忆 | Lance、OpenSearch、Graph RAG、本体记忆 | P1 | 规约、代码、需求、运行证据、数据血缘统一进入知识/记忆层 | 租户向量 namespace、记忆生命周期、脱敏、证据回传 |
 | 调度与工作流内核 | Temporal-ready WorkflowOps、Redis Streams、Outbox/DLQ、CloudEvents | P1 | 调度中心输出 AI 可消费任务包、DAG、事件唤醒和质量卡点 | 幂等键、重试策略、人工审批、执行证据 |
-| Agent/MCP/A2A 运行底座 | sop-agentd、MCP Hub、A2A Gateway、Skill Marketplace | P0 | 统一 Agent 注册、能力画像、工具权限、心跳、任务领取和执行回写 | 工具白名单、沙箱执行、HMAC/JWT、动作审计 |
+| Agent/MCP/A2A 运行底座 | sop-agentd、MCP Hub、A2A Gateway、Skill Marketplace | P0 | 统一 Agent 注册、能力画像、工具权限、心跳、任务领取和执行回写；SDK IPC 支持 Unix Socket / Windows named pipe、结构化诊断和离线降级 | 工具白名单、沙箱执行、HMAC/JWT、动作审计 |
 | 产品化前端 | React 18、Ant Design 6、TanStack Query、lazy chunks | P0 | 专业域菜单、模块 Manifest、细粒度 capability 和 AI surfaces | 域/模块/子能力注册、按钮动作审计、页面地图校验 |
 | 安全可观测治理 | OpenTelemetry、Prometheus、Grafana、Loki、Audit WORM、ABAC | P2 | 日志、指标、链路、审计、用量、账单和审批策略统一治理 | 字段级权限、审计不可篡改、配额限流、策略审批 |
 
@@ -317,6 +331,233 @@ flowchart LR
   SaaS --> Enterprise
 ```
 
+### 10.1 OceanBase 生产存储迁移契约
+
+生产存储路径已从“部署建议”收敛为可执行契约：
+
+- 后端统一由 `apps/manager/sop_manager/db.py` 输出 OceanBase MySQL 模式迁移计划、核心表清单、三码字段、三码索引和备份恢复清单。
+- DDL 位于 `apps/manager/migrations/001_oceanbase_core_schema.sql`，覆盖 tenants、businesses、projects、users、project_members、requirements、tasks、issues、sprints、audit_logs、webhook_configs、api_keys。
+- 生产表按 `tenant_code`、`business_code`、`project_id` 建立组合索引，支持租户/业务线/项目级读取隔离与后续 ABAC/审计查询。
+- 运维接口：
+  - `GET /api/v1/system/ops/storage/migration-plan`: 输出迁移 manifest、当前 DB 类型、SQLite 开发路径、目标 OceanBase 参数和迁移文件内容。
+  - `POST /api/v1/system/ops/storage/migration-smoke`: 检查迁移文件、核心表、三码字段、三码索引、OceanBase MySQL 兼容语法和 SQLite 开发路径。
+- Settings 前端新增“生产存储”模块，展示迁移目标、核心表、作用域索引、迁移文件、Smoke 结果和备份恢复清单。
+- SQLite 本地开发路径保持不变：`apply_startup_defaults()` 仍将 legacy SQLite URL 落到 `.sop-runtime/db/sop.db`。
+
+### 10.2 Trace 关联观测与根因导航
+
+平台观测链路已形成可执行闭环：
+
+- `metrics.py` 在 HTTP 中间件中生成或透传 `traceparent`、`X-Trace-Id`、`X-Correlation-Id`，并提供进程内 `trace_context()` 供 Agent Run、LLM 调用、数据作业、事件与审计写入同一关联上下文。
+- Agent Run、LLM Gateway usage、Data Ingest run、Events journal、Audit Chain 写入时保留 `trace_id`、`correlation_id`、`agent_run_id`。
+- `GET /api/v1/system/ops/observability/traces` 支持按 `run_id`、`trace_id`、`correlation_id` 聚合失败 Run、慢 LLM、数据接入失败、事件流水和审计链，输出 `root_cause_navigation` 给前端和 Agent 消费。
+- Settings 运行状态模块新增 Trace 根因导航面板，可检索运行链路、查看风险级别、根因线索和可跳转节点。
+- OpsCenter 新增 `POST /api/v1/ops-center/rca/insights`，复用 Trace 根因导航并聚合数据质量告警、计费提醒、失败流水线和未关闭 RCA，输出带置信度、证据和建议动作的智能根因候选。
+- `POST /api/v1/ops-center/rca/insights/tasks` 可将根因候选预览或落库为治理任务，前端根因分析页新增独立智能归因工作区，支持 run_id/trace_id/correlation_id 检索、告警摘要和任务化操作。
+- 根因候选使用稳定 ID，并自动匹配 Runbook 名称、标签和步骤；`POST /api/v1/ops-center/rca/insights/rca` 可将候选一键沉淀为 RCA，保留证据、严重级别、置信度、推荐 Runbook 和来源候选，支撑复盘资产持续积累。
+- OpsCenter 前端候选卡片展示推荐 Runbook、匹配分和生成 RCA 操作，RCA 列表展示智能归因来源、置信度与绑定 Runbook，形成“发现根因 - 推荐处置 - 沉淀复盘”的闭环。
+- OpsCenter 新增 RCA 关闭前验证契约：`GET /api/v1/ops-center/rca/{id}/verification-plan` 输出根因、处置、证据、服务健康、关联流水线与 Runbook 检查清单；`POST /api/v1/ops-center/rca/{id}/verify` 写入验证历史、验证评分和验证人，验证通过时可自动关闭 RCA。
+- OpsCenter 前端 RCA 列表提供“验证计划”和“验证并关闭”操作，展示检查项状态、验证分数和最近验证人，避免 RCA 只靠人工按钮关闭。
+- OpsCenter 新增生产告警源控制面：`/api/v1/ops-center/alert-sources` 支持 Prometheus、Grafana、Datadog、Webhook、通用 JSON 和 manual 源注册、测试、启停与同步，密钥只能通过托管引用传入，采集结果标准化为 `/api/v1/ops-center/alerts`。
+- OpsCenter 前端新增独立“告警源”工作区，可配置 Endpoint、托管密钥引用、标签和样例 payload，测试或同步后展示标准化告警并自动作为 RCA 智能归因输入。
+- OpsCenter 新增告警降噪控制面：`/api/v1/ops-center/alert-noise/policies` 管理分组、RCA 阈值和低优先级抑制策略，`/alert-noise/silences` 管理维护静默，`/alert-noise/evaluate` 输出分组、重复折叠、抑制数量、可行动事件和降噪率。
+- OpsCenter 新增告警策略智能推荐：`GET/POST /api/v1/ops-center/alert-noise/recommendations` 基于开放告警、重复分组、降噪率和历史健康分生成可应用建议，`/recommendations/{recommendation_id}/action` 支持应用、忽略和重新打开；应用动作复用现有 policy/silence 模型，避免产生孤立配置。
+- OpsCenter 告警源前端新增“策略智能推荐”面板，支持生成推荐、查看原因/影响/置信度、应用到降噪策略或静默规则，并联动策略目录、评估历史和 OpsCenter summary，形成策略效果自优化闭环。
+- OpsCenter 新增告警策略效果 A/B 对比：`POST /api/v1/ops-center/alert-noise/strategy-compare` 对基线策略、表单策略和严格高危策略在同一批开放告警上执行对比，输出健康分、可行动 RCA 变化、降噪率、赢家和策略建议；`GET /strategy-compare/runs` 查询历史运行。
+- OpsCenter 新增跨源 SLO 预测：`POST /api/v1/ops-center/alert-noise/slo-prediction` 按告警源和服务聚合开放告警、采集失败和降噪效果，输出预测 SLO 分、违约概率、风险等级和处置建议；`GET /slo-prediction/runs` 查询历史预测。
+- OpsCenter 告警源前端将策略增强拆成“策略智能推荐 / 策略效果 A/B 对比 / 跨源 SLO 预测”三个独立单元，避免所有能力堆在同一个列表里，并让 Agent 可消费同一套运行记录与 summary。
+- OpsCenter 新增告警 SLO 自动升级：`GET/PUT /api/v1/ops-center/alert-noise/slo-escalation-policy` 管理升级阈值、动作集、IM 通道和负责人，`POST /slo-escalation/run` 支持 dry-run 预览和真实执行，真实执行会生成任务中心治理任务并按 Notify 通道投递 IM 风险简报，`GET /slo-escalation/runs` 查询升级历史。
+- OpsCenter 告警源前端新增“告警 SLO 自动升级”独立单元，支持保存升级策略、预览升级、执行升级、查看升级对象、任务数量和 IM 投递计划，形成“预测 - 升级 - 任务 - 通知 - 留痕”的运维闭环。
+- OpsCenter 新增策略灰度应用审计：`POST /api/v1/ops-center/alert-noise/strategy-canary/audit` 基于策略 A/B 对比、SLO 预测、自动升级历史和策略目录输出灰度准入分、ready/needs_review/blocked 决策、证据、护栏和回滚触发；`GET /strategy-canary/audits` 查询审计历史，`/strategy-canary/audits/{audit_id}/action` 支持 approve/start/rollback/archive/reject/reopen 状态流。
+- OpsCenter 告警源前端新增“策略灰度应用审计”独立单元，支持选择候选策略或 A/B 胜出策略、刷新审计输入、生成准入审计、查看证据与准入说明，并对审计记录执行审批、启动灰度、回滚和归档操作。
+- OpsCenter 新增跨模块运维策略联动：`POST /api/v1/ops-center/strategy-linkage/run` 聚合策略灰度审计、SLO 自动升级、RCA、Runbook、自愈策略和发布流水线，输出联动项、模块路由、治理任务、IM 简报和 Agent consumption；`GET /api/v1/ops-center/strategy-linkage/runs` 查询真实执行历史和高风险 summary。
+- OpsCenter 告警源前端新增“跨模块运维策略联动”独立单元，支持 dry-run 预览、真实执行、优先级/负责人/执行工具/最大项数/动作集/通道配置，联动任务落入任务中心，IM 投递复用 Notify 通道治理，形成“审计 - 升级 - Runbook/自愈 - 任务 - 通知 - 留痕”的闭环。
+- RCA 智能归因会在存在启用降噪策略或静默规则时仅消费可行动告警，避免 info/low 或维护窗口告警直接生成高优先级复盘；前端在告警源工作区内提供策略、静默、评估历史和最近降噪结果。
+- OpsCenter Runbook 管理升级为版本治理：创建/更新自动生成不可变快照，`/api/v1/ops-center/runbooks/{id}/versions` 输出版本历史和审计事件，`/versions/diff` 支持版本差异对比，`/versions/{version_id}/action` 支持恢复历史版本和归档非激活版本。
+- Runbook 当前激活版本会回写到主 Runbook 记录，RCA 推荐和自愈策略继续读取稳定的当前版本；前端展示版本健康、checksum、变更说明和恢复/归档动作，避免生产处置手册被静默覆盖。
+- OpsCenter 新增 Runbook 执行证据自动回填：`GET /api/v1/ops-center/runbooks/evidence` 查看证据记录，`POST /api/v1/ops-center/runbooks/evidence/backfill` 从 RCA 验证历史、自愈动作和关联流水线恢复记录归集证据，计算覆盖率、必填缺口和建议动作，`/evidence/{record_id}/action` 支持确认、归档和重新打开。
+- OpsCenter 前端 Runbook 模块新增执行证据面板，支持按选中 Runbook 自动回填、展示证据覆盖率、缺失项、来源链路和确认/归档动作，形成“Runbook 版本 - RCA 验证 - 自愈执行 - 审计证据”的闭环。
+
+### 10.3 IM 深度工作流与通知治理
+
+通信集成从“通道发送”增强为可治理的企业 IM 工作流：
+
+- 入站消息支持 `message_id` / `idempotency_key` 去重，避免企业微信、钉钉、Webhook 重试导致重复创建任务或需求。
+- 审批回调统一接入 `POST /api/v1/notify/approvals/callback`，记录审批人、审批状态、来源通道和审计事件，可承接任务质量卡点、发布审批和权限策略审批。
+- 任务状态推送统一接入 `POST /api/v1/notify/tasks/status-push`，支持 dry-run 预览、按事件匹配通道和发送审计，便于 Agent/WorkflowOps 将 blocked、failed、success 等状态主动推送到 IM。
+- 报告订阅由 `GET/POST /api/v1/notify/report-subscriptions` 管理，支撑质量报告、洞察报告、运行周报的默认通道、周期和过滤条件配置。
+- 报告订阅运行中心由 `GET /api/v1/notify/report-subscriptions/runs` 与 `POST /api/v1/notify/report-subscriptions/run` 提供，支持按报告类型、周期、通道筛选，dry-run 预览、force 纳入停用订阅、IM 简报生成、通道投递计划、真实发送和运行历史留痕。
+- `GET /api/v1/notify/connectors/health` 聚合通道启停、事件订阅、最近发送/入站流水，输出连接器健康分、健康/降级/停用状态，前端 Notify 增加连接器健康、审批回调、任务状态推送、报告订阅与订阅运行中心五个产品化面板。
+
+### 10.4 商业化运营与配额治理
+
+Billing 从订阅/账单展示增强为可执行的商业化控制面：
+
+- `PUT /api/v1/billing/subscription` 继续作为租户套餐入口，并在应用套餐时同步写入 Usage quota，形成“套餐 -> 配额 -> 用量检查”的联动。
+- `GET/PUT /api/v1/billing/overage-policy` 管理超额策略，支持 `allow`、`block`、`approval_required` 三种模式，以及宽限比例、账单到期天数和暂停阈值。
+- `POST /api/v1/billing/entitlements/check` 同时检查套餐 feature entitlement、当前 usage quota 和超额策略，输出 `allowed`、`decision`、`feature_allowed`、`quota_allowed`，供 API Gateway、LLM Gateway、Agent Run 和前端操作前置校验。
+- `GET /api/v1/billing/dunning` 基于已出账未支付发票输出催收队列、stage、未收金额和下一步动作，支撑客户成功与财务运营。
+- 发票快照、状态流转和收款登记会写入 `GET /api/v1/billing/invoices/{invoice_id}/audit` 生命周期审计，前端 Settings 商业计费模块展示超额策略、权益试算、催收队列和发票审计。
+
+### 10.5 移动端与响应式控制台
+
+React Manager 壳从桌面侧栏扩展为桌面/移动双形态控制台：
+
+- 桌面端保留可折叠、可调宽侧栏和全量微应用菜单，适合长期运营、治理与多模块切换。
+- 移动端新增抽屉导航，按微应用分组展示核心菜单，并提供运营驾驶舱、任务中心、需求工作台、告警、IM 五个高频入口。
+- 移动端底部操作栏固定承载核心工作流，支持 dashboard、tasks、requirements、alerts 和 IM-triggered actions 的快速切换。
+- 主内容区包裹 `data-mobile-compact` 响应式容器，统一压缩卡片、统计格、Ant Design 表格和输入控件，降低移动端横向溢出与触控成本。
+- 已使用本地桌面视口和 390x844 移动视口截图验证侧栏、移动菜单、底部操作栏和紧凑工作台可见性。
+
+### 10.6 SystemMap 模块完整度任务化
+
+SystemMap 从“看见模块状态”升级为“把模块缺口直接转成可执行任务”的治理入口：
+
+- `GET /api/v1/system/pages/readiness` 继续输出模块前端、后端 API、权限、AI surfaces、产品动作等完整度矩阵，并在 `agent_consumption` 中暴露任务化 API。
+- `POST /api/v1/system/pages/readiness/tasks` 支持按模块 ID、领域、状态和关键词筛选，支持 dry-run 预览与实际生成，任务来源统一写入 `source=system_page_readiness`。
+- 任务描述包含模块路由、领域、完整度分、gaps、next actions、API 契约、capability、AI surfaces 和子模块数量，便于 Codex/Agent 领取后直接进入实现。
+- SystemMap 前端完整度卡片新增“包含完整模块”“预览完整度任务”“生成完整度任务”操作，支持持续增强已完成模块，也支持后续 watch/risk 模块快速派单。
+- SDK/CLI 新增 `system_pages_readiness`、`system_pages_readiness_tasks` 与 `sop pages readiness/readiness-tasks`，让 AI CLI 可以离开浏览器直接读取模块缺口并生成治理任务。
+
+### 10.7 三码隔离审计任务化
+
+三码隔离从“审计矩阵”升级为“安全治理任务闭环”：
+
+- `GET /api/v1/system/pages/isolation-audit` 输出 Tasks、Requirements、Analytics、Notify、Agent Runs、OpsCenter、Data Governance、Usage/Billing 等核心域的 `tenant_code`、`business_code`、`project_id` 覆盖、读写保护、guard 和回归测试。
+- `POST /api/v1/system/pages/isolation-audit/tasks` 支持按审计域 ID、状态和关键词筛选，支持 dry-run 预览与实际生成，任务来源统一写入 `source=system_page_isolation`。
+- 任务描述包含 domain、module、storage、guard、read/write protected、scope fields、已覆盖测试和统一 scope contract，便于 SecurityAgent/Codex 直接领取后补测试或加固文件型 store。
+- SystemMap 三码隔离卡片新增“包含已保护域”“预览隔离任务”“生成隔离任务”，既能处理 watch/risk，也能对已保护域做周期性持续审计。
+- SDK/CLI 新增 `system_pages_isolation`、`system_pages_isolation_tasks` 与 `sop pages isolation/isolation-tasks`，让 AI CLI 在执行敏感动作前可自动读取隔离状态并生成治理任务。
+
+### 10.8 三码隔离源代码扫描
+
+三码隔离进一步从“声明式审计”扩展到“源码级发现”：
+
+- `GET /api/v1/system/pages/isolation-audit/scan` 扫描 Manager Router 中的文件型存储、`scope_guard.attach_scope`、`scope_guard.scope_matches`、`tenant_code/business_code/project_id` 字段和当前 scope 解析信号，输出 protected/watch/risk 文件清单。
+- `GET/POST /api/v1/system/pages/isolation-audit/scan/runs` 支持保存和读取源码隔离扫描快照，固化 filters、summary、findings、created_by、note 与 Agent consumption，作为安全基线和趋势回放入口。
+- `GET /api/v1/system/pages/isolation-audit/scan/runs/compare` 支持按 `base_id/target_id/q/status` 对比历史快照与当前扫描，识别新增风险、回退、已修复项、评分变化和下一步 Agent 推荐动作。
+- `POST /api/v1/system/pages/isolation-audit/scan/runs/compare/tasks` 支持将智能基线对比中的新增风险、回退、变化项预览/生成 `source=system_page_isolation_scan_compare` 治理任务。
+- `POST /api/v1/system/pages/isolation-audit/scan/tasks` 支持将源码扫描项按状态、关键词和模块 ID 预览/生成 `source=system_page_isolation_scan` 源码加固任务。
+- `GET /api/v1/system/pages/isolation-audit` 同步返回 `source_scan_summary`，SystemMap 可在隔离卡片内同时展示审计矩阵和源码扫描摘要。
+- SystemMap 三码隔离卡片通过独立 `IsolationSourceScanPanel` 承载源码扫描、任务预览和快照历史，并抽离 `IsolationBaselineComparePanel` 单元承载智能基线对比、差异表和对比风险任务化；页面只负责查询和 mutation 编排。
+- 模块治理菜单同步拆成页面注册表、模块 Manifest、能力权限、模块完整度、三码隔离审计、源码隔离扫描、智能基线对比、治理任务化、动作目录和迁移任务，前后端 capabilities、导航 path、i18n 子菜单和权限能力码保持一一对应，避免把治理功能堆在单一页面入口。
+- A2A 工作台、注册表、能力协商、SLA、执行窗口、任务分发和执行证据等 focused 子路由均作为一级可检索导航文案进入 zh-CN/en-US/ja-JP，多语言健康检查 `missing_i18n` 与 `missing_sub_i18n` 清零，避免真实子路由退化为技术 ID。
+- `GET /api/v1/system/pages/governance-tasks` 聚合 `system_page_readiness`、`system_page_isolation`、`system_page_isolation_scan`、`system_page_isolation_scan_compare`、`system_page_backlog`、`system_page_governance` 与 `system_module_action` 等真实任务来源，输出状态、优先级、来源 lane、跳转 URL、批量处置契约和 Agent consumption；`POST /api/v1/system/pages/governance-tasks/bulk-update` 只允许对上述治理来源任务做 scoped 批量状态/优先级/负责人更新，普通任务与未知 ID 自动跳过并可 dry-run 预览。SystemMap 通过独立 `SystemGovernanceTasksPanel` 呈现治理任务运营看板，使各专业治理单元生成的任务能被统一追踪、筛选、批量处置和跳回任务中心。
+- SDK/CLI 新增 `system_pages_isolation_scan`、`system_pages_isolation_scan_tasks`、`system_pages_isolation_scan_runs`、`system_pages_isolation_scan_run_create`、`system_pages_isolation_scan_compare`、`system_pages_isolation_scan_compare_tasks` 与 `sop pages isolation-scan/isolation-scan-tasks/isolation-scan-runs/isolation-scan-run/isolation-scan-compare/isolation-scan-compare-tasks`，AI CLI 可在新增 Router 或文件型 store 后直接读取隔离扫描结果、保存基线、智能对比、任务化风险并派发治理任务。
+
+### 10.9 企业 SSO SAML 生产化契约
+
+企业 SSO 已从 SAML 联调占位升级为可执行生产契约：
+
+- OIDC 保持 Authorization Code + PKCE；SAML 使用成熟 `python3-saml` 适配层处理 AuthnRequest、断言验签、属性读取和认证状态判断。
+- SAML 配置支持 IdP EntityID、SSO URL、metadata URL、X.509 证书、NameID Format、SP EntityID、ACS URL、租户域名映射和 IdP group 到平台角色映射。
+- `GET /api/v1/sso/{provider}/saml/metadata` 输出标准 SP Metadata XML，供 Okta、Azure AD/Entra ID、ADFS、通用 SAML IdP 导入。
+- `GET /api/v1/sso/{provider}/saml/login` 发起 SP initiated 登录，`POST /api/v1/sso/{provider}/saml/acs` 验证 SAMLResponse 后执行 JIT 用户创建/更新、角色映射、租户隔离和审计留痕。
+- `POST /api/v1/sso/providers/{provider}/test` 返回 SAML 依赖、IdP/SP 契约、缺失项和可用性诊断；未安装 `python3-saml` 时明确返回安装提示，不再伪装成功。
+- Settings 企业 SSO 模块支持 SAML 专项字段、SP Metadata 链接、SAML 登录测试入口、依赖状态和 provider readiness，避免只有框架字段无法落地。
+
+### 10.10 企业 SSO SCIM 用户同步契约
+
+SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
+
+- `POST /api/v1/sso/providers/{provider}/scim-token` 为指定 IdP 轮换一次性 SCIM Bearer Token，服务端只持久化 token hash，token 仅在轮换响应中返回。
+- `POST /api/v1/sso/providers/{provider}/scim/test` 支持管理员用同一套租户域名映射和 group-role 映射 dry-run 或实际落库测试用户同步。
+- `GET /api/v1/sso/scim/v2/{provider}/ServiceProviderConfig` 输出 SCIM 2.0 能力声明，便于 Okta、Azure AD/Entra ID、通用 IdP 自动探测。
+- `GET/POST /api/v1/sso/scim/v2/{provider}/Users` 支持用户查询、按 userName 过滤和创建；创建时复用 `_jit_user`，按邮箱域名映射租户，按 groups 映射平台角色。
+- `GET/PUT/PATCH/DELETE /api/v1/sso/scim/v2/{provider}/Users/{user_id}` 支持用户读取、覆盖更新、active 状态 patch 和软删除停用，避免 IdP 停用后平台账号继续可用。
+- `GET /api/v1/sso/scim/v2/{provider}/Groups` 输出可映射的平台角色/组；`GET/PUT/PATCH /api/v1/sso/scim/v2/{provider}/Groups/{role}` 支持读取、替换、增量添加和移除角色组成员，成员变更会同步到平台用户 `role` 字段，移除成员默认回退 `developer`。
+- `GET /api/v1/sso/providers/{provider}/scim/audit` 提供 SCIM 审计报表，汇总 token 轮换、dry-run/apply 测试、Users 创建/覆盖/patch/停用、Groups 替换/增量变更事件；事件详情统一脱敏 token/secret/password/x509/SAMLResponse 等敏感字段，单 Provider 保留最近 200 条，支持按 `event_type`、`status` 过滤。
+- `GET /api/v1/sso/providers/{provider}/risk-report` 提供 SSO 风险报表，基于 OIDC/SAML 契约完整度、SAML 依赖与证书、租户域名映射、组到角色映射、SCIM 启用状态、SCIM Token 年龄和 SCIM 审计失败/跳过成员计算 `score/status/findings/action_plan`，风险项只返回稳定 `kind/params/recommendation_key`，前端负责多语言展示，避免后端写死展示文案。
+- `POST /api/v1/sso/providers/{provider}/risk-tasks` 将结构化风险项转换为治理任务，支持 `dry_run/include_low/limit/priority/assigned_to/dev_tool`，复用任务中心 `TaskCreate/create_task` 契约并写入 `source=sso_risk_governance`、`source_report_id`、`source_report_title` 和架构文档证据路径，避免 SSO 模块单独维护一套任务落库逻辑。
+- `POST /api/v1/sso/providers/{provider}/risk-im-briefing` 复用 Notify 企业 IM 通道与 `im_integration_core` 投递计划，根据 SSO 风险报表生成安全简报；支持 `dry_run` 预览、按 `sso_risk` 事件匹配通道、手动选择通道、实际发送和审计返回，避免 SSO 模块自建消息系统。
+- `GET/PUT /api/v1/sso/providers/{provider}/risk-subscription` 将 SSO 风险通知从单次手动发送升级为可配置订阅策略，支持启停、通道白名单、最低风险等级、风险分阈值、频率、低风险纳入、简报上限、负责人和标题配置，配置保存在 Provider 运行时配置中并与密钥脱敏契约隔离。
+- `POST /api/v1/sso/providers/{provider}/risk-subscription/test` 复用风险报表和 IM 简报投递计划，按 `force/score_threshold/severity_threshold/subscription_disabled/no_matching_risk` 给出触发原因；dry-run 只返回预览和投递计划，实际发送会写入订阅历史、更新 `last_sent_at` 并尽力写入审计链。
+- `GET/PUT /api/v1/sso/providers/{provider}/risk-escalation` 新增 SSO 风险自动升级策略，支持启停、最低风险等级、风险分阈值、冷却窗口、低风险纳入、任务负责人/优先级/工具、IM 通道、升级动作和负责人备注配置，策略与 Provider 运行时配置一起持久化但不混入密钥字段。
+- `POST /api/v1/sso/providers/{provider}/risk-escalation/run` 复用风险报表、治理任务化和 IM 简报能力，按 `force/policy_disabled/cooldown/score_threshold/severity_threshold/no_matching_risk` 判定是否触发；dry-run 返回任务和 IM 预览，实际执行会创建治理任务、发送 IM、更新 `last_run_at/last_triggered_at`、写入升级历史并尽力写入审计链。
+- `GET/POST /api/v1/sso/providers/{provider}/risk-runbooks` 与 `GET/POST /api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}[/action]` 新增 SSO 风险处置 Runbook，基于风险报表快照生成结构化步骤、负责人、证据和 Agent consumption；action 支持任务预览/落库、IM 预览/发送、重新验证、步骤完成/失败和归档，复用任务中心与 Notify 通道，不新建孤立执行体系。
+- Settings 企业 SSO 模块新增 SCIM 开关、Users/Groups 端点展示、token 轮换、一次性 token 提示、用户同步测试区、SSO 风险报表、SSO 治理任务化、SSO 风险 IM 通知、SSO 风险订阅策略、SSO 风险自动升级、SSO 风险处置 Runbook 和 SCIM 审计报表，保障管理员能在 UI 内完成 IdP 对接、验证、风险治理、通知协作、自动升级、订阅运营、处置归档和审计闭环。
+- `GET/POST /api/v1/system/ops/deployment-rollback-runbooks` 与 `GET/POST /api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}[/action]` 新增发布回滚 Runbook 自动化，基于不可变部署包、可选回滚演练和流水线命令生成结构化步骤、负责人、命令/API、证据和 Agent consumption；支持 dry-run 回滚流水线预览、任务预览/落库、真实 rollback 流水线创建、就绪标记和归档。
+- Settings 环境 Profile 模块在“发布回滚演练”和“一键部署流水线”之间新增独立 Runbook 自动化单元，可选择部署包、关联演练、配置触发原因/负责人/任务优先级/执行工具，生成 Runbook、预览治理任务、创建任务和创建真实回滚流水线。
+- `GET/POST /api/v1/system/ops/deployment-canary-metric-sources` 与 `POST /api/v1/system/ops/deployment-canary-policies/{policy_id}/metric-collection` 新增灰度指标源自动采集，支持 Prometheus/Grafana/Datadog 协议型来源以及 manual/synthetic 本地兜底，按配置查询错误率与 P95 延迟并生成 gate 结果；采集可 dry-run 预览，也可写入灰度策略 gate、失败阻断、通过后自动 start/advance。
+- Settings 灰度发布策略详情新增独立指标源自动采集单元，可配置指标源类型、endpoint、查询语句、观测窗口、标签和兜底样本，支持保存来源、采集预览、应用 gate、采集并推进、查看最近样本和 gate 结果。
+- `GET/POST /api/v1/system/ops/deployment-execution-audits`、`GET /deployment-execution-audits/{audit_id}` 与 `POST /deployment-execution-audits/{audit_id}/tasks` 新增跨环境执行审计，统一串联部署包、流水线、灰度策略、回滚演练、回滚 Runbook、变更单和执行证据；自动计算证据覆盖、必填缺口、风险分与风险等级，并可将失败/阻断状态和证据缺口任务化。
+- Settings 环境 Profile 模块新增独立跨环境执行审计单元，可选择发布关联对象、记录执行状态/风险/变更单/证据链接、查看证据矩阵和最近审计记录，并一键预览或生成治理任务。
+- `GET /api/v1/system/ops/deployment-pipeline-executors` 与 `POST /api/v1/system/ops/deployment-pipelines/{run_id}/execute` 新增真实执行器控制面，按 Profile 返回受控执行器目录；执行接口支持 dry-run 计划、命令/阶段选择、非 shell 本地执行、超时、apply 双开关、证据链接、阶段状态回写、execution 记录和审计事件。
+- Settings 一键部署流水线详情新增真实执行器单元，管理员可在同一流水线详情中选择执行器、命令、阶段、证据链接、超时和说明，先生成执行计划，再按审批与 apply 护栏受控运行。
+- `POST /api/v1/system/ops/deployment-pipelines/{run_id}/remediation` 新增流水线自愈诊断控制面，基于终态失败、取消、未完成卡点、失败阶段、执行器失败/阻断和证据缺口输出结构化 findings、Runbook 步骤、治理任务计划和审计事件；非 dry-run 时复用任务中心生成 `source=system_ops.pipeline_self_heal` 治理任务并回写流水线自愈任务 ID。
+- Settings 一键部署流水线详情新增独立自愈诊断单元，管理员可配置低风险纳入、优先级、负责人、执行工具和复盘备注，预览自愈方案、查看风险发现和 Runbook，并把诊断结果一键任务化。
+- `GET/POST /api/v1/system/ops/deployment-executor-targets`、`PUT /deployment-executor-targets/{target_id}` 与 `POST /deployment-executor-targets/{target_id}/action` 新增分布式执行目标注册表，支持 Webhook、GitHub Actions、GitLab CI、Jenkins、Kubernetes Job、Temporal Workflow 和远程 Agent 目标；目标只保存 `auth_ref` 密钥引用，支持动作能力、并发、超时、标签、启停、删除和配置检查。
+- 执行器目录会自动合并 Profile 可见的执行目标；流水线选择外部目标执行时不会在 Manager 内直接执行 shell，而是生成受控 `queued` 外部编排请求，保留审批卡点、apply 双开关、阶段运行态、execution 记录和审计事件，方便后续接入真实回调与状态同步。
+- Settings 真实执行器单元新增“分布式执行目标”管理区，可创建/更新目标、测试配置、启停/删除目标，并将目标直接选为当前流水线执行器。
+- `POST /api/v1/system/ops/deployment-pipelines/{run_id}/executions/{execution_id}/callback` 新增外部执行回调状态同步，外部编排器或远程 Agent 可按 execution id 或 external request id 回写 `running/succeeded/failed/blocked/cancelled`；Manager 会同步 execution、external_request、外部运行 ID、证据链接、stdout/stderr、exit_code、阶段状态、流水线终态和审计事件。
+- Settings 真实执行器单元新增“外部执行回调”管理区，可从执行历史选择记录，手动登记外部运行结果、证据、输出和元数据，便于没有自动 Webhook 回调的 CI/CD 或远程 Agent 也能完成受控闭环。
+- 分布式执行目标新增外部回调签名策略：`callback_secret_ref` 只保存密钥引用，`require_callback_signature` 开启后回调必须携带 timestamp、nonce 和 HMAC-SHA256 签名，Manager 按目标时间窗校验并把验证结果写入 execution/external_request 与审计事件。
+- Settings 分布式执行目标表单支持配置回调签名密钥引用、强制签名和时间窗；外部执行回调区支持录入 timestamp、nonce 与 `sha256=` 签名，兼容自动 Webhook 和人工补录场景。
+
+### 10.11 系统运维部署包版本化
+
+系统运维 Profile 已从“即时导出文件”升级为“版本化部署包”：
+
+- `POST /api/v1/system/ops/profiles/{profile}/deployment-packages` 将当前 Profile 固化为带版本号、通道、发布说明、manifest、文件 checksum 和 Agent consumption 的部署包版本。
+- `GET /api/v1/system/ops/profiles/{profile}/deployment-packages` 返回指定 Profile 的版本列表，支撑运维按 staging/production/rollback 等通道追踪部署包。
+- `GET /api/v1/system/ops/deployment-packages/{package_id}` 返回部署包 manifest、checksum、文件清单和脱敏预览，敏感 env 只展示 `***`，避免把 token/password/secret 泄漏到 UI。
+- `GET /api/v1/system/ops/deployment-packages/{package_id}/compose.override.yml` 下载版本化 compose override，使回滚和审计使用固定产物而不是实时重算产物。
+- Settings 环境 Profile 模块新增“部署包版本化”单元，可创建版本、查看版本列表、检查 checksum、预览 compose 并下载指定版本产物。
+
+### 10.12 系统运维一键部署流水线
+
+部署包版本化之后，Settings Profile 继续补齐“可预览、可审批、可追踪”的发布流水线闭环：
+
+- `POST /api/v1/system/ops/deployment-pipelines` 基于指定 `package_id` 或 Profile 最新部署包创建流水线 run，支持 `preview/deploy/rollback`、`dev/staging/production/rollback`、`dry_run` 和 `approval_required`。
+- `GET /api/v1/system/ops/deployment-pipelines` 支持按 Profile、部署包、状态过滤最近流水线，返回阶段进度、状态、操作人、环境和版本信息。
+- `GET /api/v1/system/ops/deployment-pipelines/{run_id}` 返回完整 run，包括标准阶段、可复制命令、安全风险、审计事件和 Agent consumption，便于 CLI/Agent/管理员复盘。
+- `POST /api/v1/system/ops/deployment-pipelines/{run_id}/action` 提供 `approve/start/mark_success/mark_failed/cancel` 状态机动作，形成审批卡点、启动、成功/失败归档和取消治理。
+- Settings 环境 Profile 模块新增“一键部署流水线”独立单元，管理员可选择版本化部署包、环境、动作、审批策略，生成预览或创建受控发布记录，并在 UI 内推进状态与查看审计事件。
+- 后端阶段只返回稳定 `id/label_key/status/params`，前端负责三语种展示，避免把展示文案写死到运行记录中；真实部署执行器后续可在同一 run 契约下替换命令执行层。
+
+### 10.13 系统运维部署包审批发布
+
+部署发布从“能创建流水线”进一步升级为“不可变部署包 + 审批证据 + 受控发布联动”的企业发布卡点：
+
+- `POST /api/v1/system/ops/deployment-package-approvals` 基于部署包创建审批单，记录目标环境、申请人、审批人、审批策略、发布说明、checksum 校验和不可变产物证据。
+- `GET /api/v1/system/ops/deployment-package-approvals` 支持按 Profile、部署包、状态过滤审批记录，支撑发布经理查看最近审批和跨环境发布状态。
+- `GET /api/v1/system/ops/deployment-package-approvals/{approval_id}` 返回审批详情、检查项、事件流水、关联部署包和发布流水线引用。
+- `POST /api/v1/system/ops/deployment-package-approvals/{approval_id}/action` 提供 `approve/reject/publish/cancel` 状态机；`publish` 仅允许已批准审批单执行，并可自动创建受控部署流水线，同时回写部署包 `release_status/published_*` 元数据。
+- Settings 环境 Profile 模块新增“部署包审批发布”独立单元，管理员可选择部署包、环境和审批策略发起审批，在同一模块内完成批准、拒绝、发布、取消，并查看检查项、审计事件和关联流水线。
+- 审批记录、部署包索引和流水线之间通过稳定 ID 关联，后续可接入多级审批、变更单、IM 通知和灰度发布策略，而不需要重写前端工作区。
+
+### 10.14 系统运维灰度发布策略
+
+部署审批之后，Settings Profile 补齐“逐步放量 + 指标卡点 + 完成/回滚留证”的灰度发布控制面：
+
+- `POST /api/v1/system/ops/deployment-canary-policies` 基于部署包创建灰度策略，配置环境、推进策略、流量阶梯、最大错误率、P95 延迟阈值、观察窗口和自动推进开关。
+- `GET /api/v1/system/ops/deployment-canary-policies` 支持按 Profile、部署包、状态过滤策略，返回当前流量、阶段、策略和流水线引用。
+- `GET /api/v1/system/ops/deployment-canary-policies/{policy_id}` 返回完整策略、指标 gate、事件流水和 Agent consumption。
+- `POST /api/v1/system/ops/deployment-canary-policies/{policy_id}/action` 提供 `start/advance/pause/resume/rollback/complete` 状态机；`start/advance` 会按观测错误率和 P95 延迟执行指标卡点，超阈值自动阻断，`complete` 要求流量达到 100% 后才能联动生成受控部署流水线并回写部署包 `canary_*` 元数据。
+- `POST /api/v1/system/ops/deployment-canary-policies/{policy_id}/im-briefing` 复用 Notify 与 `im_integration_core`，按灰度状态、当前流量、指标 gate、回滚/阻断风险生成企业 IM 简报；支持 dry-run 预览、事件匹配通道、手选通道、实际发送和审计留痕。
+- Settings 环境 Profile 模块新增“灰度发布策略”独立单元，管理员可配置流量阶梯、指标阈值、观测指标和自动推进策略，在 UI 内完成启动、推进、暂停、恢复、回滚和完成，并查看 gate、事件证据和灰度 IM 风险通知。
+- 灰度策略与部署包、审批、流水线、Notify 通道共享稳定 ID，不把策略写死在页面里，后续可继续接入真实 Prometheus/OTel 指标、订阅化 IM 策略和发布回滚演练。
+
+### 10.15 系统运维发布回滚演练
+
+灰度与流水线之后，Settings Profile 新增“回滚可演练、可验证、可留证”的发布安全能力：
+
+- `POST /api/v1/system/ops/deployment-rollback-drills` 基于不可变部署包创建回滚演练，支持 `post_deploy_regression/canary_gate_failure/dependency_outage/manual_rehearsal` 场景、目标环境、负责人、审批要求和 dry-run 预览流水线配置。
+- `GET /api/v1/system/ops/deployment-rollback-drills` 支持按 Profile、部署包、状态过滤演练历史，返回检查项总数、通过数、失败数、预览流水线和真实回滚流水线引用。
+- `GET /api/v1/system/ops/deployment-rollback-drills/{drill_id}` 返回完整演练记录、稳定检查项、事件流水、部署包 checksum 和 Agent consumption，支撑管理员、CLI 和 Agent 复盘发布恢复能力。
+- `POST /api/v1/system/ops/deployment-rollback-drills/{drill_id}/action` 提供 `start/pass_check/fail_check/create_rollback_pipeline/complete/cancel` 状态机；完成前必须所有必要检查项通过，存在失败项时阻断完成，完成时可联动创建真实 `rollback` 流水线。
+- Settings 环境 Profile 模块新增“发布回滚演练”独立单元，可选择部署包、场景、负责人和审批策略，创建 dry-run 预览、逐项通过/标记失败、创建真实回滚流水线、完成或取消演练。
+- 回滚演练复用部署流水线执行契约，不自建一套执行器；检查项只保存稳定 `id/label_key/status/params`，前端负责三语种展示，后续可接入 Runbook 自动化、IM 通知和真实恢复验证指标。
+
+### 10.16 数据智能决策归因引擎
+
+洞察报告不再只停留在“保存报告 + 批量归因 + 任务化”，数据智能面新增可解释决策控制面：
+
+- `GET /api/v1/analytics/decision/overview` 聚合当前项目洞察报告、归因驱动、高风险报告、证据和建议动作，输出 `decision/summary/evidence/actions/agent_consumption` packet。
+- `POST /api/v1/analytics/decision/explain` 支持输入业务决策问题、指定报告集合、证据开关和最大证据数量，返回可解释决策结论、置信度、关键归因和下一步动作。
+- `POST /api/v1/analytics/decision/tasks` 可将决策动作按优先级、负责人、执行工具和任务数量预览或生成 `source=analytics_decision_attribution` 治理任务。
+- Analytics 洞察报告工作台新增“智能决策归因引擎”独立单元，支持解释、证据查看、任务预览和任务落库，避免把决策能力隐藏在普通报表列表中。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |
@@ -325,6 +566,7 @@ flowchart LR
 | H1 已完成 | 智能任务分发与 DAG 调度 | dispatch-plan、scheduler/plan、agent-feed、agent-report、Tasks 调度中心 |
 | H2 已完成 | Hermes 平台蓝图与集成矩阵 | /hermes/blueprint、blueprint tasks、Dashboard 蓝图区 |
 | D0 已完成 | 数据智能蓝图与任务化 | /analytics/blueprint、sop data、Analytics 数据蓝图 |
+| D1 已完成 | NLQ 问数可用性兜底 | /analytics/nlq 规则兜底、前端引擎可解释、sop data nlq |
 | H3 下一步 | Agent 执行运行中心 | Agent run 表、heartbeat、能力画像、负载、成功率、失败重试 |
 | H4 下一步 | 数据质量中心 | 质量规则目录、质量运行、告警、异常归因、质量报告 |
 | H5 下一步 | 指标/标签/画像服务 | 指标语义层、标签目录、画像本体、数据 API 发布 |

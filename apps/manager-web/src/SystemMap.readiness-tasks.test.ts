@@ -26,7 +26,10 @@ describe("SystemMap readiness task generation", () => {
   it("adds focused experience governance instead of extending the page as one long matrix", () => {
     expect(apiSource).toContain("systemPagesExperienceReview");
     expect(apiSource).toContain("/api/v1/system/pages/experience-review");
+    expect(apiSource).toContain("systemPagesExperienceTasks");
+    expect(apiSource).toContain("/api/v1/system/pages/experience-review/tasks");
     expect(systemMapSource).toContain("api.systemPagesExperienceReview");
+    expect(systemMapSource).toContain("api.systemPagesExperienceTasks");
     expect(systemMapSource).toContain("readinessDetailView");
     expect(systemMapSource).toContain("experienceColumns");
   });
@@ -47,5 +50,7 @@ describe("SystemMap readiness task generation", () => {
     expect(zh.page.systemMap.productionStageValue.production_ready).toBe("生产就绪");
     expect(zh.page.systemMap.experienceReviewTitle).toBe("体验与产品化治理");
     expect(zh.page.systemMap.readinessDetailViewValue.experience).toBe("体验治理");
+    expect(zh.page.systemMap.previewExperienceTasks).toBe("预览体验任务");
+    expect(zh.page.systemMap.createExperienceTasks).toBe("生成体验任务");
   });
 });

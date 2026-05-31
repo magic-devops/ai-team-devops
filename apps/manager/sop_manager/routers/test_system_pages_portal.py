@@ -3,6 +3,7 @@ import json
 from sop_manager.routers.sql_models import User
 from sop_manager.routers import system_pages as system_pages_module
 from sop_manager.routers.system_pages import (
+    ExperienceTaskIn,
     IsolationScanRunIn,
     IsolationScanCompareTaskIn,
     IsolationScanTaskIn,
@@ -22,6 +23,7 @@ from sop_manager.routers.system_pages import (
     system_pages_governance_tasks,
     system_pages_governance_tasks_bulk_update,
     system_page_registry_validate,
+    system_page_experience_tasks,
     system_pages_experience_review,
     system_pages_hub,
     system_pages_production_readiness,
@@ -172,6 +174,63 @@ def test_system_pages_experience_review_filters_domain_status_and_keyword():
     for item in payload["items"]:
         assert item["domain"] == "governance"
         assert "治理" in f"{item['id']} {item['name']} {' '.join(item.get('recommendations', []))}"
+
+
+def test_system_pages_experience_tasks_preview_modules_for_ui_simplification():
+    result = system_page_experience_tasks(
+        ExperienceTaskIn(
+            dry_run=True,
+            domain="all",
+            status="all",
+            q="",
+            include_simple=False,
+            max_items=3,
+            priority="P1",
+            assigned_to="Designer",
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["summary"]["planned"] > 0
+    assert result["summary"]["created"] == 0
+    first = result["planned"][0]
+    assert first["source"] == "system_page_experience"
+    assert first["priority"] == "P1"
+    assert first["assigned_to"] == "Designer"
+    assert first["source_report_id"].startswith("experience:")
+    assert "experience_score" in first["description"]
+    assert "ui_contract" in first["description"]
+
+
+def test_system_pages_experience_tasks_apply_is_idempotent(monkeypatch):
+    created: list[dict] = []
+
+    def fake_list_tasks(**filters):
+        source = filters.get("source")
+        rows = created if source == "system_page_experience" else []
+        return rows
+
+    def fake_create_task(body):
+        row = body.model_dump()
+        row["id"] = f"T-exp-{len(created) + 1}"
+        row["status"] = "pending"
+        created.append(row)
+        return row
+
+    monkeypatch.setattr(system_pages_module, "list_tasks", fake_list_tasks)
+    monkeypatch.setattr(system_pages_module, "create_task", fake_create_task)
+
+    body = ExperienceTaskIn(dry_run=False, status="all", include_simple=False, max_items=2)
+    first = system_page_experience_tasks(body)
+    second = system_page_experience_tasks(body)
+
+    assert first["summary"]["created"] == first["summary"]["planned"]
+    assert first["summary"]["created"] > 0
+    assert second["summary"]["created"] == 0
+    assert second["summary"]["planned"] == 0
+    assert second["summary"]["skipped"] == first["summary"]["created"]
+    assert len(created) == first["summary"]["created"]
 
 
 def test_system_pages_production_readiness_filters_stage_domain_and_keyword():
@@ -343,7 +402,8 @@ def test_system_pages_governance_tasks_aggregates_real_generated_tasks(monkeypat
     assert first["source_label"] == "智能基线对比"
     assert first["source_route"] == "#/system-map/baseline-compare"
     assert first["task_url"].startswith("#/tasks?")
-    assert payload["lanes"][0]["source"] == "system_page_readiness"
+    assert payload["lanes"][0]["source"] == "system_page_experience"
+    assert any(lane["source"] == "system_page_readiness" for lane in payload["lanes"])
     assert payload["agent_consumption"]["api"] == "/api/v1/system/pages/governance-tasks"
     assert payload["agent_consumption"]["cli"] == "sop pages governance-tasks --json"
 

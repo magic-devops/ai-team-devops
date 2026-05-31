@@ -698,6 +698,18 @@ class ReadinessTaskIn(BaseModel):
     include_complete: bool = False
 
 
+class ExperienceTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    domain: str = "all"
+    status: str = Field("watch", pattern="^(all|simple|watch|complex)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "Designer"
+    max_items: int = Field(12, ge=1, le=100)
+    include_simple: bool = False
+
+
 class IsolationTaskIn(BaseModel):
     ids: list[str] = Field(default_factory=list)
     status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
@@ -1090,7 +1102,7 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "llmGatewayEval", "name": "模型评测", "domain": "ecosystem", "path": "#/ai/llm-gateway/eval", "status": "active", "maturity": 96, "apis": ["/api/v1/llm-gateway/model-evals/runs", "/api/v1/llm-gateway/model-evals/run", "/api/v1/llm-gateway/model-evals/tasks", "/api/v1/llm-gateway/provider-health", "/api/v1/llm-gateway/throttle"], "capabilities": ["评测 Suite", "模型排名", "质量评分", "成本效率评分", "延迟 SLO", "Prompt 安全评分", "评测历史", "评测任务化", "Agent consumption"], "next": ["真实在线评测执行器", "人工标注反馈集"]},
     {"id": "platformOps", "name": "运行治理", "domain": "ecosystem", "path": "#/platforms/ops", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms/ops-plan", "/api/v1/platforms/ops-tasks"], "capabilities": ["健康评分", "风险清单", "治理 Runbook", "AI 操作包", "治理任务预览", "治理任务落地"], "next": ["多工具 SLO", "Agent 执行审计", "自愈策略"]},
     {"id": "cliTools", "name": "CLI 工具", "domain": "ecosystem", "path": "#/platforms/cli", "status": "active", "maturity": 86, "apis": ["/api/v1/cli", "/api/v1/cli/run"], "capabilities": ["工具目录", "受控执行", "自定义工具", "安装提示"], "next": ["执行审计", "配额策略"]},
-    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 93, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest", "/api/v1/system/pages/readiness", "/api/v1/system/pages/production-readiness", "/api/v1/system/pages/experience-review", "/api/v1/system/pages/readiness/tasks", "/api/v1/system/pages/governance-tasks", "/api/v1/system/pages/governance-tasks/bulk-update", "/api/v1/system/pages/isolation-audit", "/api/v1/system/pages/isolation-audit/scan", "/api/v1/system/pages/isolation-audit/scan/runs", "/api/v1/system/pages/isolation-audit/scan/runs/compare", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", "/api/v1/system/pages/isolation-audit/scan/tasks", "/api/v1/system/pages/isolation-audit/tasks"], "capabilities": ["治理中心", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "体验治理矩阵", "生产就绪矩阵", "细粒度权限", "模块动作目录", "治理任务运营", "治理任务批量处置", "模块完整度任务化", "三码隔离任务化", "隔离源代码扫描", "隔离扫描快照", "智能基线对比", "对比风险任务化", "隔离源码任务化"], "next": ["页面插件清单", "按钮级权限矩阵"]},
+    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 93, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest", "/api/v1/system/pages/readiness", "/api/v1/system/pages/production-readiness", "/api/v1/system/pages/experience-review", "/api/v1/system/pages/experience-review/tasks", "/api/v1/system/pages/readiness/tasks", "/api/v1/system/pages/governance-tasks", "/api/v1/system/pages/governance-tasks/bulk-update", "/api/v1/system/pages/isolation-audit", "/api/v1/system/pages/isolation-audit/scan", "/api/v1/system/pages/isolation-audit/scan/runs", "/api/v1/system/pages/isolation-audit/scan/runs/compare", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", "/api/v1/system/pages/isolation-audit/scan/tasks", "/api/v1/system/pages/isolation-audit/tasks"], "capabilities": ["治理中心", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "体验治理矩阵", "体验治理任务化", "生产就绪矩阵", "细粒度权限", "模块动作目录", "治理任务运营", "治理任务批量处置", "模块完整度任务化", "三码隔离任务化", "隔离源代码扫描", "隔离扫描快照", "智能基线对比", "对比风险任务化", "隔离源码任务化"], "next": ["页面插件清单", "按钮级权限矩阵"]},
     {"id": "opsCenter", "name": "智能运维中心", "domain": "system", "path": "#/system/ops-center", "status": "active", "maturity": 99, "apis": ["/api/v1/ops-center/pipelines", "/api/v1/ops-center/alert-sources", "/api/v1/ops-center/alert-sources/{id}/test", "/api/v1/ops-center/alert-sources/{id}/toggle", "/api/v1/ops-center/alert-sources/sync", "/api/v1/ops-center/alerts", "/api/v1/ops-center/alert-noise/policies", "/api/v1/ops-center/alert-noise/evaluate", "/api/v1/ops-center/alert-noise/evaluations", "/api/v1/ops-center/alert-noise/silences", "/api/v1/ops-center/alert-noise/recommendations", "/api/v1/ops-center/alert-noise/recommendations/{recommendation_id}/action", "/api/v1/ops-center/alert-noise/strategy-compare", "/api/v1/ops-center/alert-noise/strategy-compare/runs", "/api/v1/ops-center/alert-noise/slo-prediction", "/api/v1/ops-center/alert-noise/slo-prediction/runs", "/api/v1/ops-center/alert-noise/slo-escalation-policy", "/api/v1/ops-center/alert-noise/slo-escalation/run", "/api/v1/ops-center/alert-noise/slo-escalation/runs", "/api/v1/ops-center/alert-noise/strategy-canary/audit", "/api/v1/ops-center/alert-noise/strategy-canary/audits", "/api/v1/ops-center/alert-noise/strategy-canary/audits/{audit_id}/action", "/api/v1/ops-center/strategy-linkage/runs", "/api/v1/ops-center/strategy-linkage/run", "/api/v1/ops-center/rca", "/api/v1/ops-center/rca/{id}/verification-plan", "/api/v1/ops-center/rca/{id}/verify", "/api/v1/ops-center/rca/insights", "/api/v1/ops-center/rca/insights/tasks", "/api/v1/ops-center/rca/insights/rca", "/api/v1/ops-center/runbooks", "/api/v1/ops-center/runbooks/{id}/versions", "/api/v1/ops-center/runbooks/{id}/versions/diff", "/api/v1/ops-center/runbooks/{id}/versions/{version_id}/action", "/api/v1/ops-center/runbooks/evidence", "/api/v1/ops-center/runbooks/evidence/backfill", "/api/v1/ops-center/runbooks/evidence/{record_id}/action", "/api/v1/ops-center/self-heal", "/api/v1/ops-center/self-heal/evaluate", "/api/v1/ops-center/self-heal/evaluations", "/api/v1/ops-center/self-heal/tasks", "/api/v1/ops-center/self-heal/actions", "/api/v1/ops-center/self-heal/actions/{id}/approve", "/api/v1/ops-center/self-heal/actions/{id}/apply", "/api/v1/ops-center/self-heal/actions/{id}/verify", "/api/v1/ops-center/self-heal/actions/{id}/rollback", "/api/v1/ops-center/summary", "/api/v1/ops-center/im-briefing"], "capabilities": ["部署流水线", "生产告警源", "告警源测试", "告警同步", "告警标准化", "告警降噪策略", "告警分组", "重复告警折叠", "低优先级抑制", "维护静默窗口", "告警策略智能推荐", "策略效果自优化", "策略推荐应用", "策略 A/B 对比", "策略赢家计算", "跨源 SLO 预测", "SLO 风险评分", "告警 SLO 自动升级", "SLO 升级策略", "SLO 升级任务化", "SLO 升级 IM 通知", "策略灰度准入审计", "灰度审批状态流", "灰度护栏与回滚触发", "跨模块运维策略联动", "策略联动任务化", "联动 IM 简报", "根因分析", "RCA 验证计划", "RCA 验证关闭", "智能归因", "多源告警聚合", "归因任务化", "RCA 自动入库", "Runbook 推荐", "Runbook", "Runbook 版本治理", "不可变快照", "版本差异对比", "历史版本恢复", "Runbook 审计", "执行证据自动回填", "证据覆盖评分", "证据确认归档", "自愈策略", "自愈审批", "动作应用", "动作验证", "回滚留证", "审计载荷", "治理任务生成", "IM 风险简报"], "next": ["接入外部 CMDB/ITSM 联动"]},
     {"id": "settings", "name": "设置", "domain": "system", "path": "#/settings", "status": "active", "maturity": 99, "apis": ["/api/v1/auth/me", "/api/v1/health", "/api/v1/billing/subscription", "/api/v1/billing/summary", "/api/v1/billing/alerts", "/api/v1/billing/overage-policy", "/api/v1/billing/entitlements/check", "/api/v1/billing/dunning", "/api/v1/billing/invoices/{invoice_id}/audit", "/api/v1/sso/config", "/api/v1/sso/providers/{provider}/test", "/api/v1/sso/providers/{provider}/risk-report", "/api/v1/sso/providers/{provider}/risk-tasks", "/api/v1/sso/providers/{provider}/risk-im-briefing", "/api/v1/sso/providers/{provider}/risk-subscription", "/api/v1/sso/providers/{provider}/risk-subscription/test", "/api/v1/sso/providers/{provider}/risk-escalation", "/api/v1/sso/providers/{provider}/risk-escalation/run", "/api/v1/sso/providers/{provider}/risk-runbooks", "/api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}", "/api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}/action", "/api/v1/sso/providers/{provider}/scim-token", "/api/v1/sso/providers/{provider}/scim/test", "/api/v1/sso/providers/{provider}/scim/audit", "/api/v1/sso/scim/v2/{provider}/Users", "/api/v1/sso/scim/v2/{provider}/Groups", "/api/v1/sso/scim/v2/{provider}/Groups/{role}", "/api/v1/sso/{provider}/saml/metadata", "/api/v1/sso/{provider}/saml/login", "/api/v1/sso/{provider}/saml/acs", "/api/v1/system/ops/profiles", "/api/v1/system/ops/profiles/{profile}/deployment-packages", "/api/v1/system/ops/deployment-packages/{package_id}", "/api/v1/system/ops/deployment-packages/{package_id}/compose.override.yml", "/api/v1/system/ops/deployment-package-approvals", "/api/v1/system/ops/deployment-package-approvals/{approval_id}", "/api/v1/system/ops/deployment-package-approvals/{approval_id}/action", "/api/v1/system/ops/deployment-canary-policies", "/api/v1/system/ops/deployment-canary-policies/{policy_id}", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/action", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/im-briefing", "/api/v1/system/ops/deployment-canary-metric-sources", "/api/v1/system/ops/deployment-canary-metric-sources/{source_id}", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/metric-collection", "/api/v1/system/ops/deployment-rollback-drills", "/api/v1/system/ops/deployment-rollback-drills/{drill_id}", "/api/v1/system/ops/deployment-rollback-drills/{drill_id}/action", "/api/v1/system/ops/deployment-rollback-runbooks", "/api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}", "/api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}/action", "/api/v1/system/ops/deployment-execution-audits", "/api/v1/system/ops/deployment-execution-audits/{audit_id}", "/api/v1/system/ops/deployment-execution-audits/{audit_id}/tasks", "/api/v1/system/ops/deployment-pipelines", "/api/v1/system/ops/deployment-pipelines/{run_id}", "/api/v1/system/ops/deployment-pipelines/{run_id}/action", "/api/v1/system/ops/deployment-pipeline-executors", "/api/v1/system/ops/deployment-executor-targets", "/api/v1/system/ops/deployment-executor-targets/{target_id}", "/api/v1/system/ops/deployment-executor-targets/{target_id}/action", "/api/v1/system/ops/deployment-pipelines/{run_id}/execute", "/api/v1/system/ops/deployment-pipelines/{run_id}/executions/{execution_id}/callback", "/api/v1/system/ops/deployment-pipelines/{run_id}/remediation", "/api/v1/system/ops/observability", "/api/v1/system/ops/observability/traces", "/api/v1/system/ops/logs", "/api/v1/system/ops/storage/migration-plan", "/api/v1/system/ops/storage/migration-smoke"], "capabilities": ["模块化系统配置", "账户", "运行状态", "日志观测", "事件摘要", "Trace 关联检索", "失败根因导航", "主题", "商业计费", "权益校验", "租户配额联动", "超额策略", "催收状态", "发票生命周期审计", "企业 SSO 配置", "SSO 组到角色映射", "SSO JIT 用户落库", "SAML SP Metadata", "SAML 签名断言处理", "SAML 依赖诊断", "SSO 风险报表", "SSO 治理任务化", "SSO 风险 IM 通知", "SSO 风险订阅策略", "SSO 风险自动升级", "SSO 风险处置 Runbook", "SSO 风险处置验证", "SCIM 用户自动开通", "SCIM Token 轮换", "SCIM 用户停用", "SCIM Groups 成员同步", "SCIM 审计报表", "环境 Profile", "部署自检", "配置变更审计", "compose 覆盖文件生成", "部署包版本化", "部署包审批发布", "灰度发布策略", "指标卡点放量", "灰度指标源自动采集", "灰度指标历史", "灰度 IM 风险通知", "发布回滚演练", "回滚检查项留证", "回滚 Runbook 自动化", "回滚任务化", "跨环境执行审计", "执行证据任务化", "一键部署流水线", "真实执行器", "分布式执行目标", "外部编排排队", "外部执行回调", "执行目标配置检查", "执行计划审计", "流水线自愈诊断", "自愈任务化", "发布审批卡点", "OceanBase 迁移", "备份恢复清单", "SQLite 开发路径"], "next": []},
 ]
@@ -1441,6 +1453,14 @@ def _existing_readiness_task_ids() -> set[str]:
     return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
 
 
+def _existing_experience_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_experience")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
 def _existing_isolation_task_ids() -> set[str]:
     try:
         existing = list_tasks(source="system_page_isolation")
@@ -1474,6 +1494,13 @@ def _list_tasks_safe(**filters: Any) -> list[dict[str, Any]]:
 
 
 SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES: list[dict[str, str]] = [
+    {
+        "source": "system_page_experience",
+        "label": "体验治理",
+        "route": "#/system-map/experience",
+        "task_api": "/api/v1/system/pages/experience-review/tasks",
+        "cli": "sop pages experience-tasks --dry-run --json",
+    },
     {
         "source": "system_page_readiness",
         "label": "模块完整度",
@@ -1752,6 +1779,50 @@ def _readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to:
         "source_report_id": f"readiness:{module_id}",
         "source_report_title": str(item.get("name") or module_id),
         "debug_notes": f"Generated from SystemMap module readiness: {module_id}",
+    }
+
+
+def _experience_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    module_id = str(item.get("id") or "")
+    recommendations = [str(x) for x in item.get("recommendations") or [] if str(x).strip()]
+    dimensions = item.get("dimensions") or {}
+    contract = item.get("implementation_contract") or {}
+    ui_contract = item.get("ui_contract") or {}
+    return {
+        "title": f"优化页面体验：{item.get('name') or module_id}",
+        "description": "\n".join(
+            [
+                f"module_id: {module_id}",
+                f"path: {item.get('path') or ''}",
+                f"domain: {item.get('domain_name') or item.get('domain') or ''}",
+                f"experience_status: {item.get('status')}",
+                f"experience_score: {item.get('experience_score')}",
+                "",
+                "experience_dimensions:",
+                *[
+                    f"- {key}: score={value.get('score')} status={value.get('status')} detail={value.get('detail')}"
+                    for key, value in dimensions.items()
+                    if isinstance(value, dict)
+                ],
+                "",
+                "recommendations:",
+                *[f"- {x}" for x in recommendations[:8]],
+                "",
+                "ui_contract:",
+                json.dumps(ui_contract, ensure_ascii=False, indent=2),
+                "",
+                "implementation_contract:",
+                json.dumps(contract, ensure_ascii=False, indent=2),
+            ]
+        ).strip(),
+        "priority": priority,
+        "estimate": "M" if str(item.get("status")) == "complex" else "S",
+        "assigned_to": assigned_to or "Designer",
+        "dev_tool": "codex",
+        "source": "system_page_experience",
+        "source_report_id": f"experience:{module_id}",
+        "source_report_title": str(item.get("name") or module_id),
+        "debug_notes": f"Generated from SystemMap experience review: {module_id}",
     }
 
 
@@ -2892,7 +2963,7 @@ def _module_experience_review_payload(*, domain: str | None = None, status: str 
         "agent_consumption": {
             "purpose": "供 SystemMap、产品经理和 AI Agent 评估菜单分类、页面复杂度、响应式、权限与 AI 可改造性，优先把复杂页面拆成清晰模块。",
             "api": "/api/v1/system/pages/experience-review",
-            "task_api": "/api/v1/system/pages/readiness/tasks",
+            "task_api": "/api/v1/system/pages/experience-review/tasks",
             "recommended_next": ["先拆 complex 页面", "为 watch 页面补移动端表格/卡片和成熟表单组件", "把权限与 AI gap 写入治理任务"],
             "fields": ["items.experience_score", "items.dimensions", "items.recommendations", "items.ui_contract", "items.implementation_contract"],
         },
@@ -4393,6 +4464,57 @@ def system_pages_experience_review(
     if status and status not in {"all", "simple", "watch", "complex"}:
         status = "all"
     return _module_experience_review_payload(domain=domain, status=status, q=q)
+
+
+@router.post("/experience-review/tasks")
+def system_page_experience_tasks(body: ExperienceTaskIn) -> dict[str, Any]:
+    status = body.status if body.status in {"all", "simple", "watch", "complex"} else "watch"
+    payload = _module_experience_review_payload(
+        domain=body.domain if body.domain and body.domain != "all" else None,
+        status=status,
+        q=body.q,
+    )
+    rows = payload.get("items") or []
+    selected = {str(x) for x in body.ids or [] if str(x).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("id") or "") in selected]
+    if not body.include_simple and status != "simple":
+        rows = [item for item in rows if str(item.get("status") or "") != "simple"]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_experience_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _experience_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "ids": sorted(selected),
+            "domain": body.domain or "all",
+            "status": status,
+            "q": body.q,
+            "include_simple": body.include_simple,
+        },
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把 SystemMap 体验治理中的 complex/watch 模块转成可由设计、前端和 AI Agent 领取的优化任务。",
+            "source": "system_page_experience",
+            "api": "/api/v1/system/pages/experience-review/tasks",
+            "cli": "sop pages experience-tasks --dry-run --json",
+        },
+    }
 
 
 @router.post("/readiness/tasks")

@@ -934,6 +934,11 @@ export const api = {
     });
     return request<any>(`/api/v1/system/pages/experience-review${qs.toString() ? `?${qs}` : ""}`);
   },
+  systemPagesExperienceTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_simple?: boolean }) =>
+    request<any>("/api/v1/system/pages/experience-review/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   systemPagesReadinessTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_complete?: boolean }) =>
     request<any>("/api/v1/system/pages/readiness/tasks", {
       method: "POST",

@@ -145,6 +145,7 @@ export function SystemMap() {
   const caps = useCapabilities();
   const [taskResult, setTaskResult] = useState<any>(null);
   const [readinessTaskResult, setReadinessTaskResult] = useState<any>(null);
+  const [experienceTaskResult, setExperienceTaskResult] = useState<any>(null);
   const [isolationTaskResult, setIsolationTaskResult] = useState<any>(null);
   const [isolationScanTaskResult, setIsolationScanTaskResult] = useState<any>(null);
   const [isolationScanRunResult, setIsolationScanRunResult] = useState<any>(null);
@@ -175,6 +176,24 @@ export function SystemMap() {
       }),
     onSuccess: (data) => {
       setReadinessTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
+    },
+  });
+  const experienceTasks = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.systemPagesExperienceTasks({
+        dry_run: dryRun,
+        domain,
+        status: experienceStatus,
+        q: keyword.trim(),
+        include_simple: false,
+        priority: experienceStatus === "complex" ? "P0" : "P1",
+        assigned_to: "Designer",
+        max_items: 12,
+      }),
+    onSuccess: (data) => {
+      setExperienceTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
     },
@@ -803,8 +822,49 @@ export function SystemMap() {
                       value,
                     }))}
                   />
+                  <button
+                    type="button"
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:opacity-60"
+                    onClick={() => experienceTasks.mutate({ dryRun: true })}
+                    disabled={experienceTasks.isPending}
+                  >
+                    {t("page.systemMap.previewExperienceTasks")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+                    onClick={() => experienceTasks.mutate({ dryRun: false })}
+                    disabled={experienceTasks.isPending || !canWriteSystemPages}
+                    title={!canWriteSystemPages ? t("capability.denied") : undefined}
+                  >
+                    {t("page.systemMap.createExperienceTasks")}
+                  </button>
                 </div>
               </div>
+              {experienceTaskResult ? (
+                <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted-strong)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      {t("page.systemMap.experienceTaskResult", {
+                        planned: experienceTaskResult.summary?.planned ?? 0,
+                        created: experienceTaskResult.summary?.created ?? 0,
+                        skipped: experienceTaskResult.summary?.skipped ?? 0,
+                      })}
+                    </span>
+                    <span className="font-mono text-xs text-[var(--brand)]">{experienceTaskResult.agent_consumption?.cli}</span>
+                  </div>
+                  {(experienceTaskResult.planned ?? []).length ? (
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      {(experienceTaskResult.planned ?? []).slice(0, 4).map((item: any) => (
+                        <article key={item.source_report_id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2">
+                          <p className="line-clamp-1 text-xs font-semibold text-[var(--text)]">{item.title}</p>
+                          <p className="mt-1 line-clamp-2 text-[11px] text-[var(--muted)]">{item.source_report_id} · {item.priority}</p>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {experienceReviewQ.isError ? <ErrorBlock message={(experienceReviewQ.error as Error).message} /> : null}
               <Table
                 rowKey="id"

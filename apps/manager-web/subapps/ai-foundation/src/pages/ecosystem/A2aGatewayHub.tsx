@@ -9,7 +9,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 const MODULES = [
-  { id: "registry", path: "#/ecosystem/a2a/workbench", icon: Bot, label: "Agent 注册", desc: "WorkBuddy/OpenClaw/HermesAgent 注册管理" },
+  { id: "registry", path: "#/ecosystem/a2a/registry", icon: Bot, label: "Agent 注册", desc: "WorkBuddy/OpenClaw/HermesAgent 注册管理" },
   { id: "negotiate", path: "#/ecosystem/a2a/negotiate", icon: Network, label: "能力协商", desc: "任务与 Agent 能力匹配" },
   { id: "sla", path: "#/ecosystem/a2a/sla", icon: TimerReset, label: "外部 Agent SLA", desc: "超时、缺证据与治理任务" },
   { id: "windows", path: "#/ecosystem/a2a/windows", icon: Activity, label: "执行窗口", desc: "租约、进度与重派风险审计" },

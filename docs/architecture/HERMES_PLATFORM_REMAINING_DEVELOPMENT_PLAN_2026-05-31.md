@@ -1,0 +1,228 @@
+# Hermes 平台剩余功能补全与前端优化开发计划
+
+> 日期：2026-05-31
+> 范围：Hermes Manager / Manager Web / Manager Worker / SystemMap 治理闭环
+> 原则：体验交互好用优先，成熟组件使用优先，功能逐一完整实现并可验证。
+
+## 1. 当前结论
+
+当前平台已经不是页面和接口空白阶段。`/api/v1/system/pages/readiness` 已能证明 React 页面、API 契约、能力码、AI surface 与菜单治理的大部分注册完整；三码隔离审计也具备高分基线。后续重点不再是堆页面数量，而是把契约完整升级为生产可用：
+
+- 真实运行数据：摘要、分页、状态回写、失败证据、运行 smoke。
+- 外部集成：连接测试、SecretRef、Provider 健康、账单/回款/IM 真实通道。
+- 异步执行：Worker、幂等键、失败重试、DLQ、任务状态和指标。
+- 权限安全：字段 mask、行过滤、拒绝审计、跨 scope 拒绝测试。
+- 前端体验：成熟组件、表单校验、步骤式执行、加载/空/错态、移动端表格策略、路由级懒加载。
+
+## 2. M0 稳定性收口
+
+### 已落地
+
+- 修复 OpsCenter 跨模块策略联动任务重复创建问题：
+  - `tasks.id` 改为毫秒时间戳加随机后缀，避免同毫秒连续创建多任务触发 SQLite primary key 冲突。
+  - OpsCenter 策略联动任务按稳定 `source_report_id` 去重，同 scope 重复 apply 跳过已有治理任务。
+  - 保留跨 scope 独立性，不把其他租户/项目的相同 `source_report_id` 误判为重复。
+- 增加回归测试：
+  - dry-run 不落库。
+  - 同 scope 连续 apply 不增加重复任务。
+  - 不同 scope 可以创建自己的同源治理任务。
+- 新增生产就绪 API：
+  - `/api/v1/system/pages/production-readiness`
+  - 输出 `contract_complete / runtime_ready / production_ready` 三档。
+  - 维度包含运行数据、外部连接、异步 Worker、测试覆盖、部署证据、监控信号、权限策略。
+- 前端 SystemMap 接入生产就绪矩阵，使用 Ant Design `Table / Segmented / Tag` 呈现筛选、阶段和维度。
+- 新增体验与产品化治理矩阵：
+  - `/api/v1/system/pages/experience-review`
+  - `/api/v1/system/pages/experience-review/tasks`
+  - 输出简洁度、自适配、成熟组件、权限管控、AI 可改造性、商业化六个维度。
+  - SystemMap 详情区改为“体验治理 / 生产就绪 / 完整度”分段视图，默认先看体验治理，减少长页面堆叠。
+  - 体验治理支持预览/生成 source=`system_page_experience` 治理任务，按 `source_report_id=experience:{module_id}` 幂等去重，并进入治理任务运营看板。
+- Worker `rag.warmup` 从 noop 改为真实调用 RAG health/search，可选 index docs；Redis 消费增加重试和 DLQ。
+- Vite chunk 调整：把 `@antv` 和 `@ant-design/plots/charts/graphs` 合并到 `visualization-vendor`，降低 AntV/AntD 循环 chunk 风险。
+
+### 待继续
+
+- 给 OpsCenter 其他任务化入口复用同一套 `source_report_id` 幂等 helper。
+- 把 production readiness gap 一键转成 SystemMap 治理任务。
+- Worker DLQ 增加 Manager API 查询、重放和归档入口。
+
+## 3. M1 从 contract complete 到 production ready
+
+### 后端
+
+- 扩展 SystemMap readiness：
+  - 保留 `readiness` 作为契约完整矩阵。
+  - 使用 `production-readiness` 作为生产就绪矩阵。
+  - 增加可追踪 evidence：测试命令、部署版本、最近 smoke 时间、外部连接 health、Worker heartbeat。
+- 对 37 个 legacy/migrating 页面建立承接任务：
+  - 只迁移业务能力，不复制旧交互。
+  - 承接任务统一进入 SystemMap 治理任务运营看板。
+  - 每条任务必须有 `source_report_id` 和 scope 信息。
+
+### 前端
+
+- SystemMap 优先升级为治理控制台：
+  - 顶部按体验治理、契约完整、运行可用、生产就绪分层。
+  - 每个模块显示维度分、证据、缺口、推荐任务。
+  - 表格同时提供桌面密集视图和移动端卡片/横向滚动。
+- 菜单和页面设计评估口径：
+  - `simple`：首屏信息清晰、动作少、权限明确、移动端可用。
+  - `watch`：功能可用但需要减少冗余、补响应式或补成熟组件。
+  - `complex`：页面/API/动作过多，必须拆子路由或工作流抽屉。
+
+## 4. M2 异步与执行底座
+
+### manager-api
+
+- 明确边界：
+  - `apps/manager/sop_manager` 继续作为 FastAPI 代码真源。
+  - `apps/manager-api` 只保留部署入口、README、健康检查和镜像/进程配置。
+- 补部署 smoke：
+  - OpenAPI 暴露。
+  - `/health`、`/system/pages/readiness`、`/worker/health`。
+
+### manager-worker
+
+- 已完成第一步：
+  - `rag.warmup` 真实执行。
+  - Redis 消费失败支持 retry 和 DLQ。
+  - 健康接口输出 received/completed/failed/retried/dlq 指标。
+- 后续补齐：
+  - Manager 端 DLQ 列表、重放、归档。
+  - Worker 指标接 Prometheus。
+  - `kb.index`、`memory.summarize` 增加幂等 payload hash。
+  - 本地 pending job runner，避免无 Redis 时只能显示 pending。
+
+### WorkflowOps
+
+- 本地 profile 继续内存引擎。
+- 生产 profile 必须暴露 Temporal/Redis/Worker 健康、降级原因和不可执行原因。
+- 复杂操作采用“预览 -> 确认 -> 执行 -> 证据”模式。
+
+## 5. M3 数据智能生产化
+
+- 数据接入：
+  - 真实数据库采样、字段统计、敏感字段扫描。
+  - 连接密钥只保存 SecretRef。
+  - CDC 游标增加延迟指标和失败恢复点。
+- 数据质量：
+  - 规则订阅、报告版本、告警通知策略。
+  - 质量问题转治理任务必须按数据集、规则、窗口幂等。
+- 指标与标签：
+  - 指标 API 发布鉴权。
+  - 标签画像批量构建、版本、调用审计。
+- 元数据：
+  - 字段级权限。
+  - 血缘变更订阅。
+  - 湖仓/OLAP 自动采样适配器。
+
+## 6. M4 AI/Agent 生态深化
+
+- A2A：
+  - 保留注册、心跳、拉取、确认、续租、重派、SLA、执行窗口。
+  - 新增外部 Agent conformance harness，验证 WorkBuddy、OpenClaw、Hermes Agent 接入。
+- MCP/Agentd：
+  - 工具沙箱执行策略。
+  - 工具白名单审计。
+  - 外部执行证据回写和失败重放。
+- LLM Gateway：
+  - Provider 账单导入。
+  - 在线评测执行器。
+  - 流式调用审计。
+  - 项目成本中心分摊。
+- Graph RAG/Memory：
+  - 可替换图存储适配器。
+  - 实体合并、证据权重、记忆保留期、脱敏。
+  - 跨 scope 检索拒绝测试。
+
+## 7. M5 企业安全、商业化与生产存储
+
+- OceanBase：
+  - 文件型 store 到数据库迁移。
+  - 可执行迁移、回滚、备份恢复、三码索引验证。
+- ABAC：
+  - 字段 mask、行过滤、动态条件、拒绝审计。
+  - API、导出、IM、Agent packet 统一脱敏。
+- Billing：
+  - 真实支付/回款渠道。
+  - 催收节奏、超额审批、租户 quota enforcement。
+- Observability：
+  - API、Worker、Agent Run、LLM、数据作业、事件、审计链统一 trace/correlation id。
+  - 接入 Prometheus/Grafana/Loki/Tempo profile。
+
+## 8. 前端设计与交互任务
+
+优先级从“看起来完整”改为“实际好用”：
+
+1. 拆分超大工作台：
+   - `Settings`：已完成专业子路由聚焦与移动端模块选择第一步，`#/settings/account/runtime/observability/profiles/sso/billing` 可直接进入对应模块；下一步继续把发布流水线、SSO 风险处置、计费策略等复杂表单拆成 Drawer/Steps。
+   - `OpsCenterWorkbench`
+   - `A2aWorkbench`：已完成第一步交互收敛，Hub 的 Agent 注册入口直达 `#/ecosystem/a2a/registry`，工作台内部按 `registry/negotiate/sla/windows/dispatch/evidence` 深链自动聚焦，并将手写 tab 改为 Ant Design `Segmented`，移动端横向滚动承接；Agent 注册已从页面内裸表单升级为 Ant Design `Drawer / Form / Select / Steps / Alert`，注册后一次性凭证提示独立展示；能力协商已升级为 Ant Design `Drawer / Form / Steps / Alert`，主页面只保留任务摘要、推荐结果、时间线入口和分发动作；信任策略、SLA 策略、执行窗口策略已统一升级为 `Drawer / Form / InputNumber / Switch / Steps / Alert`，主工作区只展示策略摘要和高频治理操作。
+   - `LlmGatewayWorkbench`：已完成第一步交互收敛，主导航改为 Ant Design `Segmented`，路由规则、Provider 健康、限流策略三张关键表改为 Ant Design `Table`，并保留 AI 助手入口。
+   - `App`
+2. 成熟组件优先：
+   - 表单优先使用 Ant Design `Form / Input / Select / InputNumber / Switch / Alert / Drawer / Steps / Table`。
+   - 避免裸 `input/select/textarea` 承担复杂校验。
+   - LLM Gateway 后续继续把策略、评测、Prompt 审计表单升级为 `Form / Drawer / Steps`，避免 JSON 输入承担主流程。
+3. 复杂操作统一步骤化：
+   - 预览
+   - 审批/确认
+   - 执行
+   - 证据回看
+4. 所有表格必须具备：
+   - loading
+   - empty
+   - error
+   - filter
+   - mobile 横向滚动或卡片视图
+5. 图表必须具备表格替代视图。
+6. 性能目标：
+   - 路由级懒加载。
+   - 图表库按需加载。
+   - 首屏主 chunk 控制在可接受范围，持续消除循环 chunk。
+
+## 9. 验收命令
+
+后端：
+
+```bash
+PYTHONPATH=apps/manager python -m pytest apps/manager/sop_manager/routers/test_ops_center_core.py -q
+PYTHONPATH=apps/manager python -m pytest apps/manager/sop_manager/routers/test_system_pages_portal.py -q
+PYTHONPATH=apps/manager-worker python -m pytest apps/manager-worker/tests/test_handlers.py -q
+python -m py_compile apps/manager/sop_manager/routers/ops_center.py apps/manager/sop_manager/routers/tasks.py apps/manager/sop_manager/routers/system_pages.py apps/manager/sop_manager/routers/worker_jobs.py
+python -m py_compile apps/manager-worker/sop_worker/handlers.py apps/manager-worker/sop_worker/__main__.py
+```
+
+前端：
+
+```bash
+pnpm --dir apps/manager-web build
+```
+
+运行 smoke：
+
+```bash
+PYTHONPATH=apps/manager python - <<'PY'
+from fastapi.testclient import TestClient
+from sop_manager.main import app
+c = TestClient(app)
+for path in [
+    "/api/v1/system/pages/readiness",
+    "/api/v1/system/pages/production-readiness",
+    "/api/v1/system/pages/experience-review",
+    "/api/v1/system/pages/isolation-audit",
+    "/api/v1/worker/health",
+]:
+    r = c.get(path)
+    print(path, r.status_code)
+PY
+```
+
+## 10. 发布标准
+
+- 无新增跨 scope 泄露。
+- 无硬编码密钥。
+- 新增外部连接只保存 SecretRef。
+- 治理任务必须幂等。
+- 新增能力同步导航、i18n、System Pages、SDK/CLI。
+- 前端不出现按钮文字溢出、表格遮挡、移动端关键操作不可见。

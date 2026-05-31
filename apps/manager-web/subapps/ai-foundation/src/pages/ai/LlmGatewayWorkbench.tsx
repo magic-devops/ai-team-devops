@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Segmented, Space, Table, Tag } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -289,6 +291,117 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   const routes = routesQ.data?.items ?? [];
   const throttles = throttleQ.data?.items ?? [];
   const risks = summary.risks ?? [];
+  const routeColumns: ColumnsType<any> = [
+    {
+      title: "路由名称",
+      dataIndex: "name",
+      render: (_value, route) => (
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-[var(--text)]">{route.name}</p>
+          <p className="mt-1 truncate font-mono text-[11px] text-[var(--muted)]">{route.id}</p>
+        </div>
+      ),
+    },
+    {
+      title: "任务类型",
+      dataIndex: "task_type",
+      width: 130,
+      render: (value) => <Tag color="blue">{value || "general"}</Tag>,
+    },
+    {
+      title: "模型",
+      dataIndex: "model_id",
+      render: (_value, route) => (
+        <div className="min-w-0 font-mono text-xs">
+          <p className="truncate text-[var(--text)]">{route.model_id}</p>
+          <p className="mt-1 truncate text-[var(--muted)]">fallback: {route.fallback_model_id || "-"}</p>
+        </div>
+      ),
+    },
+    {
+      title: "状态",
+      dataIndex: "enabled",
+      width: 110,
+      render: (enabled, route) => (
+        <Space size={4} wrap>
+          <Tag color={enabled ? "green" : "default"}>{enabled ? "启用" : "禁用"}</Tag>
+          <Tag>{route.priority ?? 0}</Tag>
+        </Space>
+      ),
+    },
+    {
+      title: "操作",
+      width: 90,
+      render: (_value, route) => (
+        <button onClick={() => deleteRoute.mutate(route.id)} className="text-xs text-red-500 hover:underline">删除</button>
+      ),
+    },
+  ];
+  const providerColumns: ColumnsType<any> = [
+    {
+      title: "模型",
+      dataIndex: "model_id",
+      render: (value) => <span className="font-mono text-xs">{value}</span>,
+    },
+    {
+      title: "状态",
+      dataIndex: "status",
+      width: 120,
+      render: (value) => {
+        const status = String(value || "healthy");
+        const color = ["healthy", "ok", "active"].includes(status.toLowerCase()) ? "green" : status === "degraded" ? "gold" : "red";
+        return <Tag color={color}>{status}</Tag>;
+      },
+    },
+    {
+      title: "延迟",
+      dataIndex: "latency_ms",
+      width: 110,
+      render: (value) => `${value ?? 0}ms`,
+    },
+    {
+      title: "错误率",
+      dataIndex: "error_rate",
+      width: 110,
+      render: (value) => value ?? 0,
+    },
+    {
+      title: "备注",
+      dataIndex: "note",
+      render: (value) => <span className="line-clamp-1 text-xs text-[var(--muted)]">{value || "-"}</span>,
+    },
+  ];
+  const throttleColumns: ColumnsType<any> = [
+    {
+      title: "模型 ID",
+      dataIndex: "model_id",
+      render: (value) => <span className="font-mono text-xs">{value}</span>,
+    },
+    {
+      title: "RPM",
+      dataIndex: "rpm_limit",
+      width: 120,
+    },
+    {
+      title: "TPM",
+      dataIndex: "tpm_limit",
+      width: 140,
+      render: (value) => Number(value ?? 0).toLocaleString(),
+    },
+    {
+      title: "状态",
+      dataIndex: "enabled",
+      width: 110,
+      render: (enabled) => <Tag color={enabled ? "green" : "default"}>{enabled ? "启用" : "禁用"}</Tag>,
+    },
+    {
+      title: "操作",
+      width: 90,
+      render: (_value, item) => (
+        <button onClick={() => deleteThrottle.mutate(item.id)} className="text-xs text-red-500 hover:underline">删除</button>
+      ),
+    },
+  ];
 
   return (
     <div className="w-full space-y-4">
@@ -312,13 +425,15 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
         }
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
-        {tabs.map((item) => (
-          <button key={item.key} onClick={() => { setTab(item.key); setShowForm(false); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === item.key ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-            {item.key === "routes" ? `${item.label} (${routes.length})` : item.label}
-          </button>
-        ))}
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+        <Segmented
+          value={tab}
+          onChange={(value) => { setTab(value as Tab); setShowForm(false); }}
+          options={tabs.map((item) => ({
+            label: item.key === "routes" ? `${item.label} (${routes.length})` : item.label,
+            value: item.key,
+          }))}
+        />
       </div>
 
       {tab === "health" && (
@@ -478,25 +593,17 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
               <input className="input-base sm:col-span-4" placeholder="备注" value={providerForm.note} onChange={(event) => setProviderForm((form) => ({ ...form, note: event.target.value }))} />
               <button onClick={() => recordProviderHealth.mutate()} disabled={!providerForm.model_id || recordProviderHealth.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">上报健康</button>
             </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                  <th className="pb-2 pr-4">模型</th><th className="pb-2 pr-4">状态</th><th className="pb-2 pr-4">延迟</th><th className="pb-2 pr-4">错误率</th><th className="pb-2">备注</th>
-                </tr></thead>
-                <tbody>
-                  {providerHealth.length === 0 ? <tr><td colSpan={5} className="py-8 text-center text-[var(--muted)]">暂无 Provider 健康上报</td></tr> : null}
-                  {providerHealth.map((item: any) => (
-                    <tr key={item.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                      <td className="py-2 pr-4 font-mono text-xs">{item.model_id}</td>
-                      <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 text-xs ring-1 ${badgeClass(item.status)}`}>{item.status}</span></td>
-                      <td className="py-2 pr-4">{item.latency_ms ?? 0}ms</td>
-                      <td className="py-2 pr-4">{item.error_rate ?? 0}</td>
-                      <td className="py-2 text-xs text-[var(--muted)]">{item.note || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table
+              className="mt-4"
+              rowKey={(item) => item.id || item.model_id}
+              size="small"
+              columns={providerColumns}
+              dataSource={providerHealth}
+              loading={providerHealthQ.isLoading || providerHealthQ.isFetching}
+              pagination={false}
+              scroll={{ x: 720 }}
+              locale={{ emptyText: "暂无 Provider 健康上报" }}
+            />
           </WorkbenchPanel>
         </div>
       )}
@@ -529,27 +636,16 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
               </div>
             </div>
           )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                <th className="pb-2 pr-4">路由名称</th><th className="pb-2 pr-4">任务类型</th><th className="pb-2 pr-4">主模型</th><th className="pb-2 pr-4">备用模型</th><th className="pb-2 pr-4">优先级</th><th className="pb-2 pr-4">状态</th><th className="pb-2">操作</th>
-              </tr></thead>
-              <tbody>
-                {routes.length === 0 ? <tr><td colSpan={7} className="py-8 text-center text-[var(--muted)]">暂无路由规则</td></tr> : null}
-                {routes.map((route: any) => (
-                  <tr key={route.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                    <td className="py-2 pr-4 font-medium">{route.name}</td>
-                    <td className="py-2 pr-4"><span className="rounded bg-[var(--brand-soft)] px-2 py-0.5 text-xs text-[var(--brand)]">{route.task_type}</span></td>
-                    <td className="py-2 pr-4 font-mono text-xs">{route.model_id}</td>
-                    <td className="py-2 pr-4 font-mono text-xs text-[var(--muted)]">{route.fallback_model_id || "-"}</td>
-                    <td className="py-2 pr-4">{route.priority}</td>
-                    <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 text-xs ${route.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{route.enabled ? "启用" : "禁用"}</span></td>
-                    <td className="py-2"><button onClick={() => deleteRoute.mutate(route.id)} className="text-xs text-red-500 hover:underline">删除</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table
+            rowKey="id"
+            size="small"
+            columns={routeColumns}
+            dataSource={routes}
+            loading={routesQ.isLoading || routesQ.isFetching}
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            scroll={{ x: 860 }}
+            locale={{ emptyText: "暂无路由规则" }}
+          />
         </WorkbenchPanel>
       )}
 
@@ -1136,25 +1232,16 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
               </div>
             </div>
           )}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                <th className="pb-2 pr-4">模型 ID</th><th className="pb-2 pr-4">RPM 限制</th><th className="pb-2 pr-4">TPM 限制</th><th className="pb-2 pr-4">状态</th><th className="pb-2">操作</th>
-              </tr></thead>
-              <tbody>
-                {throttles.length === 0 ? <tr><td colSpan={5} className="py-8 text-center text-[var(--muted)]">暂无限流策略</td></tr> : null}
-                {throttles.map((item: any) => (
-                  <tr key={item.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                    <td className="py-2 pr-4 font-mono text-xs">{item.model_id}</td>
-                    <td className="py-2 pr-4">{item.rpm_limit}</td>
-                    <td className="py-2 pr-4">{item.tpm_limit?.toLocaleString()}</td>
-                    <td className="py-2 pr-4"><span className={`rounded-full px-2 py-0.5 text-xs ${item.enabled ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-500"}`}>{item.enabled ? "启用" : "禁用"}</span></td>
-                    <td className="py-2"><button onClick={() => deleteThrottle.mutate(item.id)} className="text-xs text-red-500 hover:underline">删除</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table
+            rowKey="id"
+            size="small"
+            columns={throttleColumns}
+            dataSource={throttles}
+            loading={throttleQ.isLoading || throttleQ.isFetching}
+            pagination={{ pageSize: 8, showSizeChanger: false }}
+            scroll={{ x: 680 }}
+            locale={{ emptyText: "暂无限流策略" }}
+          />
         </WorkbenchPanel>
       )}
 
