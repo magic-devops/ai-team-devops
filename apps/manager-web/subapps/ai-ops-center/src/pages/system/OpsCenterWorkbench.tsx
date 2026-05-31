@@ -147,6 +147,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     owner: "Ops Lead",
     enabled: true,
   });
+  const [alertNoiseConfigDrawer, setAlertNoiseConfigDrawer] = useState<"policy" | "silence" | null>(null);
   const [alertNoiseResult, setAlertNoiseResult] = useState<any>(null);
   const [alertStrategyResult, setAlertStrategyResult] = useState<any>(null);
   const [alertStrategyCompareResult, setAlertStrategyCompareResult] = useState<any>(null);
@@ -399,6 +400,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["opsAlertNoisePolicies"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setAlertNoiseConfigDrawer(null);
     },
   });
   const toggleAlertNoisePolicy = useMutation({
@@ -406,6 +408,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["opsAlertNoisePolicies"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setAlertNoiseConfigDrawer(null);
     },
   });
   const deleteAlertNoisePolicy = useMutation({
@@ -996,15 +999,17 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 </div>
 
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold">告警降噪策略</p>
-                      <p className="mt-1 text-xs text-[var(--muted)]">按标签分组、折叠重复、抑制低优先级，并把可行动组送入 RCA。</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button onClick={() => generateAlertStrategy.mutate()} disabled={generateAlertStrategy.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">
-                        {generateAlertStrategy.isPending ? "生成中..." : "智能推荐"}
-                      </button>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">告警降噪策略</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">按标签分组、折叠重复、抑制低优先级，并把可行动组送入 RCA。</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setAlertNoiseConfigDrawer("policy")} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">新增策略</button>
+                        <button onClick={() => setAlertNoiseConfigDrawer("silence")} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">新增静默</button>
+                        <button onClick={() => generateAlertStrategy.mutate()} disabled={generateAlertStrategy.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">
+                          {generateAlertStrategy.isPending ? "生成中..." : "智能推荐"}
+                        </button>
                       <button onClick={() => evaluateAlertNoise.mutate(false)} disabled={evaluateAlertNoise.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">预览降噪</button>
                       <button onClick={() => evaluateAlertNoise.mutate(true)} disabled={evaluateAlertNoise.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">应用评估</button>
                     </div>
@@ -1393,40 +1398,6 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    <div className="rounded-lg border border-[var(--border)] p-3">
-                      <p className="text-xs font-semibold text-[var(--muted-strong)]">新增策略</p>
-                      <div className="mt-2 space-y-2">
-                        <input className="input-base w-full" placeholder="策略名称" value={alertNoisePolicyForm.name} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, name: e.target.value }))} />
-                        <input className="input-base w-full" placeholder="分组字段，逗号分隔" value={alertNoisePolicyForm.group_by} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, group_by: e.target.value }))} />
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <select className="input-base" value={alertNoisePolicyForm.min_rca_severity} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, min_rca_severity: e.target.value }))}>
-                            {["critical", "high", "medium", "low", "info"].map(item => <option key={item} value={item}>{item}</option>)}
-                          </select>
-                          <input className="input-base" placeholder="抑制级别" value={alertNoisePolicyForm.suppress_severities} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, suppress_severities: e.target.value }))} />
-                        </div>
-                        <input className="input-base w-full" placeholder="策略说明" value={alertNoisePolicyForm.note} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, note: e.target.value }))} />
-                        <label className="flex items-center gap-2 text-xs text-[var(--muted-strong)]">
-                          <input type="checkbox" checked={alertNoisePolicyForm.enabled} onChange={e => setAlertNoisePolicyForm(f => ({ ...f, enabled: e.target.checked }))} />
-                          启用策略
-                        </label>
-                        <button onClick={() => createAlertNoisePolicy.mutate()} disabled={!alertNoisePolicyForm.name || createAlertNoisePolicy.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">保存策略</button>
-                      </div>
-                    </div>
-                    <div className="rounded-lg border border-[var(--border)] p-3">
-                      <p className="text-xs font-semibold text-[var(--muted-strong)]">新增静默</p>
-                      <div className="mt-2 space-y-2">
-                        <input className="input-base w-full" placeholder="静默名称" value={alertSilenceForm.name} onChange={e => setAlertSilenceForm(f => ({ ...f, name: e.target.value }))} />
-                        <textarea className="input-base min-h-16 w-full font-mono text-xs" placeholder="匹配器 key=value，每行一个" value={alertSilenceForm.matchers} onChange={e => setAlertSilenceForm(f => ({ ...f, matchers: e.target.value }))} />
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input className="input-base" placeholder="开始 ISO 时间，可空" value={alertSilenceForm.starts_at} onChange={e => setAlertSilenceForm(f => ({ ...f, starts_at: e.target.value }))} />
-                          <input className="input-base" placeholder="结束 ISO 时间，可空" value={alertSilenceForm.ends_at} onChange={e => setAlertSilenceForm(f => ({ ...f, ends_at: e.target.value }))} />
-                        </div>
-                        <input className="input-base w-full" placeholder="原因" value={alertSilenceForm.reason} onChange={e => setAlertSilenceForm(f => ({ ...f, reason: e.target.value }))} />
-                        <button onClick={() => createAlertSilence.mutate()} disabled={!alertSilenceForm.name || createAlertSilence.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">保存静默</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-[var(--muted-strong)]">策略目录</p>
                       {(alertNoiseQ.data?.items ?? []).length === 0 && <p className="rounded-lg bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)]">暂无策略，保存后评估结果会记录为降噪历史。</p>}
@@ -1587,6 +1558,156 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                 </Space>
                 {createAlertSource.error && <p className="mt-3 text-xs text-red-600">{(createAlertSource.error as Error).message}</p>}
               </Form>
+            </div>
+          </Drawer>
+          <Drawer
+            title={alertNoiseConfigDrawer === "silence" ? "配置告警静默" : "配置降噪策略"}
+            open={Boolean(alertNoiseConfigDrawer)}
+            onClose={() => setAlertNoiseConfigDrawer(null)}
+            width="min(640px, 100vw)"
+          >
+            <div className="alertNoiseFocusedDrawer space-y-5">
+              <Steps
+                size="small"
+                current={alertNoiseConfigDrawer === "silence" ? 1 : 2}
+                items={[
+                  { title: "规则" },
+                  { title: "范围" },
+                  { title: "生效" },
+                ]}
+              />
+              {alertNoiseConfigDrawer === "silence" ? (
+                <Form layout="vertical" requiredMark={false} onFinish={() => createAlertSilence.mutate()}>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">静默范围</p>
+                    <Form.Item className="mt-3" label="静默名称" required>
+                      <Input
+                        value={alertSilenceForm.name}
+                        onChange={e => setAlertSilenceForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="维护窗口静默"
+                      />
+                    </Form.Item>
+                    <Form.Item label="匹配器">
+                      <Input.TextArea
+                        autoSize={{ minRows: 4, maxRows: 7 }}
+                        value={alertSilenceForm.matchers}
+                        onChange={e => setAlertSilenceForm(f => ({ ...f, matchers: e.target.value }))}
+                        placeholder="environment=staging"
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">窗口与责任人</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="开始时间">
+                        <Input
+                          value={alertSilenceForm.starts_at}
+                          onChange={e => setAlertSilenceForm(f => ({ ...f, starts_at: e.target.value }))}
+                          placeholder="ISO 时间，可空"
+                        />
+                      </Form.Item>
+                      <Form.Item label="结束时间">
+                        <Input
+                          value={alertSilenceForm.ends_at}
+                          onChange={e => setAlertSilenceForm(f => ({ ...f, ends_at: e.target.value }))}
+                          placeholder="ISO 时间，可空"
+                        />
+                      </Form.Item>
+                    </div>
+                    <Form.Item label="原因">
+                      <Input
+                        value={alertSilenceForm.reason}
+                        onChange={e => setAlertSilenceForm(f => ({ ...f, reason: e.target.value }))}
+                        placeholder="维护窗口或非生产环境降噪"
+                      />
+                    </Form.Item>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="Owner">
+                        <Input
+                          value={alertSilenceForm.owner}
+                          onChange={e => setAlertSilenceForm(f => ({ ...f, owner: e.target.value }))}
+                        />
+                      </Form.Item>
+                      <Form.Item label="启用静默">
+                        <Switch
+                          checked={alertSilenceForm.enabled}
+                          onChange={checked => setAlertSilenceForm(f => ({ ...f, enabled: checked }))}
+                        />
+                      </Form.Item>
+                    </div>
+                  </div>
+
+                  <Space className="mt-4" wrap>
+                    <Button type="primary" htmlType="submit" loading={createAlertSilence.isPending} disabled={!alertSilenceForm.name.trim()}>
+                      保存静默
+                    </Button>
+                    <Button onClick={() => setAlertNoiseConfigDrawer(null)}>取消</Button>
+                  </Space>
+                  {createAlertSilence.error && <p className="mt-3 text-xs text-red-600">{(createAlertSilence.error as Error).message}</p>}
+                </Form>
+              ) : (
+                <Form layout="vertical" requiredMark={false} onFinish={() => createAlertNoisePolicy.mutate()}>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">策略规则</p>
+                    <Form.Item className="mt-3" label="策略名称" required>
+                      <Input
+                        value={alertNoisePolicyForm.name}
+                        onChange={e => setAlertNoisePolicyForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="生产告警降噪策略"
+                      />
+                    </Form.Item>
+                    <Form.Item label="分组字段">
+                      <Input
+                        value={alertNoisePolicyForm.group_by}
+                        onChange={e => setAlertNoisePolicyForm(f => ({ ...f, group_by: e.target.value }))}
+                        placeholder="service,alertname,source_id"
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">降噪动作</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="RCA 阈值">
+                        <Select
+                          value={alertNoisePolicyForm.min_rca_severity}
+                          onChange={value => setAlertNoisePolicyForm(f => ({ ...f, min_rca_severity: value }))}
+                          options={["critical", "high", "medium", "low", "info"].map(item => ({ label: item, value: item }))}
+                        />
+                      </Form.Item>
+                      <Form.Item label="抑制级别">
+                        <Input
+                          value={alertNoisePolicyForm.suppress_severities}
+                          onChange={e => setAlertNoisePolicyForm(f => ({ ...f, suppress_severities: e.target.value }))}
+                          placeholder="info,low"
+                        />
+                      </Form.Item>
+                    </div>
+                    <Form.Item label="策略说明">
+                      <Input.TextArea
+                        autoSize={{ minRows: 3, maxRows: 5 }}
+                        value={alertNoisePolicyForm.note}
+                        onChange={e => setAlertNoisePolicyForm(f => ({ ...f, note: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="启用策略">
+                      <Switch
+                        checked={alertNoisePolicyForm.enabled}
+                        onChange={checked => setAlertNoisePolicyForm(f => ({ ...f, enabled: checked }))}
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <Space className="mt-4" wrap>
+                    <Button type="primary" htmlType="submit" loading={createAlertNoisePolicy.isPending} disabled={!alertNoisePolicyForm.name.trim()}>
+                      保存策略
+                    </Button>
+                    <Button onClick={() => setAlertNoiseConfigDrawer(null)}>取消</Button>
+                  </Space>
+                  {createAlertNoisePolicy.error && <p className="mt-3 text-xs text-red-600">{(createAlertNoisePolicy.error as Error).message}</p>}
+                </Form>
+              )}
             </div>
           </Drawer>
           </>

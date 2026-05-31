@@ -37,4 +37,17 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("告警源名称 *");
     expect(source).not.toContain("<textarea className=\"input-base min-h-32 w-full font-mono text-xs\" placeholder=\"样例 payload JSON，用于无外网或 Webhook dry-run 测试\"");
   });
+
+  it("keeps alert noise policy and silence setup in a focused drawer flow", () => {
+    expect(source).toContain("alertNoiseConfigDrawer");
+    expect(source).toContain("alertNoiseFocusedDrawer");
+    expect(source).toContain("setAlertNoiseConfigDrawer(\"policy\")");
+    expect(source).toContain("setAlertNoiseConfigDrawer(\"silence\")");
+    expect(source).toContain("配置降噪策略");
+    expect(source).toContain("配置告警静默");
+    expect(source).toContain("createAlertNoisePolicy.mutate()");
+    expect(source).toContain("createAlertSilence.mutate()");
+    expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"策略名称\"");
+    expect(source).not.toContain("<textarea className=\"input-base min-h-16 w-full font-mono text-xs\" placeholder=\"匹配器 key=value，每行一个\"");
+  });
 });
