@@ -3,6 +3,7 @@ import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Button, Drawer, Form, Input, Select, Space, Steps } from "antd";
 import { Card } from "@/components/Card";
 import { api } from "@/lib/api";
 import { clearSession, getProjectId, getToken } from "@/lib/authStorage";
@@ -184,6 +185,7 @@ export function Settings() {
     env: "ADMIN_MODE=single\nDB_TYPE=sqlite\nWORKFLOW_ENGINE=memory",
     notes: "",
   });
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
   const [profileEnv, setProfileEnv] = useState<any>(null);
   const [profileBundle, setProfileBundle] = useState<any>(null);
   const [deploymentPackageDraft, setDeploymentPackageDraft] = useState({ version: "", channel: "manual", release_notes: "" });
@@ -738,7 +740,10 @@ export function Settings() {
       env: parseEnvLines(profileDraft.env),
       notes: profileDraft.notes,
     }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsProfiles"] }),
+    onSuccess: () => {
+      setProfileDrawerOpen(false);
+      void qc.invalidateQueries({ queryKey: ["opsProfiles"] });
+    },
   });
 
   const activateProfile = useMutation({
@@ -1547,19 +1552,13 @@ export function Settings() {
       ) : null}
 
       {activeModule === "profiles" ? (
+        <>
         <Card
           title={t("page.settings.profilesCard")}
           actions={<StatusPill tone={opsProfiles.data?.doctor?.ok ? "ok" : opsProfiles.isError ? "danger" : "warn"} label={opsProfiles.data?.active || "..."} />}
         >
           <div className="grid gap-4 xl:grid-cols-[24rem_minmax(0,1fr)]">
-            <form
-              className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!profileDraft.name.trim()) return;
-                saveProfile.mutate();
-              }}
-            >
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
                   <CloudCog className="h-6 w-6" />
@@ -1570,26 +1569,21 @@ export function Settings() {
                 </div>
               </div>
               <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <input className={inputClass} value={profileDraft.name} onChange={(e) => setProfileDraft({ ...profileDraft, name: e.target.value })} placeholder="local-dev" />
-                  <select className={inputClass} value={profileDraft.mode} onChange={(e) => setProfileDraft({ ...profileDraft, mode: e.target.value })}>
-                    {["local", "single", "saas", "private"].map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                  <select className={inputClass} value={profileDraft.database} onChange={(e) => setProfileDraft({ ...profileDraft, database: e.target.value })}>
-                    {["sqlite", "postgresql", "mysql", "oceanbase"].map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
+                <div className="grid gap-3">
+                  <Info label={t("page.settings.profile")} value={profileDraft.name || "-"} />
+                  <Info label={t("page.settings.mode")} value={profileDraft.mode || "-"} />
+                  <Info label={t("page.settings.database")} value={profileDraft.database || "-"} />
                 </div>
-                <input className={inputClass} value={profileDraft.manager_url} onChange={(e) => setProfileDraft({ ...profileDraft, manager_url: e.target.value })} placeholder="MANAGER_URL" />
-                <input className={inputClass} value={profileDraft.public_url} onChange={(e) => setProfileDraft({ ...profileDraft, public_url: e.target.value })} placeholder="MANAGER_PUBLIC_URL" />
-                <input className={inputClass} value={profileDraft.features} onChange={(e) => setProfileDraft({ ...profileDraft, features: e.target.value })} placeholder="billing=true,sso=true,worker=true" />
-                <textarea className={`${inputClass} min-h-36 font-mono text-xs`} value={profileDraft.env} onChange={(e) => setProfileDraft({ ...profileDraft, env: e.target.value })} placeholder={"ADMIN_MODE=saas\nDB_TYPE=postgresql"} />
-                <textarea className={`${inputClass} min-h-20`} value={profileDraft.notes} onChange={(e) => setProfileDraft({ ...profileDraft, notes: e.target.value })} placeholder={t("page.settings.profileNotes")} />
-                <button type="submit" className="w-full rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={saveProfile.isPending || !profileDraft.name.trim()}>
-                  {t("page.settings.profileSave")}
-                </button>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs font-semibold text-[var(--text)]">{t("page.settings.profileQuickSummary", { defaultValue: "当前草稿" })}</p>
+                  <p className="mt-1 break-all text-xs text-[var(--muted)]">{profileDraft.manager_url || profileDraft.public_url || profileDraft.notes || t("page.settings.profileDesc")}</p>
+                </div>
+                <Button block type="primary" icon={<CloudCog className="h-4 w-4" />} onClick={() => setProfileDrawerOpen(true)}>
+                  {t("page.settings.profileEdit")}
+                </Button>
                 {saveProfile.error ? <ErrorLine message={(saveProfile.error as Error).message} /> : null}
               </div>
-            </form>
+            </div>
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 {(opsProfiles.data?.doctor?.checks || []).map((check: any) => (
@@ -1606,7 +1600,10 @@ export function Settings() {
                     key={tpl.name}
                     type="button"
                     className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left hover:border-[var(--brand)] hover:bg-[var(--surface-muted)]"
-                    onClick={() => setProfileDraft(profileToDraft(tpl))}
+                    onClick={() => {
+                      setProfileDraft(profileToDraft(tpl));
+                      setProfileDrawerOpen(true);
+                    }}
                   >
                     <span className="text-sm font-semibold text-[var(--text)]">{tpl.name}</span>
                     <span className="mt-1 block text-xs text-[var(--muted)]">{tpl.notes}</span>
@@ -1622,7 +1619,14 @@ export function Settings() {
                 </div>
                 {(opsProfiles.data?.items || []).map((row: any) => (
                   <div key={row.name} className="grid grid-cols-[1fr_6rem_7rem_11rem] gap-3 border-b border-[var(--border)] px-4 py-3 last:border-0">
-                    <button type="button" className="min-w-0 text-left" onClick={() => setProfileDraft(profileToDraft(row))}>
+                    <button
+                      type="button"
+                      className="min-w-0 text-left"
+                      onClick={() => {
+                        setProfileDraft(profileToDraft(row));
+                        setProfileDrawerOpen(true);
+                      }}
+                    >
                       <span className="block truncate text-sm font-semibold text-[var(--text)]">{row.name}</span>
                       <span className="block truncate text-xs text-[var(--muted)]">{row.manager_url || row.public_url || row.notes}</span>
                     </button>
@@ -3205,6 +3209,85 @@ export function Settings() {
             </div>
           </div>
         </Card>
+        <Drawer
+          title={t("page.settings.profileEdit")}
+          open={profileDrawerOpen}
+          onClose={() => setProfileDrawerOpen(false)}
+          width={620}
+          destroyOnHidden
+          extra={
+            <Space>
+              <Button onClick={() => setProfileDrawerOpen(false)}>{t("common.cancel")}</Button>
+              <Button type="primary" loading={saveProfile.isPending} disabled={!profileDraft.name.trim()} onClick={() => saveProfile.mutate()}>
+                {t("page.settings.profileSave")}
+              </Button>
+            </Space>
+          }
+        >
+          <div className="space-y-4">
+            <Steps
+              size="small"
+              current={1}
+              items={[
+                { title: t("page.settings.profileStepScope", { defaultValue: "范围" }) },
+                { title: t("page.settings.profileStepRuntime", { defaultValue: "运行" }) },
+                { title: t("page.settings.profileStepEvidence", { defaultValue: "证据" }) },
+              ]}
+            />
+            <Form
+              layout="vertical"
+              onFinish={() => {
+                if (profileDraft.name.trim()) saveProfile.mutate();
+              }}
+            >
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Form.Item label={t("page.settings.profile")} required>
+                  <Input value={profileDraft.name} onChange={(e) => setProfileDraft({ ...profileDraft, name: e.target.value })} placeholder="local-dev" />
+                </Form.Item>
+                <Form.Item label={t("page.settings.mode")} required>
+                  <Select
+                    value={profileDraft.mode}
+                    onChange={(value) => setProfileDraft({ ...profileDraft, mode: value })}
+                    options={["local", "single", "saas", "private"].map((value) => ({ value, label: value }))}
+                  />
+                </Form.Item>
+                <Form.Item label={t("page.settings.database")} required>
+                  <Select
+                    value={profileDraft.database}
+                    onChange={(value) => setProfileDraft({ ...profileDraft, database: value })}
+                    options={["sqlite", "postgresql", "mysql", "oceanbase"].map((value) => ({ value, label: value }))}
+                  />
+                </Form.Item>
+              </div>
+              <Form.Item label="MANAGER_URL">
+                <Input value={profileDraft.manager_url} onChange={(e) => setProfileDraft({ ...profileDraft, manager_url: e.target.value })} placeholder="http://localhost:8765" />
+              </Form.Item>
+              <Form.Item label="MANAGER_PUBLIC_URL">
+                <Input value={profileDraft.public_url} onChange={(e) => setProfileDraft({ ...profileDraft, public_url: e.target.value })} placeholder="https://manager.example.com" />
+              </Form.Item>
+              <Form.Item label={t("page.settings.profileFeatures", { defaultValue: "能力开关" })}>
+                <Input value={profileDraft.features} onChange={(e) => setProfileDraft({ ...profileDraft, features: e.target.value })} placeholder="billing=true,sso=true,worker=true" />
+              </Form.Item>
+              <Form.Item label={t("page.settings.profileEnv", { defaultValue: "环境变量" })}>
+                <Input.TextArea
+                  rows={7}
+                  className="font-mono text-xs"
+                  value={profileDraft.env}
+                  onChange={(e) => setProfileDraft({ ...profileDraft, env: e.target.value })}
+                  placeholder={"ADMIN_MODE=saas\nDB_TYPE=postgresql"}
+                />
+              </Form.Item>
+              <Form.Item label={t("page.settings.profileNotes")}>
+                <Input.TextArea rows={3} value={profileDraft.notes} onChange={(e) => setProfileDraft({ ...profileDraft, notes: e.target.value })} placeholder={t("page.settings.profileNotes")} />
+              </Form.Item>
+              {saveProfile.error ? <ErrorLine message={(saveProfile.error as Error).message} /> : null}
+              <Button className="w-full" htmlType="submit" type="primary" loading={saveProfile.isPending} disabled={!profileDraft.name.trim()}>
+                {t("page.settings.profileSave")}
+              </Button>
+            </Form>
+          </div>
+        </Drawer>
+        </>
       ) : null}
 
       {activeModule === "storage" ? (
