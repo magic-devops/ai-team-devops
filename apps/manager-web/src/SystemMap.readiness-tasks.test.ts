@@ -32,6 +32,10 @@ describe("SystemMap readiness task generation", () => {
     expect(systemMapSource).toContain("api.systemPagesExperienceTasks");
     expect(systemMapSource).toContain("readinessDetailView");
     expect(systemMapSource).toContain("experienceColumns");
+    expect(systemMapSource).toContain("experiencePriorityQueue");
+    expect(systemMapSource).toContain("experienceAiChangePack");
+    expect(systemMapSource).toContain("focusedExperienceTasks");
+    expect(systemMapSource).toContain("weakestExperienceDimension");
   });
 
   it("provides product controls for previewing and creating readiness tasks", () => {
@@ -52,5 +56,8 @@ describe("SystemMap readiness task generation", () => {
     expect(zh.page.systemMap.readinessDetailViewValue.experience).toBe("体验治理");
     expect(zh.page.systemMap.previewExperienceTasks).toBe("预览体验任务");
     expect(zh.page.systemMap.createExperienceTasks).toBe("生成体验任务");
+    expect(zh.page.systemMap.experiencePriorityTitle).toBe("体验治理优先队列");
+    expect(zh.page.systemMap.previewModuleExperienceTask).toBe("预览该模块任务");
+    expect(zh.page.systemMap.experienceAiChangePack).toBe("AI 改造包");
   });
 });
