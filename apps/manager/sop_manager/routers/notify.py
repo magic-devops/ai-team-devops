@@ -11,6 +11,14 @@ from sop_manager.path_config import (
     resolved_project_id,
     resolved_tenant_code,
 )
+from sop_manager.routers.scope_guard import attach_scope, scope_matches
+from sop_manager.routers.im_integration_core import (
+    build_connector_health,
+    build_im_briefing,
+    build_im_delivery_plan,
+    build_report_subscription_digest,
+    inbound_dedupe_key,
+)
 
 router = APIRouter(prefix="/api/v1/notify", tags=["notify"])
 
@@ -42,8 +50,7 @@ def _scope() -> dict[str, str]:
 def _append_event(row: dict[str, Any]) -> dict[str, Any]:
     row.setdefault("id", f"msg-{uuid.uuid4().hex[:12]}")
     row.setdefault("ts", _now())
-    for k, v in _scope().items():
-        row.setdefault(k, v)
+    attach_scope(row)
     p = _ledger_file()
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
@@ -61,6 +68,8 @@ def _read_events(limit: int = 100, direction: str = "") -> list[dict[str, Any]]:
         try:
             row = json.loads(line)
         except Exception:
+            continue
+        if not scope_matches(row):
             continue
         if direction and row.get("direction") != direction:
             continue
@@ -80,9 +89,98 @@ def _find_event(message_id: str) -> dict[str, Any] | None:
             row = json.loads(line)
         except Exception:
             continue
+        if not scope_matches(row):
+            continue
         if str(row.get("id") or "") == message_id:
             return row
     return None
+
+def _find_event_by_dedupe_key(dedupe_key: str) -> dict[str, Any] | None:
+    if not dedupe_key:
+        return None
+    p = _ledger_file()
+    if not p.exists():
+        return None
+    for line in reversed(p.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if not scope_matches(row):
+            continue
+        if str(row.get("dedupe_key") or "") == dedupe_key:
+            return row
+    return None
+
+def _append_inbound_event(row: dict[str, Any]) -> dict[str, Any]:
+    row["direction"] = "inbound"
+    row.setdefault("ok", True)
+    key = inbound_dedupe_key(row)
+    existing = _find_event_by_dedupe_key(key)
+    if existing:
+        return {
+            **existing,
+            "duplicated": True,
+            "original_id": existing.get("id"),
+            "dedupe_key": key,
+        }
+    row["dedupe_key"] = key
+    row["duplicated"] = False
+    return _append_event(row)
+
+def _subscriptions_file() -> Path:
+    return resolved_ai_memory_root() / "notify-report-subscriptions.json"
+
+def _report_runs_file() -> Path:
+    return resolved_ai_memory_root() / "notify-report-subscription-runs.jsonl"
+
+def _load_subscriptions() -> list[dict[str, Any]]:
+    p = _subscriptions_file()
+    if not p.exists():
+        return []
+    try:
+        rows = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict) and scope_matches(row)]
+
+def _save_subscriptions(rows: list[dict[str, Any]]) -> None:
+    p = _subscriptions_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def _append_report_run(row: dict[str, Any]) -> dict[str, Any]:
+    row.setdefault("id", f"notify-report-run-{uuid.uuid4().hex[:12]}")
+    row.setdefault("ts", _now())
+    attach_scope(row)
+    p = _report_runs_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+def _read_report_runs(limit: int = 50) -> list[dict[str, Any]]:
+    p = _report_runs_file()
+    if not p.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in reversed(p.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except Exception:
+            continue
+        if not scope_matches(row):
+            continue
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out
 
 def _inbound_title(row: dict[str, Any]) -> str:
     text = str(row.get("text") or row.get("content") or "").strip()
@@ -122,6 +220,7 @@ class InboundMsg(BaseModel):
     text: str = Field(default="", max_length=20000)
     event: str = "message"
     payload: dict[str, Any] = {}
+    idempotency_key: str = ""
 
 class InboundAction(BaseModel):
     action: str = Field("task", pattern="^(task|requirement)$")
@@ -138,6 +237,39 @@ class ConnectorVerifyIn(BaseModel):
     signature: str = ""
     payload: dict[str, Any] = {}
     body: str = ""
+
+class ApprovalCallbackIn(BaseModel):
+    approval_id: str
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    reviewer: str = "im-user"
+    note: str = ""
+    source_channel: str = "im"
+    callback_message_id: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+class TaskStatusPushIn(BaseModel):
+    task_id: str
+    status: str
+    title: str = ""
+    content: str = ""
+    channels: list[str] = Field(default_factory=list)
+    dry_run: bool = True
+    level: str = "info"
+
+class ReportSubscriptionIn(BaseModel):
+    report_type: str
+    channel: str
+    schedule: str = "weekly"
+    enabled: bool = True
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+class ReportSubscriptionRunIn(BaseModel):
+    report_type: str = ""
+    schedule: str = ""
+    channels: list[str] = Field(default_factory=list)
+    dry_run: bool = True
+    force: bool = False
+    note: str = ""
 
 CONNECTOR_CATALOG: list[dict[str, Any]] = [
     {
@@ -292,6 +424,7 @@ def _normalize_inbound(connector_type: str, payload: dict[str, Any], raw_body: s
         "sender": _sender_from_payload(connector_type, payload),
         "event": _event_from_payload(connector_type, payload),
         "text": _text_from_payload(connector_type, payload, raw_body),
+        "idempotency_key": str(payload.get("message_id") or payload.get("event_id") or payload.get("id") or ""),
         "payload": payload,
         "headers": {
             "user-agent": request.headers.get("user-agent", ""),
@@ -357,7 +490,7 @@ async def connector_inbound(connector_type: str, request: Request):
         except Exception:
             payload = {"raw": raw}
     row = _normalize_inbound(connector_type, payload, raw, request)
-    return _append_event(row)
+    return _append_inbound_event(row)
 
 @router.get("/templates")
 def templates(): return {"items": CHANNEL_TEMPLATES}
@@ -415,15 +548,201 @@ def send_msg(body: NotifyMsg):
 
 @router.post("/inbound")
 def inbound(body: InboundMsg):
-    return _append_event({
+    return _append_inbound_event({
         "direction": "inbound",
         "channel": body.channel,
         "sender": body.sender,
         "event": body.event,
         "text": body.text,
         "payload": body.payload,
+        "idempotency_key": body.idempotency_key,
         "ok": True,
     })
+
+@router.post("/approvals/callback")
+def approval_callback(body: ApprovalCallbackIn):
+    approval = None
+    try:
+        from sop_manager.routers.system_pages import _review_approval
+
+        approval = _review_approval(body.approval_id, status=body.status, reviewer=body.reviewer, note=body.note)
+    except Exception:
+        approval = None
+    row = _append_event({
+        "direction": "inbound",
+        "channel": body.source_channel,
+        "event": "approval_callback",
+        "approval_id": body.approval_id,
+        "callback_message_id": body.callback_message_id,
+        "status": body.status,
+        "reviewer": body.reviewer,
+        "note": body.note,
+        "payload": body.payload,
+        "ok": bool(approval),
+    })
+    try:
+        from sop_manager.routers.audit_chain import append_audit
+
+        append_audit(
+            "notify.approval.callback",
+            resource_type="approval",
+            resource_id=body.approval_id,
+            details={"status": body.status, "reviewer": body.reviewer, "event_id": row.get("id")},
+        )
+    except Exception:
+        pass
+    return {"ok": bool(approval), "approval": approval or {"id": body.approval_id, "status": "not_found"}, "event": row}
+
+@router.post("/tasks/status-push")
+def task_status_push(body: TaskStatusPushIn):
+    channels = list(_load()["channels"].values())
+    title = body.title or f"任务状态更新：{body.task_id}"
+    content = body.content or f"任务 {body.task_id} 状态变更为 {body.status}"
+    briefing = build_im_briefing(
+        module="notify",
+        title=title,
+        summary={"health_score": 100, "task_id": body.task_id, "status": body.status},
+        risks=[] if body.status not in {"blocked", "failed", "cancelled"} else [{"level": "high", "title": content}],
+        recommendations=["查看任务详情并推进下一步"] if body.status in {"blocked", "failed"} else [],
+        scope=_scope(),
+        actions=[{"label": "查看任务", "href": "#/tasks"}],
+    )
+    plan = build_im_delivery_plan(briefing, channels, requested_channels=body.channels, event="task_status_changed")
+    if body.dry_run:
+        return {"ok": True, "dry_run": True, "delivery_plan": plan, "briefing": briefing}
+    sent = [send_msg(NotifyMsg(channel=msg["channel"], title=msg["title"], content=msg["content"], level=body.level or msg["level"])) for msg in plan.get("messages", [])]
+    audit = _append_event({
+        "direction": "internal",
+        "channel": "notify",
+        "event": "task_status_pushed",
+        "task_id": body.task_id,
+        "status": body.status,
+        "delivery_audit": plan.get("audit"),
+        "sent_count": len(sent),
+        "ok": True,
+    })
+    return {"ok": True, "dry_run": False, "delivery_plan": plan, "briefing": briefing, "sent": sent, "audit": audit}
+
+@router.get("/report-subscriptions")
+def report_subscriptions():
+    rows = _load_subscriptions()
+    return {"ok": True, "items": rows, "total": len(rows)}
+
+@router.post("/report-subscriptions")
+def upsert_report_subscription(body: ReportSubscriptionIn):
+    rows = [row for row in _load_subscriptions() if not (row.get("report_type") == body.report_type and row.get("channel") == body.channel)]
+    item = {**_scope(), "id": f"{body.report_type}:{body.channel}", **body.model_dump(), "updated_at": _now(), "created_at": _now()}
+    attach_scope(item, overwrite=True)
+    rows.append(item)
+    _save_subscriptions(rows)
+    _append_event({
+        "direction": "internal",
+        "channel": body.channel,
+        "event": "report_subscription_upserted",
+        "report_type": body.report_type,
+        "schedule": body.schedule,
+        "ok": True,
+    })
+    return {"ok": True, "item": item}
+
+@router.get("/report-subscriptions/runs")
+def report_subscription_runs(limit: int = 50):
+    rows = _read_report_runs(limit=max(1, min(limit, 200)))
+    return {"ok": True, "items": rows, "total": len(rows)}
+
+def _select_report_subscriptions(body: ReportSubscriptionRunIn) -> list[dict[str, Any]]:
+    wanted_channels = {str(item).strip() for item in body.channels if str(item).strip()}
+    rows: list[dict[str, Any]] = []
+    for row in _load_subscriptions():
+        if not body.force and not bool(row.get("enabled", True)):
+            continue
+        if body.report_type and str(row.get("report_type") or "") != body.report_type:
+            continue
+        if body.schedule and str(row.get("schedule") or "") != body.schedule:
+            continue
+        if wanted_channels and str(row.get("channel") or "") not in wanted_channels:
+            continue
+        rows.append(row)
+    return rows
+
+@router.post("/report-subscriptions/run")
+def run_report_subscriptions(body: ReportSubscriptionRunIn):
+    selected = _select_report_subscriptions(body)
+    channel_rows = list(_load()["channels"].values())
+    health = build_connector_health(channel_rows, _read_events(limit=1000))
+    digest = build_report_subscription_digest(
+        subscriptions=selected,
+        notify_summary=summary(),
+        connector_health=health,
+        recent_events=_read_events(limit=30),
+        scope=_scope(),
+        now_iso=_now(),
+    )
+    delivery_plans = []
+    sent: list[dict[str, Any]] = []
+    for item in digest.get("items", []):
+        plan = build_im_delivery_plan(
+            item["briefing"],
+            channel_rows,
+            requested_channels=[str(item.get("channel") or "")],
+            event="report_subscription_due",
+        )
+        delivery_plans.append({
+            "subscription_id": item.get("subscription_id"),
+            "report_type": item.get("report_type"),
+            "channel": item.get("channel"),
+            "plan": plan,
+        })
+        if not body.dry_run:
+            for msg in plan.get("messages", []):
+                sent.append(send_msg(NotifyMsg(
+                    channel=msg["channel"],
+                    title=msg["title"],
+                    content=msg["content"],
+                    level=msg.get("level") or "info",
+                )))
+    messages_planned = sum(len(item.get("plan", {}).get("messages", [])) for item in delivery_plans)
+    ready_count = sum(1 for item in delivery_plans if item.get("plan", {}).get("ready"))
+    run = _append_report_run({
+        "event": "report_subscription_run",
+        "status": "dry_run" if body.dry_run else "sent",
+        "dry_run": body.dry_run,
+        "force": body.force,
+        "filters": {
+            "report_type": body.report_type,
+            "schedule": body.schedule,
+            "channels": [str(item).strip() for item in body.channels if str(item).strip()],
+        },
+        "note": body.note,
+        "selected_count": len(selected),
+        "ready_count": ready_count,
+        "messages_planned": messages_planned,
+        "sent_count": len(sent),
+        "risk_level": digest.get("risk_level"),
+        "summary": digest.get("summary"),
+        "delivery_audits": [item.get("plan", {}).get("audit") for item in delivery_plans],
+        "ok": bool(selected),
+    })
+    _append_event({
+        "direction": "internal",
+        "channel": "notify",
+        "event": "report_subscription_run",
+        "run_id": run.get("id"),
+        "dry_run": body.dry_run,
+        "selected_count": len(selected),
+        "messages_planned": messages_planned,
+        "sent_count": len(sent),
+        "ok": bool(selected),
+    })
+    return {
+        "ok": bool(selected),
+        "dry_run": body.dry_run,
+        "digest": digest,
+        "delivery_plans": delivery_plans,
+        "run": run,
+        "sent": sent,
+        "recommendation": "" if selected else "没有匹配的报告订阅，请先启用订阅或放宽报告类型、周期、通道筛选。",
+    }
 
 @router.post("/inbound/{message_id}/action")
 def inbound_action(message_id: str, body: InboundAction):
@@ -488,6 +807,11 @@ def messages(limit: int = 100, direction: str = ""):
     items = _read_events(limit=limit, direction=direction)
     return {"items": items, "total": len(items)}
 
+@router.get("/connectors/health")
+def connector_health():
+    payload = build_connector_health(list(_load()["channels"].values()), _read_events(limit=1000))
+    return {"ok": True, **payload, "scope": _scope()}
+
 @router.get("/charts")
 def notify_charts():
     payload = summary()
@@ -547,6 +871,9 @@ def summary():
 def notify_hub() -> dict[str, Any]:
     payload = summary()
     charts = notify_charts()
+    health = connector_health()
+    subscriptions = report_subscriptions()
+    subscription_runs = report_subscription_runs(limit=20)
     return {
         "ok": True,
         "summary": {
@@ -555,6 +882,9 @@ def notify_hub() -> dict[str, Any]:
             "messages": payload.get("messages", 0),
             "failures": payload.get("failures", 0),
             "last_24h": payload.get("last_24h", 0),
+            "connector_health_score": (health.get("summary") or {}).get("score", 0),
+            "report_subscriptions": subscriptions.get("total", 0),
+            "report_subscription_runs": subscription_runs.get("total", 0),
         },
         "charts": {
             "by_direction": charts.get("by_direction") or [],
@@ -567,6 +897,9 @@ def notify_hub() -> dict[str, Any]:
             {"id": "inbound", "path": "#/notify/inbound", "capability": "ecosystem.notify.inbound"},
             {"id": "messages", "path": "#/notify/messages", "capability": "ecosystem.notify.messages"},
             {"id": "connectors", "path": "#/notify/connectors", "capability": "ecosystem.notify.connectors"},
+            {"id": "approvals", "path": "#/notify/inbound", "capability": "ecosystem.notify.approvals"},
+            {"id": "subscriptions", "path": "#/notify/subscriptions", "capability": "ecosystem.notify.subscriptions"},
+            {"id": "subscription_runs", "path": "#/notify/subscription-runs", "capability": "ecosystem.notify.subscription-runs"},
             {"id": "webhooks", "path": "#/notify/webhooks", "capability": "ecosystem.notify.webhooks"},
         ],
     }

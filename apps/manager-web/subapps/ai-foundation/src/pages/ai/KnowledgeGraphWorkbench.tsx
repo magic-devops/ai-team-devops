@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Bot, GitBranch, Layers, Network, Search, Sparkles } from "lucide-react";
+import { Bot, GitBranch, Layers, Network, Search, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
 import { NeedLogin, RefreshButton } from "@/components/PageStates";
@@ -8,7 +8,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 
-type Tab = "build" | "query" | "lineage";
+type Tab = "build" | "query" | "lineage" | "profile";
 
 const ENTITY_TYPES = ["requirement", "task", "issue", "code_file", "spec", "design_doc", "agent", "metric", "tag", "knowledge"];
 const EDGE_TYPES = ["", "depends_on", "mentions", "co_occurs"];
@@ -17,6 +17,7 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof Layers }> = [
   { id: "build", label: "图谱构建", icon: Layers },
   { id: "query", label: "图谱查询", icon: Search },
   { id: "lineage", label: "血缘关联", icon: GitBranch },
+  { id: "profile", label: "实体画像", icon: UserRound },
 ];
 
 function shortDate(value?: string | null) {
@@ -48,12 +49,17 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
   const [queryText, setQueryText] = useState("");
   const [queryResult, setQueryResult] = useState<any>(null);
   const [lineageEntityId, setLineageEntityId] = useState("");
+  const [profileEntityId, setProfileEntityId] = useState("");
+  const [profileMemoryQuery, setProfileMemoryQuery] = useState("");
+  const [profileResult, setProfileResult] = useState<any>(null);
   const [lineageDepth, setLineageDepth] = useState(2);
   const [lineageResult, setLineageResult] = useState<any>(null);
   const [edgeType, setEdgeType] = useState("");
   const [buildForm, setBuildForm] = useState({
     entity_types: ["requirement", "task", "code_file", "spec", "design_doc", "agent", "tag"],
     rebuild: false,
+    allowed_sources: "",
+    denied_sources: "",
   });
 
   const summaryQ = useQuery({ queryKey: ["knowledgeGraphSummary"], queryFn: api.knowledgeGraphSummary, enabled: authed });
@@ -69,13 +75,19 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
   });
 
   const buildMut = useMutation({
-    mutationFn: () => api.knowledgeGraphBuild(buildForm),
+    mutationFn: () => api.knowledgeGraphBuild({
+      entity_types: buildForm.entity_types,
+      rebuild: buildForm.rebuild,
+      allowed_sources: buildForm.allowed_sources.split(",").map((item) => item.trim()).filter(Boolean),
+      denied_sources: buildForm.denied_sources.split(",").map((item) => item.trim()).filter(Boolean),
+    }),
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ["knowledgeGraphSummary"] });
       void qc.invalidateQueries({ queryKey: ["knowledgeGraphEntities"] });
       void qc.invalidateQueries({ queryKey: ["knowledgeGraphEdges"] });
       const firstEntity = data?.graph?.entities?.[0]?.id;
       if (firstEntity && !lineageEntityId) setLineageEntityId(firstEntity);
+      if (firstEntity && !profileEntityId) setProfileEntityId(firstEntity);
     },
   });
 
@@ -85,12 +97,22 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
       setQueryResult(data);
       const firstEntity = data?.results?.[0]?.entity?.id;
       if (firstEntity) setLineageEntityId(firstEntity);
+      if (firstEntity) setProfileEntityId(firstEntity);
     },
   });
 
   const lineageMut = useMutation({
     mutationFn: () => api.knowledgeGraphLineage({ entity_id: lineageEntityId.trim(), depth: lineageDepth }),
     onSuccess: setLineageResult,
+  });
+  const profileMut = useMutation({
+    mutationFn: () => api.knowledgeGraphEntityProfileMerge({
+      entity_id: profileEntityId.trim(),
+      memory_query: profileMemoryQuery.trim(),
+      memory_limit: 10,
+      depth: 2,
+    }),
+    onSuccess: setProfileResult,
   });
 
   const typeCounts = summaryQ.data?.summary?.type_counts ?? {};
@@ -107,6 +129,7 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
   const buildSummary = buildMut.data?.summary;
   const canQuery = queryText.trim().length > 0 && !queryMut.isPending;
   const canLineage = lineageEntityId.trim().length > 0 && !lineageMut.isPending;
+  const canMergeProfile = profileEntityId.trim().length > 0 && !profileMut.isPending;
 
   return (
     <div className="w-full space-y-4">
@@ -171,6 +194,26 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
                 <input type="checkbox" checked={buildForm.rebuild} onChange={(e) => setBuildForm((f) => ({ ...f, rebuild: e.target.checked }))} />
                 强制重建并覆盖当前项目图谱
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">允许来源</span>
+                  <input
+                    className="input-base w-full"
+                    placeholder="trusted.docs, sql.tasks"
+                    value={buildForm.allowed_sources}
+                    onChange={(e) => setBuildForm((f) => ({ ...f, allowed_sources: e.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">阻断来源</span>
+                  <input
+                    className="input-base w-full"
+                    placeholder="restricted.docs"
+                    value={buildForm.denied_sources}
+                    onChange={(e) => setBuildForm((f) => ({ ...f, denied_sources: e.target.value }))}
+                  />
+                </label>
+              </div>
               <button
                 type="button"
                 onClick={() => buildMut.mutate()}
@@ -182,6 +225,15 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
               </button>
               {buildMut.isError ? (
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{(buildMut.error as Error).message}</div>
+              ) : null}
+              {buildMut.data?.permission ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted-strong)]">
+                  <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--text)]">
+                    <ShieldCheck className="h-4 w-4 text-[var(--brand)]" />
+                    来源权限检查
+                  </div>
+                  已检查 {buildMut.data.permission.checked ?? 0} 个来源，允许 {buildMut.data.permission.accepted_documents ?? 0} 个，阻断 {buildMut.data.permission.denied_documents ?? 0} 个。
+                </div>
               ) : null}
             </div>
           </WorkbenchPanel>
@@ -244,7 +296,7 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
                   <div key={row.entity.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <button type="button" onClick={() => { setLineageEntityId(row.entity.id); setTab("lineage"); }} className="text-left text-sm font-semibold text-[var(--text)] hover:text-[var(--brand)]">
+                        <button type="button" onClick={() => { setLineageEntityId(row.entity.id); setProfileEntityId(row.entity.id); setTab("lineage"); }} className="text-left text-sm font-semibold text-[var(--text)] hover:text-[var(--brand)]">
                           {row.entity.label}
                         </button>
                         <p className="mt-1 break-all text-xs text-[var(--muted)]">{row.entity.id}</p>
@@ -255,6 +307,19 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(row.neighbors ?? []).slice(0, 6).map((n: any) => (
                         <span key={n.id} className="rounded bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)]">{n.type}: {n.label}</span>
+                      ))}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-[var(--muted)]">证据链 {row.evidence_count ?? row.evidence?.length ?? 0}</p>
+                        <button type="button" onClick={() => { setProfileEntityId(row.entity.id); setProfileMemoryQuery(queryText); setTab("profile"); }} className="text-xs font-medium text-[var(--brand)]">
+                          合并画像
+                        </button>
+                      </div>
+                      {(row.evidence ?? []).slice(0, 3).map((ev: any, idx: number) => (
+                        <div key={`${row.entity.id}-evidence-${idx}`} className="rounded bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted-strong)]">
+                          {ev.relationship ? `${ev.relationship}: ${ev.from} → ${ev.to}` : `${ev.source}${ev.path ? ` · ${ev.path}` : ""}`}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -349,6 +414,95 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
                 </table>
               </div>
             </div>
+          </WorkbenchPanel>
+        </div>
+      ) : null}
+
+      {tab === "profile" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(360px,0.8fr)_minmax(460px,1.2fr)]">
+          <WorkbenchPanel title="实体画像合并">
+            <div className="space-y-3">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">实体 ID</span>
+                <input
+                  className="input-base w-full"
+                  placeholder="knowledge:DOC-public"
+                  value={profileEntityId}
+                  onChange={(e) => setProfileEntityId(e.target.value)}
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">记忆检索词</span>
+                <input
+                  className="input-base w-full"
+                  placeholder="默认使用实体标题，也可输入运行证据关键词"
+                  value={profileMemoryQuery}
+                  onChange={(e) => setProfileMemoryQuery(e.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => profileMut.mutate()}
+                disabled={!canMergeProfile}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand)] px-5 py-2 text-sm text-white disabled:opacity-50"
+              >
+                <UserRound className="h-4 w-4" />
+                {profileMut.isPending ? "合并中..." : "合并实体画像"}
+              </button>
+              {profileMut.isError ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{(profileMut.error as Error).message}</div>
+              ) : null}
+            </div>
+          </WorkbenchPanel>
+
+          <WorkbenchPanel title="画像上下文包">
+            {profileResult?.profile ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-[var(--border)] p-3">
+                  <span className={`rounded px-2 py-0.5 text-xs ${badgeClass(profileResult.profile.entity?.type)}`}>{profileResult.profile.entity?.type}</span>
+                  <p className="mt-2 text-sm font-semibold">{profileResult.profile.entity?.label}</p>
+                  <p className="mt-1 break-all text-xs text-[var(--muted)]">{profileResult.profile.entity?.id}</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">邻居节点</p>
+                    <p className="mt-1 text-lg font-semibold">{profileResult.profile.neighbors?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">记忆证据</p>
+                    <p className="mt-1 text-lg font-semibold">{profileResult.profile.memory_items?.length ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">证据链</p>
+                    <p className="mt-1 text-lg font-semibold">{profileResult.profile.evidence_links?.length ?? 0}</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div>
+                    <p className="mb-2 text-sm font-semibold">关联记忆</p>
+                    <div className="max-h-64 space-y-2 overflow-auto pr-1">
+                      {(profileResult.profile.memory_items ?? []).map((item: any) => (
+                        <div key={item.id} className="rounded-lg border border-[var(--border)] p-3 text-xs">
+                          <p className="line-clamp-2 text-[var(--muted-strong)]">{item.content}</p>
+                          <p className="mt-1 text-[var(--muted)]">{item.kind} · {(item.metadata?.lifecycle_state ?? "active")}</p>
+                        </div>
+                      ))}
+                      {!(profileResult.profile.memory_items ?? []).length ? <EmptyBlock text="暂无可合并记忆。" /> : null}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-sm font-semibold">证据链接</p>
+                    <div className="max-h-64 space-y-2 overflow-auto pr-1">
+                      {(profileResult.profile.evidence_links ?? []).map((ev: any, idx: number) => (
+                        <div key={`profile-evidence-${idx}`} className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-strong)]">
+                          {ev.relationship ? `${ev.relationship}: ${ev.from} → ${ev.to}` : `${ev.source}${ev.path ? ` · ${ev.path}` : ""}`}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : <EmptyBlock text="选择实体并合并画像后，会输出 Graph RAG 可直接消费的上下文包。" />}
           </WorkbenchPanel>
         </div>
       ) : null}

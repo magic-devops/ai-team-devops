@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from sop_manager.sync_journal import append_event, recent_events
+from sop_manager.routers.metrics import current_trace_context
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 _log = logging.getLogger("sop.events")
@@ -146,6 +147,13 @@ def _event_payload(e: CloudEvent) -> dict[str, Any]:
 def _publish(e: CloudEvent) -> dict[str, Any]:
     """落入同步事件日志并转发给 WSS 订阅端。"""
     payload = _event_payload(e)
+    trace = current_trace_context()
+    data = payload.setdefault("data", {})
+    if isinstance(data, dict):
+        data.setdefault("trace_id", trace["trace_id"])
+        data.setdefault("correlation_id", trace["correlation_id"])
+        if trace.get("agent_run_id"):
+            data.setdefault("agent_run_id", trace["agent_run_id"])
     evt = append_event(
         module="events",
         action=e.type,

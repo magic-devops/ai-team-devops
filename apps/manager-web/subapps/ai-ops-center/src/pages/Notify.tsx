@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Modal, Space, Table, Tag, Timeline, Typography } from "antd";
-import { BellRing, CheckCircle2, Copy, MessageSquareText, PlugZap, RefreshCw, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { BellRing, CalendarClock, CheckCircle2, Copy, History, MessageSquareText, PlayCircle, PlugZap, RefreshCw, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 const EChartsDonutLazy = lazy(() =>
@@ -15,7 +15,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 import { getToken } from "@/lib/authStorage";
 
-type NotifyModule = "connectors" | "channels" | "outbound" | "inbound" | "messages";
+type NotifyModule = "connectors" | "channels" | "outbound" | "inbound" | "messages" | "subscriptions" | "subscriptionRuns";
 
 const inputClass = "rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20";
 
@@ -36,8 +36,14 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
   const [events, setEvents] = useState("task_blocked,issue_p0,sprint_complete,deploy");
   const [sendDraft, setSendDraft] = useState({ channel: "", title: "", content: "", level: "info" });
   const [inboundDraft, setInboundDraft] = useState({ channel: "inbound", sender: "manual", text: "" });
+  const [approvalDraft, setApprovalDraft] = useState({ approval_id: "", status: "approved", reviewer: "ops-lead", note: "", source_channel: "wechat_work" });
+  const [taskPushDraft, setTaskPushDraft] = useState({ task_id: "", status: "blocked", title: "", content: "", channels: "", dry_run: true });
+  const [subscriptionDraft, setSubscriptionDraft] = useState({ report_type: "weekly_quality", channel: "", schedule: "weekly", enabled: true, filters: "severity=high" });
+  const [subscriptionRunDraft, setSubscriptionRunDraft] = useState({ report_type: "", schedule: "", channels: "", dry_run: true, force: false, note: "" });
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; message: string } | null>(null);
   const [actionResult, setActionResult] = useState<any>(null);
+  const [taskPushResult, setTaskPushResult] = useState<any>(null);
+  const [subscriptionRunResult, setSubscriptionRunResult] = useState<any>(null);
   const [callbackResult, setCallbackResult] = useState<any>(null);
   const [verifyDraft, setVerifyDraft] = useState({ connector: "webhook", secret: "", timestamp: "", signature: "", body: "" });
   const [verifyResult, setVerifyResult] = useState<any>(null);
@@ -50,8 +56,11 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
     enabled: authed && module === "messages",
   });
   const connectors = useQuery({ queryKey: ["notifyConnectors"], queryFn: api.notifyConnectors, enabled: authed });
+  const connectorHealth = useQuery({ queryKey: ["notifyConnectorHealth"], queryFn: api.notifyConnectorHealth, enabled: authed && module === "connectors" });
   const templates = useQuery({ queryKey: ["notifyTemplates"], queryFn: api.notifyTemplates, enabled: authed });
   const channels = useQuery({ queryKey: ["notifyChannels"], queryFn: api.notifyChannels, enabled: authed });
+  const subscriptions = useQuery({ queryKey: ["notifyReportSubscriptions"], queryFn: api.notifyReportSubscriptions, enabled: authed && module === "subscriptions" });
+  const subscriptionRuns = useQuery({ queryKey: ["notifyReportSubscriptionRuns"], queryFn: () => api.notifyReportSubscriptionRuns(50), enabled: authed && module === "subscriptionRuns" });
   const messages = useQuery({ queryKey: ["notifyMessages"], queryFn: () => api.notifyMessages(100), enabled: authed && module === "messages" });
   const outboundMessages = useQuery({ queryKey: ["notifyMessages", "outbound"], queryFn: () => api.notifyMessages(100, "outbound"), enabled: authed && module === "outbound" });
   const inboundMessages = useQuery({ queryKey: ["notifyMessages", "inbound"], queryFn: () => api.notifyMessages(100, "inbound"), enabled: authed && module === "inbound" });
@@ -120,6 +129,68 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
     },
     onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
   });
+  const approvalCallback = useMutation({
+    mutationFn: () => api.notifyApprovalCallback({
+      approval_id: approvalDraft.approval_id,
+      status: approvalDraft.status as "approved" | "rejected",
+      reviewer: approvalDraft.reviewer,
+      note: approvalDraft.note,
+      source_channel: approvalDraft.source_channel,
+    }),
+    onSuccess: () => {
+      setFlash({ kind: "ok", message: t("page.notify.approvalRecorded") });
+      invalidate();
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
+  const taskStatusPush = useMutation({
+    mutationFn: () => api.notifyTaskStatusPush({
+      task_id: taskPushDraft.task_id,
+      status: taskPushDraft.status,
+      title: taskPushDraft.title,
+      content: taskPushDraft.content,
+      channels: taskPushDraft.channels.split(",").map((x) => x.trim()).filter(Boolean),
+      dry_run: taskPushDraft.dry_run,
+    }),
+    onSuccess: (data) => {
+      setTaskPushResult(data);
+      if (!data?.dry_run) setFlash({ kind: "ok", message: t("page.notify.taskStatusPushed") });
+      invalidate();
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
+  const saveSubscription = useMutation({
+    mutationFn: () => api.notifyUpsertReportSubscription({
+      report_type: subscriptionDraft.report_type,
+      channel: subscriptionDraft.channel,
+      schedule: subscriptionDraft.schedule,
+      enabled: subscriptionDraft.enabled,
+      filters: parseKv(subscriptionDraft.filters),
+    }),
+    onSuccess: () => {
+      setFlash({ kind: "ok", message: t("page.notify.subscriptionSaved") });
+      void qc.invalidateQueries({ queryKey: ["notifyReportSubscriptions"] });
+      invalidate();
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
+  const runSubscriptions = useMutation({
+    mutationFn: () => api.notifyRunReportSubscriptions({
+      report_type: subscriptionRunDraft.report_type.trim(),
+      schedule: subscriptionRunDraft.schedule,
+      channels: subscriptionRunDraft.channels.split(",").map((x) => x.trim()).filter(Boolean),
+      dry_run: subscriptionRunDraft.dry_run,
+      force: subscriptionRunDraft.force,
+      note: subscriptionRunDraft.note,
+    }),
+    onSuccess: (data) => {
+      setSubscriptionRunResult(data);
+      setFlash({ kind: data?.ok ? "ok" : "err", message: data?.ok ? t("page.notify.subscriptionRunCompleted") : (data?.recommendation || t("page.notify.noMatchingSubscriptions")) });
+      void qc.invalidateQueries({ queryKey: ["notifyReportSubscriptionRuns"] });
+      invalidate();
+    },
+    onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
+  });
   const loadCallback = useMutation({
     mutationFn: (connectorType: string) => api.notifyConnectorCallbackTemplate(connectorType),
     onSuccess: setCallbackResult,
@@ -140,9 +211,12 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
   function invalidate() {
     void qc.invalidateQueries({ queryKey: ["notifyChannels"] });
     void qc.invalidateQueries({ queryKey: ["notifyConnectors"] });
+    void qc.invalidateQueries({ queryKey: ["notifyConnectorHealth"] });
     void qc.invalidateQueries({ queryKey: ["notifyMessages"] });
     void qc.invalidateQueries({ queryKey: ["notifySummary"] });
     void qc.invalidateQueries({ queryKey: ["notifyTimeline"] });
+    void qc.invalidateQueries({ queryKey: ["notifyReportSubscriptions"] });
+    void qc.invalidateQueries({ queryKey: ["notifyReportSubscriptionRuns"] });
   }
 
   useEffect(() => {
@@ -163,11 +237,14 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
     { id: "outbound", label: t("page.notify.module.outbound"), icon: <Send className="h-5 w-5" /> },
     { id: "inbound", label: t("page.notify.module.inbound"), icon: <MessageSquareText className="h-5 w-5" /> },
     { id: "messages", label: t("page.notify.module.messages"), icon: <MessageSquareText className="h-5 w-5" /> },
+    { id: "subscriptions", label: t("page.notify.module.subscriptions"), icon: <BellRing className="h-5 w-5" /> },
+    { id: "subscriptionRuns", label: t("page.notify.module.subscriptionRuns"), icon: <History className="h-5 w-5" /> },
   ];
 
   const refreshAll = () => {
     invalidate();
     if (module === "messages") void timeline.refetch();
+    if (module === "subscriptionRuns") void subscriptionRuns.refetch();
   };
 
   const channelChart = useMemo(() => pieToRecord(charts.data?.by_channel), [charts.data]);
@@ -318,6 +395,34 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
                       <span className="truncate font-mono text-xs text-[var(--text)]">{String(v || "-")}</span>
                     </div>
                   ))}
+                </div>
+              </Card>
+              <Card title={t("page.notify.connectorHealth")}>
+                <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">{t("page.notify.healthScore")}</p>
+                    <p className="mt-1 text-lg font-semibold text-[var(--text)]">{connectorHealth.data?.summary?.score ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">{t("page.notify.healthy")}</p>
+                    <p className="mt-1 text-lg font-semibold text-emerald-600">{connectorHealth.data?.summary?.healthy ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                    <p className="text-xs text-[var(--muted)]">{t("page.notify.degraded")}</p>
+                    <p className="mt-1 text-lg font-semibold text-amber-600">{connectorHealth.data?.summary?.degraded ?? 0}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {(connectorHealth.data?.items ?? []).map((item: any) => (
+                    <div key={item.name} className="rounded-xl border border-[var(--border)] px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-semibold text-[var(--text)]">{item.name}</span>
+                        <Tag color={item.status === "degraded" ? "orange" : item.status === "disabled" ? "default" : "green"}>{item.status}</Tag>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-[var(--muted)]">{(item.events ?? []).join(", ") || "-"}</p>
+                    </div>
+                  ))}
+                  {!connectorHealth.data?.items?.length ? <p className="text-sm text-[var(--muted)]">{t("page.notify.noHealth")}</p> : null}
                 </div>
               </Card>
               <Card title={t("page.notify.signatureLab")}>
@@ -481,6 +586,25 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
                 <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!sendDraft.channel || !sendDraft.title.trim() || send.isPending} onClick={() => send.mutate()}><Send className="h-4 w-4" />{t("page.notify.send")}</button>
               </div>
             </Card>
+            <Card title={t("page.notify.taskStatusPush")}>
+              <div className="space-y-2">
+                <input className={`${inputClass} w-full`} placeholder="TASK-123" value={taskPushDraft.task_id} onChange={(e) => setTaskPushDraft((v) => ({ ...v, task_id: e.target.value }))} />
+                <select className={`${inputClass} w-full`} value={taskPushDraft.status} onChange={(e) => setTaskPushDraft((v) => ({ ...v, status: e.target.value }))}>
+                  {["running", "blocked", "failed", "success", "cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input className={`${inputClass} w-full`} placeholder={t("page.notify.titlePh")} value={taskPushDraft.title} onChange={(e) => setTaskPushDraft((v) => ({ ...v, title: e.target.value }))} />
+                <textarea className={`${inputClass} min-h-20 w-full`} placeholder={t("page.notify.contentPh")} value={taskPushDraft.content} onChange={(e) => setTaskPushDraft((v) => ({ ...v, content: e.target.value }))} />
+                <input className={`${inputClass} w-full`} placeholder={t("page.notify.channelsPh")} value={taskPushDraft.channels} onChange={(e) => setTaskPushDraft((v) => ({ ...v, channels: e.target.value }))} />
+                <label className="flex items-center gap-2 text-sm text-[var(--muted-strong)]">
+                  <input type="checkbox" checked={taskPushDraft.dry_run} onChange={(e) => setTaskPushDraft((v) => ({ ...v, dry_run: e.target.checked }))} />
+                  {t("page.notify.dryRun")}
+                </label>
+                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!taskPushDraft.task_id.trim() || taskStatusPush.isPending} onClick={() => taskStatusPush.mutate()}>
+                  <Send className="h-4 w-4" />{t("page.notify.pushTaskStatus")}
+                </button>
+                {taskPushResult ? <pre className="max-h-52 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(taskPushResult.delivery_plan?.audit || taskPushResult, null, 2)}</pre> : null}
+              </div>
+            </Card>
             <Card title={t("page.notify.outboundMessages")}>
               <Table
                 rowKey={(row: any) => String(row.id)}
@@ -564,6 +688,164 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
                 <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50" disabled={!inboundDraft.text.trim() || inbound.isPending} onClick={() => inbound.mutate()}><CheckCircle2 className="h-4 w-4" />{t("page.notify.saveInbound")}</button>
               </div>
             </Card>
+            <Card title={t("page.notify.approvalCallback")}>
+              <div className="space-y-2">
+                <input className={`${inputClass} w-full`} placeholder="approval_id" value={approvalDraft.approval_id} onChange={(e) => setApprovalDraft((v) => ({ ...v, approval_id: e.target.value }))} />
+                <select className={`${inputClass} w-full`} value={approvalDraft.status} onChange={(e) => setApprovalDraft((v) => ({ ...v, status: e.target.value }))}>
+                  <option value="approved">{t("page.notify.approved")}</option>
+                  <option value="rejected">{t("page.notify.rejected")}</option>
+                </select>
+                <input className={`${inputClass} w-full`} placeholder={t("page.notify.reviewerPh")} value={approvalDraft.reviewer} onChange={(e) => setApprovalDraft((v) => ({ ...v, reviewer: e.target.value }))} />
+                <input className={`${inputClass} w-full`} placeholder={t("page.notify.sourceChannelPh")} value={approvalDraft.source_channel} onChange={(e) => setApprovalDraft((v) => ({ ...v, source_channel: e.target.value }))} />
+                <textarea className={`${inputClass} min-h-20 w-full`} placeholder={t("page.notify.notePh")} value={approvalDraft.note} onChange={(e) => setApprovalDraft((v) => ({ ...v, note: e.target.value }))} />
+                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!approvalDraft.approval_id.trim() || approvalCallback.isPending} onClick={() => approvalCallback.mutate()}>
+                  <ShieldCheck className="h-4 w-4" />{t("page.notify.submitApproval")}
+                </button>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
+        {module === "subscriptions" ? (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+            <Card title={t("page.notify.reportSubscriptions")}>
+              <Table
+                rowKey={(row: any) => String(row.id)}
+                size="middle"
+                loading={subscriptions.isLoading}
+                dataSource={subscriptions.data?.items ?? []}
+                pagination={false}
+                locale={{ emptyText: <EmptyState message={t("page.notify.noSubscriptions")} /> }}
+                columns={[
+                  { title: t("page.notify.reportType"), dataIndex: "report_type" },
+                  { title: t("page.notify.channel"), dataIndex: "channel" },
+                  { title: t("page.notify.schedule"), dataIndex: "schedule" },
+                  { title: t("page.notify.status"), dataIndex: "enabled", render: (v: boolean) => <Tag color={v ? "green" : "default"}>{v ? t("page.notify.enabled") : t("page.notify.disabled")}</Tag> },
+                ]}
+              />
+            </Card>
+            <Card title={t("page.notify.addSubscription")}>
+              <div className="space-y-2">
+                <input className={`${inputClass} w-full`} value={subscriptionDraft.report_type} onChange={(e) => setSubscriptionDraft((v) => ({ ...v, report_type: e.target.value }))} />
+                <select className={`${inputClass} w-full`} value={subscriptionDraft.channel} onChange={(e) => setSubscriptionDraft((v) => ({ ...v, channel: e.target.value }))}>
+                  <option value="">{t("page.notify.pickChannel")}</option>
+                  {(channels.data ?? []).map((ch: any) => <option key={ch.name} value={ch.name}>{ch.name}</option>)}
+                </select>
+                <select className={`${inputClass} w-full`} value={subscriptionDraft.schedule} onChange={(e) => setSubscriptionDraft((v) => ({ ...v, schedule: e.target.value }))}>
+                  {["daily", "weekly", "monthly"].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input className={`${inputClass} w-full`} value={subscriptionDraft.filters} onChange={(e) => setSubscriptionDraft((v) => ({ ...v, filters: e.target.value }))} placeholder="severity=high,domain=data" />
+                <label className="flex items-center gap-2 text-sm text-[var(--muted-strong)]">
+                  <input type="checkbox" checked={subscriptionDraft.enabled} onChange={(e) => setSubscriptionDraft((v) => ({ ...v, enabled: e.target.checked }))} />
+                  {t("page.notify.enabled")}
+                </label>
+                <button type="button" className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!subscriptionDraft.report_type.trim() || !subscriptionDraft.channel || saveSubscription.isPending} onClick={() => saveSubscription.mutate()}>
+                  {t("common.save")}
+                </button>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+
+        {module === "subscriptionRuns" ? (
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_25rem]">
+            <Card
+              title={t("page.notify.subscriptionRunHistory")}
+              actions={<Button size="small" icon={<RefreshCw className="h-3.5 w-3.5" />} onClick={() => void subscriptionRuns.refetch()} loading={subscriptionRuns.isFetching}>{t("common.refresh")}</Button>}
+            >
+              <Table
+                rowKey={(row: any) => String(row.id)}
+                size="middle"
+                loading={subscriptionRuns.isLoading}
+                dataSource={subscriptionRuns.data?.items ?? []}
+                scroll={{ x: 980 }}
+                pagination={{ pageSize: 8, showSizeChanger: true }}
+                locale={{ emptyText: <EmptyState message={t("page.notify.noSubscriptionRuns")} /> }}
+                columns={[
+                  {
+                    title: t("page.notify.run"),
+                    dataIndex: "id",
+                    render: (_: unknown, row: any) => (
+                      <div className="min-w-[18rem]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs text-[var(--text)]">{row.id}</span>
+                          <Tag color={row.dry_run ? "blue" : "green"}>{row.status}</Tag>
+                          <Tag color={row.ok ? "success" : "warning"}>{row.ok ? "ok" : "skipped"}</Tag>
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{row.ts}</p>
+                      </div>
+                    ),
+                  },
+                  { title: t("page.notify.selectedSubscriptions"), dataIndex: "selected_count", width: 140 },
+                  { title: t("page.notify.messagesPlanned"), dataIndex: "messages_planned", width: 130 },
+                  { title: t("page.notify.sentCount"), dataIndex: "sent_count", width: 110 },
+                  {
+                    title: t("page.notify.filters"),
+                    dataIndex: "filters",
+                    render: (value: Record<string, unknown>) => <Typography.Text className="text-xs" code>{JSON.stringify(value ?? {})}</Typography.Text>,
+                  },
+                ]}
+              />
+            </Card>
+            <div className="space-y-4">
+              <Card title={t("page.notify.runSubscriptionNow")}>
+                <div className="space-y-2">
+                  <input className={`${inputClass} w-full`} placeholder={t("page.notify.reportTypeOptional")} value={subscriptionRunDraft.report_type} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, report_type: e.target.value }))} />
+                  <select className={`${inputClass} w-full`} value={subscriptionRunDraft.schedule} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, schedule: e.target.value }))}>
+                    <option value="">{t("page.notify.allSchedules")}</option>
+                    {["daily", "weekly", "monthly"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <input className={`${inputClass} w-full`} placeholder={t("page.notify.channelsPh")} value={subscriptionRunDraft.channels} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, channels: e.target.value }))} />
+                  <textarea className={`${inputClass} min-h-20 w-full`} placeholder={t("page.notify.runNotePh")} value={subscriptionRunDraft.note} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, note: e.target.value }))} />
+                  <label className="flex items-center gap-2 text-sm text-[var(--muted-strong)]">
+                    <input type="checkbox" checked={subscriptionRunDraft.dry_run} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, dry_run: e.target.checked }))} />
+                    {t("page.notify.dryRun")}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-[var(--muted-strong)]">
+                    <input type="checkbox" checked={subscriptionRunDraft.force} onChange={(e) => setSubscriptionRunDraft((v) => ({ ...v, force: e.target.checked }))} />
+                    {t("page.notify.forceRun")}
+                  </label>
+                  <Button block type="primary" icon={<PlayCircle className="h-4 w-4" />} loading={runSubscriptions.isPending} onClick={() => runSubscriptions.mutate()}>
+                    {subscriptionRunDraft.dry_run ? t("page.notify.previewSubscriptionRun") : t("page.notify.executeSubscriptionRun")}
+                  </Button>
+                </div>
+              </Card>
+              <Card title={t("page.notify.subscriptionRunPreview")}>
+                {subscriptionRunResult ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">{t("page.notify.selectedSubscriptions")}</p>
+                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">{subscriptionRunResult.run?.selected_count ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">{t("page.notify.messagesPlanned")}</p>
+                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">{subscriptionRunResult.run?.messages_planned ?? 0}</p>
+                      </div>
+                      <div className="rounded-xl bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">{t("page.notify.sentCount")}</p>
+                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">{subscriptionRunResult.run?.sent_count ?? 0}</p>
+                      </div>
+                    </div>
+                    {(subscriptionRunResult.delivery_plans ?? []).slice(0, 4).map((item: any) => (
+                      <div key={`${item.subscription_id}-${item.channel}`} className="rounded-xl border border-[var(--border)] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate text-sm font-semibold text-[var(--text)]">{item.report_type} · {item.channel}</span>
+                          <Tag color={item.plan?.ready ? "green" : "orange"}>{item.plan?.selection_mode || "plan"}</Tag>
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{t("page.notify.targetChannels")}: {(item.plan?.audit?.selected_channels ?? []).join(", ") || "-"}</p>
+                      </div>
+                    ))}
+                    <pre className="max-h-72 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(subscriptionRunResult.run, null, 2)}</pre>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted)]">
+                    <CalendarClock className="mb-2 h-5 w-5 text-[var(--brand)]" />
+                    {t("page.notify.noRunPreview")}
+                  </div>
+                )}
+              </Card>
+            </div>
           </div>
         ) : null}
       </section>
@@ -598,4 +880,15 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
       </Modal>
     </WorkbenchShell>
   );
+}
+
+function parseKv(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of text.split(/[,\n]/)) {
+    const [rawKey, ...rawValue] = part.split("=");
+    const key = rawKey.trim();
+    if (!key) continue;
+    out[key] = rawValue.join("=").trim();
+  }
+  return out;
 }

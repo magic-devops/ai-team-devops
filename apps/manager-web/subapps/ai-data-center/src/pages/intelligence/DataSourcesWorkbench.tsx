@@ -1,68 +1,123 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Table, Tag } from "antd";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Database, FileSearch, Link2, Plus, RefreshCcw, ShieldCheck } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
+import { LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
+import { getToken } from "@/lib/authStorage";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { RefreshButton, WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
-type ConnRow = { name: string; driver?: string; url_masked?: string; status?: string };
+type DataSourceView = "overview" | "connections" | "metadata";
 
-export function DataSourcesWorkbench({ focused = false }: { focused?: boolean }) {
-  const { t } = useTranslation();
+type SourceForm = {
+  name: string;
+  type: string;
+  role: string;
+  capabilities: string[];
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  schema_name?: string;
+  ssl_mode?: string;
+  readonly?: boolean;
+  pool_size?: number;
+  url_env?: string;
+  secret_ref?: string;
+};
+
+type SourceRow = SourceForm & {
+  id?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+const DEFAULT_SOURCE: SourceForm = {
+  name: "",
+  type: "mysql",
+  role: "business",
+  capabilities: ["sql"],
+  host: "",
+  port: 3306,
+  database: "",
+  username: "",
+  schema_name: "",
+  ssl_mode: "",
+  readonly: true,
+  pool_size: 5,
+  url_env: "",
+  secret_ref: "",
+};
+
+const VIEW_META: Record<DataSourceView, { title: string; description: string }> = {
+  overview: { title: "数据源管理", description: "连接、密钥引用、元数据发现和接入同步的统一入口。" },
+  connections: { title: "数据源连接目录", description: "维护连接元数据、能力声明、只读策略和 SecretRef。" },
+  metadata: { title: "数据源元数据同步", description: "预览表字段并同步到数据接入 Schema Registry。" },
+};
+
+export function DataSourcesWorkbench({
+  focused = false,
+  initialView = "overview",
+}: {
+  focused?: boolean;
+  initialView?: DataSourceView;
+}) {
+  const authed = Boolean(getToken());
   const { message } = App.useApp();
-  const qc = useQueryClient();
-  const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [aiOpen, setAiOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
-  const [form] = Form.useForm<{ name: string; url: string; driver: string }>();
+  const [selectedName, setSelectedName] = useState("");
+  const [previewPayload, setPreviewPayload] = useState<any>(null);
+  const [syncPayload, setSyncPayload] = useState<any>(null);
+  const [form] = Form.useForm<SourceForm>();
 
-  const connQ = useQuery({ queryKey: ["dbConnections"], queryFn: api.dbConnections });
-  const driversQ = useQuery({ queryKey: ["dbDrivers"], queryFn: api.dbDrivers });
+  const connQ = useQuery({ queryKey: ["dbConnections"], queryFn: api.dbConnections, enabled: authed });
+  const summaryQ = useQuery({ queryKey: ["dbConnectionsSummary"], queryFn: api.dbConnectionsSummary, enabled: authed });
+  const driversQ = useQuery({ queryKey: ["dbDrivers"], queryFn: api.dbDrivers, enabled: authed });
 
-  const items: ConnRow[] = connQ.data?.items ?? [];
-  const driverList = Array.isArray(driversQ.data?.drivers)
-    ? driversQ.data.drivers
-    : Array.isArray(driversQ.data)
-      ? driversQ.data
-      : ["mysql", "postgresql", "oceanbase"];
+  const sources: SourceRow[] = connQ.data?.items ?? [];
+  const summary = summaryQ.data?.summary ?? {};
+  const driverCatalog = driversQ.data ?? {};
+  const sourceTypes: string[] = driverCatalog.sql?.supported ?? driverCatalog.drivers ?? ["mysql", "postgresql", "oceanbase", "sqlite"];
+  const roles: string[] = driverCatalog.roles ?? ["metadata", "business", "analytics", "vector", "memory", "audit"];
+  const capabilities: string[] = driverCatalog.capabilities ?? ["sql", "vector", "json", "graph", "analytics", "memory", "audit"];
+
+  const readinessMap = useMemo(() => {
+    const rows = Array.isArray(summaryQ.data?.readiness) ? summaryQ.data.readiness : [];
+    return new Map(rows.map((item: any) => [item.name, item]));
+  }, [summaryQ.data]);
+
+  const selectedSource = sources.find((item) => item.name === selectedName) ?? sources[0];
+
+  const refreshAll = () => {
+    void connQ.refetch();
+    void summaryQ.refetch();
+  };
 
   const openCreate = () => {
     setEditingName(null);
-    form.resetFields();
-    form.setFieldsValue({ driver: "mysql" });
+    form.setFieldsValue(DEFAULT_SOURCE);
     setEditOpen(true);
   };
 
-  const openEdit = (row: ConnRow) => {
+  const openEdit = (row: SourceRow) => {
     setEditingName(row.name);
-    form.setFieldsValue({ name: row.name, driver: row.driver || "mysql", url: "" });
+    form.setFieldsValue({ ...DEFAULT_SOURCE, ...row, capabilities: row.capabilities?.length ? row.capabilities : ["sql"] });
     setEditOpen(true);
   };
-
-  const testMut = useMutation({
-    mutationFn: (name: string) => api.dbTestConnection(name),
-    onSuccess: (data, name) => {
-      const ok = Boolean(data?.ok);
-      setTestResult((r) => ({ ...r, [name]: ok ? "OK" : String(data?.error || "fail") }));
-      if (ok) message.success(t("page.dataSources.testOk"));
-      else message.warning(String(data?.error || t("common.error", { msg: "test failed" })));
-    },
-    onError: (e) => message.error((e as Error).message),
-  });
 
   const saveMut = useMutation({
-    mutationFn: (v: { name: string; url: string; driver: string }) => {
-      const target = editingName || v.name;
-      return api.dbUpsertConnection(target, { url: v.url, driver: v.driver });
-    },
+    mutationFn: (v: SourceForm) => api.dbUpsertConnection(editingName || v.name, v),
     onSuccess: () => {
       setEditOpen(false);
       setEditingName(null);
       form.resetFields();
-      message.success(t("page.dataSources.saved"));
-      void qc.invalidateQueries({ queryKey: ["dbConnections"] });
+      refreshAll();
+      message.success("数据源已保存");
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -70,88 +125,394 @@ export function DataSourcesWorkbench({ focused = false }: { focused?: boolean })
   const deleteMut = useMutation({
     mutationFn: (name: string) => api.dbDeleteConnection(name),
     onSuccess: () => {
-      message.success(t("page.dataSources.deleted"));
-      void qc.invalidateQueries({ queryKey: ["dbConnections"] });
+      refreshAll();
+      message.success("数据源已删除");
     },
     onError: (e) => message.error((e as Error).message),
   });
 
-  const columns: ColumnsType<ConnRow> = [
-    { title: t("page.dataSources.name"), dataIndex: "name" },
-    { title: t("page.dataSources.driver"), dataIndex: "driver", width: 120 },
-    { title: t("page.dataSources.url"), dataIndex: "url_masked", ellipsis: true },
+  const testMut = useMutation({
+    mutationFn: (name: string) => api.dbTestConnection(name),
+    onSuccess: (data) => message.success(data?.message || "连接测试通过"),
+    onError: (e) => message.error((e as Error).message),
+  });
+
+  const previewMut = useMutation({
+    mutationFn: (name: string) => api.dbMetadataPreview(name, { sample_limit: 50 }),
+    onSuccess: (payload, name) => {
+      setSelectedName(name);
+      setPreviewPayload(payload);
+      setSyncPayload(null);
+      message.success("元数据预览已生成");
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+
+  const syncMut = useMutation({
+    mutationFn: (name: string) => api.dbMetadataSync(name, { create_ingest_connector: true, sample_limit: 50, owner: "DataOps" }),
+    onSuccess: (payload, name) => {
+      setSelectedName(name);
+      setSyncPayload(payload);
+      message.success("已同步到 Schema Registry");
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+
+  if (!authed) return <NeedLogin />;
+  if (connQ.isLoading || summaryQ.isLoading) return <LoadingBlock />;
+
+  const view = initialView;
+  const shell = VIEW_META[view];
+
+  return (
+    <WorkbenchShell
+      title={shell.title}
+      description={focused ? shell.description : "企业数据源管理控制面。"}
+      actions={
+        <Space wrap>
+          <AiAssistButton onClick={() => setAiOpen(true)} />
+          <Button icon={<RefreshCcw className="h-4 w-4" />} onClick={refreshAll}>刷新</Button>
+          {view === "connections" ? <Button icon={<Plus className="h-4 w-4" />} type="primary" onClick={openCreate}>新建数据源</Button> : null}
+        </Space>
+      }
+      metrics={
+        <WorkbenchStats
+          items={[
+            { label: "数据源", value: summary.total ?? sources.length },
+            { label: "就绪", value: summary.ready ?? 0, trend: "up" },
+            { label: "观察", value: summary.watch ?? 0 },
+            { label: "健康分", value: summary.readiness_score ?? 0 },
+          ]}
+        />
+      }
+    >
+      {view === "overview" ? <Overview summary={summary} /> : null}
+      {view === "connections" ? (
+        <ConnectionsPanel
+          sources={sources}
+          readinessMap={readinessMap}
+          onCreate={openCreate}
+          onEdit={openEdit}
+          onDelete={(name) => deleteMut.mutate(name)}
+          onTest={(name) => testMut.mutate(name)}
+          testing={testMut.isPending}
+          refreshing={connQ.isFetching || summaryQ.isFetching}
+          onRefresh={refreshAll}
+        />
+      ) : null}
+      {view === "metadata" ? (
+        <MetadataPanel
+          sources={sources}
+          selectedName={selectedSource?.name ?? ""}
+          previewPayload={previewPayload}
+          syncPayload={syncPayload}
+          previewing={previewMut.isPending}
+          syncing={syncMut.isPending}
+          onSelect={(name) => {
+            setSelectedName(name);
+            setPreviewPayload(null);
+            setSyncPayload(null);
+          }}
+          onPreview={(name) => previewMut.mutate(name)}
+          onSync={(name) => syncMut.mutate(name)}
+        />
+      ) : null}
+
+      <SourceEditor
+        open={editOpen}
+        editingName={editingName}
+        form={form}
+        sourceTypes={sourceTypes}
+        roles={roles}
+        capabilities={capabilities}
+        saving={saveMut.isPending}
+        onCancel={() => setEditOpen(false)}
+        onSubmit={(v) => saveMut.mutate({ ...DEFAULT_SOURCE, ...v })}
+      />
+      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="data-sources" title="数据源管理 AI 助手" initialPrompt="请分析当前数据源健康、SecretRef 配置、元数据发现和接入同步风险，给出治理任务建议。" />
+    </WorkbenchShell>
+  );
+}
+
+function Overview({ summary }: { summary: any }) {
+  const modules = [
+    { href: "#/data/sources/connections", icon: Database, title: "连接目录", desc: "维护数据源、SecretRef 和能力声明" },
+    { href: "#/data/sources/metadata", icon: FileSearch, title: "元数据同步", desc: "发现表字段并注册到 Schema Registry" },
+    { href: "#/data/ingest/schema", icon: Link2, title: "Schema Registry", desc: "查看已同步的数据接入结构" },
+  ];
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <WorkbenchPanel title="核心入口">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {modules.map(({ href, icon: Icon, title, desc }) => (
+            <a key={href} href={href} className="group rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
+              <Icon className="mb-3 h-5 w-5 text-[var(--brand)]" />
+              <span className="block text-sm font-semibold text-[var(--text)]">{title}</span>
+              <span className="mt-1 block text-xs text-[var(--muted)]">{desc}</span>
+            </a>
+          ))}
+        </div>
+      </WorkbenchPanel>
+      <WorkbenchPanel title="覆盖概况">
+        <CompactKV title="按角色" value={summary.by_role ?? {}} />
+        <CompactKV title="按类型" value={summary.by_type ?? {}} />
+        <CompactKV title="能力" value={summary.capabilities ?? {}} />
+      </WorkbenchPanel>
+    </div>
+  );
+}
+
+function ConnectionsPanel({
+  sources,
+  readinessMap,
+  refreshing,
+  testing,
+  onRefresh,
+  onCreate,
+  onEdit,
+  onDelete,
+  onTest,
+}: {
+  sources: SourceRow[];
+  readinessMap: Map<any, any>;
+  refreshing: boolean;
+  testing: boolean;
+  onRefresh: () => void;
+  onCreate: () => void;
+  onEdit: (row: SourceRow) => void;
+  onDelete: (name: string) => void;
+  onTest: (name: string) => void;
+}) {
+  const columns: ColumnsType<SourceRow> = [
     {
-      title: t("common.actions"),
-      key: "a",
-      width: 220,
+      title: "数据源",
+      dataIndex: "name",
       render: (_, row) => (
-        <span className="flex flex-wrap gap-1">
-          <Button size="small" onClick={() => openEdit(row)}>
-            {t("page.dataSources.edit")}
-          </Button>
-          <Button size="small" loading={testMut.isPending} onClick={() => testMut.mutate(row.name)}>
-            {t("page.dataSources.test")}
-          </Button>
-          <Popconfirm title={t("page.dataSources.confirmDelete")} onConfirm={() => deleteMut.mutate(row.name)}>
-            <Button size="small" danger>
-              {t("common.delete")}
-            </Button>
+        <div>
+          <div className="font-semibold text-[var(--text)]">{row.name}</div>
+          <div className="text-xs text-[var(--muted)]">{row.host || "local"}{row.port ? `:${row.port}` : ""} / {row.database || "default"}</div>
+        </div>
+      ),
+    },
+    { title: "类型", dataIndex: "type", width: 120, render: (value) => <Tag>{value}</Tag> },
+    { title: "角色", dataIndex: "role", width: 130 },
+    {
+      title: "能力",
+      dataIndex: "capabilities",
+      render: (items: string[] = []) => <Space wrap>{items.map((item) => <Tag key={item} color="blue">{item}</Tag>)}</Space>,
+    },
+    {
+      title: "密钥引用",
+      key: "secret",
+      ellipsis: true,
+      render: (_, row) => row.secret_ref || row.url_env || <span className="text-xs text-amber-600">待配置</span>,
+    },
+    {
+      title: "健康",
+      key: "readiness",
+      width: 100,
+      render: (_, row) => {
+        const item = readinessMap.get(row.name);
+        const color = item?.status === "ready" ? "success" : item?.status === "watch" ? "warning" : "error";
+        return <Tag color={color}>{item?.score ?? 0}</Tag>;
+      },
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 260,
+      render: (_, row) => (
+        <Space wrap>
+          <Button size="small" onClick={() => onEdit(row)}>编辑</Button>
+          <Button size="small" loading={testing} onClick={() => onTest(row.name)}>测试</Button>
+          <Button size="small" href="#/data/sources/metadata">元数据</Button>
+          <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(row.name)}>
+            <Button size="small" danger>删除</Button>
           </Popconfirm>
-          {testResult[row.name] ? (
-            <Tag color={testResult[row.name] === "OK" ? "success" : "error"}>{testResult[row.name]}</Tag>
-          ) : null}
-        </span>
+        </Space>
       ),
     },
   ];
 
   return (
-    <WorkbenchShell
-      title={t("page.dataSources.title")}
-      description={focused ? t("page.dataSources.focusedHint") : t("page.dataSources.desc")}
-      actions={
-        <Button type="primary" onClick={openCreate}>
-          {t("page.dataSources.add")}
-        </Button>
-      }
-      metrics={
-        <WorkbenchStats
-          items={[
-            { label: t("page.dataSources.total"), value: items.length },
-            { label: t("page.dataSources.drivers"), value: driverList.length },
-          ]}
-        />
-      }
-    >
-      <WorkbenchPanel actions={<RefreshButton onClick={() => void connQ.refetch()} pending={connQ.isFetching} />}>
-        <Table rowKey="name" loading={connQ.isLoading} columns={columns} dataSource={items} pagination={{ pageSize: 10 }} />
-      </WorkbenchPanel>
+    <WorkbenchPanel title="连接目录" actions={<Space><RefreshButton onClick={onRefresh} pending={refreshing} /><Button type="primary" onClick={onCreate}>新建数据源</Button></Space>}>
+      <Table rowKey="name" columns={columns} dataSource={sources} pagination={{ pageSize: 10 }} scroll={{ x: 1080 }} />
+    </WorkbenchPanel>
+  );
+}
 
-      <Modal
-        title={editingName ? t("page.dataSources.edit") : t("page.dataSources.add")}
-        open={editOpen}
-        onCancel={() => setEditOpen(false)}
-        onOk={() => form.submit()}
-        confirmLoading={saveMut.isPending}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical" onFinish={(v) => saveMut.mutate(v)}>
-          <Form.Item name="name" label={t("page.dataSources.name")} rules={[{ required: true }]}>
-            <Input disabled={Boolean(editingName)} />
+function MetadataPanel({
+  sources,
+  selectedName,
+  previewPayload,
+  syncPayload,
+  previewing,
+  syncing,
+  onSelect,
+  onPreview,
+  onSync,
+}: {
+  sources: SourceRow[];
+  selectedName: string;
+  previewPayload: any;
+  syncPayload: any;
+  previewing: boolean;
+  syncing: boolean;
+  onSelect: (name: string) => void;
+  onPreview: (name: string) => void;
+  onSync: (name: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <WorkbenchPanel title="选择数据源">
+        <Space direction="vertical" className="w-full">
+          <Select
+            className="w-full"
+            value={selectedName || undefined}
+            placeholder="选择数据源"
+            options={sources.map((item) => ({ value: item.name, label: `${item.name} · ${item.type}` }))}
+            onChange={onSelect}
+          />
+          <Button className="w-full" type="primary" disabled={!selectedName} loading={previewing} onClick={() => onPreview(selectedName)}>预览元数据</Button>
+          <Button className="w-full" disabled={!selectedName} loading={syncing} onClick={() => onSync(selectedName)}>同步到 Schema Registry</Button>
+        </Space>
+      </WorkbenchPanel>
+      <WorkbenchPanel title="预览与同步结果">
+        {!previewPayload ? (
+          <EmptyHint />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Metric label="表" value={previewPayload.metadata?.tables ?? 0} />
+              <Metric label="字段" value={previewPayload.metadata?.columns ?? 0} />
+              <Metric label="敏感候选" value={previewPayload.metadata?.pii_candidates ?? 0} />
+              <Metric label="只读" value={previewPayload.metadata?.readonly ? "是" : "否"} />
+            </div>
+            <Table
+              rowKey="name"
+              size="small"
+              pagination={{ pageSize: 8 }}
+              dataSource={previewPayload.tables ?? []}
+              columns={[
+                { title: "表名", dataIndex: "name", width: 220 },
+                { title: "Schema", dataIndex: "schema_name", width: 120 },
+                { title: "字段", render: (_, row: any) => (row.columns ?? []).map((col: any) => `${col.name}:${col.type}`).join(", ") },
+              ]}
+            />
+            {syncPayload ? (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>已同步 {syncPayload.schema_registry?.total ?? 0} 张表</span>
+                  <Button size="small" href="#/data/ingest/schema">查看 Schema Registry</Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </WorkbenchPanel>
+    </div>
+  );
+}
+
+function SourceEditor({
+  open,
+  editingName,
+  form,
+  sourceTypes,
+  roles,
+  capabilities,
+  saving,
+  onCancel,
+  onSubmit,
+}: {
+  open: boolean;
+  editingName: string | null;
+  form: ReturnType<typeof Form.useForm<SourceForm>>[0];
+  sourceTypes: string[];
+  roles: string[];
+  capabilities: string[];
+  saving: boolean;
+  onCancel: () => void;
+  onSubmit: (values: SourceForm) => void;
+}) {
+  return (
+    <Modal
+      title={editingName ? "编辑数据源" : "新建数据源"}
+      open={open}
+      onCancel={onCancel}
+      onOk={() => form.submit()}
+      confirmLoading={saving}
+      width={820}
+      destroyOnHidden
+    >
+      <Form form={form} layout="vertical" onFinish={onSubmit} initialValues={DEFAULT_SOURCE}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Form.Item name="name" label="数据源名称" rules={[{ required: true, message: "请输入数据源名称" }]}>
+            <Input disabled={Boolean(editingName)} placeholder="billing-ob" />
           </Form.Item>
-          <Form.Item name="driver" label={t("page.dataSources.driver")} rules={[{ required: true }]}>
-            <Select options={driverList.map((d: string) => ({ value: d, label: d }))} />
+          <Form.Item name="type" label="数据库类型" rules={[{ required: true }]}>
+            <Select options={sourceTypes.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
-          <Form.Item
-            name="url"
-            label={t("page.dataSources.url")}
-            rules={[{ required: !editingName }]}
-            extra={editingName ? t("page.dataSources.urlPh") : undefined}
-          >
-            <Input.TextArea rows={2} placeholder={t("page.dataSources.urlPh")} />
+          <Form.Item name="role" label="数据源角色" rules={[{ required: true }]}>
+            <Select options={roles.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
-        </Form>
-      </Modal>
-    </WorkbenchShell>
+          <Form.Item name="capabilities" label="能力声明" rules={[{ required: true }]}>
+            <Select mode="multiple" options={capabilities.map((item) => ({ value: item, label: item }))} />
+          </Form.Item>
+          <Form.Item name="host" label="主机"><Input placeholder="db.example.internal" /></Form.Item>
+          <Form.Item name="port" label="端口"><InputNumber className="w-full" min={0} max={65535} /></Form.Item>
+          <Form.Item name="database" label="数据库"><Input placeholder="billing" /></Form.Item>
+          <Form.Item name="schema_name" label="Schema"><Input placeholder="public / dwd" /></Form.Item>
+          <Form.Item name="username" label="用户名"><Input placeholder="只保存用户名，不保存密码" /></Form.Item>
+          <Form.Item name="pool_size" label="连接池大小"><InputNumber className="w-full" min={1} max={200} /></Form.Item>
+          <Form.Item name="url_env" label="连接串环境变量"><Input placeholder="APP_DB_URL" /></Form.Item>
+          <Form.Item name="secret_ref" label="SecretRef"><Input placeholder="env://APP_DB_URL 或 vault://secret/data/app-db" /></Form.Item>
+          <Form.Item name="ssl_mode" label="SSL 模式"><Input placeholder="require / verify-full" /></Form.Item>
+          <Form.Item name="readonly" label="安全策略" valuePropName="checked">
+            <Switch checkedChildren="只读" unCheckedChildren="读写" />
+          </Form.Item>
+        </div>
+        <Checkbox checked disabled>不保存明文密码或连接串</Checkbox>
+      </Form>
+    </Modal>
+  );
+}
+
+function CompactKV({ title, value }: { title: string; value: Record<string, unknown> }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+        <ShieldCheck className="h-4 w-4 text-[var(--brand)]" />
+        {title}
+      </div>
+      <div className="space-y-1">
+        {Object.entries(value).length === 0 ? <p className="text-xs text-[var(--muted)]">暂无数据</p> : null}
+        {Object.entries(value).map(([key, count]) => (
+          <div key={key} className="flex justify-between text-xs">
+            <span className="text-[var(--muted)]">{key}</span>
+            <span className="font-semibold">{String(count)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function EmptyHint() {
+  return (
+    <div className="flex min-h-60 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] text-center">
+      <FileSearch className="mb-3 h-8 w-8 text-[var(--muted)]" />
+      <p className="text-sm font-medium">请选择数据源并预览元数据</p>
+    </div>
   );
 }

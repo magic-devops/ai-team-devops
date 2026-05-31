@@ -39,12 +39,28 @@ class MemoryAttachRun(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryLifecycleUpdate(BaseModel):
+    state: Literal["active", "pinned", "archived", "deprecated", "forgotten"] = "active"
+    reason: str = Field("", max_length=1000)
+
+
 def _require_scope() -> None:
     if not request_scope_active():
         raise HTTPException(
             status_code=400,
             detail="需要登录且携带 X-Project-Id 以绑定记忆分区（tenant/business/project）",
         )
+
+
+def _filter_lifecycle(items: list[dict[str, Any]], lifecycle_state: str) -> list[dict[str, Any]]:
+    state = lifecycle_state.strip() if isinstance(lifecycle_state, str) else "active"
+    if state in ("all", "*"):
+        return items
+    return [
+        item
+        for item in items
+        if str((item.get("metadata") or {}).get("lifecycle_state") or "active") == state
+    ]
 
 
 @router.get("/health")
@@ -69,23 +85,29 @@ def memory_create(body: MemoryCreate) -> dict[str, Any]:
 
 
 @router.get("/search")
-def memory_search(q: str = Query(..., min_length=1), limit: int = Query(20, ge=1, le=100)) -> dict[str, Any]:
+def memory_search(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+    lifecycle_state: str = Query("active", max_length=40),
+) -> dict[str, Any]:
     _require_scope()
     try:
         store = get_memory_store()
     except RuntimeError as e:
         raise HTTPException(status_code=501, detail=str(e)) from e
-    return {"ok": True, "items": store.search(q, limit=limit)}
+    items = _filter_lifecycle(store.search(q, limit=min(limit * 4, 200)), lifecycle_state)[:limit]
+    return {"ok": True, "items": items, "lifecycle_state": lifecycle_state}
 
 
 @router.get("/recent")
-def memory_recent(limit: int = Query(30, ge=1, le=200)) -> dict[str, Any]:
+def memory_recent(limit: int = Query(30, ge=1, le=200), lifecycle_state: str = Query("active", max_length=40)) -> dict[str, Any]:
     _require_scope()
     try:
         store = get_memory_store()
     except RuntimeError as e:
         raise HTTPException(status_code=501, detail=str(e)) from e
-    return {"ok": True, "items": store.recent(limit=limit)}
+    items = _filter_lifecycle(store.recent(limit=min(limit * 4, 400)), lifecycle_state)[:limit]
+    return {"ok": True, "items": items, "lifecycle_state": lifecycle_state}
 
 
 @router.post("/forget")
@@ -119,3 +141,13 @@ def memory_attach_run(memory_id: str, body: MemoryAttachRun) -> dict[str, Any]:
     except RuntimeError as e:
         raise HTTPException(status_code=501, detail=str(e)) from e
     return store.attach_run(memory_id, body.run_id, body.metadata)
+
+
+@router.post("/{memory_id}/lifecycle")
+def memory_lifecycle(memory_id: str, body: MemoryLifecycleUpdate) -> dict[str, Any]:
+    _require_scope()
+    try:
+        store = get_memory_store()
+    except RuntimeError as e:
+        raise HTTPException(status_code=501, detail=str(e)) from e
+    return store.update_lifecycle(memory_id, body.state, body.reason)

@@ -9,7 +9,10 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Awaitable, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, Request, Response
 from starlette.responses import PlainTextResponse
@@ -29,6 +32,11 @@ except ImportError:  # pragma: no cover
 
 
 router = APIRouter(tags=["metrics"])
+
+_ctx_trace_id: ContextVar[str] = ContextVar("sop_trace_id", default="")
+_ctx_span_id: ContextVar[str] = ContextVar("sop_span_id", default="")
+_ctx_correlation_id: ContextVar[str] = ContextVar("sop_correlation_id", default="")
+_ctx_agent_run_id: ContextVar[str] = ContextVar("sop_agent_run_id", default="")
 
 
 _REGISTRY = CollectorRegistry() if CollectorRegistry else None  # type: ignore[truthy-function]
@@ -67,23 +75,103 @@ else:  # pragma: no cover
 async def metrics_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
+    ctx = trace_context_from_request(request)
+    tokens = (
+        _ctx_trace_id.set(ctx["trace_id"]),
+        _ctx_span_id.set(ctx["span_id"]),
+        _ctx_correlation_id.set(ctx["correlation_id"]),
+        _ctx_agent_run_id.set(ctx.get("agent_run_id", "")),
+    )
     if _REGISTRY is None:
-        return await call_next(request)
+        try:
+            resp = await call_next(request)
+            _attach_trace_headers(resp)
+            return resp
+        finally:
+            _reset_trace_tokens(tokens)
     t0 = time.time()
-    resp = await call_next(request)
-    dt = time.time() - t0
-    path = _normalize_path(request.url.path)
-    REQ_LATENCY.labels(request.method, path).observe(dt)  # type: ignore[union-attr]
-    tenant = ""
-    project = ""
     try:
-        from sop_manager.path_config import resolved_project_id, resolved_tenant_id  # type: ignore[import-not-found]
-        tenant = resolved_tenant_id()
-        project = resolved_project_id()
-    except Exception:
-        pass
-    REQ_COUNT.labels(request.method, path, str(resp.status_code), tenant, project).inc()  # type: ignore[union-attr]
-    return resp
+        resp = await call_next(request)
+        dt = time.time() - t0
+        path = _normalize_path(request.url.path)
+        REQ_LATENCY.labels(request.method, path).observe(dt)  # type: ignore[union-attr]
+        tenant = ""
+        project = ""
+        try:
+            from sop_manager.path_config import resolved_project_id, resolved_tenant_id  # type: ignore[import-not-found]
+            tenant = resolved_tenant_id()
+            project = resolved_project_id()
+        except Exception:
+            pass
+        REQ_COUNT.labels(request.method, path, str(resp.status_code), tenant, project).inc()  # type: ignore[union-attr]
+        _attach_trace_headers(resp)
+        return resp
+    finally:
+        _reset_trace_tokens(tokens)
+
+
+def trace_context_from_request(request: Request) -> dict[str, str]:
+    traceparent = request.headers.get("traceparent", "").strip()
+    trace_id = ""
+    span_id = ""
+    if traceparent:
+        parts = traceparent.split("-")
+        if len(parts) >= 4:
+            trace_id = _safe_hex(parts[1], 32)
+            span_id = _safe_hex(parts[2], 16)
+    trace_id = trace_id or _safe_hex(request.headers.get("X-Trace-Id", ""), 32) or uuid4().hex
+    span_id = span_id or uuid4().hex[:16]
+    correlation_id = request.headers.get("X-Correlation-Id", "").strip() or trace_id
+    agent_run_id = request.headers.get("X-Agent-Run-Id", "").strip()
+    return {"trace_id": trace_id, "span_id": span_id, "correlation_id": correlation_id, "agent_run_id": agent_run_id}
+
+
+def current_trace_context() -> dict[str, str]:
+    trace_id = _ctx_trace_id.get() or uuid4().hex
+    span_id = _ctx_span_id.get() or uuid4().hex[:16]
+    correlation_id = _ctx_correlation_id.get() or trace_id
+    return {
+        "trace_id": trace_id,
+        "span_id": span_id,
+        "correlation_id": correlation_id,
+        "agent_run_id": _ctx_agent_run_id.get(),
+    }
+
+
+@contextmanager
+def trace_context(*, trace_id: str = "", correlation_id: str = "", span_id: str = "", agent_run_id: str = ""):
+    trace_id = _safe_hex(trace_id, 32) or uuid4().hex
+    span_id = _safe_hex(span_id, 16) or uuid4().hex[:16]
+    correlation_id = correlation_id or trace_id
+    tokens = (
+        _ctx_trace_id.set(trace_id),
+        _ctx_span_id.set(span_id),
+        _ctx_correlation_id.set(correlation_id),
+        _ctx_agent_run_id.set(agent_run_id),
+    )
+    try:
+        yield current_trace_context()
+    finally:
+        _reset_trace_tokens(tokens)
+
+
+def _safe_hex(value: str, length: int) -> str:
+    text = str(value or "").lower()
+    return text if len(text) == length and all(c in "0123456789abcdef" for c in text) else ""
+
+
+def _reset_trace_tokens(tokens) -> None:
+    _ctx_trace_id.reset(tokens[0])
+    _ctx_span_id.reset(tokens[1])
+    _ctx_correlation_id.reset(tokens[2])
+    _ctx_agent_run_id.reset(tokens[3])
+
+
+def _attach_trace_headers(resp: Response) -> None:
+    ctx = current_trace_context()
+    resp.headers.setdefault("X-Trace-Id", ctx["trace_id"])
+    resp.headers.setdefault("X-Correlation-Id", ctx["correlation_id"])
+    resp.headers.setdefault("traceparent", f"00-{ctx['trace_id']}-{ctx['span_id']}-01")
 
 
 def _normalize_path(path: str) -> str:

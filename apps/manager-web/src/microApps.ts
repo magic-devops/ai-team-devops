@@ -111,6 +111,7 @@ const AI_FOUNDATION_KEYS = [
   "knowledgeGraphBuild",
   "knowledgeGraphQuery",
   "knowledgeGraphLineage",
+  "knowledgeGraphProfile",
   "a2aGateway",
   "a2aWorkbench",
   "a2aRegistry",

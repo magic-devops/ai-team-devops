@@ -306,9 +306,12 @@ cli = build_default_client()
 print(cli.health())
 
 ipc = AgentdIpcClient()
+print(ipc.diagnose())
 if ipc.available():
     print(ipc.health())
 ```
+
+IPC 客户端会返回结构化错误（`error_code`、`transport`、`endpoint`），macOS/Linux 默认使用 `.sop-runtime/agentd.sock`，Windows 可通过 `SOP_AGENTD_PIPE` 指定 named pipe，便于 hook、CLI 和 Agent 在 agentd 不在线时自动降级到本地 outbox 或 Manager 直连。
 
 详见 [packages/sop-sdk-python/README.md](../packages/sop-sdk-python/README.md)。
 

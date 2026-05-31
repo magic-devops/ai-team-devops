@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, GitBranch, Layers, Search } from "lucide-react";
+import { ArrowRight, GitBranch, Layers, Search, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
@@ -12,6 +12,7 @@ const MODULES = [
   { id: "build", path: "#/ai/knowledge-graph/workbench", icon: Layers, label: "图谱构建", desc: "从代码/需求/规约构建知识图谱" },
   { id: "query", path: "#/ai/knowledge-graph/query", icon: Search, label: "图谱查询", desc: "图谱语义检索与推理" },
   { id: "lineage", path: "#/ai/knowledge-graph/lineage", icon: GitBranch, label: "血缘关联", desc: "实体间依赖与影响分析" },
+  { id: "profile", path: "#/ai/knowledge-graph/profile", icon: UserRound, label: "实体画像", desc: "合并图谱邻居、证据链与项目记忆" },
 ];
 
 export function KnowledgeGraphHub() {
@@ -40,7 +41,7 @@ export function KnowledgeGraphHub() {
         }
       />
       <Card title="功能模块">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {MODULES.map(({ id, path, icon: Icon, label, desc }) => (
             <a key={id} href={path} className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
               <span className="rounded-lg bg-[var(--brand-soft)] p-2 text-[var(--brand)]"><Icon className="h-5 w-5" /></span>

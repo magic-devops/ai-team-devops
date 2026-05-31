@@ -116,7 +116,7 @@ from sop_manager.routers.sprints import router as sprints_router
 
 from sop_manager.routers import data_exchange, organization as organization_router
 
-# ── 新增模块：agent_runs / data_quality / metrics_service / tag_service / data_ingest / a2a_gateway / llm_gateway_v2 / ops_center ──
+# ── 新增模块：agent_runs / data_quality / metrics_service / tag_service / data_ingest / metadata_management / a2a_gateway / llm_gateway_v2 / ops_center ──
 try:
     from sop_manager.routers import agent_runs as _agent_runs
 except Exception as _e:
@@ -146,6 +146,12 @@ try:
 except Exception as _e:
     _data_ingest = None
     app_logger.warning("data_ingest 路由未启用: %s", _e)
+
+try:
+    from sop_manager.routers import metadata_management as _metadata_management
+except Exception as _e:
+    _metadata_management = None
+    app_logger.warning("metadata_management 路由未启用: %s", _e)
 
 try:
     from sop_manager.routers import a2a_gateway as _a2a_gateway
@@ -311,7 +317,7 @@ if _plugin_loader is not None:
 for _name in ("_audit_chain", "_audit_worm", "_crypto_box", "_key_rotation",
               "_workflow", "_marketplace", "_reflection_distill", "_sso",
               "_agent_runs", "_data_quality", "_metrics_service", "_tag_service",
-              "_data_ingest", "_a2a_gateway", "_llm_gateway_v2", "_ops_center"):
+              "_data_ingest", "_metadata_management", "_a2a_gateway", "_llm_gateway_v2", "_ops_center"):
     _mod = globals().get(_name)
     if _mod is not None and hasattr(_mod, "router"):
         try:

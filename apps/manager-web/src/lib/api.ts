@@ -687,16 +687,22 @@ export const api = {
       body: JSON.stringify(body),
     }),
   memoryHealth: () => request<any>("/api/v1/memory/health"),
-  memoryRecent: (limit = 30) =>
-    request<any>(`/api/v1/memory/recent?limit=${encodeURIComponent(String(limit))}`),
-  memorySearch: (q: string, limit = 20) =>
+  memoryRecent: (limit = 30, lifecycleState = "active") =>
+    request<any>(`/api/v1/memory/recent?limit=${encodeURIComponent(String(limit))}&lifecycle_state=${encodeURIComponent(lifecycleState)}`),
+  memorySearch: (q: string, limit = 20, lifecycleState = "active") =>
     request<any>(
-      `/api/v1/memory/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`,
+      `/api/v1/memory/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}&lifecycle_state=${encodeURIComponent(lifecycleState)}`,
     ),
   memoryAdd: (body: { content: string; kind?: string; metadata?: Record<string, unknown> }) =>
     request<any>("/api/v1/memory", { method: "POST", body: JSON.stringify(body) }),
+  memoryLifecycle: (memoryId: string, body: { state: string; reason?: string }) =>
+    request<any>(`/api/v1/memory/${encodeURIComponent(memoryId)}/lifecycle`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   dbDrivers: () => request<any>("/api/v1/db-config/drivers"),
   dbConnections: () => request<{ items: any[]; total: number }>("/api/v1/db-config/connections"),
+  dbConnectionsSummary: () => request<any>("/api/v1/db-config/connections/summary"),
   dbUpsertConnection: (name: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}`, {
       method: "PUT",
@@ -710,6 +716,16 @@ export const api = {
   },
   dbDeleteConnection: (name: string) =>
     request<{ ok: boolean }>(`/api/v1/db-config/connections/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  dbMetadataPreview: (name: string, body: { sample_limit?: number } = {}) =>
+    request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}/metadata-preview`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  dbMetadataSync: (name: string, body: { create_ingest_connector?: boolean; sample_limit?: number; owner?: string } = {}) =>
+    request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}/metadata-sync`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   eventsList: (limit = 100, since = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (since) qs.set("since", since);
@@ -740,6 +756,25 @@ export const api = {
   billingPlans: () => request<{ ok: boolean; items: any[] }>("/api/v1/billing/plans"),
   billingAlerts: () => request<{ ok: boolean; items: any[]; total: number }>("/api/v1/billing/alerts"),
   billingSummary: () => request<any>("/api/v1/billing/summary"),
+  billingOveragePolicy: () => request<any>("/api/v1/billing/overage-policy"),
+  billingUpdateOveragePolicy: (body: {
+    mode: string;
+    grace_percent?: number;
+    approval_threshold_percent?: number;
+    invoice_due_days?: number;
+    suspend_after_days?: number;
+    metadata?: Record<string, unknown>;
+  }) =>
+    request<any>("/api/v1/billing/overage-policy", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  billingEntitlementCheck: (body: { feature?: string; metric?: string; delta?: number; subject?: string; metadata?: Record<string, unknown> }) =>
+    request<any>("/api/v1/billing/entitlements/check", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  billingDunning: () => request<any>("/api/v1/billing/dunning"),
   billingInvoice: (period = "") => {
     const qs = period ? `?period=${encodeURIComponent(period)}` : "";
     return request<any>(`/api/v1/billing/invoice${qs}`);
@@ -764,6 +799,8 @@ export const api = {
     if (invoiceId) qs.set("invoice_id", invoiceId);
     return request<{ ok: boolean; items: any[]; total: number }>(`/api/v1/billing/payments?${qs}`);
   },
+  billingInvoiceAudit: (invoiceId: string) =>
+    request<any>(`/api/v1/billing/invoices/${encodeURIComponent(invoiceId)}/audit`),
   billingRecordPayment: (body: {
     invoice_id: string;
     amount_usd: number;
@@ -840,6 +877,81 @@ export const api = {
   systemPagesCapabilities: () => request<any>("/api/v1/system/pages/capabilities"),
   systemPagesCapabilitiesMe: () => request<any>("/api/v1/system/pages/capabilities/me"),
   systemPagesHealth: () => request<any>("/api/v1/system/pages/health"),
+  systemPagesIsolationAudit: () => request<any>("/api/v1/system/pages/isolation-audit"),
+  systemPagesIsolationScan: (params: { status?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status && params.status !== "all") qs.set("status", params.status);
+    if (params.q) qs.set("q", params.q);
+    return request<any>(`/api/v1/system/pages/isolation-audit/scan${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesIsolationScanTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_protected?: boolean }) =>
+    request<any>("/api/v1/system/pages/isolation-audit/scan/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  systemPagesIsolationScanRuns: (limit = 20) =>
+    request<any>(`/api/v1/system/pages/isolation-audit/scan/runs?limit=${encodeURIComponent(String(limit))}`),
+  systemPagesIsolationScanRunCreate: (body: { status?: string; q?: string; note?: string; created_by?: string; max_items?: number }) =>
+    request<any>("/api/v1/system/pages/isolation-audit/scan/runs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  systemPagesIsolationScanCompare: (params: { base_id?: string; target_id?: string; status?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== "all") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/pages/isolation-audit/scan/runs/compare${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesIsolationScanCompareTasks: (body: { base_id?: string; target_id?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_resolved?: boolean }) =>
+    request<any>("/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  systemPagesIsolationTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_protected?: boolean }) =>
+    request<any>("/api/v1/system/pages/isolation-audit/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  systemPagesReadiness: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== "all") qs.set(key, value);
+    });
+    return request<any>(`/api/v1/system/pages/readiness${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesProductionReadiness: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== "all") qs.set(key, value);
+    });
+    return request<any>(`/api/v1/system/pages/production-readiness${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesExperienceReview: (params: Record<string, string> = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== "all") qs.set(key, value);
+    });
+    return request<any>(`/api/v1/system/pages/experience-review${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesReadinessTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_complete?: boolean }) =>
+    request<any>("/api/v1/system/pages/readiness/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  systemPagesGovernanceTasks: (params: { status?: string; source?: string; q?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status && params.status !== "all") qs.set("status", params.status);
+    if (params.source && params.source !== "all") qs.set("source", params.source);
+    if (params.q) qs.set("q", params.q);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/system/pages/governance-tasks${qs.toString() ? `?${qs}` : ""}`);
+  },
+  systemPagesGovernanceTasksBulkUpdate: (body: { ids: string[]; dry_run?: boolean; status?: string; priority?: string; assigned_to?: string }) =>
+    request<any>("/api/v1/system/pages/governance-tasks/bulk-update", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   systemPagesMicroApps: () => request<any>("/api/v1/system/pages/micro-apps"),
   systemPagesMenuPreferencesMe: () => request<any>("/api/v1/system/pages/menu/preferences/me"),
   systemPagesMenuPreferencesUpdate: (body: {
@@ -1004,6 +1116,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  notifyConnectorHealth: () => request<any>("/api/v1/notify/connectors/health"),
   notifyTemplates: () => request<{ items: any[] }>("/api/v1/notify/templates"),
   notifySummary: () =>
     request<{
@@ -1084,6 +1197,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  notifyApprovalCallback: (body: { approval_id: string; status: "approved" | "rejected"; reviewer?: string; note?: string; source_channel?: string; callback_message_id?: string; payload?: Record<string, unknown> }) =>
+    request<any>("/api/v1/notify/approvals/callback", { method: "POST", body: JSON.stringify(body) }),
+  notifyTaskStatusPush: (body: { task_id: string; status: string; title?: string; content?: string; channels?: string[]; dry_run?: boolean; level?: string }) =>
+    request<any>("/api/v1/notify/tasks/status-push", { method: "POST", body: JSON.stringify(body) }),
+  notifyReportSubscriptions: () => request<any>("/api/v1/notify/report-subscriptions"),
+  notifyUpsertReportSubscription: (body: { report_type: string; channel: string; schedule?: string; enabled?: boolean; filters?: Record<string, unknown> }) =>
+    request<any>("/api/v1/notify/report-subscriptions", { method: "POST", body: JSON.stringify(body) }),
+  notifyReportSubscriptionRuns: (limit = 50) =>
+    request<any>(`/api/v1/notify/report-subscriptions/runs?limit=${encodeURIComponent(String(limit))}`),
+  notifyRunReportSubscriptions: (body: { report_type?: string; schedule?: string; channels?: string[]; dry_run?: boolean; force?: boolean; note?: string }) =>
+    request<any>("/api/v1/notify/report-subscriptions/run", { method: "POST", body: JSON.stringify(body) }),
   analyticsOverview: () => request<any>("/api/v1/analytics/overview"),
   analyticsCharts: () =>
     request<{
@@ -1210,6 +1334,29 @@ export const api = {
       upstream_count: number;
       downstream_count: number;
     }>(`/api/v1/analytics/lineage/impact?node_id=${encodeURIComponent(nodeId)}`),
+  metadataSummary: () => request<any>("/api/v1/metadata/summary"),
+  metadataAssets: (domain = "", status = "", q = "") => {
+    const qs = new URLSearchParams();
+    if (domain) qs.set("domain", domain);
+    if (status) qs.set("status", status);
+    if (q) qs.set("q", q);
+    return request<any>(`/api/v1/metadata/assets${qs.toString() ? `?${qs}` : ""}`);
+  },
+  metadataFields: (assetId = "", q = "", sensitive?: boolean) => {
+    const qs = new URLSearchParams();
+    if (assetId) qs.set("asset_id", assetId);
+    if (q) qs.set("q", q);
+    if (typeof sensitive === "boolean") qs.set("sensitive", String(sensitive));
+    return request<any>(`/api/v1/metadata/fields${qs.toString() ? `?${qs}` : ""}`);
+  },
+  metadataLineage: () => request<any>("/api/v1/metadata/lineage"),
+  metadataLineageImpact: (assetId: string) =>
+    request<any>(`/api/v1/metadata/lineage/impact?asset_id=${encodeURIComponent(assetId)}`),
+  metadataClassifyAsset: (assetId: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/metadata/assets/${encodeURIComponent(assetId)}/classify`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   analyticsExportCsvUrl: () => "/api/v1/analytics/export.csv",
   analyticsNlq: (question: string) =>
     request<any>("/api/v1/analytics/nlq", { method: "POST", body: JSON.stringify({ question }) }),
@@ -1227,6 +1374,18 @@ export const api = {
   },
   analyticsReportsSummary: () => request<any>("/api/v1/analytics/reports/summary"),
   analyticsReportsCharts: () => request<any>("/api/v1/analytics/reports/charts"),
+  analyticsReportsIntelligence: () => request<any>("/api/v1/analytics/reports/intelligence"),
+  analyticsDecisionOverview: (params: { question?: string; include_evidence?: boolean; max_reports?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.question) qs.set("question", params.question);
+    if (params.include_evidence !== undefined) qs.set("include_evidence", String(params.include_evidence));
+    if (params.max_reports) qs.set("max_reports", String(params.max_reports));
+    return request<any>(`/api/v1/analytics/decision/overview${qs.toString() ? `?${qs}` : ""}`);
+  },
+  analyticsDecisionExplain: (body: { question?: string; report_ids?: string[]; include_evidence?: boolean; max_reports?: number }) =>
+    request<any>("/api/v1/analytics/decision/explain", { method: "POST", body: JSON.stringify(body) }),
+  analyticsDecisionTasks: (body: { question?: string; report_ids?: string[]; include_evidence?: boolean; max_reports?: number; preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; max_tasks?: number }) =>
+    request<any>("/api/v1/analytics/decision/tasks", { method: "POST", body: JSON.stringify(body) }),
   marketplaceCharts: () => request<any>("/api/v1/marketplace/charts"),
   notifyCharts: () => request<any>("/api/v1/notify/charts"),
   copilotHub: () => request<any>("/api/v1/copilot/hub"),
@@ -1262,6 +1421,10 @@ export const api = {
     request<any>("/api/v1/analytics/reports", { method: "POST", body: JSON.stringify(body) }),
   analyticsCreateInsightReport: (body: { title?: string; publish?: boolean }) =>
     request<any>("/api/v1/analytics/reports/insight", { method: "POST", body: JSON.stringify(body) }),
+  analyticsRefreshReportsAttribution: (body: { report_ids?: string[]; only_missing?: boolean }) =>
+    request<any>("/api/v1/analytics/reports/attribution-batch", { method: "POST", body: JSON.stringify(body) }),
+  analyticsReportsIntelligenceTasks: (body: { preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/analytics/reports/intelligence/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsRefreshReportAttribution: (reportId: string) =>
     request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/attribution`, { method: "POST" }),
   analyticsReportAttributionTasks: (
@@ -1326,7 +1489,13 @@ export const api = {
       body: JSON.stringify({ query, limit, hybrid: true, rerank: true }),
     }),
   knowledgeGraphSummary: () => request<any>("/api/v1/knowledge-graph/summary"),
-  knowledgeGraphBuild: (body: { entity_types?: string[]; rebuild?: boolean; documents?: Array<Record<string, unknown>> }) =>
+  knowledgeGraphBuild: (body: {
+    entity_types?: string[];
+    rebuild?: boolean;
+    documents?: Array<Record<string, unknown>>;
+    allowed_sources?: string[];
+    denied_sources?: string[];
+  }) =>
     request<any>("/api/v1/knowledge-graph/build", {
       method: "POST",
       body: JSON.stringify(body),
@@ -1351,6 +1520,11 @@ export const api = {
     if (edgeType) qs.set("edge_type", edgeType);
     return request<any>(`/api/v1/knowledge-graph/edges?${qs}`);
   },
+  knowledgeGraphEntityProfileMerge: (body: { entity_id: string; memory_query?: string; memory_limit?: number; depth?: number }) =>
+    request<any>("/api/v1/knowledge-graph/entity-profiles/merge", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   workerEnqueue: (type: string, payload: Record<string, unknown> = {}) =>
     request<any>("/api/v1/worker/jobs", {
       method: "POST",
@@ -1409,6 +1583,100 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  ssoRotateScimToken: (provider: string, body: { enabled?: boolean }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/scim-token`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoTestScimUser: (provider: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/scim/test`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoScimAudit: (provider: string, params?: { event_type?: string; status?: string; limit?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.event_type) qs.set("event_type", params.event_type);
+    if (params?.status) qs.set("status", params.status);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/scim/audit${suffix}`);
+  },
+  ssoRiskReport: (provider: string) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-report`),
+  ssoRiskTasks: (provider: string, body: { dry_run?: boolean; include_low?: boolean; limit?: number; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-tasks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoRiskImBriefing: (provider: string, body: { dry_run?: boolean; include_low?: boolean; limit?: number; channels?: string[]; event?: string; title?: string }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-im-briefing`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoRiskSubscription: (provider: string) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-subscription`),
+  ssoUpsertRiskSubscription: (provider: string, body: {
+    enabled?: boolean;
+    channels?: string[];
+    min_severity?: string;
+    score_threshold?: number;
+    frequency?: string;
+    include_low?: boolean;
+    limit?: number;
+    owner?: string;
+    title?: string;
+    event?: string;
+  }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-subscription`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  ssoTestRiskSubscription: (provider: string, body: { dry_run?: boolean; actor?: string; force?: boolean }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-subscription/test`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoRiskEscalation: (provider: string) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-escalation`),
+  ssoUpsertRiskEscalation: (provider: string, body: {
+    enabled?: boolean;
+    min_severity?: string;
+    score_threshold?: number;
+    actions?: string[];
+    channels?: string[];
+    priority?: string;
+    assigned_to?: string;
+    dev_tool?: string;
+    include_low?: boolean;
+    limit?: number;
+    cooldown_minutes?: number;
+    title?: string;
+    owner?: string;
+    notes?: string;
+  }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-escalation`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  ssoRunRiskEscalation: (provider: string, body: { dry_run?: boolean; actor?: string; force?: boolean }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-escalation/run`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoRiskRunbooks: (provider: string, limit = 20) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks?limit=${encodeURIComponent(String(limit))}`),
+  ssoCreateRiskRunbook: (provider: string, body: { include_low?: boolean; limit?: number; priority?: string; assigned_to?: string; dev_tool?: string; owner?: string; channels?: string[]; title?: string; notes?: string }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  ssoRiskRunbookDetail: (provider: string, runbookId: string) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks/${encodeURIComponent(runbookId)}`),
+  ssoRiskRunbookAction: (provider: string, runbookId: string, body: { action: string; actor?: string; dry_run?: boolean; step_id?: string; note?: string; include_low?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; title?: string }) =>
+    request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks/${encodeURIComponent(runbookId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   opsProfiles: () => request<any>("/api/v1/system/ops/profiles"),
   opsUpsertProfile: (profile: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}`, {
@@ -1425,8 +1693,207 @@ export const api = {
     request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/bundle`),
   opsProfileComposeUrl: (profile: string) =>
     `/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/compose.override.yml`,
+  opsDeploymentPackages: (profile: string, limit = 20) =>
+    request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/deployment-packages?limit=${encodeURIComponent(String(limit))}`),
+  opsCreateDeploymentPackage: (profile: string, body: { version?: string; channel?: string; release_notes?: string; created_by?: string }) =>
+    request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/deployment-packages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPackageDetail: (packageId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-packages/${encodeURIComponent(packageId)}`),
+  opsDeploymentPackageComposeUrl: (packageId: string) =>
+    `/api/v1/system/ops/deployment-packages/${encodeURIComponent(packageId)}/compose.override.yml`,
+  opsDeploymentPackageApprovals: (params: { profile?: string; package_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-package-approvals${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentPackageApproval: (body: { package_id: string; environment?: string; requested_by?: string; reviewers?: string[]; policy?: string; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-package-approvals", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPackageApprovalDetail: (approvalId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-package-approvals/${encodeURIComponent(approvalId)}`),
+  opsDeploymentPackageApprovalAction: (approvalId: string, body: { action: string; actor?: string; note?: string; create_pipeline?: boolean }) =>
+    request<any>(`/api/v1/system/ops/deployment-package-approvals/${encodeURIComponent(approvalId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentCanaryPolicies: (params: { profile?: string; package_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-canary-policies${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentCanaryPolicy: (body: { package_id: string; name?: string; environment?: string; strategy?: string; traffic_steps?: number[]; max_error_rate?: number; latency_p95_ms?: number; min_observation_minutes?: number; auto_promote?: boolean; created_by?: string; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-canary-policies", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentCanaryPolicyDetail: (policyId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-canary-policies/${encodeURIComponent(policyId)}`),
+  opsDeploymentCanaryPolicyAction: (policyId: string, body: { action: string; actor?: string; note?: string; metrics?: Record<string, unknown>; create_pipeline?: boolean }) =>
+    request<any>(`/api/v1/system/ops/deployment-canary-policies/${encodeURIComponent(policyId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentCanaryPolicyImBriefing: (policyId: string, body: { dry_run?: boolean; channels?: string[]; event?: string; title?: string; limit?: number }) =>
+    request<any>(`/api/v1/system/ops/deployment-canary-policies/${encodeURIComponent(policyId)}/im-briefing`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentCanaryMetricSources: (params: { profile?: string; policy_id?: string; package_id?: string; source_type?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-canary-metric-sources${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentCanaryMetricSource: (body: { policy_id: string; name?: string; source_type?: string; endpoint?: string; error_rate_query?: string; latency_p95_query?: string; window_minutes?: number; enabled?: boolean; sample_error_rate?: number; sample_latency_p95_ms?: number; labels?: Record<string, string>; created_by?: string; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-canary-metric-sources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentCanaryMetricSourceDetail: (sourceId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-canary-metric-sources/${encodeURIComponent(sourceId)}`),
+  opsDeploymentCanaryMetricCollection: (policyId: string, body: { dry_run?: boolean; source_id?: string; actor?: string; metrics?: Record<string, unknown>; apply_to_gate?: boolean; advance_on_pass?: boolean }) =>
+    request<any>(`/api/v1/system/ops/deployment-canary-policies/${encodeURIComponent(policyId)}/metric-collection`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelines: (params: { profile?: string; package_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-pipelines${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentPipeline: (body: { package_id?: string; profile?: string; environment?: string; action?: string; operator?: string; dry_run?: boolean; approval_required?: boolean; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-pipelines", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelineDetail: (runId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}`),
+  opsDeploymentPipelineAction: (runId: string, body: { action: string; actor?: string; message?: string }) =>
+    request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelineExecutors: (profile = "") => {
+    const qs = new URLSearchParams();
+    if (profile) qs.set("profile", profile);
+    return request<any>(`/api/v1/system/ops/deployment-pipeline-executors${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsDeploymentExecutorTargets: (profile = "") => {
+    const qs = new URLSearchParams();
+    if (profile) qs.set("profile", profile);
+    return request<any>(`/api/v1/system/ops/deployment-executor-targets${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentExecutorTarget: (body: { profile?: string; name: string; target_type?: string; endpoint?: string; enabled?: boolean; supports?: string[]; auth_ref?: string; concurrency_limit?: number; timeout_seconds?: number; labels?: Record<string, string>; notes?: string; actor?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-executor-targets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsUpdateDeploymentExecutorTarget: (targetId: string, body: { profile?: string; name: string; target_type?: string; endpoint?: string; enabled?: boolean; supports?: string[]; auth_ref?: string; concurrency_limit?: number; timeout_seconds?: number; labels?: Record<string, string>; notes?: string; actor?: string }) =>
+    request<any>(`/api/v1/system/ops/deployment-executor-targets/${encodeURIComponent(targetId)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentExecutorTargetAction: (targetId: string, body: { action: string; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/system/ops/deployment-executor-targets/${encodeURIComponent(targetId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelineExecute: (runId: string, body: { executor_id?: string; command_id?: string; stage_id?: string; actor?: string; dry_run?: boolean; allow_apply?: boolean; evidence_url?: string; note?: string; timeout_seconds?: number }) =>
+    request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}/execute`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelineExecutionCallback: (runId: string, executionId: string, body: { status: string; actor?: string; external_run_id?: string; timestamp?: number | null; nonce?: string; signature?: string; evidence_url?: string; stdout?: string; stderr?: string; exit_code?: number | null; note?: string; metadata?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}/executions/${encodeURIComponent(executionId)}/callback`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentPipelineRemediation: (runId: string, body: { dry_run?: boolean; include_low?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}/remediation`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentRollbackDrills: (params: { profile?: string; package_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-rollback-drills${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentRollbackDrill: (body: { package_id?: string; profile?: string; name?: string; environment?: string; scenario?: string; operator?: string; approval_required?: boolean; create_pipeline?: boolean; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-rollback-drills", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentRollbackDrillDetail: (drillId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-rollback-drills/${encodeURIComponent(drillId)}`),
+  opsDeploymentRollbackDrillAction: (drillId: string, body: { action: string; actor?: string; note?: string; check_id?: string; create_pipeline?: boolean }) =>
+    request<any>(`/api/v1/system/ops/deployment-rollback-drills/${encodeURIComponent(drillId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentRollbackRunbooks: (params: { profile?: string; package_id?: string; drill_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-rollback-runbooks${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentRollbackRunbook: (body: { package_id?: string; profile?: string; drill_id?: string; name?: string; environment?: string; trigger?: string; operator?: string; approval_required?: boolean; create_preview_pipeline?: boolean; task_priority?: string; assigned_to?: string; dev_tool?: string; notes?: string }) =>
+    request<any>("/api/v1/system/ops/deployment-rollback-runbooks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentRollbackRunbookDetail: (runbookId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-rollback-runbooks/${encodeURIComponent(runbookId)}`),
+  opsDeploymentRollbackRunbookAction: (runbookId: string, body: { action: string; actor?: string; note?: string; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>(`/api/v1/system/ops/deployment-rollback-runbooks/${encodeURIComponent(runbookId)}/action`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentExecutionAudits: (params: { profile?: string; package_id?: string; environment?: string; action?: string; status?: string; risk_level?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/deployment-execution-audits${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsCreateDeploymentExecutionAudit: (body: { package_id?: string; profile?: string; pipeline_run_id?: string; canary_policy_id?: string; rollback_drill_id?: string; rollback_runbook_id?: string; environment?: string; action?: string; status?: string; actor?: string; change_ticket?: string; evidence_url?: string; risk_level?: string; notes?: string; metadata?: Record<string, unknown> }) =>
+    request<any>("/api/v1/system/ops/deployment-execution-audits", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  opsDeploymentExecutionAuditDetail: (auditId: string) =>
+    request<any>(`/api/v1/system/ops/deployment-execution-audits/${encodeURIComponent(auditId)}`),
+  opsDeploymentExecutionAuditTasks: (auditId: string, body: { dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; include_low?: boolean }) =>
+    request<any>(`/api/v1/system/ops/deployment-execution-audits/${encodeURIComponent(auditId)}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   opsDoctor: () => request<any>("/api/v1/system/ops/doctor"),
   opsObservability: () => request<any>("/api/v1/system/ops/observability"),
+  opsTraceSummary: (params: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/system/ops/observability/traces${qs.toString() ? `?${qs}` : ""}`);
+  },
+  opsStorageMigrationPlan: () => request<any>("/api/v1/system/ops/storage/migration-plan"),
+  opsStorageMigrationSmoke: () =>
+    request<any>("/api/v1/system/ops/storage/migration-smoke", { method: "POST" }),
   opsLogs: (name = "sop.app.log", limit = 200, level = "", q = "") => {
     const qs = new URLSearchParams({ name, limit: String(limit) });
     if (level) qs.set("level", level);
@@ -1665,6 +2132,10 @@ export const api = {
     request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/heartbeat`, { method: "PUT" }),
   agentRunStatus: (runId: string, body: { status: string; error_msg?: string; retry_count?: number }) =>
     request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/status`, { method: "PUT", body: JSON.stringify(body) }),
+  agentRunRetry: (runId: string) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/retry`, { method: "POST" }),
+  agentRunCancel: (runId: string, body: { reason?: string } = {}) =>
+    request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: JSON.stringify(body) }),
   agentRunEvidence: (runId: string, body: { artifact?: Record<string, unknown>; gate_results?: Record<string, unknown>; confidence?: number }) =>
     request<any>(`/api/v1/agent-runs/${encodeURIComponent(runId)}/evidence`, { method: "POST", body: JSON.stringify(body) }),
   agentRunDelete: (runId: string) =>
@@ -1675,7 +2146,7 @@ export const api = {
   // ── Data Quality ────────────────────────────────────────────────────────
   dataQualityRules: (domain = "", status = "") =>
     request<any>(`/api/v1/data-quality/rules?domain=${domain}&status=${status}`),
-  dataQualityRuleCreate: (body: { name: string; domain?: string; rule_type?: string; expression?: string; severity?: string }) =>
+  dataQualityRuleCreate: (body: { name: string; domain?: string; rule_type?: string; expression?: string; severity?: string; config?: Record<string, unknown> }) =>
     request<any>("/api/v1/data-quality/rules", { method: "POST", body: JSON.stringify(body) }),
   dataQualityRuleUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/data-quality/rules/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -1683,7 +2154,7 @@ export const api = {
     request<any>(`/api/v1/data-quality/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
   dataQualityRuns: (ruleId = "", limit = 50) =>
     request<any>(`/api/v1/data-quality/runs?rule_id=${ruleId}&limit=${limit}`),
-  dataQualityRunCreate: (body: { rule_id: string; dataset?: string }) =>
+  dataQualityRunCreate: (body: { rule_id: string; dataset?: string; sample_rows?: Array<Record<string, unknown>>; execute_now?: boolean }) =>
     request<any>("/api/v1/data-quality/runs", { method: "POST", body: JSON.stringify(body) }),
   dataQualityRunFinish: (id: string) =>
     request<any>(`/api/v1/data-quality/runs/${encodeURIComponent(id)}/finish`, { method: "POST" }),
@@ -1691,12 +2162,14 @@ export const api = {
     request<any>(`/api/v1/data-quality/alerts?severity=${severity}&status=${status}`),
   dataQualityAlertResolve: (id: string) =>
     request<any>(`/api/v1/data-quality/alerts/${encodeURIComponent(id)}/resolve`, { method: "POST" }),
+  dataQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/data-quality/alerts/tasks", { method: "POST", body: JSON.stringify(body) }),
   dataQualitySummary: () => request<any>("/api/v1/data-quality/summary"),
 
   // ── Metrics Service ─────────────────────────────────────────────────────
   metricsCatalog: (domain = "", metricType = "") =>
     request<any>(`/api/v1/metrics-service/catalog?domain=${domain}&metric_type=${metricType}`),
-  metricCreate: (body: { name: string; domain?: string; metric_type?: string; formula?: string; unit?: string; owner?: string }) =>
+  metricCreate: (body: { name: string; domain?: string; metric_type?: string; formula?: string; dimensions?: string[]; source_assets?: string[]; depends_on?: string[]; description?: string; unit?: string; owner?: string }) =>
     request<any>("/api/v1/metrics-service/catalog", { method: "POST", body: JSON.stringify(body) }),
   metricUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -1704,6 +2177,19 @@ export const api = {
     request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(id)}`, { method: "DELETE" }),
   metricPublishApi: (metricId: string) =>
     request<any>(`/api/v1/metrics-service/api-publish?metric_id=${encodeURIComponent(metricId)}`, { method: "POST" }),
+  metricPublishVersion: (metricId: string, body: { version_note?: string; sla?: string } = {}) =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/publish`, { method: "POST", body: JSON.stringify(body) }),
+  metricVersions: (metricId: string) =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/versions`),
+  metricQuery: (metricId: string, params: { grain?: string; start?: string; end?: string; dimensions?: string } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) qs.set(key, String(value));
+    });
+    return request<any>(`/api/v1/metrics-service/query/${encodeURIComponent(metricId)}${qs.toString() ? `?${qs}` : ""}`);
+  },
+  metricImpact: (metricId: string) =>
+    request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/impact`),
   metricsPublished: () => request<any>("/api/v1/metrics-service/api-publish"),
   metricValues: (metricId: string, grain = "day") =>
     request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/values?grain=${encodeURIComponent(grain)}`),
@@ -1711,15 +2197,17 @@ export const api = {
 
   // ── Tag Service ─────────────────────────────────────────────────────────
   tagCatalog: (category = "") => request<any>(`/api/v1/tag-service/catalog?category=${category}`),
-  tagCreate: (body: { name: string; category?: string; description?: string; value_type?: string; owner?: string }) =>
+  tagCreate: (body: { name: string; category?: string; description?: string; value_type?: string; owner?: string; applies_to?: string[] }) =>
     request<any>("/api/v1/tag-service/catalog", { method: "POST", body: JSON.stringify(body) }),
   tagUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/tag-service/catalog/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   tagDelete: (id: string) =>
     request<any>(`/api/v1/tag-service/catalog/${encodeURIComponent(id)}`, { method: "DELETE" }),
   tagRules: () => request<any>("/api/v1/tag-service/rules"),
-  tagRuleCreate: (body: { tag_id: string; condition?: Record<string, unknown>; priority?: number }) =>
+  tagRuleCreate: (body: { tag_id: string; entity_type?: string; condition?: Record<string, unknown>; output_value?: unknown; priority?: number }) =>
     request<any>("/api/v1/tag-service/rules", { method: "POST", body: JSON.stringify(body) }),
+  tagRuleEvaluate: (body: { entity_type: string; sample?: Record<string, unknown> }) =>
+    request<any>("/api/v1/tag-service/rules/evaluate", { method: "POST", body: JSON.stringify(body) }),
   tagRuleDelete: (id: string) =>
     request<any>(`/api/v1/tag-service/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
   tagOntology: () => request<any>("/api/v1/tag-service/ontology"),
@@ -1727,12 +2215,18 @@ export const api = {
     request<any>("/api/v1/tag-service/ontology/entities", { method: "POST", body: JSON.stringify(body) }),
   tagEntityDelete: (id: string) =>
     request<any>(`/api/v1/tag-service/ontology/entities/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  tagProfileBuilds: (entityType = "") =>
+    request<any>(`/api/v1/tag-service/profiles/builds?entity_type=${encodeURIComponent(entityType)}`),
+  tagProfileBuild: (body: { entity_type: string; profile_name?: string; records?: Array<Record<string, unknown>>; publish?: boolean }) =>
+    request<any>("/api/v1/tag-service/profiles/build", { method: "POST", body: JSON.stringify(body) }),
+  tagPublishContract: (entityId: string) =>
+    request<any>(`/api/v1/tag-service/ontology/entities/${encodeURIComponent(entityId)}/publish`, { method: "POST" }),
   tagSummary: () => request<any>("/api/v1/tag-service/summary"),
 
   // ── Data Ingest ─────────────────────────────────────────────────────────
   dataIngestConnectors: (connectorType = "") =>
     request<any>(`/api/v1/data-ingest/connectors?connector_type=${connectorType}`),
-  dataIngestConnectorCreate: (body: { name: string; connector_type?: string; host?: string; port?: number; database?: string }) =>
+  dataIngestConnectorCreate: (body: { name: string; connector_type?: string; host?: string; port?: number; database?: string; extra?: Record<string, unknown> }) =>
     request<any>("/api/v1/data-ingest/connectors", { method: "POST", body: JSON.stringify(body) }),
   dataIngestConnectorUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -1740,44 +2234,97 @@ export const api = {
     request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}`, { method: "DELETE" }),
   dataIngestConnectorTest: (id: string) =>
     request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}/test`, { method: "POST" }),
+  dataIngestConnectorDryRun: (id: string, body: { sample_limit?: number } = {}) =>
+    request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}/dry-run`, { method: "POST", body: JSON.stringify(body) }),
   dataIngestConnectorSchema: (id: string) =>
     request<any>(`/api/v1/data-ingest/connectors/${encodeURIComponent(id)}/schema`),
+  dataIngestSchemaRegistry: (connectorId = "") =>
+    request<any>(`/api/v1/data-ingest/schema-registry?connector_id=${encodeURIComponent(connectorId)}`),
   dataIngestJobs: (connectorId = "", status = "") =>
     request<any>(`/api/v1/data-ingest/jobs?connector_id=${connectorId}&status=${status}`),
-  dataIngestJobCreate: (body: { connector_id: string; name: string; ingest_mode?: string; schedule?: string; target_table?: string }) =>
+  dataIngestJobCreate: (body: { connector_id: string; name: string; ingest_mode?: string; schedule?: string; source_table?: string; target_table?: string; cursor_field?: string; batch_size?: number }) =>
     request<any>("/api/v1/data-ingest/jobs", { method: "POST", body: JSON.stringify(body) }),
   dataIngestJobUpdate: (id: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
   dataIngestJobRun: (id: string) =>
     request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}/run`, { method: "POST" }),
-  dataIngestJobStatus: (id: string, body: { status: string; rows_ingested?: number; error_msg?: string }) =>
+  dataIngestJobStatus: (id: string, body: { status: string; rows_ingested?: number; error_msg?: string; cdc_cursor?: string }) =>
     request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify(body) }),
   dataIngestJobDelete: (id: string) =>
     request<any>(`/api/v1/data-ingest/jobs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dataIngestRuns: (jobId = "", status = "") =>
+    request<any>(`/api/v1/data-ingest/runs?job_id=${encodeURIComponent(jobId)}&status=${encodeURIComponent(status)}`),
+  dataIngestCdcCursors: (jobId = "") =>
+    request<any>(`/api/v1/data-ingest/cdc-cursors?job_id=${encodeURIComponent(jobId)}`),
   dataIngestSummary: () => request<any>("/api/v1/data-ingest/summary"),
 
   // ── A2A Gateway ─────────────────────────────────────────────────────────
   a2aRegistry: (agentType = "") => request<any>(`/api/v1/a2a/registry?agent_type=${agentType}`),
-  a2aRegister: (body: { name: string; agent_type?: string; endpoint?: string; capabilities?: string[] }) =>
+  a2aRegister: (body: { name: string; agent_type?: string; endpoint?: string; organization_code?: string; trust_domain?: string; capabilities?: string[] }) =>
     request<any>("/api/v1/a2a/registry", { method: "POST", body: JSON.stringify(body) }),
   a2aDeregister: (id: string) =>
     request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}`, { method: "DELETE" }),
   a2aAgentStatus: (id: string, status: string) =>
     request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+  a2aRotateCredential: (id: string) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/credentials/rotate`, { method: "POST" }),
+  a2aHeartbeat: (id: string, body: { credential_token: string; status?: string; load?: number; success_rate?: number; capabilities?: string[]; telemetry?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/heartbeat`, { method: "POST", body: JSON.stringify(body) }),
+  a2aPullTasks: (id: string, body: { credential_token: string; limit?: number; capabilities?: string[]; lease_seconds?: number; wait_seconds?: number }) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/pull`, { method: "POST", body: JSON.stringify(body) }),
+  a2aAckTask: (id: string, body: { credential_token: string; dispatch_id: string; lease_id: string; ack?: string; message?: string }) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/ack`, { method: "POST", body: JSON.stringify(body) }),
+  a2aRenewLease: (id: string, body: { credential_token: string; dispatch_id: string; lease_id: string; extend_seconds?: number }) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/tasks/renew`, { method: "POST", body: JSON.stringify(body) }),
+  a2aExpireLeases: () =>
+    request<any>("/api/v1/a2a/leases/expire", { method: "POST" }),
+  a2aProgress: (id: string, body: { credential_token: string; dispatch_id: string; status?: string; progress?: number; message?: string; artifact?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/a2a/registry/${encodeURIComponent(id)}/progress`, { method: "POST", body: JSON.stringify(body) }),
+  a2aTrust: () => request<any>("/api/v1/a2a/trust"),
+  a2aTrustPolicy: () => request<any>("/api/v1/a2a/trust/policy"),
+  a2aTrustPolicyUpdate: (body: { stale_after_minutes?: number; min_success_rate?: number; max_load?: number; require_endpoint?: boolean; allowed_agent_types?: string[]; allowed_organization_codes?: string[]; required_capabilities?: string[]; enforce_on_negotiate?: boolean; enforce_on_dispatch?: boolean; enforce_on_pull?: boolean }) =>
+    request<any>("/api/v1/a2a/trust/policy", { method: "PUT", body: JSON.stringify(body) }),
+  a2aTrustTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/a2a/trust/tasks", { method: "POST", body: JSON.stringify(body) }),
   a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[]; priority?: string }) =>
     request<any>("/api/v1/a2a/negotiate", { method: "POST", body: JSON.stringify(body) }),
-  a2aDispatch: (body: { agent_id: string; task_id: string; payload?: Record<string, unknown> }) =>
+  a2aDispatch: (body: { agent_id: string; task_id: string; session_id?: string; payload?: Record<string, unknown> }) =>
     request<any>("/api/v1/a2a/dispatch", { method: "POST", body: JSON.stringify(body) }),
   a2aDispatchPacket: (dispatchId: string) =>
     request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/packet`),
+  a2aRetryDispatch: (dispatchId: string) =>
+    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/retry`, { method: "POST" }),
+  a2aReassignDispatch: (dispatchId: string, body: { agent_id: string; reason?: string }) =>
+    request<any>(`/api/v1/a2a/dispatch/${encodeURIComponent(dispatchId)}/reassign`, { method: "POST", body: JSON.stringify(body) }),
   a2aDispatches: (agentId = "", status = "") => request<any>(`/api/v1/a2a/dispatch?agent_id=${agentId}&status=${status}`),
   a2aEvidence: (agentId = "") => request<any>(`/api/v1/a2a/evidence?agent_id=${agentId}`),
   a2aReceiveEvidence: (body: { dispatch_id: string; status: string; artifact?: Record<string, unknown>; confidence?: number; quality_gate_results?: Array<Record<string, unknown>> }) =>
     request<any>("/api/v1/a2a/evidence", { method: "POST", body: JSON.stringify(body) }),
+  a2aSessions: () => request<any>("/api/v1/a2a/sessions"),
+  a2aSession: (sessionId: string) =>
+    request<any>(`/api/v1/a2a/sessions/${encodeURIComponent(sessionId)}`),
   a2aSummary: () => request<any>("/api/v1/a2a/summary"),
   a2aHealth: () => request<any>("/api/v1/a2a/health"),
+  a2aSla: () => request<any>("/api/v1/a2a/sla"),
+  a2aSlaPolicy: () => request<any>("/api/v1/a2a/sla/policy"),
+  a2aSlaPolicyUpdate: (body: { default_sla_minutes?: number; due_soon_ratio?: number; priority_sla_minutes?: Record<string, number>; auto_retry_enabled?: boolean; max_auto_retries?: number; im_alert_enabled?: boolean }) =>
+    request<any>("/api/v1/a2a/sla/policy", { method: "PUT", body: JSON.stringify(body) }),
+  a2aSlaTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/a2a/sla/tasks", { method: "POST", body: JSON.stringify(body) }),
+  a2aSlaEscalations: (body: { dry_run?: boolean; channels?: string[] }) =>
+    request<any>("/api/v1/a2a/sla/escalations", { method: "POST", body: JSON.stringify(body) }),
+  a2aExecutionWindows: () => request<any>("/api/v1/a2a/execution-windows"),
+  a2aExecutionWindowPolicy: () => request<any>("/api/v1/a2a/execution-windows/policy"),
+  a2aExecutionWindowPolicyUpdate: (body: { stale_after_minutes?: number; due_soon_seconds?: number; max_auto_reassign?: number; action_mode?: string; require_preview_for_high_risk?: boolean; auto_renew_enabled?: boolean; auto_reassign_enabled?: boolean; auto_expire_enabled?: boolean }) =>
+    request<any>("/api/v1/a2a/execution-windows/policy", { method: "PUT", body: JSON.stringify(body) }),
+  a2aExecutionWindowTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/a2a/execution-windows/tasks", { method: "POST", body: JSON.stringify(body) }),
+  a2aExecutionWindowActions: (body: { dry_run?: boolean; renew_seconds?: number; max_actions?: number }) =>
+    request<any>("/api/v1/a2a/execution-windows/actions", { method: "POST", body: JSON.stringify(body) }),
   a2aGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
     request<any>("/api/v1/a2a/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
+  a2aImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
+    request<any>("/api/v1/a2a/im-briefing", { method: "POST", body: JSON.stringify(body) }),
 
   // ── LLM Gateway v2 ──────────────────────────────────────────────────────
   llmRoutes: () => request<any>("/api/v1/llm-gateway/routes"),
@@ -1791,6 +2338,35 @@ export const api = {
     request<any>(`/api/v1/llm-gateway/resolve?task_type=${encodeURIComponent(taskType)}`, { method: "POST" }),
   llmDecision: (body: { task_type?: string; estimated_prompt_tokens?: number; estimated_completion_tokens?: number; required_quality?: string; allow_fallback?: boolean }) =>
     request<any>("/api/v1/llm-gateway/decision", { method: "POST", body: JSON.stringify(body) }),
+  llmGatewayPolicies: () => request<any>("/api/v1/llm-gateway/policies"),
+  llmGatewayPolicyUpdate: (body: { enabled?: boolean; daily_budget_usd?: number; block_on_budget?: boolean; require_provider_health?: boolean; max_provider_latency_ms?: number; max_provider_error_rate?: number; cost_anomaly_threshold_usd?: number }) =>
+    request<any>("/api/v1/llm-gateway/policies", { method: "PUT", body: JSON.stringify(body) }),
+  llmProviderHealth: () => request<any>("/api/v1/llm-gateway/provider-health"),
+  llmProviderHealthRecord: (body: { model_id: string; status?: string; latency_ms?: number; error_rate?: number; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/provider-health", { method: "POST", body: JSON.stringify(body) }),
+  llmPolicyEvaluate: (body: { task_type?: string; estimated_prompt_tokens?: number; estimated_completion_tokens?: number; required_quality?: string; allow_fallback?: boolean }) =>
+    request<any>("/api/v1/llm-gateway/policy-evaluate", { method: "POST", body: JSON.stringify(body) }),
+  llmFallbackDrill: () => request<any>("/api/v1/llm-gateway/fallback-drill", { method: "POST" }),
+  llmCostAnomalyTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/llm-gateway/cost-anomalies/tasks", { method: "POST", body: JSON.stringify(body) }),
+  llmCostAttributionRuns: (limit = 30) =>
+    request<any>(`/api/v1/llm-gateway/cost-attribution/runs?limit=${encodeURIComponent(String(limit))}`),
+  llmCostAttributionRun: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/cost-attribution/run", { method: "POST", body: JSON.stringify(body) }),
+  llmCostAttributionTasks: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/cost-attribution/tasks", { method: "POST", body: JSON.stringify(body) }),
+  llmModelEvalRuns: (limit = 30) =>
+    request<any>(`/api/v1/llm-gateway/model-evals/runs?limit=${encodeURIComponent(String(limit))}`),
+  llmModelEvalRun: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/model-evals/run", { method: "POST", body: JSON.stringify(body) }),
+  llmModelEvalTasks: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/model-evals/tasks", { method: "POST", body: JSON.stringify(body) }),
+  llmPromptAuditRuns: (limit = 30) =>
+    request<any>(`/api/v1/llm-gateway/prompt-audit/runs?limit=${encodeURIComponent(String(limit))}`),
+  llmPromptAuditRun: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/prompt-audit/run", { method: "POST", body: JSON.stringify(body) }),
+  llmPromptAuditTasks: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+    request<any>("/api/v1/llm-gateway/prompt-audit/tasks", { method: "POST", body: JSON.stringify(body) }),
   llmCostStats: (modelId = "", period = "7d") =>
     request<any>(`/api/v1/llm-gateway/cost?model_id=${modelId}&period=${period}`),
   llmRecordCost: (body: { model_id: string; prompt_tokens?: number; completion_tokens?: number; cost_usd?: number; latency_ms?: number; task_type?: string }) =>
@@ -1806,6 +2382,8 @@ export const api = {
   llmGatewayHealth: () => request<any>("/api/v1/llm-gateway/health"),
   llmGatewayGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
     request<any>("/api/v1/llm-gateway/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
+  llmGatewayImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
+    request<any>("/api/v1/llm-gateway/im-briefing", { method: "POST", body: JSON.stringify(body) }),
 
   // ── Ops Center ──────────────────────────────────────────────────────────
   opsPipelines: () => request<any>("/api/v1/ops-center/pipelines"),
@@ -1822,9 +2400,126 @@ export const api = {
     request<any>("/api/v1/ops-center/rca", { method: "POST", body: JSON.stringify(body) }),
   opsRcaResolve: (id: string) =>
     request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/resolve`, { method: "PUT" }),
+  opsRcaVerificationPlan: (id: string) =>
+    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/verification-plan`),
+  opsRcaVerify: (id: string, body: { verifier?: string; checks?: Record<string, unknown>; close_on_pass?: boolean; note?: string }) =>
+    request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
+  opsRcaInsights: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number }) =>
+    request<any>("/api/v1/ops-center/rca/insights", { method: "POST", body: JSON.stringify(body) }),
+  opsRcaInsightTasks: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/ops-center/rca/insights/tasks", { method: "POST", body: JSON.stringify(body) }),
+  opsRcaInsightCreateRca: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; candidate_id?: string; owner?: string; status?: string; selected_runbook_ids?: string[]; note?: string }) =>
+    request<any>("/api/v1/ops-center/rca/insights/rca", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSources: () => request<any>("/api/v1/ops-center/alert-sources"),
+  opsAlertSourceCreate: (body: { name: string; source_type?: string; endpoint?: string; enabled?: boolean; auth_ref?: string; query?: string; labels?: Record<string, unknown>; headers?: Record<string, unknown>; sample_payload?: unknown; timeout_s?: number }) =>
+    request<any>("/api/v1/ops-center/alert-sources", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSourceUpdate: (id: string, body: { name: string; source_type?: string; endpoint?: string; enabled?: boolean; auth_ref?: string; query?: string; labels?: Record<string, unknown>; headers?: Record<string, unknown>; sample_payload?: unknown; timeout_s?: number }) =>
+    request<any>(`/api/v1/ops-center/alert-sources/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  opsAlertSourceTest: (id: string, body: { sample_payload?: unknown; use_endpoint?: boolean; endpoint_override?: string }) =>
+    request<any>(`/api/v1/ops-center/alert-sources/${encodeURIComponent(id)}/test`, { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSourceToggle: (id: string, body: { enabled: boolean }) =>
+    request<any>(`/api/v1/ops-center/alert-sources/${encodeURIComponent(id)}/toggle`, { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSourceSync: (body: { source_ids?: string[]; persist?: boolean; limit?: number }) =>
+    request<any>("/api/v1/ops-center/alert-sources/sync", { method: "POST", body: JSON.stringify(body) }),
+  opsExternalAlerts: (params: { source_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.source_id) qs.set("source_id", params.source_id);
+    if (params.status) qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/ops-center/alerts${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsAlertSourceDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/alert-sources/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  opsAlertNoisePolicies: () => request<any>("/api/v1/ops-center/alert-noise/policies"),
+  opsAlertNoisePolicyCreate: (body: { name: string; enabled?: boolean; group_by?: string[]; min_rca_severity?: string; suppress_severities?: string[]; labels?: Record<string, unknown>; note?: string }) =>
+    request<any>("/api/v1/ops-center/alert-noise/policies", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertNoisePolicyToggle: (id: string, body: { enabled: boolean }) =>
+    request<any>(`/api/v1/ops-center/alert-noise/policies/${encodeURIComponent(id)}/toggle`, { method: "POST", body: JSON.stringify(body) }),
+  opsAlertNoisePolicyDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/alert-noise/policies/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  opsAlertNoiseEvaluate: (body: { policy_id?: string; persist?: boolean; limit?: number }) =>
+    request<any>("/api/v1/ops-center/alert-noise/evaluate", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertNoiseEvaluations: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/alert-noise/evaluations?limit=${encodeURIComponent(String(limit))}`),
+  opsAlertStrategyRecommendations: (params: { status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/ops-center/alert-noise/recommendations${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsAlertStrategyRecommend: (body: { persist?: boolean; limit?: number }) =>
+    request<any>("/api/v1/ops-center/alert-noise/recommendations", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertStrategyRecommendationAction: (id: string, body: { action: "apply" | "dismiss" | "reopen"; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/ops-center/alert-noise/recommendations/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify(body) }),
+  opsAlertStrategyCompareRuns: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/alert-noise/strategy-compare/runs?limit=${encodeURIComponent(String(limit))}`),
+  opsAlertStrategyCompare: (body: {
+    variants?: Array<{ id?: string; name: string; enabled?: boolean; group_by?: string[]; min_rca_severity?: string; suppress_severities?: string[]; labels?: Record<string, unknown>; note?: string }>;
+    baseline_policy_id?: string;
+    persist?: boolean;
+    limit?: number;
+  }) => request<any>("/api/v1/ops-center/alert-noise/strategy-compare", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSloPredictionRuns: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/alert-noise/slo-prediction/runs?limit=${encodeURIComponent(String(limit))}`),
+  opsAlertSloPrediction: (body: { window_hours?: number; persist?: boolean; limit?: number }) =>
+    request<any>("/api/v1/ops-center/alert-noise/slo-prediction", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSloEscalationPolicy: () =>
+    request<any>("/api/v1/ops-center/alert-noise/slo-escalation-policy"),
+  opsAlertSloEscalationPolicyUpdate: (body: {
+    enabled?: boolean;
+    min_risk_level?: string;
+    min_breach_probability?: number;
+    max_targets?: number;
+    cooldown_minutes?: number;
+    actions?: string[];
+    channels?: string[];
+    owner?: string;
+    note?: string;
+  }) => request<any>("/api/v1/ops-center/alert-noise/slo-escalation-policy", { method: "PUT", body: JSON.stringify(body) }),
+  opsAlertSloEscalationRuns: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/alert-noise/slo-escalation/runs?limit=${encodeURIComponent(String(limit))}`),
+  opsAlertSloEscalationRun: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; window_hours?: number; force?: boolean; note?: string }) =>
+    request<any>("/api/v1/ops-center/alert-noise/slo-escalation/run", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertStrategyCanaryAudits: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/alert-noise/strategy-canary/audits?limit=${encodeURIComponent(String(limit))}`),
+  opsAlertStrategyCanaryAudit: (body: { policy_id?: string; candidate_id?: string; traffic_percent?: number; refresh_inputs?: boolean; persist?: boolean; created_by?: string; note?: string }) =>
+    request<any>("/api/v1/ops-center/alert-noise/strategy-canary/audit", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertStrategyCanaryAction: (id: string, body: { action: "approve" | "reject" | "start" | "rollback" | "archive" | "reopen"; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/ops-center/alert-noise/strategy-canary/audits/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify(body) }),
+  opsStrategyLinkageRuns: (limit = 30) =>
+    request<any>(`/api/v1/ops-center/strategy-linkage/runs?limit=${encodeURIComponent(String(limit))}`),
+  opsStrategyLinkageRun: (body: { dry_run?: boolean; actions?: string[]; max_items?: number; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; note?: string }) =>
+    request<any>("/api/v1/ops-center/strategy-linkage/run", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSilenceCreate: (body: { name: string; matchers?: Record<string, unknown>; starts_at?: string; ends_at?: string; reason?: string; enabled?: boolean; owner?: string }) =>
+    request<any>("/api/v1/ops-center/alert-noise/silences", { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSilenceToggle: (id: string, body: { enabled: boolean }) =>
+    request<any>(`/api/v1/ops-center/alert-noise/silences/${encodeURIComponent(id)}/toggle`, { method: "POST", body: JSON.stringify(body) }),
+  opsAlertSilenceDelete: (id: string) =>
+    request<any>(`/api/v1/ops-center/alert-noise/silences/${encodeURIComponent(id)}`, { method: "DELETE" }),
   opsRunbooks: () => request<any>("/api/v1/ops-center/runbooks"),
-  opsRunbookCreate: (body: { name: string; steps?: string[]; tags?: string[] }) =>
+  opsRunbookCreate: (body: { name: string; steps?: string[]; tags?: string[]; owner?: string; change_note?: string }) =>
     request<any>("/api/v1/ops-center/runbooks", { method: "POST", body: JSON.stringify(body) }),
+  opsRunbookUpdate: (id: string, body: { name: string; steps?: string[]; tags?: string[]; owner?: string; change_note?: string }) =>
+    request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  opsRunbookVersions: (id: string) =>
+    request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}/versions`),
+  opsRunbookVersionAction: (id: string, versionId: string, body: { action: "promote" | "archive" | "restore"; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/action`, { method: "POST", body: JSON.stringify(body) }),
+  opsRunbookVersionDiff: (id: string, baseVersionId: string, targetVersionId: string) => {
+    const qs = new URLSearchParams({ base_version_id: baseVersionId, target_version_id: targetVersionId });
+    return request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}/versions/diff?${qs.toString()}`);
+  },
+  opsRunbookEvidence: (params: { runbook_id?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.runbook_id) qs.set("runbook_id", params.runbook_id);
+    if (params.status) qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/ops-center/runbooks/evidence${qs.toString() ? `?${qs.toString()}` : ""}`);
+  },
+  opsRunbookEvidenceBackfill: (body: { runbook_ids?: string[]; rca_ids?: string[]; include_resolved?: boolean; persist?: boolean; actor?: string; note?: string; limit?: number }) =>
+    request<any>("/api/v1/ops-center/runbooks/evidence/backfill", { method: "POST", body: JSON.stringify(body) }),
+  opsRunbookEvidenceAction: (id: string, body: { action: "acknowledge" | "archive" | "reopen"; actor?: string; note?: string }) =>
+    request<any>(`/api/v1/ops-center/runbooks/evidence/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify(body) }),
   opsRunbookDelete: (id: string) =>
     request<any>(`/api/v1/ops-center/runbooks/${encodeURIComponent(id)}`, { method: "DELETE" }),
   opsSelfHeal: () => request<any>("/api/v1/ops-center/self-heal"),
@@ -1838,8 +2533,20 @@ export const api = {
     request<any>("/api/v1/ops-center/self-heal/evaluate", { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealEvaluations: (limit = 30) =>
     request<any>(`/api/v1/ops-center/self-heal/evaluations?limit=${encodeURIComponent(String(limit))}`),
+  opsSelfHealActions: (state = "", limit = 50) =>
+    request<any>(`/api/v1/ops-center/self-heal/actions?state=${encodeURIComponent(state)}&limit=${encodeURIComponent(String(limit))}`),
+  opsSelfHealActionApprove: (id: string, body: { approver?: string; note?: string }) =>
+    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/approve`, { method: "POST", body: JSON.stringify(body) }),
+  opsSelfHealActionApply: (id: string, body: { operator?: string; result?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/apply`, { method: "POST", body: JSON.stringify(body) }),
+  opsSelfHealActionVerify: (id: string, body: { verifier?: string; verification?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
+  opsSelfHealActionRollback: (id: string, body: { operator?: string; evidence?: Record<string, unknown> }) =>
+    request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/rollback`, { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealTasks: (body: { signals?: Record<string, unknown>; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
     request<any>("/api/v1/ops-center/self-heal/tasks", { method: "POST", body: JSON.stringify(body) }),
+  opsCenterImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
+    request<any>("/api/v1/ops-center/im-briefing", { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealDelete: (id: string) =>
     request<any>(`/api/v1/ops-center/self-heal/${encodeURIComponent(id)}`, { method: "DELETE" }),
   opsCenterSummary: () => request<any>("/api/v1/ops-center/summary"),

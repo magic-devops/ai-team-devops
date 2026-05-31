@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from sop_manager.path_config import resolved_ai_memory_root
+from sop_manager.path_config import resolved_ai_memory_root, resolved_business_code, resolved_project_id, resolved_tenant_code
 
 from .auth_sql import PROJECT_MEMBER_ROLES, USER_ROLES, User as AuthUser, current_user, require_role, role_weight
 from .sql_models import Business, Project, ProjectMember, Task, User, get_session
@@ -22,12 +22,18 @@ class RolePolicyUpdateIn(BaseModel):
     user_capability_map: dict[str, list[str]] = Field(default_factory=dict)
     project_capability_map: dict[str, list[str]] = Field(default_factory=dict)
     notes: str = Field("", max_length=2000)
+    field_security_rules: list[dict[str, Any]] = Field(default_factory=list)
+    row_filter_rules: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class RolePolicyCheckIn(BaseModel):
     scope: str = Field("tenant", pattern="^(tenant|project)$")
     role: str = Field(..., max_length=64)
     capability: str = Field(..., max_length=120)
+    resource: str = Field("", max_length=160)
+    action: str = Field("read", max_length=40)
+    fields: list[str] = Field(default_factory=list, max_length=100)
+    row: dict[str, Any] = Field(default_factory=dict)
 
 
 class AccessReviewTasksIn(BaseModel):
@@ -87,6 +93,75 @@ def _dedupe_capabilities(items: list[str]) -> list[str]:
     return out[:80]
 
 
+def _clean_string_list(items: Any, *, max_items: int = 80) -> list[str]:
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        value = str(item or "").strip()
+        if not value or len(value) > 160 or value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _normalize_field_security_rules(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+    rules: list[dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        resource = str(item.get("resource") or "").strip()
+        fields = _clean_string_list(item.get("fields") or item.get("field_names") or [], max_items=60)
+        if not resource or not fields:
+            continue
+        action = str(item.get("action") or "mask").strip()
+        if action not in {"mask", "deny", "allow"}:
+            action = "mask"
+        rules.append({
+            "id": str(item.get("id") or f"field-rule-{idx + 1}").strip()[:120],
+            "resource": resource[:160],
+            "fields": fields,
+            "roles": _clean_string_list(item.get("roles") or ["*"], max_items=40) or ["*"],
+            "actions": _clean_string_list(item.get("actions") or [item.get("operation") or "read"], max_items=20) or ["read"],
+            "action": action,
+            "mask": str(item.get("mask") or item.get("mask_type") or "full").strip()[:40],
+            "reason": str(item.get("reason") or "").strip()[:500],
+        })
+    return rules[:100]
+
+
+def _normalize_row_filter_rules(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        return []
+    rules: list[dict[str, Any]] = []
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        resource = str(item.get("resource") or "").strip()
+        conditions = item.get("conditions") if isinstance(item.get("conditions"), dict) else {}
+        if not resource or not conditions:
+            continue
+        effect = str(item.get("effect") or "deny").strip()
+        if effect not in {"deny", "allow"}:
+            effect = "deny"
+        rules.append({
+            "id": str(item.get("id") or f"row-rule-{idx + 1}").strip()[:120],
+            "resource": resource[:160],
+            "roles": _clean_string_list(item.get("roles") or ["*"], max_items=40) or ["*"],
+            "actions": _clean_string_list(item.get("actions") or [item.get("operation") or "read"], max_items=20) or ["read"],
+            "effect": effect,
+            "conditions": conditions,
+            "reason": str(item.get("reason") or "").strip()[:500],
+        })
+    return rules[:100]
+
+
 def _normalize_role_policy(data: dict[str, Any] | None = None) -> dict[str, Any]:
     data = data if isinstance(data, dict) else {}
     user_map = {**_default_user_capability_map()}
@@ -101,6 +176,10 @@ def _normalize_role_policy(data: dict[str, Any] | None = None) -> dict[str, Any]
         "version": int(data.get("version") or 1),
         "user_capability_map": user_map,
         "project_capability_map": project_map,
+        "abac_policy": {
+            "field_security_rules": _normalize_field_security_rules(data.get("field_security_rules") or (data.get("abac_policy") or {}).get("field_security_rules") or []),
+            "row_filter_rules": _normalize_row_filter_rules(data.get("row_filter_rules") or (data.get("abac_policy") or {}).get("row_filter_rules") or []),
+        },
         "notes": str(data.get("notes") or "租户级角色与项目成员角色可配置能力策略。"),
         "updated_at": str(data.get("updated_at") or ""),
         "updated_by": str(data.get("updated_by") or ""),
@@ -153,6 +232,115 @@ def _read_role_policy_history(tenant_id: str, limit: int = 50) -> list[dict[str,
         except Exception:
             continue
     return items
+
+
+def _rule_applies(rule: dict[str, Any], *, role: str, resource: str, action: str) -> bool:
+    roles = set(_clean_string_list(rule.get("roles") or ["*"], max_items=100))
+    if "*" not in roles and role not in roles:
+        return False
+    rule_resource = str(rule.get("resource") or "").strip()
+    if rule_resource not in {"*", resource}:
+        return False
+    actions = set(_clean_string_list(rule.get("actions") or ["read"], max_items=100))
+    return "*" in actions or action in actions
+
+
+def _resolve_condition_value(value: Any) -> Any:
+    if value == "$current_project_id":
+        return resolved_project_id()
+    if value == "$current_tenant_code":
+        return resolved_tenant_code()
+    if value == "$current_business_code":
+        return resolved_business_code()
+    if isinstance(value, list):
+        return [_resolve_condition_value(item) for item in value]
+    return value
+
+
+def _condition_matches(row_value: Any, expected: Any) -> bool:
+    if isinstance(expected, dict):
+        if "eq" in expected and row_value != _resolve_condition_value(expected["eq"]):
+            return False
+        if "neq" in expected and row_value == _resolve_condition_value(expected["neq"]):
+            return False
+        if "in" in expected:
+            values = _resolve_condition_value(expected["in"])
+            if row_value not in (values if isinstance(values, list) else [values]):
+                return False
+        if "not_in" in expected:
+            values = _resolve_condition_value(expected["not_in"])
+            if row_value in (values if isinstance(values, list) else [values]):
+                return False
+        return True
+    return row_value == _resolve_condition_value(expected)
+
+
+def _row_matches_conditions(row: dict[str, Any], conditions: dict[str, Any]) -> bool:
+    return all(_condition_matches(row.get(field), expected) for field, expected in conditions.items())
+
+
+def _mask_value(value: Any, mask: str) -> str:
+    if value in (None, ""):
+        return ""
+    raw = str(value)
+    if mask == "partial" and len(raw) > 4:
+        return f"{raw[:2]}***{raw[-2:]}"
+    return "***masked***"
+
+
+def _mask_field_value(field: str, value: Any, mask: str) -> str:
+    lower = field.lower()
+    if any(token in lower for token in ("password", "secret", "token", "hash", "key")):
+        return "***masked***"
+    return _mask_value(value, mask)
+
+
+def _evaluate_abac(policy: dict[str, Any], body: RolePolicyCheckIn) -> dict[str, Any]:
+    abac = policy.get("abac_policy") if isinstance(policy.get("abac_policy"), dict) else {}
+    resource = body.resource.strip()
+    action = body.action.strip() or "read"
+    row = dict(body.row or {})
+    fields = body.fields or list(row.keys())
+    masked_row = dict(row)
+    field_decisions: dict[str, dict[str, Any]] = {}
+    denied_fields: list[str] = []
+
+    for field in fields:
+        decision = {"decision": "allow", "matched_rules": []}
+        for rule in abac.get("field_security_rules") or []:
+            if field not in (rule.get("fields") or []):
+                continue
+            if not _rule_applies(rule, role=body.role, resource=resource, action=action):
+                continue
+            decision["decision"] = rule.get("action") or "mask"
+            decision["matched_rules"].append(rule.get("id"))
+            if decision["decision"] == "mask" and field in masked_row:
+                masked_row[field] = _mask_field_value(field, masked_row.get(field), str(rule.get("mask") or "full"))
+            if decision["decision"] == "deny":
+                denied_fields.append(field)
+        field_decisions[field] = decision
+
+    row_allowed = True
+    matched_row_rules: list[str] = []
+    for rule in abac.get("row_filter_rules") or []:
+        if not _rule_applies(rule, role=body.role, resource=resource, action=action):
+            continue
+        conditions = rule.get("conditions") if isinstance(rule.get("conditions"), dict) else {}
+        if conditions and _row_matches_conditions(row, conditions):
+            matched_row_rules.append(str(rule.get("id") or "row-rule"))
+            if rule.get("effect") == "deny":
+                row_allowed = False
+
+    return {
+        "row_decision": {
+            "allowed": row_allowed,
+            "decision": "allow" if row_allowed else "deny",
+            "matched_rules": matched_row_rules,
+        },
+        "field_decisions": field_decisions,
+        "masked_row": masked_row,
+        "denied_fields": denied_fields,
+    }
 
 
 def _severity_rank(severity: str) -> int:
@@ -417,6 +605,7 @@ def organization_policy(
         "updated_by": role_policy["updated_by"],
         "user_capability_map": user_capability_map,
         "project_capability_map": project_capability_map,
+        "abac_policy": role_policy.get("abac_policy") or {"field_security_rules": [], "row_filter_rules": []},
         "tenant_scope": {
             "tenant_id": user.tenant_id,
             "tenant_code": tenant_code,
@@ -466,6 +655,20 @@ def organization_policy(
                 "next": "加入临时授权、权限变更审批和过期自动回收。",
             },
             {
+                "id": "field_level_security",
+                "title": "字段级安全",
+                "status": "active",
+                "description": "按资源、角色和动作对敏感字段执行 mask/deny/allow 裁决。",
+                "next": "扩展到数据服务字段和导出脱敏模板。",
+            },
+            {
+                "id": "row_level_filter",
+                "title": "行级 ABAC",
+                "status": "active",
+                "description": "按动态上下文变量和行属性执行 allow/deny 策略。",
+                "next": "接入更多业务上下文和审批条件。",
+            },
+            {
                 "id": "ai_operability",
                 "title": "AI 可操作规约",
                 "status": "active",
@@ -510,6 +713,11 @@ def organization_policy(
             "reset_api": "POST /api/v1/organization/policy/reset",
             "check_api": "POST /api/v1/organization/policy/check",
             "history_api": "GET /api/v1/organization/policy/history",
+            "abac": {
+                "field_security_rules": "abac_policy.field_security_rules",
+                "row_filter_rules": "abac_policy.row_filter_rules",
+                "simulation": "POST /api/v1/organization/policy/check",
+            },
         },
     }
 
@@ -523,6 +731,8 @@ def organization_policy_update(
     current.update({
         "user_capability_map": body.user_capability_map,
         "project_capability_map": body.project_capability_map,
+        "field_security_rules": body.field_security_rules,
+        "row_filter_rules": body.row_filter_rules,
         "notes": body.notes,
         "updated_at": _now(),
         "updated_by": user.username,
@@ -534,6 +744,8 @@ def organization_policy_update(
         "notes": body.notes,
         "user_roles": len(current.get("user_capability_map") or {}),
         "project_roles": len(current.get("project_capability_map") or {}),
+        "field_rules": len((current.get("abac_policy") or {}).get("field_security_rules") or []),
+        "row_rules": len((current.get("abac_policy") or {}).get("row_filter_rules") or []),
     })
     return organization_policy(user=user)
 
@@ -566,17 +778,40 @@ def organization_policy_check(
     policy = _load_role_policy(user.tenant_id)
     source = policy["project_capability_map"] if body.scope == "project" else policy["user_capability_map"]
     capabilities = source.get(body.role, [])
-    allowed = body.capability in capabilities or "*" in capabilities
-    return {
-        "ok": True,
-        "allowed": allowed,
-        "decision": "allow" if allowed else "deny",
+    capability_allowed = body.capability in capabilities or "*" in capabilities
+    abac = _evaluate_abac(policy, body)
+    allowed = capability_allowed and abac["row_decision"]["allowed"] and not abac["denied_fields"]
+    decision = "allow" if allowed else "deny"
+    _append_role_policy_history(user.tenant_id, {
+        "action": "abac_check",
+        "updated_by": user.username,
+        "decision": decision,
         "scope": body.scope,
         "role": body.role,
         "capability": body.capability,
+        "resource": body.resource,
+        "operation": body.action,
+        "matched_row_rules": abac["row_decision"]["matched_rules"],
+        "denied_fields": abac["denied_fields"],
+        "notes": "ABAC policy simulation",
+    })
+    return {
+        "ok": True,
+        "allowed": allowed,
+        "decision": decision,
+        "scope": body.scope,
+        "role": body.role,
+        "capability": body.capability,
+        "resource": body.resource,
+        "action": body.action,
         "matched_capabilities": capabilities,
         "tenant_id": user.tenant_id,
-        "reason": "capability_matched" if allowed else "capability_not_found",
+        "reason": "allowed" if allowed else (
+            "capability_not_found" if not capability_allowed else
+            "row_denied" if not abac["row_decision"]["allowed"] else
+            "field_denied"
+        ),
+        **abac,
         "next": [
             "CLI/Agent 在领取任务或执行敏感操作前可调用本接口完成权限试算。",
             "若返回 deny，可由 tenant_admin 在角色策略中心补充能力码或调整任务分派。",

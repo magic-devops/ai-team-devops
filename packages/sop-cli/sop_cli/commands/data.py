@@ -165,6 +165,33 @@ def metrics(
     _render_simple("metrics center", list(out.get("items") or []), ("id", "name", "domain", "source", "owner"))
 
 
+@app.command(name="nlq")
+def nlq(
+    question: str = typer.Argument(..., help="自然语言指标问题"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """基于当前项目指标执行自然语言问数；LLM 不可用时返回规则兜底答案。"""
+    try:
+        out = get_client().data_analytics_nlq(question)
+    except Exception as e:
+        warn(f"Manager analytics NLQ 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    kv("engine", out.get("engine", ""))
+    if out.get("model"):
+        kv("model", out.get("model", ""))
+    if out.get("confidence") is not None:
+        kv("confidence", f"{float(out.get('confidence') or 0) * 100:.0f}%")
+    if out.get("fallback_reason"):
+        kv("fallback_reason", out.get("fallback_reason", ""))
+    console.print(str(out.get("answer") or ""))
+    cards = out.get("cards") if isinstance(out.get("cards"), list) else []
+    if cards:
+        _render_simple("nlq metric cards", cards, ("label", "value", "metric"))
+
+
 @app.command(name="tags")
 def tags(
     category: str = typer.Option("", "--category", help="标签分类"),

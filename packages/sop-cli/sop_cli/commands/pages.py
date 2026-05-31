@@ -167,6 +167,474 @@ def health(
     console.print(tbl)
 
 
+@app.command("readiness")
+def readiness(
+    domain: str = typer.Option("", "--domain", help="能力域过滤，如 portfolio/delivery/data/ai"),
+    status: str = typer.Option("", "--status", help="完整度过滤：complete/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+    limit: int = typer.Option(12, "--limit", help="展示模块数量"),
+) -> None:
+    """查看模块前后端/API/权限/AI surface 完整度矩阵。"""
+    try:
+        out = get_client().system_pages_readiness(domain=domain, status=status, q=q)
+    except Exception as e:
+        warn(f"Manager system pages readiness 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("avg_score", summary.get("avg_score", 0))
+    kv("complete", summary.get("complete", 0))
+    kv("watch", summary.get("watch", 0))
+    kv("risk", summary.get("risk", 0))
+    tbl = Table(title="module readiness", show_header=True, header_style="bold")
+    for col in ("id", "domain", "status", "score", "gaps", "route"):
+        tbl.add_column(col)
+    for item in _items(out)[: max(1, min(int(limit or 12), 100))]:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("domain", "")),
+            str(item.get("status", "")),
+            str(item.get("readiness_score", "")),
+            str(len(item.get("gaps") or [])),
+            str(item.get("path", "")),
+        )
+    console.print(tbl)
+
+
+@app.command("isolation")
+def isolation(
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+    limit: int = typer.Option(12, "--limit", help="展示领域数量"),
+) -> None:
+    """查看 tenant_code/business_code/project_id 三码隔离审计矩阵。"""
+    try:
+        out = get_client().system_pages_isolation()
+    except Exception as e:
+        warn(f"Manager system pages isolation audit 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("score", summary.get("score", 0))
+    kv("protected", summary.get("protected", 0))
+    kv("watch", summary.get("watch", 0))
+    kv("high_risk", summary.get("high_risk", 0))
+    tbl = Table(title="three-code isolation", show_header=True, header_style="bold")
+    for col in ("id", "status", "storage", "scope_fields", "guard"):
+        tbl.add_column(col)
+    for item in (out.get("domains") or [])[: max(1, min(int(limit or 12), 100))]:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("status", "")),
+            str(item.get("storage", "")),
+            ",".join(str(x) for x in item.get("scope_fields") or [])[:56],
+            str(item.get("guard", ""))[:72],
+        )
+    console.print(tbl)
+
+
+@app.command("isolation-scan")
+def isolation_scan(
+    status: str = typer.Option("all", "--status", help="源码隔离状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    limit: int = typer.Option(12, "--limit", help="展示文件数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """扫描 Manager 源码中的文件型存储与 scope_guard 隔离风险。"""
+    try:
+        out = get_client().system_pages_isolation_scan(status=status, q=q)
+    except Exception as e:
+        warn(f"Manager system pages isolation scan 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("scanned_files", summary.get("scanned_files", 0))
+    kv("protected", summary.get("protected", 0))
+    kv("watch", summary.get("watch", 0))
+    kv("risk", summary.get("risk", 0))
+    tbl = Table(title="isolation source scan", show_header=True, header_style="bold")
+    for col in ("module", "status", "risk", "storage", "file", "recommendation"):
+        tbl.add_column(col)
+    for item in (out.get("items") or [])[: max(1, min(int(limit or 12), 100))]:
+        tbl.add_row(
+            str(item.get("module", "")),
+            str(item.get("status", "")),
+            str(item.get("risk_level", "")),
+            str(item.get("storage", "")),
+            str(item.get("file", "")),
+            str(item.get("recommendation", ""))[:72],
+        )
+    console.print(tbl)
+
+
+@app.command("isolation-scan-tasks")
+def isolation_scan_tasks(
+    status: str = typer.Option("watch", "--status", help="源码隔离状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔源码模块 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
+    include_protected: bool = typer.Option(False, "--include-protected", help="包含已 protected 源码项，用于持续审计"),
+    priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把源码隔离扫描项预览/生成源码加固任务，供 Agent 领取增强。"""
+    body = {
+        "ids": [x.strip() for x in ids.split(",") if x.strip()],
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_protected": include_protected,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+    }
+    try:
+        out = get_client().system_pages_isolation_scan_tasks(**body)
+    except Exception as e:
+        warn(f"Manager system pages isolation scan tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run"))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="isolation source scan tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
+@app.command("isolation-scan-runs")
+def isolation_scan_runs(
+    limit: int = typer.Option(10, "--limit", help="展示快照数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看源码隔离扫描快照历史。"""
+    try:
+        out = get_client().system_pages_isolation_scan_runs(limit=limit)
+    except Exception as e:
+        warn(f"Manager system pages isolation scan runs 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("total", summary.get("total", 0))
+    kv("risk_runs", summary.get("risk_runs", 0))
+    tbl = Table(title="isolation scan runs", show_header=True, header_style="bold")
+    for col in ("id", "created_at", "created_by", "score", "risk", "note"):
+        tbl.add_column(col)
+    for item in (out.get("items") or [])[: max(1, min(int(limit or 10), 100))]:
+        item_summary = item.get("summary") or {}
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("created_at", "")),
+            str(item.get("created_by", "")),
+            str(item_summary.get("score", "")),
+            str(item_summary.get("risk", "")),
+            str(item.get("note", ""))[:60],
+        )
+    console.print(tbl)
+
+
+@app.command("isolation-scan-run")
+def isolation_scan_run(
+    status: str = typer.Option("all", "--status", help="源码隔离状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    note: str = typer.Option("", "--note", help="快照备注"),
+    created_by: str = typer.Option("CLI", "--created-by", help="创建人/Agent"),
+    max_items: int = typer.Option(20, "--max-items", help="快照保留明细数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """保存一次源码隔离扫描快照。"""
+    try:
+        out = get_client().system_pages_isolation_scan_run_create(
+            status=status,
+            q=q,
+            note=note,
+            created_by=created_by,
+            max_items=max_items,
+        )
+    except Exception as e:
+        warn(f"Manager system pages isolation scan run create 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    run = out.get("run") or {}
+    summary = run.get("summary") or {}
+    ok("isolation scan snapshot saved")
+    kv("id", run.get("id", ""))
+    kv("total", summary.get("total", 0))
+    kv("risk", summary.get("risk", 0))
+    kv("history", "sop pages isolation-scan-runs --json")
+
+
+@app.command("isolation-scan-compare")
+def isolation_scan_compare(
+    base_id: str = typer.Option("", "--base-id", help="基线快照 ID；为空使用最新快照"),
+    target_id: str = typer.Option("", "--target-id", help="目标快照 ID；为空使用当前源码扫描"),
+    status: str = typer.Option("all", "--status", help="当前扫描状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="当前扫描关键词"),
+    limit: int = typer.Option(12, "--limit", help="展示差异数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """对比源码隔离扫描快照与当前扫描，识别新增风险和已修复项。"""
+    try:
+        out = get_client().system_pages_isolation_scan_compare(
+            base_id=base_id,
+            target_id=target_id,
+            status=status,
+            q=q,
+        )
+    except Exception as e:
+        warn(f"Manager system pages isolation scan compare 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("new_risks", summary.get("new_risks", 0))
+    kv("resolved", summary.get("resolved", 0))
+    kv("score_delta", summary.get("score_delta", 0))
+    tbl = Table(title="isolation scan compare", show_header=True, header_style="bold")
+    for col in ("module", "before", "after", "change", "recommendation"):
+        tbl.add_column(col)
+    rows = [item for item in (out.get("items") or []) if item.get("change") != "unchanged"]
+    for item in rows[: max(1, min(int(limit or 12), 100))]:
+        tbl.add_row(
+            str(item.get("module", "")),
+            str(item.get("before_status", "")),
+            str(item.get("after_status", "")),
+            str(item.get("change", "")),
+            str(item.get("recommendation", ""))[:72],
+        )
+    console.print(tbl)
+
+
+@app.command("isolation-scan-compare-tasks")
+def isolation_scan_compare_tasks(
+    base_id: str = typer.Option("", "--base-id", help="基线快照 ID；为空使用最新快照"),
+    target_id: str = typer.Option("", "--target-id", help="目标快照 ID；为空使用当前源码扫描"),
+    status: str = typer.Option("all", "--status", help="当前扫描状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="当前扫描关键词"),
+    dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
+    include_resolved: bool = typer.Option(False, "--include-resolved", help="包含已修复项，用于回归验证任务"),
+    priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把源码隔离智能基线对比差异预览/生成治理任务。"""
+    body = {
+        "base_id": base_id,
+        "target_id": target_id,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_resolved": include_resolved,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+    }
+    try:
+        out = get_client().system_pages_isolation_scan_compare_tasks(**body)
+    except Exception as e:
+        warn(f"Manager system pages isolation scan compare tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run"))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="isolation scan compare tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
+@app.command("isolation-tasks")
+def isolation_tasks(
+    status: str = typer.Option("watch", "--status", help="审计状态过滤：all/protected/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔审计域 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
+    include_protected: bool = typer.Option(False, "--include-protected", help="包含已 protected 领域，用于持续审计"),
+    priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把三码隔离审计项预览/生成安全治理任务，供 Agent 领取增强。"""
+    body = {
+        "ids": [x.strip() for x in ids.split(",") if x.strip()],
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_protected": include_protected,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+    }
+    try:
+        out = get_client().system_pages_isolation_tasks(**body)
+    except Exception as e:
+        warn(f"Manager system pages isolation tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run"))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="isolation tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
+@app.command("readiness-tasks")
+def readiness_tasks(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤，如 ecosystem/system/all"),
+    status: str = typer.Option("watch", "--status", help="完整度过滤：all/complete/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔模块 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
+    include_complete: bool = typer.Option(False, "--include-complete", help="包含已 complete 模块，用于持续增强"),
+    priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("Coder", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """把模块完整度缺口预览/生成治理任务，供 Agent 领取增强。"""
+    body = {
+        "ids": [x.strip() for x in ids.split(",") if x.strip()],
+        "domain": domain,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_complete": include_complete,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+    }
+    try:
+        out = get_client().system_pages_readiness_tasks(**body)
+    except Exception as e:
+        warn(f"Manager system pages readiness tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run"))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="readiness tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
+@app.command("governance-tasks")
+def governance_tasks(
+    status: str = typer.Option("all", "--status", help="任务状态：all/pending/in_progress/blocked/completed"),
+    source: str = typer.Option("all", "--source", help="任务来源：all/system_page_readiness/..."),
+    q: str = typer.Option("", "--q", help="关键词"),
+    limit: int = typer.Option(50, "--limit", help="返回数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """查看 SystemMap 各专业治理单元生成的真实任务运营看板。"""
+    try:
+        out = get_client().system_pages_governance_tasks(status=status, source=source, q=q, limit=limit)
+    except Exception as e:
+        warn(f"Manager system pages governance tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("total", summary.get("total", 0))
+    kv("open", summary.get("open", 0))
+    kv("blocked", summary.get("blocked", 0))
+    kv("completed", summary.get("completed", 0))
+    tbl = Table(title="system governance tasks", show_header=True, header_style="bold")
+    for col in ("id", "source", "status", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("items") or [])[: max(1, min(int(limit or 50), 200))]:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("source_label") or item.get("source") or ""),
+            str(item.get("status", "")),
+            str(item.get("priority", "")),
+            str(item.get("title", ""))[:80],
+        )
+    console.print(tbl)
+
+
+@app.command("governance-tasks-update")
+def governance_tasks_update(
+    ids: str = typer.Option(..., "--ids", help="逗号分隔治理任务 ID"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际批量更新"),
+    status: str = typer.Option("", "--status", help="任务状态：pending/in_progress/blocked/completed"),
+    priority: str = typer.Option("", "--priority", help="优先级：P0-P3"),
+    assigned_to: str = typer.Option("", "--assigned-to", help="负责人"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """对 SystemMap 治理任务做 scoped 批量处置，普通任务会被跳过。"""
+    body = {
+        "ids": [x.strip() for x in ids.split(",") if x.strip()],
+        "dry_run": dry_run,
+        "status": status or None,
+        "priority": priority or None,
+        "assigned_to": assigned_to or None,
+    }
+    try:
+        out = get_client().system_pages_governance_tasks_bulk_update(**body)
+    except Exception as e:
+        warn(f"Manager system pages governance tasks bulk update 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run"))
+    kv("planned", summary.get("planned", 0))
+    kv("updated", summary.get("updated", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="governance task update", show_header=True, header_style="bold")
+    for col in ("id", "source", "title"):
+        tbl.add_column(col)
+    for item in out.get("planned") or []:
+        tbl.add_row(str(item.get("id", "")), str(item.get("source", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
 @app.command("menu-prefs")
 def menu_prefs(
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),

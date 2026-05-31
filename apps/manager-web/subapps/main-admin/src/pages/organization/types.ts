@@ -41,6 +41,10 @@ export type OrganizationPolicy = {
   updated_by?: string;
   user_capability_map?: Record<string, string[]>;
   project_capability_map?: Record<string, string[]>;
+  abac_policy?: {
+    field_security_rules?: Array<Record<string, any>>;
+    row_filter_rules?: Array<Record<string, any>>;
+  };
   tenant_scope: Record<string, string>;
   user_roles: Array<{ role: string; level: number; scope: string; capabilities: string[]; assignable: boolean }>;
   project_member_roles: Array<{ role: string; level: number; scope: string; capabilities: string[]; assignable: boolean }>;
@@ -57,6 +61,12 @@ export type OrganizationPolicyCheckResult = {
   capability: string;
   matched_capabilities: string[];
   reason?: string;
+  resource?: string;
+  action?: string;
+  row_decision?: { allowed: boolean; decision: "allow" | "deny"; matched_rules: string[] };
+  field_decisions?: Record<string, { decision: string; matched_rules: string[] }>;
+  masked_row?: Record<string, unknown>;
+  denied_fields?: string[];
 };
 
 export type OrganizationPolicyHistoryItem = {
@@ -67,6 +77,11 @@ export type OrganizationPolicyHistoryItem = {
   notes?: string;
   user_roles?: number;
   project_roles?: number;
+  decision?: string;
+  resource?: string;
+  capability?: string;
+  field_rules?: number;
+  row_rules?: number;
 };
 
 export type OrganizationAccessFinding = {

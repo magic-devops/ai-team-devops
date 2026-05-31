@@ -657,6 +657,7 @@ export function App() {
   const [, bump] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const [activeMicroApp, setActiveMicroApp] = useState<MicroAppId>(() => {
     try {
@@ -737,6 +738,7 @@ export function App() {
     const h = () => {
       if (applyHashNormalization()) return;
       setHash(window.location.hash || "#/dashboard");
+      setMobileNavOpen(false);
     };
     h();
     window.addEventListener("hashchange", h);
@@ -931,6 +933,16 @@ export function App() {
   const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
   const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickAccessItems;
   const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
+  const mobileCoreActions = useMemo(
+    () => [
+      { key: "dashboard", path: "#/dashboard", icon: Rows3, label: navLabel("dashboard") },
+      { key: "tasks", path: "#/tasks", icon: Check, label: navLabel("tasks") },
+      { key: "requirements", path: "#/requirements", icon: Layers3, label: navLabel("requirements") },
+      { key: "alerts", path: "#/intelligence/usage", icon: Sparkles, label: t("nav.mobileAlerts", { defaultValue: "告警" }) },
+      { key: "im", path: "#/notify/inbound", icon: Bot, label: t("nav.mobileIm", { defaultValue: "IM" }) },
+    ],
+    [navLabel, t],
+  );
 
   useEffect(() => {
     if (routeMicroApp && routeMicroApp !== activeMicroApp) setActiveMicroApp(routeMicroApp);
@@ -1100,9 +1112,105 @@ export function App() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row">
       <CommandPalette open={commandOpen} setOpen={setCommandOpen} authed={authed} />
+      <Dialog.Root open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm lg:hidden" />
+          <Dialog.Content
+            data-testid="mobile-nav-drawer"
+            className="fixed inset-y-0 left-0 z-50 flex w-[min(22rem,calc(100vw-2rem))] flex-col border-r border-[var(--nav-border)] bg-[var(--nav-bg)] text-[var(--text)] shadow-2xl backdrop-blur-xl lg:hidden"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--nav-border)] px-4 py-3">
+              <div className="min-w-0">
+                <Dialog.Title className="truncate text-base font-bold text-[var(--brand)]">Hermes</Dialog.Title>
+                <p className="mt-0.5 truncate text-xs text-[var(--nav-muted)]">{activeAppDefinition.name}</p>
+              </div>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)]"
+                  aria-label={t("common.close")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </Dialog.Close>
+            </div>
+            <div className="border-b border-[var(--nav-border)] p-3">
+              <button
+                type="button"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Command className="h-4 w-4" />
+                {t("command.short")}
+              </button>
+              <div className="mt-3 grid grid-cols-5 gap-1">
+                {mobileCoreActions.map((action) => {
+                  const Icon = action.icon;
+                  const active = hash.startsWith(action.path);
+                  return (
+                    <a
+                      key={action.key}
+                      href={action.path}
+                      className={`flex min-w-0 flex-col items-center gap-1 rounded-lg px-1 py-2 text-[11px] ${
+                        active ? "bg-[var(--nav-active)] font-semibold text-[var(--brand)]" : "text-[var(--nav-muted)] hover:bg-[var(--surface-muted)]"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="max-w-full truncate">{action.label}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="hermes-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
+              <div className="grid gap-2">
+                {MICRO_APPS.map((app) => {
+                  const appMenus = microAppMenuById.get(app.id) ?? [];
+                  const active = app.id === activeMicroApp;
+                  const shown = appMenus.slice(0, active ? 12 : 5);
+                  return (
+                    <section key={app.id} className={`rounded-xl border p-2 ${active ? "border-[var(--brand)]/45 bg-[var(--nav-active)]" : "border-[var(--border)] bg-[var(--surface-raised)]/55"}`}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left"
+                        onClick={() => chooseMicroApp(app.id, app.route)}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[var(--text)]">{app.shortName}</span>
+                          <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{app.owner}</span>
+                        </span>
+                        <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-strong)]">{appMenus.length}</span>
+                      </button>
+                      <div className="mt-1 grid gap-1">
+                        {shown.map((item) => {
+                          const Icon = item.icon;
+                          const activeItem = current.key === item.key || current.parentKey === item.key;
+                          return (
+                            <a
+                              key={item.key}
+                              href={item.path}
+                              className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-xs ${
+                                activeItem ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--nav-text)] hover:bg-[var(--surface-muted)]"
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="min-w-0 flex-1 truncate">{navLabel(item.key)}</span>
+                              <NavBadgeTag badge={item.badge} />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <aside
         style={sidebarStyle}
-        className={`relative flex min-h-0 w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r ${
+        className={`relative hidden min-h-0 w-full shrink-0 flex-col border-b border-[var(--nav-border)] bg-[var(--nav-bg)] shadow-sm backdrop-blur-xl transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:border-b-0 lg:border-r ${
           sidebarCollapsed ? "lg:w-20" : "lg:w-[var(--sidebar-width)]"
         }`}
       >
@@ -1648,16 +1756,25 @@ export function App() {
         ) : null}
       </aside>
 
-      <main className="hermes-scrollbar min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 lg:h-screen lg:overflow-y-auto xl:px-8 2xl:px-10">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-          <div>
+      <main className="hermes-scrollbar min-w-0 flex-1 overflow-x-hidden px-3 pb-24 pt-4 sm:px-6 lg:h-screen lg:overflow-y-auto lg:px-6 lg:py-5 xl:px-8 2xl:px-10">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4 lg:mb-6">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="mobile-nav-toggle"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--control-bg)] text-[var(--muted-strong)] shadow-sm lg:hidden"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label={t("nav.openMobileMenu", { defaultValue: "打开菜单" })}
+              >
+                <Rows3 className="h-4 w-4" />
+              </button>
               <span
-                className="inline-block h-5 w-1 rounded"
+                className="hidden h-5 w-1 rounded sm:inline-block"
                 style={{ background: NAV_GROUP_ACCENT[current.group] }}
                 aria-hidden
               />
-              <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">
+              <h1 className="min-w-0 truncate text-xl font-bold tracking-tight text-[var(--text)] sm:text-2xl">
                 {t(`page.${current.key}.title`, { defaultValue: navLabel(current.key) })}
               </h1>
               <NavBadgeTag badge={current.badge} />
@@ -1701,7 +1818,7 @@ export function App() {
               ) : null}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               className="hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)] lg:inline-flex"
@@ -1711,7 +1828,9 @@ export function App() {
               <Command className="h-4 w-4" />
               <span>{t("command.short")}</span>
             </button>
-            <ProjectSelector />
+            <div className="hidden sm:block">
+              <ProjectSelector />
+            </div>
             <button
               type="button"
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)]"
@@ -1735,8 +1854,29 @@ export function App() {
             <UserMenu authed={authed} />
           </div>
         </header>
-        <div className="w-full">{current.el}</div>
+        <div className="hermes-mobile-compact w-full" data-mobile-compact="true">{current.el}</div>
       </main>
+      <nav
+        data-testid="mobile-action-bar"
+        className="fixed inset-x-3 bottom-3 z-40 grid grid-cols-5 gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface-raised)]/95 p-1.5 shadow-2xl backdrop-blur-xl lg:hidden"
+      >
+        {mobileCoreActions.map((action) => {
+          const Icon = action.icon;
+          const active = hash.startsWith(action.path);
+          return (
+            <a
+              key={action.key}
+              href={action.path}
+              className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] ${
+                active ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]" : "text-[var(--muted-strong)]"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="max-w-full truncate">{action.label}</span>
+            </a>
+          );
+        })}
+      </nav>
     </div>
   );
 }

@@ -22,7 +22,13 @@ API 进程通过 `POST /api/v1/worker/jobs` 写入 Stream（或本地 job 文件
 |----------|------|
 | `kb.index` / `kb.reindex` | 回调 Manager `POST /api/v1/knowledge/index` |
 | `memory.summarize` | 拉取 recent 记忆并生成预览摘要 |
-| `rag.warmup` | 占位 noop |
+| `rag.warmup` | 调用 Manager RAG health/search，可选 index docs 后预热热门集合；失败可重试并进入 DLQ |
+
+失败治理：
+
+- `WORKER_MAX_RETRIES`：单条 Redis Stream 消息最大重试次数，默认 `2`。
+- `WORKER_DLQ_STREAM`：失败超过重试次数后的死信 Stream，默认 `${WORKER_TASK_STREAM}:dlq`。
+- 健康接口返回 `metrics.received/completed/failed/retried/dlq`，便于 Prometheus/日志侧采集。
 
 Worker 需配置 `MANAGER_URL`、`MANAGER_BEARER`（或 `SOP_BEARER_TOKEN`）、`PROJECT_ID`（及可选三码头）。
 

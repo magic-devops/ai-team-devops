@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Input } from "antd";
+import { Button, Input, Tag } from "antd";
 import { Save, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -30,6 +30,11 @@ export function AnalyticsNlqWorkbench() {
   });
 
   const metrics = overview.data?.metrics ?? {};
+  const nlqCards = Array.isArray(nlq.data?.cards) ? nlq.data.cards : [];
+  const providerErrors = Array.isArray(nlq.data?.provider_errors) ? nlq.data.provider_errors : [];
+  const engine = String(nlq.data?.engine ?? "");
+  const fallbackReason = String(nlq.data?.fallback_reason ?? "");
+  const confidence = typeof nlq.data?.confidence === "number" ? Math.round(nlq.data.confidence * 100) : null;
 
   const saveReport = useMutation({
     mutationFn: () =>
@@ -113,10 +118,45 @@ export function AnalyticsNlqWorkbench() {
             {nlq.isPending ? <LoadingBlock /> : null}
             {nlq.data?.answer ? (
               <div className="mt-4 rounded-xl border border-[var(--brand)]/30 bg-[var(--brand-softer)] p-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                  {t("page.analytics.nlqAnswer")}
-                </p>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <p className="mr-auto text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    {t("page.analytics.nlqAnswer")}
+                  </p>
+                  {engine ? (
+                    <Tag color={engine === "llm" ? "green" : "blue"}>
+                      {t("page.analytics.nlqEngineLabel")}: {t(`page.analytics.nlqEngines.${engine}`, engine)}
+                    </Tag>
+                  ) : null}
+                  {confidence !== null ? <Tag>{t("page.analytics.nlqConfidence")}: {confidence}%</Tag> : null}
+                </div>
                 <MarkdownView content={String(nlq.data.answer)} />
+                {fallbackReason ? (
+                  <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900">
+                    <div className="font-medium">{t("page.analytics.nlqFallbackReason")}: {t(`page.analytics.nlqFallback.${fallbackReason}`, fallbackReason)}</div>
+                    {providerErrors.length ? (
+                      <div className="mt-1 text-amber-800">{t("page.analytics.nlqProviderErrors")}: {providerErrors.slice(0, 2).join("；")}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {nlqCards.length ? (
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                      {t("page.analytics.nlqMetricCards")}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {nlqCards.map((card: { label?: string; value?: unknown; metric?: string; tone?: string }) => (
+                        <div
+                          key={String(card.metric ?? card.label)}
+                          className="min-h-20 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                        >
+                          <div className="truncate text-xs text-[var(--muted)]">{card.label}</div>
+                          <div className="mt-1 text-2xl font-semibold text-[var(--text)]">{String(card.value ?? 0)}</div>
+                          <div className="mt-1 truncate text-[11px] text-[var(--muted)]">{card.metric}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </WorkbenchPanel>

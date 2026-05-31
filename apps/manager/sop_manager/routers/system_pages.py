@@ -6,7 +6,9 @@ import hashlib
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from shlex import quote as shell_quote
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends
@@ -14,9 +16,18 @@ from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root
 from .auth_sql import USER_ROLES, User, current_user
-from .tasks import TaskCreate, create_task, list_tasks
+from .tasks import TaskBulkUpdate, TaskCreate, bulk_update_tasks, create_task, list_tasks
 
 router = APIRouter(prefix="/api/v1/system/pages", tags=["system-pages"])
+
+TASK_STATUS_PATTERN = "^(pending|in_progress|blocked|completed)$"
+TASK_PRIORITY_PATTERN = "^P[0-3]$"
+SYSTEM_GOVERNANCE_TASK_STATUSES = ("pending", "in_progress", "blocked", "completed")
+SYSTEM_GOVERNANCE_TASK_PRIORITIES = ("P0", "P1", "P2", "P3")
+SYSTEM_GOVERNANCE_TASKS_API = "/api/v1/system/pages/governance-tasks"
+SYSTEM_GOVERNANCE_TASKS_BULK_UPDATE_API = "/api/v1/system/pages/governance-tasks/bulk-update"
+SYSTEM_GOVERNANCE_TASKS_ROUTE = "#/system-map/governance-tasks"
+SYSTEM_TASK_CENTER_ROUTE = "#/tasks"
 
 
 def _utc_now() -> str:
@@ -39,6 +50,12 @@ def _action_approvals_file():
     d = resolved_ai_memory_root() / "system-pages-v4"
     d.mkdir(parents=True, exist_ok=True)
     return d / "module_action_approvals.jsonl"
+
+
+def _isolation_scan_runs_file() -> Path:
+    d = resolved_ai_memory_root() / "system-pages-v4"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "isolation_scan_runs.jsonl"
 
 
 def _menu_prefs_dir() -> Path:
@@ -420,7 +437,7 @@ MICRO_APPS: list[dict[str, Any]] = [
         "entry": "subapps/ai-data-center/index.html",
         "mode": "standalone",
         "domains": ["data"],
-        "module_ids": ["analytics", "analyticsCatalog", "analyticsReports", "analyticsLineage", "dataExchange", "dataSources", "dataIngest", "dataQualityCenter", "metricsCenter", "tagService", "dataDev"],
+        "module_ids": ["analytics", "analyticsCatalog", "analyticsReports", "analyticsLineage", "metadataManagement", "dataExchange", "dataSources", "dataIngest", "dataQualityCenter", "metricsCenter", "tagService", "dataDev"],
         "responsibilities": ["数据源", "数据接入", "元数据血缘", "数据开发", "指标标签", "数据服务"],
     },
     {
@@ -471,7 +488,7 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "projectOnboarding": [("overview", "接入总览"), ("commands", "命令清单"), ("env", "环境变量"), ("agent_toml", "agent.toml"), ("tool_profiles", "工具 Profile"), ("context_assets", "上下文资产")],
     "projectTemplates": [("overview", "模板总览"), ("template_catalog", "模板目录"), ("clone_wizard", "克隆向导"), ("capability_flags", "能力开关")],
     "projectGovernance": [("readiness", "健康评估"), ("ops_plan", "治理操作包"), ("governance_tasks", "治理任务化"), ("agent_prompt", "Agent 接手提示词")],
-    "organization": [("tenant_users", "租户成员"), ("business_lines", "业务线"), ("project_members", "项目成员"), ("role_policy", "角色策略"), ("access_review", "权限体检")],
+    "organization": [("tenant_users", "租户成员"), ("business_lines", "业务线"), ("project_members", "项目成员"), ("role_policy", "角色策略"), ("abac", "ABAC"), ("field_security", "字段级安全"), ("row_filter", "行级过滤"), ("policy_simulation", "策略试算"), ("access_review", "权限体检")],
     "requirements": [("requirement_pool", "需求池"), ("smart_review", "智能评审"), ("task_generation", "任务拆解"), ("batch_governance", "批量治理")],
     "tasks": [("execution_table", "执行列表"), ("kanban", "状态看板"), ("dag_dependencies", "任务依赖关系"), ("scheduler_center", "依赖调度执行"), ("agent_feed", "Agent Feed"), ("bulk_governance", "批量治理")],
     "taskExecution": [("execution_table", "执行表格"), ("filters", "筛选器"), ("bulk_update", "批量治理")],
@@ -485,6 +502,7 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "analyticsReports": [("report_assets", "报告资产"), ("report_subscription", "报告订阅"), ("action_tasks", "报告转任务"), ("notification", "报告分发")],
     "analyticsCatalog": [("capability_stack", "四层能力栈"), ("domain_overview", "五大专业域"), ("governance_export", "治理导出")],
     "dataAssets": [("asset_catalog", "资产目录"), ("quality_evaluate", "质量评估"), ("governance_tasks", "治理任务")],
+    "metadataManagement": [("overview", "元数据总览"), ("assets", "资产目录"), ("fields", "字段目录"), ("lineage", "血缘影响")],
     "dataMetricsTags": [("metric_definitions", "指标口径"), ("tag_rules", "标签规则"), ("ownership", "负责人")],
     "dataServices": [("service_catalog", "服务目录"), ("publishing", "发布管理"), ("health", "健康检查")],
     "dataQuality": [("alerts", "质量告警"), ("notify", "通知"), ("fix_tasks", "修复任务")],
@@ -496,19 +514,33 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "intelligence": [("knowledge", "知识库"), ("rag", "RAG 检索"), ("memory", "记忆"), ("rules", "规则"), ("distill", "蒸馏审核"), ("specs", "规范文档"), ("design_docs", "技术方案"), ("datasources", "数据源"), ("worker", "WorkerOps"), ("sync", "SyncOps"), ("events", "事件流水"), ("usage", "用量治理")],
     "knowledgeBase": [("documents", "知识文档"), ("index", "索引"), ("search", "检索")],
     "ragSearch": [("retrieval", "检索增强"), ("citations", "引用证据"), ("prompt_context", "提示词上下文")],
-    "aiMemory": [("recent", "最近记忆"), ("search", "记忆检索"), ("attach_run", "运行挂载")],
+    "aiMemory": [("recent", "最近记忆"), ("search", "记忆检索"), ("attach_run", "运行挂载"), ("lifecycle", "生命周期")],
+    "knowledgeGraph": [("build", "图谱构建"), ("query", "Graph RAG"), ("lineage", "血缘关联"), ("profile_merge", "画像合并")],
     "ruleCenter": [("proposals", "规则提案"), ("apply", "规则应用"), ("sync", "规则同步")],
     "reflectionDistill": [("run", "蒸馏运行"), ("proposal_review", "提案审核"), ("rule_apply", "规则入库")],
     "workerOps": [("job_types", "任务类型"), ("enqueue", "任务投递"), ("monitor", "运行监控")],
     "syncOps": [("modules", "同步模块"), ("pull", "拉取预览"), ("asset_push", "资产推送")],
     "eventStream": [("cloud_events", "CloudEvents"), ("sync_events", "同步事件"), ("agent_events", "Agent 事件")],
     "usageOps": [("quota", "配额"), ("alerts", "告警"), ("governance_tasks", "治理任务")],
+    "llmGateway": [("routing", "模型路由"), ("cost", "成本控制"), ("attribution", "成本归因"), ("eval", "模型评测"), ("audit", "Prompt 审计"), ("health", "运行健康")],
     "platforms": [("tool_profiles", "工具接入"), ("mcp_hub", "MCP Hub"), ("agents", "Agent 注册"), ("agent_runs", "Agent 运行中心"), ("models", "模型管理"), ("ops", "运行治理"), ("a2a", "A2A 专家组")],
     "marketplace": [("catalog", "资产目录"), ("installed", "已安装资产"), ("rating", "评分反馈"), ("signature", "签名状态")],
-    "notify": [("connectors", "连接器"), ("channels", "通道模板"), ("outbound", "出站消息"), ("inbound", "入站消息"), ("messages", "消息流水"), ("action_conversion", "消息转任务/需求")],
+    "notify": [("connectors", "连接器"), ("channels", "通道模板"), ("outbound", "出站消息"), ("inbound", "入站消息"), ("messages", "消息流水"), ("subscriptions", "报告订阅"), ("subscription_runs", "订阅运行中心"), ("action_conversion", "消息转任务/需求")],
     "audit": [("hash_chain", "审计哈希链"), ("events", "事件检索"), ("module_actions", "模块动作审计"), ("approvals", "动作审批"), ("export", "合规导出")],
-    "systemMap": [("registry", "页面注册表"), ("manifest", "模块 Manifest"), ("capabilities", "能力权限"), ("actions", "动作目录"), ("legacy", "Legacy 收敛"), ("migration", "迁移任务")],
-    "settings": [("account", "账户会话"), ("runtime", "运行状态"), ("sso", "企业 SSO"), ("billing", "商业计费"), ("profiles", "环境 Profile"), ("observability", "日志观测")],
+    "systemMap": [
+        ("registry", "页面注册表"),
+        ("manifest", "模块 Manifest"),
+        ("capabilities", "能力权限"),
+        ("readiness", "模块完整度"),
+        ("three_code_isolation", "三码隔离审计"),
+        ("source_scan", "源码隔离扫描"),
+        ("baseline_compare", "智能基线对比"),
+        ("governance_tasks", "治理任务化"),
+        ("actions", "动作目录"),
+        ("legacy", "Legacy 收敛"),
+        ("migration", "迁移任务"),
+    ],
+    "settings": [("account", "账户会话"), ("runtime", "运行状态"), ("sso", "企业 SSO"), ("billing", "商业计费"), ("profiles", "环境 Profile"), ("observability", "日志观测"), ("storage", "生产存储")],
     "legacyConsole": [("bridge", "Legacy 桥接"), ("target_jump", "目标跳转"), ("migration_task", "迁移任务")],
 }
 
@@ -535,6 +567,12 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("projectGovernance", "ops_plan"): "#/projects/governance/ops",
     ("projectGovernance", "governance_tasks"): "#/projects/governance/actions",
     ("projectGovernance", "agent_prompt"): "#/projects/governance/prompt",
+    ("llmGateway", "routing"): "#/ai/llm-gateway/routing",
+    ("llmGateway", "cost"): "#/ai/llm-gateway/cost",
+    ("llmGateway", "attribution"): "#/ai/llm-gateway/attribution",
+    ("llmGateway", "eval"): "#/ai/llm-gateway/eval",
+    ("llmGateway", "audit"): "#/ai/llm-gateway/audit",
+    ("llmGateway", "health"): "#/ai/llm-gateway/health",
     ("organization", "tenant_users"): "#/organization/users",
     ("organization", "business_lines"): "#/organization/businesses",
     ("organization", "project_members"): "#/organization/project-members",
@@ -559,6 +597,10 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("analyticsCatalog", "capability_stack"): "#/analytics/catalog",
     ("analyticsCatalog", "domain_overview"): "#/analytics/catalog",
     ("analyticsCatalog", "governance_export"): "#/analytics/catalog",
+    ("metadataManagement", "overview"): "#/data/metadata/overview",
+    ("metadataManagement", "assets"): "#/data/metadata/assets",
+    ("metadataManagement", "fields"): "#/data/metadata/fields",
+    ("metadataManagement", "lineage"): "#/data/metadata/lineage",
     ("copilot", "chat"): "#/copilot/chat",
     ("copilot", "commands"): "#/copilot/commands",
     ("copilot", "tool_plan"): "#/copilot/tool-plan",
@@ -580,6 +622,9 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("platforms", "agent_runs"): "#/platforms/agent-runs",
     ("platforms", "models"): "#/platforms/models",
     ("platforms", "ops"): "#/platforms/ops",
+    ("dataSources", "overview"): "#/data/sources",
+    ("dataSources", "connections"): "#/data/sources",
+    ("dataSources", "metadata"): "#/data/sources",
     ("marketplace", "catalog"): "#/marketplace/catalog",
     ("marketplace", "installed"): "#/marketplace/installed",
     ("marketplace", "rating"): "#/marketplace/ratings",
@@ -588,6 +633,8 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("notify", "inbound"): "#/notify/inbound",
     ("notify", "connectors"): "#/notify/connectors",
     ("notify", "messages"): "#/notify/messages",
+    ("notify", "subscriptions"): "#/notify/subscriptions",
+    ("notify", "subscription_runs"): "#/notify/subscription-runs",
     ("audit", "hash_chain"): "#/audit/chain",
     ("audit", "events"): "#/audit/events",
     ("audit", "module_actions"): "#/audit/module-actions",
@@ -595,6 +642,11 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("systemMap", "registry"): "#/system-map/registry",
     ("systemMap", "manifest"): "#/system-map/manifest",
     ("systemMap", "capabilities"): "#/system-map/capabilities",
+    ("systemMap", "readiness"): "#/system-map/readiness",
+    ("systemMap", "three_code_isolation"): "#/system-map/three-code-isolation",
+    ("systemMap", "source_scan"): "#/system-map/source-scan",
+    ("systemMap", "baseline_compare"): "#/system-map/baseline-compare",
+    ("systemMap", "governance_tasks"): "#/system-map/governance-tasks",
     ("systemMap", "actions"): "#/system-map/actions",
     ("settings", "account"): "#/settings/account",
     ("settings", "runtime"): "#/settings/runtime",
@@ -602,6 +654,7 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("settings", "billing"): "#/settings/billing",
     ("settings", "profiles"): "#/settings/profiles",
     ("settings", "observability"): "#/settings/observability",
+    ("settings", "storage"): "#/settings/storage",
 }
 
 
@@ -633,12 +686,74 @@ class BacklogTaskIn(BaseModel):
     assigned_to: str = "Coder"
 
 
+class ReadinessTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    domain: str = "all"
+    status: str = Field("watch", pattern="^(all|complete|watch|risk)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "Coder"
+    max_items: int = Field(12, ge=1, le=100)
+    include_complete: bool = False
+
+
+class IsolationTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P0", pattern="^P[0-3]$")
+    assigned_to: str = "SecurityAgent"
+    max_items: int = Field(12, ge=1, le=100)
+    include_protected: bool = False
+
+
+class IsolationScanTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P0", pattern="^P[0-3]$")
+    assigned_to: str = "SecurityAgent"
+    max_items: int = Field(12, ge=1, le=100)
+    include_protected: bool = False
+
+
+class IsolationScanRunIn(BaseModel):
+    status: str = Field("all", pattern="^(all|protected|watch|risk)$")
+    q: str = ""
+    note: str = ""
+    created_by: str = "SystemMap"
+    max_items: int = Field(20, ge=1, le=100)
+
+
+class IsolationScanCompareTaskIn(BaseModel):
+    base_id: str = ""
+    target_id: str = ""
+    status: str = Field("all", pattern="^(all|protected|watch|risk)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P0", pattern="^P[0-3]$")
+    assigned_to: str = "SecurityAgent"
+    max_items: int = Field(12, ge=1, le=100)
+    include_resolved: bool = False
+
+
 class GovernanceTaskIn(BaseModel):
     scope: str = Field("all", pattern="^(all|registry_consistency|legacy_convergence|module_permission_ai|module_maturity)$")
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
     assigned_to: str = "Coder"
     max_items: int = Field(12, ge=1, le=100)
+
+
+class GovernanceTaskBulkUpdateIn(BaseModel):
+    ids: list[str] = Field(default_factory=list, min_length=1, max_length=200)
+    dry_run: bool = True
+    status: str | None = Field(default=None, pattern=TASK_STATUS_PATTERN)
+    priority: str | None = Field(default=None, pattern=TASK_PRIORITY_PATTERN)
+    assigned_to: str | None = None
 
 
 class CapabilityCheckIn(BaseModel):
@@ -693,6 +808,12 @@ class MenuPreferencesIn(BaseModel):
 
 
 NAV_CONTRACT: list[dict[str, Any]] = [
+    {"id": "microAppMainAdmin", "path": "#/apps/main-admin", "domain": "overview", "capability": "overview.micro-apps.main-admin", "entry_type": "micro_app_shell"},
+    {"id": "microAppAiFoundation", "path": "#/apps/ai-foundation", "domain": "ai", "capability": "ai.micro-apps.foundation", "entry_type": "micro_app_shell"},
+    {"id": "microAppAiRdCenter", "path": "#/apps/ai-rd-center", "domain": "delivery", "capability": "delivery.micro-apps.rd-center", "entry_type": "micro_app_shell"},
+    {"id": "microAppAiDataCenter", "path": "#/apps/ai-data-center", "domain": "data", "capability": "data.micro-apps.data-center", "entry_type": "micro_app_shell"},
+    {"id": "microAppAiOpsCenter", "path": "#/apps/ai-ops-center", "domain": "system", "capability": "system.micro-apps.ops-center", "entry_type": "micro_app_shell"},
+    {"id": "microAppGovernance", "path": "#/micro-apps", "domain": "governance", "capability": "governance.micro-apps.registry", "entry_type": "micro_app_shell"},
     {"id": "dashboard", "path": "#/dashboard", "domain": "overview", "capability": "overview.dashboard"},
     {"id": "projects", "path": "#/projects", "domain": "portfolio", "capability": "portfolio.projects"},
     {"id": "projectPortfolio", "path": "#/projects/portfolio", "domain": "portfolio", "capability": "portfolio.projects.portfolio"},
@@ -738,12 +859,22 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "analyticsReports", "path": "#/analytics/reports", "domain": "data", "capability": "data.analytics.reports"},
     {"id": "analyticsCatalog", "path": "#/analytics/catalog", "domain": "data", "capability": "data.analytics.catalog"},
     {"id": "dataAssets", "path": "#/analytics/catalog/assets", "domain": "data", "capability": "data.analytics.catalog.assets"},
+    {"id": "metadataManagement", "path": "#/data/metadata", "domain": "data", "capability": "data.metadata"},
+    {"id": "metadataOverview", "path": "#/data/metadata/overview", "domain": "data", "capability": "data.metadata.overview"},
+    {"id": "metadataAssets", "path": "#/data/metadata/assets", "domain": "data", "capability": "data.metadata.assets"},
+    {"id": "metadataFields", "path": "#/data/metadata/fields", "domain": "data", "capability": "data.metadata.fields"},
+    {"id": "metadataLineage", "path": "#/data/metadata/lineage", "domain": "data", "capability": "data.metadata.lineage"},
     {"id": "dataMetricsTags", "path": "#/analytics/catalog/metrics", "domain": "data", "capability": "data.analytics.catalog.metrics"},
     {"id": "dataServices", "path": "#/analytics/catalog/services", "domain": "data", "capability": "data.analytics.catalog.services"},
     {"id": "dataQuality", "path": "#/analytics/catalog/quality", "domain": "data", "capability": "data.analytics.catalog.quality"},
     {"id": "dataDevelopment", "path": "#/analytics/catalog/development", "domain": "data", "capability": "data.analytics.catalog.development"},
     {"id": "analyticsLineage", "path": "#/analytics/lineage", "domain": "data", "capability": "data.analytics.lineage"},
     {"id": "dataExchange", "path": "#/analytics/exchange", "domain": "data", "capability": "data.exchange"},
+    {"id": "dataSources", "path": "#/data/sources", "domain": "data", "capability": "data.sources"},
+    {"id": "dataSourcesOverview", "path": "#/data/sources/overview", "domain": "data", "capability": "data.sources.overview"},
+    {"id": "dataSourcesConnections", "path": "#/data/sources/connections", "domain": "data", "capability": "data.sources.connections"},
+    {"id": "dataSourcesMetadata", "path": "#/data/sources/metadata", "domain": "data", "capability": "data.sources.metadata"},
+    {"id": "dataIngest", "path": "#/analytics/ingest", "domain": "data", "capability": "data.dataIngest"},
     {"id": "analyticsNlq", "path": "#/analytics/nlq", "domain": "data", "capability": "data.analytics.nlq"},
     {"id": "copilot", "path": "#/copilot", "domain": "ai", "capability": "ai.copilot"},
     {"id": "vibe", "path": "#/vibe", "domain": "ai", "capability": "ai.vibe"},
@@ -752,11 +883,11 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "knowledgeBase", "path": "#/intelligence/kb", "domain": "ai", "capability": "ai.intelligence.knowledge"},
     {"id": "ragSearch", "path": "#/intelligence/rag", "domain": "ai", "capability": "ai.intelligence.rag"},
     {"id": "aiMemory", "path": "#/intelligence/memory", "domain": "ai", "capability": "ai.intelligence.memory"},
+    {"id": "knowledgeGraph", "path": "#/ai/knowledge-graph", "domain": "ai", "capability": "ai.knowledgeGraph"},
     {"id": "ruleCenter", "path": "#/intelligence/rules", "domain": "ai", "capability": "ai.intelligence.rules"},
     {"id": "reflectionDistill", "path": "#/intelligence/distill", "domain": "ai", "capability": "ai.intelligence.distill"},
     {"id": "specs", "path": "#/intelligence/specs", "domain": "ai", "capability": "ai.intelligence.specs"},
     {"id": "designDocs", "path": "#/intelligence/design-docs", "domain": "ai", "capability": "ai.intelligence.design-docs"},
-    {"id": "dataSources", "path": "#/intelligence/datasources", "domain": "ai", "capability": "ai.intelligence.datasources"},
     {"id": "workerOps", "path": "#/intelligence/worker", "domain": "ai", "capability": "ai.intelligence.worker"},
     {"id": "syncOps", "path": "#/intelligence/sync", "domain": "ai", "capability": "ai.intelligence.sync"},
     {"id": "eventStream", "path": "#/intelligence/events", "domain": "ai", "capability": "ai.intelligence.events"},
@@ -767,8 +898,19 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "agentRegistry", "path": "#/platforms/agents", "domain": "ecosystem", "capability": "ecosystem.platforms.agents"},
     {"id": "agentRuns", "path": "#/platforms/agent-runs", "domain": "ecosystem", "capability": "ecosystem.platforms.agent-runs"},
     {"id": "modelOps", "path": "#/platforms/models", "domain": "ecosystem", "capability": "ecosystem.platforms.models"},
+    {"id": "llmGateway", "path": "#/ai/llm-gateway", "domain": "ecosystem", "capability": "ecosystem.llmGateway"},
+    {"id": "llmGatewayAttribution", "path": "#/ai/llm-gateway/attribution", "domain": "ecosystem", "capability": "ai.llm-gateway.attribution"},
+    {"id": "llmGatewayEval", "path": "#/ai/llm-gateway/eval", "domain": "ecosystem", "capability": "ai.llm-gateway.eval"},
     {"id": "platformOps", "path": "#/platforms/ops", "domain": "ecosystem", "capability": "ecosystem.platforms.ops"},
     {"id": "cliTools", "path": "#/platforms/cli", "domain": "ecosystem", "capability": "ecosystem.platforms.cli"},
+    {"id": "a2aGateway", "path": "#/ecosystem/a2a", "domain": "ecosystem", "capability": "ecosystem.a2a"},
+    {"id": "a2aWorkbench", "path": "#/ecosystem/a2a/workbench", "domain": "ecosystem", "capability": "ecosystem.a2a.workbench"},
+    {"id": "a2aRegistry", "path": "#/ecosystem/a2a/registry", "domain": "ecosystem", "capability": "ecosystem.a2a.registry"},
+    {"id": "a2aNegotiate", "path": "#/ecosystem/a2a/negotiate", "domain": "ecosystem", "capability": "ecosystem.a2a.negotiate"},
+    {"id": "a2aSla", "path": "#/ecosystem/a2a/sla", "domain": "ecosystem", "capability": "ecosystem.a2a.sla"},
+    {"id": "a2aWindows", "path": "#/ecosystem/a2a/windows", "domain": "ecosystem", "capability": "ecosystem.a2a.windows"},
+    {"id": "a2aDispatch", "path": "#/ecosystem/a2a/dispatch", "domain": "ecosystem", "capability": "ecosystem.a2a.dispatch"},
+    {"id": "a2aEvidence", "path": "#/ecosystem/a2a/evidence", "domain": "ecosystem", "capability": "ecosystem.a2a.evidence"},
     {"id": "marketplace", "path": "#/marketplace", "domain": "ecosystem", "capability": "ecosystem.marketplace"},
     {"id": "skillsHub", "path": "#/skills-hub", "domain": "ecosystem", "capability": "ecosystem.skills-hub"},
     {"id": "skillsCatalog", "path": "#/skills-hub/skills", "domain": "ecosystem", "capability": "ecosystem.skills-hub.skills"},
@@ -779,6 +921,9 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "notifyOutbound", "path": "#/notify/outbound", "domain": "ecosystem", "capability": "ecosystem.notify.outbound"},
     {"id": "notifyInbound", "path": "#/notify/inbound", "domain": "ecosystem", "capability": "ecosystem.notify.inbound"},
     {"id": "notifyMessages", "path": "#/notify/messages", "domain": "ecosystem", "capability": "ecosystem.notify.messages"},
+    {"id": "notifySubscriptions", "path": "#/notify/subscriptions", "domain": "ecosystem", "capability": "ecosystem.notify.subscriptions"},
+    {"id": "notifySubscriptionRuns", "path": "#/notify/subscription-runs", "domain": "ecosystem", "capability": "ecosystem.notify.subscription-runs"},
+    {"id": "opsCenter", "path": "#/system/ops-center", "domain": "system", "capability": "system.ops-center"},
     {"id": "webhooks", "path": "#/notify/webhooks", "domain": "ecosystem", "capability": "ecosystem.notify.webhooks"},
     {"id": "audit", "path": "#/audit", "domain": "governance", "capability": "governance.audit"},
     {"id": "systemMap", "path": "#/system-map", "domain": "governance", "capability": "governance.system-map"},
@@ -872,27 +1017,38 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "workflowEvents", "name": "事件流水", "domain": "delivery", "path": "#/workflows/events", "status": "active", "maturity": 83, "apis": ["/api/v1/workflows/events"], "capabilities": ["事件查询", "事件过滤", "运行追踪"], "next": ["事件检索索引"]},
     {"id": "workflowSignals", "name": "信号控制", "domain": "delivery", "path": "#/workflows/signals", "status": "active", "maturity": 83, "apis": ["/api/v1/workflows/instances", "/api/v1/workflows/signals"], "capabilities": ["目标实例", "信号发送", "运行干预"], "next": ["信号审批", "信号审计"]},
     {"id": "workflowBulkOps", "name": "批量治理", "domain": "delivery", "path": "#/workflows/bulk_ops", "status": "active", "maturity": 82, "apis": ["/api/v1/workflows/ops-plan", "/api/v1/workflows/ops-tasks"], "capabilities": ["治理操作包", "批量任务化", "风险处置"], "next": ["自动化 Runbook"]},
-    {"id": "organization", "name": "组织权限", "domain": "portfolio", "path": "#/organization", "status": "active", "maturity": 86, "apis": ["/api/v1/organization/summary", "/api/v1/organization/policy", "/api/v1/organization/access-review", "/api/v1/auth/users", "/api/v1/businesses", "/api/v1/projects/{id}/members"], "capabilities": ["组织摘要", "租户成员", "业务线", "项目成员", "角色策略", "权限体检", "治理任务"], "next": ["ABAC 策略", "审批流联动"]},
+    {"id": "organization", "name": "组织权限", "domain": "portfolio", "path": "#/organization", "status": "active", "maturity": 91, "apis": ["/api/v1/organization/summary", "/api/v1/organization/policy", "/api/v1/organization/policy/check", "/api/v1/organization/policy/history", "/api/v1/organization/access-review", "/api/v1/auth/users", "/api/v1/businesses", "/api/v1/projects/{id}/members"], "capabilities": ["组织摘要", "租户成员", "业务线", "项目成员", "角色策略", "字段级安全", "行级 ABAC", "策略试算", "策略审计", "权限体检", "治理任务"], "next": ["审批流联动", "临时授权过期回收"]},
     {"id": "analytics", "name": "指标概览", "domain": "data", "path": "#/analytics", "status": "active", "maturity": 92, "apis": ["/api/v1/analytics/overview"], "capabilities": ["项目指标摘要", "关键指标快照", "原始指标 JSON"], "next": ["指标权限", "趋势图", "异常阈值"]},
     {"id": "analyticsBlueprint", "name": "数据智能蓝图", "domain": "data", "path": "#/analytics/blueprint", "status": "active", "maturity": 82, "apis": ["/api/v1/analytics/blueprint", "/api/v1/analytics/blueprint/summary", "/api/v1/analytics/blueprint/charts", "/api/v1/analytics/blueprint/tasks"], "capabilities": ["数据能力地图", "成熟度评估", "技术栈矩阵", "缺口任务化"], "next": ["质量中心", "指标/标签任务模板"]},
     {"id": "analyticsReports", "name": "洞察报告", "domain": "data", "path": "#/analytics/reports", "status": "active", "maturity": 96, "apis": ["/api/v1/analytics/reports", "/api/v1/analytics/reports/summary", "/api/v1/analytics/reports/charts", "/api/v1/analytics/report-subscription", "/api/v1/analytics/report-subscription/test", "/api/v1/analytics/reports/{id}/status", "/api/v1/analytics/reports/{id}/meta", "/api/v1/analytics/reports/{id}/action-tasks", "/api/v1/analytics/reports/{id}.md", "/api/v1/analytics/reports/{id}/notify"], "capabilities": ["洞察报告沉淀", "报告运营摘要", "报告搜索筛选", "报告资产元数据治理", "报告生成执行任务", "报告发布归档", "Markdown 导出", "报告通知发送", "报告订阅策略", "订阅通道测试"], "next": ["报告订阅调度", "报告权限", "AI 自动洞察"]},
     {"id": "analyticsCatalog", "name": "数据资产治理中心", "domain": "data", "path": "#/analytics/catalog", "status": "active", "maturity": 88, "apis": ["/api/v1/analytics/governance/hub", "/api/v1/analytics/export.csv"], "capabilities": ["治理中心", "四层能力栈", "五大专业域入口", "CSV 导出"], "next": ["对接湖仓元数据", "指标变更审核"]},
     {"id": "dataAssets", "name": "数据资产", "domain": "data", "path": "#/analytics/catalog/assets", "status": "active", "maturity": 84, "apis": ["/api/v1/analytics/assets", "/api/v1/analytics/quality/evaluate", "/api/v1/analytics/governance/tasks"], "capabilities": ["资产目录", "状态治理", "质量评估", "治理任务化"], "next": ["资产详情页", "字段级血缘"]},
-    {"id": "dataMetricsTags", "name": "指标与标签", "domain": "data", "path": "#/analytics/catalog/metrics", "status": "active", "maturity": 83, "apis": ["/api/v1/analytics/metrics", "/api/v1/analytics/tags"], "capabilities": ["指标口径", "标签规则", "负责人治理", "目录维护"], "next": ["指标审批", "标签试算"]},
+    {"id": "metadataManagement", "name": "元数据管理", "domain": "data", "path": "#/data/metadata", "status": "active", "maturity": 88, "apis": ["/api/v1/metadata/summary", "/api/v1/metadata/assets", "/api/v1/metadata/fields", "/api/v1/metadata/lineage/impact", "/api/v1/metadata/assets/{asset_id}/classify"], "capabilities": ["元数据总览", "资产目录", "字段目录", "分类治理", "血缘影响", "Agent 消费入口"], "next": ["字段级权限", "湖仓自动采样"]},
+    {"id": "metadataOverview", "name": "元数据总览", "domain": "data", "path": "#/data/metadata/overview", "status": "active", "maturity": 88, "apis": ["/api/v1/metadata/summary"], "capabilities": ["资产统计", "字段统计", "敏感字段", "治理缺口"], "next": ["趋势分析"]},
+    {"id": "metadataAssets", "name": "元数据资产目录", "domain": "data", "path": "#/data/metadata/assets", "status": "active", "maturity": 88, "apis": ["/api/v1/metadata/assets", "/api/v1/metadata/assets/{asset_id}/classify"], "capabilities": ["资产检索", "负责人维护", "密级配置", "质量规则绑定"], "next": ["审批流"]},
+    {"id": "metadataFields", "name": "字段元数据", "domain": "data", "path": "#/data/metadata/fields", "status": "active", "maturity": 87, "apis": ["/api/v1/metadata/fields", "/api/v1/data-ingest/schema-registry"], "capabilities": ["字段检索", "敏感字段候选", "来源追踪", "分类标记"], "next": ["字段血缘"]},
+    {"id": "metadataLineage", "name": "元数据血缘影响", "domain": "data", "path": "#/data/metadata/lineage", "status": "active", "maturity": 87, "apis": ["/api/v1/metadata/lineage", "/api/v1/metadata/lineage/impact"], "capabilities": ["资产选择", "上游依赖", "下游影响", "变更范围"], "next": ["变更订阅"]},
+    {"id": "dataMetricsTags", "name": "指标与标签", "domain": "data", "path": "#/analytics/catalog/metrics", "status": "active", "maturity": 92, "apis": ["/api/v1/analytics/metrics", "/api/v1/analytics/tags", "/api/v1/metrics-service/catalog", "/api/v1/metrics-service/catalog/{id}/publish", "/api/v1/metrics-service/catalog/{id}/versions", "/api/v1/metrics-service/catalog/{id}/impact", "/api/v1/metrics-service/query/{id}", "/api/v1/metrics-service/api-publish", "/api/v1/tag-service/catalog", "/api/v1/tag-service/rules", "/api/v1/tag-service/rules/evaluate", "/api/v1/tag-service/ontology", "/api/v1/tag-service/profiles/build", "/api/v1/tag-service/profiles/builds", "/api/v1/tag-service/ontology/entities/{id}/publish"], "capabilities": ["指标口径", "标签规则", "负责人治理", "目录维护", "公式校验", "指标版本发布", "查询契约", "血缘影响分析", "规则试算", "画像构建", "画像发布契约"], "next": ["指标审批", "实时标签计算"]},
     {"id": "dataServices", "name": "数据服务", "domain": "data", "path": "#/analytics/catalog/services", "status": "active", "maturity": 84, "apis": ["/api/v1/analytics/services", "/api/v1/analytics/services/{id}/publish"], "capabilities": ["服务目录", "发布暂停", "健康评分", "消费者管理"], "next": ["服务 SLA", "调用日志"]},
-    {"id": "dataQuality", "name": "质量告警", "domain": "data", "path": "#/analytics/catalog/quality", "status": "active", "maturity": 84, "apis": ["/api/v1/analytics/quality/alerts", "/api/v1/analytics/quality/alerts/tasks"], "capabilities": ["质量告警", "告警任务化", "通知处置"], "next": ["告警订阅", "根因分析"]},
+    {"id": "dataQuality", "name": "质量告警", "domain": "data", "path": "#/analytics/catalog/quality", "status": "active", "maturity": 90, "apis": ["/api/v1/analytics/quality/alerts", "/api/v1/analytics/quality/alerts/tasks", "/api/v1/data-quality/rules", "/api/v1/data-quality/runs", "/api/v1/data-quality/alerts", "/api/v1/data-quality/alerts/tasks", "/api/v1/data-quality/summary"], "capabilities": ["质量告警", "告警任务化", "通知处置", "规则执行", "运行历史", "告警归因", "运行任务化"], "next": ["告警订阅", "指标血缘联动"]},
     {"id": "dataDevelopment", "name": "数据开发", "domain": "data", "path": "#/analytics/catalog/development", "status": "active", "maturity": 86, "apis": ["/api/v1/analytics/development/templates", "/api/v1/analytics/development/schedule", "/api/v1/analytics/development/agent-feed", "/api/v1/analytics/development/evidence", "/api/v1/analytics/development/runbook"], "capabilities": ["开发模板", "智能调度", "Agent Feed", "质量证据", "自动化 Runbook"], "next": ["Runbook 历史", "开发 DAG 可视化"]},
     {"id": "analyticsLineage", "name": "数据血缘", "domain": "data", "path": "#/analytics/lineage", "status": "active", "maturity": 85, "apis": ["/api/v1/analytics/lineage", "/api/v1/analytics/lineage/impact"], "capabilities": ["血缘图谱", "影响分析", "上下游追溯", "节点筛选"], "next": ["血缘权限", "变更订阅"]},
     {"id": "dataExchange", "name": "数据交换", "domain": "data", "path": "#/analytics/exchange", "status": "active", "maturity": 88, "apis": ["/api/v1/data-exchange/summary", "/api/v1/data-exchange/charts", "/api/v1/data-exchange/export", "/api/v1/data-exchange/preview", "/api/v1/data-exchange/import", "/api/v1/data-exchange/jobs", "/api/v1/data-exchange/export-job"], "capabilities": ["数据港导入导出", "导入预检", "数据交换作业流水", "选择模块导出"], "next": ["导入任务异步化", "对象存储归档", "跨项目数据服务联邦"]},
+    {"id": "dataSources", "name": "数据源管理", "domain": "data", "path": "#/data/sources", "status": "active", "maturity": 91, "apis": ["/api/v1/db-config/connections", "/api/v1/db-config/connections/summary", "/api/v1/db-config/connections/{name}/metadata-preview", "/api/v1/db-config/connections/{name}/metadata-sync", "/api/v1/db-config/connections/{name}/test", "/api/v1/db-config/drivers", "/api/v1/data-ingest/schema-registry"], "capabilities": ["模块总览", "连接目录", "驱动目录", "SecretRef", "连接测试", "元数据预览", "Schema Registry 同步", "Agent 消费入口"], "next": ["真实数据库采样扫描", "字段级权限策略"]},
+    {"id": "dataSourcesOverview", "name": "数据源总览", "domain": "data", "path": "#/data/sources/overview", "status": "active", "maturity": 90, "apis": ["/api/v1/db-config/connections/summary"], "capabilities": ["数据源健康", "能力覆盖", "专业入口"], "next": ["角色化默认入口"]},
+    {"id": "dataSourcesConnections", "name": "连接目录", "domain": "data", "path": "#/data/sources/connections", "status": "active", "maturity": 91, "apis": ["/api/v1/db-config/connections", "/api/v1/db-config/connections/{name}/test", "/api/v1/db-config/drivers"], "capabilities": ["连接 CRUD", "SecretRef", "连接测试", "只读策略"], "next": ["密钥托管审计"]},
+    {"id": "dataSourcesMetadata", "name": "元数据同步", "domain": "data", "path": "#/data/sources/metadata", "status": "active", "maturity": 90, "apis": ["/api/v1/db-config/connections/{name}/metadata-preview", "/api/v1/db-config/connections/{name}/metadata-sync", "/api/v1/data-ingest/schema-registry"], "capabilities": ["元数据预览", "敏感字段候选", "Schema Registry 同步"], "next": ["真实采样扫描"]},
+    {"id": "dataIngest", "name": "数据接入", "domain": "data", "path": "#/analytics/ingest", "status": "active", "maturity": 90, "apis": ["/api/v1/data-ingest/connectors", "/api/v1/data-ingest/connectors/{id}/dry-run", "/api/v1/data-ingest/connectors/{id}/schema", "/api/v1/data-ingest/schema-registry", "/api/v1/data-ingest/jobs", "/api/v1/data-ingest/jobs/{id}/run", "/api/v1/data-ingest/jobs/{id}/status", "/api/v1/data-ingest/runs", "/api/v1/data-ingest/cdc-cursors", "/api/v1/data-ingest/summary"], "capabilities": ["连接器管理", "连接器 Dry-run", "Schema Registry", "接入作业", "CDC 游标", "运行历史", "三码隔离"], "next": ["实时延迟指标", "接入质量联动"]},
     {"id": "analyticsNlq", "name": "NLQ 问数", "domain": "data", "path": "#/analytics/nlq", "status": "active", "maturity": 82, "apis": ["/api/v1/analytics/nlq", "/api/v1/analytics/overview"], "capabilities": ["自然语言问数", "LLM 指标解释", "问答保存为报告"], "next": ["指标语义层", "权限感知 NLQ", "SQL 生成审计"]},
-    {"id": "notify", "name": "通信集成", "domain": "ecosystem", "path": "#/notify", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/hub", "/api/v1/notify/summary", "/api/v1/notify/charts", "/api/v1/notify/timeline", "/api/v1/notify/connectors", "/api/v1/notify/channels", "/api/v1/notify/messages", "/api/v1/notify/inbound"], "capabilities": ["连接器矩阵", "通道摘要", "消息时间线", "统一通道模板", "出站发送", "入站记录", "通道测试", "入站转需求/任务", "独立子路由"], "next": ["Agent 自动订阅策略", "消息重试策略"]},
+    {"id": "notify", "name": "通信集成", "domain": "ecosystem", "path": "#/notify", "status": "active", "maturity": 95, "apis": ["/api/v1/notify/hub", "/api/v1/notify/summary", "/api/v1/notify/charts", "/api/v1/notify/timeline", "/api/v1/notify/connectors", "/api/v1/notify/connectors/health", "/api/v1/notify/channels", "/api/v1/notify/messages", "/api/v1/notify/inbound", "/api/v1/notify/approvals/callback", "/api/v1/notify/tasks/status-push", "/api/v1/notify/report-subscriptions", "/api/v1/notify/report-subscriptions/runs", "/api/v1/notify/report-subscriptions/run"], "capabilities": ["连接器矩阵", "连接器健康", "通道摘要", "消息时间线", "统一通道模板", "出站发送", "入站记录", "入站去重", "审批回调", "任务状态推送", "报告订阅", "订阅运行中心", "订阅投递预览", "订阅运行历史", "通道测试", "入站转需求/任务", "独立子路由"], "next": ["消息重试策略", "死信重投"]},
     {"id": "notifyConnectors", "name": "连接器矩阵", "domain": "ecosystem", "path": "#/notify/connectors", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/connectors"], "capabilities": ["企业微信", "钉钉", "Webhook", "Slack", "签名模板"], "next": ["连接器健康探测"]},
     {"id": "notifyChannels", "name": "通道管理", "domain": "ecosystem", "path": "#/notify/channels", "status": "active", "maturity": 84, "apis": ["/api/v1/notify/channels"], "capabilities": ["通道列表", "启停配置", "模板配置"], "next": ["密钥托管"]},
     {"id": "notifyOutbound", "name": "出站发送", "domain": "ecosystem", "path": "#/notify/outbound", "status": "active", "maturity": 83, "apis": ["/api/v1/notify/send", "/api/v1/notify/messages"], "capabilities": ["发送测试", "通知草稿", "消息落账"], "next": ["重试策略"]},
     {"id": "notifyInbound", "name": "入站处置", "domain": "ecosystem", "path": "#/notify/inbound", "status": "active", "maturity": 83, "apis": ["/api/v1/notify/inbound", "/api/v1/notify/inbound/{message_id}/action"], "capabilities": ["入站消息", "转任务", "转需求", "处置审计"], "next": ["意图识别"]},
     {"id": "notifyMessages", "name": "消息流水", "domain": "ecosystem", "path": "#/notify/messages", "status": "active", "maturity": 82, "apis": ["/api/v1/notify/messages", "/api/v1/notify/timeline"], "capabilities": ["全量消息表", "方向筛选", "日聚合时间线", "入站处置入口"], "next": ["消息检索索引", "死信重试"]},
+    {"id": "notifySubscriptions", "name": "报告订阅", "domain": "ecosystem", "path": "#/notify/subscriptions", "status": "active", "maturity": 88, "apis": ["/api/v1/notify/report-subscriptions"], "capabilities": ["订阅配置", "周期策略", "通道绑定", "过滤条件"], "next": ["订阅审批"]},
+    {"id": "notifySubscriptionRuns", "name": "订阅运行中心", "domain": "ecosystem", "path": "#/notify/subscription-runs", "status": "active", "maturity": 90, "apis": ["/api/v1/notify/report-subscriptions/runs", "/api/v1/notify/report-subscriptions/run"], "capabilities": ["订阅运行历史", "投递预览", "立即执行", "IM 简报", "通道投递计划"], "next": ["定时调度器接入", "失败自动重试"]},
     {"id": "webhooks", "name": "Webhook", "domain": "ecosystem", "path": "#/notify/webhooks", "status": "active", "maturity": 88, "apis": ["/api/v1/webhooks", "/api/v1/webhooks/events", "/api/v1/webhooks/{id}/deliveries"], "capabilities": ["出站 Webhook", "事件订阅", "HMAC 签名", "投递测试", "投递时间线"], "next": ["重试策略可视化", "死信队列"]},
-    {"id": "dataSources", "name": "数据源", "domain": "ai", "path": "#/intelligence/datasources", "status": "active", "maturity": 84, "apis": ["/api/v1/db-config/connections"], "capabilities": ["连接配置", "驱动目录", "连接测试"], "next": ["SecretRef", "SCIM 同步"]},
     {"id": "envOps", "name": "环境运维", "domain": "system", "path": "#/ops/env", "status": "active", "maturity": 86, "apis": ["/api/v1/env/check/full", "/api/v1/env/docker/ps"], "capabilities": ["环境检查", "Docker 列表", "Compose 入口"], "next": ["镜像构建 UI", "受控修复向导"]},
     {"id": "audit", "name": "安全审计", "domain": "governance", "path": "#/audit", "status": "active", "maturity": 90, "apis": ["/api/v1/audit/hub", "/api/v1/audit/chain/state", "/api/v1/audit/chain/verify", "/api/v1/audit/summary", "/api/v1/audit/charts", "/api/v1/audit/timeline", "/api/v1/audit/events", "/api/v1/audit/record", "/api/v1/audit/export.csv", "/api/v1/system/pages/actions/runs"], "capabilities": ["治理中心", "哈希链状态", "链校验", "ECharts 活动趋势", "动作/资源分布", "按日时间线", "合规 CSV 导出", "模块动作审计"], "next": ["合规报表模板", "风险规则告警", "对象存储 WORM 锚定"]},
     {"id": "copilot", "name": "AI 助手", "domain": "ai", "path": "#/copilot", "status": "active", "maturity": 82, "apis": ["/api/v1/copilot/hub", "/api/v1/copilot/ask", "/api/v1/copilot/sessions", "/api/v1/copilot/commands", "/api/v1/copilot/commands/resolve", "/api/v1/copilot/plan"], "capabilities": ["会话", "run_id", "项目上下文", "transcript", "全局 CmdK 命令中心", "工具调用计划"], "next": ["命令权限策略", "跨工具执行器", "更多页面操作注册"]},
@@ -901,7 +1057,8 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "intelligence", "name": "智能与知识", "domain": "ai", "path": "#/intelligence", "status": "active", "maturity": 88, "apis": ["/api/v1/intelligence/hub", "/api/v1/knowledge", "/api/v1/rag/search", "/api/v1/memory", "/api/v1/reflections/proposals", "/api/v1/worker/jobs", "/api/v1/sync/summary"], "capabilities": ["治理中心", "知识库", "RAG", "记忆", "规则", "蒸馏审核", "WorkerOps", "SyncOps", "数据源", "事件", "用量"], "next": ["图谱 RAG", "Worker 真实执行器", "同步冲突合并"]},
     {"id": "knowledgeBase", "name": "知识库", "domain": "ai", "path": "#/intelligence/kb", "status": "active", "maturity": 86, "apis": ["/api/v1/knowledge"], "capabilities": ["知识文档", "索引", "检索", "分类标签"], "next": ["批量导入", "知识版本"]},
     {"id": "ragSearch", "name": "RAG 检索", "domain": "ai", "path": "#/intelligence/rag", "status": "active", "maturity": 84, "apis": ["/api/v1/rag/search"], "capabilities": ["检索增强", "引用证据", "提示词上下文"], "next": ["混合检索", "图谱 RAG"]},
-    {"id": "aiMemory", "name": "AI 记忆", "domain": "ai", "path": "#/intelligence/memory", "status": "active", "maturity": 86, "apis": ["/api/v1/memory"], "capabilities": ["最近记忆", "记忆检索", "运行挂载", "本地优先同步"], "next": ["长期记忆压缩", "画像本体"]},
+    {"id": "aiMemory", "name": "AI 记忆", "domain": "ai", "path": "#/intelligence/memory", "status": "active", "maturity": 88, "apis": ["/api/v1/memory", "/api/v1/memory/{id}/lifecycle"], "capabilities": ["最近记忆", "记忆检索", "运行挂载", "本地优先同步", "记忆生命周期"], "next": ["长期记忆压缩", "画像本体"]},
+    {"id": "knowledgeGraph", "name": "知识图谱", "domain": "ai", "path": "#/ai/knowledge-graph", "status": "active", "maturity": 90, "apis": ["/api/v1/knowledge-graph/summary", "/api/v1/knowledge-graph/build", "/api/v1/knowledge-graph/query", "/api/v1/knowledge-graph/lineage", "/api/v1/knowledge-graph/entities", "/api/v1/knowledge-graph/edges", "/api/v1/knowledge-graph/entity-profiles/merge", "/api/v1/memory/{id}/lifecycle"], "capabilities": ["图谱构建", "Graph RAG", "血缘关联", "来源权限检查", "证据链", "实体画像合并", "记忆生命周期", "Agent 上下文包"], "next": ["多模态证据", "跨项目联邦图谱"]},
     {"id": "ruleCenter", "name": "规则中心", "domain": "ai", "path": "#/intelligence/rules", "status": "active", "maturity": 84, "apis": ["/api/v1/rules", "/api/v1/reflections/proposals"], "capabilities": ["规则提案", "规则应用", "蒸馏审核", "规则同步"], "next": ["规则评测", "灰度发布"]},
     {"id": "reflectionDistill", "name": "蒸馏审核", "domain": "ai", "path": "#/intelligence/distill", "status": "active", "maturity": 83, "apis": ["/api/v1/reflections/distill", "/api/v1/reflections/proposals", "/api/v1/reflections/proposals/{proposal_id}/review"], "capabilities": ["反思采样", "规则蒸馏", "提案审核", "规则入库"], "next": ["模型评测", "自动化置信度策略"]},
     {"id": "workerOps", "name": "WorkerOps", "domain": "ai", "path": "#/intelligence/worker", "status": "active", "maturity": 82, "apis": ["/api/v1/worker/jobs"], "capabilities": ["任务类型", "幂等投递", "运行监控", "取消重试"], "next": ["真实执行池", "资源配额"]},
@@ -918,12 +1075,24 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "platformTools", "name": "工具接入", "domain": "ecosystem", "path": "#/platforms/tools", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms"], "capabilities": ["CLI/IDE 接入", "工具目录", "接入 Profile"], "next": ["工具健康回传"]},
     {"id": "mcpHub", "name": "MCP Hub", "domain": "ecosystem", "path": "#/platforms/mcp", "status": "active", "maturity": 86, "apis": ["/api/v1/mcp"], "capabilities": ["MCP 模板", "命令探测", "Profile 导出"], "next": ["MCP 运行态观测"]},
     {"id": "agentRegistry", "name": "Agent 注册表", "domain": "ecosystem", "path": "#/platforms/agents", "status": "active", "maturity": 85, "apis": ["/api/v1/agents", "/api/v1/agents/summary"], "capabilities": ["Agent 角色", "能力画像", "A2A 专家组"], "next": ["能力包市场"]},
-    {"id": "agentRuns", "name": "Agent 运行中心", "domain": "ecosystem", "path": "#/platforms/agent-runs", "status": "active", "maturity": 84, "apis": ["/api/v1/agents/runs", "/api/v1/agents/runs/summary", "/api/v1/tasks/agent-feed/claims", "/api/v1/tasks/{id}/agent-report"], "capabilities": ["运行列表", "能力画像", "活跃租约", "负载统计", "成功率", "最近心跳"], "next": ["Run 表持久化", "Agent SLO", "自动再平衡"]},
+    {"id": "agentRuns", "name": "Agent 运行中心", "domain": "ecosystem", "path": "#/platforms/agent-runs", "status": "active", "maturity": 90, "apis": ["/api/v1/agents/runs", "/api/v1/agents/runs/summary", "/api/v1/agent-runs", "/api/v1/agent-runs/{id}/retry", "/api/v1/agent-runs/{id}/cancel", "/api/v1/agent-runs/{id}/evidence", "/api/v1/tasks/agent-feed/claims", "/api/v1/tasks/{id}/agent-report", "/api/v1/a2a/dispatch"], "capabilities": ["运行列表", "持久化 Run 生命周期", "失败重试", "运行取消", "证据回写", "A2A Dispatch 关联", "能力画像", "活跃租约", "负载统计", "成功率", "最近心跳"], "next": ["质量门禁自动判定", "自动再平衡执行"]},
+    {"id": "a2aGateway", "name": "A2A 网关", "domain": "ecosystem", "path": "#/ecosystem/a2a", "status": "active", "maturity": 99, "apis": ["/api/v1/a2a/registry", "/api/v1/a2a/registry/{id}/heartbeat", "/api/v1/a2a/registry/{id}/credentials/rotate", "/api/v1/a2a/registry/{id}/tasks/pull", "/api/v1/a2a/registry/{id}/tasks/ack", "/api/v1/a2a/registry/{id}/tasks/renew", "/api/v1/a2a/leases/expire", "/api/v1/a2a/registry/{id}/progress", "/api/v1/a2a/trust", "/api/v1/a2a/trust/policy", "/api/v1/a2a/trust/tasks", "/api/v1/a2a/negotiate", "/api/v1/a2a/sessions", "/api/v1/a2a/sessions/{id}", "/api/v1/a2a/sla", "/api/v1/a2a/sla/tasks", "/api/v1/a2a/sla/policy", "/api/v1/a2a/sla/escalations", "/api/v1/a2a/execution-windows", "/api/v1/a2a/execution-windows/policy", "/api/v1/a2a/execution-windows/tasks", "/api/v1/a2a/execution-windows/actions", "/api/v1/a2a/dispatch", "/api/v1/a2a/dispatch/{id}/packet", "/api/v1/a2a/dispatch/{id}/retry", "/api/v1/a2a/dispatch/{id}/reassign", "/api/v1/a2a/evidence", "/api/v1/a2a/health", "/api/v1/a2a/governance-tasks", "/api/v1/a2a/im-briefing", "/api/v1/agent-runs"], "capabilities": ["Agent 注册", "外部 Agent 凭证", "双向心跳", "跨组织信任策略", "信任治理任务", "双向任务拉取", "任务租约确认", "任务租约续期", "租约过期回收", "拒绝任务重派", "执行窗口审计", "执行窗口任务化", "执行窗口自动动作", "执行窗口策略配置", "执行窗口动作阻断解释", "进度回写", "能力协商", "协商会话历史", "外部 Agent SLA", "SLA 策略配置", "SLA 自动升级动作", "任务分发", "协议包预览", "Agent Run 关联", "失败分发重试", "证据回写同步质量门禁", "协议健康", "治理任务生成", "IM 风险简报"], "next": ["A2A 签名与跨租户 federation"]},
+    {"id": "a2aWorkbench", "name": "A2A 工作台", "domain": "ecosystem", "path": "#/ecosystem/a2a/workbench", "status": "active", "maturity": 99, "apis": ["/api/v1/a2a/health", "/api/v1/a2a/registry", "/api/v1/a2a/registry/{id}/heartbeat", "/api/v1/a2a/registry/{id}/credentials/rotate", "/api/v1/a2a/registry/{id}/tasks/pull", "/api/v1/a2a/registry/{id}/tasks/ack", "/api/v1/a2a/registry/{id}/tasks/renew", "/api/v1/a2a/leases/expire", "/api/v1/a2a/registry/{id}/progress", "/api/v1/a2a/trust", "/api/v1/a2a/trust/policy", "/api/v1/a2a/trust/tasks", "/api/v1/a2a/sessions", "/api/v1/a2a/sla", "/api/v1/a2a/sla/tasks", "/api/v1/a2a/sla/policy", "/api/v1/a2a/sla/escalations", "/api/v1/a2a/execution-windows", "/api/v1/a2a/execution-windows/policy", "/api/v1/a2a/execution-windows/tasks", "/api/v1/a2a/execution-windows/actions", "/api/v1/a2a/dispatch", "/api/v1/a2a/dispatch/{id}/reassign"], "capabilities": ["协议健康", "运行风险", "外部 Agent 凭证", "双向心跳", "跨组织信任策略", "信任治理任务", "双向任务拉取", "任务租约确认", "任务租约续期", "租约过期回收", "拒绝任务重派", "执行窗口审计", "执行窗口任务化", "执行窗口自动动作", "执行窗口策略配置", "执行窗口动作阻断解释", "进度回写", "协商会话历史", "外部 Agent SLA", "SLA 策略配置", "SLA 自动升级动作", "Agent Run 关联", "IM 简报"], "next": ["A2A 签名与跨租户 federation"]},
+    {"id": "a2aRegistry", "name": "A2A Agent 注册", "domain": "ecosystem", "path": "#/ecosystem/a2a/registry", "status": "active", "maturity": 99, "apis": ["/api/v1/a2a/registry", "/api/v1/a2a/registry/{id}/status", "/api/v1/a2a/registry/{id}/heartbeat", "/api/v1/a2a/registry/{id}/credentials/rotate", "/api/v1/a2a/registry/{id}/tasks/pull", "/api/v1/a2a/registry/{id}/tasks/ack", "/api/v1/a2a/registry/{id}/tasks/renew", "/api/v1/a2a/leases/expire", "/api/v1/a2a/registry/{id}/progress", "/api/v1/a2a/trust", "/api/v1/a2a/trust/policy", "/api/v1/a2a/trust/tasks"], "capabilities": ["Agent 注册", "能力画像", "启停治理", "外部 Agent 凭证", "双向心跳", "跨组织信任策略", "信任治理任务", "双向任务拉取", "任务租约确认", "任务租约续期", "租约过期回收", "进度回写", "可信状态"], "next": ["A2A 签名与跨租户 federation"]},
+    {"id": "a2aNegotiate", "name": "A2A 能力协商", "domain": "ecosystem", "path": "#/ecosystem/a2a/negotiate", "status": "active", "maturity": 90, "apis": ["/api/v1/a2a/negotiate", "/api/v1/a2a/sessions", "/api/v1/a2a/sessions/{id}"], "capabilities": ["能力匹配", "风险解释", "推荐分发", "协商会话历史"], "next": ["会话 SLA"]},
+    {"id": "a2aSla", "name": "A2A 外部 Agent SLA", "domain": "ecosystem", "path": "#/ecosystem/a2a/sla", "status": "active", "maturity": 94, "apis": ["/api/v1/a2a/sla", "/api/v1/a2a/sla/tasks", "/api/v1/a2a/sla/policy", "/api/v1/a2a/sla/escalations", "/api/v1/a2a/dispatch/{id}/retry"], "capabilities": ["SLA 健康分", "超时识别", "缺证据治理", "治理任务生成", "SLA 策略配置", "SLA 自动升级动作", "Agent Run 追溯"], "next": ["外部 Agent 凭证与双向心跳"]},
+    {"id": "a2aWindows", "name": "A2A 执行窗口", "domain": "ecosystem", "path": "#/ecosystem/a2a/windows", "status": "active", "maturity": 99, "apis": ["/api/v1/a2a/execution-windows", "/api/v1/a2a/execution-windows/policy", "/api/v1/a2a/execution-windows/tasks", "/api/v1/a2a/execution-windows/actions", "/api/v1/a2a/registry/{id}/tasks/renew", "/api/v1/a2a/leases/expire", "/api/v1/a2a/dispatch/{id}/reassign"], "capabilities": ["执行窗口审计", "执行窗口任务化", "执行窗口自动动作", "执行窗口策略配置", "执行窗口动作阻断解释", "任务租约续期", "租约过期回收", "拒绝任务重派", "Agent Run 追溯"], "next": ["跨组织 A2A 信任策略"]},
+    {"id": "a2aDispatch", "name": "A2A 任务分发", "domain": "ecosystem", "path": "#/ecosystem/a2a/dispatch", "status": "active", "maturity": 99, "apis": ["/api/v1/a2a/dispatch", "/api/v1/a2a/dispatch/{id}/packet", "/api/v1/a2a/dispatch/{id}/retry", "/api/v1/a2a/dispatch/{id}/reassign", "/api/v1/a2a/registry/{id}/tasks/pull", "/api/v1/a2a/registry/{id}/tasks/ack", "/api/v1/a2a/registry/{id}/tasks/renew", "/api/v1/a2a/leases/expire", "/api/v1/a2a/registry/{id}/progress", "/api/v1/a2a/sla", "/api/v1/a2a/execution-windows", "/api/v1/a2a/execution-windows/tasks", "/api/v1/a2a/execution-windows/actions", "/api/v1/agent-runs"], "capabilities": ["任务分发", "协议包预览", "Agent Run 关联", "失败分发重试", "拒绝任务重派", "双向任务拉取", "任务租约确认", "任务租约续期", "租约过期回收", "执行窗口审计", "执行窗口任务化", "执行窗口自动动作", "进度回写", "SLA 状态追踪"], "next": ["执行窗口策略调优"]},
+    {"id": "a2aEvidence", "name": "A2A 执行证据", "domain": "ecosystem", "path": "#/ecosystem/a2a/evidence", "status": "active", "maturity": 92, "apis": ["/api/v1/a2a/evidence", "/api/v1/a2a/sla", "/api/v1/a2a/sla/tasks", "/api/v1/agent-runs/{id}/evidence"], "capabilities": ["证据回写", "质量评分", "Agent Run 状态同步", "SLA 超时治理"], "next": ["SLA 策略配置"]},
     {"id": "modelOps", "name": "模型管理", "domain": "ecosystem", "path": "#/platforms/models", "status": "active", "maturity": 85, "apis": ["/api/v1/models"], "capabilities": ["模型目录", "默认模型", "提供商连接", "角色绑定"], "next": ["模型评测", "成本路由"]},
+    {"id": "llmGateway", "name": "模型网关", "domain": "ecosystem", "path": "#/ai/llm-gateway", "status": "active", "maturity": 99, "apis": ["/api/v1/llm-gateway/routes", "/api/v1/llm-gateway/decision", "/api/v1/llm-gateway/policies", "/api/v1/llm-gateway/provider-health", "/api/v1/llm-gateway/policy-evaluate", "/api/v1/llm-gateway/fallback-drill", "/api/v1/llm-gateway/cost", "/api/v1/llm-gateway/cost-anomalies/tasks", "/api/v1/llm-gateway/cost-attribution/runs", "/api/v1/llm-gateway/cost-attribution/run", "/api/v1/llm-gateway/cost-attribution/tasks", "/api/v1/llm-gateway/model-evals/runs", "/api/v1/llm-gateway/model-evals/run", "/api/v1/llm-gateway/model-evals/tasks", "/api/v1/llm-gateway/prompt-audit/runs", "/api/v1/llm-gateway/prompt-audit/run", "/api/v1/llm-gateway/prompt-audit/tasks", "/api/v1/llm-gateway/throttle", "/api/v1/llm-gateway/health", "/api/v1/llm-gateway/governance-tasks", "/api/v1/llm-gateway/im-briefing"], "capabilities": ["路由规则", "调用决策", "策略化路由", "预算护栏", "Provider 健康", "Fallback 演练", "成本统计", "成本异常任务化", "跨 Provider 成本归因", "成本归因历史", "成本归因任务化", "模型评测", "评测历史", "评测任务化", "Prompt 审计", "Prompt 风险任务化", "密钥与 PII 检测", "提示词注入检测", "限流策略", "治理任务生成", "IM 风险简报"], "next": ["真实账单导入", "按项目成本中心分摊"]},
+    {"id": "llmGatewayAttribution", "name": "成本归因", "domain": "ecosystem", "path": "#/ai/llm-gateway/attribution", "status": "active", "maturity": 96, "apis": ["/api/v1/llm-gateway/cost-attribution/runs", "/api/v1/llm-gateway/cost-attribution/run", "/api/v1/llm-gateway/cost-attribution/tasks", "/api/v1/usage/summary"], "capabilities": ["Provider 成本分布", "模型成本分布", "任务类型归因", "调用来源归因", "归因历史", "归因任务化", "Agent consumption"], "next": ["真实账单导入", "按项目成本中心分摊"]},
+    {"id": "llmGatewayEval", "name": "模型评测", "domain": "ecosystem", "path": "#/ai/llm-gateway/eval", "status": "active", "maturity": 96, "apis": ["/api/v1/llm-gateway/model-evals/runs", "/api/v1/llm-gateway/model-evals/run", "/api/v1/llm-gateway/model-evals/tasks", "/api/v1/llm-gateway/provider-health", "/api/v1/llm-gateway/throttle"], "capabilities": ["评测 Suite", "模型排名", "质量评分", "成本效率评分", "延迟 SLO", "Prompt 安全评分", "评测历史", "评测任务化", "Agent consumption"], "next": ["真实在线评测执行器", "人工标注反馈集"]},
     {"id": "platformOps", "name": "运行治理", "domain": "ecosystem", "path": "#/platforms/ops", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms/ops-plan", "/api/v1/platforms/ops-tasks"], "capabilities": ["健康评分", "风险清单", "治理 Runbook", "AI 操作包", "治理任务预览", "治理任务落地"], "next": ["多工具 SLO", "Agent 执行审计", "自愈策略"]},
     {"id": "cliTools", "name": "CLI 工具", "domain": "ecosystem", "path": "#/platforms/cli", "status": "active", "maturity": 86, "apis": ["/api/v1/cli", "/api/v1/cli/run"], "capabilities": ["工具目录", "受控执行", "自定义工具", "安装提示"], "next": ["执行审计", "配额策略"]},
-    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 88, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest"], "capabilities": ["治理中心", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "细粒度权限", "模块动作目录"], "next": ["页面插件清单", "按钮级权限矩阵"]},
-    {"id": "settings", "name": "设置", "domain": "system", "path": "#/settings", "status": "active", "maturity": 92, "apis": ["/api/v1/auth/me", "/api/v1/health", "/api/v1/billing", "/api/v1/sso/config", "/api/v1/system/ops/profiles", "/api/v1/system/ops/observability", "/api/v1/system/ops/logs"], "capabilities": ["模块化系统配置", "账户", "运行状态", "日志观测", "事件摘要", "主题", "商业计费", "企业 SSO 配置", "SSO 组到角色映射", "SSO JIT 用户落库", "环境 Profile", "部署自检", "配置变更审计", "compose 覆盖文件生成"], "next": ["SSO SCIM 同步", "部署包版本化", "一键部署流水线", "Trace 关联检索"]},
+    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 93, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest", "/api/v1/system/pages/readiness", "/api/v1/system/pages/production-readiness", "/api/v1/system/pages/experience-review", "/api/v1/system/pages/readiness/tasks", "/api/v1/system/pages/governance-tasks", "/api/v1/system/pages/governance-tasks/bulk-update", "/api/v1/system/pages/isolation-audit", "/api/v1/system/pages/isolation-audit/scan", "/api/v1/system/pages/isolation-audit/scan/runs", "/api/v1/system/pages/isolation-audit/scan/runs/compare", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", "/api/v1/system/pages/isolation-audit/scan/tasks", "/api/v1/system/pages/isolation-audit/tasks"], "capabilities": ["治理中心", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "体验治理矩阵", "生产就绪矩阵", "细粒度权限", "模块动作目录", "治理任务运营", "治理任务批量处置", "模块完整度任务化", "三码隔离任务化", "隔离源代码扫描", "隔离扫描快照", "智能基线对比", "对比风险任务化", "隔离源码任务化"], "next": ["页面插件清单", "按钮级权限矩阵"]},
+    {"id": "opsCenter", "name": "智能运维中心", "domain": "system", "path": "#/system/ops-center", "status": "active", "maturity": 99, "apis": ["/api/v1/ops-center/pipelines", "/api/v1/ops-center/alert-sources", "/api/v1/ops-center/alert-sources/{id}/test", "/api/v1/ops-center/alert-sources/{id}/toggle", "/api/v1/ops-center/alert-sources/sync", "/api/v1/ops-center/alerts", "/api/v1/ops-center/alert-noise/policies", "/api/v1/ops-center/alert-noise/evaluate", "/api/v1/ops-center/alert-noise/evaluations", "/api/v1/ops-center/alert-noise/silences", "/api/v1/ops-center/alert-noise/recommendations", "/api/v1/ops-center/alert-noise/recommendations/{recommendation_id}/action", "/api/v1/ops-center/alert-noise/strategy-compare", "/api/v1/ops-center/alert-noise/strategy-compare/runs", "/api/v1/ops-center/alert-noise/slo-prediction", "/api/v1/ops-center/alert-noise/slo-prediction/runs", "/api/v1/ops-center/alert-noise/slo-escalation-policy", "/api/v1/ops-center/alert-noise/slo-escalation/run", "/api/v1/ops-center/alert-noise/slo-escalation/runs", "/api/v1/ops-center/alert-noise/strategy-canary/audit", "/api/v1/ops-center/alert-noise/strategy-canary/audits", "/api/v1/ops-center/alert-noise/strategy-canary/audits/{audit_id}/action", "/api/v1/ops-center/strategy-linkage/runs", "/api/v1/ops-center/strategy-linkage/run", "/api/v1/ops-center/rca", "/api/v1/ops-center/rca/{id}/verification-plan", "/api/v1/ops-center/rca/{id}/verify", "/api/v1/ops-center/rca/insights", "/api/v1/ops-center/rca/insights/tasks", "/api/v1/ops-center/rca/insights/rca", "/api/v1/ops-center/runbooks", "/api/v1/ops-center/runbooks/{id}/versions", "/api/v1/ops-center/runbooks/{id}/versions/diff", "/api/v1/ops-center/runbooks/{id}/versions/{version_id}/action", "/api/v1/ops-center/runbooks/evidence", "/api/v1/ops-center/runbooks/evidence/backfill", "/api/v1/ops-center/runbooks/evidence/{record_id}/action", "/api/v1/ops-center/self-heal", "/api/v1/ops-center/self-heal/evaluate", "/api/v1/ops-center/self-heal/evaluations", "/api/v1/ops-center/self-heal/tasks", "/api/v1/ops-center/self-heal/actions", "/api/v1/ops-center/self-heal/actions/{id}/approve", "/api/v1/ops-center/self-heal/actions/{id}/apply", "/api/v1/ops-center/self-heal/actions/{id}/verify", "/api/v1/ops-center/self-heal/actions/{id}/rollback", "/api/v1/ops-center/summary", "/api/v1/ops-center/im-briefing"], "capabilities": ["部署流水线", "生产告警源", "告警源测试", "告警同步", "告警标准化", "告警降噪策略", "告警分组", "重复告警折叠", "低优先级抑制", "维护静默窗口", "告警策略智能推荐", "策略效果自优化", "策略推荐应用", "策略 A/B 对比", "策略赢家计算", "跨源 SLO 预测", "SLO 风险评分", "告警 SLO 自动升级", "SLO 升级策略", "SLO 升级任务化", "SLO 升级 IM 通知", "策略灰度准入审计", "灰度审批状态流", "灰度护栏与回滚触发", "跨模块运维策略联动", "策略联动任务化", "联动 IM 简报", "根因分析", "RCA 验证计划", "RCA 验证关闭", "智能归因", "多源告警聚合", "归因任务化", "RCA 自动入库", "Runbook 推荐", "Runbook", "Runbook 版本治理", "不可变快照", "版本差异对比", "历史版本恢复", "Runbook 审计", "执行证据自动回填", "证据覆盖评分", "证据确认归档", "自愈策略", "自愈审批", "动作应用", "动作验证", "回滚留证", "审计载荷", "治理任务生成", "IM 风险简报"], "next": ["接入外部 CMDB/ITSM 联动"]},
+    {"id": "settings", "name": "设置", "domain": "system", "path": "#/settings", "status": "active", "maturity": 99, "apis": ["/api/v1/auth/me", "/api/v1/health", "/api/v1/billing/subscription", "/api/v1/billing/summary", "/api/v1/billing/alerts", "/api/v1/billing/overage-policy", "/api/v1/billing/entitlements/check", "/api/v1/billing/dunning", "/api/v1/billing/invoices/{invoice_id}/audit", "/api/v1/sso/config", "/api/v1/sso/providers/{provider}/test", "/api/v1/sso/providers/{provider}/risk-report", "/api/v1/sso/providers/{provider}/risk-tasks", "/api/v1/sso/providers/{provider}/risk-im-briefing", "/api/v1/sso/providers/{provider}/risk-subscription", "/api/v1/sso/providers/{provider}/risk-subscription/test", "/api/v1/sso/providers/{provider}/risk-escalation", "/api/v1/sso/providers/{provider}/risk-escalation/run", "/api/v1/sso/providers/{provider}/risk-runbooks", "/api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}", "/api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}/action", "/api/v1/sso/providers/{provider}/scim-token", "/api/v1/sso/providers/{provider}/scim/test", "/api/v1/sso/providers/{provider}/scim/audit", "/api/v1/sso/scim/v2/{provider}/Users", "/api/v1/sso/scim/v2/{provider}/Groups", "/api/v1/sso/scim/v2/{provider}/Groups/{role}", "/api/v1/sso/{provider}/saml/metadata", "/api/v1/sso/{provider}/saml/login", "/api/v1/sso/{provider}/saml/acs", "/api/v1/system/ops/profiles", "/api/v1/system/ops/profiles/{profile}/deployment-packages", "/api/v1/system/ops/deployment-packages/{package_id}", "/api/v1/system/ops/deployment-packages/{package_id}/compose.override.yml", "/api/v1/system/ops/deployment-package-approvals", "/api/v1/system/ops/deployment-package-approvals/{approval_id}", "/api/v1/system/ops/deployment-package-approvals/{approval_id}/action", "/api/v1/system/ops/deployment-canary-policies", "/api/v1/system/ops/deployment-canary-policies/{policy_id}", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/action", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/im-briefing", "/api/v1/system/ops/deployment-canary-metric-sources", "/api/v1/system/ops/deployment-canary-metric-sources/{source_id}", "/api/v1/system/ops/deployment-canary-policies/{policy_id}/metric-collection", "/api/v1/system/ops/deployment-rollback-drills", "/api/v1/system/ops/deployment-rollback-drills/{drill_id}", "/api/v1/system/ops/deployment-rollback-drills/{drill_id}/action", "/api/v1/system/ops/deployment-rollback-runbooks", "/api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}", "/api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}/action", "/api/v1/system/ops/deployment-execution-audits", "/api/v1/system/ops/deployment-execution-audits/{audit_id}", "/api/v1/system/ops/deployment-execution-audits/{audit_id}/tasks", "/api/v1/system/ops/deployment-pipelines", "/api/v1/system/ops/deployment-pipelines/{run_id}", "/api/v1/system/ops/deployment-pipelines/{run_id}/action", "/api/v1/system/ops/deployment-pipeline-executors", "/api/v1/system/ops/deployment-executor-targets", "/api/v1/system/ops/deployment-executor-targets/{target_id}", "/api/v1/system/ops/deployment-executor-targets/{target_id}/action", "/api/v1/system/ops/deployment-pipelines/{run_id}/execute", "/api/v1/system/ops/deployment-pipelines/{run_id}/executions/{execution_id}/callback", "/api/v1/system/ops/deployment-pipelines/{run_id}/remediation", "/api/v1/system/ops/observability", "/api/v1/system/ops/observability/traces", "/api/v1/system/ops/logs", "/api/v1/system/ops/storage/migration-plan", "/api/v1/system/ops/storage/migration-smoke"], "capabilities": ["模块化系统配置", "账户", "运行状态", "日志观测", "事件摘要", "Trace 关联检索", "失败根因导航", "主题", "商业计费", "权益校验", "租户配额联动", "超额策略", "催收状态", "发票生命周期审计", "企业 SSO 配置", "SSO 组到角色映射", "SSO JIT 用户落库", "SAML SP Metadata", "SAML 签名断言处理", "SAML 依赖诊断", "SSO 风险报表", "SSO 治理任务化", "SSO 风险 IM 通知", "SSO 风险订阅策略", "SSO 风险自动升级", "SSO 风险处置 Runbook", "SSO 风险处置验证", "SCIM 用户自动开通", "SCIM Token 轮换", "SCIM 用户停用", "SCIM Groups 成员同步", "SCIM 审计报表", "环境 Profile", "部署自检", "配置变更审计", "compose 覆盖文件生成", "部署包版本化", "部署包审批发布", "灰度发布策略", "指标卡点放量", "灰度指标源自动采集", "灰度指标历史", "灰度 IM 风险通知", "发布回滚演练", "回滚检查项留证", "回滚 Runbook 自动化", "回滚任务化", "跨环境执行审计", "执行证据任务化", "一键部署流水线", "真实执行器", "分布式执行目标", "外部编排排队", "外部执行回调", "执行目标配置检查", "执行计划审计", "流水线自愈诊断", "自愈任务化", "发布审批卡点", "OceanBase 迁移", "备份恢复清单", "SQLite 开发路径"], "next": []},
 ]
 
 
@@ -960,7 +1129,7 @@ LEGACY_PAGES: list[dict[str, Any]] = [
     {"id": "system", "console_id": "system", "name": "系统管理", "domain": "legacy-system", "path": "/console.html#system", "status": "migrating", "maturity": 75, "target": "#/settings", "next": ["拆分系统配置模块", "接入 Profile/SSO/观测"]},
     {"id": "auth", "console_id": "auth", "name": "账号管理", "domain": "legacy-admin", "path": "/console.html#auth", "status": "migrating", "maturity": 74, "target": "#/organization", "next": ["统一到成员权限", "SSO JIT 用户联动"]},
     {"id": "tenants", "console_id": "tenants", "name": "组织管理", "domain": "legacy-admin", "path": "/console.html#tenants", "status": "migrating", "maturity": 72, "target": "#/organization", "next": ["套餐/配额联动", "ABAC"]},
-    {"id": "db_config", "console_id": "db-config", "name": "数据库配置", "domain": "legacy-data", "path": "/console.html#db-config", "status": "active", "maturity": 84, "target": "#/intelligence/datasources", "next": ["SecretRef", "向量库联邦"]},
+    {"id": "db_config", "console_id": "db-config", "name": "数据库配置", "domain": "legacy-data", "path": "/console.html#db-config", "status": "active", "maturity": 84, "target": "#/data/sources", "next": ["SecretRef", "向量库联邦"]},
     {"id": "health", "console_id": "health", "name": "健康监控", "domain": "legacy-ops", "path": "/console.html#health", "status": "migrating", "maturity": 80, "target": "#/settings", "next": ["统一到运行状态", "补充自动诊断建议"]},
     {"id": "audit_legacy", "console_id": "audit", "name": "审计日志", "domain": "legacy-ops", "path": "/console.html#audit", "status": "migrating", "maturity": 78, "target": "#/audit", "next": ["合并审计事件检索", "链验证体验统一"]},
     {"id": "webhook", "console_id": "webhook", "name": "Webhook", "domain": "legacy-ops", "path": "/console.html#webhook", "status": "active", "maturity": 84, "target": "#/notify/webhooks", "next": ["重试策略", "死信队列"]},
@@ -1262,6 +1431,436 @@ def _existing_governance_task_ids() -> set[str]:
     except Exception:
         return set()
     return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
+def _existing_readiness_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_readiness")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
+def _existing_isolation_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_isolation")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
+def _existing_isolation_scan_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_isolation_scan")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
+def _existing_isolation_scan_compare_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_isolation_scan_compare")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
+def _list_tasks_safe(**filters: Any) -> list[dict[str, Any]]:
+    try:
+        raw = list_tasks(**filters) if filters else list_tasks()
+    except Exception:
+        return []
+    return [item for item in raw if isinstance(item, dict)]
+
+
+SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES: list[dict[str, str]] = [
+    {
+        "source": "system_page_readiness",
+        "label": "模块完整度",
+        "route": "#/system-map/readiness",
+        "task_api": "/api/v1/system/pages/readiness/tasks",
+        "cli": "sop pages readiness-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_isolation",
+        "label": "三码隔离审计",
+        "route": "#/system-map/three-code-isolation",
+        "task_api": "/api/v1/system/pages/isolation-audit/tasks",
+        "cli": "sop pages isolation-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_isolation_scan",
+        "label": "源码隔离扫描",
+        "route": "#/system-map/source-scan",
+        "task_api": "/api/v1/system/pages/isolation-audit/scan/tasks",
+        "cli": "sop pages isolation-scan-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_isolation_scan_compare",
+        "label": "智能基线对比",
+        "route": "#/system-map/baseline-compare",
+        "task_api": "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks",
+        "cli": "sop pages isolation-scan-compare-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_backlog",
+        "label": "Legacy 迁移",
+        "route": "#/system-map/migration",
+        "task_api": "/api/v1/system/pages/backlog/tasks",
+        "cli": "sop pages backlog-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_governance",
+        "label": "模块治理",
+        "route": SYSTEM_GOVERNANCE_TASKS_ROUTE,
+        "task_api": "/api/v1/system/pages/governance/tasks",
+        "cli": "sop pages governance-tasks --json",
+    },
+    {
+        "source": "system_module_action",
+        "label": "模块动作",
+        "route": "#/system-map/actions",
+        "task_api": "/api/v1/system/pages/actions/execute",
+        "cli": "sop pages actions --json",
+    },
+]
+
+
+def _governance_task_source_meta() -> dict[str, dict[str, str]]:
+    return {item["source"]: item for item in SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES}
+
+
+def _governance_task_text(item: dict[str, Any]) -> str:
+    return "\n".join(
+        str(item.get(key) or "")
+        for key in (
+            "id",
+            "title",
+            "description",
+            "assigned_to",
+            "priority",
+            "status",
+            "source",
+            "source_report_id",
+            "source_report_title",
+        )
+    ).lower()
+
+
+def _task_url(item: dict[str, Any]) -> str:
+    source = str(item.get("source") or "")
+    task_id = str(item.get("id") or "")
+    q = str(item.get("source_report_id") or task_id)
+    return f"#/tasks?source={quote(source)}&q={quote(q)}"
+
+
+def _decorate_governance_task(item: dict[str, Any], source_meta: dict[str, dict[str, str]]) -> dict[str, Any]:
+    source = str(item.get("source") or "")
+    meta = source_meta.get(source, {"label": source or "未分类", "route": SYSTEM_GOVERNANCE_TASKS_ROUTE, "task_api": "", "cli": ""})
+    return {
+        **item,
+        "source": source,
+        "source_label": meta.get("label") or source,
+        "source_route": meta.get("route") or SYSTEM_GOVERNANCE_TASKS_ROUTE,
+        "source_task_api": meta.get("task_api") or "",
+        "source_cli": meta.get("cli") or "",
+        "task_url": _task_url(item),
+    }
+
+
+def _system_governance_task_bulk_cli(ids: list[str], patch: dict[str, str], *, dry_run: bool) -> str:
+    args = ["sop pages governance-tasks-update"]
+    if ids:
+        args.append(f"--ids {','.join(ids[:5])}")
+    args.append("--dry-run" if dry_run else "--apply")
+    if patch.get("status"):
+        args.append(f"--status {patch['status']}")
+    if patch.get("priority"):
+        args.append(f"--priority {patch['priority']}")
+    if patch.get("assigned_to"):
+        args.append(f"--assigned-to {shell_quote(str(patch['assigned_to']))}")
+    args.append("--json")
+    return " ".join(args)
+
+
+def _system_governance_tasks_payload(*, status: str, source: str, q: str, limit: int) -> dict[str, Any]:
+    source_meta = _governance_task_source_meta()
+    source_order = {item["source"]: index for index, item in enumerate(SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES)}
+    safe_status = status if status in {"all", *SYSTEM_GOVERNANCE_TASK_STATUSES} else "all"
+    safe_source = source if source in source_meta else "all"
+    q_norm = q.strip().lower()
+    raw_tasks = _list_tasks_safe()
+    rows = [task for task in raw_tasks if str(task.get("source") or "") in source_meta]
+    if safe_status != "all":
+        rows = [task for task in rows if str(task.get("status") or "") == safe_status]
+    if safe_source != "all":
+        rows = [task for task in rows if str(task.get("source") or "") == safe_source]
+    if q_norm:
+        rows = [task for task in rows if q_norm in _governance_task_text(task)]
+
+    def _sort_key(task: dict[str, Any]) -> tuple[int, str, str]:
+        priority = str(task.get("priority") or "P9").upper()
+        priority_rank = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}.get(priority, 9)
+        updated = str(task.get("updated_at") or task.get("created_at") or "")
+        return (priority_rank, source_order.get(str(task.get("source") or ""), 99), updated)
+
+    rows = sorted(rows, key=_sort_key)[: max(1, min(int(limit or 50), 200))]
+    decorated = [_decorate_governance_task(item, source_meta) for item in rows]
+    by_status = Counter(str(item.get("status") or "unknown") for item in decorated)
+    by_priority = Counter(str(item.get("priority") or "P3").upper() for item in decorated)
+    by_source = Counter(str(item.get("source") or "") for item in decorated)
+    lanes = []
+    for meta in SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES:
+        lane_rows = [item for item in decorated if item.get("source") == meta["source"]]
+        lanes.append(
+            {
+                "source": meta["source"],
+                "label": meta["label"],
+                "route": meta["route"],
+                "task_api": meta["task_api"],
+                "cli": meta["cli"],
+                "count": len(lane_rows),
+                "open": sum(1 for item in lane_rows if item.get("status") != "completed"),
+                "completed": sum(1 for item in lane_rows if item.get("status") == "completed"),
+                "latest_task_id": str(lane_rows[0].get("id") or "") if lane_rows else "",
+            }
+        )
+    source_options = [{"value": "all", "label": "全部治理任务"}] + [
+        {"value": item["source"], "label": item["label"], "route": item["route"]} for item in SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES
+    ]
+    return {
+        "ok": True,
+        "filters": {"status": safe_status, "source": safe_source, "q": q, "limit": max(1, min(int(limit or 50), 200))},
+        "items": decorated,
+        "lanes": lanes,
+        "summary": {
+            "total": len(decorated),
+            "open": sum(1 for item in decorated if item.get("status") != "completed"),
+            "pending": by_status.get("pending", 0),
+            "in_progress": by_status.get("in_progress", 0),
+            "blocked": by_status.get("blocked", 0),
+            "completed": by_status.get("completed", 0),
+            "by_status": dict(by_status),
+            "by_priority": dict(by_priority),
+            "by_source": dict(by_source),
+            "source_options": source_options,
+            "status_options": [{"value": "all", "label": "全部状态"}] + [{"value": value, "label": value} for value in SYSTEM_GOVERNANCE_TASK_STATUSES],
+            "bulk_actions": {
+                "statuses": list(SYSTEM_GOVERNANCE_TASK_STATUSES),
+                "priorities": list(SYSTEM_GOVERNANCE_TASK_PRIORITIES),
+                "fields": ["status", "priority", "assigned_to"],
+                "max_ids": 200,
+                "assigned_to_max_length": 64,
+                "dry_run_default": True,
+            },
+        },
+        "agent_consumption": {
+            "purpose": "聚合 SystemMap 各专业治理单元生成的真实任务，供人、CLI 和 Agent 按来源、状态、优先级持续跟踪闭环。",
+            "api": SYSTEM_GOVERNANCE_TASKS_API,
+            "cli": "sop pages governance-tasks --json",
+            "sources": [item["source"] for item in SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES],
+            "task_center": SYSTEM_TASK_CENTER_ROUTE,
+        },
+    }
+
+
+def _system_governance_tasks_bulk_update_payload(body: GovernanceTaskBulkUpdateIn) -> dict[str, Any]:
+    requested_ids = [str(tid).strip() for tid in body.ids if str(tid).strip()]
+    requested_ids = list(dict.fromkeys(requested_ids))
+    patch: dict[str, str] = {}
+    if body.status is not None:
+        patch["status"] = str(body.status)
+    if body.priority is not None:
+        patch["priority"] = str(body.priority).upper()
+    if body.assigned_to is not None and str(body.assigned_to).strip():
+        patch["assigned_to"] = str(body.assigned_to).strip()[:64]
+    payload = _system_governance_tasks_payload(status="all", source="all", q="", limit=200)
+    governance_by_id = {str(item.get("id") or ""): item for item in payload.get("items") or [] if item.get("id")}
+    all_known_ids = {str(item.get("id") or "") for item in _list_tasks_safe() if item.get("id")}
+    planned: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for task_id in requested_ids:
+        item = governance_by_id.get(task_id)
+        if item:
+            planned.append({"id": task_id, "title": item.get("title"), "source": item.get("source"), "patch": patch})
+        elif task_id in all_known_ids:
+            skipped.append({"id": task_id, "reason": "not_governance_task"})
+        else:
+            skipped.append({"id": task_id, "reason": "not_found"})
+    updated = 0
+    bulk_result: dict[str, Any] = {}
+    if planned and patch and not body.dry_run:
+        bulk_body = TaskBulkUpdate(ids=[item["id"] for item in planned], **patch)
+        bulk_result = bulk_update_tasks(bulk_body)
+        updated = int(bulk_result.get("updated") or len(planned))
+    elif not patch:
+        skipped.extend({"id": item["id"], "reason": "no_update_fields"} for item in planned)
+        planned = []
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "planned": planned,
+        "updated": bulk_result,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "updated": updated, "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "对 SystemMap 治理任务运营看板中选中的真实治理任务做 scoped 批量处置，普通任务不会被此接口更新。",
+            "api": SYSTEM_GOVERNANCE_TASKS_BULK_UPDATE_API,
+            "cli": _system_governance_task_bulk_cli(requested_ids, patch, dry_run=body.dry_run),
+            "allowed_sources": [item["source"] for item in SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES],
+            "allowed_statuses": list(SYSTEM_GOVERNANCE_TASK_STATUSES),
+            "allowed_priorities": list(SYSTEM_GOVERNANCE_TASK_PRIORITIES),
+            "task_center": SYSTEM_TASK_CENTER_ROUTE,
+        },
+    }
+
+
+def _readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    gaps = item.get("gaps") or []
+    next_actions = [str(x) for x in item.get("next_actions") or [] if str(x).strip()]
+    contract = item.get("implementation_contract") or {}
+    module_id = str(item.get("id") or "")
+    return {
+        "title": f"补齐模块完整度：{item.get('name') or module_id}",
+        "description": "\n".join(
+            [
+                f"module_id: {module_id}",
+                f"path: {item.get('path') or ''}",
+                f"domain: {item.get('domain_name') or item.get('domain') or ''}",
+                f"status: {item.get('status')}",
+                f"readiness_score: {item.get('readiness_score')}",
+                "",
+                "gaps:",
+                *[
+                    f"- {gap.get('dimension')}: score={gap.get('score')} detail={gap.get('detail')}"
+                    for gap in gaps[:8]
+                    if isinstance(gap, dict)
+                ],
+                "",
+                "next_actions:",
+                *[f"- {x}" for x in next_actions[:8]],
+                "",
+                "implementation_contract:",
+                json.dumps(contract, ensure_ascii=False, indent=2),
+            ]
+        ).strip(),
+        "priority": priority,
+        "estimate": "M" if str(item.get("status")) == "risk" else "S",
+        "assigned_to": assigned_to or "Coder",
+        "dev_tool": "codex",
+        "source": "system_page_readiness",
+        "source_report_id": f"readiness:{module_id}",
+        "source_report_title": str(item.get("name") or module_id),
+        "debug_notes": f"Generated from SystemMap module readiness: {module_id}",
+    }
+
+
+def _isolation_task_payload(item: dict[str, Any], *, scope_contract: dict[str, Any], priority: str, assigned_to: str) -> dict[str, Any]:
+    domain_id = str(item.get("id") or "")
+    tests = [str(x) for x in item.get("tests") or [] if str(x).strip()]
+    scope_fields = [str(x) for x in item.get("scope_fields") or [] if str(x).strip()]
+    return {
+        "title": f"加固三码隔离：{item.get('name') or domain_id}",
+        "description": "\n".join(
+            [
+                f"domain_id: {domain_id}",
+                f"module: {item.get('module') or ''}",
+                f"storage: {item.get('storage') or ''}",
+                f"status: {item.get('status') or ''}",
+                f"guard: {item.get('guard') or ''}",
+                f"read_protected: {item.get('read_protected')}",
+                f"write_protected: {item.get('write_protected')}",
+                "",
+                "scope_fields:",
+                *[f"- {field}" for field in scope_fields],
+                "",
+                "tests:",
+                *[f"- {test}" for test in tests],
+                "",
+                "scope_contract:",
+                json.dumps(scope_contract, ensure_ascii=False, indent=2),
+            ]
+        ).strip(),
+        "priority": priority,
+        "estimate": "M" if str(item.get("status")) != "protected" else "S",
+        "assigned_to": assigned_to or "SecurityAgent",
+        "dev_tool": "codex",
+        "source": "system_page_isolation",
+        "source_report_id": f"isolation:{domain_id}",
+        "source_report_title": str(item.get("name") or domain_id),
+        "debug_notes": f"Generated from SystemMap three-code isolation audit: {domain_id}",
+    }
+
+
+def _isolation_scan_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    module = str(item.get("module") or "").strip()
+    source_id = module or str(item.get("id") or "").replace("source:", "")
+    return {
+        "title": f"加固源码隔离扫描项：{module or item.get('file') or source_id}",
+        "description": "\n".join(
+            [
+                f"module: {module}",
+                f"file: {item.get('file') or ''}",
+                f"storage: {item.get('storage') or ''}",
+                f"status: {item.get('status') or ''}",
+                f"risk_level: {item.get('risk_level') or ''}",
+                "",
+                "scope_guard:",
+                json.dumps(item.get("scope_guard") or {}, ensure_ascii=False, indent=2),
+                "",
+                "signals:",
+                json.dumps(item.get("signals") or {}, ensure_ascii=False, indent=2),
+                "",
+                "missing:",
+                *[f"- {x}" for x in item.get("missing") or []],
+                "",
+                "recommendation:",
+                str(item.get("recommendation") or ""),
+            ]
+        ).strip(),
+        "priority": priority,
+        "estimate": "M" if str(item.get("status")) != "protected" else "S",
+        "assigned_to": assigned_to or "SecurityAgent",
+        "dev_tool": "codex",
+        "source": "system_page_isolation_scan",
+        "source_report_id": f"isolation_scan:{source_id}",
+        "source_report_title": str(item.get("file") or module or source_id),
+        "debug_notes": f"Generated from SystemMap source isolation scan: {source_id}",
+    }
+
+
+def _isolation_scan_compare_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    module = str(item.get("module") or item.get("id") or "").strip()
+    change = str(item.get("change") or "changed")
+    source_id = module or str(item.get("id") or "").strip()
+    effective_priority = "P0" if change in {"new_risk", "regressed"} else priority
+    return {
+        "title": f"处置源码隔离基线差异：{module or source_id}（{change}）",
+        "description": "\n".join(
+            [
+                f"module: {module}",
+                f"file: {item.get('file') or ''}",
+                f"change: {change}",
+                f"before={item.get('before_status') or ''}",
+                f"after={item.get('after_status') or ''}",
+                f"risk_level: {item.get('risk_level') or ''}",
+                "",
+                "recommendation:",
+                str(item.get("recommendation") or ""),
+                "",
+                "compare_api: /api/v1/system/pages/isolation-audit/scan/runs/compare",
+                "task_cli: sop pages isolation-scan-compare-tasks --dry-run --json",
+            ]
+        ).strip(),
+        "priority": effective_priority,
+        "estimate": "M" if change in {"new_risk", "regressed"} else "S",
+        "assigned_to": assigned_to or "SecurityAgent",
+        "dev_tool": "codex",
+        "source": "system_page_isolation_scan_compare",
+        "source_report_id": f"isolation_scan_compare:{source_id}:{change}",
+        "source_report_title": str(item.get("file") or module or source_id),
+        "debug_notes": f"Generated from SystemMap source isolation baseline compare: {source_id}/{change}",
+    }
 
 
 def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, max_items: int) -> list[dict[str, Any]]:
@@ -1674,6 +2273,1058 @@ def _menu_health() -> dict[str, Any]:
             "cli": "sop pages health --json",
             "api": "/api/v1/system/pages/health",
             "recommended_next": ["修复 critical/high 问题", "补齐 i18n 和 API 契约", "为高价值子模块补齐独立 path"],
+        },
+    }
+
+
+def _readiness_dimension(status: str, score: int, detail: str) -> dict[str, Any]:
+    return {
+        "status": status,
+        "score": max(0, min(int(score), 100)),
+        "detail": detail,
+    }
+
+
+def _readiness_status(score: float) -> str:
+    if score >= 90:
+        return "complete"
+    if score >= 75:
+        return "watch"
+    return "risk"
+
+
+def _module_readiness_matrix() -> list[dict[str, Any]]:
+    react = _enrich_pages(REACT_PAGES)
+    registry = {str(item.get("id")): item for item in _capability_registry(react)}
+    nav_by_id = {str(item.get("id")): item for item in NAV_CONTRACT}
+    menu_issues = _menu_health().get("issues") or []
+    issues_by_module: dict[str, list[dict[str, Any]]] = {}
+    for issue in menu_issues:
+        module_id = str(issue.get("module_id") or "").split(".", 1)[0]
+        if module_id:
+            issues_by_module.setdefault(module_id, []).append(issue)
+    rows: list[dict[str, Any]] = []
+    for page in react:
+        module_id = str(page.get("id") or "")
+        nav = nav_by_id.get(module_id) or {}
+        capability_item = registry.get(module_id) or {}
+        apis = [str(item) for item in page.get("apis") or [] if str(item).strip()]
+        capabilities = [str(item) for item in page.get("capabilities") or [] if str(item).strip()]
+        ai_surfaces = [str(item) for item in (capability_item.get("ai") or {}).get("surfaces") or [] if str(item).strip()]
+        submodules = capability_item.get("submodules") or []
+        module_issues = issues_by_module.get(module_id, [])
+        high_issues = [item for item in module_issues if item.get("severity") in {"critical", "high"}]
+        maturity = max(0, min(int(page.get("maturity") or 0), 100))
+        frontend_score = 100 if nav and page.get("path") else 70 if page.get("path") else 35
+        backend_score = 100 if len(apis) >= 2 else 85 if len(apis) == 1 else 35
+        ai_score = 100 if ai_surfaces else 45
+        governance_score = 100
+        if not capability_item.get("capability"):
+            governance_score -= 35
+        if high_issues:
+            governance_score -= min(len(high_issues) * 12, 45)
+        if not submodules:
+            governance_score -= 8
+        product_score = maturity
+        dimensions = {
+            "frontend": _readiness_dimension("complete" if frontend_score >= 90 else "watch" if frontend_score >= 75 else "risk", frontend_score, "前端路由与菜单契约" if nav else "缺少菜单导航契约"),
+            "backend": _readiness_dimension("complete" if backend_score >= 90 else "watch" if backend_score >= 75 else "risk", backend_score, f"声明 {len(apis)} 个后端 API 契约"),
+            "ai": _readiness_dimension("complete" if ai_score >= 90 else "risk", ai_score, "已接入 AI surfaces" if ai_surfaces else "缺少 Copilot/CLI/Agent 可消费入口"),
+            "governance": _readiness_dimension("complete" if governance_score >= 90 else "watch" if governance_score >= 75 else "risk", governance_score, f"能力码、权限与菜单健康问题 {len(module_issues)} 个"),
+            "product": _readiness_dimension("complete" if product_score >= 90 else "watch" if product_score >= 75 else "risk", product_score, "基于模块成熟度和 next 建议"),
+        }
+        readiness_score = round(
+            dimensions["frontend"]["score"] * 0.18
+            + dimensions["backend"]["score"] * 0.24
+            + dimensions["ai"]["score"] * 0.18
+            + dimensions["governance"]["score"] * 0.2
+            + dimensions["product"]["score"] * 0.2,
+            1,
+        )
+        gaps: list[dict[str, Any]] = []
+        for key, value in dimensions.items():
+            if int(value["score"]) < 90:
+                gaps.append({"dimension": key, "score": value["score"], "detail": value["detail"]})
+        for issue in module_issues[:4]:
+            gaps.append(
+                {
+                    "dimension": "menu_health",
+                    "score": max(0, 100 - int(issue.get("penalty") or 0) * 5),
+                    "detail": issue.get("title") or issue.get("category") or "菜单健康问题",
+                    "severity": issue.get("severity"),
+                }
+            )
+        next_actions = [str(item) for item in page.get("next") or [] if str(item).strip()]
+        if not apis:
+            next_actions.append("补齐后端 API 契约与前端调用封装")
+        if not ai_surfaces:
+            next_actions.append("补齐 Copilot、CLI 或 Agent 消费入口")
+        if high_issues:
+            next_actions.append("优先修复菜单、能力码或权限高风险问题")
+        rows.append(
+            {
+                "id": module_id,
+                "name": page.get("name") or module_id,
+                "domain": page.get("effective_domain") or page.get("domain"),
+                "domain_name": page.get("domain_name") or page.get("domain"),
+                "path": page.get("path") or "",
+                "status": _readiness_status(readiness_score),
+                "readiness_score": readiness_score,
+                "maturity": maturity,
+                "capabilities": capabilities,
+                "dimensions": dimensions,
+                "gaps": gaps[:8],
+                "next_actions": next_actions[:8],
+                "implementation_contract": {
+                    "route": page.get("path") or "",
+                    "api_count": len(apis),
+                    "apis": apis,
+                    "capability": capability_item.get("capability") or nav.get("capability") or page.get("capability_key") or "",
+                    "ai_surfaces": ai_surfaces,
+                    "submodule_count": len(submodules),
+                    "action_count": int(capability_item.get("action_count") or 0),
+                },
+            }
+        )
+    return sorted(rows, key=lambda item: ({"risk": 0, "watch": 1, "complete": 2}.get(str(item["status"]), 3), float(item["readiness_score"]), str(item["id"])))
+
+
+def _module_readiness_payload(*, domain: str | None = None, status: str | None = None, q: str | None = None) -> dict[str, Any]:
+    query = (q or "").strip().lower()
+    rows = []
+    for item in _module_readiness_matrix():
+        if domain and domain != "all" and item.get("domain") != domain:
+            continue
+        if status and status != "all" and item.get("status") != status:
+            continue
+        if query:
+            haystack = " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("domain") or ""),
+                    " ".join(str(x) for x in item.get("capabilities") or []),
+                    " ".join(str(x) for x in item.get("next_actions") or []),
+                ]
+            ).lower()
+            if query not in haystack:
+                continue
+        rows.append(item)
+    by_status = Counter(str(item.get("status")) for item in rows)
+    domain_summary: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        domain_id = str(item.get("domain") or "unknown")
+        bucket = domain_summary.setdefault(
+            domain_id,
+            {
+                "domain": domain_id,
+                "domain_name": item.get("domain_name") or domain_id,
+                "total": 0,
+                "complete": 0,
+                "watch": 0,
+                "risk": 0,
+                "avg_score": 0,
+            },
+        )
+        bucket["total"] += 1
+        bucket[str(item.get("status"))] = int(bucket.get(str(item.get("status")), 0)) + 1
+        bucket["avg_score"] += float(item.get("readiness_score") or 0)
+    for bucket in domain_summary.values():
+        bucket["avg_score"] = round(float(bucket["avg_score"]) / max(1, int(bucket["total"])), 1)
+    avg_score = round(sum(float(item.get("readiness_score") or 0) for item in rows) / max(1, len(rows)), 1)
+    return {
+        "ok": True,
+        "items": rows,
+        "summary": {
+            "total": len(rows),
+            "avg_score": avg_score,
+            "complete": by_status.get("complete", 0),
+            "watch": by_status.get("watch", 0),
+            "risk": by_status.get("risk", 0),
+        },
+        "domain_summary": sorted(domain_summary.values(), key=lambda item: (float(item["avg_score"]), str(item["domain"]))),
+        "filters": {"domain": domain or "all", "status": status or "all", "q": q or ""},
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 判断每个模块是否前后端完整、是否具备 API/权限/AI surface，并据此生成增强任务。",
+            "api": "/api/v1/system/pages/readiness",
+            "task_api": "/api/v1/system/pages/readiness/tasks",
+            "recommended_next": ["优先处理 risk 模块", "为 watch 模块补 API 契约与 AI surfaces", "把 gaps 转成 SystemMap 治理任务"],
+            "fields": ["items.id", "items.readiness_score", "items.dimensions", "items.gaps", "items.implementation_contract"],
+        },
+    }
+
+
+def _production_dimension(status: str, score: int, detail: str, evidence: list[str], recommendation: str = "") -> dict[str, Any]:
+    return {
+        "status": status,
+        "score": max(0, min(int(score), 100)),
+        "detail": detail,
+        "evidence": [item for item in evidence if item][:6],
+        "recommendation": recommendation,
+    }
+
+
+def _production_status(score: float) -> str:
+    if score >= 85:
+        return "ready"
+    if score >= 70:
+        return "partial"
+    return "gap"
+
+
+def _contains_any(text: str, words: tuple[str, ...]) -> bool:
+    lower = text.lower()
+    return any(word.lower() in lower for word in words)
+
+
+def _production_readiness_matrix() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in _module_readiness_matrix():
+        contract = item.get("implementation_contract") or {}
+        api_count = int(contract.get("api_count") or 0)
+        action_count = int(contract.get("action_count") or 0)
+        ai_surface_count = len(contract.get("ai_surfaces") or [])
+        maturity = int(item.get("maturity") or 0)
+        readiness_score = float(item.get("readiness_score") or 0)
+        blob = " ".join(
+            [
+                str(item.get("id") or ""),
+                str(item.get("name") or ""),
+                str(item.get("domain") or ""),
+                " ".join(str(x) for x in item.get("capabilities") or []),
+                " ".join(str(x) for x in item.get("next_actions") or []),
+                " ".join(str(x) for x in contract.get("apis") or []),
+            ]
+        )
+
+        runtime_score = 92 if api_count >= 3 and maturity >= 88 else 78 if api_count >= 1 else 42
+        runtime_data = _production_dimension(
+            _production_status(runtime_score),
+            runtime_score,
+            f"声明 {api_count} 个 API 契约，模块成熟度 {maturity}",
+            [f"api_count={api_count}", f"maturity={maturity}", f"readiness_score={readiness_score}"],
+            "" if runtime_score >= 85 else "补真实运行摘要、分页检索、空/错/加载态和端到端 smoke 证据。",
+        )
+
+        external_required = _contains_any(
+            blob,
+            (
+                "connection",
+                "connector",
+                "provider",
+                "secretref",
+                "sso",
+                "mcp",
+                "a2a",
+                "webhook",
+                "notify",
+                "billing",
+                "payment",
+                "db-config",
+                "llm",
+                "data-ingest",
+            ),
+        )
+        external_score = 90 if not external_required else 86 if _contains_any(blob, ("secretref", "test", "health", "audit", "config")) else 58
+        external_connections = _production_dimension(
+            "not_required" if not external_required else _production_status(external_score),
+            external_score,
+            "无需外部连接配置" if not external_required else "依赖外部连接、Provider 或企业集成，需要配置、测试和密钥托管证据",
+            ["external_required=true" if external_required else "external_required=false"],
+            "" if external_score >= 85 else "接入 SecretRef、连接测试、连通性审计和失败重试证据。",
+        )
+
+        async_required = _contains_any(
+            blob,
+            (
+                "worker",
+                "scheduler",
+                "workflow",
+                "job",
+                "runs",
+                "agent",
+                "queue",
+                "cdc",
+                "ingest",
+                "quality",
+                "report-subscription",
+            ),
+        )
+        async_score = 90 if not async_required else 84 if _contains_any(blob, ("scheduler", "runs", "lease", "heartbeat", "workflow", "job")) else 62
+        async_worker = _production_dimension(
+            "not_required" if not async_required else _production_status(async_score),
+            async_score,
+            "同步页面，无异步执行底座要求" if not async_required else "存在异步执行、任务调度或 Agent 运行要求",
+            ["async_required=true" if async_required else "async_required=false"],
+            "" if async_score >= 85 else "补 Worker 健康、幂等键、失败重试、DLQ 和状态回写。",
+        )
+
+        coverage_score = 86 if readiness_score >= 90 and api_count >= 2 else 74 if readiness_score >= 75 else 45
+        test_coverage = _production_dimension(
+            _production_status(coverage_score),
+            coverage_score,
+            "基于模块契约、API 覆盖和现有路由测试的生产化测试证据",
+            [f"contract_status={item.get('status')}", f"apis={api_count}"],
+            "" if coverage_score >= 85 else "补 focused route、表单校验、空/错/加载态、跨 scope 和 TestClient smoke。",
+        )
+
+        deploy_score = 82 if maturity >= 90 else 74 if maturity >= 82 else 56
+        deployment_evidence = _production_dimension(
+            _production_status(deploy_score),
+            deploy_score,
+            "前端构建、模块注册和发布流水证据的完整度",
+            [f"route={contract.get('route') or ''}", f"maturity={maturity}"],
+            "" if deploy_score >= 85 else "补可部署 profile、发布包、回滚脚本和部署 smoke 记录。",
+        )
+
+        observability_score = 88 if _contains_any(blob, ("summary", "health", "timeline", "audit", "trace", "metrics")) else 72 if api_count >= 2 else 55
+        observability = _production_dimension(
+            _production_status(observability_score),
+            observability_score,
+            "运行监控、审计、trace/correlation id 与指标摘要信号",
+            [f"ai_surfaces={ai_surface_count}", f"api_count={api_count}"],
+            "" if observability_score >= 85 else "补 summary/health、trace_id、correlation_id、错误预算和仪表盘入口。",
+        )
+
+        policy_score = 90 if contract.get("capability") and action_count > 0 else 82 if contract.get("capability") else 52
+        permission_policy = _production_dimension(
+            _production_status(policy_score),
+            policy_score,
+            "能力码、权限策略和可审计动作覆盖状态",
+            [f"capability={contract.get('capability') or ''}", f"action_count={action_count}"],
+            "" if policy_score >= 85 else "补字段级权限、动作审批、拒绝审计和 SystemMap 能力策略注册。",
+        )
+
+        dimensions = {
+            "runtime_data": runtime_data,
+            "external_connections": external_connections,
+            "async_worker": async_worker,
+            "test_coverage": test_coverage,
+            "deployment_evidence": deployment_evidence,
+            "observability": observability,
+            "permission_policy": permission_policy,
+        }
+        production_score = round(
+            runtime_data["score"] * 0.18
+            + external_connections["score"] * 0.12
+            + async_worker["score"] * 0.14
+            + test_coverage["score"] * 0.16
+            + deployment_evidence["score"] * 0.12
+            + observability["score"] * 0.14
+            + permission_policy["score"] * 0.14,
+            1,
+        )
+        contract_complete = readiness_score >= 90
+        runtime_ready = runtime_data["score"] >= 75 and observability["score"] >= 70 and permission_policy["score"] >= 75
+        production_ready = contract_complete and production_score >= 85 and all(
+            value["status"] in {"ready", "not_required"} for value in dimensions.values()
+        )
+        stage = "production_ready" if production_ready else "runtime_ready" if runtime_ready else "contract_complete" if contract_complete else "gap"
+        recommendations = [
+            value["recommendation"]
+            for value in dimensions.values()
+            if value.get("recommendation")
+        ][:8]
+        rows.append(
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "domain": item.get("domain"),
+                "domain_name": item.get("domain_name"),
+                "path": item.get("path"),
+                "contract_complete": contract_complete,
+                "runtime_ready": runtime_ready,
+                "production_ready": production_ready,
+                "stage": stage,
+                "readiness_score": readiness_score,
+                "production_score": production_score,
+                "dimensions": dimensions,
+                "recommendations": recommendations,
+                "implementation_contract": contract,
+            }
+        )
+    order = {"gap": 0, "contract_complete": 1, "runtime_ready": 2, "production_ready": 3}
+    return sorted(rows, key=lambda row: (order.get(str(row.get("stage")), 0), float(row.get("production_score") or 0), str(row.get("id"))))
+
+
+def _module_production_readiness_payload(*, domain: str | None = None, stage: str | None = None, q: str | None = None) -> dict[str, Any]:
+    query = (q or "").strip().lower()
+    rows = []
+    for item in _production_readiness_matrix():
+        if domain and domain != "all" and item.get("domain") != domain:
+            continue
+        if stage and stage != "all" and item.get("stage") != stage:
+            continue
+        if query:
+            haystack = " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("domain") or ""),
+                    " ".join(str(x) for x in item.get("recommendations") or []),
+                ]
+            ).lower()
+            if query not in haystack:
+                continue
+        rows.append(item)
+    by_stage = Counter(str(item.get("stage") or "gap") for item in rows)
+    avg_score = round(sum(float(item.get("production_score") or 0) for item in rows) / max(1, len(rows)), 1)
+    return {
+        "ok": True,
+        "items": rows,
+        "summary": {
+            "total": len(rows),
+            "avg_production_score": avg_score,
+            "contract_complete": sum(1 for item in rows if item.get("contract_complete")),
+            "runtime_ready": sum(1 for item in rows if item.get("runtime_ready")),
+            "production_ready": sum(1 for item in rows if item.get("production_ready")),
+            "gap": by_stage.get("gap", 0),
+            "by_stage": dict(by_stage),
+        },
+        "filters": {"domain": domain or "all", "stage": stage or "all", "q": q or ""},
+        "agent_consumption": {
+            "purpose": "供 SystemMap、CLI 和 Agent 区分契约完整、运行可用和生产就绪，避免页面 complete 掩盖真实生产缺口。",
+            "api": "/api/v1/system/pages/production-readiness",
+            "task_api": "/api/v1/system/pages/readiness/tasks",
+            "recommended_next": ["先补 runtime_ready 的关键证据", "把 production gap 转为治理任务", "按外部连接和异步执行要求补 smoke"],
+            "fields": ["items.contract_complete", "items.runtime_ready", "items.production_ready", "items.dimensions"],
+        },
+    }
+
+
+def _experience_status(score: float) -> str:
+    if score >= 86:
+        return "simple"
+    if score >= 72:
+        return "watch"
+    return "complex"
+
+
+def _experience_dimension(score: int, detail: str, recommendation: str = "") -> dict[str, Any]:
+    score = max(0, min(int(score), 100))
+    return {
+        "score": score,
+        "status": _experience_status(score),
+        "detail": detail,
+        "recommendation": recommendation,
+    }
+
+
+def _module_experience_review_matrix() -> list[dict[str, Any]]:
+    production_by_id = {str(item.get("id")): item for item in _production_readiness_matrix()}
+    rows: list[dict[str, Any]] = []
+    for item in _module_readiness_matrix():
+        contract = item.get("implementation_contract") or {}
+        api_count = int(contract.get("api_count") or 0)
+        action_count = int(contract.get("action_count") or 0)
+        submodule_count = int(contract.get("submodule_count") or 0)
+        ai_surface_count = len(contract.get("ai_surfaces") or [])
+        maturity = int(item.get("maturity") or 0)
+        next_actions = [str(x) for x in item.get("next_actions") or [] if str(x).strip()]
+        production = production_by_id.get(str(item.get("id"))) or {}
+        production_score = float(production.get("production_score") or 0)
+
+        complexity_penalty = min(api_count * 3 + action_count * 2 + submodule_count * 4 + len(next_actions) * 2, 65)
+        maturity_bonus = 8 if maturity >= 90 else 3 if maturity >= 80 else 0
+        simplicity_score = max(35, min(100, 100 - complexity_penalty + maturity_bonus))
+        if api_count <= 5 and action_count <= 6 and submodule_count <= 4:
+            simplicity_score = min(100, simplicity_score + 8)
+        simplicity = _experience_dimension(
+            simplicity_score,
+            f"{api_count} API / {action_count} 动作 / {submodule_count} 子能力",
+            "" if simplicity_score >= 86 else "拆成业务子路由或分段工作区，只保留首屏高频动作。",
+        )
+
+        responsive_score = 92
+        if api_count > 8 or action_count > 10:
+            responsive_score -= 18
+        if submodule_count > 6:
+            responsive_score -= 10
+        if item.get("status") != "complete":
+            responsive_score -= 6
+        responsive = _experience_dimension(
+            responsive_score,
+            "桌面表格 + 移动端卡片/横向滚动的响应式要求",
+            "" if responsive_score >= 86 else "为宽表格补横向滚动、移动卡片和底部高频操作区。",
+        )
+
+        component_score = 88 if api_count >= 1 else 55
+        if action_count >= 1:
+            component_score += 6
+        if api_count > 10:
+            component_score -= 10
+        componentization = _experience_dimension(
+            component_score,
+            "优先使用 Ant Design Form/Table/Drawer/Steps/Segmented 等成熟组件",
+            "" if component_score >= 86 else "把原生输入、JSON pre 和手填 ID 收敛成表单、抽屉和步骤式确认。",
+        )
+
+        permission_score = 92 if contract.get("capability") and action_count > 0 else 78 if contract.get("capability") else 45
+        permission = _experience_dimension(
+            permission_score,
+            "能力码、动作权限、审批与拒绝审计的页面落点",
+            "" if permission_score >= 86 else "补按钮级能力码、字段级可见性和动作审批证据。",
+        )
+
+        ai_score = 94 if ai_surface_count >= 2 else 84 if ai_surface_count == 1 else 58
+        if api_count >= 2:
+            ai_score = min(100, ai_score + 4)
+        ai_editability = _experience_dimension(
+            ai_score,
+            f"{ai_surface_count} 个 AI surface，{api_count} 个可调用 API",
+            "" if ai_score >= 86 else "补 Copilot/CLI/Agent 消费字段，输出稳定 source_report_id 和 task_api。",
+        )
+
+        commercial_score = 88 if production_score >= 80 and permission_score >= 86 else 74 if production_score >= 70 else 58
+        commercialization = _experience_dimension(
+            commercial_score,
+            "面向套餐、配额、审计、运维和客户成功的专业化管理能力",
+            "" if commercial_score >= 86 else "补套餐/配额/审计口径和客户可解释的运营指标。",
+        )
+
+        dimensions = {
+            "simplicity": simplicity,
+            "responsive": responsive,
+            "componentization": componentization,
+            "permission": permission,
+            "ai_editability": ai_editability,
+            "commercialization": commercialization,
+        }
+        experience_score = round(
+            simplicity["score"] * 0.22
+            + responsive["score"] * 0.18
+            + componentization["score"] * 0.16
+            + permission["score"] * 0.16
+            + ai_editability["score"] * 0.16
+            + commercialization["score"] * 0.12,
+            1,
+        )
+        recommendations = [value["recommendation"] for value in dimensions.values() if value.get("recommendation")]
+        if not recommendations:
+            recommendations = ["保持当前模块化结构，继续以成熟组件和权限策略增量增强。"]
+        ui_contract = {
+            "preferred_components": ["Segmented", "Table", "Form", "Drawer", "Steps", "Tag"],
+            "layout": "summary-left + focused-detail-right + responsive-table",
+            "mobile_rule": "宽表格横向滚动；复杂工作流进入抽屉；固定操作区只保留高频动作。",
+            "permission_rule": "所有写操作绑定 capability/action，禁用态展示拒绝原因。",
+            "ai_rule": "接口返回 fields/task_api/source_report_id，便于 Agent 安全改造。",
+        }
+        rows.append(
+            {
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "domain": item.get("domain"),
+                "domain_name": item.get("domain_name"),
+                "path": item.get("path"),
+                "status": _experience_status(experience_score),
+                "experience_score": experience_score,
+                "maturity": maturity,
+                "dimensions": dimensions,
+                "recommendations": recommendations[:8],
+                "ui_contract": ui_contract,
+                "implementation_contract": contract,
+            }
+        )
+    order = {"complex": 0, "watch": 1, "simple": 2}
+    return sorted(rows, key=lambda row: (order.get(str(row.get("status")), 0), float(row.get("experience_score") or 0), str(row.get("id"))))
+
+
+def _module_experience_review_payload(*, domain: str | None = None, status: str | None = None, q: str | None = None) -> dict[str, Any]:
+    query = (q or "").strip().lower()
+    rows = []
+    for item in _module_experience_review_matrix():
+        if domain and domain != "all" and item.get("domain") != domain:
+            continue
+        if status and status != "all" and item.get("status") != status:
+            continue
+        if query:
+            haystack = " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("domain") or ""),
+                    " ".join(str(x) for x in item.get("recommendations") or []),
+                    " ".join(str(x) for x in (item.get("implementation_contract") or {}).get("apis") or []),
+                ]
+            ).lower()
+            if query not in haystack:
+                continue
+        rows.append(item)
+    by_status = Counter(str(item.get("status") or "complex") for item in rows)
+    avg_score = round(sum(float(item.get("experience_score") or 0) for item in rows) / max(1, len(rows)), 1)
+    domain_summary: dict[str, dict[str, Any]] = {}
+    for item in rows:
+        domain_id = str(item.get("domain") or "unknown")
+        bucket = domain_summary.setdefault(
+            domain_id,
+            {
+                "domain": domain_id,
+                "domain_name": item.get("domain_name") or domain_id,
+                "total": 0,
+                "simple": 0,
+                "watch": 0,
+                "complex": 0,
+                "avg_score": 0,
+            },
+        )
+        bucket["total"] += 1
+        bucket[str(item.get("status") or "complex")] = int(bucket.get(str(item.get("status") or "complex"), 0)) + 1
+        bucket["avg_score"] += float(item.get("experience_score") or 0)
+    for bucket in domain_summary.values():
+        bucket["avg_score"] = round(float(bucket["avg_score"]) / max(1, int(bucket["total"])), 1)
+    return {
+        "ok": True,
+        "items": rows,
+        "summary": {
+            "total": len(rows),
+            "avg_experience_score": avg_score,
+            "simple": by_status.get("simple", 0),
+            "watch": by_status.get("watch", 0),
+            "complex": by_status.get("complex", 0),
+            "needs_simplification": by_status.get("watch", 0) + by_status.get("complex", 0),
+            "mobile_risk": sum(1 for item in rows if int((item.get("dimensions") or {}).get("responsive", {}).get("score") or 0) < 86),
+            "permission_gap": sum(1 for item in rows if int((item.get("dimensions") or {}).get("permission", {}).get("score") or 0) < 86),
+            "ai_edit_gap": sum(1 for item in rows if int((item.get("dimensions") or {}).get("ai_editability", {}).get("score") or 0) < 86),
+            "by_status": dict(by_status),
+        },
+        "domain_summary": sorted(domain_summary.values(), key=lambda item: (float(item["avg_score"]), str(item["domain"]))),
+        "filters": {"domain": domain or "all", "status": status or "all", "q": q or ""},
+        "agent_consumption": {
+            "purpose": "供 SystemMap、产品经理和 AI Agent 评估菜单分类、页面复杂度、响应式、权限与 AI 可改造性，优先把复杂页面拆成清晰模块。",
+            "api": "/api/v1/system/pages/experience-review",
+            "task_api": "/api/v1/system/pages/readiness/tasks",
+            "recommended_next": ["先拆 complex 页面", "为 watch 页面补移动端表格/卡片和成熟表单组件", "把权限与 AI gap 写入治理任务"],
+            "fields": ["items.experience_score", "items.dimensions", "items.recommendations", "items.ui_contract", "items.implementation_contract"],
+        },
+    }
+
+
+def _isolation_audit_payload() -> dict[str, Any]:
+    domains = [
+        {
+            "id": "tasks_sql",
+            "name": "任务执行与调度",
+            "module": "tasks",
+            "storage": "sql_adapter",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "db_sql_compat._base_q + resolved request scope",
+            "tests": ["Task SQL adapter filters tenant_id/project_id; business code is bound by project scope middleware."],
+            "status": "protected",
+        },
+        {
+            "id": "requirements_sql",
+            "name": "需求工作台",
+            "module": "requirements",
+            "storage": "sql_adapter",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "db_sql_compat._base_q + resolved request scope",
+            "tests": ["Requirement SQL adapter filters tenant_id/project_id; business code is bound by project scope middleware."],
+            "status": "protected",
+        },
+        {
+            "id": "analytics_reports",
+            "name": "智能报表与归因分析",
+            "module": "analytics",
+            "storage": "jsonl",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "scope_guard.attach_scope + scope_guard.scope_matches",
+            "tests": ["test_analytics_reports_do_not_cross_business_scope", "test_analytics_report_write_rejects_cross_business_scope"],
+            "status": "protected",
+        },
+        {
+            "id": "notify_messages",
+            "name": "IM/Notify 消息流水",
+            "module": "notify",
+            "storage": "jsonl",
+            "scope_fields": ["tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "scope_guard.attach_scope + scope_guard.scope_matches",
+            "tests": ["test_notify_messages_do_not_cross_project_scope", "test_notify_inbound_action_rejects_cross_project_scope"],
+            "status": "protected",
+        },
+        {
+            "id": "agent_runs",
+            "name": "Agent 运行中心",
+            "module": "tasks/agents",
+            "storage": "json/jsonl",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "scope_guard.attach_scope + scope_guard.scope_matches",
+            "tests": ["test_agent_claims_and_reports_do_not_cross_business_scope", "test_agent_runs_do_not_cross_business_scope", "test_agent_heartbeat_rejects_cross_business_claim"],
+            "status": "protected",
+        },
+        {
+            "id": "ops_records",
+            "name": "OpsCenter 运行记录",
+            "module": "ops_center",
+            "storage": "json",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "scope_guard.attach_scope + scope_guard.scope_matches",
+            "tests": ["test_ops_center_records_do_not_cross_project_scope", "test_ops_center_write_rejects_cross_project_scope"],
+            "status": "protected",
+        },
+        {
+            "id": "data_governance_records",
+            "name": "数据治理与数据开发记录",
+            "module": "data_analytics",
+            "storage": "json",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "scoped data-governance store + scope_guard.attach_scope",
+            "tests": ["test_data_governance_records_do_not_cross_business_scope", "test_data_development_templates_do_not_cross_project_scope"],
+            "status": "protected",
+        },
+        {
+            "id": "usage_and_billing_ledgers",
+            "name": "用量与计费流水",
+            "module": "usage/billing",
+            "storage": "json/jsonl",
+            "scope_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "read_protected": True,
+            "write_protected": True,
+            "guard": "usage scoped file key + billing scope_guard.attach_scope/scope_guard.scope_matches",
+            "tests": ["test_usage_ledger_does_not_cross_business_scope", "test_billing_invoices_do_not_cross_business_scope", "test_billing_payment_rejects_cross_project_invoice"],
+            "status": "protected",
+        },
+    ]
+    watch: list[dict[str, Any]] = []
+    protected = sum(1 for item in domains if item["read_protected"] and item["write_protected"])
+    score = round((protected / max(1, len(domains))) * 100)
+    source_scan = _isolation_source_scan_payload()
+    return {
+        "ok": True,
+        "summary": {
+            "score": score,
+            "protected": protected,
+            "domains": len(domains),
+            "watch": len(watch),
+            "high_risk": 0,
+            "guard": "scope_guard",
+        },
+        "domains": domains,
+        "watch": watch,
+        "source_scan_summary": source_scan["summary"],
+        "scope_contract": {
+            "required_headers": ["X-Tenant-Code", "X-Business-Code", "X-Project-Id", "X-Project-Code"],
+            "required_row_fields": ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"],
+            "write_rule": "所有文件型写入必须 attach_scope，缺失三码视为不可跨 scope 读取。",
+            "read_rule": "所有文件型读取、查找、更新、删除必须 scope_matches 当前请求作用域。",
+        },
+        "agent_consumption": {
+            "purpose": "供 AI CLI/Agent 判断核心领域是否具备 tenant_code/business_code/project_id 隔离，以及下一步应加固哪些文件型存储。",
+            "api": "/api/v1/system/pages/isolation-audit",
+            "task_api": "/api/v1/system/pages/isolation-audit/tasks",
+            "scan_api": "/api/v1/system/pages/isolation-audit/scan",
+            "cli": "sop pages isolation --json",
+            "task_cli": "sop pages isolation-tasks --dry-run --json",
+            "scan_cli": "sop pages isolation-scan --json",
+            "recommended_next": ["新增文件型 store 必须先接入 scope_guard 回归测试", "将 scope_guard 纳入代码审查清单", "持续在 SystemMap 审计矩阵中暴露 protected/watch 状态"],
+        },
+    }
+
+
+ISOLATION_SCAN_SCOPE_FIELDS = ["tenant_id", "tenant_code", "business_code", "project_id", "project_code"]
+ISOLATION_SCAN_STORAGE_MARKERS = {
+    "jsonl": [".jsonl", "splitlines()", "append_event"],
+    "json": ["json.loads", "json.dumps", ".json", "read_text", "write_text"],
+    "sql": ["sql_adapter", "select(", "insert(", "update(", "delete("],
+}
+
+
+def _storage_signals(source: str) -> list[str]:
+    signals: list[str] = []
+    for storage, markers in ISOLATION_SCAN_STORAGE_MARKERS.items():
+        if any(marker in source for marker in markers):
+            signals.append(storage)
+    return signals
+
+
+def _source_scan_status(*, file_backed: bool, attach_scope: bool, scope_matches: bool, scope_fields: list[str]) -> str:
+    if file_backed and attach_scope and scope_matches and {"tenant_code", "business_code", "project_id"} <= set(scope_fields):
+        return "protected"
+    if file_backed and (not attach_scope) and (not scope_matches):
+        return "risk"
+    if file_backed:
+        return "watch"
+    if attach_scope and scope_matches:
+        return "protected"
+    return "watch"
+
+
+def _isolation_source_scan_payload(q: str = "", status: str = "all") -> dict[str, Any]:
+    router_dir = Path(__file__).parent
+    scanned_files = 0
+    items: list[dict[str, Any]] = []
+    for path in sorted(router_dir.glob("*.py")):
+        name = path.name
+        if name.startswith("test_") or name in {"__init__.py", "sql_models.py"}:
+            continue
+        scanned_files += 1
+        try:
+            source = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            source = path.read_text(errors="ignore")
+        storage = _storage_signals(source)
+        scope_fields = [field for field in ISOLATION_SCAN_SCOPE_FIELDS if field in source]
+        attach_scope = "attach_scope(" in source or "scope_guard.attach_scope" in source
+        scope_matches = "scope_matches(" in source or "scope_guard.scope_matches" in source
+        current_scope = any(marker in source for marker in ("resolved_tenant_code", "resolved_business_code", "resolved_project_id", "current_scope", "request_scope"))
+        file_backed = bool({"json", "jsonl"} & set(storage)) or "resolved_ai_memory_root" in source
+        if not (file_backed or attach_scope or scope_matches or len(scope_fields) >= 2):
+            continue
+        item_status = _source_scan_status(
+            file_backed=file_backed,
+            attach_scope=attach_scope,
+            scope_matches=scope_matches,
+            scope_fields=scope_fields,
+        )
+        missing: list[str] = []
+        if file_backed and not attach_scope:
+            missing.append("attach_scope")
+        if file_backed and not scope_matches:
+            missing.append("scope_matches")
+        for field in ("tenant_code", "business_code", "project_id"):
+            if field not in scope_fields:
+                missing.append(field)
+        risk_level = "high" if item_status == "risk" else "medium" if item_status == "watch" else "low"
+        module = path.stem
+        recommendation = (
+            "已检测到 attach_scope + scope_matches，可纳入持续回归扫描。"
+            if item_status == "protected"
+            else f"补齐 {', '.join(missing[:4])}，并增加跨 tenant/business/project 读取与写入回归测试。"
+        )
+        items.append(
+            {
+                "id": f"source:{module}",
+                "module": module,
+                "file": str(path.relative_to(router_dir.parent.parent)),
+                "storage": "+".join(storage) if storage else "scope",
+                "status": item_status,
+                "risk_level": risk_level,
+                "scope_guard": {
+                    "attach_scope": attach_scope,
+                    "scope_matches": scope_matches,
+                    "current_scope": current_scope,
+                    "resolved_scope": any(marker in source for marker in ("resolved_tenant_code", "resolved_business_code", "resolved_project_id")),
+                },
+                "signals": {
+                    "storage": storage,
+                    "scope_fields": scope_fields,
+                    "file_backed": file_backed,
+                },
+                "missing": missing,
+                "recommendation": recommendation,
+            }
+        )
+
+    query = (q or "").strip().lower()
+    if query:
+        items = [
+            item
+            for item in items
+            if query
+            in " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("module") or ""),
+                    str(item.get("file") or ""),
+                    str(item.get("storage") or ""),
+                    str(item.get("recommendation") or ""),
+                    " ".join(str(x) for x in (item.get("signals") or {}).get("scope_fields") or []),
+                    " ".join(str(x) for x in item.get("missing") or []),
+                ]
+            ).lower()
+        ]
+    if status and status != "all":
+        items = [item for item in items if str(item.get("status") or "") == status]
+    by_status = Counter(str(item.get("status")) for item in items)
+    protected = by_status.get("protected", 0)
+    watch = by_status.get("watch", 0)
+    risk = by_status.get("risk", 0)
+    score = round((protected / max(1, len(items))) * 100)
+    return {
+        "ok": True,
+        "items": items,
+        "summary": {
+            "scanned_files": scanned_files,
+            "total": len(items),
+            "protected": protected,
+            "watch": watch,
+            "risk": risk,
+            "score": score,
+        },
+        "filters": {"q": q or "", "status": status or "all"},
+        "agent_consumption": {
+            "purpose": "扫描 Manager Router 源码中的文件型存储与 scope_guard 使用情况，帮助 AI Agent 发现新增模块的三码隔离风险。",
+            "api": "/api/v1/system/pages/isolation-audit/scan",
+            "task_api": "/api/v1/system/pages/isolation-audit/scan/tasks",
+            "history_api": "/api/v1/system/pages/isolation-audit/scan/runs",
+            "cli": "sop pages isolation-scan --json",
+            "task_cli": "sop pages isolation-scan-tasks --dry-run --json",
+            "history_cli": "sop pages isolation-scan-runs --json",
+            "fields": ["items.file", "items.storage", "items.scope_guard", "items.missing", "items.recommendation"],
+            "recommended_next": ["对 watch/risk 文件补 attach_scope/scope_matches", "为新增文件型 store 增加跨 scope 回归测试", "把扫描结果接入 SystemMap 安全治理节奏"],
+        },
+    }
+
+
+def _read_isolation_scan_runs(limit: int = 20) -> list[dict[str, Any]]:
+    path = _isolation_scan_runs_file()
+    if not path.exists():
+        return []
+    max_items = max(1, min(int(limit or 20), 100))
+    rows: list[dict[str, Any]] = []
+    for line in reversed(path.read_text(encoding="utf-8").splitlines()):
+        try:
+            item = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(item, dict):
+            rows.append(item)
+        if len(rows) >= max_items:
+            break
+    return rows
+
+
+def _append_isolation_scan_run(run: dict[str, Any]) -> None:
+    path = _isolation_scan_runs_file()
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(run, ensure_ascii=False) + "\n")
+
+
+def _isolation_scan_run_by_id(run_id: str, runs: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
+    target = str(run_id or "").strip()
+    if not target:
+        return None
+    for item in runs if runs is not None else _read_isolation_scan_runs(limit=100):
+        if str(item.get("id") or "") == target:
+            return item
+    return None
+
+
+def _isolation_finding_key(item: dict[str, Any]) -> str:
+    return str(item.get("module") or item.get("id") or "").replace("source:", "")
+
+
+def _isolation_scan_compare_payload(
+    *,
+    base_id: str = "",
+    target_id: str = "",
+    q: str = "",
+    status: str = "all",
+) -> dict[str, Any]:
+    runs = _read_isolation_scan_runs(limit=100)
+    base = _isolation_scan_run_by_id(base_id, runs) if base_id else (runs[0] if runs else None)
+    if target_id:
+        target_run = _isolation_scan_run_by_id(target_id, runs)
+        target_items = list((target_run or {}).get("findings") or [])
+        target_summary = dict((target_run or {}).get("summary") or {})
+        target_meta = {
+            "mode": "saved_run",
+            "id": target_run.get("id") if target_run else target_id,
+            "created_at": target_run.get("created_at") if target_run else None,
+        }
+    else:
+        scan = _isolation_source_scan_payload(q=q, status=status)
+        target_items = list(scan.get("items") or [])
+        target_summary = dict(scan.get("summary") or {})
+        target_meta = {"mode": "current_scan", "filters": scan.get("filters") or {"q": q, "status": status}}
+
+    base_items = list((base or {}).get("findings") or [])
+    base_by_key = {_isolation_finding_key(item): item for item in base_items if _isolation_finding_key(item)}
+    target_by_key = {_isolation_finding_key(item): item for item in target_items if _isolation_finding_key(item)}
+    keys = sorted(set(base_by_key) | set(target_by_key))
+    rows: list[dict[str, Any]] = []
+    for key in keys:
+        before = base_by_key.get(key)
+        after = target_by_key.get(key)
+        before_status = str((before or {}).get("status") or "missing")
+        after_status = str((after or {}).get("status") or "missing")
+        if before_status in {"risk", "watch"} and after_status == "protected":
+            change = "resolved"
+        elif before_status == "protected" and after_status in {"risk", "watch"}:
+            change = "regressed"
+        elif before is None and after_status in {"risk", "watch"}:
+            change = "new_risk"
+        elif after is None and before_status in {"risk", "watch"}:
+            change = "resolved"
+        elif before_status != after_status:
+            change = "changed"
+        else:
+            change = "unchanged"
+        rows.append(
+            {
+                "id": key,
+                "module": str((after or before or {}).get("module") or key),
+                "file": str((after or before or {}).get("file") or ""),
+                "before_status": before_status,
+                "after_status": after_status,
+                "change": change,
+                "risk_level": str((after or before or {}).get("risk_level") or "low"),
+                "recommendation": str((after or before or {}).get("recommendation") or ""),
+            }
+        )
+    by_change = Counter(str(item.get("change")) for item in rows)
+    base_score = int(((base or {}).get("summary") or {}).get("score") or 0)
+    target_score = int(target_summary.get("score") or 0)
+    new_risks = by_change.get("new_risk", 0) + by_change.get("regressed", 0)
+    recommendations = [
+        {
+            "kind": "create_tasks",
+            "priority": "P0",
+            "title": "为新增或回退的源码隔离风险生成治理任务",
+            "cli": "sop pages isolation-scan-tasks --status all --dry-run --json",
+        }
+    ] if new_risks else [
+        {
+            "kind": "keep_protected",
+            "priority": "P2",
+            "title": "将已修复源码项纳入持续回归扫描基线",
+            "cli": "sop pages isolation-scan-run --status all --json",
+        }
+    ] if by_change.get("resolved", 0) else [
+        {
+            "kind": "monitor",
+            "priority": "P2",
+            "title": "当前源码隔离基线稳定，保持周期性扫描",
+            "cli": "sop pages isolation-scan-compare --json",
+        }
+    ]
+    return {
+        "ok": True,
+        "base": {
+            "id": (base or {}).get("id"),
+            "created_at": (base or {}).get("created_at"),
+            "score": base_score,
+            "missing": base is None,
+        },
+        "target": {**target_meta, "score": target_score},
+        "items": rows,
+        "summary": {
+            "total": len(rows),
+            "new_risks": new_risks,
+            "resolved": by_change.get("resolved", 0),
+            "changed": by_change.get("changed", 0),
+            "unchanged": by_change.get("unchanged", 0),
+            "score_delta": target_score - base_score,
+        },
+        "recommendations": recommendations,
+        "agent_consumption": {
+            "purpose": "对比源代码隔离扫描快照和当前扫描，识别新增风险、回退、已修复项和下一步 Agent 治理动作。",
+            "api": "/api/v1/system/pages/isolation-audit/scan/runs/compare",
+            "cli": "sop pages isolation-scan-compare --json",
+            "task_cli": "sop pages isolation-scan-tasks --status all --dry-run --json",
         },
     }
 
@@ -2709,6 +4360,344 @@ def system_page_registry_validate() -> dict[str, Any]:
 @router.get("/health")
 def system_page_menu_health() -> dict[str, Any]:
     return {"ok": True, "health": _menu_health()}
+
+
+@router.get("/readiness")
+def system_pages_readiness(
+    domain: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+) -> dict[str, Any]:
+    if status and status not in {"all", "complete", "watch", "risk"}:
+        status = "all"
+    return _module_readiness_payload(domain=domain, status=status, q=q)
+
+
+@router.get("/production-readiness")
+def system_pages_production_readiness(
+    domain: str | None = None,
+    stage: str | None = None,
+    q: str | None = None,
+) -> dict[str, Any]:
+    if stage and stage not in {"all", "gap", "contract_complete", "runtime_ready", "production_ready"}:
+        stage = "all"
+    return _module_production_readiness_payload(domain=domain, stage=stage, q=q)
+
+
+@router.get("/experience-review")
+def system_pages_experience_review(
+    domain: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+) -> dict[str, Any]:
+    if status and status not in {"all", "simple", "watch", "complex"}:
+        status = "all"
+    return _module_experience_review_payload(domain=domain, status=status, q=q)
+
+
+@router.post("/readiness/tasks")
+def system_page_readiness_tasks(body: ReadinessTaskIn) -> dict[str, Any]:
+    status = body.status if body.status in {"all", "complete", "watch", "risk"} else "watch"
+    payload = _module_readiness_payload(
+        domain=body.domain if body.domain and body.domain != "all" else None,
+        status=status,
+        q=body.q,
+    )
+    rows = payload.get("items") or []
+    selected = {str(x) for x in body.ids or [] if str(x).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("id") or "") in selected]
+    if not body.include_complete and status != "complete":
+        rows = [item for item in rows if str(item.get("status") or "") != "complete"]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_readiness_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _readiness_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "ids": sorted(selected),
+            "domain": body.domain or "all",
+            "status": status,
+            "q": body.q,
+            "include_complete": body.include_complete,
+        },
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把 SystemMap readiness 的 watch/risk 模块转成可由 AI CLI/Agent 领取的治理任务。",
+            "source": "system_page_readiness",
+            "api": "/api/v1/system/pages/readiness/tasks",
+            "cli": "sop pages readiness-tasks --dry-run --json",
+        },
+    }
+
+
+@router.get("/governance-tasks")
+def system_pages_governance_tasks(
+    status: str = "all",
+    source: str = "all",
+    q: str = "",
+    limit: int = 50,
+) -> dict[str, Any]:
+    return _system_governance_tasks_payload(status=status, source=source, q=q, limit=limit)
+
+
+@router.post("/governance-tasks/bulk-update")
+def system_pages_governance_tasks_bulk_update(body: GovernanceTaskBulkUpdateIn) -> dict[str, Any]:
+    return _system_governance_tasks_bulk_update_payload(body)
+
+
+@router.get("/isolation-audit")
+def system_pages_isolation_audit() -> dict[str, Any]:
+    return _isolation_audit_payload()
+
+
+@router.get("/isolation-audit/scan")
+def system_pages_isolation_scan(status: str = "all", q: str = "") -> dict[str, Any]:
+    return _isolation_source_scan_payload(q=q, status=status)
+
+
+@router.get("/isolation-audit/scan/runs")
+def system_pages_isolation_scan_runs(limit: int = 20) -> dict[str, Any]:
+    rows = _read_isolation_scan_runs(limit=limit)
+    risk_runs = sum(1 for item in rows if int((item.get("summary") or {}).get("risk") or 0) > 0)
+    watch_runs = sum(1 for item in rows if int((item.get("summary") or {}).get("watch") or 0) > 0)
+    return {
+        "ok": True,
+        "items": rows,
+        "summary": {
+            "total": len(rows),
+            "risk_runs": risk_runs,
+            "watch_runs": watch_runs,
+            "latest_id": rows[0].get("id") if rows else None,
+        },
+        "agent_consumption": {
+            "purpose": "读取 SystemMap 源代码隔离扫描快照历史，供人和 AI Agent 对比风险收敛趋势。",
+            "api": "/api/v1/system/pages/isolation-audit/scan/runs",
+            "cli": "sop pages isolation-scan-runs --json",
+        },
+    }
+
+
+@router.get("/isolation-audit/scan/runs/compare")
+def system_pages_isolation_scan_run_compare(
+    base_id: str = "",
+    target_id: str = "",
+    q: str = "",
+    status: str = "all",
+) -> dict[str, Any]:
+    safe_status = status if status in {"all", "protected", "watch", "risk"} else "all"
+    return _isolation_scan_compare_payload(base_id=base_id, target_id=target_id, q=q, status=safe_status)
+
+
+@router.post("/isolation-audit/scan/runs/compare/tasks")
+def system_page_isolation_scan_compare_tasks(body: IsolationScanCompareTaskIn) -> dict[str, Any]:
+    compare = _isolation_scan_compare_payload(
+        base_id=body.base_id,
+        target_id=body.target_id,
+        q=body.q,
+        status=body.status,
+    )
+    task_changes = {"new_risk", "regressed", "changed"}
+    if body.include_resolved:
+        task_changes.add("resolved")
+    rows = [item for item in compare.get("items") or [] if str(item.get("change") or "") in task_changes]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_isolation_scan_compare_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _isolation_scan_compare_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "base_id": body.base_id,
+            "target_id": body.target_id,
+            "status": body.status,
+            "q": body.q,
+            "include_resolved": body.include_resolved,
+        },
+        "compare_summary": compare.get("summary") or {},
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把源码隔离智能基线对比中的新增风险、回退和变化项转成可由 SecurityAgent/Codex 领取的治理任务。",
+            "source": "system_page_isolation_scan_compare",
+            "api": "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks",
+            "cli": "sop pages isolation-scan-compare-tasks --dry-run --json",
+        },
+    }
+
+
+@router.post("/isolation-audit/scan/runs")
+def system_page_isolation_scan_run_create(body: IsolationScanRunIn) -> dict[str, Any]:
+    scan = _isolation_source_scan_payload(q=body.q, status=body.status)
+    findings = list(scan.get("items") or [])[: max(1, min(int(body.max_items or 20), 100))]
+    run = {
+        "id": f"isolation-scan-run-{uuid4().hex[:12]}",
+        "created_at": _utc_now(),
+        "created_by": body.created_by.strip() or "SystemMap",
+        "note": body.note.strip(),
+        "filters": scan.get("filters") or {"q": body.q, "status": body.status},
+        "summary": scan.get("summary") or {},
+        "findings": findings,
+        "agent_consumption": {
+            "source_api": "/api/v1/system/pages/isolation-audit/scan",
+            "task_api": "/api/v1/system/pages/isolation-audit/scan/tasks",
+            "history_api": "/api/v1/system/pages/isolation-audit/scan/runs",
+            "history_cli": "sop pages isolation-scan-runs --json",
+        },
+    }
+    _append_isolation_scan_run(run)
+    return {
+        "ok": True,
+        "run": run,
+        "agent_consumption": {
+            "purpose": "保存一次源代码隔离扫描快照，作为模块治理、安全回归和 Agent 任务化的审计基线。",
+            "api": "/api/v1/system/pages/isolation-audit/scan/runs",
+            "cli": "sop pages isolation-scan-run --q <keyword> --json",
+        },
+    }
+
+
+@router.post("/isolation-audit/scan/tasks")
+def system_page_isolation_scan_tasks(body: IsolationScanTaskIn) -> dict[str, Any]:
+    scan = _isolation_source_scan_payload(q=body.q, status=body.status)
+    rows = list(scan.get("items") or [])
+    if not body.include_protected and body.status != "protected":
+        rows = [item for item in rows if str(item.get("status") or "") != "protected"]
+    selected = {str(x).strip().replace("source:", "") for x in body.ids or [] if str(x).strip()}
+    if selected:
+        rows = [
+            item
+            for item in rows
+            if str(item.get("module") or "") in selected or str(item.get("id") or "").replace("source:", "") in selected
+        ]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_isolation_scan_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _isolation_scan_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "ids": sorted(selected),
+            "status": body.status,
+            "q": body.q,
+            "include_protected": body.include_protected,
+        },
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把 SystemMap 源代码隔离扫描项转成可由 SecurityAgent/Codex 领取的源码加固任务。",
+            "source": "system_page_isolation_scan",
+            "api": "/api/v1/system/pages/isolation-audit/scan/tasks",
+            "cli": "sop pages isolation-scan-tasks --dry-run --json",
+        },
+    }
+
+
+@router.post("/isolation-audit/tasks")
+def system_page_isolation_tasks(body: IsolationTaskIn) -> dict[str, Any]:
+    audit = _isolation_audit_payload()
+    rows = list(audit.get("domains") or [])
+    if body.status and body.status != "all":
+        rows = [item for item in rows if str(item.get("status") or "") == body.status]
+    if not body.include_protected and body.status != "protected":
+        rows = [item for item in rows if str(item.get("status") or "") != "protected"]
+    selected = {str(x).strip() for x in body.ids or [] if str(x).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("id") or "") in selected]
+    query = (body.q or "").strip().lower()
+    if query:
+        rows = [
+            item
+            for item in rows
+            if query
+            in " ".join(
+                [
+                    str(item.get("id") or ""),
+                    str(item.get("name") or ""),
+                    str(item.get("module") or ""),
+                    str(item.get("storage") or ""),
+                    str(item.get("guard") or ""),
+                    " ".join(str(x) for x in item.get("scope_fields") or []),
+                    " ".join(str(x) for x in item.get("tests") or []),
+                ]
+            ).lower()
+        ]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_isolation_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    scope_contract = audit.get("scope_contract") or {}
+    for item in rows:
+        payload_item = _isolation_task_payload(item, scope_contract=scope_contract, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "ids": sorted(selected),
+            "status": body.status,
+            "q": body.q,
+            "include_protected": body.include_protected,
+        },
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把 SystemMap 三码隔离审计项转成可由 AI CLI/Agent 领取的安全治理任务。",
+            "source": "system_page_isolation",
+            "api": "/api/v1/system/pages/isolation-audit/tasks",
+            "cli": "sop pages isolation-tasks --dry-run --json",
+        },
+    }
 
 
 @router.get("/menu/preferences/me")

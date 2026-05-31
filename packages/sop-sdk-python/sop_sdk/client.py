@@ -210,6 +210,64 @@ class ManagerClient:
     def system_pages_health(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/health")
 
+    def system_pages_isolation(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/isolation-audit")
+
+    def system_pages_isolation_scan(self, *, status: str = "", q: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/isolation-audit/scan", params={"status": status, "q": q})
+
+    def system_pages_isolation_scan_tasks(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/isolation-audit/scan/tasks", json_body=body)
+
+    def system_pages_isolation_scan_runs(self, *, limit: int = 20) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/isolation-audit/scan/runs", params={"limit": limit})
+
+    def system_pages_isolation_scan_run_create(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/isolation-audit/scan/runs", json_body=body)
+
+    def system_pages_isolation_scan_compare(
+        self,
+        *,
+        base_id: str = "",
+        target_id: str = "",
+        status: str = "",
+        q: str = "",
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/system/pages/isolation-audit/scan/runs/compare",
+            params={"base_id": base_id, "target_id": target_id, "status": status, "q": q},
+        )
+
+    def system_pages_isolation_scan_compare_tasks(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", json_body=body)
+
+    def system_pages_isolation_tasks(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/isolation-audit/tasks", json_body=body)
+
+    def system_pages_readiness(self, *, domain: str = "", status: str = "", q: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/pages/readiness", params={"domain": domain, "status": status, "q": q})
+
+    def system_pages_readiness_tasks(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/readiness/tasks", json_body=body)
+
+    def system_pages_governance_tasks(
+        self,
+        *,
+        status: str = "",
+        source: str = "",
+        q: str = "",
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/system/pages/governance-tasks",
+            params={"status": status, "source": source, "q": q, "limit": limit},
+        )
+
+    def system_pages_governance_tasks_bulk_update(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/system/pages/governance-tasks/bulk-update", json_body=body)
+
     def system_pages_menu_preferences_me(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/menu/preferences/me")
 

@@ -13,7 +13,10 @@ const STATUS_COLOR: Record<string, string> = {
   success: "bg-green-50 text-green-700",
   failed: "bg-red-50 text-red-700",
   retrying: "bg-yellow-50 text-yellow-700",
+  cancelled: "bg-slate-100 text-slate-600",
 };
+
+const TERMINAL_STATUSES = new Set(["success", "failed", "cancelled"]);
 
 export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: { focused?: boolean; initialTab?: "runs" | "profiles" }) {
   const authed = Boolean(getToken());
@@ -33,7 +36,15 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
   });
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.agentRunStatus(id, { status }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["agentRunsList", statusFilter] }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentRunsList"] }); void qc.invalidateQueries({ queryKey: ["agentRunsSummaryV2"] }); void qc.invalidateQueries({ queryKey: ["agentRunProfiles"] }); },
+  });
+  const retryRun = useMutation({
+    mutationFn: (id: string) => api.agentRunRetry(id),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentRunsList"] }); void qc.invalidateQueries({ queryKey: ["agentRunsSummaryV2"] }); void qc.invalidateQueries({ queryKey: ["agentRunProfiles"] }); },
+  });
+  const cancelRun = useMutation({
+    mutationFn: (id: string) => api.agentRunCancel(id, { reason: "manual cancel from AgentOps" }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["agentRunsList"] }); void qc.invalidateQueries({ queryKey: ["agentRunsSummaryV2"] }); void qc.invalidateQueries({ queryKey: ["agentRunProfiles"] }); },
   });
   const createRun = useMutation({
     mutationFn: () => api.agentRunCreate({ agent_id: `manual-agent-${Date.now()}`, task_id: `manual-task-${Date.now()}`, meta: { source: "manager-web" } }),
@@ -83,9 +94,9 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
         <WorkbenchPanel title="运行记录" actions={
 	          <div className="flex gap-2">
 	            <SearchInput value={q} onChange={setQ} placeholder="搜索 Agent/Task ID..." />
-	            <select className="input-base text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <select className="input-base text-sm" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
               <option value="">全部状态</option>
-	              {["pending", "running", "success", "failed", "retrying"].map(s => <option key={s}>{s}</option>)}
+	              {["pending", "running", "success", "failed", "retrying", "cancelled"].map(s => <option key={s}>{s}</option>)}
 	            </select>
 	            <button onClick={() => createRun.mutate()} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white">新建运行</button>
 	          </div>
@@ -110,7 +121,8 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
 	                      {r.status === "running" && <button onClick={() => heartbeat.mutate(r.id)} className="text-xs text-[var(--brand)] hover:underline">心跳</button>}
 	                      {r.status === "pending" && <button onClick={() => updateStatus.mutate({ id: r.id, status: "running" })} className="text-xs text-[var(--brand)] hover:underline">开始</button>}
 	                      {r.status === "running" && <button onClick={() => updateStatus.mutate({ id: r.id, status: "success" })} className="text-xs text-green-600 hover:underline">成功</button>}
-	                      {r.status === "failed" && <button onClick={() => updateStatus.mutate({ id: r.id, status: "retrying" })} className="text-xs text-yellow-600 hover:underline">重试</button>}
+	                      {r.status === "failed" && <button disabled={retryRun.isPending} onClick={() => retryRun.mutate(r.id)} className="text-xs text-yellow-600 hover:underline disabled:opacity-50">重试</button>}
+	                      {!TERMINAL_STATUSES.has(String(r.status)) && <button disabled={cancelRun.isPending} onClick={() => cancelRun.mutate(r.id)} className="text-xs text-slate-600 hover:underline disabled:opacity-50">取消</button>}
 	                      <button onClick={() => writeEvidence.mutate(r.id)} className="text-xs text-[var(--brand)] hover:underline">证据</button>
 	                      <button onClick={() => deleteRun.mutate(r.id)} className="text-xs text-red-500 hover:underline">删除</button>
 	                    </td>

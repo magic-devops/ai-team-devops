@@ -11,9 +11,13 @@ type RoleRow = { role: string; level: number; scope: string; capabilities: strin
 type PolicyDraft = {
   user_capability_map: Record<string, string[]>;
   project_capability_map: Record<string, string[]>;
+  field_security_rules: Array<Record<string, any>>;
+  row_filter_rules: Array<Record<string, any>>;
   notes: string;
 };
-type CheckDraft = { scope: "tenant" | "project"; role: string; capability: string };
+type CheckDraft = { scope: "tenant" | "project"; role: string; capability: string; resource: string; action: string; fields: string; row: string };
+
+const parseCsv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 
 export function RolePolicyModule({
   policy,
@@ -46,17 +50,29 @@ export function RolePolicyModule({
   checkError?: Error | null;
   onSave?: (body: PolicyDraft) => void;
   onReset?: () => void;
-  onCheck?: (body: CheckDraft) => void;
+  onCheck?: (body: Record<string, unknown>) => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState<PolicyDraft>({ user_capability_map: {}, project_capability_map: {}, notes: "" });
-  const [checkDraft, setCheckDraft] = useState<CheckDraft>({ scope: "tenant", role: "developer", capability: "task.claim" });
+  const [draft, setDraft] = useState<PolicyDraft>({ user_capability_map: {}, project_capability_map: {}, field_security_rules: [], row_filter_rules: [], notes: "" });
+  const [fieldRuleDraft, setFieldRuleDraft] = useState({ resource: "organization.users", fields: "email,password_hash", roles: "viewer", action: "mask", mask: "partial" });
+  const [rowRuleDraft, setRowRuleDraft] = useState({ resource: "organization.users", roles: "viewer", effect: "deny", conditions: "{\"status\":\"disabled\"}" });
+  const [checkDraft, setCheckDraft] = useState<CheckDraft>({
+    scope: "tenant",
+    role: "developer",
+    capability: "task.claim",
+    resource: "organization.users",
+    action: "read",
+    fields: "username,email",
+    row: "{\"username\":\"demo\",\"email\":\"demo@example.com\",\"status\":\"active\"}",
+  });
 
   useEffect(() => {
     if (!policy) return;
     setDraft({
       user_capability_map: { ...(policy.user_capability_map || Object.fromEntries((policy.user_roles || []).map((row) => [row.role, row.capabilities || []]))) },
       project_capability_map: { ...(policy.project_capability_map || Object.fromEntries((policy.project_member_roles || []).map((row) => [row.role, row.capabilities || []]))) },
+      field_security_rules: [...(policy.abac_policy?.field_security_rules || [])],
+      row_filter_rules: [...(policy.abac_policy?.row_filter_rules || [])],
       notes: policy.notes || "",
     });
   }, [policy]);
@@ -82,6 +98,67 @@ export function RolePolicyModule({
         [role]: Array.from(new Set((capabilities || []).map((item) => item.trim()).filter(Boolean))),
       },
     }));
+  };
+
+  const addFieldRule = () => {
+    const fields = parseCsv(fieldRuleDraft.fields);
+    if (!fieldRuleDraft.resource.trim() || !fields.length) return;
+    setDraft((value) => ({
+      ...value,
+      field_security_rules: [
+        ...value.field_security_rules,
+        {
+          id: `field-${Date.now()}`,
+          resource: fieldRuleDraft.resource.trim(),
+          fields,
+          roles: parseCsv(fieldRuleDraft.roles).length ? parseCsv(fieldRuleDraft.roles) : ["*"],
+          action: fieldRuleDraft.action,
+          mask: fieldRuleDraft.mask,
+        },
+      ],
+    }));
+  };
+
+  const addRowRule = () => {
+    if (!rowRuleDraft.resource.trim()) return;
+    let conditions: Record<string, unknown> = {};
+    try {
+      conditions = JSON.parse(rowRuleDraft.conditions || "{}");
+    } catch {
+      conditions = {};
+    }
+    if (!Object.keys(conditions).length) return;
+    setDraft((value) => ({
+      ...value,
+      row_filter_rules: [
+        ...value.row_filter_rules,
+        {
+          id: `row-${Date.now()}`,
+          resource: rowRuleDraft.resource.trim(),
+          roles: parseCsv(rowRuleDraft.roles).length ? parseCsv(rowRuleDraft.roles) : ["*"],
+          effect: rowRuleDraft.effect,
+          conditions,
+        },
+      ],
+    }));
+  };
+
+  const runPolicyCheck = () => {
+    let row: Record<string, unknown> = {};
+    try {
+      row = JSON.parse(checkDraft.row || "{}");
+    } catch {
+      row = {};
+    }
+    onCheck?.({
+      scope: checkDraft.scope,
+      role: checkDraft.role,
+      capability: checkDraft.capability,
+      resource: checkDraft.resource,
+      action: checkDraft.action,
+      fields: parseCsv(checkDraft.fields),
+      row,
+    } as any);
   };
 
   const columns: ColumnsType<RoleRow> = [
@@ -116,7 +193,7 @@ export function RolePolicyModule({
     {
       title: t("page.organization.policyHistoryRoles"),
       width: 130,
-      render: (_, row) => `${row.user_roles ?? 0}/${row.project_roles ?? 0}`,
+      render: (_, row) => row.action === "abac_check" ? (row.decision || "-") : `${row.user_roles ?? 0}/${row.project_roles ?? 0}`,
     },
     { title: t("page.organization.policyHistoryNotes"), dataIndex: "notes", ellipsis: true },
   ];
@@ -171,7 +248,7 @@ export function RolePolicyModule({
                 <Button
                   type="primary"
                   loading={checkPending}
-                  onClick={() => onCheck?.(checkDraft)}
+                  onClick={runPolicyCheck}
                 >
                   {t("page.organization.policyCheckRun")}
                 </Button>
@@ -196,14 +273,42 @@ export function RolePolicyModule({
                   placeholder={t("page.organization.policyCheckCapability")}
                 />
               </div>
-              {checkResult ? (
-                <Alert
-                  className="mt-3"
-                  showIcon
-                  type={checkResult.allowed ? "success" : "warning"}
-                  message={checkResult.allowed ? t("page.organization.policyDecisionAllow") : t("page.organization.policyDecisionDeny")}
-                  description={`${checkResult.scope}:${checkResult.role} -> ${checkResult.capability} / ${(checkResult.matched_capabilities || []).join(", ") || "-"}`}
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <Input
+                  value={checkDraft.resource}
+                  onChange={(e) => setCheckDraft((value) => ({ ...value, resource: e.target.value }))}
+                  placeholder="organization.users"
                 />
+                <Input
+                  value={checkDraft.fields}
+                  onChange={(e) => setCheckDraft((value) => ({ ...value, fields: e.target.value }))}
+                  placeholder="username,email"
+                />
+                <Input
+                  value={checkDraft.action}
+                  onChange={(e) => setCheckDraft((value) => ({ ...value, action: e.target.value }))}
+                  placeholder="read"
+                />
+              </div>
+              <Input.TextArea
+                className="mt-3"
+                rows={2}
+                value={checkDraft.row}
+                onChange={(e) => setCheckDraft((value) => ({ ...value, row: e.target.value }))}
+                placeholder='{"username":"demo","email":"demo@example.com","status":"active"}'
+              />
+              {checkResult ? (
+                <div className="mt-3 space-y-2">
+                  <Alert
+                    showIcon
+                    type={checkResult.allowed ? "success" : "warning"}
+                    message={checkResult.allowed ? t("page.organization.policyDecisionAllow") : t("page.organization.policyDecisionDeny")}
+                    description={`${checkResult.scope}:${checkResult.role} -> ${checkResult.capability} / row=${checkResult.row_decision?.decision ?? "-"} / ${(checkResult.matched_capabilities || []).join(", ") || "-"}`}
+                  />
+                  <pre className="max-h-40 overflow-auto rounded-lg bg-[var(--surface)] p-3 text-xs text-[var(--muted-strong)]">
+                    {JSON.stringify({ masked_row: checkResult.masked_row, field_decisions: checkResult.field_decisions, row_decision: checkResult.row_decision }, null, 2)}
+                  </pre>
+                </div>
               ) : null}
             </div>
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -217,6 +322,69 @@ export function RolePolicyModule({
                 pagination={false}
                 scroll={{ x: 680, y: 240 }}
                 locale={{ emptyText: t("page.organization.policyHistoryEmpty") }}
+              />
+            </div>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="mb-3 text-sm font-semibold text-[var(--text)]">字段级安全策略</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input value={fieldRuleDraft.resource} onChange={(e) => setFieldRuleDraft((v) => ({ ...v, resource: e.target.value }))} placeholder="resource" />
+                <Input value={fieldRuleDraft.fields} onChange={(e) => setFieldRuleDraft((v) => ({ ...v, fields: e.target.value }))} placeholder="email,password_hash" />
+                <Input value={fieldRuleDraft.roles} onChange={(e) => setFieldRuleDraft((v) => ({ ...v, roles: e.target.value }))} placeholder="viewer,developer" />
+                <div className="flex gap-2">
+                  <Select className="flex-1" value={fieldRuleDraft.action} onChange={(action) => setFieldRuleDraft((v) => ({ ...v, action }))} options={[{ value: "mask", label: "mask" }, { value: "deny", label: "deny" }, { value: "allow", label: "allow" }]} />
+                  <Select className="flex-1" value={fieldRuleDraft.mask} onChange={(mask) => setFieldRuleDraft((v) => ({ ...v, mask }))} options={[{ value: "full", label: "full" }, { value: "partial", label: "partial" }]} />
+                </div>
+              </div>
+              <Button className="mt-3" onClick={addFieldRule}>添加字段规则</Button>
+              <Table
+                className="mt-3"
+                size="small"
+                rowKey={(row) => row.id}
+                dataSource={draft.field_security_rules}
+                pagination={false}
+                columns={[
+                  { title: "Resource", dataIndex: "resource", ellipsis: true },
+                  { title: "Fields", render: (_, row) => (row.fields || []).join(", ") },
+                  { title: "Roles", render: (_, row) => (row.roles || []).join(", ") },
+                  { title: "Action", dataIndex: "action", width: 90 },
+                  {
+                    title: "",
+                    width: 70,
+                    render: (_, row) => <Button size="small" danger onClick={() => setDraft((v) => ({ ...v, field_security_rules: v.field_security_rules.filter((item) => item.id !== row.id) }))}>删除</Button>,
+                  },
+                ]}
+                scroll={{ x: 620, y: 220 }}
+              />
+            </div>
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+              <div className="mb-3 text-sm font-semibold text-[var(--text)]">行级 ABAC 策略</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input value={rowRuleDraft.resource} onChange={(e) => setRowRuleDraft((v) => ({ ...v, resource: e.target.value }))} placeholder="resource" />
+                <Input value={rowRuleDraft.roles} onChange={(e) => setRowRuleDraft((v) => ({ ...v, roles: e.target.value }))} placeholder="viewer,developer" />
+                <Select value={rowRuleDraft.effect} onChange={(effect) => setRowRuleDraft((v) => ({ ...v, effect }))} options={[{ value: "deny", label: "deny" }, { value: "allow", label: "allow" }]} />
+                <Input value={rowRuleDraft.conditions} onChange={(e) => setRowRuleDraft((v) => ({ ...v, conditions: e.target.value }))} placeholder='{"status":"disabled"}' />
+              </div>
+              <Button className="mt-3" onClick={addRowRule}>添加行规则</Button>
+              <Table
+                className="mt-3"
+                size="small"
+                rowKey={(row) => row.id}
+                dataSource={draft.row_filter_rules}
+                pagination={false}
+                columns={[
+                  { title: "Resource", dataIndex: "resource", ellipsis: true },
+                  { title: "Roles", render: (_, row) => (row.roles || []).join(", ") },
+                  { title: "Effect", dataIndex: "effect", width: 90 },
+                  { title: "Conditions", render: (_, row) => JSON.stringify(row.conditions || {}) },
+                  {
+                    title: "",
+                    width: 70,
+                    render: (_, row) => <Button size="small" danger onClick={() => setDraft((v) => ({ ...v, row_filter_rules: v.row_filter_rules.filter((item) => item.id !== row.id) }))}>删除</Button>,
+                  },
+                ]}
+                scroll={{ x: 620, y: 220 }}
               />
             </div>
           </div>

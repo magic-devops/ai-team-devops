@@ -91,10 +91,12 @@ def _match_reason(matched: list[str], missing: list[str], confidence: float, ris
 
 def build_protocol_packet(dispatch: dict[str, Any], agent: dict[str, Any], scope: dict[str, Any]) -> dict[str, Any]:
     payload = dispatch.get("payload") if isinstance(dispatch.get("payload"), dict) else {}
-    run_id = str(dispatch.get("id") or "")
+    dispatch_id = str(dispatch.get("id") or "")
+    run_id = str(dispatch.get("agent_run_id") or dispatch_id)
     return {
         "protocol": "hermes-a2a",
         "version": "1.0",
+        "dispatch_id": dispatch_id,
         "run_id": run_id,
         "task_id": str(dispatch.get("task_id") or payload.get("task_id") or ""),
         "scope": dict(scope),
@@ -106,6 +108,7 @@ def build_protocol_packet(dispatch: dict[str, Any], agent: dict[str, Any], scope
         },
         "payload": payload,
         "callbacks": {
+            "run_heartbeat": f"/api/v1/agent-runs/{run_id}/heartbeat",
             "heartbeat": f"/api/v1/a2a/dispatch/{run_id}/heartbeat",
             "evidence": "/api/v1/a2a/evidence",
             "audit": "/api/v1/audit/events",
@@ -152,6 +155,7 @@ def evaluate_evidence_quality(evidence: dict[str, Any]) -> dict[str, Any]:
 def summarize_a2a_health(registry: list[dict[str, Any]], dispatches: list[dict[str, Any]]) -> dict[str, Any]:
     active = [a for a in registry if str(a.get("status") or "active") == "active"]
     evidence = [d for d in dispatches if d.get("evidence_at")]
+    linked_agent_runs = [d for d in dispatches if d.get("agent_run_id")]
     pending_evidence = [d for d in dispatches if not d.get("evidence_at") and str(d.get("status") or "") == "dispatched"]
     cap_counts: dict[str, int] = {}
     empty_profile = 0
@@ -181,6 +185,7 @@ def summarize_a2a_health(registry: list[dict[str, Any]], dispatches: list[dict[s
         "active": len(active),
         "paused": len(registry) - len(active),
         "dispatched_tasks": len(dispatches),
+        "linked_agent_runs": len(linked_agent_runs),
         "evidence_received": len(evidence),
         "pending_evidence": len(pending_evidence),
         "failed": len(failed),

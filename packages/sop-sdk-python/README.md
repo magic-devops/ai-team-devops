@@ -37,12 +37,13 @@ cli = ManagerClient("https://mgr.example.com",
 
 ## 本地 agentd IPC
 
-无需走 Manager，hook / 脚本里直接用：
+无需走 Manager，hook / 脚本里直接用。SDK 默认在 macOS/Linux 使用项目内 `.sop-runtime/agentd.sock`，Windows 使用 `SOP_AGENTD_PIPE` 指定的 named pipe；也可以用 `SOP_AGENTD_SOCK` 覆盖 Unix Socket 路径。连接失败会返回结构化错误，不会打断调用方的离线降级逻辑。
 
 ```python
 from sop_sdk import AgentdIpcClient
 
 ipc = AgentdIpcClient()
+print(ipc.diagnose())  # transport / endpoint / available / timeout
 if ipc.available():
     ipc.event("tool.pre", tool="Bash", command="git status")
     ipc.task_done("t-123", "完成实现 + 测试通过", confidence=0.85)

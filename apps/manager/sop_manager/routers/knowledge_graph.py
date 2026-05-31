@@ -24,6 +24,7 @@ from sop_manager.routers.knowledge_graph_core import (
     now_iso,
     query_graph,
 )
+from sop_manager.memory_store import get_memory_store
 
 router = APIRouter(prefix="/api/v1/knowledge-graph", tags=["knowledge-graph"])
 
@@ -32,6 +33,8 @@ class BuildIn(BaseModel):
     entity_types: list[str] = Field(default_factory=lambda: ["requirement", "task", "code_file", "spec", "design_doc", "agent", "tag"])
     rebuild: bool = False
     documents: list[dict[str, Any]] | None = None
+    allowed_sources: list[str] = Field(default_factory=list)
+    denied_sources: list[str] = Field(default_factory=list)
 
 
 class QueryIn(BaseModel):
@@ -42,6 +45,13 @@ class QueryIn(BaseModel):
 class LineageIn(BaseModel):
     entity_id: str = Field(..., min_length=1)
     depth: int = Field(default=2, ge=1, le=4)
+
+
+class EntityProfileMergeIn(BaseModel):
+    entity_id: str = Field(..., min_length=1)
+    memory_query: str = Field("", max_length=1000)
+    memory_limit: int = Field(default=10, ge=1, le=50)
+    depth: int = Field(default=1, ge=1, le=3)
 
 
 def _scope() -> dict[str, str]:
@@ -60,6 +70,10 @@ def _kg_dir() -> Path:
 
 def _graph_path() -> Path:
     return _kg_dir() / "graph.json"
+
+
+def _profiles_path() -> Path:
+    return _kg_dir() / "entity_profiles.json"
 
 
 def _safe_read_text(path: Path, limit: int = 6000) -> str:
@@ -224,6 +238,66 @@ def load_source_documents(extra: list[dict[str, Any]] | None = None) -> list[dic
     return deduped
 
 
+def _listify(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return []
+
+
+def _document_permission(doc: dict[str, Any], *, allowed_sources: list[str], denied_sources: list[str]) -> tuple[bool, str]:
+    source = str(doc.get("source") or doc.get("path") or doc.get("type") or "local")
+    if denied_sources and source in denied_sources:
+        return False, "source_denied"
+    if allowed_sources and source not in allowed_sources:
+        return False, "source_not_allowed"
+
+    scope = _scope()
+    checks = [
+        ("allowed_tenant_codes", scope["tenant_code"]),
+        ("allowed_business_codes", scope["business_code"]),
+        ("allowed_project_ids", scope["project_id"]),
+        ("allowed_project_codes", scope["project_id"]),
+    ]
+    for key, current in checks:
+        allowed_values = _listify(doc.get(key))
+        if allowed_values and current not in allowed_values:
+            return False, f"{key}_mismatch"
+
+    denied_projects = set(_listify(doc.get("denied_project_ids")))
+    if denied_projects and scope["project_id"] in denied_projects:
+        return False, "project_denied"
+    return True, ""
+
+
+def _filter_documents(docs: list[dict[str, Any]], body: BuildIn | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    allowed_sources = [str(item).strip() for item in ((body.allowed_sources if body else []) or []) if str(item).strip()]
+    denied_sources = [str(item).strip() for item in ((body.denied_sources if body else []) or []) if str(item).strip()]
+    accepted: list[dict[str, Any]] = []
+    denied: list[dict[str, Any]] = []
+    for doc in docs:
+        ok, reason = _document_permission(doc, allowed_sources=allowed_sources, denied_sources=denied_sources)
+        if ok:
+            accepted.append(doc)
+        else:
+            denied.append(
+                {
+                    "id": doc.get("id") or doc.get("path") or doc.get("title"),
+                    "source": doc.get("source") or doc.get("path") or doc.get("type") or "local",
+                    "reason": reason,
+                }
+            )
+    return accepted, {
+        "checked": len(docs),
+        "accepted_documents": len(accepted),
+        "denied_documents": len(denied),
+        "allowed_sources": allowed_sources,
+        "denied_sources": denied_sources,
+        "denied": denied[:50],
+    }
+
+
 def _empty_graph() -> dict[str, Any]:
     return {
         "version": "1.0",
@@ -247,6 +321,46 @@ def _load_graph() -> dict[str, Any]:
 
 def _save_graph(graph: dict[str, Any]) -> None:
     _graph_path().write_text(json.dumps(graph, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _entity_evidence(entity: dict[str, Any]) -> list[dict[str, Any]]:
+    props = entity.get("properties") if isinstance(entity.get("properties"), dict) else {}
+    content = str(entity.get("content") or "")
+    sources = entity.get("sources") if isinstance(entity.get("sources"), list) else []
+    if not sources:
+        sources = [props.get("path") or entity.get("type") or "local"]
+    evidence: list[dict[str, Any]] = []
+    for source in sources[:6]:
+        evidence.append(
+            {
+                "entity_id": entity.get("id"),
+                "source": source,
+                "path": props.get("path") or "",
+                "title": entity.get("title") or entity.get("label") or entity.get("id"),
+                "snippet": content[:260],
+            }
+        )
+    return evidence
+
+
+def _edge_evidence(edge: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "edge_id": edge.get("id"),
+        "source": edge.get("edge_source") or "graph",
+        "relationship": edge.get("type"),
+        "from": edge.get("source"),
+        "to": edge.get("target"),
+    }
+
+
+def _decorate_query_results(out: dict[str, Any]) -> dict[str, Any]:
+    for row in out.get("results") or []:
+        entity = row.get("entity") if isinstance(row.get("entity"), dict) else {}
+        evidence = _entity_evidence(entity)
+        evidence.extend(_edge_evidence(edge) for edge in (row.get("edges") or [])[:6])
+        row["evidence"] = evidence
+        row["evidence_count"] = len(evidence)
+    return out
 
 
 def _response(kg: dict[str, Any], **extra: Any) -> dict[str, Any]:
@@ -274,14 +388,21 @@ def summary() -> dict[str, Any]:
 @router.post("/build")
 def build(body: BuildIn) -> dict[str, Any]:
     docs = load_source_documents(body.documents)
+    docs, permission = _filter_documents(docs, body)
     if not docs:
         raise HTTPException(400, "没有可构建图谱的项目知识源")
     graph = build_graph_from_documents(docs, entity_types=body.entity_types or DEFAULT_ENTITY_TYPES)
     graph["scope"] = _scope()
-    graph["build_options"] = {"entity_types": body.entity_types, "rebuild": body.rebuild}
+    graph["build_options"] = {
+        "entity_types": body.entity_types,
+        "rebuild": body.rebuild,
+        "allowed_sources": body.allowed_sources,
+        "denied_sources": body.denied_sources,
+    }
+    graph["permission"] = permission
     graph["updated_at"] = now_iso()
     _save_graph(graph)
-    return _response(graph, graph=graph)
+    return _response(graph, graph=graph, permission=permission)
 
 
 @router.post("/query")
@@ -294,7 +415,7 @@ def query(body: QueryIn) -> dict[str, Any]:
             graph["scope"] = _scope()
             graph["updated_at"] = now_iso()
             _save_graph(graph)
-    out = query_graph(graph, body.query, top_k=body.top_k)
+    out = _decorate_query_results(query_graph(graph, body.query, top_k=body.top_k))
     return _response(graph, **out)
 
 
@@ -321,3 +442,59 @@ def edges(limit: int = 300, edge_type: str = "") -> dict[str, Any]:
     if edge_type:
         items = [item for item in items if item.get("type") == edge_type]
     return _response(graph, items=items[: max(1, min(limit, 1000))], total=len(items))
+
+
+@router.post("/entity-profiles/merge")
+def merge_entity_profile(body: EntityProfileMergeIn) -> dict[str, Any]:
+    graph = _load_graph()
+    entity_map = {str(item.get("id")): item for item in graph.get("entities") or []}
+    entity = entity_map.get(body.entity_id)
+    if not entity:
+        raise HTTPException(404, "实体不存在，请先构建知识图谱")
+
+    lineage = lineage_for_entity(graph, body.entity_id, depth=body.depth)
+    neighbors = [item for item in (lineage.get("nodes") or []) if item.get("id") != body.entity_id]
+    memory_query = body.memory_query.strip() or str(entity.get("label") or entity.get("id") or "")
+    memory_items: list[dict[str, Any]] = []
+    try:
+        store = get_memory_store()
+        candidates = store.search(memory_query, limit=min(body.memory_limit * 4, 100))
+        for item in candidates:
+            md = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            state = str(md.get("lifecycle_state") or "active")
+            if state not in ("active", "pinned"):
+                continue
+            if md.get("entity_id") == body.entity_id or memory_query.lower() in str(item.get("content") or "").lower():
+                memory_items.append(item)
+            if len(memory_items) >= body.memory_limit:
+                break
+    except Exception:
+        memory_items = []
+
+    evidence_links = _entity_evidence(entity)
+    evidence_links.extend(_edge_evidence(edge) for edge in (lineage.get("edges") or [])[:12])
+    profile = {
+        "entity": entity,
+        "neighbors": neighbors,
+        "edges": lineage.get("edges") or [],
+        "memory_items": memory_items,
+        "evidence_links": evidence_links,
+        "profile_state": "merged",
+        "merged_at": now_iso(),
+        "scope": _scope(),
+        "agent_consumption": {
+            "purpose": "entity_profile_context",
+            "suggested_use": "在回答 Graph RAG 问题、生成任务包或做影响分析前注入该实体画像。",
+        },
+    }
+
+    profiles: dict[str, Any] = {}
+    path = _profiles_path()
+    if path.exists():
+        try:
+            profiles = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            profiles = {}
+    profiles[body.entity_id] = profile
+    path.write_text(json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+    return _response(graph, profile=profile)

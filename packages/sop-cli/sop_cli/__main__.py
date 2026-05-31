@@ -70,7 +70,7 @@ app.add_typer(context_cmd.app, name="context", help="v4 三码上下文与 Manag
 app.add_typer(memory_cmd.app,   name="memory",   help="v4 记忆：add/search/recent/forget/summarize/attach-run/flush")
 app.add_typer(kb_cmd.app,       name="kb",       help="知识库：search / rag / add / flush / index")
 app.add_typer(copilot_cmd.app, name="copilot", help="AI Copilot：ask / sessions / show / classify / summarize / suggest")
-app.add_typer(data_cmd.app, name="data", help="数据智能：blueprint / tasks")
+app.add_typer(data_cmd.app, name="data", help="数据智能：blueprint / nlq / tasks")
 app.add_typer(dev_flow_cmd.app, name="dev-flow", help="研发全流程：ops-plan/ops-tasks")
 app.add_typer(db_config_cmd.app, name="db-config", help="数据库配置：OceanBase/PG/MySQL")
 app.add_typer(ops_cmd.app,      name="ops",      help="运维：health/stack/deploy/snapshot/notify/worker")

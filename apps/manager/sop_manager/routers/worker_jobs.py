@@ -162,7 +162,7 @@ def _emit_job_event(job_id: str, status: str, rec: dict[str, Any]) -> None:
         pass
 
 
-def _enqueue_redis(job_id: str, job_type: str, payload: dict[str, Any]) -> bool:
+def _enqueue_redis(job_id: str, job_type: str, payload: dict[str, Any], *, attempt: int = 1, idempotency_key: str = "") -> bool:
     url = (os.environ.get("REDIS_URL") or "").strip()
     if not url:
         return False
@@ -178,6 +178,8 @@ def _enqueue_redis(job_id: str, job_type: str, payload: dict[str, Any]) -> bool:
             "job_id": job_id,
             "type": job_type,
             "payload": json.dumps(payload, ensure_ascii=False),
+            "attempt": str(max(1, int(attempt or 1))),
+            "idempotency_key": idempotency_key or "",
         },
     )
     return True
@@ -273,7 +275,7 @@ def enqueue_job(body: JobEnqueue) -> dict[str, Any]:
         "retry_of": None,
     }
     _write_job(job_id, record)
-    queued = _enqueue_redis(job_id, body.type, body.payload)
+    queued = _enqueue_redis(job_id, body.type, body.payload, attempt=1, idempotency_key=body.idempotency_key)
     if not queued:
         record["status"] = "pending_local"
         record["note"] = "REDIS_URL 未配置；请本地运行 sop-worker 或配置 Redis"
@@ -348,7 +350,7 @@ def retry_job(job_id: str) -> dict[str, Any]:
         "project_code": resolved_project_code(),
     }
     _write_job(new_id, new_rec)
-    queued = _enqueue_redis(new_id, str(new_rec["type"]), dict(new_rec.get("payload") or {}))
+    queued = _enqueue_redis(new_id, str(new_rec["type"]), dict(new_rec.get("payload") or {}), attempt=attempt)
     if not queued:
         new_rec["status"] = "pending_local"
         new_rec["note"] = "REDIS_URL 未配置；请本地运行 sop-worker 或配置 Redis"

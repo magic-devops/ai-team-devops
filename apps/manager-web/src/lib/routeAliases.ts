@@ -36,7 +36,7 @@ export const CONSOLE_ID_ROUTE_TARGETS: Record<string, string> = {
   system: "#/settings",
   auth: "#/organization",
   tenants: "#/organization",
-  "db-config": "#/intelligence/datasources",
+  "db-config": "#/data/sources",
   health: "#/settings/runtime",
   webhook: "#/notify/webhooks",
   audit: "#/audit",

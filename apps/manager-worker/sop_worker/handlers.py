@@ -65,7 +65,7 @@ def handle_task(job_id: str, job_type: str, payload: dict[str, Any]) -> None:
         elif job_type == "memory.summarize":
             result = _run_memory_summarize(payload)
         elif job_type == "rag.warmup":
-            result = {"ok": True, "note": "rag warmup noop"}
+            result = _run_rag_warmup(payload)
         else:
             raise ValueError(f"unknown job type: {job_type}")
         _patch_job(job_id, status="completed", result=result)
@@ -97,3 +97,65 @@ def _run_memory_summarize(payload: dict[str, Any]) -> dict[str, Any]:
     texts = [str(x.get("content", "")) for x in (items or []) if isinstance(x, dict)]
     summary = "\n".join(texts[:20])[:4000]
     return {"ok": True, "summarized_lines": len(texts), "preview": summary[:500]}
+
+
+def _run_rag_warmup(payload: dict[str, Any]) -> dict[str, Any]:
+    collections = payload.get("collections")
+    if not isinstance(collections, list) or not collections:
+        collections = ["tasks", "knowledge", "rules"]
+    collections = [str(item).strip() for item in collections if str(item).strip()][:20]
+    queries = payload.get("queries")
+    if not isinstance(queries, list) or not queries:
+        queries = ["Hermes 平台治理", "SOP 开发规约", "任务执行状态"]
+    queries = [str(item).strip() for item in queries if str(item).strip()][:20]
+    limit = max(1, min(int(payload.get("limit") or 6), 50))
+    docs = payload.get("docs") if isinstance(payload.get("docs"), list) else []
+    index_collection = str(payload.get("index_collection") or (collections[0] if collections else "knowledge")).strip()
+    fail_on_error = bool(payload.get("fail_on_error"))
+
+    searches: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    indexed: dict[str, Any] | None = None
+    with httpx.Client(timeout=float(payload.get("timeout_seconds") or 60.0)) as client:
+        health_resp = client.get(f"{_manager_base()}/api/v1/rag/health", headers=_manager_headers())
+        health_resp.raise_for_status()
+        health = health_resp.json()
+
+        if docs:
+            index_resp = client.post(
+                f"{_manager_base()}/api/v1/rag/index",
+                json={"collection": index_collection, "docs": docs[:100]},
+                headers=_manager_headers(),
+            )
+            index_resp.raise_for_status()
+            indexed_data = index_resp.json()
+            indexed = indexed_data if isinstance(indexed_data, dict) else {"ok": True}
+
+        for query in queries:
+            try:
+                resp = client.post(
+                    f"{_manager_base()}/api/v1/rag/search",
+                    json={"query": query, "collections": collections, "limit": limit, "hybrid": True, "rerank": False},
+                    headers=_manager_headers(),
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                items = data.get("items") if isinstance(data, dict) else []
+                searches.append({"query": query, "hits": len(items or []), "sample_ids": [str(item.get("id") or "") for item in (items or [])[:5] if isinstance(item, dict)]})
+            except Exception as exc:
+                errors.append({"query": query, "error": str(exc)[:500]})
+                if fail_on_error:
+                    raise
+
+    hits = sum(int(item.get("hits") or 0) for item in searches)
+    return {
+        "ok": not errors,
+        "health": health if isinstance(health, dict) else {},
+        "collections": collections,
+        "queries": queries,
+        "searches": len(searches),
+        "hits": hits,
+        "indexed": indexed,
+        "errors": errors,
+        "warmup_mode": "index_and_search" if docs else "search",
+    }

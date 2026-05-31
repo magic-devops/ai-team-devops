@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bot, CheckCircle, Network, Send } from "lucide-react";
+import { Activity, ArrowRight, Bot, CheckCircle, Network, Send, TimerReset } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
@@ -11,6 +11,8 @@ import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 const MODULES = [
   { id: "registry", path: "#/ecosystem/a2a/workbench", icon: Bot, label: "Agent 注册", desc: "WorkBuddy/OpenClaw/HermesAgent 注册管理" },
   { id: "negotiate", path: "#/ecosystem/a2a/negotiate", icon: Network, label: "能力协商", desc: "任务与 Agent 能力匹配" },
+  { id: "sla", path: "#/ecosystem/a2a/sla", icon: TimerReset, label: "外部 Agent SLA", desc: "超时、缺证据与治理任务" },
+  { id: "windows", path: "#/ecosystem/a2a/windows", icon: Activity, label: "执行窗口", desc: "租约、进度与重派风险审计" },
   { id: "dispatch", path: "#/ecosystem/a2a/dispatch", icon: Send, label: "任务分发", desc: "向外部 Agent 分发任务" },
   { id: "evidence", path: "#/ecosystem/a2a/evidence", icon: CheckCircle, label: "执行证据", desc: "Agent 执行结果与证据回写" },
 ];
@@ -41,7 +43,7 @@ export function A2aGatewayHub() {
         }
       />
       <Card title="功能模块">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {MODULES.map(({ id, path, icon: Icon, label, desc }) => (
             <a key={id} href={path} className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
               <span className="rounded-lg bg-[var(--brand-soft)] p-2 text-[var(--brand)]"><Icon className="h-5 w-5" /></span>

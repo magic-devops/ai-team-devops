@@ -7,7 +7,7 @@ import { NeedLogin, RefreshButton } from "@/components/PageStates";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
-type Tab = "connectors" | "jobs";
+type Tab = "connectors" | "jobs" | "schemas" | "runs";
 
 const CONNECTOR_TYPES = ["mysql", "postgresql", "kafka", "s3", "api", "dingtalk", "wechat", "oceanbase", "starrocks"];
 const INGEST_MODES = ["batch", "cdc", "stream"];
@@ -18,15 +18,20 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [showForm, setShowForm] = useState(false);
-  const [cForm, setCForm] = useState({ name: "", connector_type: "mysql", host: "", port: 3306, database: "" });
-  const [jForm, setJForm] = useState({ connector_id: "", name: "", ingest_mode: "batch", schedule: "", target_table: "" });
+  const [cForm, setCForm] = useState({ name: "", connector_type: "mysql", host: "", port: 3306, database: "", supports_cdc: true });
+  const [jForm, setJForm] = useState({ connector_id: "", name: "", ingest_mode: "batch", schedule: "", source_table: "", target_table: "", cursor_field: "updated_at", batch_size: 1000 });
   const [schema, setSchema] = useState<any>(null);
+  const [dryRun, setDryRun] = useState<any>(null);
+  const [finishForm, setFinishForm] = useState({ rows_ingested: 1000, cdc_cursor: "binlog.000001:100" });
 
   const connQ = useQuery({ queryKey: ["diConnectors"], queryFn: () => api.dataIngestConnectors(), enabled: authed });
   const jobsQ = useQuery({ queryKey: ["diJobs"], queryFn: () => api.dataIngestJobs(), enabled: authed && tab === "jobs" });
+  const schemaRegistryQ = useQuery({ queryKey: ["diSchemaRegistry"], queryFn: () => api.dataIngestSchemaRegistry(), enabled: authed && tab === "schemas" });
+  const runsQ = useQuery({ queryKey: ["diRuns"], queryFn: () => api.dataIngestRuns(), enabled: authed && tab === "runs" });
+  const cursorsQ = useQuery({ queryKey: ["diCdcCursors"], queryFn: () => api.dataIngestCdcCursors(), enabled: authed && tab === "runs" });
 
   const createConn = useMutation({
-    mutationFn: () => api.dataIngestConnectorCreate(cForm),
+    mutationFn: () => api.dataIngestConnectorCreate({ ...cForm, extra: { supports_cdc: cForm.supports_cdc } }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ["diConnectors"] }); setShowForm(false); },
   });
   const testConn = useMutation({
@@ -39,7 +44,18 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
   });
   const loadSchema = useMutation({
     mutationFn: (id: string) => api.dataIngestConnectorSchema(id),
-    onSuccess: (data) => setSchema(data),
+    onSuccess: (data) => {
+      setSchema(data);
+      void qc.invalidateQueries({ queryKey: ["diSchemaRegistry"] });
+    },
+  });
+  const dryRunConn = useMutation({
+    mutationFn: (id: string) => api.dataIngestConnectorDryRun(id, { sample_limit: 5 }),
+    onSuccess: (data) => {
+      setDryRun(data);
+      void qc.invalidateQueries({ queryKey: ["diConnectors"] });
+      void qc.invalidateQueries({ queryKey: ["diSchemaRegistry"] });
+    },
   });
   const createJob = useMutation({
     mutationFn: () => api.dataIngestJobCreate(jForm),
@@ -47,11 +63,18 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
   });
   const runJob = useMutation({
     mutationFn: (id: string) => api.dataIngestJobRun(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["diJobs"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["diJobs"] });
+      void qc.invalidateQueries({ queryKey: ["diRuns"] });
+    },
   });
   const finishJob = useMutation({
-    mutationFn: (id: string) => api.dataIngestJobStatus(id, { status: "success", rows_ingested: 1000 }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["diJobs"] }),
+    mutationFn: (id: string) => api.dataIngestJobStatus(id, { status: "success", rows_ingested: finishForm.rows_ingested, cdc_cursor: finishForm.cdc_cursor }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["diJobs"] });
+      void qc.invalidateQueries({ queryKey: ["diRuns"] });
+      void qc.invalidateQueries({ queryKey: ["diCdcCursors"] });
+    },
   });
   const deleteJob = useMutation({
     mutationFn: (id: string) => api.dataIngestJobDelete(id),
@@ -62,15 +85,18 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
 
   const connectors = connQ.data?.items ?? [];
   const jobs = jobsQ.data?.items ?? [];
+  const schemaItems = schemaRegistryQ.data?.items ?? [];
+  const runs = runsQ.data?.items ?? [];
+  const cursors = cursorsQ.data?.items ?? [];
 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell title="数据接入中心" description="连接器管理与接入作业配置">
         <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["connectors", "jobs"] as Tab[]).map(t => (
+          {(["connectors", "jobs", "schemas", "runs"] as Tab[]).map(t => (
             <button key={t} onClick={() => { setTab(t); setShowForm(false); }}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "connectors" ? `连接器 (${connectors.length})` : `接入作业 (${jobs.length})`}
+              {t === "connectors" ? `连接器 (${connectors.length})` : t === "jobs" ? `接入作业 (${jobs.length})` : t === "schemas" ? "Schema Registry" : "运行历史"}
             </button>
           ))}
         </div>
@@ -93,6 +119,10 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
                   <input className="input-base" placeholder="主机地址" value={cForm.host} onChange={e => setCForm(f => ({ ...f, host: e.target.value }))} />
                   <input className="input-base" type="number" placeholder="端口" value={cForm.port} onChange={e => setCForm(f => ({ ...f, port: Number(e.target.value) }))} />
                   <input className="input-base sm:col-span-2" placeholder="数据库名" value={cForm.database} onChange={e => setCForm(f => ({ ...f, database: e.target.value }))} />
+                  <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+                    <input type="checkbox" checked={cForm.supports_cdc} onChange={e => setCForm(f => ({ ...f, supports_cdc: e.target.checked }))} />
+                    支持 CDC
+                  </label>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => createConn.mutate()} disabled={!cForm.name || createConn.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
@@ -115,6 +145,7 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
                   </div>
 	                  <div className="mt-3 flex gap-2">
 	                    <button onClick={() => testConn.mutate(c.id)} className="text-xs text-[var(--brand)] hover:underline">测试连接</button>
+	                    <button onClick={() => dryRunConn.mutate(c.id)} className="text-xs text-[var(--brand)] hover:underline">Dry-run</button>
 	                    <button onClick={() => loadSchema.mutate(c.id)} className="text-xs text-[var(--brand)] hover:underline">发现 Schema</button>
 	                    <button onClick={() => deleteConn.mutate(c.id)} className="text-xs text-red-500 hover:underline">删除</button>
 	                  </div>
@@ -131,6 +162,25 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
 	                      <p className="mt-1 text-xs text-[var(--muted)]">{(t.columns ?? []).map((c: any) => `${c.name}:${c.type}`).join(", ")}</p>
 	                    </div>
 	                  ))}
+	                </div>
+	              </div>
+	            )}
+	            {dryRun && (
+	              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+	                <p className="mb-2 text-sm font-semibold">Dry-run 结果</p>
+	                <div className="grid gap-2 sm:grid-cols-4">
+	                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
+	                    <p className="text-xs text-[var(--muted)]">状态</p><p className="text-lg font-semibold">{dryRun.status}</p>
+	                  </div>
+	                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
+	                    <p className="text-xs text-[var(--muted)]">表</p><p className="text-lg font-semibold">{dryRun.schema_summary?.tables ?? 0}</p>
+	                  </div>
+	                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
+	                    <p className="text-xs text-[var(--muted)]">列</p><p className="text-lg font-semibold">{dryRun.schema_summary?.columns ?? 0}</p>
+	                  </div>
+	                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
+	                    <p className="text-xs text-[var(--muted)]">CDC</p><p className="text-lg font-semibold">{dryRun.supports_cdc ? "支持" : "否"}</p>
+	                  </div>
 	                </div>
 	              </div>
 	            )}
@@ -156,7 +206,14 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
 	                    {INGEST_MODES.map(m => <option key={m}>{m}</option>)}
 	                  </select>
 	                  <input className="input-base" placeholder="调度表达式 (如 0 2 * * *)" value={jForm.schedule} onChange={e => setJForm(f => ({ ...f, schedule: e.target.value }))} />
-	                  <input className="input-base sm:col-span-2" placeholder="目标表名" value={jForm.target_table} onChange={e => setJForm(f => ({ ...f, target_table: e.target.value }))} />
+	                  <input className="input-base" placeholder="源表名" value={jForm.source_table} onChange={e => setJForm(f => ({ ...f, source_table: e.target.value }))} />
+	                  <input className="input-base" placeholder="目标表名" value={jForm.target_table} onChange={e => setJForm(f => ({ ...f, target_table: e.target.value }))} />
+	                  <input className="input-base" placeholder="游标字段" value={jForm.cursor_field} onChange={e => setJForm(f => ({ ...f, cursor_field: e.target.value }))} />
+	                  <input className="input-base" type="number" placeholder="批大小" value={jForm.batch_size} onChange={e => setJForm(f => ({ ...f, batch_size: Number(e.target.value) }))} />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input className="input-base" type="number" placeholder="完成行数" value={finishForm.rows_ingested} onChange={e => setFinishForm(f => ({ ...f, rows_ingested: Number(e.target.value) }))} />
+                  <input className="input-base" placeholder="CDC 游标" value={finishForm.cdc_cursor} onChange={e => setFinishForm(f => ({ ...f, cdc_cursor: e.target.value }))} />
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => createJob.mutate()} disabled={!jForm.name || createJob.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
@@ -179,13 +236,61 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
                       <td className="py-2 pr-4"><span className="rounded bg-[var(--brand-soft)] px-2 py-0.5 text-xs text-[var(--brand)]">{j.ingest_mode}</span></td>
 	                      <td className="py-2 pr-4 text-[var(--muted)]">{j.status}</td>
 	                      <td className="py-2 pr-4">{j.rows_ingested ?? 0}</td>
-	                      <td className="py-2 text-xs text-[var(--muted)]">{j.last_run_at?.slice(0, 19).replace("T", " ") ?? "—"}</td>
+	                      <td className="py-2 text-xs text-[var(--muted)]">{j.last_run_at?.slice(0, 19).replace("T", " ") ?? "—"}{j.cdc_cursor ? ` · ${j.cdc_cursor}` : ""}</td>
 	                      <td className="py-2 flex gap-2">
 	                        {j.status !== "running" && <button onClick={() => runJob.mutate(j.id)} className="text-xs text-[var(--brand)] hover:underline">运行</button>}
 	                        {j.status === "running" && <button onClick={() => finishJob.mutate(j.id)} className="text-xs text-green-600 hover:underline">完成</button>}
 	                        <button onClick={() => deleteJob.mutate(j.id)} className="text-xs text-red-500 hover:underline">删除</button>
 	                      </td>
 	                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </WorkbenchPanel>
+        )}
+
+        {tab === "schemas" && (
+          <WorkbenchPanel title="Schema Registry" actions={<RefreshButton onClick={() => void schemaRegistryQ.refetch()} pending={schemaRegistryQ.isFetching} />}>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {schemaItems.length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无 Schema，请先执行 Dry-run 或发现 Schema</p>}
+              {schemaItems.map((s: any) => (
+                <div key={s.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <p className="text-sm font-semibold">{s.table_name}</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">{s.database || "default"} · {s.connector_name}</p>
+                  <p className="mt-2 text-xs text-[var(--muted)]">{(s.columns ?? []).map((c: any) => `${c.name}:${c.type}`).join(", ") || "无列信息"}</p>
+                </div>
+              ))}
+            </div>
+          </WorkbenchPanel>
+        )}
+
+        {tab === "runs" && (
+          <WorkbenchPanel title="运行历史与 CDC 游标" actions={<RefreshButton onClick={() => { void runsQ.refetch(); void cursorsQ.refetch(); }} pending={runsQ.isFetching || cursorsQ.isFetching} />}>
+            <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {cursors.map((c: any) => (
+                <div key={c.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
+                  <p className="text-xs text-[var(--muted)]">{c.source_table || c.job_id}</p>
+                  <p className="mt-1 truncate font-mono text-sm text-[var(--brand)]">{c.cursor || "—"}</p>
+                </div>
+              ))}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
+                  <th className="pb-2 pr-4">运行</th><th className="pb-2 pr-4">作业</th><th className="pb-2 pr-4">模式</th><th className="pb-2 pr-4">状态</th><th className="pb-2 pr-4">行数</th><th className="pb-2">游标</th>
+                </tr></thead>
+                <tbody>
+                  {runs.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-[var(--muted)]">暂无运行历史</td></tr>}
+                  {runs.map((r: any) => (
+                    <tr key={r.id} className="border-b border-[var(--border)]">
+                      <td className="py-2 pr-4 font-mono text-xs">{r.run_id?.slice(0, 8)}...</td>
+                      <td className="py-2 pr-4">{r.name}</td>
+                      <td className="py-2 pr-4">{r.ingest_mode}</td>
+                      <td className="py-2 pr-4">{r.status}</td>
+                      <td className="py-2 pr-4">{r.rows_ingested ?? 0}</td>
+                      <td className="py-2 font-mono text-xs text-[var(--muted)]">{r.cdc_cursor || "—"}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>

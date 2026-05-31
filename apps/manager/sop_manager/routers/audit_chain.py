@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sop_manager.routers.metrics import current_trace_context
+
 _log = logging.getLogger("sop.audit_chain")
 _CHAIN_VERSION = "v1"
 _GENESIS = "0" * 64
@@ -81,6 +83,8 @@ def append_audit(action: str, *, user_id: str = "", tenant_id: str = "",
     线程安全：进程内 lock；多进程部署应改为基于数据库行锁或 advisory lock。
     """
     _CHAIN_DIR.mkdir(parents=True, exist_ok=True)
+    trace = current_trace_context()
+    normalized_details = details or {}
     payload = {
         "action": action,
         "user_id": user_id,
@@ -88,7 +92,10 @@ def append_audit(action: str, *, user_id: str = "", tenant_id: str = "",
         "project_id": project_id,
         "resource_type": resource_type,
         "resource_id": resource_id,
-        "details": details or {},
+        "trace_id": normalized_details.get("trace_id") or trace["trace_id"],
+        "correlation_id": normalized_details.get("correlation_id") or trace["correlation_id"],
+        "agent_run_id": normalized_details.get("agent_run_id") or trace.get("agent_run_id", ""),
+        "details": normalized_details,
         "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "v": _CHAIN_VERSION,
     }
@@ -106,6 +113,28 @@ def append_audit(action: str, *, user_id: str = "", tenant_id: str = "",
         state["count"] = str(int(state.get("count", "0")) + 1)
         _write_state(state)
     return {"hash": h, "prev_hash": prev, "ts": payload["ts"]}
+
+
+def recent_audit_entries(*, limit: int = 100) -> list[dict[str, Any]]:
+    if not _CHAIN_DIR.exists():
+        return []
+    files = sorted(_CHAIN_DIR.glob("chain-*.jsonl"), reverse=True)
+    out: list[dict[str, Any]] = []
+    for fp in files:
+        try:
+            lines = fp.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+            if len(out) >= limit:
+                return out
+    return out
 
 
 def verify_chain(*, max_files: int | None = None) -> dict[str, Any]:

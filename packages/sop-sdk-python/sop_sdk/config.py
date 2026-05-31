@@ -84,7 +84,10 @@ def _resolve_api_key(ref: str, fallback_env: str = "MANAGER_API_KEY") -> str:
             return os.getenv(fallback_env, "")
         rest = ref[len("keyring://"):]
         service, _, account = rest.partition("/")
-        return keyring.get_password(service or "sop", account or "manager") or ""
+        try:
+            return keyring.get_password(service or "sop", account or "manager") or ""
+        except Exception:
+            return os.getenv(fallback_env, "")
     return ""
 
 

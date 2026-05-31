@@ -76,12 +76,14 @@ def _check_agentd_ipc(cfg) -> tuple[bool, str]:
     try:
         from sop_sdk import AgentdIpcClient
         ipc = AgentdIpcClient(sock)
+        diag = ipc.diagnose()
         if ipc.available():
             h = ipc.health()
             if h.get("ok"):
                 r = h.get("result") or {}
                 auth = "bearer" if r.get("has_bearer") else ("apikey" if r.get("has_api_key") else "none")
-                return True, f"{sock} project_id={r.get('project_id','-')} auth={auth}"
+                return True, f"{diag.get('transport')} {diag.get('endpoint')} project_id={r.get('project_id','-')} auth={auth}"
+            return False, f"{diag.get('transport')} {diag.get('endpoint')} 连接失败：{h.get('error_code', '-')}: {h.get('error', '-')}"
         s = socket.socket(socket.AF_UNIX)
         s.settimeout(0.5)
         s.connect(str(sock))

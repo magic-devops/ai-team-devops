@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
+from sop_manager.routers.scope_guard import scope_matches
 from .tasks import TaskCreate, create_task
 
 try:
@@ -91,7 +92,7 @@ def _read_jsonl(path: Path, limit: int = 5000) -> list[dict[str, Any]]:
             item = json.loads(line)
         except Exception:
             continue
-        if isinstance(item, dict):
+        if isinstance(item, dict) and scope_matches(item):
             rows.append(item)
     return rows[-limit:]
 
@@ -99,7 +100,7 @@ def _read_jsonl(path: Path, limit: int = 5000) -> list[dict[str, Any]]:
 def _load_claim_rows() -> list[dict[str, Any]]:
     data = _read_json(_agent_claims_path()) or {}
     claims = data.get("claims") if isinstance(data.get("claims"), dict) else {}
-    return [dict(row) for row in claims.values() if isinstance(row, dict)]
+    return [dict(row) for row in claims.values() if isinstance(row, dict) and scope_matches(row)]
 
 
 def _active_claim(row: dict[str, Any]) -> bool:

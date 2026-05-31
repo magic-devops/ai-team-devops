@@ -16,13 +16,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 _log = logging.getLogger("sop_worker")
 _stop = threading.Event()
+_metrics = {"received": 0, "completed": 0, "failed": 0, "retried": 0, "dlq": 0}
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
         if path in ("/", "/health", "/healthz", "/api/v1/health"):
-            body = json.dumps({"ok": True, "service": "sop-manager-worker"}, separators=(",", ":")).encode()
+            body = json.dumps({"ok": True, "service": "sop-manager-worker", "metrics": dict(_metrics)}, separators=(",", ":")).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -47,8 +48,10 @@ def _redis_loop() -> None:
         _log.warning("install redis extra: pip install 'sop-manager-worker[redis]'")
         return
     stream = (os.environ.get("WORKER_TASK_STREAM") or "sop:tasks").strip()
+    dlq_stream = (os.environ.get("WORKER_DLQ_STREAM") or f"{stream}:dlq").strip()
     group = (os.environ.get("WORKER_TASK_GROUP") or "sop-workers").strip()
     consumer = (os.environ.get("WORKER_CONSUMER_NAME") or "worker-1").strip()
+    max_retries = max(0, int(os.environ.get("WORKER_MAX_RETRIES") or "2"))
     client = redis.from_url(url, decode_responses=True)
     try:
         client.xgroup_create(stream, group, id="0", mkstream=True)
@@ -76,11 +79,27 @@ def _redis_loop() -> None:
                     payload = {}
                 _log.info("task %s type=%s payload=%s", job_id, job_type, payload)
                 try:
+                    attempt = max(1, int(data.get("attempt") or payload.get("attempt") or 1))
+                except (TypeError, ValueError):
+                    attempt = 1
+                _metrics["received"] += 1
+                try:
                     from sop_worker.handlers import handle_task
 
                     handle_task(job_id, job_type, payload)
+                    _metrics["completed"] += 1
                 except Exception as e:
+                    _metrics["failed"] += 1
                     _log.warning("handler error job=%s: %s", job_id, e)
+                    retry_data = {**data, "attempt": str(attempt + 1), "last_error": str(e)[:500]}
+                    if attempt <= max_retries:
+                        client.xadd(stream, retry_data)
+                        _metrics["retried"] += 1
+                        _log.info("retry scheduled job=%s attempt=%s/%s", job_id, attempt + 1, max_retries + 1)
+                    else:
+                        client.xadd(dlq_stream, retry_data)
+                        _metrics["dlq"] += 1
+                        _log.warning("sent job=%s to dlq=%s after attempts=%s", job_id, dlq_stream, attempt)
                 try:
                     client.xack(stream, group, msg_id)
                 except redis.ResponseError:

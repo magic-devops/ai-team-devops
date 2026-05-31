@@ -131,3 +131,11 @@ class HttpMemoryStore(MemoryStore):
             r.raise_for_status()
             data = r.json()
         return data if isinstance(data, dict) else {"ok": True}
+
+    def update_lifecycle(self, memory_id: str, state: str, reason: str = "") -> dict[str, Any]:
+        body = {**self._scope_body(), "state": state, "reason": reason}
+        with httpx.Client(timeout=self._timeout) as client:
+            r = client.post(f"{self._base}/memories/{memory_id}/lifecycle", json=body, headers=self._headers())
+            r.raise_for_status()
+            data = r.json()
+        return data if isinstance(data, dict) else {"ok": True, "updated": 1, "state": state}

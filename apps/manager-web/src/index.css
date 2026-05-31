@@ -408,3 +408,55 @@ html.dark .workbench-stat-card {
 html.dark .workbench-stat-card:hover {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
+
+@media (max-width: 767px) {
+  .hermes-mobile-compact {
+    font-size: 0.875rem;
+  }
+
+  .hermes-mobile-compact [data-mobile-compact],
+  [data-mobile-compact] {
+    min-width: 0;
+  }
+
+  .hermes-mobile-compact .sop-card.ant-card,
+  .hermes-mobile-compact .rounded-2xl,
+  .hermes-mobile-compact .rounded-xl {
+    border-radius: 0.75rem;
+  }
+
+  .hermes-mobile-compact .sop-card > .ant-card-head,
+  .hermes-mobile-compact .sop-card > .ant-card-body {
+    padding-inline: 0.875rem;
+  }
+
+  .hermes-mobile-compact .workbench-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .hermes-mobile-compact .workbench-stat-card {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .hermes-mobile-compact .ant-table-wrapper {
+    overflow-x: auto;
+    border-radius: 0.75rem;
+  }
+
+  .hermes-mobile-compact .ant-table {
+    min-width: 44rem;
+    font-size: 0.75rem;
+  }
+
+  .hermes-mobile-compact .ant-table-cell {
+    padding: 0.5rem 0.6rem !important;
+  }
+
+  .hermes-mobile-compact input,
+  .hermes-mobile-compact textarea,
+  .hermes-mobile-compact select,
+  .hermes-mobile-compact button {
+    max-width: 100%;
+  }
+}

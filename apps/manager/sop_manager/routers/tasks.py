@@ -18,6 +18,7 @@ from sop_manager.path_config import (
     resolved_tenant_id,
 )
 from .db_sql_compat import rows, table, now
+from .scope_guard import attach_scope, current_scope, scope_matches
 from .webhook import notify_webhook
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
@@ -501,6 +502,7 @@ def _parse_utc(value: Any) -> datetime | None:
 
 
 def _append_jsonl(path, row: Dict[str, Any]) -> None:
+    attach_scope(row)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -529,13 +531,7 @@ def _write_jsonl(path, rows_in: List[Dict[str, Any]]) -> None:
 
 
 def _scope_payload() -> Dict[str, str]:
-    return {
-        "tenant_id": resolved_tenant_id(),
-        "tenant_code": resolved_tenant_code(),
-        "business_code": resolved_business_code(),
-        "project_id": resolved_project_id(),
-        "project_code": resolved_project_code(),
-    }
+    return current_scope()
 
 
 def _agent_claims_default() -> Dict[str, Any]:
@@ -551,12 +547,23 @@ def _load_agent_claims() -> Dict[str, Any]:
         if not isinstance(data, dict):
             return _agent_claims_default()
         data.setdefault("claims", {})
+        data["claims"] = {
+            str(claim_id): claim
+            for claim_id, claim in (data.get("claims") or {}).items()
+            if isinstance(claim, dict) and scope_matches(claim)
+        }
         return data
     except Exception:
         return _agent_claims_default()
 
 
 def _save_agent_claims(data: Dict[str, Any]) -> None:
+    claims = data.setdefault("claims", {})
+    data["claims"] = {
+        str(claim_id): attach_scope(dict(claim))
+        for claim_id, claim in claims.items()
+        if isinstance(claim, dict)
+    }
     p = _agent_claims_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1711,12 +1718,8 @@ def _agent_reports_payload(
     artifact_count = 0
     heartbeat_count = 0
     for row in rows_all:
-        row_scope = row.get("scope") if isinstance(row.get("scope"), dict) else {}
-        if row_scope:
-            if str(row_scope.get("tenant_code") or "") != scope.get("tenant_code"):
-                continue
-            if str(row_scope.get("project_id") or "") != scope.get("project_id"):
-                continue
+        if not scope_matches(row):
+            continue
         row_type = str(row.get("type") or "report")
         if row_type == "heartbeat":
             heartbeat_count += 1
@@ -2285,7 +2288,7 @@ def create_task(body: TaskCreate):
     t = table("tasks")
     if t is None:
         raise HTTPException(503, "数据库不可用")
-    tid = f"T-{int(now().timestamp() * 1000)}"
+    tid = f"T-{int(now().timestamp() * 1000)}-{uuid.uuid4().hex[:8]}"
     row = {
         "id": tid,
         "project_id": resolved_project_id(),

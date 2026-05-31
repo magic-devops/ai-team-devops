@@ -79,6 +79,10 @@ class MemoryStore(ABC):
     def attach_run(self, memory_id: str, run_id: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         raise NotImplementedError
 
+    @abstractmethod
+    def update_lifecycle(self, memory_id: str, state: str, reason: str = "") -> dict[str, Any]:
+        raise NotImplementedError
+
 
 class FileJsonlMemoryStore(MemoryStore):
     """按 tenant/business/project 分文件；单机文件锁，适合默认部署。"""
@@ -87,11 +91,13 @@ class FileJsonlMemoryStore(MemoryStore):
     _max_lines = int(os.getenv("MEMORY_FILE_MAX_LINES", "2000"))
 
     def append(self, content: str, kind: str, metadata: dict[str, Any]) -> MemoryRecord:
+        md = dict(metadata or {})
+        md.setdefault("lifecycle_state", "active")
         rec = MemoryRecord(
             id=str(uuid.uuid4()),
             content=content,
             kind=kind,
-            metadata=metadata,
+            metadata=md,
             created_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         )
         line = json.dumps(rec.to_json(), ensure_ascii=False) + "\n"
@@ -226,6 +232,25 @@ class FileJsonlMemoryStore(MemoryStore):
         if updated:
             self._write_all(rows)
         return {"ok": True, "updated": updated}
+
+    def update_lifecycle(self, memory_id: str, state: str, reason: str = "") -> dict[str, Any]:
+        mid = memory_id.strip()
+        rows = self._read_all()
+        updated = 0
+        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        for row in rows:
+            if str(row.get("id") or "") != mid:
+                continue
+            md = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            md["lifecycle_state"] = state
+            md["lifecycle_updated_at"] = now
+            if reason:
+                md["lifecycle_reason"] = reason
+            row["metadata"] = md
+            updated += 1
+        if updated:
+            self._write_all(rows)
+        return {"ok": True, "updated": updated, "state": state}
 
 
 _store_singleton: MemoryStore | None = None

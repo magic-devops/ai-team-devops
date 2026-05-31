@@ -25,6 +25,23 @@ _PID_FILE = ".sop-runtime/agentd.pid"
 _LOG_FILE = ".sop-runtime/logs/agentd.log"
 
 
+def _read_pid(pidf: Path) -> int | None:
+    try:
+        return int(pidf.read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _pid_state(pid: int) -> str:
+    try:
+        os.kill(pid, 0)
+        return "running"
+    except ProcessLookupError:
+        return "missing"
+    except PermissionError:
+        return "inaccessible"
+
+
 def _runtime(project: Path) -> Path:
     rt = project / ".sop-runtime"
     rt.mkdir(parents=True, exist_ok=True)
@@ -56,12 +73,17 @@ def start(foreground: bool = typer.Option(False, "--foreground", "-f")) -> None:
     rt = _runtime(project)
     pidf = rt / "agentd.pid"
     if pidf.is_file():
-        try:
-            pid = int(pidf.read_text().strip())
-            os.kill(pid, 0)
-            warn(f"sop-agentd 已在运行，pid={pid}")
-            raise typer.Exit(0)
-        except (ProcessLookupError, ValueError):
+        pid = _read_pid(pidf)
+        if pid is None:
+            pidf.unlink(missing_ok=True)
+        else:
+            state = _pid_state(pid)
+            if state == "running":
+                warn(f"sop-agentd 已在运行，pid={pid}")
+                raise typer.Exit(0)
+            if state == "inaccessible":
+                warn(f"PID 文件存在但当前环境无权探测 pid={pid}，为避免重复启动请先确认该进程或清理 PID 文件")
+                raise typer.Exit(3)
             pidf.unlink(missing_ok=True)
 
     if foreground:
@@ -89,14 +111,24 @@ def stop() -> None:
     if not pidf.is_file():
         warn("未发现 PID 文件，可能未启动")
         raise typer.Exit(0)
+    remove_pid_file = False
     try:
-        pid = int(pidf.read_text().strip())
+        pid = _read_pid(pidf)
+        if pid is None:
+            warn("PID 文件失效")
+            remove_pid_file = True
+            return
         os.kill(pid, signal.SIGTERM)
         ok(f"已发送 SIGTERM 到 pid={pid}")
-    except (ProcessLookupError, ValueError):
+        remove_pid_file = True
+    except ProcessLookupError:
         warn("进程不存在")
+        remove_pid_file = True
+    except PermissionError:
+        warn(f"当前环境无权停止 pid={pid}，保留 PID 文件便于后续诊断")
     finally:
-        pidf.unlink(missing_ok=True)
+        if remove_pid_file:
+            pidf.unlink(missing_ok=True)
 
 
 @app.command()
@@ -107,21 +139,27 @@ def status() -> None:
     project = Path.cwd()
     pidf = project / _PID_FILE
     if pidf.is_file():
-        try:
-            pid = int(pidf.read_text().strip())
-            os.kill(pid, 0)
-            ok(f"进程运行中 pid={pid}")
-        except (ProcessLookupError, ValueError):
+        pid = _read_pid(pidf)
+        if pid is None:
             warn("PID 文件失效")
+        else:
+            state = _pid_state(pid)
+            if state == "running":
+                ok(f"进程运行中 pid={pid}")
+            elif state == "inaccessible":
+                warn(f"PID 文件存在但当前环境无权探测 pid={pid}")
+            else:
+                warn("PID 文件失效")
     else:
         warn("未启动")
 
     ipc = AgentdIpcClient(project / ".sop-runtime" / "agentd.sock")
+    kv("ipc_diagnose", ipc.diagnose())
     if ipc.available():
         out = ipc.health()
         kv("ipc", out)
     else:
-        warn(f"IPC socket 不存在：{ipc.socket_path}")
+        warn(f"IPC 不可用：{ipc.diagnose().get('endpoint')}")
 
 
 @app.command()

@@ -1,10 +1,11 @@
 """
 @module: routers.data_analytics
-@purpose: AI 数据分析概览（指标目录、用量、NLQ 占位）
+@purpose: AI 数据分析概览（指标目录、用量、规则兜底 NLQ）
 """
 from __future__ import annotations
 
 import csv
+import copy
 import io
 import json
 from datetime import datetime, timedelta, timezone
@@ -27,13 +28,18 @@ from sop_manager.path_config import (
     resolved_tenant_id,
 )
 from sop_manager.routers.analytics_report_core import (
+    aggregate_report_intelligence,
     analyze_metric_attribution,
     build_attribution_tasks,
+    build_decision_attribution_engine,
+    build_decision_tasks,
+    build_report_intelligence_tasks,
     generate_insight_report,
     summarize_report_intelligence,
 )
 from sop_manager.routers.auth_sql import User, current_user
 from sop_manager.routers.db_sql_compat import now, rows, table
+from sop_manager.routers.scope_guard import attach_scope, scope_matches
 from sop_manager.routers.sql_models import Issue, Requirement, Task, get_session
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -502,7 +508,7 @@ def _governance_file() -> Path:
 def _default_governance() -> dict[str, Any]:
     return {
         "scope": _data_scope(),
-        "assets": DEFAULT_DATA_ASSETS,
+        "assets": copy.deepcopy(DEFAULT_DATA_ASSETS),
         "metrics": [
             {
                 **m,
@@ -516,37 +522,88 @@ def _default_governance() -> dict[str, Any]:
             }
             for m in METRIC_CATALOG
         ],
-        "tags": DEFAULT_TAGS,
-        "quality_rules": DEFAULT_QUALITY_RULES,
-        "services": DEFAULT_DATA_SERVICES,
-        "dev_templates": DEFAULT_DATA_DEV_TEMPLATES,
+        "tags": copy.deepcopy(DEFAULT_TAGS),
+        "quality_rules": copy.deepcopy(DEFAULT_QUALITY_RULES),
+        "services": copy.deepcopy(DEFAULT_DATA_SERVICES),
+        "dev_templates": copy.deepcopy(DEFAULT_DATA_DEV_TEMPLATES),
         "dev_schedules": [],
         "updated_at": _utc_now(),
     }
 
 
-def _load_governance() -> dict[str, Any]:
+def _governance_scope_key(scope: dict[str, Any] | None = None) -> str:
+    source = scope if isinstance(scope, dict) else _data_scope()
+    return "|".join(
+        [
+            str(source.get("tenant_id") or ""),
+            str(source.get("tenant_code") or ""),
+            str(source.get("business_code") or ""),
+            str(source.get("project_id") or ""),
+            str(source.get("project_code") or ""),
+        ]
+    )
+
+
+def _empty_governance_store() -> dict[str, Any]:
+    return {"version": 2, "scoped_governance": True, "scopes": {}, "updated_at": _utc_now()}
+
+
+def _read_governance_store() -> dict[str, Any]:
     path = _governance_file()
     if not path.exists():
-        data = _default_governance()
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        return data
+        return _empty_governance_store()
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        data = {}
+        raw = {}
+    if isinstance(raw, dict) and raw.get("scoped_governance") is True and isinstance(raw.get("scopes"), dict):
+        raw.setdefault("version", 2)
+        raw.setdefault("updated_at", _utc_now())
+        return raw
+    store = _empty_governance_store()
+    if isinstance(raw, dict) and any(isinstance(raw.get(key), list) for key in ("assets", "metrics", "tags", "quality_rules", "services", "dev_templates", "dev_schedules")):
+        legacy = dict(raw)
+        legacy_scope = legacy.get("scope") if isinstance(legacy.get("scope"), dict) else _data_scope()
+        store["scopes"][_governance_scope_key(legacy_scope)] = legacy
+    return store
+
+
+def _normalize_governance(data: dict[str, Any]) -> dict[str, Any]:
     default = _default_governance()
-    for key in ("assets", "metrics", "tags", "quality_rules", "services", "dev_templates", "dev_schedules"):
+    for key in ("assets", "metrics", "tags", "quality_rules", "services", "dev_templates", "dev_schedules", "dev_runbooks"):
         if not isinstance(data.get(key), list):
-            data[key] = default[key]
-    data["scope"] = _data_scope()
+            data[key] = copy.deepcopy(default.get(key) or [])
+    attach_scope(data, overwrite=True)
+    data["updated_at"] = data.get("updated_at") or _utc_now()
     return data
 
 
+def _write_governance_store(store: dict[str, Any]) -> None:
+    store["version"] = 2
+    store["scoped_governance"] = True
+    store["updated_at"] = _utc_now()
+    _governance_file().write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_governance() -> dict[str, Any]:
+    store = _read_governance_store()
+    scopes = store.setdefault("scopes", {})
+    key = _governance_scope_key()
+    data = scopes.get(key) if isinstance(scopes.get(key), dict) else None
+    if data is None:
+        data = _default_governance()
+        scopes[key] = data
+        _write_governance_store(store)
+    return _normalize_governance(dict(data))
+
+
 def _save_governance(data: dict[str, Any]) -> dict[str, Any]:
-    data["scope"] = _data_scope()
+    store = _read_governance_store()
+    scopes = store.setdefault("scopes", {})
+    data = _normalize_governance(dict(data))
     data["updated_at"] = _utc_now()
-    _governance_file().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    scopes[_governance_scope_key()] = data
+    _write_governance_store(store)
     return data
 
 
@@ -739,7 +796,7 @@ def _read_reports(limit: int = 30, status: str = "", source: str = "", q: str = 
     out: list[dict[str, Any]] = []
     q_norm = q.strip().lower()
     for item in _read_all_reports():
-        if item.get("tenant_id") != resolved_tenant_id() or item.get("project_id") != resolved_project_id():
+        if not scope_matches(item):
             continue
         if status and str(item.get("status") or "draft") != status:
             continue
@@ -773,11 +830,7 @@ def _rewrite_reports(items: list[dict[str, Any]]) -> None:
 
 def _find_scoped_report(report_id: str) -> dict[str, Any] | None:
     for item in _read_all_reports():
-        if (
-            item.get("id") == report_id
-            and item.get("tenant_id") == resolved_tenant_id()
-            and item.get("project_id") == resolved_project_id()
-        ):
+        if item.get("id") == report_id and scope_matches(item):
             return item
     return None
 
@@ -786,11 +839,7 @@ def _replace_scoped_report(report_id: str, patch: dict[str, Any]) -> dict[str, A
     items = _read_all_reports()
     updated: dict[str, Any] | None = None
     for item in items:
-        if (
-            item.get("id") == report_id
-            and item.get("tenant_id") == resolved_tenant_id()
-            and item.get("project_id") == resolved_project_id()
-        ):
+        if item.get("id") == report_id and scope_matches(item):
             item.update(patch)
             updated = item
             break
@@ -2948,6 +2997,81 @@ class NlqIn(BaseModel):
     question: str = Field(..., min_length=2, max_length=2000)
 
 
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _metric_card(label: str, value: Any, metric: str, *, tone: str = "neutral") -> dict[str, Any]:
+    return {"label": label, "value": _safe_int(value), "metric": metric, "tone": tone}
+
+
+def _answer_nlq_with_metrics(question: str, metrics: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic metric NLQ fallback for availability and auditable behavior."""
+    q = (question or "").strip().lower()
+    tasks_by_status = metrics.get("tasks_by_status") if isinstance(metrics.get("tasks_by_status"), dict) else {}
+    issues_by_priority = metrics.get("issues_by_priority") if isinstance(metrics.get("issues_by_priority"), dict) else {}
+    requirements_total = _safe_int(metrics.get("requirements_total"))
+    tasks_total = _safe_int(metrics.get("tasks_total"))
+    issues_total = _safe_int(metrics.get("issues_total"))
+    pending = _safe_int(tasks_by_status.get("pending"))
+    in_progress = _safe_int(tasks_by_status.get("in_progress"))
+    blocked = _safe_int(tasks_by_status.get("blocked"))
+    completed = _safe_int(tasks_by_status.get("completed"))
+    p0_issues = _safe_int(issues_by_priority.get("P0") or issues_by_priority.get("p0"))
+
+    intent_rules: list[tuple[str, tuple[str, ...]]] = [
+        ("status_distribution", ("状态", "分布", "阻塞", "blocked", "进行", "in_progress", "完成", "completed", "pending")),
+        ("requirements", ("需求", "requirement", "prd")),
+        ("issues", ("问题", "缺陷", "bug", "issue", "风险", "p0")),
+        ("delivery_overview", ("概览", "总览", "overview", "项目", "交付", "整体")),
+    ]
+    matched = [intent for intent, words in intent_rules if any(word in q for word in words)]
+    if not matched:
+        matched = ["delivery_overview"]
+    if "delivery_overview" not in matched and len(matched) > 1:
+        matched.append("delivery_overview")
+
+    cards = [
+        _metric_card("需求总数", requirements_total, "requirements_total"),
+        _metric_card("任务总数", tasks_total, "tasks_total"),
+        _metric_card("问题总数", issues_total, "issues_total", tone="warning" if issues_total else "neutral"),
+        _metric_card("阻塞任务", blocked, "tasks_by_status.blocked", tone="danger" if blocked else "neutral"),
+        _metric_card("P0 问题", p0_issues, "issues_by_priority.P0", tone="danger" if p0_issues else "neutral"),
+    ]
+
+    lines: list[str] = []
+    if "delivery_overview" in matched:
+        lines.append(f"项目交付概览：需求总数：{requirements_total}，任务总数：{tasks_total}，问题总数：{issues_total}。")
+    if "status_distribution" in matched:
+        lines.append(
+            "任务状态分布："
+            f"任务总数：{tasks_total}，待处理：{pending}，进行中：{in_progress}，阻塞：{blocked}，已完成：{completed}。"
+        )
+    if "requirements" in matched and "delivery_overview" not in matched:
+        lines.append(f"需求总数：{requirements_total}。建议优先检查高优先级需求是否已经完成验收标准和任务拆解。")
+    if "issues" in matched and "delivery_overview" not in matched:
+        lines.append(f"问题总数：{issues_total}，其中 P0 问题：{p0_issues}。")
+    if blocked or p0_issues:
+        lines.append(f"风险提示：当前存在阻塞任务 {blocked} 个、P0 问题 {p0_issues} 个，建议先任务化跟进责任人和处理时限。")
+    else:
+        lines.append("风险提示：当前未发现阻塞任务或 P0 问题，可继续关注进行中任务的验收证据和完成节奏。")
+
+    confidence = 0.86 if "delivery_overview" in matched or "status_distribution" in matched else 0.72
+    return {
+        "ok": True,
+        "engine": "rules",
+        "confidence": confidence,
+        "matched_intents": matched,
+        "answer": "\n".join(lines),
+        "cards": cards,
+        "metrics_snapshot": metrics,
+        "limitations": ["规则问数基于当前指标快照回答；需要复杂归因、跨表分析或自由推理时会优先使用 LLM Gateway。"],
+    }
+
+
 class ReportIn(BaseModel):
     title: str = Field("", max_length=160)
     question: str = Field("", max_length=2000)
@@ -2985,6 +3109,33 @@ class AttributionTasksIn(BaseModel):
     priority: str = Field("P1", pattern="^P[0-3]$")
     assigned_to: str = Field("DataOps", max_length=80)
     dev_tool: str = Field("codex", max_length=80)
+
+
+class ReportAttributionBatchIn(BaseModel):
+    report_ids: list[str] = Field(default_factory=list, max_length=100)
+    only_missing: bool = False
+
+
+class ReportIntelligenceTasksIn(BaseModel):
+    preview: bool = True
+    priority: str = Field("", pattern="^(|P[0-3])$")
+    assigned_to: str = Field("DataOps", max_length=80)
+    dev_tool: str = Field("codex", max_length=80)
+
+
+class DecisionExplainIn(BaseModel):
+    question: str = Field("", max_length=1000)
+    report_ids: list[str] = Field(default_factory=list, max_length=50)
+    include_evidence: bool = True
+    max_reports: int = Field(10, ge=1, le=50)
+
+
+class DecisionTasksIn(DecisionExplainIn):
+    preview: bool = True
+    priority: str = Field("", pattern="^(|P[0-3])$")
+    assigned_to: str = Field("DataOps", max_length=80)
+    dev_tool: str = Field("codex", max_length=80)
+    max_tasks: int = Field(5, ge=1, le=10)
 
 
 class ReportNotifyIn(BaseModel):
@@ -3074,10 +3225,15 @@ def _report_action_candidates(report: dict[str, Any], body: ReportActionTasksIn)
 def analytics_nlq(body: NlqIn, db: Session = Depends(get_session)) -> dict[str, Any]:
     pid = _require_scope()
     metrics = _build_metrics(db, pid)
+    fallback = _answer_nlq_with_metrics(body.question, metrics)
     try:
         from sop_manager.routers.llm_gateway import ChatIn, Message, _provider_chain, _route_model
     except Exception as e:
-        raise HTTPException(503, "LLM Gateway 未启用") from e
+        return {
+            **fallback,
+            "fallback_reason": "llm_gateway_unavailable",
+            "provider_errors": [str(e)],
+        }
     prompt = (
         "你是项目数据分析助手。根据以下 JSON 指标摘要，用中文简洁回答用户问题；"
         "若数据不足请说明。\n\n指标："
@@ -3089,10 +3245,22 @@ def analytics_nlq(body: NlqIn, db: Session = Depends(get_session)) -> dict[str, 
     for provider in _provider_chain(model):
         try:
             out = provider.chat(ChatIn(**{**chat_in.model_dump(), "model": model}))
-            return {"ok": True, "answer": out.content, "metrics_snapshot": metrics, "model": out.model}
+            return {
+                **fallback,
+                "engine": "llm",
+                "confidence": 0.95,
+                "answer": out.content,
+                "model": out.model,
+                "fallback_answer": fallback["answer"],
+                "provider_errors": [],
+            }
         except Exception as e:
             errors.append(str(e))
-    raise HTTPException(502, f"NLQ 失败: {'; '.join(errors[:3])}")
+    return {
+        **fallback,
+        "fallback_reason": "llm_provider_failed",
+        "provider_errors": errors[:3],
+    }
 
 
 @router.get("/reports")
@@ -3194,8 +3362,6 @@ def create_analytics_report(
     answer = (body.answer or "").strip() or "\n".join(highlights)
     report = {
         "id": f"ar-{uuid4().hex[:12]}",
-        "tenant_id": resolved_tenant_id(),
-        "project_id": pid,
         "created_at": _utc_now(),
         "actor": getattr(user, "username", "") or getattr(user, "id", ""),
         "title": title,
@@ -3213,6 +3379,7 @@ def create_analytics_report(
         "published_at": "",
         "archived_at": "",
     }
+    attach_scope(report, overwrite=True)
     path = _reports_file()
     path.open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
     return {"ok": True, "report": report}
@@ -3230,8 +3397,6 @@ def create_analytics_insight_report(
     status = "published" if body.publish else "draft"
     report = {
         "id": f"ar-{uuid4().hex[:12]}",
-        "tenant_id": resolved_tenant_id(),
-        "project_id": pid,
         "created_at": _utc_now(),
         "actor": getattr(user, "username", "") or getattr(user, "id", ""),
         "title": insight["title"],
@@ -3249,8 +3414,147 @@ def create_analytics_insight_report(
         "published_at": _utc_now() if status == "published" else "",
         "archived_at": "",
     }
+    attach_scope(report, overwrite=True)
     _reports_file().open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
     return {"ok": True, "report": report, "attribution": insight["attribution"]}
+
+
+@router.get("/reports/intelligence")
+def get_reports_intelligence(_: User = Depends(current_user)) -> dict[str, Any]:
+    _require_scope()
+    reports = _read_reports(200)
+    intelligence = aggregate_report_intelligence(reports)
+    return {"ok": True, **intelligence}
+
+
+@router.get("/decision/overview")
+def analytics_decision_overview(
+    question: str = Query("", max_length=1000),
+    include_evidence: bool = Query(True),
+    max_reports: int = Query(10, ge=1, le=50),
+    _: User = Depends(current_user),
+) -> dict[str, Any]:
+    _require_scope()
+    reports = _read_reports(200)
+    packet = build_decision_attribution_engine(
+        reports,
+        question=question,
+        include_evidence=include_evidence,
+        max_reports=max_reports,
+    )
+    return {"ok": True, **packet}
+
+
+@router.post("/decision/explain")
+def analytics_decision_explain(body: DecisionExplainIn, _: User = Depends(current_user)) -> dict[str, Any]:
+    _require_scope()
+    wanted = {str(x).strip() for x in body.report_ids if str(x).strip()}
+    reports = _read_reports(200)
+    if wanted:
+        reports = [row for row in reports if str(row.get("id") or "") in wanted]
+    packet = build_decision_attribution_engine(
+        reports,
+        question=body.question,
+        include_evidence=body.include_evidence,
+        max_reports=body.max_reports,
+    )
+    return {"ok": True, "selected_report_ids": sorted(wanted), **packet}
+
+
+@router.post("/decision/tasks")
+def analytics_decision_tasks(body: DecisionTasksIn, _: User = Depends(current_user)) -> dict[str, Any]:
+    _require_scope()
+    wanted = {str(x).strip() for x in body.report_ids if str(x).strip()}
+    reports = _read_reports(200)
+    if wanted:
+        reports = [row for row in reports if str(row.get("id") or "") in wanted]
+    packet = build_decision_attribution_engine(
+        reports,
+        question=body.question,
+        include_evidence=body.include_evidence,
+        max_reports=body.max_reports,
+    )
+    candidates = build_decision_tasks(
+        packet,
+        priority=body.priority,
+        assigned_to=body.assigned_to,
+        dev_tool=body.dev_tool,
+        max_tasks=body.max_tasks,
+    )
+    if body.preview:
+        return {"ok": True, "preview": True, "items": candidates, "total": len(candidates), "decision_packet": packet}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+    created = [create_task(TaskCreate(**item)) for item in candidates]
+    return {
+        "ok": True,
+        "preview": False,
+        "items": candidates,
+        "created": created,
+        "created_count": len(created),
+        "decision_packet": packet,
+    }
+
+
+@router.post("/reports/attribution-batch")
+def refresh_reports_attribution_batch(
+    body: ReportAttributionBatchIn,
+    _: User = Depends(current_user),
+) -> dict[str, Any]:
+    _require_scope()
+    wanted = {str(x).strip() for x in body.report_ids if str(x).strip()}
+    items = _read_all_reports()
+    updated: list[dict[str, Any]] = []
+    for item in items:
+        if not scope_matches(item):
+            continue
+        if wanted and str(item.get("id") or "") not in wanted:
+            continue
+        if body.only_missing and isinstance(item.get("attribution"), dict):
+            continue
+        metrics = item.get("metrics_snapshot") if isinstance(item.get("metrics_snapshot"), dict) else {}
+        attribution = analyze_metric_attribution(metrics)
+        existing_tags = [str(x) for x in item.get("tags", []) if str(x).strip()]
+        item.update(
+            {
+                "attribution": attribution,
+                "updated_at": _utc_now(),
+                "tags": list(dict.fromkeys([*existing_tags, "归因分析", f"risk:{attribution['risk_level']}"])),
+            }
+        )
+        updated.append(item)
+    if updated:
+        _rewrite_reports(items)
+    scoped_reports = _read_reports(200)
+    intelligence = aggregate_report_intelligence(scoped_reports)
+    return {"ok": True, "updated_count": len(updated), "items": updated[:50], "intelligence": intelligence}
+
+
+@router.post("/reports/intelligence/tasks")
+def create_reports_intelligence_tasks(
+    body: ReportIntelligenceTasksIn,
+    _: User = Depends(current_user),
+) -> dict[str, Any]:
+    _require_scope()
+    reports = _read_reports(200)
+    intelligence = aggregate_report_intelligence(reports)
+    candidates = build_report_intelligence_tasks(
+        intelligence,
+        priority=body.priority,
+        assigned_to=body.assigned_to,
+        dev_tool=body.dev_tool,
+    )
+    if body.preview:
+        return {"ok": True, "preview": True, "items": candidates, "total": len(candidates), "intelligence": intelligence}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+    created = [create_task(TaskCreate(**item)) for item in candidates]
+    return {
+        "ok": True,
+        "preview": False,
+        "items": candidates,
+        "created": created,
+        "created_count": len(created),
+        "intelligence": intelligence,
+    }
 
 
 @router.post("/reports/{report_id}/attribution")
@@ -3506,11 +3810,7 @@ def delete_analytics_report(report_id: str, _: User = Depends(current_user)) -> 
     kept = [
         x
         for x in items
-        if not (
-            x.get("id") == report_id
-            and x.get("tenant_id") == resolved_tenant_id()
-            and x.get("project_id") == resolved_project_id()
-        )
+        if not (x.get("id") == report_id and scope_matches(x))
     ]
     if len(kept) == len(items):
         raise HTTPException(404, "报告不存在")
