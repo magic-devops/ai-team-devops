@@ -853,6 +853,22 @@ def test_system_pages_ops_center_contract_exposes_self_heal_guardrails():
     assert "动作验证" in ops["capabilities"]
     assert "回滚留证" in ops["capabilities"]
 
+    capability_payload = system_page_capabilities()
+    ops_capability = next(item for item in capability_payload["items"] if item["id"] == "opsCenter")
+    submodules = {item["id"]: item for item in ops_capability["submodules"]}
+    assert {"pipeline", "alerts", "rca", "runbook", "self-heal"} <= set(submodules)
+    assert submodules["alerts"]["path"] == "#/system/ops-center/alerts"
+    assert submodules["self-heal"]["capability"] == "system.ops-center.self-heal"
+
+
+def test_system_pages_experience_review_scores_modular_api_density():
+    payload = system_pages_experience_review(q="智能运维中心")
+    ops = next(item for item in payload["items"] if item["id"] == "opsCenter")
+
+    assert ops["implementation_contract"]["submodule_count"] >= 5
+    assert "密度" in ops["dimensions"]["simplicity"]["detail"]
+    assert ops["dimensions"]["simplicity"]["score"] >= 60
+
 
 def test_system_pages_settings_contract_exposes_storage_migration():
     payload = system_pages_readiness(q="设置")

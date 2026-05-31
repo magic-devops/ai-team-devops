@@ -529,6 +529,7 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "marketplace": [("catalog", "资产目录"), ("installed", "已安装资产"), ("rating", "评分反馈"), ("signature", "签名状态")],
     "notify": [("connectors", "连接器"), ("channels", "通道模板"), ("outbound", "出站消息"), ("inbound", "入站消息"), ("messages", "消息流水"), ("subscriptions", "报告订阅"), ("subscription_runs", "订阅运行中心"), ("action_conversion", "消息转任务/需求")],
     "audit": [("hash_chain", "审计哈希链"), ("events", "事件检索"), ("module_actions", "模块动作审计"), ("approvals", "动作审批"), ("export", "合规导出")],
+    "opsCenter": [("pipeline", "部署流水线"), ("alerts", "告警源治理"), ("rca", "智能根因分析"), ("runbook", "Runbook 治理"), ("self-heal", "自愈策略")],
     "systemMap": [
         ("registry", "页面注册表"),
         ("contract", "模块契约"),
@@ -657,6 +658,11 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("audit", "events"): "#/audit/events",
     ("audit", "module_actions"): "#/audit/module-actions",
     ("audit", "approvals"): "#/audit/approvals",
+    ("opsCenter", "pipeline"): "#/system/ops-center/pipeline",
+    ("opsCenter", "alerts"): "#/system/ops-center/alerts",
+    ("opsCenter", "rca"): "#/system/ops-center/rca",
+    ("opsCenter", "runbook"): "#/system/ops-center/runbook",
+    ("opsCenter", "self-heal"): "#/system/ops-center/self-heal",
     ("systemMap", "registry"): "#/system-map/registry",
     ("systemMap", "contract"): "#/system-map/contract",
     ("systemMap", "manifest"): "#/system-map/manifest",
@@ -2817,28 +2823,38 @@ def _module_experience_review_matrix() -> list[dict[str, Any]]:
         api_count = int(contract.get("api_count") or 0)
         action_count = int(contract.get("action_count") or 0)
         submodule_count = int(contract.get("submodule_count") or 0)
+        module_units = max(1, submodule_count)
+        api_density = (api_count + module_units - 1) // module_units
+        action_density = (action_count + module_units - 1) // module_units
         ai_surface_count = len(contract.get("ai_surfaces") or [])
         maturity = int(item.get("maturity") or 0)
         next_actions = [str(x) for x in item.get("next_actions") or [] if str(x).strip()]
         production = production_by_id.get(str(item.get("id"))) or {}
         production_score = float(production.get("production_score") or 0)
 
-        complexity_penalty = min(api_count * 3 + action_count * 2 + submodule_count * 4 + len(next_actions) * 2, 65)
+        complexity_penalty = min(api_density * 3 + action_density * 2 + submodule_count * 2 + len(next_actions) * 2, 65)
         maturity_bonus = 8 if maturity >= 90 else 3 if maturity >= 80 else 0
         simplicity_score = max(35, min(100, 100 - complexity_penalty + maturity_bonus))
-        if api_count <= 5 and action_count <= 6 and submodule_count <= 4:
+        if api_density <= 5 and action_density <= 6 and submodule_count <= 8:
             simplicity_score = min(100, simplicity_score + 8)
+        simplicity_recommendation = ""
+        if simplicity_score < 86:
+            simplicity_recommendation = (
+                "补齐专业子路由或模块契约，把低频操作从首屏拆出去。"
+                if submodule_count <= 1 and api_count > 8
+                else "继续收敛首屏，只保留当前子模块的高频操作。"
+            )
         simplicity = _experience_dimension(
             simplicity_score,
-            f"{api_count} API / {action_count} 动作 / {submodule_count} 子能力",
-            "" if simplicity_score >= 86 else "拆成业务子路由或分段工作区，只保留首屏高频动作。",
+            f"{api_count} API / {action_count} 动作 / {submodule_count} 子能力；密度 {api_density} API/{action_density} 动作",
+            simplicity_recommendation,
         )
 
         responsive_score = 92
-        if api_count > 8 or action_count > 10:
+        if api_density > 8 or action_density > 10:
             responsive_score -= 18
-        if submodule_count > 6:
-            responsive_score -= 10
+        if submodule_count > 8:
+            responsive_score -= 6
         if item.get("status") != "complete":
             responsive_score -= 6
         responsive = _experience_dimension(
@@ -2850,7 +2866,7 @@ def _module_experience_review_matrix() -> list[dict[str, Any]]:
         component_score = 88 if api_count >= 1 else 55
         if action_count >= 1:
             component_score += 6
-        if api_count > 10:
+        if api_density > 10:
             component_score -= 10
         componentization = _experience_dimension(
             component_score,
