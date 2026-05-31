@@ -18,4 +18,14 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("profileQuickSummary");
     expect(source).not.toContain("onSubmit={(e) => {\n                e.preventDefault();\n                if (!profileDraft.name.trim()) return;\n                saveProfile.mutate();\n              }}");
   });
+
+  it("keeps release pipeline creation in a preview-first drawer flow", () => {
+    expect(source).toContain("deploymentPipelineDrawerOpen");
+    expect(source).toContain("pipelineQuickSummary");
+    expect(source).toContain("pipelineOpenDrawer");
+    expect(source).toContain("setDeploymentPipelineDrawerOpen(true)");
+    expect(source).toContain("Switch checked={deploymentPipelineDraft.dry_run}");
+    expect(source).toContain("createDeploymentPipeline.mutate(true)");
+    expect(source).toContain("createDeploymentPipeline.mutate(false)");
+  });
 });

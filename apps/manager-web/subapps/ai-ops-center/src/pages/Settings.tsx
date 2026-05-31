@@ -3,7 +3,7 @@ import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, 
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Button, Drawer, Form, Input, Select, Space, Steps } from "antd";
+import { Button, Drawer, Form, Input, Select, Space, Steps, Switch } from "antd";
 import { Card } from "@/components/Card";
 import { api } from "@/lib/api";
 import { clearSession, getProjectId, getToken } from "@/lib/authStorage";
@@ -201,6 +201,7 @@ export function Settings() {
   const [deploymentCanaryImResult, setDeploymentCanaryImResult] = useState<any>(null);
   const [deploymentPipelineDraft, setDeploymentPipelineDraft] = useState({ package_id: "", environment: "staging", action: "preview", operator: "", dry_run: true, approval_required: true, notes: "" });
   const [deploymentPipelineDetail, setDeploymentPipelineDetail] = useState<any>(null);
+  const [deploymentPipelineDrawerOpen, setDeploymentPipelineDrawerOpen] = useState(false);
   const [deploymentPipelineExecuteDraft, setDeploymentPipelineExecuteDraft] = useState({ executor_id: "dry-run", command_id: "", stage_id: "", dry_run: true, allow_apply: false, evidence_url: "", timeout_seconds: "30", note: "" });
   const [deploymentPipelineCallbackDraft, setDeploymentPipelineCallbackDraft] = useState({ execution_id: "", status: "succeeded", external_run_id: "", timestamp: "", nonce: "", signature: "", evidence_url: "", stdout: "", stderr: "", exit_code: "0", note: "", metadata: "source=manual-callback" });
   const [deploymentPipelineRemediationDraft, setDeploymentPipelineRemediationDraft] = useState({ include_low: false, priority: "P1", assigned_to: "ReleaseOps", dev_tool: "codex", note: "" });
@@ -956,8 +957,9 @@ export function Settings() {
         approval_required: deploymentPipelineDraft.approval_required,
         notes: deploymentPipelineDraft.notes,
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, dryRun) => {
       setDeploymentPipelineDetail(data);
+      if (!dryRun) setDeploymentPipelineDrawerOpen(false);
       void qc.invalidateQueries({ queryKey: ["opsDeploymentPipelines"] });
     },
   });
@@ -2846,72 +2848,22 @@ export function Settings() {
                 </div>
                 <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
                   <div className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <select
-                        className={inputClass}
-                        value={selectedDeploymentPackageId}
-                        onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, package_id: e.target.value })}
-                      >
-                        <option value="">{t("page.settings.pipelinePackagePh")}</option>
-                        {(deploymentPackages.data?.items || []).map((item: any) => (
-                          <option key={item.id} value={item.id}>{`${item.version} / ${item.channel}`}</option>
-                        ))}
-                      </select>
-                      <select className={inputClass} value={deploymentPipelineDraft.environment} onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, environment: e.target.value })}>
-                        {["dev", "staging", "production", "rollback"].map((env) => <option key={env} value={env}>{t(`page.settings.pipelineEnvironment.${env}`, { defaultValue: env })}</option>)}
-                      </select>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <Info label={t("page.settings.deployPackage")} value={selectedDeploymentPackageId || "-"} />
+                      <Info label={t("page.settings.pipelineEnvironmentLabel", { defaultValue: "环境" })} value={t(`page.settings.pipelineEnvironment.${deploymentPipelineDraft.environment}`, { defaultValue: deploymentPipelineDraft.environment })} />
+                      <Info label={t("page.settings.pipelineActionLabel", { defaultValue: "动作" })} value={t(`page.settings.pipelineAction.${deploymentPipelineDraft.action}`, { defaultValue: deploymentPipelineDraft.action })} />
                     </div>
-                    <div className="grid gap-3 md:grid-cols-[10rem_1fr]">
-                      <select
-                        className={inputClass}
-                        value={deploymentPipelineDraft.action}
-                        onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, action: e.target.value, dry_run: e.target.value === "preview" ? true : deploymentPipelineDraft.dry_run })}
-                      >
-                        {["preview", "deploy", "rollback"].map((action) => <option key={action} value={action}>{t(`page.settings.pipelineAction.${action}`, { defaultValue: action })}</option>)}
-                      </select>
-                      <input
-                        className={inputClass}
-                        value={deploymentPipelineDraft.operator}
-                        onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, operator: e.target.value })}
-                        placeholder={t("page.settings.pipelineOperator")}
-                      />
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs font-semibold text-[var(--text)]">{t("page.settings.pipelineQuickSummary", { defaultValue: "发布草稿" })}</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">{deploymentPipelineDraft.notes || t("page.settings.pipelineNotes")}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <StatusPill tone={deploymentPipelineDraft.dry_run ? "warn" : "ok"} label={deploymentPipelineDraft.dry_run ? t("page.settings.pipelineDryRun") : t("page.settings.pipelineCreate")} />
+                        <StatusPill tone={deploymentPipelineDraft.approval_required ? "warn" : "ok"} label={deploymentPipelineDraft.approval_required ? t("page.settings.pipelineApprovalRequired") : t("page.settings.pipelineNoApproval", { defaultValue: "无需审批" })} />
+                      </div>
                     </div>
-                    <textarea
-                      className={`${inputClass} min-h-20`}
-                      value={deploymentPipelineDraft.notes}
-                      onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, notes: e.target.value })}
-                      placeholder={t("page.settings.pipelineNotes")}
-                    />
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-[var(--muted-strong)]">
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={deploymentPipelineDraft.dry_run} onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, dry_run: e.target.checked, action: e.target.checked ? "preview" : deploymentPipelineDraft.action })} />
-                        {t("page.settings.pipelineDryRun")}
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={deploymentPipelineDraft.approval_required} onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, approval_required: e.target.checked })} />
-                        {t("page.settings.pipelineApprovalRequired")}
-                      </label>
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <button
-                        type="button"
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
-                        disabled={createDeploymentPipeline.isPending || !selectedDeploymentPackageId}
-                        onClick={() => createDeploymentPipeline.mutate(true)}
-                      >
-                        <Search className="h-4 w-4" />
-                        {t("page.settings.pipelinePreview")}
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                        disabled={createDeploymentPipeline.isPending || !selectedDeploymentPackageId || deploymentPipelineDraft.action === "preview"}
-                        onClick={() => createDeploymentPipeline.mutate(false)}
-                      >
-                        <PlayCircle className="h-4 w-4" />
-                        {t("page.settings.pipelineCreate")}
-                      </button>
-                    </div>
+                    <Button block type="primary" icon={<Rocket className="h-4 w-4" />} onClick={() => setDeploymentPipelineDrawerOpen(true)}>
+                      {t("page.settings.pipelineOpenDrawer", { defaultValue: "配置发布流水线" })}
+                    </Button>
                     {createDeploymentPipeline.error ? <ErrorLine message={(createDeploymentPipeline.error as Error).message} /> : null}
                     {deploymentPipelines.error ? <ErrorLine message={(deploymentPipelines.error as Error).message} /> : null}
                   </div>
@@ -3284,6 +3236,86 @@ export function Settings() {
               <Button className="w-full" htmlType="submit" type="primary" loading={saveProfile.isPending} disabled={!profileDraft.name.trim()}>
                 {t("page.settings.profileSave")}
               </Button>
+            </Form>
+          </div>
+        </Drawer>
+        <Drawer
+          title={t("page.settings.pipelineTitle")}
+          open={deploymentPipelineDrawerOpen}
+          onClose={() => setDeploymentPipelineDrawerOpen(false)}
+          width={640}
+          destroyOnHidden
+          extra={
+            <Space>
+              <Button onClick={() => setDeploymentPipelineDrawerOpen(false)}>{t("common.cancel")}</Button>
+              <Button loading={createDeploymentPipeline.isPending} disabled={!selectedDeploymentPackageId} onClick={() => createDeploymentPipeline.mutate(true)}>
+                {t("page.settings.pipelinePreview")}
+              </Button>
+              <Button type="primary" loading={createDeploymentPipeline.isPending} disabled={!selectedDeploymentPackageId || deploymentPipelineDraft.action === "preview"} onClick={() => createDeploymentPipeline.mutate(false)}>
+                {t("page.settings.pipelineCreate")}
+              </Button>
+            </Space>
+          }
+        >
+          <div className="space-y-4">
+            <Steps
+              size="small"
+              current={deploymentPipelineDraft.action === "preview" || deploymentPipelineDraft.dry_run ? 0 : 1}
+              items={[
+                { title: t("page.settings.pipelinePreview", { defaultValue: "预览" }) },
+                { title: t("page.settings.pipelineCreate", { defaultValue: "创建" }) },
+                { title: t("page.settings.pipelineEvidence", { defaultValue: "证据" }) },
+              ]}
+            />
+            <Form layout="vertical">
+              <Form.Item label={t("page.settings.deployPackage")} required>
+                <Select
+                  value={selectedDeploymentPackageId || undefined}
+                  placeholder={t("page.settings.pipelinePackagePh")}
+                  onChange={(value) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, package_id: value })}
+                  options={(deploymentPackages.data?.items || []).map((item: any) => ({ value: item.id, label: `${item.version} / ${item.channel}` }))}
+                />
+              </Form.Item>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Form.Item label={t("page.settings.pipelineEnvironmentLabel", { defaultValue: "环境" })} required>
+                  <Select
+                    value={deploymentPipelineDraft.environment}
+                    onChange={(value) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, environment: value })}
+                    options={["dev", "staging", "production", "rollback"].map((value) => ({ value, label: t(`page.settings.pipelineEnvironment.${value}`, { defaultValue: value }) }))}
+                  />
+                </Form.Item>
+                <Form.Item label={t("page.settings.pipelineActionLabel", { defaultValue: "动作" })} required>
+                  <Select
+                    value={deploymentPipelineDraft.action}
+                    onChange={(value) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, action: value, dry_run: value === "preview" ? true : deploymentPipelineDraft.dry_run })}
+                    options={["preview", "deploy", "rollback"].map((value) => ({ value, label: t(`page.settings.pipelineAction.${value}`, { defaultValue: value }) }))}
+                  />
+                </Form.Item>
+              </div>
+              <Form.Item label={t("page.settings.pipelineOperator")}>
+                <Input value={deploymentPipelineDraft.operator} onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, operator: e.target.value })} placeholder={me.data?.username || me.data?.email || "ops-admin"} />
+              </Form.Item>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Form.Item label={t("page.settings.pipelineDryRun")}>
+                  <Switch checked={deploymentPipelineDraft.dry_run} onChange={(checked) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, dry_run: checked, action: checked ? "preview" : deploymentPipelineDraft.action })} />
+                </Form.Item>
+                <Form.Item label={t("page.settings.pipelineApprovalRequired")}>
+                  <Switch checked={deploymentPipelineDraft.approval_required} onChange={(checked) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, approval_required: checked })} />
+                </Form.Item>
+              </div>
+              <Form.Item label={t("page.settings.pipelineNotes")}>
+                <Input.TextArea rows={4} value={deploymentPipelineDraft.notes} onChange={(e) => setDeploymentPipelineDraft({ ...deploymentPipelineDraft, notes: e.target.value })} placeholder={t("page.settings.pipelineNotes")} />
+              </Form.Item>
+              {createDeploymentPipeline.error ? <ErrorLine message={(createDeploymentPipeline.error as Error).message} /> : null}
+              {deploymentPipelineDetail?.result ? <pre className="max-h-48 overflow-auto rounded-xl bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(deploymentPipelineDetail.result, null, 2)}</pre> : null}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button loading={createDeploymentPipeline.isPending} disabled={!selectedDeploymentPackageId} onClick={() => createDeploymentPipeline.mutate(true)}>
+                  {t("page.settings.pipelinePreview")}
+                </Button>
+                <Button type="primary" loading={createDeploymentPipeline.isPending} disabled={!selectedDeploymentPackageId || deploymentPipelineDraft.action === "preview"} onClick={() => createDeploymentPipeline.mutate(false)}>
+                  {t("page.settings.pipelineCreate")}
+                </Button>
+              </div>
             </Form>
           </div>
         </Drawer>
