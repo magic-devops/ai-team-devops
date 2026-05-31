@@ -37,7 +37,7 @@
   - 输出简洁度、自适配、成熟组件、权限管控、AI 可改造性、商业化六个维度。
   - SystemMap 详情区改为“体验治理 / 生产就绪 / 完整度”分段视图，默认先看体验治理，减少长页面堆叠。
   - 体验治理支持预览/生成 source=`system_page_experience` 治理任务，按 `source_report_id=experience:{module_id}` 幂等去重，并进入治理任务运营看板。
-  - 体验治理新增优先处理队列和 AI 改造包：自动把 `complex/watch` 模块按体验分排序，展示最低维度、首条改造建议、移动端风险、权限缺口、AI 可改缺口、API/任务 API 和 Agent 字段；单模块可直接聚焦、预览或生成体验治理任务，避免在长表格里手工筛选。
+  - 体验治理新增优先处理队列和 AI 改造包，并抽离为 `SystemExperiencePriorityPanel` 独立模块：自动把 `complex/watch` 模块按体验分排序，展示最低维度、首条改造建议、移动端风险、权限缺口、AI 可改缺口、API/任务 API 和 Agent 字段；单模块可直接聚焦、预览或生成体验治理任务，避免在长表格里手工筛选，也避免继续膨胀 `SystemMap.tsx`。
 - Worker `rag.warmup` 从 noop 改为真实调用 RAG health/search，可选 index docs；Redis 消费增加重试和 DLQ。
 - Vite chunk 调整：把 `@antv` 和 `@ant-design/plots/charts/graphs` 合并到 `visualization-vendor`，降低 AntV/AntD 循环 chunk 风险。
 

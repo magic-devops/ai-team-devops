@@ -6,6 +6,7 @@ const root = resolve(__dirname, "..");
 
 describe("SystemMap readiness task generation", () => {
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
+  const experiencePrioritySource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/SystemExperiencePriorityPanel.tsx"), "utf8");
   const apiSource = readFileSync(resolve(root, "src/lib/api.ts"), "utf8");
   const zhSource = readFileSync(resolve(root, "src/i18n/zh-CN.json"), "utf8");
 
@@ -32,10 +33,14 @@ describe("SystemMap readiness task generation", () => {
     expect(systemMapSource).toContain("api.systemPagesExperienceTasks");
     expect(systemMapSource).toContain("readinessDetailView");
     expect(systemMapSource).toContain("experienceColumns");
-    expect(systemMapSource).toContain("experiencePriorityQueue");
-    expect(systemMapSource).toContain("experienceAiChangePack");
+    expect(systemMapSource).toContain("SystemExperiencePriorityPanel");
     expect(systemMapSource).toContain("focusedExperienceTasks");
-    expect(systemMapSource).toContain("weakestExperienceDimension");
+    expect(experiencePrioritySource).toContain("export function SystemExperiencePriorityPanel");
+    expect(experiencePrioritySource).toContain("experiencePriorityQueue");
+    expect(experiencePrioritySource).toContain("experienceAiChangePack");
+    expect(experiencePrioritySource).toContain("weakestExperienceDimension");
+    expect(experiencePrioritySource).toContain("onPreviewModuleTask");
+    expect(experiencePrioritySource).toContain("onCreateModuleTask");
   });
 
   it("provides product controls for previewing and creating readiness tasks", () => {

@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
 import { useCapabilities } from "@/lib/capabilities";
 import { IsolationSourceScanPanel } from "./system/IsolationSourceScanPanel";
+import { SystemExperiencePriorityPanel } from "./system/SystemExperiencePriorityPanel";
 import { SystemGovernanceTasksPanel } from "./system/SystemGovernanceTasksPanel";
 
 type ViewMode = "react" | "legacy" | "all";
@@ -36,12 +37,6 @@ function StatusBadge({ status }: { status: string }) {
           ? "bg-sky-500/10 text-sky-700 dark:text-sky-200"
           : "bg-amber-500/10 text-amber-700 dark:text-amber-200";
   return <span className={`inline-flex h-6 w-fit items-center rounded-full px-2.5 text-xs font-medium ${cls}`}>{status}</span>;
-}
-
-function weakestExperienceDimension(item: any): [string, any] | null {
-  const entries = Object.entries(item?.dimensions ?? {}) as Array<[string, any]>;
-  if (!entries.length) return null;
-  return entries.sort((a, b) => Number(a[1]?.score ?? 100) - Number(b[1]?.score ?? 100))[0] ?? null;
 }
 
 export function SystemMap() {
@@ -348,10 +343,6 @@ export function SystemMap() {
   }, [capabilitiesQ.data, domain, q.data]);
   const readinessRows = readinessQ.data?.items ?? [];
   const experienceRows = experienceReviewQ.data?.items ?? [];
-  const topExperienceIssues = useMemo(
-    () => experienceRows.filter((item: any) => item.status !== "simple").slice(0, 3),
-    [experienceRows],
-  );
   const productionRows = productionReadinessQ.data?.items ?? [];
   const currentRole = caps.role || String(me.data?.role || "viewer");
   const canWriteSystemPages = caps.can("governance.system-map", "write") || caps.can("system.pages", "write");
@@ -899,80 +890,17 @@ export function SystemMap() {
                   ) : null}
                 </div>
               ) : null}
-              <div className="experiencePriorityQueue mb-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_18rem]">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.experiencePriorityTitle")}</p>
-                      <p className="mt-1 text-xs text-[var(--muted)]">{t("page.systemMap.experiencePriorityHint")}</p>
-                    </div>
-                    <Tag color="blue">{topExperienceIssues.length} focus</Tag>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-3">
-                    {topExperienceIssues.map((item: any) => {
-                      const weak = weakestExperienceDimension(item);
-                      return (
-                        <article key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <a href={item.path} className="line-clamp-1 text-sm font-semibold text-[var(--text)] hover:text-[var(--brand)]">{item.name}</a>
-                              <p className="mt-1 truncate font-mono text-[11px] text-[var(--muted)]">{item.id} · {domainLabel(item.domain)}</p>
-                            </div>
-                            <Tag color={item.status === "complex" ? "red" : "gold"}>{t(`page.systemMap.experienceStatusValue.${item.status}`)}</Tag>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                            <Info label={t("page.systemMap.experienceScore")} value={String(item.experience_score ?? "-")} />
-                            <Info
-                              label={t("page.systemMap.experienceWeakestDimension")}
-                              value={weak ? `${t(`page.systemMap.experienceDimension.${weak[0]}`)} ${weak[1]?.score ?? "-"}` : "-"}
-                            />
-                          </div>
-                          <p className="mt-3 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{item.recommendations?.[0] || t("page.systemMap.noReadinessGaps")}</p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button size="small" onClick={() => focusExperienceModule(item)}>
-                              {t("page.systemMap.focusExperienceModule")}
-                            </Button>
-                            <Button size="small" loading={focusedExperienceTasks.isPending} onClick={() => focusedExperienceTasks.mutate({ item, dryRun: true })}>
-                              {t("page.systemMap.previewModuleExperienceTask")}
-                            </Button>
-                            <Button
-                              size="small"
-                              type="primary"
-                              loading={focusedExperienceTasks.isPending}
-                              disabled={!canWriteSystemPages}
-                              title={!canWriteSystemPages ? t("capability.denied") : undefined}
-                              onClick={() => focusedExperienceTasks.mutate({ item, dryRun: false })}
-                            >
-                              {t("page.systemMap.createModuleExperienceTask")}
-                            </Button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                    {!topExperienceIssues.length ? (
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm text-[var(--muted)] md:col-span-3">
-                        {t("page.systemMap.noExperienceRows")}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="experienceAiChangePack rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.experienceAiChangePack")}</p>
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{experienceReviewQ.data?.agent_consumption?.purpose}</p>
-                  <div className="mt-3 space-y-2">
-                    <Info label="API" value={experienceReviewQ.data?.agent_consumption?.api ?? "/api/v1/system/pages/experience-review"} />
-                    <Info label={t("page.systemMap.taskApi")} value={experienceReviewQ.data?.agent_consumption?.task_api ?? "/api/v1/system/pages/experience-review/tasks"} />
-                    <Info label={t("page.systemMap.experienceMobileRisk")} value={String(experienceReviewQ.data?.summary?.mobile_risk ?? 0)} />
-                    <Info label={t("page.systemMap.experiencePermissionGap")} value={String(experienceReviewQ.data?.summary?.permission_gap ?? 0)} />
-                    <Info label={t("page.systemMap.experienceAiEditGap")} value={String(experienceReviewQ.data?.summary?.ai_edit_gap ?? 0)} />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {(experienceReviewQ.data?.agent_consumption?.fields ?? []).slice(0, 5).map((field: string) => (
-                      <span key={field} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 font-mono text-[11px] text-[var(--muted-strong)]">{field}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <SystemExperiencePriorityPanel
+                rows={experienceRows}
+                agentConsumption={experienceReviewQ.data?.agent_consumption}
+                summary={experienceReviewQ.data?.summary}
+                domainLabel={domainLabel}
+                canWrite={canWriteSystemPages}
+                taskPending={focusedExperienceTasks.isPending}
+                onFocusModule={focusExperienceModule}
+                onPreviewModuleTask={(item) => focusedExperienceTasks.mutate({ item, dryRun: true })}
+                onCreateModuleTask={(item) => focusedExperienceTasks.mutate({ item, dryRun: false })}
+              />
               {experienceReviewQ.isError ? <ErrorBlock message={(experienceReviewQ.error as Error).message} /> : null}
               <Table
                 rowKey="id"
