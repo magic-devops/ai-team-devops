@@ -800,6 +800,35 @@ def test_system_pages_a2a_contract_exposes_agent_run_traceability():
     assert "进度回写" in a2a["capabilities"]
 
 
+def test_system_pages_a2a_focused_routes_expose_operational_submodules():
+    payload = system_page_capabilities()
+    registry = next(item for item in payload["items"] if item["id"] == "a2aRegistry")
+    dispatch = next(item for item in payload["items"] if item["id"] == "a2aDispatch")
+
+    registry_submodules = {item["id"]: item for item in registry["submodules"]}
+    dispatch_submodules = {item["id"]: item for item in dispatch["submodules"]}
+
+    assert {"agent_directory", "credential_rotation", "heartbeat", "trust_policy", "lease_flow", "progress_sync"} <= set(registry_submodules)
+    assert registry_submodules["credential_rotation"]["path"] == "#/ecosystem/a2a/registry"
+    assert registry_submodules["trust_policy"]["capability"] == "ecosystem.a2a.registry.trust_policy"
+    assert {"dispatch_queue", "packet_preview", "retry", "reassign", "lease_ops", "evidence_sync"} <= set(dispatch_submodules)
+    assert dispatch_submodules["packet_preview"]["path"] == "#/ecosystem/a2a/dispatch"
+    assert dispatch_submodules["evidence_sync"]["path"] == "#/ecosystem/a2a/evidence"
+
+
+def test_system_pages_experience_review_scores_a2a_focused_route_density():
+    payload = system_pages_experience_review(q="A2A")
+    registry = next(item for item in payload["items"] if item["id"] == "a2aRegistry")
+    dispatch = next(item for item in payload["items"] if item["id"] == "a2aDispatch")
+
+    assert registry["implementation_contract"]["submodule_count"] >= 6
+    assert dispatch["implementation_contract"]["submodule_count"] >= 6
+    assert "密度" in registry["dimensions"]["simplicity"]["detail"]
+    assert "密度" in dispatch["dimensions"]["simplicity"]["detail"]
+    assert registry["status"] == "simple"
+    assert dispatch["status"] == "simple"
+
+
 def test_system_pages_llm_gateway_contract_exposes_production_controls():
     payload = system_pages_readiness(q="模型网关")
 
