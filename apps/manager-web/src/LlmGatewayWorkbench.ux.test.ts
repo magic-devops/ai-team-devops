@@ -34,6 +34,12 @@ describe("LlmGatewayWorkbench UX contract", () => {
     expect(source).toContain("上报 Provider 健康");
     expect(source).toContain("新建模型路由");
     expect(source).toContain("新建限流策略");
+    expect(source).toContain("发起调用决策");
+    expect(source).toContain("记录模型调用");
+    expect(source).toContain("运行成本归因");
+    expect(source).toContain("运行模型评测");
+    expect(source).toContain("发起 Prompt 审计");
     expect(source).not.toContain("setShowForm");
+    expect(source).not.toContain("className=\"input-base");
   });
 });

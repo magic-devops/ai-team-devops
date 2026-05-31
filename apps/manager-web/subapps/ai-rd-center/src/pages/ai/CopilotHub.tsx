@@ -21,10 +21,17 @@ const DOMAIN_I18N: Record<string, string> = {
   "tool-plan": "nav.copilotToolPlan",
 };
 
+const DOMAIN_DESC: Record<string, string> = {
+  chat: "持续会话、项目上下文注入、会话记录和模块 AI 追问。",
+  commands: "统一检索导航、运营动作和 AI 命令，适合快速到达与执行。",
+  "tool-plan": "把自然语言目标转成工具调用计划，再预览或生成任务。",
+};
+
 export function CopilotHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
   const hubQ = useQuery({ queryKey: ["copilotHub"], queryFn: api.copilotHub, enabled: authed });
+  const commandsQ = useQuery({ queryKey: ["copilotHubCommands"], queryFn: () => api.copilotCommands("", 100), enabled: authed });
 
   if (!authed) return <NeedLogin />;
   if (hubQ.isLoading) return <LoadingBlock />;
@@ -47,7 +54,7 @@ export function CopilotHub() {
             >
               {t("page.copilot.openChat")}
             </a>
-            <RefreshButton onClick={() => void hubQ.refetch()} pending={hubQ.isFetching} />
+              <RefreshButton onClick={() => void hubQ.refetch()} pending={hubQ.isFetching} />
           </>
         }
         metrics={
@@ -55,13 +62,15 @@ export function CopilotHub() {
             items={[
               { label: t("page.copilot.hubSessions"), value: summary.sessions ?? 0 },
               { label: t("page.copilot.hubSkills"), value: summary.skills ?? 0 },
+              { label: t("page.copilot.hubCommands", { defaultValue: "命令数" }), value: commandsQ.data?.total ?? 0 },
+              { label: t("page.copilot.hubRecent", { defaultValue: "最近会话" }), value: recent.length },
             ]}
           />
         }
       />
       <Card title={t("page.copilot.domainsTitle")}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {domains.map((domain: { id: string; path: string }) => {
+          {domains.map((domain: { id: string; path: string; description?: string; primary_action?: string }) => {
             const Icon = DOMAIN_ICONS[domain.id] ?? Bot;
             const labelKey = DOMAIN_I18N[domain.id];
             return (
@@ -78,7 +87,9 @@ export function CopilotHub() {
                     {labelKey ? t(labelKey) : domain.id}
                     <ArrowRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
                   </span>
-                  <span className="mt-0.5 block text-xs text-[var(--muted)]">{domain.path}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">{domain.description || DOMAIN_DESC[domain.id] || domain.path}</span>
+                  {domain.primary_action ? <span className="mt-2 inline-flex rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--muted)]">{domain.primary_action}</span> : null}
+                  <span className="mt-2 block font-mono text-[11px] text-[var(--muted)]">{domain.path}</span>
                 </span>
               </a>
             );

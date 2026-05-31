@@ -33,6 +33,54 @@ function badgeClass(level: string) {
 const DEFAULT_ROUTE_FORM = { name: "", task_type: "general", model_id: "", priority: 0, fallback_model_id: "", enabled: true };
 const DEFAULT_DECISION_FORM = { task_type: "code", estimated_prompt_tokens: 4000, estimated_completion_tokens: 1200, required_quality: "balanced", allow_fallback: true };
 const DEFAULT_THROTTLE_FORM = { model_id: "", rpm_limit: 60, tpm_limit: 100000, enabled: true };
+const DEFAULT_USAGE_FORM = { model_id: "", prompt_tokens: 1000, completion_tokens: 500, cost_usd: 0.01, latency_ms: 800, task_type: "general" };
+const DEFAULT_ATTRIBUTION_FORM = { min_cost_usd: 0, dry_run: true, create_tasks: false, assigned_to: "AI Platform", dev_tool: "codex", note: "" };
+const DEFAULT_EVAL_FORM = {
+  model_ids: "gpt-5-mini, claude-sonnet",
+  min_score: 75,
+  dry_run: true,
+  create_tasks: false,
+  assigned_to: "AI Platform",
+  dev_tool: "codex",
+  note: "",
+  cases_json: JSON.stringify([
+    {
+      id: "code-review",
+      name: "代码评审输出",
+      task_type: "code",
+      prompt: "请评审一段服务端代码，输出安全、结构化、可执行的修改建议。",
+      expected_keywords: ["安全", "结构化", "建议"],
+      completion_tokens: 700,
+      latency_slo_ms: 3000,
+      budget_usd: 0.05,
+      weight: 1,
+    },
+    {
+      id: "ops-analysis",
+      name: "运维根因分析",
+      task_type: "analysis",
+      prompt: "根据告警、Trace 和部署记录分析根因，并给出下一步处置。",
+      expected_keywords: ["根因", "证据", "处置"],
+      completion_tokens: 900,
+      latency_slo_ms: 4000,
+      budget_usd: 0.08,
+      weight: 1.2,
+    },
+  ], null, 2),
+  actual_outputs_json: "{}",
+};
+const DEFAULT_AUDIT_FORM = {
+  prompt: "请审计这个模型调用 Prompt 是否存在敏感信息、越权指令或上下文过长风险。",
+  task_type: "code",
+  model_id: "gpt-5",
+  user_role: "agent",
+  max_prompt_tokens: 8000,
+  allow_pii: false,
+  allow_secrets: false,
+  actions: ["create_task"],
+  assigned_to: "AI Platform",
+  dev_tool: "codex",
+};
 const DEFAULT_POLICY_FORM = {
   enabled: true,
   daily_budget_usd: 100,
@@ -51,11 +99,21 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   const [policyAntForm] = Form.useForm();
   const [providerHealthForm] = Form.useForm();
   const [throttleForm] = Form.useForm();
+  const [decisionForm] = Form.useForm();
+  const [usageAntForm] = Form.useForm();
+  const [attributionAntForm] = Form.useForm();
+  const [evalAntForm] = Form.useForm();
+  const [auditAntForm] = Form.useForm();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [showRouteDrawer, setShowRouteDrawer] = useState(false);
   const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
   const [showProviderDrawer, setShowProviderDrawer] = useState(false);
   const [showThrottleDrawer, setShowThrottleDrawer] = useState(false);
+  const [showDecisionDrawer, setShowDecisionDrawer] = useState(false);
+  const [showUsageDrawer, setShowUsageDrawer] = useState(false);
+  const [showAttributionDrawer, setShowAttributionDrawer] = useState(false);
+  const [showEvalDrawer, setShowEvalDrawer] = useState(false);
+  const [showAuditDrawer, setShowAuditDrawer] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [taskResult, setTaskResult] = useState<any>(null);
   const [decisionResult, setDecisionResult] = useState<any>(null);
@@ -70,54 +128,10 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   const [rForm, setRForm] = useState(DEFAULT_ROUTE_FORM);
   const [dForm, setDForm] = useState(DEFAULT_DECISION_FORM);
   const [tForm, setTForm] = useState(DEFAULT_THROTTLE_FORM);
-  const [usageForm, setUsageForm] = useState({ model_id: "", prompt_tokens: 1000, completion_tokens: 500, cost_usd: 0.01, latency_ms: 800, task_type: "general" });
-  const [attributionForm, setAttributionForm] = useState({ min_cost_usd: 0, dry_run: true, create_tasks: false, assigned_to: "AI Platform", dev_tool: "codex", note: "" });
-  const [evalForm, setEvalForm] = useState({
-    model_ids: "gpt-5-mini, claude-sonnet",
-    min_score: 75,
-    dry_run: true,
-    create_tasks: false,
-    assigned_to: "AI Platform",
-    dev_tool: "codex",
-    note: "",
-    cases_json: JSON.stringify([
-      {
-        id: "code-review",
-        name: "代码评审输出",
-        task_type: "code",
-        prompt: "请评审一段服务端代码，输出安全、结构化、可执行的修改建议。",
-        expected_keywords: ["安全", "结构化", "建议"],
-        completion_tokens: 700,
-        latency_slo_ms: 3000,
-        budget_usd: 0.05,
-        weight: 1,
-      },
-      {
-        id: "ops-analysis",
-        name: "运维根因分析",
-        task_type: "analysis",
-        prompt: "根据告警、Trace 和部署记录分析根因，并给出下一步处置。",
-        expected_keywords: ["根因", "证据", "处置"],
-        completion_tokens: 900,
-        latency_slo_ms: 4000,
-        budget_usd: 0.08,
-        weight: 1.2,
-      },
-    ], null, 2),
-    actual_outputs_json: "{}",
-  });
-  const [auditForm, setAuditForm] = useState({
-    prompt: "请审计这个模型调用 Prompt 是否存在敏感信息、越权指令或上下文过长风险。",
-    task_type: "code",
-    model_id: "gpt-5",
-    user_role: "agent",
-    max_prompt_tokens: 8000,
-    allow_pii: false,
-    allow_secrets: false,
-    actions: ["create_task"],
-    assigned_to: "AI Platform",
-    dev_tool: "codex",
-  });
+  const [usageForm, setUsageForm] = useState(DEFAULT_USAGE_FORM);
+  const [attributionForm, setAttributionForm] = useState(DEFAULT_ATTRIBUTION_FORM);
+  const [evalForm, setEvalForm] = useState(DEFAULT_EVAL_FORM);
+  const [auditForm, setAuditForm] = useState(DEFAULT_AUDIT_FORM);
   const [policyForm, setPolicyForm] = useState(DEFAULT_POLICY_FORM);
   const [providerForm, setProviderForm] = useState(DEFAULT_PROVIDER_HEALTH_FORM);
 
@@ -169,12 +183,20 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     },
   });
   const decision = useMutation({
-    mutationFn: () => api.llmDecision(dForm),
-    onSuccess: (data) => setDecisionResult(data),
+    mutationFn: (draft: typeof DEFAULT_DECISION_FORM = dForm) => api.llmDecision(draft),
+    onSuccess: (data, draft = dForm) => {
+      setDForm(draft);
+      setDecisionResult(data);
+      setShowDecisionDrawer(false);
+    },
   });
   const policyEvaluate = useMutation({
-    mutationFn: () => api.llmPolicyEvaluate(dForm),
-    onSuccess: (data) => setPolicyDecisionResult(data),
+    mutationFn: (draft: typeof DEFAULT_DECISION_FORM = dForm) => api.llmPolicyEvaluate(draft),
+    onSuccess: (data, draft = dForm) => {
+      setDForm(draft);
+      setPolicyDecisionResult(data);
+      setShowDecisionDrawer(false);
+    },
   });
   const updatePolicy = useMutation({
     mutationFn: (draft: typeof DEFAULT_POLICY_FORM = policyForm) => api.llmGatewayPolicyUpdate(draft),
@@ -204,63 +226,69 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     onSuccess: (data) => setCostAnomalyResult(data),
   });
   const costAttribution = useMutation({
-    mutationFn: () => api.llmCostAttributionRun({
-      min_cost_usd: attributionForm.min_cost_usd,
-      dry_run: attributionForm.dry_run,
+    mutationFn: (draft: typeof DEFAULT_ATTRIBUTION_FORM = attributionForm) => api.llmCostAttributionRun({
+      min_cost_usd: draft.min_cost_usd,
+      dry_run: draft.dry_run,
       persist: true,
-      create_tasks: attributionForm.create_tasks,
-      assigned_to: attributionForm.assigned_to,
-      dev_tool: attributionForm.dev_tool,
-      note: attributionForm.note,
+      create_tasks: draft.create_tasks,
+      assigned_to: draft.assigned_to,
+      dev_tool: draft.dev_tool,
+      note: draft.note,
     }),
-    onSuccess: (data) => {
+    onSuccess: (data, draft = attributionForm) => {
+      setAttributionForm(draft);
       setCostAttributionResult(data);
-      if (!attributionForm.dry_run) {
+      setShowAttributionDrawer(false);
+      if (!draft.dry_run) {
         void qc.invalidateQueries({ queryKey: ["llmCostAttributionRuns"] });
       }
     },
   });
   const modelEval = useMutation({
-    mutationFn: () => {
+    mutationFn: (draft: typeof DEFAULT_EVAL_FORM = evalForm) => {
       let cases: any[] = [];
       let actualOutputs: Record<string, unknown> = {};
       try {
-        const parsed = JSON.parse(evalForm.cases_json || "[]");
+        const parsed = JSON.parse(draft.cases_json || "[]");
         cases = Array.isArray(parsed) ? parsed : [];
       } catch {
         cases = [];
       }
       try {
-        const parsed = JSON.parse(evalForm.actual_outputs_json || "{}");
+        const parsed = JSON.parse(draft.actual_outputs_json || "{}");
         actualOutputs = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
       } catch {
         actualOutputs = {};
       }
       return api.llmModelEvalRun({
-        model_ids: evalForm.model_ids.split(",").map((item) => item.trim()).filter(Boolean),
+        model_ids: draft.model_ids.split(",").map((item) => item.trim()).filter(Boolean),
         cases,
         actual_outputs: actualOutputs,
-        min_score: evalForm.min_score,
-        dry_run: evalForm.dry_run,
+        min_score: draft.min_score,
+        dry_run: draft.dry_run,
         persist: true,
-        create_tasks: evalForm.create_tasks,
-        assigned_to: evalForm.assigned_to,
-        dev_tool: evalForm.dev_tool,
-        note: evalForm.note,
+        create_tasks: draft.create_tasks,
+        assigned_to: draft.assigned_to,
+        dev_tool: draft.dev_tool,
+        note: draft.note,
       });
     },
-    onSuccess: (data) => {
+    onSuccess: (data, draft = evalForm) => {
+      setEvalForm(draft);
       setModelEvalResult(data);
-      if (!evalForm.dry_run) {
+      setShowEvalDrawer(false);
+      if (!draft.dry_run) {
         void qc.invalidateQueries({ queryKey: ["llmModelEvalRuns"] });
       }
     },
   });
   const promptAudit = useMutation({
-    mutationFn: (dryRun: boolean) => api.llmPromptAuditRun({ ...auditForm, dry_run: dryRun, persist: true }),
-    onSuccess: (data, dryRun) => {
+    mutationFn: ({ draft, dryRun }: { draft: typeof DEFAULT_AUDIT_FORM; dryRun: boolean }) => api.llmPromptAuditRun({ ...draft, dry_run: dryRun, persist: true }),
+    onSuccess: (data, variables) => {
+      setAuditForm(variables.draft);
       setPromptAuditResult(data);
-      if (!dryRun) {
+      setShowAuditDrawer(false);
+      if (!variables.dryRun) {
         void qc.invalidateQueries({ queryKey: ["llmPromptAuditRuns"] });
       }
     },
@@ -283,8 +311,10 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     },
   });
   const recordCost = useMutation({
-    mutationFn: () => api.llmRecordCost(usageForm),
-    onSuccess: () => {
+    mutationFn: (draft: typeof DEFAULT_USAGE_FORM = usageForm) => api.llmRecordCost(draft),
+    onSuccess: (_, draft = usageForm) => {
+      setUsageForm(draft);
+      setShowUsageDrawer(false);
       void qc.invalidateQueries({ queryKey: ["llmCostStats"] });
       void qc.invalidateQueries({ queryKey: ["llmCostAttributionRuns"] });
       void qc.invalidateQueries({ queryKey: ["llmGatewaySummary"] });
@@ -455,6 +485,11 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
             setTab(value as Tab);
             setShowRouteDrawer(false);
             setShowThrottleDrawer(false);
+            setShowDecisionDrawer(false);
+            setShowUsageDrawer(false);
+            setShowAttributionDrawer(false);
+            setShowEvalDrawer(false);
+            setShowAuditDrawer(false);
           }}
           options={tabs.map((item) => ({
             label: item.key === "routes" ? `${item.label} (${routes.length})` : item.label,
@@ -671,30 +706,37 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
 
       {tab === "decision" && (
         <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-          <WorkbenchPanel title="调用前路由决策">
-            <div className="space-y-3">
-              <input className="input-base w-full" placeholder="任务类型" value={dForm.task_type} onChange={(event) => setDForm((form) => ({ ...form, task_type: event.target.value }))} />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input className="input-base" type="number" placeholder="预计 Prompt tokens" value={dForm.estimated_prompt_tokens} onChange={(event) => setDForm((form) => ({ ...form, estimated_prompt_tokens: Number(event.target.value) }))} />
-                <input className="input-base" type="number" placeholder="预计 Completion tokens" value={dForm.estimated_completion_tokens} onChange={(event) => setDForm((form) => ({ ...form, estimated_completion_tokens: Number(event.target.value) }))} />
+          <WorkbenchPanel title="调用前路由决策" actions={
+            <Button
+              type="primary"
+              onClick={() => {
+                decisionForm.setFieldsValue(dForm);
+                setShowDecisionDrawer(true);
+              }}
+            >
+              发起决策
+            </Button>
+          }>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">任务类型</p>
+                <p className="mt-1 font-mono text-sm font-semibold">{dForm.task_type || "general"}</p>
               </div>
-              <select className="input-base w-full" value={dForm.required_quality} onChange={(event) => setDForm((form) => ({ ...form, required_quality: event.target.value }))}>
-                <option value="fast">fast</option>
-                <option value="balanced">balanced</option>
-                <option value="high">high</option>
-              </select>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={dForm.allow_fallback} onChange={(event) => setDForm((form) => ({ ...form, allow_fallback: event.target.checked }))} />
-                允许 fallback
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button onClick={() => decision.mutate()} disabled={decision.isPending} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm disabled:opacity-50">
-                  {decision.isPending ? "决策中..." : "基础决策"}
-                </button>
-                <button onClick={() => policyEvaluate.mutate()} disabled={policyEvaluate.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                  {policyEvaluate.isPending ? "评估中..." : "策略评估"}
-                </button>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">质量策略</p>
+                <p className="mt-1 text-sm font-semibold">{dForm.required_quality} · fallback {dForm.allow_fallback ? "允许" : "关闭"}</p>
               </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">预计 Prompt</p>
+                <p className="mt-1 text-xl font-semibold">{dForm.estimated_prompt_tokens}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">预计 Completion</p>
+                <p className="mt-1 text-xl font-semibold">{dForm.estimated_completion_tokens}</p>
+              </div>
+            </div>
+            <div className="mt-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
+              决策会同时参考路由规则、Provider 健康、预算策略、限流和 fallback 配置；策略评估适合上线前拦截，基础决策适合调试模型选择。
             </div>
           </WorkbenchPanel>
 
@@ -822,18 +864,20 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       )}
 
       {tab === "cost" && (
-        <WorkbenchPanel title="成本统计" actions={<RefreshButton onClick={() => void costQ.refetch()} pending={costQ.isFetching} />}>
-          <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-            <p className="mb-3 text-sm font-semibold">记录一次模型调用</p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <input className="input-base" placeholder="模型 ID" value={usageForm.model_id} onChange={(event) => setUsageForm((form) => ({ ...form, model_id: event.target.value }))} />
-              <input className="input-base" type="number" placeholder="Prompt tokens" value={usageForm.prompt_tokens} onChange={(event) => setUsageForm((form) => ({ ...form, prompt_tokens: Number(event.target.value) }))} />
-              <input className="input-base" type="number" placeholder="Completion tokens" value={usageForm.completion_tokens} onChange={(event) => setUsageForm((form) => ({ ...form, completion_tokens: Number(event.target.value) }))} />
-              <input className="input-base" type="number" step="0.001" placeholder="费用" value={usageForm.cost_usd} onChange={(event) => setUsageForm((form) => ({ ...form, cost_usd: Number(event.target.value) }))} />
-              <input className="input-base" type="number" placeholder="延迟 ms" value={usageForm.latency_ms} onChange={(event) => setUsageForm((form) => ({ ...form, latency_ms: Number(event.target.value) }))} />
-              <button onClick={() => recordCost.mutate()} disabled={!usageForm.model_id} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">记录调用</button>
-            </div>
-          </div>
+        <WorkbenchPanel title="成本统计" actions={
+          <Space wrap>
+            <RefreshButton onClick={() => void costQ.refetch()} pending={costQ.isFetching} />
+            <Button
+              type="primary"
+              onClick={() => {
+                usageAntForm.setFieldsValue(usageForm);
+                setShowUsageDrawer(true);
+              }}
+            >
+              记录调用
+            </Button>
+          </Space>
+        }>
           <div className="grid gap-4 sm:grid-cols-3 mb-4">
             {[{ label: "总费用($)", value: costQ.data?.total_cost_usd ?? 0 }, { label: "总 Token", value: costQ.data?.total_tokens ?? 0 }, { label: "统计周期", value: "7d" }].map((item) => (
               <div key={item.label} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-center">
@@ -841,6 +885,9 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
                 <p className="mt-1 text-xs text-[var(--muted)]">{item.label}</p>
               </div>
             ))}
+          </div>
+          <div className="mb-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
+            最近记录模板：{usageForm.model_id || "未选择模型"} · {usageForm.task_type} · {usageForm.prompt_tokens + usageForm.completion_tokens} tokens · ${usageForm.cost_usd}。
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
             {(costQ.data?.breakdown ?? []).length === 0 ? <p className="py-8 text-center text-sm text-[var(--muted)]">暂无成本数据，模型调用后将在此显示</p> : null}
@@ -857,23 +904,34 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       {tab === "attribution" && (
         <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
           <WorkbenchPanel title="跨 Provider 成本归因" actions={
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setAttributionForm((form) => ({ ...form, dry_run: true, create_tasks: false }))} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">预览模式</button>
-              <button onClick={() => setAttributionForm((form) => ({ ...form, dry_run: false }))} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">落库模式</button>
-              <button onClick={() => costAttribution.mutate()} disabled={costAttribution.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
-                {costAttribution.isPending ? "分析中..." : attributionForm.dry_run ? "运行归因预览" : "执行归因"}
-              </button>
-            </div>
+            <Button
+              type="primary"
+              loading={costAttribution.isPending}
+              onClick={() => {
+                attributionAntForm.setFieldsValue(attributionForm);
+                setShowAttributionDrawer(true);
+              }}
+            >
+              运行归因
+            </Button>
           }>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input className="input-base" type="number" step="0.001" placeholder="最小成本过滤 USD" value={attributionForm.min_cost_usd} onChange={(event) => setAttributionForm((form) => ({ ...form, min_cost_usd: Number(event.target.value) }))} />
-              <input className="input-base" placeholder="负责人" value={attributionForm.assigned_to} onChange={(event) => setAttributionForm((form) => ({ ...form, assigned_to: event.target.value }))} />
-              <input className="input-base" placeholder="执行工具" value={attributionForm.dev_tool} onChange={(event) => setAttributionForm((form) => ({ ...form, dev_tool: event.target.value }))} />
-              <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                <input type="checkbox" checked={attributionForm.create_tasks} onChange={(event) => setAttributionForm((form) => ({ ...form, create_tasks: event.target.checked }))} />
-                执行时同步生成治理任务
-              </label>
-              <textarea className="input-base min-h-20 sm:col-span-2" placeholder="归因备注，可选" value={attributionForm.note} onChange={(event) => setAttributionForm((form) => ({ ...form, note: event.target.value }))} />
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">运行模式</p>
+                <p className="mt-1 text-sm font-semibold">{attributionForm.dry_run ? "预览，不落库" : "执行并保存"}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">任务化</p>
+                <p className="mt-1 text-sm font-semibold">{attributionForm.create_tasks ? "生成治理任务" : "仅分析"}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">成本过滤</p>
+                <p className="mt-1 text-sm font-semibold">≥ ${attributionForm.min_cost_usd}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">执行人/工具</p>
+                <p className="mt-1 truncate text-sm font-semibold">{attributionForm.assigned_to} · {attributionForm.dev_tool}</p>
+              </div>
             </div>
             <div className="mt-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
               当前成本统计：总费用 ${costQ.data?.total_cost_usd ?? 0}，总 tokens {costQ.data?.total_tokens ?? 0}，模型数 {(costQ.data?.breakdown ?? []).length}。归因会按 Provider、模型、任务类型、Agent/任务来源拆分费用和成本占比。
@@ -1007,26 +1065,38 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       {tab === "eval" && (
         <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <WorkbenchPanel title="模型评测 Suite" actions={
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setEvalForm((form) => ({ ...form, dry_run: true, create_tasks: false }))} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">预览模式</button>
-              <button onClick={() => setEvalForm((form) => ({ ...form, dry_run: false }))} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">落库模式</button>
-              <button onClick={() => modelEval.mutate()} disabled={modelEval.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
-                {modelEval.isPending ? "评测中..." : evalForm.dry_run ? "运行评测预览" : "执行评测"}
-              </button>
-            </div>
+            <Button
+              type="primary"
+              loading={modelEval.isPending}
+              onClick={() => {
+                evalAntForm.setFieldsValue(evalForm);
+                setShowEvalDrawer(true);
+              }}
+            >
+              运行评测
+            </Button>
           }>
             <div className="grid gap-3 sm:grid-cols-2">
-              <input className="input-base sm:col-span-2" placeholder="候选模型，逗号分隔；留空则使用路由主模型和 fallback" value={evalForm.model_ids} onChange={(event) => setEvalForm((form) => ({ ...form, model_ids: event.target.value }))} />
-              <input className="input-base" type="number" min="0" max="100" placeholder="通过阈值" value={evalForm.min_score} onChange={(event) => setEvalForm((form) => ({ ...form, min_score: Number(event.target.value) }))} />
-              <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                <input type="checkbox" checked={evalForm.create_tasks} onChange={(event) => setEvalForm((form) => ({ ...form, create_tasks: event.target.checked }))} />
-                执行时同步生成治理任务
-              </label>
-              <input className="input-base" placeholder="负责人" value={evalForm.assigned_to} onChange={(event) => setEvalForm((form) => ({ ...form, assigned_to: event.target.value }))} />
-              <input className="input-base" placeholder="执行工具" value={evalForm.dev_tool} onChange={(event) => setEvalForm((form) => ({ ...form, dev_tool: event.target.value }))} />
-              <textarea className="input-base min-h-40 font-mono text-xs sm:col-span-2" value={evalForm.cases_json} onChange={(event) => setEvalForm((form) => ({ ...form, cases_json: event.target.value }))} />
-              <textarea className="input-base min-h-24 font-mono text-xs sm:col-span-2" placeholder='实际输出 JSON，可选：{"case-1":{"gpt-5-mini":"..."}}' value={evalForm.actual_outputs_json} onChange={(event) => setEvalForm((form) => ({ ...form, actual_outputs_json: event.target.value }))} />
-              <textarea className="input-base min-h-16 sm:col-span-2" placeholder="评测备注，可选" value={evalForm.note} onChange={(event) => setEvalForm((form) => ({ ...form, note: event.target.value }))} />
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 sm:col-span-2">
+                <p className="text-xs text-[var(--muted)]">候选模型</p>
+                <p className="mt-1 truncate font-mono text-sm font-semibold">{evalForm.model_ids || "使用路由主模型和 fallback"}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">通过阈值</p>
+                <p className="mt-1 text-xl font-semibold">{evalForm.min_score}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">运行模式</p>
+                <p className="mt-1 text-sm font-semibold">{evalForm.dry_run ? "预览，不落库" : evalForm.create_tasks ? "执行并生成任务" : "执行并保存结果"}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">负责人</p>
+                <p className="mt-1 truncate text-sm font-semibold">{evalForm.assigned_to}</p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs text-[var(--muted)]">用例 JSON</p>
+                <p className="mt-1 text-sm font-semibold">{evalForm.cases_json.length} chars</p>
+              </div>
             </div>
             <div className="mt-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
               评测会综合输出质量、Prompt 安全、Provider 健康、限流、成本效率和延迟 SLO。未提供实际输出时使用模型能力画像和当前策略做离线基线评测；提供实际输出时会按 expected_keywords 计算命中率。
@@ -1123,36 +1193,40 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       {tab === "audit" && (
         <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <WorkbenchPanel title="Prompt 审计控制台" actions={
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => promptAudit.mutate(true)} disabled={promptAudit.isPending || !auditForm.prompt.trim()} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">预览审计</button>
-              <button onClick={() => promptAudit.mutate(false)} disabled={promptAudit.isPending || !auditForm.prompt.trim()} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">审计并任务化</button>
-            </div>
+            <Button
+              type="primary"
+              loading={promptAudit.isPending}
+              onClick={() => {
+                auditAntForm.setFieldsValue(auditForm);
+                setShowAuditDrawer(true);
+              }}
+            >
+              发起审计
+            </Button>
           }>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <input className="input-base" placeholder="任务类型" value={auditForm.task_type} onChange={(event) => setAuditForm((form) => ({ ...form, task_type: event.target.value }))} />
-                <input className="input-base" placeholder="模型 ID" value={auditForm.model_id} onChange={(event) => setAuditForm((form) => ({ ...form, model_id: event.target.value }))} />
-                <input className="input-base" placeholder="调用角色" value={auditForm.user_role} onChange={(event) => setAuditForm((form) => ({ ...form, user_role: event.target.value }))} />
-                <input className="input-base" type="number" placeholder="最大 Prompt tokens" value={auditForm.max_prompt_tokens} onChange={(event) => setAuditForm((form) => ({ ...form, max_prompt_tokens: Number(event.target.value) }))} />
-                <input className="input-base" placeholder="负责人" value={auditForm.assigned_to} onChange={(event) => setAuditForm((form) => ({ ...form, assigned_to: event.target.value }))} />
-                <input className="input-base" placeholder="执行工具" value={auditForm.dev_tool} onChange={(event) => setAuditForm((form) => ({ ...form, dev_tool: event.target.value }))} />
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs text-[var(--muted)]">任务/模型</p>
+                  <p className="mt-1 truncate text-sm font-semibold">{auditForm.task_type} · {auditForm.model_id}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs text-[var(--muted)]">调用角色</p>
+                  <p className="mt-1 text-sm font-semibold">{auditForm.user_role}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs text-[var(--muted)]">Token 上限</p>
+                  <p className="mt-1 text-xl font-semibold">{auditForm.max_prompt_tokens}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <p className="text-xs text-[var(--muted)]">敏感信息策略</p>
+                  <p className="mt-1 text-sm font-semibold">PII {auditForm.allow_pii ? "允许" : "阻断"} · Secret {auditForm.allow_secrets ? "允许" : "阻断"}</p>
+                </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                  <input type="checkbox" checked={auditForm.allow_pii} onChange={(event) => setAuditForm((form) => ({ ...form, allow_pii: event.target.checked }))} />
-                  允许已授权 PII
-                </label>
-                <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                  <input type="checkbox" checked={auditForm.allow_secrets} onChange={(event) => setAuditForm((form) => ({ ...form, allow_secrets: event.target.checked }))} />
-                  允许托管密钥引用
-                </label>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="text-xs font-semibold text-[var(--muted-strong)]">Prompt 预览</p>
+                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-[var(--muted)]">{auditForm.prompt}</p>
               </div>
-              <textarea
-                className="input-base min-h-[220px] w-full font-mono text-xs leading-5"
-                value={auditForm.prompt}
-                onChange={(event) => setAuditForm((form) => ({ ...form, prompt: event.target.value }))}
-                placeholder="粘贴待调用模型的 Prompt，审计时只保存 hash 与脱敏预览，不落库原文。"
-              />
               <div className="rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
                 审计项覆盖明文密钥、Bearer Token、PII、提示词注入、上下文过长和代码上下文结构化质量；真实执行会把高风险发现生成任务中心治理任务。
               </div>
@@ -1257,6 +1331,346 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
           />
         </WorkbenchPanel>
       )}
+
+      <Drawer
+        title="发起调用决策"
+        width={560}
+        open={showDecisionDrawer}
+        onClose={() => setShowDecisionDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space wrap>
+            <Button onClick={() => setShowDecisionDrawer(false)}>取消</Button>
+            <Button
+              loading={decision.isPending}
+              onClick={() => {
+                void decisionForm.validateFields().then((values) => {
+                  const draft = { ...DEFAULT_DECISION_FORM, ...dForm, ...values };
+                  setDForm(draft);
+                  decision.mutate(draft);
+                });
+              }}
+            >
+              基础决策
+            </Button>
+            <Button
+              type="primary"
+              loading={policyEvaluate.isPending}
+              onClick={() => {
+                void decisionForm.validateFields().then((values) => {
+                  const draft = { ...DEFAULT_DECISION_FORM, ...dForm, ...values };
+                  setDForm(draft);
+                  policyEvaluate.mutate(draft);
+                });
+              }}
+            >
+              策略评估
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps size="small" current={0} items={[{ title: "调用画像" }, { title: "策略护栏" }, { title: "模型选择" }]} />
+          <Form
+            form={decisionForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={dForm}
+            onValuesChange={(_, values) => setDForm((form) => ({ ...form, ...values }))}
+          >
+            <Form.Item name="task_type" label="任务类型" rules={[{ required: true, message: "请输入任务类型" }]}>
+              <Input placeholder="code_review" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="estimated_prompt_tokens" label="预计 Prompt tokens">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="estimated_completion_tokens" label="预计 Completion tokens">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item name="required_quality" label="质量要求">
+              <Select
+                options={[
+                  { label: "fast", value: "fast" },
+                  { label: "balanced", value: "balanced" },
+                  { label: "high", value: "high" },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="allow_fallback" label="允许 fallback" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            {(decision.error || policyEvaluate.error) ? <Alert type="error" showIcon message={((decision.error || policyEvaluate.error) as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="记录模型调用"
+        width={560}
+        open={showUsageDrawer}
+        onClose={() => setShowUsageDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowUsageDrawer(false)}>取消</Button>
+            <Button type="primary" loading={recordCost.isPending} onClick={() => usageAntForm.submit()} disabled={!usageForm.model_id.trim()}>
+              记录调用
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps size="small" current={0} items={[{ title: "模型" }, { title: "Token" }, { title: "成本" }]} />
+          <Form
+            form={usageAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={usageForm}
+            onValuesChange={(_, values) => setUsageForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => recordCost.mutate({ ...DEFAULT_USAGE_FORM, ...usageForm, ...values })}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="model_id" label="模型 ID" rules={[{ required: true, message: "请输入模型 ID" }]}>
+                <Input placeholder="gpt-5" />
+              </Form.Item>
+              <Form.Item name="task_type" label="任务类型">
+                <Input placeholder="general" />
+              </Form.Item>
+              <Form.Item name="prompt_tokens" label="Prompt tokens">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="completion_tokens" label="Completion tokens">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="cost_usd" label="费用 USD">
+                <InputNumber min={0} step={0.001} className="w-full" />
+              </Form.Item>
+              <Form.Item name="latency_ms" label="延迟 ms">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            {recordCost.error ? <Alert type="error" showIcon message={(recordCost.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="运行成本归因"
+        width={600}
+        open={showAttributionDrawer}
+        onClose={() => setShowAttributionDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowAttributionDrawer(false)}>取消</Button>
+            <Button type="primary" loading={costAttribution.isPending} onClick={() => attributionAntForm.submit()}>
+              运行归因
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps size="small" current={0} items={[{ title: "过滤" }, { title: "执行方式" }, { title: "任务化" }]} />
+          <Form
+            form={attributionAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={attributionForm}
+            onValuesChange={(_, values) => setAttributionForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => costAttribution.mutate({ ...DEFAULT_ATTRIBUTION_FORM, ...attributionForm, ...values })}
+          >
+            <Form.Item name="min_cost_usd" label="最小成本过滤 USD">
+              <InputNumber min={0} step={0.001} className="w-full" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="dry_run" label="预览模式" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="create_tasks" label="同步生成治理任务" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="assigned_to" label="负责人">
+                <Input />
+              </Form.Item>
+              <Form.Item name="dev_tool" label="执行工具">
+                <Input />
+              </Form.Item>
+            </div>
+            <Form.Item name="note" label="备注">
+              <Input.TextArea rows={3} placeholder="可填写本次归因目的或排查上下文" />
+            </Form.Item>
+            {costAttribution.error ? <Alert type="error" showIcon message={(costAttribution.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="运行模型评测"
+        width={720}
+        open={showEvalDrawer}
+        onClose={() => setShowEvalDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowEvalDrawer(false)}>取消</Button>
+            <Button type="primary" loading={modelEval.isPending} onClick={() => evalAntForm.submit()}>
+              运行评测
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps size="small" current={0} items={[{ title: "候选模型" }, { title: "用例" }, { title: "结果治理" }]} />
+          <Alert type="info" showIcon message="建议先预览评测，再执行落库或生成治理任务。" />
+          <Form
+            form={evalAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={evalForm}
+            onValuesChange={(_, values) => setEvalForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => modelEval.mutate({ ...DEFAULT_EVAL_FORM, ...evalForm, ...values })}
+          >
+            <Form.Item name="model_ids" label="候选模型，逗号分隔">
+              <Input placeholder="gpt-5-mini, claude-sonnet" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="min_score" label="通过阈值">
+                <InputNumber min={0} max={100} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="dry_run" label="预览模式" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="create_tasks" label="同步生成治理任务" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="assigned_to" label="负责人">
+                <Input />
+              </Form.Item>
+              <Form.Item name="dev_tool" label="执行工具">
+                <Input />
+              </Form.Item>
+            </div>
+            <Form.Item
+              name="cases_json"
+              label="评测用例 JSON"
+              rules={[{
+                validator: (_, value) => {
+                  try {
+                    const parsed = JSON.parse(value || "[]");
+                    return Array.isArray(parsed) ? Promise.resolve() : Promise.reject(new Error("请输入 JSON 数组"));
+                  } catch {
+                    return Promise.reject(new Error("请输入有效 JSON"));
+                  }
+                },
+              }]}
+            >
+              <Input.TextArea rows={10} className="font-mono text-xs" />
+            </Form.Item>
+            <Form.Item
+              name="actual_outputs_json"
+              label="实际输出 JSON"
+              rules={[{
+                validator: (_, value) => {
+                  try {
+                    const parsed = JSON.parse(value || "{}");
+                    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Promise.resolve() : Promise.reject(new Error("请输入 JSON 对象"));
+                  } catch {
+                    return Promise.reject(new Error("请输入有效 JSON"));
+                  }
+                },
+              }]}
+            >
+              <Input.TextArea rows={5} className="font-mono text-xs" placeholder='{"case-1":{"gpt-5-mini":"..."}}' />
+            </Form.Item>
+            <Form.Item name="note" label="备注">
+              <Input.TextArea rows={3} />
+            </Form.Item>
+            {modelEval.error ? <Alert type="error" showIcon message={(modelEval.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="发起 Prompt 审计"
+        width={720}
+        open={showAuditDrawer}
+        onClose={() => setShowAuditDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space wrap>
+            <Button onClick={() => setShowAuditDrawer(false)}>取消</Button>
+            <Button
+              loading={promptAudit.isPending}
+              onClick={() => {
+                void auditAntForm.validateFields().then((values) => {
+                  const draft = { ...DEFAULT_AUDIT_FORM, ...auditForm, ...values };
+                  setAuditForm(draft);
+                  promptAudit.mutate({ draft, dryRun: true });
+                });
+              }}
+            >
+              预览审计
+            </Button>
+            <Button
+              type="primary"
+              loading={promptAudit.isPending}
+              onClick={() => {
+                void auditAntForm.validateFields().then((values) => {
+                  const draft = { ...DEFAULT_AUDIT_FORM, ...auditForm, ...values };
+                  setAuditForm(draft);
+                  promptAudit.mutate({ draft, dryRun: false });
+                });
+              }}
+            >
+              审计并任务化
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps size="small" current={0} items={[{ title: "Prompt" }, { title: "敏感策略" }, { title: "治理任务" }]} />
+          <Form
+            form={auditAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={auditForm}
+            onValuesChange={(_, values) => setAuditForm((form) => ({ ...form, ...values }))}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="task_type" label="任务类型">
+                <Input placeholder="code" />
+              </Form.Item>
+              <Form.Item name="model_id" label="模型 ID">
+                <Input placeholder="gpt-5" />
+              </Form.Item>
+              <Form.Item name="user_role" label="调用角色">
+                <Input placeholder="agent" />
+              </Form.Item>
+              <Form.Item name="max_prompt_tokens" label="最大 Prompt tokens">
+                <InputNumber min={1} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="assigned_to" label="负责人">
+                <Input />
+              </Form.Item>
+              <Form.Item name="dev_tool" label="执行工具">
+                <Input />
+              </Form.Item>
+              <Form.Item name="allow_pii" label="允许已授权 PII" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="allow_secrets" label="允许托管密钥引用" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            <Form.Item name="prompt" label="待审计 Prompt" rules={[{ required: true, message: "请输入待审计 Prompt" }]}>
+              <Input.TextArea rows={10} className="font-mono text-xs" placeholder="审计时只保存 hash 与脱敏预览，不落库原文。" />
+            </Form.Item>
+            {promptAudit.error ? <Alert type="error" showIcon message={(promptAudit.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
 
       <Drawer
         title="编辑生产策略"

@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T02:43:57Z",
+  "updated_at": "2026-05-31T03:13:59Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -338,12 +338,15 @@
       "完成 Task 77 A2A Agent 注册交互抽屉化：A2A 注册外部 Agent 从页面内裸 input/select 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主注册工作区只保留列表、信任策略和关键操作；保存动作走 Form submit 与必填校验，注册成功后关闭抽屉、重置表单并保留一次性凭证提示。",
       "完成 Task 78 A2A 能力协商交互抽屉化：A2A 能力协商从主页面裸 input/select/textarea 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主协商页只保留任务摘要、能力标签、最近协商时间线入口、匹配解释和分发动作；提交后保留最近协商参数供分发 payload、SLA 和协议包复用，降低页面复杂度并增强移动端可用性。",
       "完成 Task 79 A2A 策略配置交互统一抽屉化：A2A 信任策略、SLA 策略和执行窗口策略从主页面裸 input/select/checkbox 配置区升级为 Ant Design Drawer/Form/InputNumber/Switch/Select/Steps/Alert，主工作区只展示策略摘要、关键状态和预览/生成治理任务等高频动作；策略保存改为提交 draft 后调用接口，避免状态异步导致配置错写，提升移动端和专业运维可用性。",
-      "完成 Task 80 LLM Gateway 策略与配置交互抽屉化：模型网关生产策略、Provider 健康上报、模型路由创建和限流创建从主页面裸 input/select/checkbox 表单升级为 Ant Design Drawer/Form/Input/InputNumber/Select/Switch/Steps/Alert；主工作区保留策略摘要、Provider 表、路由表、限流表和 AI 助手，低频配置进入抽屉提交 draft，减少页面复杂度并提升移动端可用性。"
+      "完成 Task 80 LLM Gateway 策略与配置交互抽屉化：模型网关生产策略、Provider 健康上报、模型路由创建和限流创建从主页面裸 input/select/checkbox 表单升级为 Ant Design Drawer/Form/Input/InputNumber/Select/Switch/Steps/Alert；主工作区保留策略摘要、Provider 表、路由表、限流表和 AI 助手，低频配置进入抽屉提交 draft，减少页面复杂度并提升移动端可用性。",
+      "完成 Task 81 LLM Gateway 执行类交互抽屉化：调用决策、模型调用记录、跨 Provider 成本归因、模型评测和 Prompt 审计从主页面裸表单升级为 Ant Design Drawer/Form/Input/InputNumber/Select/Switch/Steps/Alert；主工作区保留摘要卡、结果、历史和高频动作，决策/评测/审计支持预览与执行路径分离，JSON 用例输入增加表单校验，提升移动端可用性、专业治理体验和后续模块拆分效率。",
+      "完成 Task 82 Copilot AI 指挥台入口差异化增强：修复 AI 指挥台、AI 会话、命令中心、工具计划几个菜单进入后体验近似的问题；#/copilot 保持统一 Hub，#/copilot/chat 聚焦持续会话和 transcript，#/copilot/commands 聚焦命令目录、搜索、跳转和转计划，#/copilot/tool-plan 聚焦自然语言目标生成工具计划并预览/创建执行任务；导航传入 focused mode，CopilotHub 增加命令数和入口说明，三语种文案与 UX 契约测试同步更新。",
+      "完成 Task 83 Copilot 命令中心受控执行闭环：Manager 新增 /api/v1/copilot/commands/execute，命令注册表按 navigate/copilot/operation 分类执行，导航与会话命令只返回计划，operation 命令支持 dry-run 预览和 allowlist apply；ops.health、ops.audit_verify、ops.workflow_summary、ops.billing_summary 返回执行证据，apply 写入 audit_chain 并记录 Copilot turn/session；命令中心前端支持 operation 预览/执行、证据结果和 audit hash 展示，UX 契约与后端回归测试同步补齐。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 80 LLM Gateway 策略与配置交互抽屉化已完成：生产策略、Provider 健康上报、模型路由创建和限流创建已从主页面配置区收敛到 Ant Design 抽屉式步骤表单；下一步继续推进 LLM Gateway 调用决策/成本归因/模型评测/Prompt 审计表单抽屉化，以及 OpsCenter 大工作台模块化。"
+    "current": "Task 83 Copilot 命令中心受控执行闭环已完成：命令中心从目录/跳转升级为预览、执行、证据可见的受控操作入口；下一步继续推进命令权限策略、执行审批、跨工具执行器，以及 OpsCenter、Settings 等大工作台模块化和自适配体验治理。"
   },
   "metrics": {
     "completion_rate": 100,

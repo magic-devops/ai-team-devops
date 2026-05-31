@@ -158,12 +158,13 @@
    - `Settings`：已完成专业子路由聚焦与移动端模块选择第一步，`#/settings/account/runtime/observability/profiles/sso/billing` 可直接进入对应模块；下一步继续把发布流水线、SSO 风险处置、计费策略等复杂表单拆成 Drawer/Steps。
    - `OpsCenterWorkbench`
    - `A2aWorkbench`：已完成第一步交互收敛，Hub 的 Agent 注册入口直达 `#/ecosystem/a2a/registry`，工作台内部按 `registry/negotiate/sla/windows/dispatch/evidence` 深链自动聚焦，并将手写 tab 改为 Ant Design `Segmented`，移动端横向滚动承接；Agent 注册已从页面内裸表单升级为 Ant Design `Drawer / Form / Select / Steps / Alert`，注册后一次性凭证提示独立展示；能力协商已升级为 Ant Design `Drawer / Form / Steps / Alert`，主页面只保留任务摘要、推荐结果、时间线入口和分发动作；信任策略、SLA 策略、执行窗口策略已统一升级为 `Drawer / Form / InputNumber / Switch / Steps / Alert`，主工作区只展示策略摘要和高频治理操作。
-   - `LlmGatewayWorkbench`：已完成第一步交互收敛，主导航改为 Ant Design `Segmented`，路由规则、Provider 健康、限流策略三张关键表改为 Ant Design `Table`，并保留 AI 助手入口；生产策略、Provider 健康上报、模型路由创建、限流创建已升级为 Ant Design `Drawer / Form / InputNumber / Select / Switch / Steps / Alert`，主工作区只保留策略摘要、表格和高频治理动作；下一步继续收敛调用决策、成本归因、模型评测和 Prompt 审计表单。
+   - `LlmGatewayWorkbench`：已完成第一轮交互收敛，主导航改为 Ant Design `Segmented`，路由规则、Provider 健康、限流策略三张关键表改为 Ant Design `Table`，并保留 AI 助手入口；生产策略、Provider 健康上报、模型路由创建、限流创建、调用决策、模型调用记录、成本归因、模型评测和 Prompt 审计均已升级为 Ant Design `Drawer / Form / Input / InputNumber / Select / Switch / Steps / Alert`，主工作区只保留策略摘要、表格、结果、历史和高频治理动作；下一步继续做子路由懒加载拆分、移动端截图检查和剩余大工作台 OpsCenter/Settings 模块化。
+   - `Copilot / AI 指挥台`：已修复 `AI 指挥台 / AI 会话 / 命令中心 / 工具计划` 入口体验重复问题；`#/copilot` 保持统一 Hub，`#/copilot/chat` 聚焦持续会话与 transcript，`#/copilot/commands` 聚焦命令目录、搜索、跳转、转计划、受控 dry-run 预览和 allowlist 执行证据，`#/copilot/tool-plan` 聚焦自然语言目标到工具计划再到任务化；Manager 新增 `/api/v1/copilot/commands/execute`，导航/会话命令只返回计划，`operation` 命令支持 `ops.health / ops.audit_verify / ops.workflow_summary / ops.billing_summary` 执行并写入审计链，前端展示执行状态、目标、audit hash 和结果 JSON；页面内部使用 Ant Design `Segmented / Input.Search / Input.TextArea / Table / Button / Alert`，后续继续补命令权限策略、审批流和跨工具执行器。
    - `App`
 2. 成熟组件优先：
    - 表单优先使用 Ant Design `Form / Input / Select / InputNumber / Switch / Alert / Drawer / Steps / Table`。
    - 避免裸 `input/select/textarea` 承担复杂校验。
-   - LLM Gateway 后续继续把策略、评测、Prompt 审计表单升级为 `Form / Drawer / Steps`，避免 JSON 输入承担主流程。
+   - LLM Gateway 后续继续把评测用例 JSON 模板沉淀为可复用用例库，并做路由级懒加载拆分，避免评测/审计能力挤占首屏主包。
 3. 复杂操作统一步骤化：
    - 预览
    - 审批/确认

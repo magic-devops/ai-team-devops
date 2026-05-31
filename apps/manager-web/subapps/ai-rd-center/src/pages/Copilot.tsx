@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Space, Table, Tag } from "antd";
-import { ClipboardCheck, Loader2, Plus } from "lucide-react";
+import { Alert, Button, Input, Segmented, Space, Table, Tag } from "antd";
+import { Bot, ClipboardCheck, Command, Loader2, Network, Plus } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
 import { MarkdownView } from "@/components/MarkdownView";
@@ -13,6 +13,7 @@ import { formatCopilotResponse } from "@/lib/copilotFormat";
 import { getProjectId, getToken } from "@/lib/authStorage";
 
 type Turn = { ts: string; sessionId: string; runId: string; query: string; response?: unknown; error?: string };
+type CopilotMode = "chat" | "commands" | "tool-plan";
 const STORAGE_KEY = "sop-copilot-transcript-v1";
 
 function loadTurns(): Turn[] {
@@ -32,18 +33,32 @@ function newId(prefix: string) {
   return `${prefix}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
-export function Copilot() {
+const MODE_ROUTE: Record<CopilotMode, string> = {
+  chat: "#/copilot/chat",
+  commands: "#/copilot/commands",
+  "tool-plan": "#/copilot/tool-plan",
+};
+
+export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
+  const [mode, setMode] = useState<CopilotMode>(initialMode);
   const [q, setQ] = useState("");
+  const [commandSearch, setCommandSearch] = useState("");
   const [sessionId, setSessionId] = useState(() => newId("cp"));
   const [runId, setRunId] = useState(() => newId("run"));
   const [withProject, setWithProject] = useState(true);
   const [turns, setTurns] = useState<Turn[]>(() => loadTurns());
   const [planResult, setPlanResult] = useState<any>(null);
   const [planTaskResult, setPlanTaskResult] = useState<any>(null);
+  const [commandResult, setCommandResult] = useState<any>(null);
   const sessionsQuery = useQuery({ queryKey: ["copilotSessions"], queryFn: () => api.copilotSessions(100), enabled: authed });
+  const commandsQuery = useQuery({
+    queryKey: ["copilotCommandsPage", commandSearch],
+    queryFn: () => api.copilotCommands(commandSearch, 60),
+    enabled: authed && mode === "commands",
+  });
   const sessionQuery = useQuery({
     queryKey: ["copilotSession", sessionId],
     queryFn: () => api.copilotSession(sessionId, 100),
@@ -121,6 +136,22 @@ export function Copilot() {
     },
   });
 
+  const executeCommand = useMutation({
+    mutationFn: async ({ commandId, dryRun }: { commandId: string; dryRun: boolean }) =>
+      api.copilotExecuteCommand({
+        command_id: commandId,
+        dry_run: dryRun,
+        context: withProject ? { project_id: getProjectId(), source: "manager-web" } : { source: "manager-web" },
+        session_id: sessionId,
+        run_id: runId,
+      }),
+    onSuccess: (data) => {
+      setCommandResult(data);
+      void qc.invalidateQueries({ queryKey: ["copilotSessions"] });
+      void qc.invalidateQueries({ queryKey: ["copilotSession", sessionId] });
+    },
+  });
+
   useEffect(() => {
     if (!authed) return;
     const prefill = sessionStorage.getItem("sop-copilot-prefill");
@@ -129,30 +160,247 @@ export function Copilot() {
     setQ(prefill);
   }, [authed]);
 
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
   if (!authed) return <NeedLogin />;
+
+  const switchMode = (next: CopilotMode) => {
+    setMode(next);
+    window.location.hash = MODE_ROUTE[next];
+  };
+  const runCommand = (item: any) => {
+    const target = String(item?.target || "#/copilot/chat");
+    const prompt = String(item?.prompt || item?.label || "");
+    if (item?.type === "copilot") {
+      sessionStorage.setItem("sop-copilot-prefill", prompt);
+      window.location.hash = "#/copilot/chat";
+      setQ(prompt);
+      setMode("chat");
+      return;
+    }
+    if (target.startsWith("#")) {
+      window.location.hash = target;
+      return;
+    }
+    const text = `请检查 ${item?.label || target}，目标接口：${target}`;
+    setQ(text);
+    setMode("tool-plan");
+    window.location.hash = "#/copilot/tool-plan";
+  };
+  const createPlanFromCommand = (item: any) => {
+    const text = String(item?.prompt || item?.label || item?.description || "");
+    setQ(text);
+    setMode("tool-plan");
+    window.location.hash = "#/copilot/tool-plan";
+    if (text.trim()) plan.mutate(text);
+  };
+  const modeMeta = {
+    chat: {
+      title: t("copilot.chatTitle", { defaultValue: t("page.copilot.title") }),
+      description: t("copilot.chatIntro", { defaultValue: t("copilot.intro") }),
+    },
+    commands: {
+      title: t("copilot.commandTitle", { defaultValue: t("nav.copilotCommands") }),
+      description: t("copilot.commandIntro", { defaultValue: "统一搜索页面导航、运营动作和 AI 命令。" }),
+    },
+    "tool-plan": {
+      title: t("copilot.toolPlanTitle", { defaultValue: t("nav.copilotToolPlan") }),
+      description: t("copilot.toolPlanIntro", { defaultValue: "把自然语言目标转成工具调用计划，再预览或创建执行任务。" }),
+    },
+  }[mode];
 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title={t("page.copilot.title")}
-        description={t("copilot.intro")}
+        title={modeMeta.title}
+        description={modeMeta.description}
         actions={
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-            onClick={() => {
-              setSessionId(newId("cp"));
-              setRunId(newId("run"));
-              setPlanResult(null);
-              setPlanTaskResult(null);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            {t("copilot.newSession")}
-          </button>
+          <Space wrap>
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => {
+                setSessionId(newId("cp"));
+                setRunId(newId("run"));
+                setPlanResult(null);
+                setPlanTaskResult(null);
+                setMode("chat");
+                window.location.hash = "#/copilot/chat";
+              }}
+            >
+              {t("copilot.newSession")}
+            </Button>
+          </Space>
         }
       />
 
+      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+        <Segmented
+          value={mode}
+          onChange={(value) => switchMode(value as CopilotMode)}
+          options={[
+            { label: t("copilot.chatTab", { defaultValue: "AI 会话" }), value: "chat", icon: <Bot className="h-4 w-4" /> },
+            { label: t("copilot.commandsTab", { defaultValue: "命令中心" }), value: "commands", icon: <Command className="h-4 w-4" /> },
+            { label: t("copilot.toolPlanTab", { defaultValue: "工具计划" }), value: "tool-plan", icon: <Network className="h-4 w-4" /> },
+          ]}
+        />
+      </div>
+
+      {mode === "commands" ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <Card title={t("copilot.commandCatalog", { defaultValue: "命令目录" })}>
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Input.Search
+                allowClear
+                value={commandSearch}
+                onChange={(event) => setCommandSearch(event.target.value)}
+                placeholder={t("command.placeholder")}
+                className="max-w-xl"
+              />
+              <Tag color="blue">{commandsQuery.data?.total ?? 0} commands</Tag>
+            </div>
+            <Table
+              rowKey={(row: any) => String(row.id || row.label)}
+              size="small"
+              loading={commandsQuery.isLoading || commandsQuery.isFetching}
+              dataSource={commandsQuery.data?.items ?? []}
+              pagination={{ pageSize: 10, showSizeChanger: false }}
+              scroll={{ x: 820 }}
+              locale={{ emptyText: t("command.empty") }}
+              columns={[
+                {
+                  title: t("copilot.command", { defaultValue: "命令" }),
+                  dataIndex: "label",
+                  render: (value: string, row: any) => (
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[var(--text)]">{value}</div>
+                      <div className="mt-1 truncate text-xs text-[var(--muted)]">{row.description}</div>
+                    </div>
+                  ),
+                },
+                {
+                  title: t("copilot.intent", { defaultValue: "意图" }),
+                  dataIndex: "type",
+                  width: 120,
+                  render: (value: string) => <Tag color={value === "navigate" ? "green" : value === "operation" ? "orange" : "blue"}>{value}</Tag>,
+                },
+                {
+                  title: t("copilot.target", { defaultValue: "目标" }),
+                  dataIndex: "target",
+                  width: 220,
+                  ellipsis: true,
+                  render: (value: string) => <span className="font-mono text-xs">{value}</span>,
+                },
+                {
+                  title: t("common.actions"),
+                  width: 280,
+                  render: (_: unknown, row: any) => (
+                    <Space>
+                      {row.type === "operation" ? (
+                        <>
+                          <Button size="small" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: true })}>
+                            {t("common.preview")}
+                          </Button>
+                          <Button size="small" type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(row.id), dryRun: false })}>
+                            {t("copilot.execute", { defaultValue: "执行" })}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button size="small" onClick={() => runCommand(row)}>
+                          {row.type === "navigate" ? t("common.view") : t("copilot.execute", { defaultValue: "执行" })}
+                        </Button>
+                      )}
+                      <Button size="small" type={row.type === "operation" ? "default" : "primary"} onClick={() => createPlanFromCommand(row)}>
+                        {t("copilot.toPlan", { defaultValue: "转计划" })}
+                      </Button>
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+          </Card>
+          <Card title={t("copilot.commandUsage", { defaultValue: "怎么用" })}>
+            <div className="space-y-3 text-sm text-[var(--muted)]">
+              {executeCommand.error ? <Alert type="error" showIcon message={(executeCommand.error as Error).message} /> : null}
+              {commandResult ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[var(--text)]">{commandResult.command?.label || commandResult.command?.id}</p>
+                    <Tag color={commandResult.dry_run ? "blue" : "green"}>{commandResult.status}</Tag>
+                  </div>
+                  <p className="mt-1 font-mono text-[11px] text-[var(--muted)]">{commandResult.command?.target}</p>
+                  {commandResult.evidence?.audit_chain?.hash ? (
+                    <p className="mt-2 break-all rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--muted)]">audit: {commandResult.evidence.audit_chain.hash}</p>
+                  ) : null}
+                  <pre className="mt-2 max-h-52 overflow-auto rounded bg-[var(--surface-muted)] p-2 text-[11px] leading-5 text-[var(--muted)]">
+                    {JSON.stringify(commandResult.evidence?.result || commandResult.evidence?.plan || {}, null, 2)}
+                  </pre>
+                </div>
+              ) : null}
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="font-semibold text-[var(--text)]">{t("command.short")}</p>
+                <p className="mt-1">{t("copilot.commandUsagePalette", { defaultValue: "全局快捷键打开命令面板，适合快速跳页和查找动作。" })}</p>
+              </div>
+              <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                <p className="font-semibold text-[var(--text)]">{t("copilot.toPlan", { defaultValue: "转计划" })}</p>
+                <p className="mt-1">{t("copilot.commandUsagePlan", { defaultValue: "复杂命令先转成工具计划，再确认是否任务化。" })}</p>
+              </div>
+              <Button block icon={<Network className="h-4 w-4" />} onClick={() => switchMode("tool-plan")}>
+                {t("copilot.openToolPlan", { defaultValue: "打开工具计划" })}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {mode === "tool-plan" ? (
+        <Card title={t("copilot.toolPlanInput", { defaultValue: "自然语言目标" })}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div>
+              <Input.TextArea
+                value={q}
+                rows={5}
+                onChange={(event) => setQ(event.target.value)}
+                placeholder={t("copilot.placeholder")}
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  type="primary"
+                  icon={plan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+                  disabled={!q.trim() || plan.isPending}
+                  onClick={() => plan.mutate(q)}
+                >
+                  {t("copilot.plan")}
+                </Button>
+                <Button onClick={() => setQ("基于当前项目上下文生成下一轮迭代推进计划")}>
+                  {t("copilot.quickIterationPlan", { defaultValue: "迭代计划" })}
+                </Button>
+                <Button onClick={() => setQ("总结当前项目状态、主要风险和下一步行动")}>
+                  {t("copilot.quickProjectSummary", { defaultValue: "项目总结" })}
+                </Button>
+              </div>
+              {plan.error ? <Alert className="mt-3" type="error" showIcon message={(plan.error as Error).message} /> : null}
+            </div>
+            <div className="space-y-3 rounded-xl bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={withProject} onChange={(e) => setWithProject(e.target.checked)} />
+                {t("copilot.withProject")}
+              </label>
+              <div>
+                <p className="text-xs text-[var(--muted)]">{t("copilot.session")}</p>
+                <p className="mt-1 break-all font-mono text-xs text-[var(--text)]">{sessionId}</p>
+              </div>
+              <div>
+                <p className="text-xs text-[var(--muted)]">run_id</p>
+                <p className="mt-1 break-all font-mono text-xs text-[var(--text)]">{runId}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {mode === "chat" ? (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
         <Card>
           <div className="mb-3 grid gap-2 md:grid-cols-2">
@@ -185,7 +433,11 @@ export function Copilot() {
               type="button"
               className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-4 py-2 text-sm font-semibold text-[var(--text)] shadow-sm transition hover:bg-[var(--surface-muted)] disabled:pointer-events-none disabled:opacity-50"
               disabled={!q.trim() || plan.isPending}
-              onClick={() => plan.mutate(q)}
+              onClick={() => {
+                setMode("tool-plan");
+                window.location.hash = "#/copilot/tool-plan";
+                plan.mutate(q);
+              }}
             >
               {plan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
               {t("copilot.plan")}
@@ -209,8 +461,9 @@ export function Copilot() {
           </div>
         </Card>
       </div>
+      ) : null}
 
-      {planResult ? (
+      {mode === "tool-plan" && planResult ? (
         <Card title={t("copilot.planResult")}>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
@@ -292,6 +545,7 @@ export function Copilot() {
         </Card>
       ) : null}
 
+      {mode === "chat" ? (
       <Card title={t("copilot.transcript")}>
         <div className="space-y-3">
           {currentTurns.map((turn) => (
@@ -310,6 +564,7 @@ export function Copilot() {
           {currentTurns.length === 0 ? <p className="text-sm text-slate-500">{t("copilot.empty")}</p> : null}
         </div>
       </Card>
+      ) : null}
     </div>
   );
 }

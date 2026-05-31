@@ -108,6 +108,11 @@ def _resolve_commands(query: str, limit: int = 8) -> list[dict[str, Any]]:
     return picked[:limit]
 
 
+def _command_by_id(command_id: str) -> dict[str, Any] | None:
+    target = command_id.strip()
+    return next((cmd for cmd in _command_catalog() if str(cmd.get("id") or "") == target), None)
+
+
 def _parse_jsonish(text: str) -> dict[str, Any] | None:
     raw = (text or "").strip()
     if not raw:
@@ -296,6 +301,14 @@ class CommandResolveIn(BaseModel):
     limit: int = Field(8, ge=1, le=30)
 
 
+class CommandExecuteIn(BaseModel):
+    command_id: str = Field(..., min_length=1)
+    dry_run: bool = True
+    context: dict[str, Any] | None = None
+    session_id: str = ""
+    run_id: str = ""
+
+
 class PlanIn(BaseModel):
     query: str
     context: dict[str, Any] | None = None
@@ -439,6 +452,116 @@ def copilot_resolve_command(body: CommandResolveIn) -> dict[str, Any]:
     return {"ok": True, "query": body.query, "best": best, "items": items, "total": len(items)}
 
 
+@router.post("/commands/execute")
+async def copilot_execute_command(body: CommandExecuteIn) -> dict[str, Any]:
+    """受控命令执行：导航/AI 命令只返回计划，operation 命令支持 dry-run 与审计证据。"""
+    cmd = _command_by_id(body.command_id)
+    if not cmd:
+        raise HTTPException(404, "command not found")
+    session_id = _safe_id(body.session_id, "cp")
+    run_id = _safe_id(body.run_id, "run")
+    cmd_type = str(cmd.get("type") or "")
+    target = str(cmd.get("target") or "")
+    planned = {
+        "command_id": cmd.get("id"),
+        "label": cmd.get("label"),
+        "type": cmd_type,
+        "target": target,
+        "guards": ["registered_command_only", "no_arbitrary_url", "audit_chain_on_apply"],
+        "safe_to_execute": cmd_type in {"navigate", "copilot", "operation"},
+    }
+    if cmd_type in {"navigate", "copilot"}:
+        result = {
+            "ok": True,
+            "dry_run": True,
+            "status": "planned",
+            "command": cmd,
+            "evidence": {
+                "plan": planned,
+                "next_action": "navigate" if cmd_type == "navigate" else "open_copilot_chat",
+                "prompt": cmd.get("prompt", ""),
+            },
+            "session_id": session_id,
+            "run_id": run_id,
+        }
+        _record_turn(session_id, {
+            "ts": _now(),
+            "session_id": session_id,
+            "run_id": run_id,
+            "query": f"execute command {body.command_id}",
+            "context": body.context or {},
+            "ok": True,
+            "response": result,
+        })
+        _upsert_session(session_id, title=str(cmd.get("label") or body.command_id), run_id=run_id)
+        return result
+    if cmd_type != "operation":
+        raise HTTPException(400, "unsupported command type")
+
+    operation_result: dict[str, Any] | None = None
+    if not body.dry_run:
+        if body.command_id == "ops.health":
+            operation_result = {"ok": True, "status": "ok", "checked_at": _now(), "scope": _scope_key()}
+        elif body.command_id == "ops.audit_verify":
+            from sop_manager.routers.audit_chain import verify_chain
+            operation_result = verify_chain(max_files=20)
+        elif body.command_id == "ops.workflow_summary":
+            from sop_manager.routers.workflow import workflow_summary
+            operation_result = await workflow_summary()
+        elif body.command_id == "ops.billing_summary":
+            from sop_manager.routers.billing import billing_summary
+            operation_result = billing_summary()
+        else:
+            raise HTTPException(403, "operation is not allowlisted")
+
+    audit_chain: dict[str, Any] | None = None
+    if not body.dry_run:
+        try:
+            from sop_manager.routers.audit_chain import append_audit
+            audit_chain = append_audit(
+                "copilot.command.execute",
+                resource_type="copilot_command",
+                resource_id=body.command_id,
+                details={
+                    "command": planned,
+                    "context": body.context or {},
+                    "result_summary": {
+                        "ok": bool(operation_result.get("ok", True)) if isinstance(operation_result, dict) else True,
+                        "keys": sorted(operation_result.keys())[:12] if isinstance(operation_result, dict) else [],
+                    },
+                    "session_id": session_id,
+                    "run_id": run_id,
+                },
+            )
+        except Exception as err:  # pragma: no cover - audit chain must not hide command result
+            audit_chain = {"error": str(err)}
+
+    result = {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "status": "planned" if body.dry_run else "succeeded",
+        "command": cmd,
+        "evidence": {
+            "plan": planned,
+            "result": operation_result,
+            "audit_chain": audit_chain,
+        },
+        "session_id": session_id,
+        "run_id": run_id,
+    }
+    _record_turn(session_id, {
+        "ts": _now(),
+        "session_id": session_id,
+        "run_id": run_id,
+        "query": f"execute command {body.command_id}",
+        "context": body.context or {},
+        "ok": True,
+        "response": result,
+    })
+    _upsert_session(session_id, title=str(cmd.get("label") or body.command_id), run_id=run_id)
+    return result
+
+
 @router.post("/plan")
 def copilot_plan(body: PlanIn) -> dict[str, Any]:
     """面向 CmdK/助手页的工具调用计划，LLM 不可用时回退到命令解析。"""
@@ -550,18 +673,38 @@ def health() -> dict[str, Any]:
 def copilot_hub(limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
     rows = list(reversed(_read_jsonl(_sessions_file(), limit=limit)))
     recent = rows[:5]
+    commands = _command_catalog()
     return {
         "ok": True,
         "summary": {
             "sessions": len(rows),
             "skills": 8,
+            "commands": len(commands),
             "scope": _scope_key(),
         },
         "recent_sessions": recent,
         "domains": [
-            {"id": "chat", "path": "#/copilot/chat", "capability": "ai.copilot.chat"},
-            {"id": "commands", "path": "#/copilot/commands", "capability": "ai.copilot.commands"},
-            {"id": "tool-plan", "path": "#/copilot/tool-plan", "capability": "ai.copilot.tool-plan"},
+            {
+                "id": "chat",
+                "path": "#/copilot/chat",
+                "capability": "ai.copilot.chat",
+                "description": "持续会话、项目上下文注入、会话记录和模块 AI 追问。",
+                "primary_action": "continue_conversation",
+            },
+            {
+                "id": "commands",
+                "path": "#/copilot/commands",
+                "capability": "ai.copilot.commands",
+                "description": "统一检索导航、运营动作和 AI 命令，适合快速到达与执行。",
+                "primary_action": "search_command_catalog",
+            },
+            {
+                "id": "tool-plan",
+                "path": "#/copilot/tool-plan",
+                "capability": "ai.copilot.tool-plan",
+                "description": "把自然语言目标转成工具调用计划，再预览或生成任务。",
+                "primary_action": "plan_to_tasks",
+            },
         ],
     }
 
