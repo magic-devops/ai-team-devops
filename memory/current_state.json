@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T06:15:00Z",
+  "updated_at": "2026-05-31T06:19:16Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -355,12 +355,13 @@
       "完成 Task 94 OpsCenter 告警源创建交互抽屉化：生产告警源创建从主页面 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主工作区只保留源指标、列表、同步、测试、启停和删除等高频动作，抽屉内承接来源身份、连接 SecretRef、标签和样例 payload。",
       "完成 Task 95 OpsCenter 告警降噪配置抽屉化：告警降噪策略与静默规则新增从主页面 inline 表单升级为 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主页面只保留智能推荐、预览降噪、应用评估、策略目录、静默目录和启停删除等高频动作。",
       "完成 Task 96 OpsCenter SLO 自动升级交互抽屉化：告警 SLO 自动升级阈值、动作、负责人、执行工具、Owner、备注和启用开关从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主页面只展示当前升级策略、最近候选、升级结果、预览和执行入口。",
-      "完成 Task 97 OpsCenter 策略灰度审计交互抽屉化：策略灰度应用审计的基准策略、候选策略、灰度流量、审批人、备注和刷新输入证据开关从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主页面只保留准入摘要、配置摘要、审批动作和审计证据。"
+      "完成 Task 97 OpsCenter 策略灰度审计交互抽屉化：策略灰度应用审计的基准策略、候选策略、灰度流量、审批人、备注和刷新输入证据开关从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Switch/Steps/Button；主页面只保留准入摘要、配置摘要、审批动作和审计证据。",
+      "完成 Task 98 OpsCenter 跨模块联动配置抽屉化：跨模块运维策略联动的动作、最大联动项、优先级、负责人、执行工具和联动说明从主页面 inline 参数区迁入 Ant Design Drawer/Form/Input/Select/Steps/Button；主页面只保留联动指标、配置摘要、预览/执行入口和联动结果。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 97 OpsCenter 策略灰度审计交互抽屉化已完成：下一步继续把 OpsCenter RCA 智能归因、Runbook 版本治理、自愈动作和跨模块联动参数中的复杂 inline 表单拆成 Drawer/Steps，并继续做移动端截图检查。"
+    "current": "Task 98 OpsCenter 跨模块联动配置抽屉化已完成：下一步继续把 OpsCenter RCA 智能归因、Runbook 版本治理和自愈动作中的复杂 inline 表单拆成 Drawer/Steps，并继续做移动端截图检查。"
   },
   "metrics": {
     "completion_rate": 100,

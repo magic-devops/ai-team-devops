@@ -75,4 +75,16 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<select className=\"input-base\" value={alertStrategyCanaryForm.policy_id}");
     expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertStrategyCanaryForm.note}");
   });
+
+  it("keeps cross-module linkage setup in a focused drawer flow", () => {
+    expect(source).toContain("opsStrategyLinkageDrawerOpen");
+    expect(source).toContain("opsStrategyLinkageFocusedDrawer");
+    expect(source).toContain("setOpsStrategyLinkageDrawerOpen(true)");
+    expect(source).toContain("配置跨模块联动");
+    expect(source).toContain("联动配置摘要");
+    expect(source).toContain("runOpsStrategyLinkage.mutate(true)");
+    expect(source).toContain("runOpsStrategyLinkage.mutate(false)");
+    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"动作 create_task,im_notify\" value={opsStrategyLinkageForm.actions}");
+    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={opsStrategyLinkageForm.note}");
+  });
 });

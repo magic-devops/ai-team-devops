@@ -186,6 +186,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
     dev_tool: "codex",
     note: "联动策略灰度审计、SLO 升级、Runbook、自愈、任务和 IM 通知。",
   });
+  const [opsStrategyLinkageDrawerOpen, setOpsStrategyLinkageDrawerOpen] = useState(false);
   const [rbForm, setRbForm] = useState({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" });
   const [selectedRunbookId, setSelectedRunbookId] = useState("");
   const [runbookDiffResult, setRunbookDiffResult] = useState<any>(null);
@@ -1350,6 +1351,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                         <p className="mt-1 text-xs text-[var(--muted)]">把灰度审计、SLO 升级、Runbook、自愈、任务和 IM 通知串成可执行联动包。</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <button onClick={() => setOpsStrategyLinkageDrawerOpen(true)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs">配置联动</button>
                         <button onClick={() => runOpsStrategyLinkage.mutate(true)} disabled={runOpsStrategyLinkage.isPending} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">预览联动</button>
                         <button onClick={() => runOpsStrategyLinkage.mutate(false)} disabled={runOpsStrategyLinkage.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">执行联动</button>
                       </div>
@@ -1374,18 +1376,26 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                     </div>
                     <div className="mt-3 grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
                       <div className="rounded-lg border border-[var(--border)] p-3">
-                        <p className="text-xs font-semibold text-[var(--muted-strong)]">联动执行参数</p>
-                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                          <input className="input-base" placeholder="动作 create_task,im_notify" value={opsStrategyLinkageForm.actions} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, actions: e.target.value }))} />
-                          <input className="input-base" placeholder="最大联动项" value={opsStrategyLinkageForm.max_items} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, max_items: e.target.value }))} />
-                          <select className="input-base" value={opsStrategyLinkageForm.priority} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, priority: e.target.value }))}>
-                            {["P0", "P1", "P2", "P3"].map(item => <option key={item} value={item}>{item}</option>)}
-                          </select>
-                          <input className="input-base" placeholder="负责人" value={opsStrategyLinkageForm.assigned_to} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, assigned_to: e.target.value }))} />
-                          <input className="input-base" placeholder="执行工具" value={opsStrategyLinkageForm.dev_tool} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, dev_tool: e.target.value }))} />
+                        <p className="text-xs font-semibold text-[var(--muted-strong)]">联动配置摘要</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">动作</p>
+                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.actions}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">最大联动项</p>
+                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.max_items}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">优先级</p>
+                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.priority}</p>
+                          </div>
+                          <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                            <p className="text-xs text-[var(--muted)]">负责人</p>
+                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.assigned_to}</p>
+                          </div>
                         </div>
-                        <textarea className="input-base mt-2 min-h-16 w-full text-xs" value={opsStrategyLinkageForm.note} onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, note: e.target.value }))} />
-                        <p className="mt-2 text-[11px] text-[var(--muted)]">IM 通道沿用本页已选择通道；执行联动会创建任务并按 Notify 计划发送风险简报。</p>
+                        <p className="mt-2 text-[11px] text-[var(--muted)]">工具：{opsStrategyLinkageForm.dev_tool}。IM 通道沿用本页已选择通道，执行联动会创建任务并发送风险简报。</p>
                       </div>
                       <div className="rounded-lg border border-[var(--border)] p-3">
                         <p className="text-xs font-semibold text-[var(--muted-strong)]">联动结果</p>
@@ -1971,6 +1981,111 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
                   <Button onClick={() => setAlertStrategyCanaryDrawerOpen(false)}>取消</Button>
                 </Space>
                 {runAlertStrategyCanaryAudit.error && <p className="mt-3 text-xs text-red-600">{(runAlertStrategyCanaryAudit.error as Error).message}</p>}
+              </Form>
+            </div>
+          </Drawer>
+          <Drawer
+            title="配置跨模块联动"
+            open={opsStrategyLinkageDrawerOpen}
+            onClose={() => setOpsStrategyLinkageDrawerOpen(false)}
+            width="min(680px, 100vw)"
+          >
+            <div className="opsStrategyLinkageFocusedDrawer space-y-5">
+              <Steps
+                size="small"
+                current={1}
+                items={[
+                  { title: "范围" },
+                  { title: "动作" },
+                  { title: "证据" },
+                ]}
+              />
+              <Form layout="vertical" requiredMark={false} onFinish={() => runOpsStrategyLinkage.mutate(true)}>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">联动范围</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="动作">
+                      <Input
+                        value={opsStrategyLinkageForm.actions}
+                        onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, actions: e.target.value }))}
+                        placeholder="create_task,im_notify"
+                      />
+                    </Form.Item>
+                    <Form.Item label="最大联动项">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={opsStrategyLinkageForm.max_items}
+                        onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, max_items: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm font-semibold">任务与投递</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Form.Item label="优先级">
+                      <Select
+                        value={opsStrategyLinkageForm.priority}
+                        onChange={value => setOpsStrategyLinkageForm(f => ({ ...f, priority: value }))}
+                        options={["P0", "P1", "P2", "P3"].map(item => ({ label: item, value: item }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="负责人">
+                      <Input
+                        value={opsStrategyLinkageForm.assigned_to}
+                        onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, assigned_to: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="执行工具">
+                      <Input
+                        value={opsStrategyLinkageForm.dev_tool}
+                        onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, dev_tool: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="IM 通道">
+                      <Input value={`${imChannels.length} 个已选通道`} disabled />
+                    </Form.Item>
+                  </div>
+                  <Form.Item label="联动说明">
+                    <Input.TextArea
+                      autoSize={{ minRows: 3, maxRows: 5 }}
+                      value={opsStrategyLinkageForm.note}
+                      onChange={e => setOpsStrategyLinkageForm(f => ({ ...f, note: e.target.value }))}
+                    />
+                  </Form.Item>
+                </div>
+
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                  <p className="text-sm font-semibold">联动证据</p>
+                  <p className="mt-1 text-xs text-[var(--muted)]">预览不会落库；执行会创建治理任务并按 Notify 计划发送风险简报。</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">联动项</p>
+                      <p className="text-sm font-semibold">{latestOpsStrategyLinkage?.summary?.linkage_items ?? opsStrategyLinkageRunsQ.data?.summary?.latest_items ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">高风险</p>
+                      <p className="text-sm font-semibold">{latestOpsStrategyLinkage?.summary?.high_risk ?? opsStrategyLinkageRunsQ.data?.summary?.latest_high_risk ?? 0}</p>
+                    </div>
+                    <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-xs text-[var(--muted)]">已建任务</p>
+                      <p className="text-sm font-semibold">{latestOpsStrategyLinkage?.summary?.created ?? opsStrategyLinkageRunsQ.data?.summary?.latest_created ?? 0}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <Space className="mt-4" wrap>
+                  <Button type="primary" htmlType="submit" loading={runOpsStrategyLinkage.isPending}>
+                    预览联动
+                  </Button>
+                  <Button danger onClick={() => runOpsStrategyLinkage.mutate(false)} loading={runOpsStrategyLinkage.isPending}>
+                    执行联动
+                  </Button>
+                  <Button onClick={() => setOpsStrategyLinkageDrawerOpen(false)}>取消</Button>
+                </Space>
+                {runOpsStrategyLinkage.error && <p className="mt-3 text-xs text-red-600">{(runOpsStrategyLinkage.error as Error).message}</p>}
               </Form>
             </div>
           </Drawer>
