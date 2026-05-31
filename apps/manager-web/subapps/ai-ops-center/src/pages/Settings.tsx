@@ -141,6 +141,7 @@ export function Settings() {
   const [ssoRiskTaskDrawerOpen, setSsoRiskTaskDrawerOpen] = useState(false);
   const [ssoRiskImDraft, setSsoRiskImDraft] = useState({ channels: [] as string[], include_low: false, limit: "6", title: "" });
   const [ssoRiskImResult, setSsoRiskImResult] = useState<any>(null);
+  const [ssoRiskImDrawerOpen, setSsoRiskImDrawerOpen] = useState(false);
   const [ssoRiskSubscriptionDraft, setSsoRiskSubscriptionDraft] = useState({
     enabled: true,
     channels: [] as string[],
@@ -597,9 +598,10 @@ export function Settings() {
         channels: ssoRiskImDraft.channels,
         event: "sso_risk",
         title: ssoRiskImDraft.title,
-      }),
+    }),
     onSuccess: (data, dryRun) => {
       setSsoRiskImResult(data);
+      if (!dryRun) setSsoRiskImDrawerOpen(false);
       if (!dryRun) void qc.invalidateQueries({ queryKey: ["notifyMessages"] });
       void qc.invalidateQueries({ queryKey: ["ssoRiskReport"] });
     },
@@ -3820,84 +3822,87 @@ export function Settings() {
                           label={ssoRiskImResult ? String(ssoRiskImResult.delivery_plan?.target_count || 0) : "IM"}
                         />
                       </div>
-                      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
-                        <div className="space-y-3">
-                          <input
-                            className={inputClass}
-                            value={ssoRiskImDraft.title}
-                            onChange={(e) => setSsoRiskImDraft({ ...ssoRiskImDraft, title: e.target.value })}
-                            placeholder={t("page.settings.ssoRiskImTitlePh")}
-                          />
-                          <div className="grid gap-2 md:grid-cols-2">
-                            {(notifyChannels.data || []).map((channel: any) => {
-                              const checked = ssoRiskImDraft.channels.includes(channel.name);
-                              return (
-                                <label key={channel.name} className="flex min-h-16 items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted-strong)]">
-                                  <input
-                                    className="mt-1"
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => setSsoRiskImDraft({
-                                      ...ssoRiskImDraft,
-                                      channels: e.target.checked
-                                        ? Array.from(new Set([...ssoRiskImDraft.channels, channel.name]))
-                                        : ssoRiskImDraft.channels.filter((name) => name !== channel.name),
-                                    })}
-                                  />
-                                  <span className="min-w-0">
-                                    <span className="flex items-center gap-2">
-                                      <span className="truncate font-semibold text-[var(--text)]">{channel.name}</span>
-                                      <span className="font-mono text-[10px]">{channel.type}</span>
-                                    </span>
-                                    <span className="mt-1 block truncate text-[11px] text-[var(--muted)]">{(channel.events || []).join(", ") || "-"}</span>
-                                  </span>
-                                </label>
-                              );
-                            })}
-                            {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskImNoChannels")} /> : null}
-                          </div>
-                          {notifyChannels.error ? <ErrorLine message={(notifyChannels.error as Error).message} /> : null}
-                        </div>
-                        <div className="space-y-3">
-                          <label className="flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-xs text-[var(--muted-strong)]">
-                            <input
-                              type="checkbox"
-                              checked={ssoRiskImDraft.include_low}
-                              onChange={(e) => setSsoRiskImDraft({ ...ssoRiskImDraft, include_low: e.target.checked })}
-                            />
-                            {t("page.settings.ssoRiskTaskIncludeLow")}
-                          </label>
-                          <input
-                            className={inputClass}
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={ssoRiskImDraft.limit}
-                            onChange={(e) => setSsoRiskImDraft({ ...ssoRiskImDraft, limit: e.target.value })}
-                            placeholder={t("page.settings.ssoRiskTaskLimit")}
-                          />
-                          <div className="grid gap-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
-                              disabled={!selectedSsoProviderExists || runSsoRiskIm.isPending}
-                              onClick={() => runSsoRiskIm.mutate(true)}
-                            >
-                              <ListChecks className="h-4 w-4" />
-                              {t("page.settings.ssoRiskImPreview")}
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                              disabled={!selectedSsoProviderExists || runSsoRiskIm.isPending}
-                              onClick={() => runSsoRiskIm.mutate(false)}
-                            >
-                              <Send className="h-4 w-4" />
-                              {t("page.settings.ssoRiskImSend")}
-                            </button>
-                          </div>
-                        </div>
+                      <div className="ssoRiskImQuickSummary mt-3 grid gap-3 sm:grid-cols-4">
+                        <Info label={t("page.settings.ssoRiskImTitle")} value={ssoRiskImDraft.title || t("page.settings.ssoRiskImTitlePh")} />
+                        <Info label={t("page.settings.ssoRiskImTargets")} value={String(ssoRiskImDraft.channels.length || (notifyChannels.data || []).length || 0)} />
+                        <Info label={t("page.settings.ssoRiskTaskLimit")} value={ssoRiskImDraft.limit} />
+                        <Info label={t("page.settings.ssoRiskTaskIncludeLow")} value={ssoRiskImDraft.include_low ? "ON" : "OFF"} />
                       </div>
+                      {notifyChannels.error ? <ErrorLine message={(notifyChannels.error as Error).message} /> : null}
+                      {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskImNoChannels")} /> : null}
+                      <Button className="mt-3" block type="primary" icon={<MessageSquare className="h-4 w-4" />} disabled={!selectedSsoProviderExists} onClick={() => setSsoRiskImDrawerOpen(true)}>
+                        {t("page.settings.ssoRiskImOpenDrawer", { defaultValue: "配置 IM 风险通知" })}
+                      </Button>
+                      <Drawer
+                        title={t("page.settings.ssoRiskImTitle")}
+                        open={ssoRiskImDrawerOpen}
+                        onClose={() => setSsoRiskImDrawerOpen(false)}
+                        width={560}
+                        destroyOnClose={false}
+                        extra={
+                          <Space>
+                            <Button onClick={() => setSsoRiskImDrawerOpen(false)}>{t("common.cancel")}</Button>
+                            <Button type="primary" loading={runSsoRiskIm.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskIm.mutate(false)}>{t("page.settings.ssoRiskImSend")}</Button>
+                          </Space>
+                        }
+                      >
+                        <div className="space-y-4">
+                          <Steps
+                            size="small"
+                            current={ssoRiskImResult?.audit?.sent_count || ssoRiskImResult?.sent?.length ? 2 : ssoRiskImResult?.delivery_plan?.target_count ? 1 : 0}
+                            items={[
+                              { title: t("page.settings.ssoRiskImTitle", { defaultValue: "简报" }) },
+                              { title: t("page.settings.ssoRiskImPreview", { defaultValue: "预览" }) },
+                              { title: t("page.settings.ssoRiskImSend", { defaultValue: "发送" }) },
+                            ]}
+                          />
+                          <Form layout="vertical">
+                            <Form.Item label={t("page.settings.ssoRiskImTitle")} required>
+                              <Input value={ssoRiskImDraft.title} onChange={(e) => setSsoRiskImDraft({ ...ssoRiskImDraft, title: e.target.value })} placeholder={t("page.settings.ssoRiskImTitlePh")} />
+                            </Form.Item>
+                            <Form.Item label={t("page.settings.ssoRiskImTargets")}>
+                              <Select
+                                mode="multiple"
+                                allowClear
+                                value={ssoRiskImDraft.channels}
+                                onChange={(channels) => setSsoRiskImDraft({ ...ssoRiskImDraft, channels })}
+                                placeholder={t("page.settings.selectNotifyChannel")}
+                                options={(notifyChannels.data || []).map((channel: any) => ({
+                                  value: channel.name,
+                                  label: `${channel.name} · ${channel.type}`,
+                                }))}
+                              />
+                            </Form.Item>
+                            {!(notifyChannels.data || []).length ? <HintLine message={t("page.settings.ssoRiskImNoChannels")} /> : null}
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <Form.Item label={t("page.settings.ssoRiskTaskIncludeLow")}>
+                                <Switch checked={ssoRiskImDraft.include_low} onChange={(checked) => setSsoRiskImDraft({ ...ssoRiskImDraft, include_low: checked })} />
+                              </Form.Item>
+                              <Form.Item label={t("page.settings.ssoRiskTaskLimit")} required>
+                                <Input type="number" min={1} max={20} value={ssoRiskImDraft.limit} onChange={(e) => setSsoRiskImDraft({ ...ssoRiskImDraft, limit: e.target.value })} />
+                              </Form.Item>
+                            </div>
+                            {runSsoRiskIm.error ? <ErrorLine message={(runSsoRiskIm.error as Error).message} /> : null}
+                            {ssoRiskImResult ? (
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                  <Info label={t("page.settings.ssoRiskImTargets")} value={String(ssoRiskImResult.delivery_plan?.target_count || 0)} />
+                                  <Info label={t("page.settings.ssoRiskImMode")} value={String(ssoRiskImResult.delivery_plan?.selection_mode || "-")} />
+                                  <Info label={t("page.settings.ssoRiskImSent")} value={String(ssoRiskImResult.audit?.sent_count || ssoRiskImResult.sent?.length || 0)} />
+                                </div>
+                              </div>
+                            ) : null}
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Button loading={runSsoRiskIm.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskIm.mutate(true)}>
+                                {t("page.settings.ssoRiskImPreview")}
+                              </Button>
+                              <Button type="primary" loading={runSsoRiskIm.isPending} disabled={!selectedSsoProviderExists} onClick={() => runSsoRiskIm.mutate(false)}>
+                                {t("page.settings.ssoRiskImSend")}
+                              </Button>
+                            </div>
+                          </Form>
+                        </div>
+                      </Drawer>
                       {runSsoRiskIm.error ? <ErrorLine message={(runSsoRiskIm.error as Error).message} /> : null}
                       {ssoRiskImResult ? (
                         <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">

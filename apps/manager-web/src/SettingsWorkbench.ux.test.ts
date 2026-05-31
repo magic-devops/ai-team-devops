@@ -38,4 +38,15 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("runSsoRiskTasks.mutate(true)");
     expect(source).toContain("runSsoRiskTasks.mutate(false)");
   });
+
+  it("keeps SSO risk IM notification in a focused drawer flow", () => {
+    expect(source).toContain("ssoRiskImDrawerOpen");
+    expect(source).toContain("ssoRiskImQuickSummary");
+    expect(source).toContain("ssoRiskImOpenDrawer");
+    expect(source).toContain("setSsoRiskImDrawerOpen(true)");
+    expect(source).toContain('mode="multiple"');
+    expect(source).toContain("Switch checked={ssoRiskImDraft.include_low}");
+    expect(source).toContain("runSsoRiskIm.mutate(true)");
+    expect(source).toContain("runSsoRiskIm.mutate(false)");
+  });
 });
