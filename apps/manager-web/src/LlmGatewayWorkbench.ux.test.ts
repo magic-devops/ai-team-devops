@@ -10,6 +10,9 @@ describe("LlmGatewayWorkbench UX contract", () => {
   it("uses mature adaptive components for the main workbench shell", () => {
     expect(source).toContain("Segmented");
     expect(source).toContain("Table");
+    expect(source).toContain("Drawer");
+    expect(source).toContain("Form");
+    expect(source).toContain("Steps");
     expect(source).toContain("scroll={{ x:");
   });
 
@@ -24,5 +27,13 @@ describe("LlmGatewayWorkbench UX contract", () => {
     expect(source).toContain("AiAssistButton");
     expect(source).toContain("AiAssistDrawer");
     expect(source).toContain("llm-gateway");
+  });
+
+  it("keeps low-frequency configuration in drawers instead of inline forms", () => {
+    expect(source).toContain("编辑生产策略");
+    expect(source).toContain("上报 Provider 健康");
+    expect(source).toContain("新建模型路由");
+    expect(source).toContain("新建限流策略");
+    expect(source).not.toContain("setShowForm");
   });
 });

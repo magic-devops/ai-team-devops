@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Segmented, Space, Table, Tag } from "antd";
+import { Alert, Button, Drawer, Form, Input, InputNumber, Segmented, Select, Space, Steps, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
@@ -30,11 +30,32 @@ function badgeClass(level: string) {
   return "bg-emerald-50 text-emerald-700 ring-emerald-100";
 }
 
+const DEFAULT_ROUTE_FORM = { name: "", task_type: "general", model_id: "", priority: 0, fallback_model_id: "", enabled: true };
+const DEFAULT_DECISION_FORM = { task_type: "code", estimated_prompt_tokens: 4000, estimated_completion_tokens: 1200, required_quality: "balanced", allow_fallback: true };
+const DEFAULT_THROTTLE_FORM = { model_id: "", rpm_limit: 60, tpm_limit: 100000, enabled: true };
+const DEFAULT_POLICY_FORM = {
+  enabled: true,
+  daily_budget_usd: 100,
+  block_on_budget: true,
+  require_provider_health: true,
+  max_provider_latency_ms: 5000,
+  max_provider_error_rate: 0.5,
+  cost_anomaly_threshold_usd: 1,
+};
+const DEFAULT_PROVIDER_HEALTH_FORM = { model_id: "", status: "healthy", latency_ms: 800, error_rate: 0, note: "" };
+
 export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
   const qc = useQueryClient();
+  const [routeForm] = Form.useForm();
+  const [policyAntForm] = Form.useForm();
+  const [providerHealthForm] = Form.useForm();
+  const [throttleForm] = Form.useForm();
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [showForm, setShowForm] = useState(false);
+  const [showRouteDrawer, setShowRouteDrawer] = useState(false);
+  const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
+  const [showProviderDrawer, setShowProviderDrawer] = useState(false);
+  const [showThrottleDrawer, setShowThrottleDrawer] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [taskResult, setTaskResult] = useState<any>(null);
   const [decisionResult, setDecisionResult] = useState<any>(null);
@@ -46,9 +67,9 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   const [promptAuditResult, setPromptAuditResult] = useState<any>(null);
   const [imResult, setImResult] = useState<any>(null);
   const [imChannels, setImChannels] = useState<string[]>([]);
-  const [rForm, setRForm] = useState({ name: "", task_type: "general", model_id: "", priority: 0, fallback_model_id: "", enabled: true });
-  const [dForm, setDForm] = useState({ task_type: "code", estimated_prompt_tokens: 4000, estimated_completion_tokens: 1200, required_quality: "balanced", allow_fallback: true });
-  const [tForm, setTForm] = useState({ model_id: "", rpm_limit: 60, tpm_limit: 100000, enabled: true });
+  const [rForm, setRForm] = useState(DEFAULT_ROUTE_FORM);
+  const [dForm, setDForm] = useState(DEFAULT_DECISION_FORM);
+  const [tForm, setTForm] = useState(DEFAULT_THROTTLE_FORM);
   const [usageForm, setUsageForm] = useState({ model_id: "", prompt_tokens: 1000, completion_tokens: 500, cost_usd: 0.01, latency_ms: 800, task_type: "general" });
   const [attributionForm, setAttributionForm] = useState({ min_cost_usd: 0, dry_run: true, create_tasks: false, assigned_to: "AI Platform", dev_tool: "codex", note: "" });
   const [evalForm, setEvalForm] = useState({
@@ -97,16 +118,8 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     assigned_to: "AI Platform",
     dev_tool: "codex",
   });
-  const [policyForm, setPolicyForm] = useState({
-    enabled: true,
-    daily_budget_usd: 100,
-    block_on_budget: true,
-    require_provider_health: true,
-    max_provider_latency_ms: 5000,
-    max_provider_error_rate: 0.5,
-    cost_anomaly_threshold_usd: 1,
-  });
-  const [providerForm, setProviderForm] = useState({ model_id: "", status: "healthy", latency_ms: 800, error_rate: 0, note: "" });
+  const [policyForm, setPolicyForm] = useState(DEFAULT_POLICY_FORM);
+  const [providerForm, setProviderForm] = useState(DEFAULT_PROVIDER_HEALTH_FORM);
 
   const healthQ = useQuery({ queryKey: ["llmGatewayHealth"], queryFn: api.llmGatewayHealth, enabled: authed });
   const summaryQ = useQuery({ queryKey: ["llmGatewaySummary"], queryFn: api.llmGatewaySummary, enabled: authed });
@@ -124,7 +137,7 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   useEffect(() => {
     const policy = policyQ.data?.policy;
     if (!policy) return;
-    setPolicyForm({
+    const next = {
       enabled: Boolean(policy.enabled),
       daily_budget_usd: Number(policy.daily_budget_usd ?? 100),
       block_on_budget: Boolean(policy.block_on_budget),
@@ -132,15 +145,19 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       max_provider_latency_ms: Number(policy.max_provider_latency_ms ?? 5000),
       max_provider_error_rate: Number(policy.max_provider_error_rate ?? 0.5),
       cost_anomaly_threshold_usd: Number(policy.cost_anomaly_threshold_usd ?? 1),
-    });
-  }, [policyQ.data?.policy]);
+    };
+    setPolicyForm(next);
+    policyAntForm.setFieldsValue(next);
+  }, [policyAntForm, policyQ.data?.policy]);
 
   const createRoute = useMutation({
-    mutationFn: () => api.llmRouteCreate(rForm),
+    mutationFn: (draft: typeof DEFAULT_ROUTE_FORM = rForm) => api.llmRouteCreate(draft),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["llmRoutes"] });
       void qc.invalidateQueries({ queryKey: ["llmGatewayHealth"] });
-      setShowForm(false);
+      setShowRouteDrawer(false);
+      setRForm(DEFAULT_ROUTE_FORM);
+      routeForm.resetFields();
     },
   });
   const deleteRoute = useMutation({
@@ -160,18 +177,22 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     onSuccess: (data) => setPolicyDecisionResult(data),
   });
   const updatePolicy = useMutation({
-    mutationFn: () => api.llmGatewayPolicyUpdate(policyForm),
-    onSuccess: () => {
+    mutationFn: (draft: typeof DEFAULT_POLICY_FORM = policyForm) => api.llmGatewayPolicyUpdate(draft),
+    onSuccess: (_, draft = policyForm) => {
+      setPolicyForm(draft);
+      setShowPolicyDrawer(false);
       void qc.invalidateQueries({ queryKey: ["llmGatewayPolicies"] });
       void qc.invalidateQueries({ queryKey: ["llmGatewayHealth"] });
     },
   });
   const recordProviderHealth = useMutation({
-    mutationFn: () => api.llmProviderHealthRecord(providerForm),
+    mutationFn: (draft: typeof DEFAULT_PROVIDER_HEALTH_FORM = providerForm) => api.llmProviderHealthRecord(draft),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["llmProviderHealth"] });
       void qc.invalidateQueries({ queryKey: ["llmGatewayHealth"] });
-      setProviderForm((form) => ({ ...form, note: "" }));
+      setShowProviderDrawer(false);
+      setProviderForm(DEFAULT_PROVIDER_HEALTH_FORM);
+      providerHealthForm.resetFields();
     },
   });
   const fallbackDrill = useMutation({
@@ -245,11 +266,13 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
     },
   });
   const createThrottle = useMutation({
-    mutationFn: () => api.llmThrottleCreate(tForm),
+    mutationFn: (draft: typeof DEFAULT_THROTTLE_FORM = tForm) => api.llmThrottleCreate(draft),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["llmThrottle"] });
       void qc.invalidateQueries({ queryKey: ["llmGatewayHealth"] });
-      setShowForm(false);
+      setShowThrottleDrawer(false);
+      setTForm(DEFAULT_THROTTLE_FORM);
+      throttleForm.resetFields();
     },
   });
   const deleteThrottle = useMutation({
@@ -428,7 +451,11 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
         <Segmented
           value={tab}
-          onChange={(value) => { setTab(value as Tab); setShowForm(false); }}
+          onChange={(value) => {
+            setTab(value as Tab);
+            setShowRouteDrawer(false);
+            setShowThrottleDrawer(false);
+          }}
           options={tabs.map((item) => ({
             label: item.key === "routes" ? `${item.label} (${routes.length})` : item.label,
             value: item.key,
@@ -553,48 +580,54 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
       {tab === "policy" && (
         <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
           <WorkbenchPanel title="生产策略控制" actions={
-            <button onClick={() => updatePolicy.mutate()} disabled={updatePolicy.isPending} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white disabled:opacity-50">
-              {updatePolicy.isPending ? "保存中..." : "保存策略"}
-            </button>
+            <Button
+              type="primary"
+              loading={updatePolicy.isPending}
+              onClick={() => {
+                policyAntForm.setFieldsValue(policyForm);
+                setShowPolicyDrawer(true);
+              }}
+            >
+              编辑策略
+            </Button>
           }>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                <input type="checkbox" checked={policyForm.enabled} onChange={(event) => setPolicyForm((form) => ({ ...form, enabled: event.target.checked }))} />
-                启用模型网关策略
-              </label>
-              <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                <input type="checkbox" checked={policyForm.block_on_budget} onChange={(event) => setPolicyForm((form) => ({ ...form, block_on_budget: event.target.checked }))} />
-                超预算直接阻断
-              </label>
-              <label className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                <input type="checkbox" checked={policyForm.require_provider_health} onChange={(event) => setPolicyForm((form) => ({ ...form, require_provider_health: event.target.checked }))} />
-                强制 Provider 健康
-              </label>
-              <input className="input-base" type="number" step="0.01" placeholder="每日预算 USD" value={policyForm.daily_budget_usd} onChange={(event) => setPolicyForm((form) => ({ ...form, daily_budget_usd: Number(event.target.value) }))} />
-              <input className="input-base" type="number" placeholder="最大延迟 ms" value={policyForm.max_provider_latency_ms} onChange={(event) => setPolicyForm((form) => ({ ...form, max_provider_latency_ms: Number(event.target.value) }))} />
-              <input className="input-base" type="number" step="0.01" min="0" max="1" placeholder="最大错误率" value={policyForm.max_provider_error_rate} onChange={(event) => setPolicyForm((form) => ({ ...form, max_provider_error_rate: Number(event.target.value) }))} />
-              <input className="input-base" type="number" step="0.01" placeholder="成本异常阈值 USD" value={policyForm.cost_anomaly_threshold_usd} onChange={(event) => setPolicyForm((form) => ({ ...form, cost_anomaly_threshold_usd: Number(event.target.value) }))} />
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="text-xs text-[var(--muted)]">每日预算</div>
+                <div className="mt-1 text-2xl font-semibold">${policyForm.daily_budget_usd}</div>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="text-xs text-[var(--muted)]">Provider 健康阈值</div>
+                <div className="mt-1 text-sm font-semibold">{policyForm.max_provider_latency_ms}ms · 错误率 {Math.round(Number(policyForm.max_provider_error_rate) * 100)}%</div>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className={`rounded-full px-2 py-1 ${policyForm.enabled ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>策略 {policyForm.enabled ? "启用" : "停用"}</span>
+              <span className={`rounded-full px-2 py-1 ${policyForm.block_on_budget ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>预算阻断 {policyForm.block_on_budget ? "开启" : "关闭"}</span>
+              <span className={`rounded-full px-2 py-1 ${policyForm.require_provider_health ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>Provider 健康 {policyForm.require_provider_health ? "强制" : "提示"}</span>
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[var(--muted)]">成本异常 ≥ ${policyForm.cost_anomaly_threshold_usd}</span>
             </div>
             <div className="mt-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
               当前策略：预算 ${policy.daily_budget_usd ?? 0}，Provider 延迟阈值 {policy.max_provider_latency_ms ?? 0}ms，错误率阈值 {policy.max_provider_error_rate ?? 0}，成本异常阈值 ${policy.cost_anomaly_threshold_usd ?? 0}。
             </div>
           </WorkbenchPanel>
 
-          <WorkbenchPanel title="Provider 健康上报" actions={<RefreshButton onClick={() => void providerHealthQ.refetch()} pending={providerHealthQ.isFetching} />}>
-            <div className="grid gap-3 sm:grid-cols-5">
-              <input className="input-base sm:col-span-2" placeholder="模型 ID *" value={providerForm.model_id} onChange={(event) => setProviderForm((form) => ({ ...form, model_id: event.target.value }))} />
-              <select className="input-base" value={providerForm.status} onChange={(event) => setProviderForm((form) => ({ ...form, status: event.target.value }))}>
-                <option value="healthy">healthy</option>
-                <option value="degraded">degraded</option>
-                <option value="down">down</option>
-              </select>
-              <input className="input-base" type="number" placeholder="延迟 ms" value={providerForm.latency_ms} onChange={(event) => setProviderForm((form) => ({ ...form, latency_ms: Number(event.target.value) }))} />
-              <input className="input-base" type="number" step="0.01" min="0" max="1" placeholder="错误率" value={providerForm.error_rate} onChange={(event) => setProviderForm((form) => ({ ...form, error_rate: Number(event.target.value) }))} />
-              <input className="input-base sm:col-span-4" placeholder="备注" value={providerForm.note} onChange={(event) => setProviderForm((form) => ({ ...form, note: event.target.value }))} />
-              <button onClick={() => recordProviderHealth.mutate()} disabled={!providerForm.model_id || recordProviderHealth.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">上报健康</button>
+          <WorkbenchPanel title="Provider 健康上报" actions={
+            <div className="flex flex-wrap gap-2">
+              <RefreshButton onClick={() => void providerHealthQ.refetch()} pending={providerHealthQ.isFetching} />
+              <Button
+                type="primary"
+                loading={recordProviderHealth.isPending}
+                onClick={() => {
+                  providerHealthForm.setFieldsValue(providerForm);
+                  setShowProviderDrawer(true);
+                }}
+              >
+                上报健康
+              </Button>
             </div>
+          }>
             <Table
-              className="mt-4"
               rowKey={(item) => item.id || item.model_id}
               size="small"
               columns={providerColumns}
@@ -612,30 +645,17 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
         <WorkbenchPanel title="模型路由规则" actions={
           <div className="flex gap-2">
             <RefreshButton onClick={() => void routesQ.refetch()} pending={routesQ.isFetching} />
-            <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建路由</button>
+            <Button
+              type="primary"
+              onClick={() => {
+                routeForm.setFieldsValue(rForm);
+                setShowRouteDrawer(true);
+              }}
+            >
+              新建路由
+            </Button>
           </div>
         }>
-          {showForm && (
-            <div className="mb-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input className="input-base" placeholder="路由名称 *" value={rForm.name} onChange={(event) => setRForm((form) => ({ ...form, name: event.target.value }))} />
-                <input className="input-base" placeholder="任务类型" value={rForm.task_type} onChange={(event) => setRForm((form) => ({ ...form, task_type: event.target.value }))} />
-                <input className="input-base" placeholder="主模型 ID *" value={rForm.model_id} onChange={(event) => setRForm((form) => ({ ...form, model_id: event.target.value }))} />
-                <input className="input-base" placeholder="备用模型 ID" value={rForm.fallback_model_id} onChange={(event) => setRForm((form) => ({ ...form, fallback_model_id: event.target.value }))} />
-                <input className="input-base" type="number" placeholder="优先级" value={rForm.priority} onChange={(event) => setRForm((form) => ({ ...form, priority: Number(event.target.value) }))} />
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={rForm.enabled} onChange={(event) => setRForm((form) => ({ ...form, enabled: event.target.checked }))} />
-                  启用
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => createRoute.mutate()} disabled={!rForm.name || !rForm.model_id || createRoute.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                  {createRoute.isPending ? "创建中..." : "创建"}
-                </button>
-                <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-              </div>
-            </div>
-          )}
           <Table
             rowKey="id"
             size="small"
@@ -1214,24 +1234,17 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
         <WorkbenchPanel title="限流策略" actions={
           <div className="flex gap-2">
             <RefreshButton onClick={() => void throttleQ.refetch()} pending={throttleQ.isFetching} />
-            <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建限流</button>
+            <Button
+              type="primary"
+              onClick={() => {
+                throttleForm.setFieldsValue(tForm);
+                setShowThrottleDrawer(true);
+              }}
+            >
+              新建限流
+            </Button>
           </div>
         }>
-          {showForm && (
-            <div className="mb-4 space-y-3 rounded-lg border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <input className="input-base" placeholder="模型 ID *" value={tForm.model_id} onChange={(event) => setTForm((form) => ({ ...form, model_id: event.target.value }))} />
-                <input className="input-base" type="number" placeholder="RPM 限制" value={tForm.rpm_limit} onChange={(event) => setTForm((form) => ({ ...form, rpm_limit: Number(event.target.value) }))} />
-                <input className="input-base" type="number" placeholder="TPM 限制" value={tForm.tpm_limit} onChange={(event) => setTForm((form) => ({ ...form, tpm_limit: Number(event.target.value) }))} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => createThrottle.mutate()} disabled={!tForm.model_id || createThrottle.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                  {createThrottle.isPending ? "创建中..." : "创建"}
-                </button>
-                <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-              </div>
-            </div>
-          )}
           <Table
             rowKey="id"
             size="small"
@@ -1244,6 +1257,246 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
           />
         </WorkbenchPanel>
       )}
+
+      <Drawer
+        title="编辑生产策略"
+        width={600}
+        open={showPolicyDrawer}
+        onClose={() => setShowPolicyDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowPolicyDrawer(false)}>取消</Button>
+            <Button type="primary" loading={updatePolicy.isPending} onClick={() => policyAntForm.submit()}>
+              保存策略
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "预算护栏" },
+              { title: "Provider 健康" },
+              { title: "成本治理" },
+            ]}
+          />
+          <Alert
+            type="info"
+            showIcon
+            message="生产策略会影响所有模型调用前决策"
+            description="建议保持预算阻断和 Provider 健康校验开启，避免不可控成本和异常 Provider 继续承接任务。"
+          />
+          <Form
+            form={policyAntForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={policyForm}
+            onValuesChange={(_, values) => setPolicyForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => updatePolicy.mutate({ ...DEFAULT_POLICY_FORM, ...policyForm, ...values })}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="enabled" label="启用模型网关策略" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="block_on_budget" label="超预算直接阻断" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item name="require_provider_health" label="强制 Provider 健康" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="daily_budget_usd" label="每日预算 USD">
+                <InputNumber min={0} step={1} className="w-full" />
+              </Form.Item>
+              <Form.Item name="max_provider_latency_ms" label="最大延迟 ms">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="max_provider_error_rate" label="最大错误率">
+                <InputNumber min={0} max={1} step={0.01} className="w-full" />
+              </Form.Item>
+              <Form.Item name="cost_anomaly_threshold_usd" label="成本异常阈值 USD">
+                <InputNumber min={0} step={0.01} className="w-full" />
+              </Form.Item>
+            </div>
+            {updatePolicy.error ? <Alert type="error" showIcon message={(updatePolicy.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="上报 Provider 健康"
+        width={560}
+        open={showProviderDrawer}
+        onClose={() => setShowProviderDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowProviderDrawer(false)}>取消</Button>
+            <Button type="primary" loading={recordProviderHealth.isPending} onClick={() => providerHealthForm.submit()} disabled={!providerForm.model_id.trim()}>
+              上报健康
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "选择模型" },
+              { title: "健康指标" },
+              { title: "策略联动" },
+            ]}
+          />
+          <Form
+            form={providerHealthForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={providerForm}
+            onValuesChange={(_, values) => setProviderForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => recordProviderHealth.mutate({ ...DEFAULT_PROVIDER_HEALTH_FORM, ...providerForm, ...values })}
+          >
+            <Form.Item name="model_id" label="模型 ID" rules={[{ required: true, message: "请输入模型 ID" }]}>
+              <Input placeholder="gpt-5" />
+            </Form.Item>
+            <Form.Item name="status" label="健康状态">
+              <Select
+                options={[
+                  { label: "healthy", value: "healthy" },
+                  { label: "degraded", value: "degraded" },
+                  { label: "down", value: "down" },
+                ]}
+              />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="latency_ms" label="延迟 ms">
+                <InputNumber min={0} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="error_rate" label="错误率">
+                <InputNumber min={0} max={1} step={0.01} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item name="note" label="备注">
+              <Input placeholder="例如 provider region degraded" />
+            </Form.Item>
+            {recordProviderHealth.error ? <Alert type="error" showIcon message={(recordProviderHealth.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="新建模型路由"
+        width={560}
+        open={showRouteDrawer}
+        onClose={() => setShowRouteDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowRouteDrawer(false)}>取消</Button>
+            <Button type="primary" loading={createRoute.isPending} onClick={() => routeForm.submit()} disabled={!rForm.name.trim() || !rForm.model_id.trim()}>
+              创建路由
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "任务类型" },
+              { title: "模型路由" },
+              { title: "Fallback" },
+            ]}
+          />
+          <Form
+            form={routeForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={rForm}
+            onValuesChange={(_, values) => setRForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => createRoute.mutate({ ...DEFAULT_ROUTE_FORM, ...rForm, ...values })}
+          >
+            <Form.Item name="name" label="路由名称" rules={[{ required: true, message: "请输入路由名称" }]}>
+              <Input placeholder="Code review default route" />
+            </Form.Item>
+            <Form.Item name="task_type" label="任务类型">
+              <Input placeholder="code_review" />
+            </Form.Item>
+            <Form.Item name="model_id" label="主模型 ID" rules={[{ required: true, message: "请输入主模型 ID" }]}>
+              <Input placeholder="gpt-5" />
+            </Form.Item>
+            <Form.Item name="fallback_model_id" label="备用模型 ID">
+              <Input placeholder="gpt-5-mini" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="priority" label="优先级">
+                <InputNumber precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="enabled" label="启用路由" valuePropName="checked">
+                <Switch />
+              </Form.Item>
+            </div>
+            {createRoute.error ? <Alert type="error" showIcon message={(createRoute.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
+
+      <Drawer
+        title="新建限流策略"
+        width={520}
+        open={showThrottleDrawer}
+        onClose={() => setShowThrottleDrawer(false)}
+        destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => setShowThrottleDrawer(false)}>取消</Button>
+            <Button type="primary" loading={createThrottle.isPending} onClick={() => throttleForm.submit()} disabled={!tForm.model_id.trim()}>
+              创建限流
+            </Button>
+          </Space>
+        }
+      >
+        <div className="space-y-4">
+          <Steps
+            size="small"
+            current={0}
+            items={[
+              { title: "选择模型" },
+              { title: "设置阈值" },
+              { title: "调用保护" },
+            ]}
+          />
+          <Form
+            form={throttleForm}
+            layout="vertical"
+            requiredMark="optional"
+            initialValues={tForm}
+            onValuesChange={(_, values) => setTForm((form) => ({ ...form, ...values }))}
+            onFinish={(values) => createThrottle.mutate({ ...DEFAULT_THROTTLE_FORM, ...tForm, ...values })}
+          >
+            <Form.Item name="model_id" label="模型 ID" rules={[{ required: true, message: "请输入模型 ID" }]}>
+              <Input placeholder="gpt-5" />
+            </Form.Item>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Form.Item name="rpm_limit" label="RPM 限制">
+                <InputNumber min={1} precision={0} className="w-full" />
+              </Form.Item>
+              <Form.Item name="tpm_limit" label="TPM 限制">
+                <InputNumber min={1} precision={0} className="w-full" />
+              </Form.Item>
+            </div>
+            <Form.Item name="enabled" label="启用限流" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            {createThrottle.error ? <Alert type="error" showIcon message={(createThrottle.error as Error).message} /> : null}
+          </Form>
+        </div>
+      </Drawer>
 
       <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="llm-gateway"
         title="AI 模型网关助手"

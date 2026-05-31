@@ -158,7 +158,7 @@
    - `Settings`：已完成专业子路由聚焦与移动端模块选择第一步，`#/settings/account/runtime/observability/profiles/sso/billing` 可直接进入对应模块；下一步继续把发布流水线、SSO 风险处置、计费策略等复杂表单拆成 Drawer/Steps。
    - `OpsCenterWorkbench`
    - `A2aWorkbench`：已完成第一步交互收敛，Hub 的 Agent 注册入口直达 `#/ecosystem/a2a/registry`，工作台内部按 `registry/negotiate/sla/windows/dispatch/evidence` 深链自动聚焦，并将手写 tab 改为 Ant Design `Segmented`，移动端横向滚动承接；Agent 注册已从页面内裸表单升级为 Ant Design `Drawer / Form / Select / Steps / Alert`，注册后一次性凭证提示独立展示；能力协商已升级为 Ant Design `Drawer / Form / Steps / Alert`，主页面只保留任务摘要、推荐结果、时间线入口和分发动作；信任策略、SLA 策略、执行窗口策略已统一升级为 `Drawer / Form / InputNumber / Switch / Steps / Alert`，主工作区只展示策略摘要和高频治理操作。
-   - `LlmGatewayWorkbench`：已完成第一步交互收敛，主导航改为 Ant Design `Segmented`，路由规则、Provider 健康、限流策略三张关键表改为 Ant Design `Table`，并保留 AI 助手入口。
+   - `LlmGatewayWorkbench`：已完成第一步交互收敛，主导航改为 Ant Design `Segmented`，路由规则、Provider 健康、限流策略三张关键表改为 Ant Design `Table`，并保留 AI 助手入口；生产策略、Provider 健康上报、模型路由创建、限流创建已升级为 Ant Design `Drawer / Form / InputNumber / Select / Switch / Steps / Alert`，主工作区只保留策略摘要、表格和高频治理动作；下一步继续收敛调用决策、成本归因、模型评测和 Prompt 审计表单。
    - `App`
 2. 成熟组件优先：
    - 表单优先使用 Ant Design `Form / Input / Select / InputNumber / Switch / Alert / Drawer / Steps / Table`。

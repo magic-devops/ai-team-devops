@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T02:05:44Z",
+  "updated_at": "2026-05-31T02:43:57Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -337,12 +337,13 @@
       "完成 Task 76 A2A 工作台深链聚焦与成熟组件导航收敛：A2A Hub 的 Agent 注册入口修正为 #/ecosystem/a2a/registry；A2aWorkbench 支持 registry/negotiate/sla/windows/dispatch/evidence 等深链自动聚焦，内部导航从手写 tab 收敛为 Ant Design Segmented，移动端横向滚动承接，协商会话和分发成功后的跳转同步更新 hash。",
       "完成 Task 77 A2A Agent 注册交互抽屉化：A2A 注册外部 Agent 从页面内裸 input/select 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主注册工作区只保留列表、信任策略和关键操作；保存动作走 Form submit 与必填校验，注册成功后关闭抽屉、重置表单并保留一次性凭证提示。",
       "完成 Task 78 A2A 能力协商交互抽屉化：A2A 能力协商从主页面裸 input/select/textarea 表单升级为 Ant Design Drawer/Form/Input/Select/Steps/Alert，主协商页只保留任务摘要、能力标签、最近协商时间线入口、匹配解释和分发动作；提交后保留最近协商参数供分发 payload、SLA 和协议包复用，降低页面复杂度并增强移动端可用性。",
-      "完成 Task 79 A2A 策略配置交互统一抽屉化：A2A 信任策略、SLA 策略和执行窗口策略从主页面裸 input/select/checkbox 配置区升级为 Ant Design Drawer/Form/InputNumber/Switch/Select/Steps/Alert，主工作区只展示策略摘要、关键状态和预览/生成治理任务等高频动作；策略保存改为提交 draft 后调用接口，避免状态异步导致配置错写，提升移动端和专业运维可用性。"
+      "完成 Task 79 A2A 策略配置交互统一抽屉化：A2A 信任策略、SLA 策略和执行窗口策略从主页面裸 input/select/checkbox 配置区升级为 Ant Design Drawer/Form/InputNumber/Switch/Select/Steps/Alert，主工作区只展示策略摘要、关键状态和预览/生成治理任务等高频动作；策略保存改为提交 draft 后调用接口，避免状态异步导致配置错写，提升移动端和专业运维可用性。",
+      "完成 Task 80 LLM Gateway 策略与配置交互抽屉化：模型网关生产策略、Provider 健康上报、模型路由创建和限流创建从主页面裸 input/select/checkbox 表单升级为 Ant Design Drawer/Form/Input/InputNumber/Select/Switch/Steps/Alert；主工作区保留策略摘要、Provider 表、路由表、限流表和 AI 助手，低频配置进入抽屉提交 draft，减少页面复杂度并提升移动端可用性。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 79 A2A 策略配置交互统一抽屉化已完成：信任策略、SLA 策略、执行窗口策略统一从主页面配置区收敛到 Ant Design 抽屉式步骤表单，主页面聚焦状态、摘要、治理任务和高频动作；下一步继续推进 OpsCenter 大工作台模块化和 LLM Gateway 表单抽屉化。"
+    "current": "Task 80 LLM Gateway 策略与配置交互抽屉化已完成：生产策略、Provider 健康上报、模型路由创建和限流创建已从主页面配置区收敛到 Ant Design 抽屉式步骤表单；下一步继续推进 LLM Gateway 调用决策/成本归因/模型评测/Prompt 审计表单抽屉化，以及 OpsCenter 大工作台模块化。"
   },
   "metrics": {
     "completion_rate": 100,
