@@ -59,6 +59,7 @@ function serializeItem(item: ManagedNavItem) {
 
 export function MenuManagement() {
   const { t } = useTranslation();
+  const mt = (key: string, values?: Record<string, unknown>) => t(`page.menuManagement.${key}`, values);
   const importRef = useRef<HTMLInputElement | null>(null);
   const backendHealth = useQuery({ queryKey: ["systemPagesHealth"], queryFn: api.systemPagesHealth, retry: false });
   const backendValidation = useQuery({ queryKey: ["systemPagesValidate"], queryFn: api.systemPagesValidate, retry: false });
@@ -79,12 +80,12 @@ export function MenuManagement() {
       const summary = data?.summary ?? {};
       setToast(
         dryRun
-          ? `已预览 ${summary.planned ?? 0} 个治理任务，跳过 ${summary.skipped ?? 0} 个已存在任务`
-          : `已生成 ${summary.created ?? 0} 个治理任务，跳过 ${summary.skipped ?? 0} 个已存在任务`,
+          ? mt("taskPreviewToast", { planned: summary.planned ?? 0, skipped: summary.skipped ?? 0 })
+          : mt("taskCreatedToast", { created: summary.created ?? 0, skipped: summary.skipped ?? 0 }),
       );
     },
     onError: (error: unknown) => {
-      setToast(`治理任务处理失败：${error instanceof Error ? error.message : "后端接口暂不可用"}`);
+      setToast(mt("taskErrorToast", { message: error instanceof Error ? error.message : mt("backendUnavailable") }));
     },
   });
 
@@ -179,19 +180,19 @@ export function MenuManagement() {
           : item,
       ),
     );
-    setToast(`已更新 ${editing.label || editing.key}`);
+    setToast(mt("updatedToast", { label: editing.label || editing.key }));
     setEditing(null);
   }
 
   function batchHidden(hidden: boolean) {
     setItems((next) => next.map((item) => (selected.has(item.key) ? { ...item, hidden } : item)));
-    setToast(hidden ? `已隐藏 ${selected.size} 个菜单` : `已显示 ${selected.size} 个菜单`);
+    setToast(hidden ? mt("batchHiddenToast", { count: selected.size }) : mt("batchShownToast", { count: selected.size }));
   }
 
   function resetWorkingCopy() {
     setItems(NAV.map((item) => ({ ...item })));
     setSelected(new Set());
-    setToast("已恢复导航注册表默认状态");
+    setToast(mt("resetToast"));
   }
 
   function exportRegistry() {
@@ -202,7 +203,7 @@ export function MenuManagement() {
     link.download = `hermes-nav-registry-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setToast("已导出当前菜单工作副本");
+    setToast(mt("exportToast"));
   }
 
   function importRegistry(event: ChangeEvent<HTMLInputElement>) {
@@ -213,7 +214,7 @@ export function MenuManagement() {
       .text()
       .then((content) => {
         const parsed = JSON.parse(content) as Array<Partial<ManagedNavItem> & { key?: string }>;
-        if (!Array.isArray(parsed)) throw new Error("文件必须是菜单数组");
+        if (!Array.isArray(parsed)) throw new Error(mt("invalidImportArray"));
         const patches = new Map(parsed.filter((entry) => entry.key).map((entry) => [entry.key as string, entry]));
         let count = 0;
         setItems((next) =>
@@ -232,37 +233,37 @@ export function MenuManagement() {
             };
           }),
         );
-        setToast(`已导入并合并 ${count} 个已注册菜单`);
+        setToast(mt("importToast", { count }));
       })
       .catch((error: unknown) => {
-        setToast(`导入失败：${error instanceof Error ? error.message : "无法解析文件"}`);
+        setToast(mt("importErrorToast", { message: error instanceof Error ? error.message : mt("parseFailed") }));
       });
   }
 
   return (
     <WorkbenchShell
-      title="菜单管理工作台"
-      description="统一维护主应用与子应用菜单契约，支持树形结构、能力码、可见性、批量治理和实时健康检查。"
+      title={mt("title")}
+      description={mt("description")}
       actions={
         <>
           <input ref={importRef} type="file" accept="application/json" className="hidden" onChange={importRegistry} />
           <button className={secondaryButton} type="button" onClick={() => importRef.current?.click()}>
-            <Upload size={16} /> 导入
+            <Upload size={16} /> {mt("import")}
           </button>
           <button className={secondaryButton} type="button" onClick={exportRegistry}>
-            <Download size={16} /> 导出
+            <Download size={16} /> {mt("export")}
           </button>
           <button className={secondaryButton} type="button" onClick={resetWorkingCopy}>
-            <RotateCcw size={16} /> 恢复默认
+            <RotateCcw size={16} /> {mt("resetDefault")}
           </button>
         </>
       }
       metrics={
         <div className="grid gap-3 md:grid-cols-4">
-          <MetricCard label="菜单总数" value={items.length} icon={<Layers3 size={18} />} />
-          <MetricCard label="已选择" value={selected.size} icon={<CheckSquare size={18} />} />
-          <MetricCard label="错误" value={healthSummary.error} tone={healthSummary.error ? "danger" : "ok"} icon={<AlertTriangle size={18} />} />
-          <MetricCard label="告警" value={healthSummary.warn} tone={healthSummary.warn ? "warn" : "ok"} icon={<ShieldCheck size={18} />} />
+          <MetricCard label={mt("metricTotal")} value={items.length} icon={<Layers3 size={18} />} />
+          <MetricCard label={mt("metricSelected")} value={selected.size} icon={<CheckSquare size={18} />} />
+          <MetricCard label={mt("metricErrors")} value={healthSummary.error} tone={healthSummary.error ? "danger" : "ok"} icon={<AlertTriangle size={18} />} />
+          <MetricCard label={mt("metricWarnings")} value={healthSummary.warn} tone={healthSummary.warn ? "warn" : "ok"} icon={<ShieldCheck size={18} />} />
         </div>
       }
     >
@@ -284,7 +285,7 @@ export function MenuManagement() {
                 className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] py-2 pl-10 pr-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索名称、路径、能力码或描述"
+                placeholder={mt("searchPlaceholder")}
               />
             </label>
             <select
@@ -292,7 +293,7 @@ export function MenuManagement() {
               value={domain}
               onChange={(event) => setDomain(event.target.value as "all" | NavGroupKey)}
             >
-              <option value="all">全部域</option>
+              <option value="all">{t("common.all")}</option>
               {NAV_GROUPS.map((group) => (
                 <option key={group.key} value={group.key}>
                   {groupLabel(group.key)}
@@ -300,10 +301,10 @@ export function MenuManagement() {
               ))}
             </select>
             <button className={secondaryButton} type="button" disabled={!selected.size} onClick={() => batchHidden(true)}>
-              <EyeOff size={16} /> 批量隐藏
+              <EyeOff size={16} /> {mt("batchHide")}
             </button>
             <button className={secondaryButton} type="button" disabled={!selected.size} onClick={() => batchHidden(false)}>
-              <Eye size={16} /> 批量显示
+              <Eye size={16} /> {mt("batchShow")}
             </button>
           </div>
           <div className="max-h-[70vh] overflow-auto p-3">
@@ -374,7 +375,7 @@ export function MenuManagement() {
           <div className="h-full w-full max-w-xl overflow-auto border-l border-[var(--border)] bg-[var(--surface-raised)] p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Inline Editor</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">{mt("inlineEditor")}</p>
                 <h3 className="mt-1 text-xl font-semibold text-[var(--text)]">{editing.label}</h3>
                 <p className="mt-1 text-sm text-[var(--muted)]">{editing.key}</p>
               </div>
@@ -383,16 +384,16 @@ export function MenuManagement() {
               </button>
             </div>
             <div className="mt-6 space-y-4">
-              <Field label="名称">
+              <Field label={mt("fieldName")}>
                 <input className={inputControl} value={editing.label} onChange={(event) => setEditing({ ...editing, label: event.target.value })} />
               </Field>
-              <Field label="路径">
+              <Field label={mt("fieldPath")}>
                 <input className={cn(inputControl, "font-mono")} value={editing.path} onChange={(event) => setEditing({ ...editing, path: event.target.value })} />
               </Field>
-              <Field label="能力码">
+              <Field label={mt("fieldCapability")}>
                 <input className={cn(inputControl, "font-mono")} value={editing.capability} onChange={(event) => setEditing({ ...editing, capability: event.target.value })} />
               </Field>
-              <Field label="域">
+              <Field label={mt("fieldDomain")}>
                 <select className={inputControl} value={editing.group} onChange={(event) => setEditing({ ...editing, group: event.target.value as NavGroupKey })}>
                   {NAV_GROUPS.map((group) => (
                     <option key={group.key} value={group.key}>
@@ -401,29 +402,29 @@ export function MenuManagement() {
                   ))}
                 </select>
               </Field>
-              <Field label="徽标">
+              <Field label={mt("fieldBadge")}>
                 <select className={inputControl} value={editing.badge} onChange={(event) => setEditing({ ...editing, badge: event.target.value as "" | NavBadge })}>
                   {badgeOptions.map((badge) => (
                     <option key={badge || "none"} value={badge}>
-                      {badge || "无徽标"}
+                      {badge || mt("noBadge")}
                     </option>
                   ))}
                 </select>
               </Field>
               <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)]">
                 <span>
-                  <strong>隐藏菜单</strong>
-                  <span className="ml-2 text-[var(--muted)]">隐藏后不进入默认导航，但仍保留注册契约。</span>
+                  <strong>{mt("hiddenMenu")}</strong>
+                  <span className="ml-2 text-[var(--muted)]">{mt("hiddenHint")}</span>
                 </span>
                 <input type="checkbox" checked={editing.hidden} onChange={(event) => setEditing({ ...editing, hidden: event.target.checked })} />
               </label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button className={secondaryButton} type="button" onClick={() => setEditing(null)}>
-                取消
+                {t("common.cancel")}
               </button>
               <button className={primaryButton} type="button" onClick={saveEditor}>
-                保存并检查
+                {mt("saveAndCheck")}
               </button>
             </div>
           </div>
@@ -452,6 +453,7 @@ function GovernanceTaskPanel({
   onPreview: () => void;
   onCreate: () => void;
 }) {
+  const { t } = useTranslation();
   const planned = Array.isArray(preview?.planned) ? preview.planned : [];
   const skipped = Array.isArray(preview?.skipped) ? preview.skipped : [];
   const created = Array.isArray(preview?.created) ? preview.created : [];
@@ -460,14 +462,14 @@ function GovernanceTaskPanel({
       <div className="border-b border-[var(--border)] p-4">
         <div className="flex items-center gap-2 text-base font-semibold text-[var(--text)]">
           <CheckSquare size={18} className="text-[var(--accent)]" />
-          治理任务生成
+          {t("page.menuManagement.governanceTasks")}
         </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">基于后端迁移 Backlog 生成可追踪任务，让菜单契约、legacy 收敛和微应用治理进入任务闭环。</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">{t("page.menuManagement.governanceTasksDesc")}</p>
       </div>
       <div className="space-y-3 p-4">
         <div className="grid grid-cols-2 gap-2">
           <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
-            优先级
+            {t("page.menuManagement.priority")}
             <select
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
               value={priority}
@@ -479,38 +481,38 @@ function GovernanceTaskPanel({
             </select>
           </label>
           <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
-            负责人
+            {t("page.menuManagement.assignee")}
             <input
               className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
               value={assignedTo}
               onChange={(event) => onAssignedToChange(event.target.value)}
-              placeholder="Coder"
+              placeholder={t("page.menuManagement.defaultAssignee")}
             />
           </label>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className={secondaryButton} type="button" disabled={loading} onClick={onPreview}>
-            <Eye size={16} /> 预览任务
+            <Eye size={16} /> {t("page.menuManagement.previewTasks")}
           </button>
           <button className={primaryButton} type="button" disabled={loading} onClick={onCreate}>
-            <CheckSquare size={16} /> 生成任务
+            <CheckSquare size={16} /> {t("page.menuManagement.createTasks")}
           </button>
         </div>
         {preview ? (
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
             <div className="grid grid-cols-3 gap-2 text-center text-sm">
-              <div><div className="text-[var(--muted)]">待生成</div><div className="text-lg font-semibold text-[var(--text)]">{planned.length}</div></div>
-              <div><div className="text-[var(--muted)]">已生成</div><div className="text-lg font-semibold text-[var(--text)]">{created.length}</div></div>
-              <div><div className="text-[var(--muted)]">已跳过</div><div className="text-lg font-semibold text-[var(--text)]">{skipped.length}</div></div>
+              <div><div className="text-[var(--muted)]">{t("page.menuManagement.planned")}</div><div className="text-lg font-semibold text-[var(--text)]">{planned.length}</div></div>
+              <div><div className="text-[var(--muted)]">{t("page.menuManagement.created")}</div><div className="text-lg font-semibold text-[var(--text)]">{created.length}</div></div>
+              <div><div className="text-[var(--muted)]">{t("page.menuManagement.skipped")}</div><div className="text-lg font-semibold text-[var(--text)]">{skipped.length}</div></div>
             </div>
             <div className="mt-3 max-h-44 space-y-2 overflow-auto pr-1">
               {planned.slice(0, 6).map((task: any) => (
                 <div key={`${task.title}-${task.priority}`} className="rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs">
                   <div className="font-semibold text-[var(--text)]">{task.title}</div>
-                  <div className="mt-1 text-[var(--muted)]">{task.description ?? task.status ?? "等待生成"}</div>
+                  <div className="mt-1 text-[var(--muted)]">{task.description ?? task.status ?? t("page.menuManagement.waitingCreate")}</div>
                 </div>
               ))}
-              {!planned.length ? <div className="text-xs text-[var(--muted)]">暂无新的可生成任务。</div> : null}
+              {!planned.length ? <div className="text-xs text-[var(--muted)]">{t("page.menuManagement.noNewTasks")}</div> : null}
             </div>
           </div>
         ) : null}
@@ -532,6 +534,7 @@ function BackendHealthPanel({
   error: unknown;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   const summary = health?.summary ?? {};
   const issues = Array.isArray(health?.top_issues) ? health.top_issues : Array.isArray(health?.issues) ? health.issues.slice(0, 8) : [];
   const validationIssueCount = Array.isArray(validation?.issues) ? validation.issues.length : 0;
@@ -541,29 +544,29 @@ function BackendHealthPanel({
         <div>
           <div className="flex items-center gap-2 text-base font-semibold text-[var(--text)]">
             <FileInput size={18} className="text-[var(--accent)]" />
-            后端治理状态
+            {t("page.menuManagement.backendStatus")}
           </div>
-          <p className="mt-1 text-sm text-[var(--muted)]">来自 /system/pages/health 与 /validate，反映真实注册表、i18n、API 契约和模块健康。</p>
+          <p className="mt-1 text-sm text-[var(--muted)]">{t("page.menuManagement.backendStatusDesc")}</p>
         </div>
-        <button type="button" className={secondaryButton} onClick={onRefresh}>刷新</button>
+        <button type="button" className={secondaryButton} onClick={onRefresh}>{t("common.refresh")}</button>
       </div>
       <div className="space-y-3 p-4">
-        {loading ? <div className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--muted)]">正在读取后端治理状态...</div> : null}
-        {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">后端健康接口暂不可用，当前仍可使用前端即时校验。</div> : null}
+        {loading ? <div className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--muted)]">{t("page.menuManagement.loadingBackend")}</div> : null}
+        {error ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{t("page.menuManagement.backendHealthUnavailable")}</div> : null}
         {!loading && !error ? (
           <>
             <div className="grid grid-cols-3 gap-2 text-center text-sm">
-              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">健康分</div><div className="text-xl font-semibold text-[var(--text)]">{health?.score ?? "-"}</div></div>
-              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">问题</div><div className="text-xl font-semibold text-[var(--text)]">{summary.issues ?? issues.length}</div></div>
-              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">一致性</div><div className="text-xl font-semibold text-[var(--text)]">{validationIssueCount}</div></div>
+              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">{t("page.menuManagement.healthScore")}</div><div className="text-xl font-semibold text-[var(--text)]">{health?.score ?? "-"}</div></div>
+              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">{t("page.menuManagement.issues")}</div><div className="text-xl font-semibold text-[var(--text)]">{summary.issues ?? issues.length}</div></div>
+              <div className="rounded-lg bg-[var(--surface)] p-3"><div className="text-[var(--muted)]">{t("page.menuManagement.consistency")}</div><div className="text-xl font-semibold text-[var(--text)]">{validationIssueCount}</div></div>
             </div>
             <div className="space-y-2">
               {issues.length ? issues.map((issue: any) => (
                 <div key={`${issue.category ?? issue.code}-${issue.module_id ?? issue.key}-${issue.title ?? issue.detail}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
-                  <div className="font-semibold text-[var(--text)]">{issue.title ?? issue.code ?? "治理问题"}</div>
-                  <div className="mt-1 text-[var(--muted)]">{issue.detail ?? issue.message ?? "需要进一步检查模块注册契约。"}</div>
+                  <div className="font-semibold text-[var(--text)]">{issue.title ?? issue.code ?? t("page.menuManagement.governanceIssue")}</div>
+                  <div className="mt-1 text-[var(--muted)]">{issue.detail ?? issue.message ?? t("page.menuManagement.inspectContract")}</div>
                 </div>
-              )) : <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">后端注册表健康，没有返回高优先级问题。</div>}
+              )) : <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{t("page.menuManagement.backendHealthy")}</div>}
             </div>
           </>
         ) : null}
@@ -582,6 +585,7 @@ function MetricCard({ label, value, icon, tone }: { label: string; value: number
 }
 
 function HealthPanel({ issues }: { issues: ReturnType<typeof validateNavRegistry> }) {
+  const { t } = useTranslation();
   const errors = issues.filter((issue) => issue.level === "error");
   const warns = issues.filter((issue) => issue.level === "warn");
   return (
@@ -589,13 +593,13 @@ function HealthPanel({ issues }: { issues: ReturnType<typeof validateNavRegistry
       <div className="border-b border-[var(--border)] p-4">
         <div className="flex items-center gap-2 text-base font-semibold text-[var(--text)]">
           {issues.length ? <AlertTriangle size={18} className="text-amber-500" /> : <CheckCircle2 size={18} className="text-emerald-600" />}
-          实时健康检查
+          {t("page.menuManagement.realtimeHealth")}
         </div>
-        <p className="mt-1 text-sm text-[var(--muted)]">每次编辑都会调用 validateNavRegistry()，用于发现重复路径、父级缺失和能力码问题。</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">{t("page.menuManagement.realtimeHealthDesc")}</p>
       </div>
       <div className="max-h-[70vh] space-y-4 overflow-auto p-4">
         {!issues.length ? (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">导航注册表健康，没有发现 error 或 warn。</div>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{t("page.menuManagement.frontendHealthy")}</div>
         ) : (
           <>
             <IssueList title="Error" issues={errors} tone="error" />
@@ -638,6 +642,7 @@ function TreeNode(props: {
   onEdit: () => void;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   const Icon = props.item.icon;
   return (
     <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
@@ -654,9 +659,9 @@ function TreeNode(props: {
             <span className="font-semibold text-[var(--text)]">{props.label}</span>
             <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs text-[var(--muted)]">{props.groupLabel}</span>
             {props.item.badge ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">{props.item.badge}</span> : null}
-            {props.item.hidden ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">hidden</span> : null}
+            {props.item.hidden ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{t("page.menuManagement.hidden")}</span> : null}
           </div>
-          <div className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{props.item.path} · {props.item.capability ?? "missing capability"}</div>
+          <div className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{props.item.path} · {props.item.capability ?? t("page.menuManagement.missingCapability")}</div>
         </div>
         <span className="rounded-md bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted)]">{props.childrenCount}</span>
         <button className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)]" type="button" onClick={props.onEdit}>
@@ -685,6 +690,7 @@ function TreeRow({
   onSelect: () => void;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation();
   const Icon = item.icon;
   return (
     <div className={cn("flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[var(--surface-muted)]", child && "ml-8")}>
@@ -698,7 +704,7 @@ function TreeRow({
           <span className="text-xs text-[var(--muted)]">{groupLabel}</span>
           {item.hidden ? <EyeOff size={14} className="text-[var(--muted)]" /> : null}
         </div>
-        <div className="truncate font-mono text-xs text-[var(--muted)]">{item.path} · {item.capability ?? "missing capability"}</div>
+        <div className="truncate font-mono text-xs text-[var(--muted)]">{item.path} · {item.capability ?? t("page.menuManagement.missingCapability")}</div>
       </div>
       <button className="rounded-md p-2 text-[var(--muted)] hover:bg-[var(--surface)]" type="button" onClick={onEdit}>
         <Pencil size={15} />

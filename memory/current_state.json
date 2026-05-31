@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T10:36:12Z",
+  "updated_at": "2026-05-31T10:49:18Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -378,12 +378,13 @@
       "完成 Task 117 SystemMap 子路由聚焦体验改造：回应 #/system-map/registry 页面过重的问题，SystemMap 新增 focused + initialSection 模式和 systemMapFocusedNav，页面注册表、Manifest、能力矩阵、完整度治理、三码隔离、治理任务、动作目录等子菜单进入时只展示对应专业工作区；#/system-map/registry 聚焦注册健康、菜单健康和页面注册列表，不再默认堆叠完整度、隔离、Manifest、动作、能力、迁移 Backlog 等所有治理模块；导航子路由传入 initialSection，System Pages 登记“子路由聚焦”能力，架构计划与前端契约测试同步更新。",
       "完成 Task 118 SystemMap 源码扫描与基线对比真实聚焦：继续回应“不要只有样子，需要完整好用”，将 #/system-map/source-scan 和 #/system-map/baseline-compare 从共用三码隔离大卡片改为独立 initialSection；源码扫描入口只展示扫描问题、加固任务、快照保存和历史，智能基线对比入口只展示风险变化、评分差异和对比治理任务化，三码隔离入口保留域隔离矩阵与隔离任务生成；IsolationSourceScanPanel 新增 variant 控制展示范围，避免不同入口看起来一样且操作混杂。",
       "完成 Task 119 菜单信息架构去冗余第一轮：回应 #/projects/portfolio 与 #/projects/businesses、#/system-map/manifest/capabilities/actions 入口冗余问题；修复 #/projects/businesses hash 解析为 business Tab 的真实可用性 bug，业务线治理保留兼容 URL 但从项目主菜单和主 Tab 退居项目组合工作区；SystemMap 新增 #/system-map/contract 模块契约主入口，Manifest、能力权限和动作目录保留旧 URL 但隐藏在模块契约下，主菜单只暴露一个契约入口；新增 NavigationInformationArchitecture 契约测试防止菜单再次膨胀。",
-      "完成 Task 120 A2A 协议工作台聚焦体验增强：回应所有页面继续去冗余和保证真实可用要求，A2aWorkbench 正式使用 focused 子路由状态，registry、negotiate、sla、windows、dispatch、evidence 等入口展示各自标题、说明和当前聚焦职责，非总览子页面隐藏重复全局指标并提供返回 A2A 网关动作；System Pages 为 a2aGateway/a2aWorkbench 补齐子能力与真实路径，使体验治理、Manifest 和权限矩阵能识别 A2A 子模块；新增 A2aWorkbench UX 契约测试防止子路由再次退化为同一大页面。"
+      "完成 Task 120 A2A 协议工作台聚焦体验增强：回应所有页面继续去冗余和保证真实可用要求，A2aWorkbench 正式使用 focused 子路由状态，registry、negotiate、sla、windows、dispatch、evidence 等入口展示各自标题、说明和当前聚焦职责，非总览子页面隐藏重复全局指标并提供返回 A2A 网关动作；System Pages 为 a2aGateway/a2aWorkbench 补齐子能力与真实路径，使体验治理、Manifest 和权限矩阵能识别 A2A 子模块；新增 A2aWorkbench UX 契约测试防止子路由再次退化为同一大页面。",
+      "完成 Task 121 菜单多语言覆盖修复：补齐 232 个注册导航项在 zh-CN/en-US/ja-JP 的 nav 翻译，修复 Menu Management、Permission Matrix、Micro App Registry、OpsCenter 子路由、LLM Gateway 子路由、数据治理子路由等菜单英文 fallback；菜单管理工作台改为 page.menuManagement 多语言文案，标题、按钮、搜索、指标、编辑抽屉、健康检查和治理任务提示均随语言切换；新增 NavigationI18nCoverage 契约测试，确保后续新增菜单必须同步三语种翻译。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 120 A2A 协议工作台聚焦体验增强已完成；下一步继续按体验治理 watch 队列清理 OpsCenter、LLM Gateway、Settings 和数据智能中仍然过重或子路由相似的页面。"
+    "current": "Task 121 菜单多语言覆盖修复已完成；下一步继续按体验治理 watch 队列清理仍然过重或子路由相似的页面，并保持新增菜单三语种同步。"
   },
   "metrics": {
     "completion_rate": 100,
