@@ -26,6 +26,15 @@ describe("mobile console shell", () => {
     expect(appSource).toContain("#/notify/inbound");
   });
 
+  it("keeps menu display customization simple through presets", () => {
+    expect(appSource).toContain("menuDisplayPresets");
+    expect(appSource).toContain("优先使用预设，需要时再细调。");
+    expect(appSource).toContain('key: "simple"');
+    expect(appSource).toContain('key: "work"');
+    expect(appSource).toContain('key: "full"');
+    expect(appSource).toContain('patchMenuPrefs(preset.patch)');
+  });
+
   it("defines compact responsive card/table rules for mobile workbenches", () => {
     expect(cssSource).toContain(".hermes-mobile-compact");
     expect(cssSource).toContain("[data-mobile-compact]");

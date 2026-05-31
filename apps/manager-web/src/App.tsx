@@ -368,6 +368,26 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
   const { t, i18n } = useTranslation();
   const isEn = i18n.language?.startsWith("en");
   const densityOptions: MenuDensity[] = ["compact", "comfortable", "cozy"];
+  const menuDisplayPresets: Array<{ key: string; label: string; desc: string; patch: Partial<MenuPrefs> }> = [
+    {
+      key: "simple",
+      label: isEn ? "Simple" : "简单",
+      desc: isEn ? "Quiet chrome, AI and quick access first" : "界面更轻，优先保留 AI 与快捷入口",
+      patch: { density: "comfortable", menuLayout: "minimal", menuEffect: "quiet", showQuickPanel: true, showMenuCounts: false, showMenuMeta: false },
+    },
+    {
+      key: "work",
+      label: isEn ? "Work" : "专业",
+      desc: isEn ? "Dense scanning for daily operations" : "适合日常运营，信息密度更高",
+      patch: { density: "compact", menuLayout: "stream", menuEffect: "quiet", showQuickPanel: true, showMenuCounts: true, showMenuMeta: false },
+    },
+    {
+      key: "full",
+      label: isEn ? "Full" : "完整",
+      desc: isEn ? "Show hierarchy, badges and helper text" : "展示层级、徽标和能力说明",
+      patch: { density: "comfortable", menuLayout: "grouped", menuEffect: "soft", showQuickPanel: true, showMenuCounts: true, showMenuMeta: true },
+    },
+  ];
   const layoutOptions: Array<{ key: MenuLayout; label: string; desc: string }> = [
     { key: "grouped", label: isEn ? "Grouped cards" : "分组卡片", desc: isEn ? "Clear hierarchy for module-rich apps" : "层级最清晰，适合模块多的应用" },
     { key: "stream", label: isEn ? "Continuous list" : "连续列表", desc: isEn ? "Fewer card edges, smoother scanning" : "减少卡片边界，浏览更顺滑" },
@@ -399,10 +419,32 @@ function MenuDisplayMenu({ prefs }: { prefs: MenuPrefs }) {
         >
           <div className="mb-2 px-1">
             <p className="text-sm font-semibold text-[var(--text)]">{isEn ? "Menu display" : "菜单显示"}</p>
-            <p className="mt-0.5 text-xs text-[var(--muted)]">{isEn ? "Control density, layout and helper information." : "控制密度、布局和辅助信息显示。"}</p>
+            <p className="mt-0.5 text-xs text-[var(--muted)]">{isEn ? "Use presets first, tune details only when needed." : "优先使用预设，需要时再细调。"}</p>
           </div>
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+          <div className="menuDisplayPresets grid gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+            <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{isEn ? "Presets" : "预设"}</p>
+            {menuDisplayPresets.map((preset) => {
+              const active = Object.entries(preset.patch).every(([key, value]) => prefs[key as keyof MenuPrefs] === value);
+              return (
+                <button
+                  key={preset.key}
+                  type="button"
+                  onClick={() => patchMenuPrefs(preset.patch)}
+                  className={`flex items-start gap-2 rounded-xl px-2.5 py-2 text-left ${active ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted-strong)] hover:bg-[var(--surface)]"}`}
+                >
+                  <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold">{preset.label}</span>
+                    <span className="mt-0.5 block text-[11px] leading-4 text-[var(--muted)]">{preset.desc}</span>
+                  </span>
+                  {active ? <Check className="mt-0.5 h-3.5 w-3.5" /> : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1">
             <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">{isEn ? "Density" : "密度"}</p>
             <div className="grid grid-cols-3 gap-1">
               {densityOptions.map((opt) => (
