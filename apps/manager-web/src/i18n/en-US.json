@@ -1191,8 +1191,8 @@
     },
     "copilot": {
       "title": "AI Copilot",
-      "hubTitle": "AI Copilot hub",
-      "hubDesc": "Chat, command center, and tool-plan entry points.",
+      "hubTitle": "AI Command Cockpit",
+      "hubDesc": "Overview AI sessions, quick commands, tool plans, and recent evidence before entering a focused workspace.",
       "domainsTitle": "Capabilities",
       "hubSessions": "Sessions",
       "hubSkills": "Skills",

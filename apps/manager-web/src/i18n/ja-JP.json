@@ -939,7 +939,14 @@
       }
     },
     "copilot": {
-      "title": "AI コパイロット"
+      "title": "AI コパイロット",
+      "hubTitle": "AI コマンドコックピット",
+      "hubDesc": "AI 会話、クイックコマンド、ツール計画、最近の証跡を俯瞰してから専門ワークスペースへ進みます。",
+      "domainsTitle": "専門入口",
+      "hubSessions": "会話数",
+      "hubSkills": "能力",
+      "openChat": "会話を開く",
+      "recentSessions": "最近の会話"
     },
     "intelligence": {
       "title": "インテリジェンスと知識",

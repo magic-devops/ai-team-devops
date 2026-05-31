@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bot, Command, Network } from "lucide-react";
+import { ArrowRight, Bot, ClipboardCheck, Command, Gauge, MessageSquareText, Network, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
@@ -27,6 +27,18 @@ const DOMAIN_DESC: Record<string, string> = {
   "tool-plan": "把自然语言目标转成工具调用计划，再预览或生成任务。",
 };
 
+const DOMAIN_USAGE: Record<string, string> = {
+  chat: "用于连续追问、分析上下文、保留会话证据。",
+  commands: "用于快速找页面、预览操作、执行低风险平台动作。",
+  "tool-plan": "用于把目标拆成工具调用和任务中心可跟进事项。",
+};
+
+const DOMAIN_ACTION_LABEL: Record<string, string> = {
+  chat: "继续对话",
+  commands: "查找命令",
+  "tool-plan": "生成计划",
+};
+
 export function CopilotHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
@@ -40,12 +52,19 @@ export function CopilotHub() {
   const summary = hubQ.data?.summary ?? {};
   const domains = hubQ.data?.domains ?? [];
   const recent = hubQ.data?.recent_sessions ?? [];
+  const commandTotal = commandsQ.data?.total ?? summary.commands ?? 0;
+  const cockpitTiles = [
+    { label: "AI 会话", value: summary.sessions ?? 0, hint: "沉淀项目上下文和问答证据", icon: MessageSquareText, href: "#/copilot/chat" },
+    { label: "命令中心", value: commandTotal, hint: "统一导航、操作和 AI 命令", icon: Command, href: "#/copilot/commands" },
+    { label: "工具计划", value: summary.skills ?? 0, hint: "把目标转为计划和任务", icon: ClipboardCheck, href: "#/copilot/tool-plan" },
+    { label: "当前作用域", value: summary.scope || "default", hint: "权限与审计按作用域隔离", icon: Gauge, href: "#/system-map" },
+  ];
 
   return (
     <div className="w-full space-y-5">
       <WorkbenchShell
-        title={t("page.copilot.hubTitle")}
-        description={t("page.copilot.hubDesc")}
+        title={t("page.copilot.hubTitle", { defaultValue: "AI 指挥台" })}
+        description={t("page.copilot.hubDesc", { defaultValue: "总览 AI 会话、快捷命令、工具计划和最近运行证据；需要操作时再进入对应专业工作区。" })}
         actions={
           <>
             <a
@@ -54,7 +73,14 @@ export function CopilotHub() {
             >
               {t("page.copilot.openChat")}
             </a>
-              <RefreshButton onClick={() => void hubQ.refetch()} pending={hubQ.isFetching} />
+            <a
+              href="#/copilot/commands"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 py-1.5 text-sm font-medium text-[var(--text)]"
+            >
+              <Command className="h-4 w-4" />
+              {t("nav.copilotCommands")}
+            </a>
+            <RefreshButton onClick={() => void hubQ.refetch()} pending={hubQ.isFetching} />
           </>
         }
         metrics={
@@ -62,13 +88,37 @@ export function CopilotHub() {
             items={[
               { label: t("page.copilot.hubSessions"), value: summary.sessions ?? 0 },
               { label: t("page.copilot.hubSkills"), value: summary.skills ?? 0 },
-              { label: t("page.copilot.hubCommands", { defaultValue: "命令数" }), value: commandsQ.data?.total ?? 0 },
+              { label: t("page.copilot.hubCommands", { defaultValue: "命令数" }), value: commandTotal },
               { label: t("page.copilot.hubRecent", { defaultValue: "最近会话" }), value: recent.length },
             ]}
           />
         }
       />
-      <Card title={t("page.copilot.domainsTitle")}>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {cockpitTiles.map((tile) => {
+          const Icon = tile.icon;
+          return (
+            <a
+              key={tile.label}
+              href={tile.href}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]"
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="rounded-lg bg-[var(--surface-muted)] p-2 text-[var(--brand)]">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <ArrowRight className="h-4 w-4 text-[var(--muted)]" />
+              </span>
+              <span className="mt-4 block text-xs text-[var(--muted)]">{tile.label}</span>
+              <span className="mt-1 block truncate text-xl font-semibold text-[var(--text)]">{tile.value}</span>
+              <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">{tile.hint}</span>
+            </a>
+          );
+        })}
+      </div>
+
+      <Card title={t("page.copilot.domainsTitle", { defaultValue: "专业入口" })}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {domains.map((domain: { id: string; path: string; description?: string; primary_action?: string }) => {
             const Icon = DOMAIN_ICONS[domain.id] ?? Bot;
@@ -88,7 +138,11 @@ export function CopilotHub() {
                     <ArrowRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
                   </span>
                   <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">{domain.description || DOMAIN_DESC[domain.id] || domain.path}</span>
-                  {domain.primary_action ? <span className="mt-2 inline-flex rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--muted)]">{domain.primary_action}</span> : null}
+                  <span className="mt-2 block text-xs leading-5 text-[var(--muted-strong)]">{DOMAIN_USAGE[domain.id] || domain.primary_action}</span>
+                  <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--muted)]">
+                    <Sparkles className="h-3 w-3" />
+                    {DOMAIN_ACTION_LABEL[domain.id] || domain.primary_action || "打开"}
+                  </span>
                   <span className="mt-2 block font-mono text-[11px] text-[var(--muted)]">{domain.path}</span>
                 </span>
               </a>

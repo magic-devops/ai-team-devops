@@ -13,8 +13,11 @@ describe("Copilot workbench UX contract", () => {
     expect(navigationSource).toContain('initialMode: "commands"');
     expect(navigationSource).toContain('initialMode: "tool-plan"');
     expect(copilotSource).toContain('type CopilotMode = "chat" | "commands" | "tool-plan"');
+    expect(copilotSource).toContain("MODE_WORKFLOWS");
+    expect(copilotSource).toContain("copilotModeIdentity");
     expect(copilotSource).toContain('mode === "commands"');
     expect(copilotSource).toContain('mode === "tool-plan"');
+    expect(copilotSource).toContain('mode === "chat"');
   });
 
   it("uses mature components for command catalog and tool-plan tasking", () => {
@@ -25,11 +28,18 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("copilotPlanTasks");
     expect(copilotSource).toContain("copilotExecuteCommand");
     expect(copilotSource).toContain("commandResult");
+    expect(copilotSource).toContain("commandStats");
+    expect(copilotSource).toContain("SearchCheck");
+    expect(copilotSource).toContain("计划不是聊天记录");
+    expect(copilotSource).toContain("会话用于持续思考");
   });
 
   it("keeps the AI command hub as a distinct cockpit entry", () => {
     expect(hubSource).toContain("DOMAIN_DESC");
+    expect(hubSource).toContain("DOMAIN_USAGE");
+    expect(hubSource).toContain("cockpitTiles");
     expect(hubSource).toContain("copilotCommands");
     expect(hubSource).toContain("hubCommands");
+    expect(hubSource).toContain("AI 指挥台");
   });
 });

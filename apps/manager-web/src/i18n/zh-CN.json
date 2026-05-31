@@ -1333,8 +1333,8 @@
     },
     "copilot": {
       "title": "AI 助手",
-      "hubTitle": "AI 助手中心",
-      "hubDesc": "会话问答、命令中心与工具计划的一站式入口。",
+      "hubTitle": "AI 指挥台",
+      "hubDesc": "总览 AI 会话、快捷命令、工具计划和最近运行证据；需要操作时再进入对应专业工作区。",
       "domainsTitle": "能力入口",
       "hubSessions": "会话数",
       "hubSkills": "能力面",

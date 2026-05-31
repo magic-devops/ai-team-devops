@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Button, Input, Segmented, Space, Table, Tag } from "antd";
-import { Bot, ClipboardCheck, Command, Loader2, Network, Plus } from "lucide-react";
+import { Bot, CheckCircle2, ClipboardCheck, Command, Loader2, MessageSquareText, Network, Plus, SearchCheck } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
 import { MarkdownView } from "@/components/MarkdownView";
@@ -37,6 +37,24 @@ const MODE_ROUTE: Record<CopilotMode, string> = {
   chat: "#/copilot/chat",
   commands: "#/copilot/commands",
   "tool-plan": "#/copilot/tool-plan",
+};
+
+const MODE_WORKFLOWS: Record<CopilotMode, Array<{ title: string; desc: string }>> = {
+  chat: [
+    { title: "持续对话", desc: "围绕项目上下文连续追问，沉淀 transcript。" },
+    { title: "上下文开关", desc: "按需注入当前项目，避免跨作用域误用。" },
+    { title: "转工具计划", desc: "把当前问题一键转为可执行计划。" },
+  ],
+  commands: [
+    { title: "搜索命令", desc: "输入页面、动作或意图，快速定位能力。" },
+    { title: "预览执行", desc: "运营动作先 dry-run，查看目标和证据。" },
+    { title: "转计划", desc: "复杂命令进入工具计划，不在命令表里硬执行。" },
+  ],
+  "tool-plan": [
+    { title: "描述目标", desc: "用自然语言说明要完成的业务结果。" },
+    { title: "生成计划", desc: "系统匹配意图、目标和候选命令。" },
+    { title: "任务化", desc: "预览后再写入任务中心，形成跟进闭环。" },
+  ],
 };
 
 export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode }) {
@@ -199,17 +217,24 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
   const modeMeta = {
     chat: {
       title: t("copilot.chatTitle", { defaultValue: t("page.copilot.title") }),
-      description: t("copilot.chatIntro", { defaultValue: t("copilot.intro") }),
+      description: t("copilot.chatIntro", { defaultValue: "持续对话、注入项目上下文，并保留会话记录。" }),
     },
     commands: {
       title: t("copilot.commandTitle", { defaultValue: t("nav.copilotCommands") }),
-      description: t("copilot.commandIntro", { defaultValue: "统一搜索页面导航、运营动作和 AI 命令。" }),
+      description: t("copilot.commandIntro", { defaultValue: "统一搜索页面导航、运营动作和 AI 命令，适合快速到达与转计划。" }),
     },
     "tool-plan": {
       title: t("copilot.toolPlanTitle", { defaultValue: t("nav.copilotToolPlan") }),
       description: t("copilot.toolPlanIntro", { defaultValue: "把自然语言目标转成工具调用计划，再预览或创建执行任务。" }),
     },
   }[mode];
+  const commandRows = commandsQuery.data?.items ?? [];
+  const commandStats = {
+    navigate: commandRows.filter((x: any) => x.type === "navigate").length,
+    operation: commandRows.filter((x: any) => x.type === "operation").length,
+    copilot: commandRows.filter((x: any) => x.type === "copilot").length,
+  };
+  const workflow = MODE_WORKFLOWS[mode];
 
   return (
     <div className="w-full space-y-4">
@@ -247,6 +272,18 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         />
       </div>
 
+      <div className="copilotModeIdentity grid gap-3 md:grid-cols-3">
+        {workflow.map((item, index) => (
+          <div key={item.title} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--brand-soft)] text-xs font-semibold text-[var(--brand)]">{index + 1}</span>
+              <p className="text-sm font-semibold text-[var(--text)]">{item.title}</p>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{item.desc}</p>
+          </div>
+        ))}
+      </div>
+
       {mode === "commands" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
           <Card title={t("copilot.commandCatalog", { defaultValue: "命令目录" })}>
@@ -258,13 +295,24 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
                 placeholder={t("command.placeholder")}
                 className="max-w-xl"
               />
-              <Tag color="blue">{commandsQuery.data?.total ?? 0} commands</Tag>
+              <Space wrap>
+                <Tag color="green">{commandStats.navigate} nav</Tag>
+                <Tag color="orange">{commandStats.operation} ops</Tag>
+                <Tag color="blue">{commandStats.copilot} ai</Tag>
+              </Space>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {["任务", "审计", "健康", "计费", "页面地图"].map((keyword) => (
+                <Button key={keyword} size="small" icon={<SearchCheck className="h-3.5 w-3.5" />} onClick={() => setCommandSearch(keyword)}>
+                  {keyword}
+                </Button>
+              ))}
             </div>
             <Table
               rowKey={(row: any) => String(row.id || row.label)}
               size="small"
               loading={commandsQuery.isLoading || commandsQuery.isFetching}
-              dataSource={commandsQuery.data?.items ?? []}
+              dataSource={commandRows}
               pagination={{ pageSize: 10, showSizeChanger: false }}
               scroll={{ x: 820 }}
               locale={{ emptyText: t("command.empty") }}
@@ -358,6 +406,15 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         <Card title={t("copilot.toolPlanInput", { defaultValue: "自然语言目标" })}>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <div>
+              <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                <div className="flex items-start gap-2">
+                  <ClipboardCheck className="mt-0.5 h-4 w-4 text-[var(--brand)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">计划不是聊天记录</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">这里专门处理“要达成什么目标”，生成可预览、可审计、可转任务的工具执行方案。</p>
+                  </div>
+                </div>
+              </div>
               <Input.TextArea
                 value={q}
                 rows={5}
@@ -383,6 +440,16 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               {plan.error ? <Alert className="mt-3" type="error" showIcon message={(plan.error as Error).message} /> : null}
             </div>
             <div className="space-y-3 rounded-xl bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">
+              {[
+                ["输入目标", Boolean(q.trim())],
+                ["生成计划", Boolean(planResult)],
+                ["预览/创建任务", Boolean(planTaskResult)],
+              ].map(([label, done]) => (
+                <div key={String(label)} className="flex items-center gap-2">
+                  <CheckCircle2 className={`h-4 w-4 ${done ? "text-emerald-600" : "text-[var(--muted)]"}`} />
+                  <span className={done ? "text-[var(--text)]" : ""}>{label}</span>
+                </div>
+              ))}
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={withProject} onChange={(e) => setWithProject(e.target.checked)} />
                 {t("copilot.withProject")}
@@ -403,6 +470,15 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
       {mode === "chat" ? (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
         <Card>
+          <div className="mb-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+            <div className="flex items-start gap-2">
+              <MessageSquareText className="mt-0.5 h-4 w-4 text-[var(--brand)]" />
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">会话用于持续思考</p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">适合追问、解释、总结和对齐上下文；需要执行时再转到工具计划或命令中心。</p>
+              </div>
+            </div>
+          </div>
           <div className="mb-3 grid gap-2 md:grid-cols-2">
             <label className="text-xs text-slate-500">
               {t("copilot.session")}
