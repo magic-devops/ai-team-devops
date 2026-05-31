@@ -128,4 +128,21 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Runbook 名称 *\" value={rbForm.name}");
     expect(source).not.toContain("<textarea className=\"input-base w-full h-24 resize-none\" placeholder=\"操作步骤（每行一步）\"");
   });
+
+  it("keeps self-heal policy and signal setup in focused drawer flows", () => {
+    expect(source).toContain("selfHealPolicyDrawerOpen");
+    expect(source).toContain("selfHealSignalDrawerOpen");
+    expect(source).toContain("selfHealPolicyFocusedDrawer");
+    expect(source).toContain("selfHealSignalFocusedDrawer");
+    expect(source).toContain("setSelfHealPolicyDrawerOpen(true)");
+    expect(source).toContain("setSelfHealSignalDrawerOpen(true)");
+    expect(source).toContain("新建自愈策略");
+    expect(source).toContain("配置自愈评估信号");
+    expect(source).toContain("createSh.mutate()");
+    expect(source).toContain("evaluateSh.mutate()");
+    expect(source).toContain("createHealTasks.mutate(true)");
+    expect(source).toContain("createHealTasks.mutate(false)");
+    expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"触发条件 * (如 cpu > 90)\"");
+    expect(source).not.toContain("<textarea\n                  className=\"input-base min-h-32 w-full font-mono text-xs\"");
+  });
 });

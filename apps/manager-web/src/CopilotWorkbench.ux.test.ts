@@ -47,6 +47,14 @@ describe("Copilot workbench UX contract", () => {
     expect(copilotSource).toContain("commandCenterIdentity");
     expect(copilotSource).toContain("计划不是聊天记录");
     expect(copilotSource).toContain("会话用于持续思考");
+    expect(copilotSource).toContain("MODE_FOCUS");
+    expect(copilotSource).toContain("MODE_SURFACE_TONE");
+    expect(copilotSource).toContain("selectedCommandId");
+    expect(copilotSource).toContain("selectedCommand");
+    expect(copilotSource).toContain("命令操作台");
+    expect(copilotSource).toContain("FileSearch");
+    expect(copilotSource).toContain("ShieldCheck");
+    expect(copilotSource).toContain("Workflow");
   });
 
   it("keeps the AI command hub as a distinct cockpit entry", () => {
@@ -59,6 +67,12 @@ describe("Copilot workbench UX contract", () => {
     expect(hubSource).toContain("推荐下一步");
     expect(hubSource).toContain("copilotHubDecisionLane");
     expect(hubSource).toContain("cockpitTiles");
+    expect(hubSource).toContain("CONTROL_BOARD_LANES");
+    expect(hubSource).toContain("指挥台只做态势和分流");
+    expect(hubSource).toContain("AI 指挥台");
+    expect(hubSource).toContain("AI 会话");
+    expect(hubSource).toContain("命令中心");
+    expect(hubSource).toContain("工具计划");
     expect(hubSource).toContain("copilotCommands");
     expect(hubSource).toContain("hubCommands");
     expect(hubSource).toContain("AI 指挥台");

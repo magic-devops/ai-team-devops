@@ -195,7 +195,9 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const [runbookDiffResult, setRunbookDiffResult] = useState<any>(null);
   const [runbookEvidenceResult, setRunbookEvidenceResult] = useState<any>(null);
   const [shForm, setShForm] = useState({ trigger_condition: "", action: "", enabled: true });
+  const [selfHealPolicyDrawerOpen, setSelfHealPolicyDrawerOpen] = useState(false);
   const [signalText, setSignalText] = useState("cpu=95\nerror_rate=3\nlatency_ms=1200\nenvironment=staging\nservice=api");
+  const [selfHealSignalDrawerOpen, setSelfHealSignalDrawerOpen] = useState(false);
   const [healResult, setHealResult] = useState<any>(null);
   const [healTasksResult, setHealTasksResult] = useState<any>(null);
   const [healActionResult, setHealActionResult] = useState<any>(null);
@@ -681,7 +683,13 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   });
   const createSh = useMutation({
     mutationFn: () => api.opsSelfHealCreate(shForm),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] }); setShowForm(false); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] });
+      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setShowForm(false);
+      setSelfHealPolicyDrawerOpen(false);
+      setShForm({ trigger_condition: "", action: "", enabled: true });
+    },
   });
   const applySh = useMutation({
     mutationFn: (id: string) => api.opsSelfHealApply(id),
@@ -2729,39 +2737,176 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
             <WorkbenchPanel title="策略目录与信号评估" actions={
               <div className="flex gap-2">
                 <RefreshButton onClick={() => { void shQ.refetch(); void evalQ.refetch(); void actionsQ.refetch(); }} pending={shQ.isFetching || evalQ.isFetching || actionsQ.isFetching} />
-                <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建</button>
+                <Button size="small" onClick={() => setSelfHealSignalDrawerOpen(true)}>配置信号</Button>
+                <Button type="primary" size="small" onClick={() => setSelfHealPolicyDrawerOpen(true)}>新建策略</Button>
               </div>
             }>
-              {showForm && (
-                <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                  <input className="input-base w-full" placeholder="触发条件 * (如 cpu > 90)" value={shForm.trigger_condition} onChange={e => setShForm(f => ({ ...f, trigger_condition: e.target.value }))} />
-                  <input className="input-base w-full" placeholder="自愈动作 * (如 restart_service api)" value={shForm.action} onChange={e => setShForm(f => ({ ...f, action: e.target.value }))} />
-                  <div className="flex gap-2">
-                    <button onClick={() => createSh.mutate()} disabled={!shForm.trigger_condition || !shForm.action || createSh.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                      {createSh.isPending ? "创建中..." : "创建"}
-                    </button>
-                    <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                  </div>
+              <Drawer
+                title="新建自愈策略"
+                open={selfHealPolicyDrawerOpen}
+                onClose={() => setSelfHealPolicyDrawerOpen(false)}
+                width="min(620px, 100vw)"
+              >
+                <div className="selfHealPolicyFocusedDrawer space-y-5">
+                  <Steps
+                    size="small"
+                    current={shForm.trigger_condition && shForm.action ? 1 : 0}
+                    items={[
+                      { title: "触发" },
+                      { title: "动作" },
+                      { title: "护栏" },
+                    ]}
+                  />
+                  <Form layout="vertical" requiredMark={false} onFinish={() => createSh.mutate()}>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                      <p className="text-sm font-semibold">触发条件</p>
+                      <Form.Item className="mt-3" label="条件表达式" required>
+                        <Input
+                          value={shForm.trigger_condition}
+                          onChange={e => setShForm(f => ({ ...f, trigger_condition: e.target.value }))}
+                          placeholder="cpu > 90"
+                        />
+                      </Form.Item>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                      <p className="text-sm font-semibold">自愈动作</p>
+                      <Form.Item className="mt-3" label="动作命令/API" required>
+                        <Input
+                          value={shForm.action}
+                          onChange={e => setShForm(f => ({ ...f, action: e.target.value }))}
+                          placeholder="restart_service api"
+                        />
+                      </Form.Item>
+                      <Form.Item label="启用策略">
+                        <Switch checked={shForm.enabled} onChange={checked => setShForm(f => ({ ...f, enabled: checked }))} />
+                      </Form.Item>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <p className="text-sm font-semibold">护栏说明</p>
+                      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">策略创建后会参与信号评估；高风险动作仍会进入审批、应用、验证和回滚队列。</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">状态</p>
+                          <p className="text-sm font-semibold">{shForm.enabled ? "启用" : "禁用"}</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">策略数</p>
+                          <p className="text-sm font-semibold">{shQ.data?.items?.length ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">动作队列</p>
+                          <p className="text-sm font-semibold">{actionsQ.data?.items?.length ?? 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Space className="mt-4" wrap>
+                      <Button type="primary" htmlType="submit" loading={createSh.isPending} disabled={!shForm.trigger_condition || !shForm.action}>
+                        创建策略
+                      </Button>
+                      <Button onClick={() => setSelfHealPolicyDrawerOpen(false)}>取消</Button>
+                    </Space>
+                    {createSh.error && <p className="mt-3 text-xs text-red-600">{(createSh.error as Error).message}</p>}
+                  </Form>
                 </div>
-              )}
+              </Drawer>
+
+              <Drawer
+                title="配置自愈评估信号"
+                open={selfHealSignalDrawerOpen}
+                onClose={() => setSelfHealSignalDrawerOpen(false)}
+                width="min(680px, 100vw)"
+              >
+                <div className="selfHealSignalFocusedDrawer space-y-5">
+                  <Steps
+                    size="small"
+                    current={healTasksResult ? 2 : healResult ? 1 : 0}
+                    items={[
+                      { title: "信号" },
+                      { title: "评估" },
+                      { title: "任务" },
+                    ]}
+                  />
+                  <Form layout="vertical" requiredMark={false} onFinish={() => evaluateSh.mutate()}>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                      <p className="text-sm font-semibold">运行信号</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">每行一个 key=value，支持 cpu、error_rate、latency_ms、environment、service 等字段。</p>
+                      <Form.Item className="mt-3" label="信号输入" required>
+                        <Input.TextArea
+                          className="font-mono text-xs"
+                          autoSize={{ minRows: 6, maxRows: 10 }}
+                          value={signalText}
+                          onChange={e => setSignalText(e.target.value)}
+                          placeholder={"cpu=95\nerror_rate=3\nlatency_ms=1200\nenvironment=staging"}
+                        />
+                      </Form.Item>
+                    </div>
+
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <p className="text-sm font-semibold">评估证据</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">信号数</p>
+                          <p className="text-sm font-semibold">{Object.keys(parseSignals(signalText)).length}</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">命中</p>
+                          <p className="text-sm font-semibold">{healResult?.summary?.matched ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">待审批</p>
+                          <p className="text-sm font-semibold">{healResult?.summary?.needs_approval ?? 0}</p>
+                        </div>
+                        <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                          <p className="text-xs text-[var(--muted)]">任务</p>
+                          <p className="text-sm font-semibold">{healTasksResult?.items?.length ?? 0}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Space className="mt-4" wrap>
+                      <Button type="primary" htmlType="submit" loading={evaluateSh.isPending}>
+                        评估自愈决策
+                      </Button>
+                      <Button onClick={() => createHealTasks.mutate(true)} loading={createHealTasks.isPending}>
+                        预览治理任务
+                      </Button>
+                      <Button danger onClick={() => createHealTasks.mutate(false)} loading={createHealTasks.isPending}>
+                        生成治理任务
+                      </Button>
+                      <Button onClick={() => setSelfHealSignalDrawerOpen(false)}>取消</Button>
+                    </Space>
+                    {evaluateSh.isError ? <p className="mt-3 text-xs text-red-600">{(evaluateSh.error as Error).message}</p> : null}
+                  </Form>
+                </div>
+              </Drawer>
 
               <div className="space-y-3">
-                <textarea
-                  className="input-base min-h-32 w-full font-mono text-xs"
-                  value={signalText}
-                  onChange={e => setSignalText(e.target.value)}
-                  placeholder={"cpu=95\nerror_rate=3\nlatency_ms=1200\nenvironment=staging"}
-                />
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    ["信号数", Object.keys(parseSignals(signalText)).length],
+                    ["策略数", shQ.data?.items?.length ?? 0],
+                    ["最近命中", healResult?.summary?.matched ?? 0],
+                    ["待审批", healResult?.summary?.needs_approval ?? 0],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-lg bg-[var(--surface-muted)] p-3">
+                      <p className="text-[11px] uppercase text-[var(--muted)]">{label}</p>
+                      <p className="mt-1 text-lg font-semibold">{String(value)}</p>
+                    </div>
+                  ))}
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => evaluateSh.mutate()} disabled={evaluateSh.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {evaluateSh.isPending ? "评估中..." : "评估自愈决策"}
-                  </button>
-                  <button onClick={() => createHealTasks.mutate(true)} disabled={createHealTasks.isPending} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">
+                  <Button type="primary" onClick={() => evaluateSh.mutate()} loading={evaluateSh.isPending}>
+                    评估自愈决策
+                  </Button>
+                  <Button onClick={() => createHealTasks.mutate(true)} loading={createHealTasks.isPending}>
                     预览治理任务
-                  </button>
-                  <button onClick={() => createHealTasks.mutate(false)} disabled={createHealTasks.isPending} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm text-[var(--brand)]">
+                  </Button>
+                  <Button onClick={() => createHealTasks.mutate(false)} loading={createHealTasks.isPending}>
                     生成治理任务
-                  </button>
+                  </Button>
                 </div>
                 {evaluateSh.isError ? <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">{(evaluateSh.error as Error).message}</p> : null}
               </div>

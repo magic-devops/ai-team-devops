@@ -45,6 +45,13 @@ const DOMAIN_OUTCOME: Record<string, string> = {
   "tool-plan": "工具调用计划、任务预览、任务落库",
 };
 
+const CONTROL_BOARD_LANES = [
+  { label: "AI 指挥台", role: "看全局、做分流", action: "进入最合适的专业工作区", evidence: "会话数、命令数、最近证据" },
+  { label: "AI 会话", role: "连续问答与上下文沉淀", action: "追问、总结、转工具计划", evidence: "session / run / transcript" },
+  { label: "命令中心", role: "平台能力搜索与受控操作", action: "检索、预览、执行、留证", evidence: "dry-run / audit hash" },
+  { label: "工具计划", role: "复杂目标拆解与任务化", action: "生成计划、预览任务、创建任务", evidence: "plan / commands / task items" },
+];
+
 export function CopilotHub() {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
@@ -95,7 +102,7 @@ export function CopilotHub() {
     <div className="w-full space-y-5">
       <WorkbenchShell
         title={t("page.copilot.hubTitle", { defaultValue: "AI 指挥台" })}
-        description={t("page.copilot.hubDesc", { defaultValue: "总览 AI 会话、快捷命令、工具计划和最近运行证据；需要操作时再进入对应专业工作区。" })}
+        description={t("page.copilot.hubDesc", { defaultValue: "总览 AI 会话、快捷命令、工具计划和最近运行证据；指挥台只做态势和分流，具体操作进入对应专业工作区。" })}
         actions={
           <>
             <a
@@ -125,6 +132,20 @@ export function CopilotHub() {
           />
         }
       />
+
+      <div className="grid gap-3 lg:grid-cols-4">
+        {CONTROL_BOARD_LANES.map((lane) => (
+          <div key={lane.label} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <p className="text-sm font-semibold text-[var(--text)]">{lane.label}</p>
+            <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{lane.role}</p>
+            <div className="mt-3 rounded-lg bg-[var(--surface-muted)] px-3 py-2">
+              <p className="text-[11px] font-semibold text-[var(--muted)]">核心动作</p>
+              <p className="mt-1 text-xs text-[var(--muted-strong)]">{lane.action}</p>
+            </div>
+            <p className="mt-3 truncate font-mono text-[11px] text-[var(--muted)]">{lane.evidence}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cockpitTiles.map((tile) => {

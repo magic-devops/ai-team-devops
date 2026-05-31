@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
-import { Bot, CheckCircle2, ClipboardCheck, Command, Loader2, MessageSquareText, Network, Plus, SearchCheck } from "lucide-react";
+import { Alert, Button, Empty, Input, Segmented, Space, Steps, Switch, Table, Tag } from "antd";
+import { Bot, CheckCircle2, ClipboardCheck, Command, FileSearch, Loader2, MessageSquareText, Network, Plus, SearchCheck, ShieldCheck, Workflow } from "lucide-react";
 import { CopilotChatPanel } from "@/components/ai/CopilotChatPanel";
 import { Card } from "@/components/Card";
 import { MarkdownView } from "@/components/MarkdownView";
@@ -15,6 +15,7 @@ import { getProjectId, getToken } from "@/lib/authStorage";
 type Turn = { ts: string; sessionId: string; runId: string; query: string; response?: unknown; error?: string };
 type CopilotMode = "chat" | "commands" | "tool-plan";
 type CommandTypeFilter = "all" | "navigate" | "operation" | "copilot";
+type CommandCandidate = { id?: string; label?: string; description?: string; type?: string; target?: string; prompt?: string };
 const STORAGE_KEY = "sop-copilot-transcript-v1";
 
 function loadTurns(): Turn[] {
@@ -64,6 +65,12 @@ const MODE_SURFACE_CLASS: Record<CopilotMode, string> = {
   "tool-plan": "copilotToolPlanSurface",
 };
 
+const MODE_SURFACE_TONE: Record<CopilotMode, string> = {
+  chat: "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/50 dark:bg-emerald-950/20",
+  commands: "border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20",
+  "tool-plan": "border-sky-200 bg-sky-50/70 dark:border-sky-900/50 dark:bg-sky-950/20",
+};
+
 const MODE_GUARDRAILS: Record<CopilotMode, Array<{ label: string; value: string }>> = {
   chat: [
     { label: "核心用途", value: "持续问答" },
@@ -79,6 +86,24 @@ const MODE_GUARDRAILS: Record<CopilotMode, Array<{ label: string; value: string 
     { label: "核心用途", value: "目标拆解" },
     { label: "输出证据", value: "plan / tasks" },
     { label: "下一步", value: "预览或落库" },
+  ],
+};
+
+const MODE_FOCUS: Record<CopilotMode, Array<{ label: string; value: string }>> = {
+  chat: [
+    { label: "适合", value: "追问、解释、总结、沉淀上下文" },
+    { label: "不做", value: "直接执行平台动作" },
+    { label: "交付物", value: "会话记录与可转计划的问题" },
+  ],
+  commands: [
+    { label: "适合", value: "查入口、dry-run、低风险执行" },
+    { label: "不做", value: "长链路推理拆解" },
+    { label: "交付物", value: "命令证据、审计哈希和目标页面" },
+  ],
+  "tool-plan": [
+    { label: "适合", value: "目标拆解、工具编排、任务化" },
+    { label: "不做", value: "无确认的直接执行" },
+    { label: "交付物", value: "计划、候选命令和任务中心事项" },
   ],
 };
 
@@ -130,6 +155,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
   const [planResult, setPlanResult] = useState<any>(null);
   const [planTaskResult, setPlanTaskResult] = useState<any>(null);
   const [commandResult, setCommandResult] = useState<any>(null);
+  const [selectedCommandId, setSelectedCommandId] = useState("");
   const sessionsQuery = useQuery({ queryKey: ["copilotSessions"], queryFn: () => api.copilotSessions(100), enabled: authed });
   const commandsQuery = useQuery({
     queryKey: ["copilotCommandsPage", commandSearch],
@@ -301,6 +327,10 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
     () => (commandTypeFilter === "all" ? commandRows : commandRows.filter((x: any) => x.type === commandTypeFilter)),
     [commandRows, commandTypeFilter],
   );
+  const selectedCommand = useMemo<CommandCandidate | null>(() => {
+    const rows = filteredCommandRows.length ? filteredCommandRows : commandRows;
+    return rows.find((item: any) => String(item.id || item.label) === selectedCommandId) ?? rows[0] ?? null;
+  }, [commandRows, filteredCommandRows, selectedCommandId]);
   const commandStats = {
     navigate: commandRows.filter((x: any) => x.type === "navigate").length,
     operation: commandRows.filter((x: any) => x.type === "operation").length,
@@ -334,7 +364,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         }
       />
 
-      <div className={`copilotFocusedSurface ${MODE_SURFACE_CLASS[mode]} rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4`}>
+      <div className={`copilotFocusedSurface ${MODE_SURFACE_CLASS[mode]} ${MODE_SURFACE_TONE[mode]} rounded-xl border p-4`}>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -380,6 +410,14 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
             />
           </div>
         </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          {MODE_FOCUS[mode].map((item) => (
+            <div key={item.label} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2 text-sm shadow-sm dark:border-white/10 dark:bg-slate-950/40">
+              <p className="text-xs font-semibold text-[var(--muted)]">{item.label}</p>
+              <p className="mt-1 text-[var(--text)]">{item.value}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {mode === "commands" ? (
@@ -424,6 +462,10 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               size="small"
               loading={commandsQuery.isLoading || commandsQuery.isFetching}
               dataSource={filteredCommandRows}
+              rowClassName={(row: any) => (String(row.id || row.label) === String(selectedCommand?.id || selectedCommand?.label) ? "bg-[var(--brand-soft)]" : "")}
+              onRow={(row: any) => ({
+                onClick: () => setSelectedCommandId(String(row.id || row.label)),
+              })}
               pagination={{ pageSize: 10, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
               scroll={{ x: 820 }}
               locale={{ emptyText: t("command.empty") }}
@@ -479,9 +521,42 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
               ]}
             />
           </Card>
-          <Card title={t("copilot.commandUsage", { defaultValue: "怎么用" })}>
+          <Card title={t("copilot.commandUsage", { defaultValue: "命令操作台" })}>
             <div className="space-y-3 text-sm text-[var(--muted)]">
               {executeCommand.error ? <Alert type="error" showIcon message={(executeCommand.error as Error).message} /> : null}
+              {selectedCommand ? (
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[var(--text)]">{selectedCommand.label || selectedCommand.id}</p>
+                      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{selectedCommand.description || "选择命令后可预览目标、执行低风险动作或转成工具计划。"}</p>
+                    </div>
+                    <Tag color={selectedCommand.type === "operation" ? "orange" : selectedCommand.type === "copilot" ? "blue" : "green"}>{selectedCommand.type || "navigate"}</Tag>
+                  </div>
+                  <p className="mt-3 break-all rounded bg-[var(--surface-muted)] px-2 py-1 font-mono text-[11px] text-[var(--muted)]">{selectedCommand.target || selectedCommand.prompt || "-"}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    {selectedCommand.type === "operation" ? (
+                      <>
+                        <Button block icon={<ShieldCheck className="h-4 w-4" />} loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: true })}>
+                          {t("common.preview")}
+                        </Button>
+                        <Button block type="primary" loading={executeCommand.isPending} onClick={() => executeCommand.mutate({ commandId: String(selectedCommand.id), dryRun: false })}>
+                          {t("copilot.execute", { defaultValue: "执行" })}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button block icon={<FileSearch className="h-4 w-4" />} onClick={() => runCommand(selectedCommand)}>
+                        {selectedCommand.type === "copilot" ? t("copilot.execute", { defaultValue: "执行" }) : t("common.view")}
+                      </Button>
+                    )}
+                    <Button block icon={<Workflow className="h-4 w-4" />} onClick={() => createPlanFromCommand(selectedCommand)}>
+                      {t("copilot.toPlan", { defaultValue: "转计划" })}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("command.empty")} />
+              )}
               {commandResult ? (
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                   <div className="flex items-center justify-between gap-2">
