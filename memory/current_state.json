@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T06:46:12Z",
+  "updated_at": "2026-05-31T08:40:18Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -362,12 +362,13 @@
       "完成 Task 101 OpsCenter 手工 RCA 创建抽屉化：手工 RCA 创建的事件 ID、影响范围、根因描述和解决方案从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Steps/Button；主 RCA 页面只保留新建入口、智能归因摘要、候选结果、验证闭环和 RCA 列表。",
       "完成 Task 102 OpsCenter Runbook 版本编辑抽屉化：Runbook 首版创建、编辑生成新版本的名称、负责人、标签、变更说明和操作步骤从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Steps/Button；主 Runbook 页面只保留版本治理、证据回填、差异对比、版本动作和 Runbook 列表。",
       "完成 Task 103 OpsCenter 自愈策略与信号评估抽屉化：自愈策略触发条件、动作、启用状态和自愈评估信号从主页面 inline 表单迁入 Ant Design Drawer/Form/Input/TextArea/Switch/Steps/Button；主自愈页面只保留信号/策略/命中/审批摘要、评估/任务化入口、策略目录、决策结果和护栏动作队列。",
-      "完成 Task 104 Copilot AI 指挥台四次差异化增强：回应 AI 指挥台、AI 会话、命令中心、工具计划仍像同一页面的问题；AI 指挥台明确只做态势与分流，新增四入口职责矩阵；AI 会话、命令中心、工具计划首屏新增不同职责边界与色彩语义，命令中心新增选中命令操作台，支持在侧栏完成查看、预览、执行和转计划。"
+      "完成 Task 104 Copilot AI 指挥台四次差异化增强：回应 AI 指挥台、AI 会话、命令中心、工具计划仍像同一页面的问题；AI 指挥台明确只做态势与分流，新增四入口职责矩阵；AI 会话、命令中心、工具计划首屏新增不同职责边界与色彩语义，命令中心新增选中命令操作台，支持在侧栏完成查看、预览、执行和转计划。",
+      "完成 Task 105 App 壳层移动端 AI 优先导航增强：移动端底部高频动作把 AI 指挥台放到中间，IM 改用消息图标；移动菜单抽屉新增命令面板、AI 快捷入口和菜单搜索过滤，按微应用/菜单名称、描述、能力码和路径筛选，降低全量菜单查找成本。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 104 Copilot AI 指挥台四次差异化增强已完成；下一步继续做 OpsCenter/Copilot 移动端截图检查、剩余动作队列交互收敛和大工作台子路由懒加载拆分。"
+    "current": "Task 105 App 壳层移动端 AI 优先导航增强已完成；下一步继续做真实移动端截图检查、菜单偏好可视化简化、OpsCenter 剩余动作队列交互收敛和大工作台子路由懒加载拆分。"
   },
   "metrics": {
     "completion_rate": 100,

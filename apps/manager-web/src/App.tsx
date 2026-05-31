@@ -18,6 +18,7 @@ import {
   Layers3,
   Laptop,
   Lock,
+  MessageSquareText,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -656,6 +657,7 @@ export function App() {
   const [hash, setHash] = useState(window.location.hash || "#/dashboard");
   const [, bump] = useState(0);
   const [keyword, setKeyword] = useState("");
+  const [mobileNavKeyword, setMobileNavKeyword] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -937,9 +939,9 @@ export function App() {
     () => [
       { key: "dashboard", path: "#/dashboard", icon: Rows3, label: navLabel("dashboard") },
       { key: "tasks", path: "#/tasks", icon: Check, label: navLabel("tasks") },
-      { key: "requirements", path: "#/requirements", icon: Layers3, label: navLabel("requirements") },
+      { key: "copilot", path: "#/copilot", icon: Bot, label: navLabel("copilot") },
       { key: "alerts", path: "#/intelligence/usage", icon: Sparkles, label: t("nav.mobileAlerts", { defaultValue: "告警" }) },
-      { key: "im", path: "#/notify/inbound", icon: Bot, label: t("nav.mobileIm", { defaultValue: "IM" }) },
+      { key: "im", path: "#/notify/inbound", icon: MessageSquareText, label: t("nav.mobileIm", { defaultValue: "IM" }) },
     ],
     [navLabel, t],
   );
@@ -1094,6 +1096,7 @@ export function App() {
   const showMenuCounts = menuPrefs.showMenuCounts;
   const showMenuMeta = menuPrefs.showMenuMeta;
   const showQuickPanel = menuPrefs.showQuickPanel;
+  const mobileNavTerm = mobileNavKeyword.trim().toLowerCase();
   const menuSectionClass =
     menuPrefs.menuLayout === "minimal"
       ? "rounded-lg border border-transparent bg-transparent p-0"
@@ -1112,7 +1115,13 @@ export function App() {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--app-bg)] text-[var(--text)] lg:h-screen lg:min-h-0 lg:overflow-hidden lg:flex-row">
       <CommandPalette open={commandOpen} setOpen={setCommandOpen} authed={authed} />
-      <Dialog.Root open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+      <Dialog.Root
+        open={mobileNavOpen}
+        onOpenChange={(open) => {
+          setMobileNavOpen(open);
+          if (!open) setMobileNavKeyword("");
+        }}
+      >
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm lg:hidden" />
           <Dialog.Content
@@ -1135,14 +1144,44 @@ export function App() {
               </Dialog.Close>
             </div>
             <div className="border-b border-[var(--nav-border)] p-3">
-              <button
-                type="button"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white"
-                onClick={() => setCommandOpen(true)}
-              >
-                <Command className="h-4 w-4" />
-                {t("command.short")}
-              </button>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <button
+                  type="button"
+                  className="inline-flex min-w-0 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-3 py-2.5 text-sm font-semibold text-white"
+                  onClick={() => setCommandOpen(true)}
+                >
+                  <Command className="h-4 w-4" />
+                  <span className="truncate">{t("command.short")}</span>
+                </button>
+                <a
+                  href="#/copilot"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--control-bg)] text-[var(--brand)]"
+                  aria-label={navLabel("copilot")}
+                >
+                  <Bot className="h-4 w-4" />
+                </a>
+              </div>
+              <div className="relative mt-3">
+                <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--muted)]" />
+                <input
+                  data-testid="mobile-nav-search"
+                  value={mobileNavKeyword}
+                  onChange={(event) => setMobileNavKeyword(event.target.value)}
+                  placeholder={t("nav.searchPlaceholder")}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--control-bg)] py-2 pl-8 pr-8 text-sm text-[var(--text)] outline-none ring-[var(--brand)] placeholder:text-[var(--muted)] focus:ring"
+                  aria-label={t("nav.searchPlaceholder")}
+                />
+                {mobileNavKeyword ? (
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 rounded p-0.5 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                    onClick={() => setMobileNavKeyword("")}
+                    aria-label={t("common.cancel")}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
               <div className="mt-3 grid grid-cols-5 gap-1">
                 {mobileCoreActions.map((action) => {
                   const Icon = action.icon;
@@ -1163,11 +1202,22 @@ export function App() {
               </div>
             </div>
             <div className="hermes-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
-              <div className="grid gap-2">
+              <div className="grid gap-2" data-testid="mobile-nav-filtered-micro-apps">
                 {MICRO_APPS.map((app) => {
-                  const appMenus = microAppMenuById.get(app.id) ?? [];
+                  const allAppMenus = microAppMenuById.get(app.id) ?? [];
+                  const appMatches = mobileNavTerm
+                    ? `${app.name} ${app.shortName} ${app.owner} ${app.description}`.toLowerCase().includes(mobileNavTerm)
+                    : true;
+                  const appMenus = mobileNavTerm
+                    ? allAppMenus.filter((item) => {
+                        const label = navLabel(item.key);
+                        return `${label} ${item.description || ""} ${item.capability || ""} ${item.path}`.toLowerCase().includes(mobileNavTerm);
+                      })
+                    : allAppMenus;
+                  if (mobileNavTerm && !appMatches && !appMenus.length) return null;
                   const active = app.id === activeMicroApp;
-                  const shown = appMenus.slice(0, active ? 12 : 5);
+                  const shownMenus = appMatches && mobileNavTerm && !appMenus.length ? allAppMenus : appMenus;
+                  const shown = shownMenus.slice(0, mobileNavTerm ? 10 : active ? 12 : 5);
                   return (
                     <section key={app.id} className={`rounded-xl border p-2 ${active ? "border-[var(--brand)]/45 bg-[var(--nav-active)]" : "border-[var(--border)] bg-[var(--surface-raised)]/55"}`}>
                       <button
@@ -1179,7 +1229,7 @@ export function App() {
                           <span className="block truncate text-sm font-semibold text-[var(--text)]">{app.shortName}</span>
                           <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">{app.owner}</span>
                         </span>
-                        <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-strong)]">{appMenus.length}</span>
+                        <span className="rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted-strong)]">{mobileNavTerm ? shownMenus.length : allAppMenus.length}</span>
                       </button>
                       <div className="mt-1 grid gap-1">
                         {shown.map((item) => {
@@ -1203,6 +1253,19 @@ export function App() {
                     </section>
                   );
                 })}
+                {mobileNavTerm && MICRO_APPS.every((app) => {
+                  const allAppMenus = microAppMenuById.get(app.id) ?? [];
+                  const appMatches = `${app.name} ${app.shortName} ${app.owner} ${app.description}`.toLowerCase().includes(mobileNavTerm);
+                  const menuMatches = allAppMenus.some((item) => {
+                    const label = navLabel(item.key);
+                    return `${label} ${item.description || ""} ${item.capability || ""} ${item.path}`.toLowerCase().includes(mobileNavTerm);
+                  });
+                  return !appMatches && !menuMatches;
+                }) ? (
+                  <div className="rounded-xl border border-dashed border-[var(--border)] px-3 py-8 text-center text-sm text-[var(--muted)]">
+                    {t("nav.searchEmpty")}
+                  </div>
+                ) : null}
               </div>
             </div>
           </Dialog.Content>

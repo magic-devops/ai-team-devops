@@ -11,12 +11,18 @@ describe("mobile console shell", () => {
   it("exposes a mobile drawer navigation surface", () => {
     expect(appSource).toContain('data-testid="mobile-nav-toggle"');
     expect(appSource).toContain('data-testid="mobile-nav-drawer"');
+    expect(appSource).toContain('data-testid="mobile-nav-search"');
+    expect(appSource).toContain('data-testid="mobile-nav-filtered-micro-apps"');
     expect(appSource).toContain("mobileNavOpen");
+    expect(appSource).toContain("mobileNavKeyword");
+    expect(appSource).toContain("mobileNavTerm");
   });
 
   it("exposes a mobile action bar for core intelligent workflows", () => {
     expect(appSource).toContain('data-testid="mobile-action-bar"');
     expect(appSource).toContain("mobileCoreActions");
+    expect(appSource).toContain('#/copilot');
+    expect(appSource).toContain('label: navLabel("copilot")');
     expect(appSource).toContain("#/notify/inbound");
   });
 
