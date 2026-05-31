@@ -49,6 +49,21 @@ describe("SystemMap governance task operations", () => {
     expect(navigationSource).toContain('key: "systemMapGovernanceTasks"');
     expect(navigationSource).toContain('path: "#/system-map/governance-tasks"');
     expect(navigationSource).toContain('capability: "governance.system-map.governance-tasks"');
+    expect(navigationSource).toContain('initialSection: "tasks"');
+  });
+
+  it("keeps SystemMap subroutes focused instead of rendering one heavy page", () => {
+    expect(systemMapSource).toContain("type SystemMapSection");
+    expect(systemMapSource).toContain("systemMapFocusedNav");
+    expect(systemMapSource).toContain("showRegistry");
+    expect(systemMapSource).toContain("showReadiness");
+    expect(systemMapSource).toContain("showIsolation");
+    expect(navigationSource).toContain('key: "pageRegistry"');
+    expect(navigationSource).toContain('initialSection: "registry"');
+    expect(navigationSource).toContain('initialSection: "manifest"');
+    expect(navigationSource).toContain('initialSection: "capabilities"');
+    expect(navigationSource).toContain('path: "#/system-map/migration"');
+    expect(navigationSource).toContain('initialSection: "migration"');
   });
 
   it("ships localized product labels for the task operations unit", () => {

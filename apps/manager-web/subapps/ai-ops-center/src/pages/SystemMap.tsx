@@ -15,6 +15,16 @@ import { SystemGovernanceTasksPanel } from "./system/SystemGovernanceTasksPanel"
 import { SystemProductionReadinessPanel } from "./system/SystemProductionReadinessPanel";
 
 type ViewMode = "react" | "legacy" | "all";
+type SystemMapSection =
+  | "overview"
+  | "registry"
+  | "readiness"
+  | "isolation"
+  | "tasks"
+  | "manifest"
+  | "actions"
+  | "capabilities"
+  | "migration";
 
 function MaturityBar({ value }: { value: number }) {
   const tone = value >= 80 ? "bg-emerald-500" : value >= 60 ? "bg-amber-500" : "bg-rose-500";
@@ -40,11 +50,12 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex h-6 w-fit items-center rounded-full px-2.5 text-xs font-medium ${cls}`}>{status}</span>;
 }
 
-export function SystemMap() {
+export function SystemMap({ focused = false, initialSection = "overview" }: { focused?: boolean; initialSection?: SystemMapSection }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
   const [mode, setMode] = useState<ViewMode>("react");
+  const [section, setSection] = useState<SystemMapSection>(initialSection);
   const [domain, setDomain] = useState("all");
   const [status, setStatus] = useState("all");
   const [keyword, setKeyword] = useState("");
@@ -360,6 +371,25 @@ export function SystemMap() {
     setExperienceStatus(String(item?.status || "all"));
     setKeyword(String(item?.id || item?.name || ""));
   };
+  const sectionOptions: Array<{ label: string; value: SystemMapSection }> = [
+    { label: t("nav.pageRegistry"), value: "registry" },
+    { label: t("nav.moduleReadinessGovernance"), value: "readiness" },
+    { label: t("nav.threeCodeIsolationGovernance"), value: "isolation" },
+    { label: t("nav.systemMapGovernanceTasks"), value: "tasks" },
+    { label: t("nav.moduleManifest"), value: "manifest" },
+    { label: t("nav.moduleActionCatalog"), value: "actions" },
+    { label: t("nav.capabilityGovernance"), value: "capabilities" },
+    { label: t("nav.sub.migration", { defaultValue: "迁移任务" }), value: "migration" },
+  ];
+  const showOverview = !focused && section === "overview";
+  const showRegistry = !focused || section === "registry";
+  const showReadiness = !focused || section === "readiness";
+  const showIsolation = !focused || section === "isolation";
+  const showTasks = !focused || section === "tasks";
+  const showManifest = !focused || section === "manifest";
+  const showActions = !focused || section === "actions";
+  const showCapabilities = !focused || section === "capabilities";
+  const showMigration = !focused || section === "migration";
   const pageColumns: ColumnsType<any> = [
     {
       title: t("page.systemMap.page"),
@@ -531,6 +561,26 @@ export function SystemMap() {
       {q.isLoading ? <LoadingBlock /> : null}
       {q.isError ? <ErrorBlock message={(q.error as Error).message} /> : null}
 
+      <div className="systemMapFocusedNav overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+        <Segmented
+          value={focused ? section : "overview"}
+          onChange={(value) => {
+            if (value === "overview") {
+              window.location.hash = "#/system-map";
+              return;
+            }
+            setSection(value as SystemMapSection);
+            const nextPath = String(value).replace("isolation", "three-code-isolation").replace("tasks", "governance-tasks");
+            window.location.hash = `#/system-map/${nextPath}`;
+          }}
+          options={[
+            { label: t("nav.systemMap"), value: "overview" },
+            ...sectionOptions,
+          ]}
+        />
+      </div>
+
+      {showOverview ? (
       <Card title={t("page.systemMap.whatIsThis")}>
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(24rem,0.9fr)]">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -565,13 +615,17 @@ export function SystemMap() {
           ))}
         </div>
       </Card>
+      ) : null}
 
+      {showOverview ? (
       <div className="grid gap-3 md:grid-cols-3">
         <SummaryTile label={t("page.systemMap.reactPages")} value={q.data?.summary?.react?.total ?? 0} sub={`${q.data?.summary?.react?.avg_maturity ?? 0}%`} />
         <SummaryTile label={t("page.systemMap.legacyPages")} value={q.data?.summary?.legacy?.total ?? 0} sub={`${q.data?.summary?.legacy?.avg_maturity ?? 0}%`} />
         <SummaryTile label={t("page.systemMap.allPages")} value={q.data?.summary?.all?.total ?? 0} sub={`${q.data?.summary?.all?.avg_maturity ?? 0}%`} />
       </div>
+      ) : null}
 
+      {showRegistry ? (
       <Card title={t("page.systemMap.registryHealth")}>
         <div className="grid gap-3 lg:grid-cols-[18rem_1fr]">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -594,7 +648,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showRegistry ? (
       <Card title={t("page.systemMap.menuHealth")}>
         <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
@@ -652,7 +708,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showReadiness ? (
       <Card
         title={t("page.systemMap.readinessTitle")}
         actions={
@@ -917,7 +975,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showIsolation ? (
       <Card
         title={t("page.systemMap.isolationTitle")}
         actions={
@@ -1058,7 +1118,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showTasks ? (
       <Card title={t("page.systemMap.governanceTasksTitle")}>
         <SystemGovernanceTasksPanel
           taskData={governanceTasksQ.data}
@@ -1074,7 +1136,9 @@ export function SystemMap() {
           onBulkUpdate={(body) => governanceTasksBulkUpdate.mutate(body)}
         />
       </Card>
+      ) : null}
 
+      {showManifest ? (
       <Card title={t("page.systemMap.moduleManifest")}>
         <div className="grid gap-3 lg:grid-cols-[1.1fr_1.4fr]">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1124,7 +1188,9 @@ export function SystemMap() {
           ) : null}
         </div>
       </Card>
+      ) : null}
 
+      {showActions ? (
       <Card title={t("page.systemMap.moduleActions")}>
         <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -1255,7 +1321,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showCapabilities ? (
       <Card title={t("page.systemMap.capabilityGovernance")}>
         <div className="grid gap-3 lg:grid-cols-[22rem_1fr]">
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
@@ -1314,7 +1382,9 @@ export function SystemMap() {
           </div>
         </div>
       </Card>
+      ) : null}
 
+      {showOverview ? (
       <Card title={t("page.systemMap.domainModules")}>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {(q.data?.domain_matrix ?? []).map((item: any) => (
@@ -1344,7 +1414,9 @@ export function SystemMap() {
           ))}
         </div>
       </Card>
+      ) : null}
 
+      {showMigration ? (
       <Card title={t("page.systemMap.strategy")}>
         <p className="text-sm leading-6 text-[var(--muted-strong)]">{q.data?.migration?.strategy}</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -1352,7 +1424,9 @@ export function SystemMap() {
           <Info label={t("page.systemMap.legacyEntry")} value={q.data?.migration?.legacy_entry ?? "-"} />
         </div>
       </Card>
+      ) : null}
 
+      {showRegistry ? (
       <Card title={t("page.systemMap.pageList")}>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Segmented
@@ -1411,7 +1485,9 @@ export function SystemMap() {
           pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 25, 50, 100], showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}` }}
         />
       </Card>
+      ) : null}
 
+      {showMigration ? (
       <Card
         title={t("page.systemMap.migrationBacklog")}
         actions={
@@ -1514,6 +1590,7 @@ export function SystemMap() {
           pagination={{ pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 24, 48, 100], showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}` }}
         />
       </Card>
+      ) : null}
     </div>
   );
 }
