@@ -26,6 +26,7 @@ type SystemMapSection =
   | "manifest"
   | "actions"
   | "capabilities"
+  | "module-contract"
   | "migration";
 
 function MaturityBar({ value }: { value: number }) {
@@ -380,9 +381,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     { label: t("nav.sourceIsolationScan"), value: "source-scan" },
     { label: t("nav.isolationBaselineCompare"), value: "baseline-compare" },
     { label: t("nav.systemMapGovernanceTasks"), value: "tasks" },
-    { label: t("nav.moduleManifest"), value: "manifest" },
-    { label: t("nav.moduleActionCatalog"), value: "actions" },
-    { label: t("nav.capabilityGovernance"), value: "capabilities" },
+    { label: t("nav.moduleContract", { defaultValue: t("nav.moduleManifest") }), value: "module-contract" },
     { label: t("nav.sub.migration", { defaultValue: "迁移任务" }), value: "migration" },
   ];
   const showOverview = !focused && section === "overview";
@@ -393,7 +392,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const showBaselineCompare = !focused || section === "baseline-compare";
   const showIsolation = showIsolationGovernance || showSourceScan || showBaselineCompare;
   const showTasks = !focused || section === "tasks";
-  const showManifest = !focused || section === "manifest";
+  const showManifest = !focused || section === "manifest" || section === "module-contract";
   const showActions = !focused || section === "actions";
   const showCapabilities = !focused || section === "capabilities";
   const showMigration = !focused || section === "migration";
@@ -570,7 +569,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
 
       <div className="systemMapFocusedNav overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
         <Segmented
-          value={focused ? section : "overview"}
+          value={focused && (section === "manifest" || section === "capabilities" || section === "actions") ? "module-contract" : focused ? section : "overview"}
           onChange={(value) => {
             if (value === "overview") {
               window.location.hash = "#/system-map";
@@ -579,6 +578,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
             setSection(value as SystemMapSection);
             const pathBySection: Partial<Record<SystemMapSection, string>> = {
               "baseline-compare": "baseline-compare",
+              "module-contract": "contract",
               "source-scan": "source-scan",
               isolation: "three-code-isolation",
               tasks: "governance-tasks",

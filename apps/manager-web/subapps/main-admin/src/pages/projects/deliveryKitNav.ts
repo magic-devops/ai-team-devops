@@ -73,6 +73,15 @@ export function parseProjectsDeliveryHash(hash: string): ProjectsRouteState {
   const portfolio = h.match(/^#\/projects\/([\w-]+)$/);
   if (portfolio) {
     const seg = portfolio[1];
+    if (seg === "businesses") {
+      return {
+        tab: "business",
+        templatePanel: "overview",
+        onboardingPanel: "overview",
+        governancePanel: "review",
+        focused: true,
+      };
+    }
     const tabKeys: TabKey[] = ["portfolio", "business", "tenants", "users", "members"];
     if (tabKeys.includes(seg as TabKey)) {
       return {

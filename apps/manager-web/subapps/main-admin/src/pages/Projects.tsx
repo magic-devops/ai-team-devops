@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Building2,
   Copy,
   LayoutGrid,
   Layers3,
@@ -36,7 +35,6 @@ import { defaultDraft, type Project, type ProjectTab, type TabKey } from "./proj
 
 const coreTabs: ProjectTab[] = [
   { key: "portfolio", icon: LayoutGrid },
-  { key: "business", icon: Building2 },
   { key: "tenants", icon: Layers3 },
   { key: "users", icon: UserCog },
   { key: "members", icon: Users },

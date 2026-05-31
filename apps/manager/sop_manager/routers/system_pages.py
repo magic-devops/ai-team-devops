@@ -529,6 +529,7 @@ SUBMODULES_BY_PAGE: dict[str, list[tuple[str, str]]] = {
     "audit": [("hash_chain", "审计哈希链"), ("events", "事件检索"), ("module_actions", "模块动作审计"), ("approvals", "动作审批"), ("export", "合规导出")],
     "systemMap": [
         ("registry", "页面注册表"),
+        ("contract", "模块契约"),
         ("manifest", "模块 Manifest"),
         ("capabilities", "能力权限"),
         ("readiness", "模块完整度"),
@@ -640,6 +641,7 @@ SUBMODULE_PATHS: dict[tuple[str, str], str] = {
     ("audit", "module_actions"): "#/audit/module-actions",
     ("audit", "approvals"): "#/audit/approvals",
     ("systemMap", "registry"): "#/system-map/registry",
+    ("systemMap", "contract"): "#/system-map/contract",
     ("systemMap", "manifest"): "#/system-map/manifest",
     ("systemMap", "capabilities"): "#/system-map/capabilities",
     ("systemMap", "readiness"): "#/system-map/readiness",
@@ -4388,6 +4390,7 @@ def system_pages_hub(user: User = Depends(current_user)) -> dict[str, Any]:
         "stack_layers": _domain_matrix(REACT_PAGES, LEGACY_PAGES)[:8],
         "domains": [
             {"id": "registry", "path": "#/system-map/registry", "capability": "governance.system-map.registry"},
+            {"id": "contract", "path": "#/system-map/contract", "capability": "governance.system-map.manifest"},
             {"id": "manifest", "path": "#/system-map/manifest", "capability": "governance.system-map.manifest"},
             {"id": "capabilities", "path": "#/system-map/capabilities", "capability": "governance.system-map.capabilities"},
             {"id": "actions", "path": "#/system-map/actions", "capability": "governance.system-map.actions"},

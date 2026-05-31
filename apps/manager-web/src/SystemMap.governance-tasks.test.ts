@@ -61,7 +61,9 @@ describe("SystemMap governance task operations", () => {
     expect(systemMapSource).toContain("showSourceScan");
     expect(systemMapSource).toContain("showBaselineCompare");
     expect(navigationSource).toContain('key: "pageRegistry"');
+    expect(navigationSource).toContain('key: "moduleContract"');
     expect(navigationSource).toContain('initialSection: "registry"');
+    expect(navigationSource).toContain('initialSection: "module-contract"');
     expect(navigationSource).toContain('initialSection: "manifest"');
     expect(navigationSource).toContain('initialSection: "capabilities"');
     expect(navigationSource).toContain('initialSection: "source-scan"');

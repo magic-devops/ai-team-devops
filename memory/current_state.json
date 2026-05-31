@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-05-31T10:06:32Z",
+  "updated_at": "2026-05-31T10:12:18Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -376,12 +376,13 @@
       "完成 Task 115 Copilot 命令审批队列闭环：Manager 新增 /api/v1/copilot/commands/approvals 与审批 review API，敏感 operation 生成幂等审批记录，支持 pending 查询、批准、驳回、批准后携带 approval_id 执行并回写 executed/audit_hash；命令中心侧栏新增轻量审批队列卡片，提交审批后可在同页批准或驳回，批准自动执行并刷新审计证据；System Pages、三语种文案、UX 契约测试和架构计划同步登记。",
       "完成 Task 116 Copilot 审批模块化与外部回调闭环：前端将命令审批队列从 Copilot 主页面抽离为 CopilotCommandApprovalQueue 独立模块，主页面只保留取数、审批动作和执行编排，降低页面复杂度并方便 AI 后续单点改造；Manager 新增 /api/v1/copilot/commands/approvals/callback，外部审批系统可幂等批准/驳回敏感命令，审批记录暴露 callback 契约、review_source、external_system 和 external_ref，执行仍由受控 command apply 携带 approval_id 完成；System Pages、三语种文案、UX 契约测试和架构计划同步登记。",
       "完成 Task 117 SystemMap 子路由聚焦体验改造：回应 #/system-map/registry 页面过重的问题，SystemMap 新增 focused + initialSection 模式和 systemMapFocusedNav，页面注册表、Manifest、能力矩阵、完整度治理、三码隔离、治理任务、动作目录等子菜单进入时只展示对应专业工作区；#/system-map/registry 聚焦注册健康、菜单健康和页面注册列表，不再默认堆叠完整度、隔离、Manifest、动作、能力、迁移 Backlog 等所有治理模块；导航子路由传入 initialSection，System Pages 登记“子路由聚焦”能力，架构计划与前端契约测试同步更新。",
-      "完成 Task 118 SystemMap 源码扫描与基线对比真实聚焦：继续回应“不要只有样子，需要完整好用”，将 #/system-map/source-scan 和 #/system-map/baseline-compare 从共用三码隔离大卡片改为独立 initialSection；源码扫描入口只展示扫描问题、加固任务、快照保存和历史，智能基线对比入口只展示风险变化、评分差异和对比治理任务化，三码隔离入口保留域隔离矩阵与隔离任务生成；IsolationSourceScanPanel 新增 variant 控制展示范围，避免不同入口看起来一样且操作混杂。"
+      "完成 Task 118 SystemMap 源码扫描与基线对比真实聚焦：继续回应“不要只有样子，需要完整好用”，将 #/system-map/source-scan 和 #/system-map/baseline-compare 从共用三码隔离大卡片改为独立 initialSection；源码扫描入口只展示扫描问题、加固任务、快照保存和历史，智能基线对比入口只展示风险变化、评分差异和对比治理任务化，三码隔离入口保留域隔离矩阵与隔离任务生成；IsolationSourceScanPanel 新增 variant 控制展示范围，避免不同入口看起来一样且操作混杂。",
+      "完成 Task 119 菜单信息架构去冗余第一轮：回应 #/projects/portfolio 与 #/projects/businesses、#/system-map/manifest/capabilities/actions 入口冗余问题；修复 #/projects/businesses hash 解析为 business Tab 的真实可用性 bug，业务线治理保留兼容 URL 但从项目主菜单和主 Tab 退居项目组合工作区；SystemMap 新增 #/system-map/contract 模块契约主入口，Manifest、能力权限和动作目录保留旧 URL 但隐藏在模块契约下，主菜单只暴露一个契约入口；新增 NavigationInformationArchitecture 契约测试防止菜单再次膨胀。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 118 SystemMap 源码扫描与基线对比真实聚焦已完成；下一步继续按“每个入口都有真实数据、真实操作、权限、错误态和验证”的标准拆 Settings、OpsCenter 等大工作台。"
+    "current": "Task 119 菜单信息架构去冗余第一轮已完成；下一步继续按“少入口、强闭环、旧 URL 兼容”的标准清理 Settings、OpsCenter、Projects 和 SystemMap 中其他重复工作台。"
   },
   "metrics": {
     "completion_rate": 100,

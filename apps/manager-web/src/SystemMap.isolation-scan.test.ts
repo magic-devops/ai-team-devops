@@ -72,7 +72,7 @@ describe("SystemMap isolation source scanner", () => {
   });
 
   it("keeps system governance menu grouped into clear modular units", () => {
-    expect(navigationSource).toContain('subnav("systemMap", "registry", "manifest", "capabilities", "readiness", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "actions", "migration")');
+    expect(navigationSource).toContain('subnav("systemMap", "registry", "contract", "readiness", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "migration")');
     expect(navigationSource).toContain('key: "moduleReadinessGovernance"');
     expect(navigationSource).toContain('capability: "governance.system-map.readiness"');
     expect(navigationSource).toContain('key: "threeCodeIsolationGovernance"');
@@ -85,6 +85,9 @@ describe("SystemMap isolation source scanner", () => {
     expect(navigationSource).toContain('capability: "governance.system-map.baseline-compare"');
     expect(navigationSource).toContain('key: "systemMapGovernanceTasks"');
     expect(navigationSource).toContain('capability: "governance.system-map.governance-tasks"');
+    expect(navigationSource).toContain('key: "moduleContract"');
+    expect(navigationSource).toContain('path: "#/system-map/contract"');
+    expect(navigationSource).toContain('hidden: true, parentKey: "moduleContract"');
   });
 
   it("keeps the source scanner as a modular unit built from mature components", () => {

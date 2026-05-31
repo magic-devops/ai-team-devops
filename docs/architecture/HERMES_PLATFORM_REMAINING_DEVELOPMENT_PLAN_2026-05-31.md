@@ -68,6 +68,8 @@
   - 表格同时提供桌面密集视图和移动端卡片/横向滚动。
   - `#/system-map/registry` 等子路由进入聚焦模式：Registry 只显示注册健康、菜单健康和页面注册列表，Manifest、能力、完整度、三码隔离、治理任务、动作目录和迁移 Backlog 分别进入自己的专业入口，避免一个页面承载全部治理能力。
   - `#/system-map/source-scan` 与 `#/system-map/baseline-compare` 不再复用同一个隔离大视图：源码扫描聚焦扫描项、加固任务、快照保存和历史；基线对比聚焦新增风险、已修复、评分差异和对比治理任务化，确保拆出来的菜单有真实功能闭环。
+  - `#/system-map/manifest`、`#/system-map/capabilities`、`#/system-map/actions` 收敛到主菜单 `#/system-map/contract`，旧 URL 作为兼容入口保留但不再占据主菜单，避免模块契约、能力权限和动作目录三类相近治理入口造成选择负担。
+  - `#/projects/businesses` 修复 hash 解析并作为兼容入口保留；项目主菜单优先展示 `#/projects/portfolio`，业务线治理从主 Tab 退到项目组合工作区和组织治理场景中，减少项目组合与业务线两个入口并列造成的重复感。
 - 菜单和页面设计评估口径：
   - `simple`：首屏信息清晰、动作少、权限明确、移动端可用。
   - `watch`：功能可用但需要减少冗余、补响应式或补成熟组件。
