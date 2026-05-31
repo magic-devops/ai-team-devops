@@ -101,4 +101,17 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Agent Run ID\" value={rcaInsightFilter.run_id}");
     expect(source).not.toContain("<select className=\"input-base\" value={rcaInsightFilter.priority}");
   });
+
+  it("keeps manual RCA creation in a focused drawer flow", () => {
+    expect(source).toContain("rcaCreateDrawerOpen");
+    expect(source).toContain("rcaCreateFocusedDrawer");
+    expect(source).toContain("setRcaCreateDrawerOpen(true)");
+    expect(source).toContain("新建 RCA");
+    expect(source).toContain("事件信息");
+    expect(source).toContain("根因与处置");
+    expect(source).toContain("创建后闭环");
+    expect(source).toContain("createRca.mutate()");
+    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"事件 ID *\" value={rcaForm.incident_id}");
+    expect(source).not.toContain("<textarea className=\"input-base w-full h-16 resize-none\" placeholder=\"根因描述 *\"");
+  });
 });

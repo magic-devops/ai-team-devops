@@ -113,6 +113,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const [showForm, setShowForm] = useState(false);
   const [pForm, setPForm] = useState({ name: "", environment: "staging", steps: "" });
   const [rcaForm, setRcaForm] = useState({ incident_id: "", root_cause: "", impact: "", resolution: "" });
+  const [rcaCreateDrawerOpen, setRcaCreateDrawerOpen] = useState(false);
   const [rcaInsightFilter, setRcaInsightFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100", priority: "P1", assigned_to: "Ops Agent", dev_tool: "codex" });
   const [rcaInsightDrawerOpen, setRcaInsightDrawerOpen] = useState(false);
   const [rcaInsightResult, setRcaInsightResult] = useState<any>(null);
@@ -266,7 +267,13 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   });
   const createRca = useMutation({
     mutationFn: () => api.opsRcaCreate(rcaForm),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["opsRca"] }); setShowForm(false); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["opsRca"] });
+      void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
+      setShowForm(false);
+      setRcaCreateDrawerOpen(false);
+      setRcaForm({ incident_id: "", root_cause: "", impact: "", resolution: "" });
+    },
   });
   const resolveRca = useMutation({
     mutationFn: (id: string) => api.opsRcaResolve(id),
@@ -2097,25 +2104,85 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
           <WorkbenchPanel title="根因分析" actions={
             <div className="flex gap-2">
               <RefreshButton onClick={() => void rcaQ.refetch()} pending={rcaQ.isFetching} />
-              <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建</button>
+              <Button type="primary" size="small" onClick={() => setRcaCreateDrawerOpen(true)}>新建 RCA</Button>
             </div>
           }>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="事件 ID *" value={rcaForm.incident_id} onChange={e => setRcaForm(f => ({ ...f, incident_id: e.target.value }))} />
-                  <input className="input-base" placeholder="影响范围" value={rcaForm.impact} onChange={e => setRcaForm(f => ({ ...f, impact: e.target.value }))} />
-                </div>
-                <textarea className="input-base w-full h-16 resize-none" placeholder="根因描述 *" value={rcaForm.root_cause} onChange={e => setRcaForm(f => ({ ...f, root_cause: e.target.value }))} />
-                <textarea className="input-base w-full h-16 resize-none" placeholder="解决方案" value={rcaForm.resolution} onChange={e => setRcaForm(f => ({ ...f, resolution: e.target.value }))} />
-                <div className="flex gap-2">
-                  <button onClick={() => createRca.mutate()} disabled={!rcaForm.incident_id || !rcaForm.root_cause || createRca.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {createRca.isPending ? "创建中..." : "创建"}
-                  </button>
-                  <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
+            <Drawer
+              title="新建 RCA"
+              open={rcaCreateDrawerOpen}
+              onClose={() => setRcaCreateDrawerOpen(false)}
+              width="min(620px, 100vw)"
+            >
+              <div className="rcaCreateFocusedDrawer space-y-5">
+                <Steps
+                  size="small"
+                  current={rcaForm.incident_id && rcaForm.root_cause ? 1 : 0}
+                  items={[
+                    { title: "事件" },
+                    { title: "根因" },
+                    { title: "闭环" },
+                  ]}
+                />
+                <Form layout="vertical" requiredMark={false} onFinish={() => createRca.mutate()}>
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">事件信息</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Form.Item label="事件 ID" required>
+                        <Input value={rcaForm.incident_id} onChange={e => setRcaForm(f => ({ ...f, incident_id: e.target.value }))} />
+                      </Form.Item>
+                      <Form.Item label="影响范围">
+                        <Input value={rcaForm.impact} onChange={e => setRcaForm(f => ({ ...f, impact: e.target.value }))} />
+                      </Form.Item>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <p className="text-sm font-semibold">根因与处置</p>
+                    <Form.Item className="mt-3" label="根因描述" required>
+                      <Input.TextArea
+                        autoSize={{ minRows: 3, maxRows: 5 }}
+                        value={rcaForm.root_cause}
+                        onChange={e => setRcaForm(f => ({ ...f, root_cause: e.target.value }))}
+                      />
+                    </Form.Item>
+                    <Form.Item label="解决方案">
+                      <Input.TextArea
+                        autoSize={{ minRows: 3, maxRows: 5 }}
+                        value={rcaForm.resolution}
+                        onChange={e => setRcaForm(f => ({ ...f, resolution: e.target.value }))}
+                      />
+                    </Form.Item>
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <p className="text-sm font-semibold">创建后闭环</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--muted)]">RCA 创建后会进入列表，可继续生成验证计划、执行验证关闭，并与 Runbook 和任务中心形成治理证据。</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">事件</p>
+                        <p className="truncate text-sm font-semibold">{rcaForm.incident_id || "-"}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">影响</p>
+                        <p className="truncate text-sm font-semibold">{rcaForm.impact || "待补充"}</p>
+                      </div>
+                      <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                        <p className="text-xs text-[var(--muted)]">状态</p>
+                        <p className="text-sm font-semibold">{rcaForm.root_cause ? "可创建" : "待补根因"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Space className="mt-4" wrap>
+                    <Button type="primary" htmlType="submit" loading={createRca.isPending} disabled={!rcaForm.incident_id || !rcaForm.root_cause}>
+                      创建 RCA
+                    </Button>
+                    <Button onClick={() => setRcaCreateDrawerOpen(false)}>取消</Button>
+                  </Space>
+                  {createRca.error && <p className="mt-3 text-xs text-red-600">{(createRca.error as Error).message}</p>}
+                </Form>
               </div>
-            )}
+            </Drawer>
             <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
