@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { Segmented } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -8,6 +9,68 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 type Tab = "pipelines" | "alert-sources" | "rca" | "runbooks" | "self-heal";
+
+const OPS_CENTER_TAB_ROUTES: Record<string, Tab> = {
+  pipeline: "pipelines",
+  pipelines: "pipelines",
+  alerts: "alert-sources",
+  "alert-sources": "alert-sources",
+  rca: "rca",
+  runbook: "runbooks",
+  runbooks: "runbooks",
+  "self-heal": "self-heal",
+};
+
+const OPS_CENTER_TAB_META: Record<Tab, { href: string; label: string; shortLabel: string; desc: string; output: string }> = {
+  pipelines: {
+    href: "#/system/ops-center/pipeline",
+    label: "部署流水线",
+    shortLabel: "流水线",
+    desc: "发布、执行器、外部回调和发布证据。",
+    output: "输出：受控发布记录、执行证据、自愈诊断",
+  },
+  "alert-sources": {
+    href: "#/system/ops-center/alerts",
+    label: "告警源治理",
+    shortLabel: "告警源",
+    desc: "生产告警采集、降噪、SLO 预测和策略联动。",
+    output: "输出：标准化告警、降噪策略、SLO 升级任务",
+  },
+  rca: {
+    href: "#/system/ops-center/rca",
+    label: "根因分析",
+    shortLabel: "RCA",
+    desc: "智能归因、RCA 创建、验证计划和闭环关闭。",
+    output: "输出：根因候选、RCA 记录、治理任务",
+  },
+  runbooks: {
+    href: "#/system/ops-center/runbook",
+    label: "Runbook",
+    shortLabel: "Runbook",
+    desc: "版本治理、差异对比、执行证据和审计归档。",
+    output: "输出：可执行手册、版本证据、审计记录",
+  },
+  "self-heal": {
+    href: "#/system/ops-center/self-heal",
+    label: "自愈策略",
+    shortLabel: "自愈",
+    desc: "信号评估、护栏审批、自动修复和回滚留证。",
+    output: "输出：自愈决策、护栏动作、验证证据",
+  },
+};
+
+function readOpsCenterTabFromHash(fallback: Tab): Tab {
+  const hash = window.location.hash || "";
+  const [, routeTab] = hash.match(/^#\/system\/ops-center\/([^/?#]+)/) || [];
+  return OPS_CENTER_TAB_ROUTES[routeTab || ""] || fallback;
+}
+
+function updateOpsCenterHash(tab: Tab) {
+  const href = OPS_CENTER_TAB_META[tab].href;
+  if (window.location.hash !== href) {
+    window.history.replaceState(null, "", href);
+  }
+}
 
 function parseSignals(value: string) {
   const out: Record<string, unknown> = {};
@@ -46,7 +109,7 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const authed = Boolean(getToken());
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const [tab, setTab] = useState<Tab>(() => readOpsCenterTabFromHash(initialTab));
   const [showForm, setShowForm] = useState(false);
   const [pForm, setPForm] = useState({ name: "", environment: "staging", steps: "" });
   const [rcaForm, setRcaForm] = useState({ incident_id: "", root_cause: "", impact: "", resolution: "" });
@@ -166,6 +229,18 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   const latestSloEscalation = alertSloEscalationResult ?? alertSloEscalationRunsQ.data?.items?.[0] ?? null;
   const latestStrategyCanary = alertStrategyCanaryResult ?? alertStrategyCanaryAuditsQ.data?.items?.[0] ?? null;
   const latestOpsStrategyLinkage = opsStrategyLinkageResult ?? opsStrategyLinkageRunsQ.data?.items?.[0] ?? null;
+  const activeTabMeta = OPS_CENTER_TAB_META[tab];
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = readOpsCenterTabFromHash(initialTab);
+      setTab(next);
+      setShowForm(false);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    onHashChange();
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [initialTab]);
 
   const createPip = useMutation({
     mutationFn: () => api.opsPipelineCreate({ name: pForm.name, environment: pForm.environment, steps: pForm.steps.split("\n").filter(Boolean) }),
@@ -670,12 +745,12 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
 
   if (!authed) return <NeedLogin />;
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: "pipelines", label: `流水线 (${pipQ.data?.items?.length ?? 0})` },
-    { id: "alert-sources", label: `告警源 (${alertSourcesQ.data?.items?.length ?? 0})` },
-    { id: "rca", label: "根因分析" },
-    { id: "runbooks", label: "Runbook" },
-    { id: "self-heal", label: "自愈策略" },
+  const TABS: { id: Tab; label: string; count: number | null }[] = [
+    { id: "pipelines", label: OPS_CENTER_TAB_META.pipelines.shortLabel, count: pipQ.data?.items?.length ?? 0 },
+    { id: "alert-sources", label: OPS_CENTER_TAB_META["alert-sources"].shortLabel, count: alertSourcesQ.data?.items?.length ?? 0 },
+    { id: "rca", label: OPS_CENTER_TAB_META.rca.shortLabel, count: rcaQ.data?.items?.length ?? null },
+    { id: "runbooks", label: OPS_CENTER_TAB_META.runbooks.shortLabel, count: rbQ.data?.items?.length ?? null },
+    { id: "self-heal", label: OPS_CENTER_TAB_META["self-heal"].shortLabel, count: shQ.data?.items?.length ?? null },
   ];
 
   return (
@@ -749,13 +824,45 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
           </div>
         </WorkbenchPanel>
 
-        <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {TABS.map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); setShowForm(false); }}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t.id ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t.label}
+        <div className="opsCenterModuleQuickSummary mb-4 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--brand)]">OpsCenter</span>
+              <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs text-[var(--muted-strong)]">{activeTabMeta.output}</span>
+            </div>
+            <h2 className="mt-3 text-lg font-semibold text-[var(--text)]">{activeTabMeta.label}</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">{activeTabMeta.desc}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col lg:items-end">
+            <button type="button" onClick={() => setAiOpen(true)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
+              AI 分析当前模块
             </button>
-          ))}
+            <a href="#/system/ops-center" className="rounded-lg border border-[var(--border)] px-3 py-2 text-center text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
+              返回运维总览
+            </a>
+          </div>
+        </div>
+
+        <div className="opsCenterModeSwitch mb-4 overflow-x-auto pb-1">
+          <Segmented
+            block
+            value={tab}
+            onChange={(value) => {
+              const next = value as Tab;
+              setTab(next);
+              setShowForm(false);
+              updateOpsCenterHash(next);
+            }}
+            options={TABS.map((item) => ({
+              value: item.id,
+              label: (
+                <span className="inline-flex min-w-max items-center gap-1 px-1">
+                  <span>{item.label}</span>
+                  {item.count !== null ? <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">{item.count}</span> : null}
+                </span>
+              ),
+            }))}
+          />
         </div>
 
         {tab === "pipelines" && (

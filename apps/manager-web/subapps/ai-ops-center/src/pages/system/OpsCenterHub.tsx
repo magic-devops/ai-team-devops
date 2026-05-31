@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowRight, BookOpen, Container, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, BellRing, BookOpen, Container, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { LoadingBlock, NeedLogin, RefreshButton } from "@/components/PageStates";
@@ -9,7 +9,8 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 const MODULES = [
-  { id: "pipeline", path: "#/system/ops-center/workbench", icon: Container, label: "部署流水线", desc: "环境部署与发布管理" },
+  { id: "pipeline", path: "#/system/ops-center/pipeline", icon: Container, label: "部署流水线", desc: "环境部署与发布管理" },
+  { id: "alerts", path: "#/system/ops-center/alerts", icon: BellRing, label: "告警源治理", desc: "采集、降噪与 SLO 升级" },
   { id: "rca", path: "#/system/ops-center/rca", icon: AlertTriangle, label: "根因分析", desc: "故障根因定位与处置" },
   { id: "runbook", path: "#/system/ops-center/runbook", icon: BookOpen, label: "Runbook", desc: "标准化运维操作手册" },
   { id: "self-heal", path: "#/system/ops-center/self-heal", icon: Zap, label: "自愈策略", desc: "自动检测与修复策略" },
@@ -34,6 +35,7 @@ export function OpsCenterHub() {
         metrics={
           <WorkbenchStats items={[
             { label: "流水线", value: s.pipelines ?? 0 },
+            { label: "开放告警", value: s.external_open_alerts ?? 0, trend: s.external_high_alerts > 0 ? "down" : "neutral" },
             { label: "待处理 RCA", value: s.rca_open ?? 0, trend: s.rca_open > 0 ? "down" : "neutral" },
             { label: "Runbook", value: s.runbooks ?? 0 },
             { label: "自愈策略", value: s.self_heal_active ?? 0, trend: "up" },
@@ -41,7 +43,7 @@ export function OpsCenterHub() {
         }
       />
       <Card title="功能模块">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {MODULES.map(({ id, path, icon: Icon, label, desc }) => (
             <a key={id} href={path} className="group flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
               <span className="rounded-lg bg-[var(--brand-soft)] p-2 text-[var(--brand)]"><Icon className="h-5 w-5" /></span>
