@@ -8,6 +8,7 @@ from sop_manager.routers.system_pages import (
     IsolationScanCompareTaskIn,
     IsolationScanTaskIn,
     IsolationTaskIn,
+    FrontendPerformanceTaskIn,
     GovernanceTaskBulkUpdateIn,
     ReadinessTaskIn,
     system_page_menu_health,
@@ -26,6 +27,7 @@ from sop_manager.routers.system_pages import (
     system_page_experience_tasks,
     system_pages_experience_review,
     system_pages_frontend_performance,
+    system_pages_frontend_performance_tasks,
     system_pages_hub,
     system_pages_production_readiness,
     system_pages_readiness,
@@ -206,6 +208,34 @@ def test_system_pages_frontend_performance_exposes_chunk_budget_evidence():
     if payload["available"]:
         first = payload["top_chunks"][0]
         assert {"name", "type", "size_kb", "gzip_kb", "budget"} <= set(first)
+
+
+def test_system_pages_frontend_performance_tasks_are_idempotent(monkeypatch):
+    created: list[dict] = []
+
+    def fake_list_tasks(**filters):
+        return created if filters.get("source") == "system_frontend_performance" else []
+
+    def fake_create_task(body):
+        row = body.model_dump()
+        row["id"] = f"T-perf-{len(created) + 1}"
+        row["status"] = "pending"
+        created.append(row)
+        return row
+
+    monkeypatch.setattr(system_pages_module, "list_tasks", fake_list_tasks)
+    monkeypatch.setattr(system_pages_module, "create_task", fake_create_task)
+
+    body = FrontendPerformanceTaskIn(dry_run=False, max_items=2)
+    first = system_pages_frontend_performance_tasks(body)
+    second = system_pages_frontend_performance_tasks(body)
+
+    assert first["ok"] is True
+    assert first["summary"]["created"] >= 0
+    assert second["summary"]["created"] == 0
+    assert second["summary"]["skipped"] >= first["summary"]["created"]
+    assert all(item["source"] == "system_frontend_performance" for item in created)
+    assert len({item["source_report_id"] for item in created}) == len(created)
 
 
 def test_system_pages_experience_review_filters_domain_status_and_keyword():

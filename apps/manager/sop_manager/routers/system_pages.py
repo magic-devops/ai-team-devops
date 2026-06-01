@@ -826,6 +826,15 @@ class ExperienceTaskIn(BaseModel):
     include_simple: bool = False
 
 
+class FrontendPerformanceTaskIn(BaseModel):
+    names: list[str] = Field(default_factory=list)
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "FrontendAgent"
+    max_items: int = Field(8, ge=1, le=50)
+    include_watch: bool = True
+
+
 class IsolationTaskIn(BaseModel):
     ids: list[str] = Field(default_factory=list)
     status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
@@ -1622,6 +1631,14 @@ def _existing_experience_task_ids() -> set[str]:
     return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
 
 
+def _existing_frontend_performance_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_frontend_performance")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
 def _existing_isolation_task_ids() -> set[str]:
     try:
         existing = list_tasks(source="system_page_isolation")
@@ -1668,6 +1685,13 @@ SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES: list[dict[str, str]] = [
         "route": "#/system-map/readiness",
         "task_api": "/api/v1/system/pages/readiness/tasks",
         "cli": "sop pages readiness-tasks --dry-run --json",
+    },
+    {
+        "source": "system_frontend_performance",
+        "label": "前端性能治理",
+        "route": "#/system-map/performance",
+        "task_api": "/api/v1/system/pages/frontend-performance/tasks",
+        "cli": "sop pages frontend-performance-tasks --dry-run --json",
     },
     {
         "source": "system_page_isolation",
@@ -1984,6 +2008,40 @@ def _experience_task_payload(item: dict[str, Any], *, priority: str, assigned_to
         "source_report_id": f"experience:{module_id}",
         "source_report_title": str(item.get("name") or module_id),
         "debug_notes": f"Generated from SystemMap experience review: {module_id}",
+    }
+
+
+def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    name = str(item.get("name") or "")
+    budget = item.get("budget") or {}
+    status = str(budget.get("status") or "watch")
+    return {
+        "title": f"拆分前端构建产物：{name}",
+        "description": "\n".join(
+            [
+                f"chunk: {name}",
+                f"type: {item.get('type') or ''}",
+                f"size_kb: {item.get('size_kb')}",
+                f"gzip_kb: {item.get('gzip_kb')}",
+                f"budget_status: {status}",
+                "",
+                "optimization_scope:",
+                "- 优先确认是否属于首屏主壳、Vendor 或专业工作台路由 chunk",
+                "- 将低频图表、抽屉、表单和复杂依赖改为按需 import",
+                "- 保持页面聚焦、移动端首屏轻量和成熟组件复用",
+                "",
+                "budget:",
+                json.dumps(budget, ensure_ascii=False, indent=2),
+            ]
+        ).strip(),
+        "priority": "P0" if status == "risk" else priority,
+        "estimate": "M" if status == "risk" else "S",
+        "assigned_to": assigned_to or "FrontendAgent",
+        "dev_tool": "codex",
+        "source": "system_frontend_performance",
+        "source_report_id": f"frontend-performance:{name}",
+        "source_report_title": name,
+        "debug_notes": f"Generated from SystemMap frontend performance: {name}",
     }
 
 
@@ -4147,6 +4205,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
         "agent_consumption": {
             "purpose": "供 AI 和开发者按真实构建产物识别大包、拆分低频工作台和验证前端自适配性能治理。",
             "api": "/api/v1/system/pages/frontend-performance",
+            "task_api": "/api/v1/system/pages/frontend-performance/tasks",
             "route": "#/system-map/performance",
             "build_command": "pnpm --dir apps/manager-web build",
             "fields": ["summary.score", "summary.oversize_raw", "top_chunks", "recommendations"],
@@ -4739,6 +4798,52 @@ def system_pages_experience_review(
 @router.get("/frontend-performance")
 def system_pages_frontend_performance() -> dict[str, Any]:
     return _frontend_performance_payload()
+
+
+@router.post("/frontend-performance/tasks")
+def system_pages_frontend_performance_tasks(body: FrontendPerformanceTaskIn) -> dict[str, Any]:
+    payload = _frontend_performance_payload()
+    rows = list(payload.get("oversize_chunks") or [])
+    if body.include_watch:
+        seen = {str(item.get("name") or "") for item in rows}
+        rows.extend(
+            item
+            for item in (payload.get("top_chunks") or [])
+            if str(item.get("name") or "") not in seen and str((item.get("budget") or {}).get("status") or "") == "watch"
+        )
+    selected = {str(x) for x in body.names or [] if str(x).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("name") or "") in selected]
+    rows = rows[: max(1, min(int(body.max_items or 8), 50))]
+    existing_ids = _existing_frontend_performance_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _frontend_performance_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("name") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+            existing_ids.add(report_id)
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "将前端构建产物超预算风险转为可分派治理任务，驱动大包拆分、移动端首屏优化和 AI 辅助重构。",
+            "source": "system_frontend_performance",
+            "api": "/api/v1/system/pages/frontend-performance/tasks",
+            "cli": "sop pages frontend-performance-tasks --dry-run --json",
+            "task_center": SYSTEM_TASK_CENTER_ROUTE,
+        },
+    }
 
 
 @router.post("/experience-review/tasks")

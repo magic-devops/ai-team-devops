@@ -956,6 +956,11 @@ export const api = {
     return request<any>(`/api/v1/system/pages/experience-review${qs.toString() ? `?${qs}` : ""}`);
   },
   systemPagesFrontendPerformance: () => request<any>("/api/v1/system/pages/frontend-performance"),
+  systemPagesFrontendPerformanceTasks: (body: { names?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_watch?: boolean }) =>
+    request<any>("/api/v1/system/pages/frontend-performance/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   systemPagesExperienceTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_simple?: boolean }) =>
     request<any>("/api/v1/system/pages/experience-review/tasks", {
       method: "POST",

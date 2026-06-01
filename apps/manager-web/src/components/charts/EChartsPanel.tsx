@@ -1,6 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import type { EChartsOption } from "echarts";
 
+type EChartsRuntime = {
+  init: (el: HTMLDivElement, theme?: string, opts?: object) => {
+    resize: () => void;
+    dispose: () => void;
+    setOption: (o: EChartsOption, opts?: object) => void;
+  };
+};
+
+let echartsRuntime: Promise<EChartsRuntime> | null = null;
+
+function loadEChartsRuntime() {
+  echartsRuntime ??= Promise.all([
+    import("echarts/lib/echarts"),
+    import("echarts/lib/chart/bar"),
+    import("echarts/lib/chart/line"),
+    import("echarts/lib/chart/pie"),
+    import("echarts/lib/component/grid"),
+    import("echarts/lib/component/legend"),
+    import("echarts/lib/component/title"),
+    import("echarts/lib/component/tooltip"),
+  ]).then(([echarts]) => {
+    const runtime = echarts as unknown as EChartsRuntime;
+    return { init: runtime.init };
+  });
+  return echartsRuntime;
+}
+
 type Props = {
   option: EChartsOption | null;
   height?: number;
@@ -21,7 +48,7 @@ export function EChartsPanel({ option, height = 240, className = "", onFailed }:
 
     void (async () => {
       try {
-        const echarts = await import("echarts");
+        const echarts = await loadEChartsRuntime();
         if (disposed || !ref.current) return;
         chart = echarts.init(ref.current, undefined, { renderer: "canvas" });
         chart.setOption(option, { notMerge: true });

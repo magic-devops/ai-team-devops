@@ -48,15 +48,17 @@ export default defineConfig({
           if (/node_modules\/(react|react-dom|scheduler)\//.test(normalized)) return "react-vendor";
           if (normalized.includes("@tanstack")) return "query-vendor";
           if (normalized.includes("@ant-design/x")) return "antdx-vendor";
-          if (/node_modules\/(@antv|@ant-design\/(plots|charts|graphs))\//.test(normalized)) return "visualization-vendor";
-          if (normalized.includes("antd") || normalized.includes("@ant-design") || normalized.includes("@rc-component") || normalized.includes("rc-")) return "antd-vendor";
+          if (/node_modules\/(@antv|@ant-design\/(plots|charts|graphs))\//.test(normalized)) return "antv-vendor";
+          if (normalized.includes("/node_modules/antd/")) return "antd-core-vendor";
+          if (/node_modules\/(@rc-component|rc-[^/]+|rc-util|async-validator)\//.test(normalized)) return "antd-runtime-vendor";
+          if (/node_modules\/@ant-design\/(icons|colors|cssinjs|cssinjs-utils|fast-color)\//.test(normalized)) return "antd-runtime-vendor";
           if (normalized.includes("react-markdown") || normalized.includes("remark-")) return "markdown-vendor";
           if (normalized.includes("@radix-ui")) return "radix-vendor";
           if (normalized.includes("lucide-react")) return "icon-vendor";
           if (normalized.includes("i18next")) return "i18n-vendor";
           if (/node_modules\/(lodash|lodash-es|throttle-debounce)\//.test(normalized)) return "utility-vendor";
           if (normalized.includes("/node_modules/zrender/")) return "zrender-vendor";
-          if (normalized.includes("echarts")) return "echarts-vendor";
+          if (normalized.includes("/node_modules/echarts/")) return "echarts-vendor";
           return "vendor";
         },
       },

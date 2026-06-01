@@ -172,6 +172,7 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const [taskResult, setTaskResult] = useState<any>(null);
   const [readinessTaskResult, setReadinessTaskResult] = useState<any>(null);
   const [experienceTaskResult, setExperienceTaskResult] = useState<any>(null);
+  const [performanceTaskResult, setPerformanceTaskResult] = useState<any>(null);
   const [isolationTaskResult, setIsolationTaskResult] = useState<any>(null);
   const [isolationScanTaskResult, setIsolationScanTaskResult] = useState<any>(null);
   const [isolationScanRunResult, setIsolationScanRunResult] = useState<any>(null);
@@ -238,6 +239,21 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
       }),
     onSuccess: (data) => {
       setExperienceTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
+    },
+  });
+  const performanceTasks = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.systemPagesFrontendPerformanceTasks({
+        dry_run: dryRun,
+        priority: "P1",
+        assigned_to: "FrontendAgent",
+        include_watch: true,
+        max_items: 8,
+      }),
+    onSuccess: (data) => {
+      setPerformanceTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
     },
@@ -1054,6 +1070,40 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
           </div>
           <div className="space-y-3">
             {frontendPerformanceQ.isError ? <ErrorBlock message={(frontendPerformanceQ.error as Error).message} /> : null}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.performanceTasking")}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{t("page.systemMap.performanceTaskingHint")}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => performanceTasks.mutate({ dryRun: true })} loading={performanceTasks.isPending}>
+                  {t("page.systemMap.previewPerformanceTasks")}
+                </Button>
+                <Button
+                  type="primary"
+                  onClick={() => performanceTasks.mutate({ dryRun: false })}
+                  loading={performanceTasks.isPending}
+                  disabled={!canWriteSystemPages}
+                  title={!canWriteSystemPages ? t("capability.denied") : undefined}
+                >
+                  {t("page.systemMap.createPerformanceTasks")}
+                </Button>
+              </div>
+            </div>
+            {performanceTaskResult ? (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted-strong)]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    {t("page.systemMap.performanceTaskResult", {
+                      planned: performanceTaskResult.summary?.planned ?? 0,
+                      created: performanceTaskResult.summary?.created ?? 0,
+                      skipped: performanceTaskResult.summary?.skipped ?? 0,
+                    })}
+                  </span>
+                  <span className="font-mono text-xs text-[var(--brand)]">{performanceTaskResult.agent_consumption?.cli}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="grid gap-2 md:grid-cols-3">
               <Metric label={t("page.systemMap.performanceVendorChunks")} value={frontendPerformanceQ.data?.summary?.vendor_chunks ?? 0} />
               <Metric label={t("page.systemMap.performanceShellChunks")} value={frontendPerformanceQ.data?.summary?.shell_chunks ?? 0} />
