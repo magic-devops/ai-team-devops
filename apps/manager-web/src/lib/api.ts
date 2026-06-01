@@ -742,6 +742,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  dbSecurityScan: (name: string, body: { sample_limit?: number } = {}) =>
+    request<any>(`/api/v1/db-config/connections/${encodeURIComponent(name)}/security-scan`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   eventsList: (limit = 100, since = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (since) qs.set("since", since);

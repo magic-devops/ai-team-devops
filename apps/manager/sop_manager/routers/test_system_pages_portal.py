@@ -1059,9 +1059,24 @@ def test_system_pages_data_sources_contract_exposes_metadata_sync_control_plane(
     assert "/api/v1/db-config/connections/summary" in apis
     assert "/api/v1/db-config/connections/{name}/metadata-preview" in apis
     assert "/api/v1/db-config/connections/{name}/metadata-sync" in apis
+    assert "/api/v1/db-config/connections/{name}/security-scan" in apis
     assert "元数据预览" in sources["capabilities"]
     assert "Schema Registry 同步" in sources["capabilities"]
+    assert "安全扫描" in sources["capabilities"]
     assert "Agent 消费入口" in sources["capabilities"]
+
+
+def test_system_pages_data_sources_exposes_security_subroute_and_scores_simple():
+    capabilities = system_page_capabilities()
+    sources = next(item for item in capabilities["items"] if item["id"] == "dataSources")
+    submodules = {item["id"]: item for item in sources["submodules"]}
+    review = system_pages_experience_review(q="数据源管理")
+    reviewed = next(item for item in review["items"] if item["id"] == "dataSources")
+
+    assert {"overview", "connections", "metadata", "security"} <= set(submodules)
+    assert submodules["security"]["path"] == "#/data/sources/security"
+    assert submodules["security"]["capability"] == "data.sources.security"
+    assert reviewed["status"] == "simple"
 
 
 def test_system_pages_knowledge_graph_contract_exposes_graph_rag_and_memory_ontology():

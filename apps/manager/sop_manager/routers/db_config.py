@@ -302,6 +302,55 @@ def sync_connection_metadata(
     }
 
 
+@router.post("/connections/{name}/security-scan")
+def scan_connection_security(
+    name: str,
+    body: MetadataPreviewIn = MetadataPreviewIn(),
+    user: User = Depends(require_role("tenant_admin")),
+):
+    row = _load_connection(name)
+    tables = _metadata_tables_from_config(row)[: body.sample_limit]
+    metadata = _metadata_summary(row, tables)
+    readiness = _connection_readiness(row)
+    findings = _security_findings(row, tables, readiness)
+    score = max(0, 100 - sum(int(item.get("penalty") or 0) for item in findings))
+    status = "ready" if score >= 85 else "watch" if score >= 60 else "risk"
+    return {
+        "ok": True,
+        "connection": _public_config(row),
+        "status": status,
+        "score": score,
+        "readiness": readiness,
+        "metadata": metadata,
+        "findings": findings,
+        "controls": {
+            "secret_ref_required": True,
+            "plaintext_secret_saved": False,
+            "readonly_recommended": "sql" in (row.get("capabilities") or []),
+            "scope_columns_required": ["tenant_code", "business_code", "project_id"],
+            "sensitive_field_policy": "mask_in_api_export_agent_packet",
+        },
+        "candidate_tasks": [
+            {
+                "id": f"data-source-security-{name}-{item['id']}",
+                "title": f"治理数据源 {name}: {item['title']}",
+                "priority": "P1" if item.get("severity") == "high" else "P2",
+                "source": "data_source_security_scan",
+                "source_report_id": f"data-source-security:{name}:{item['id']}",
+                "capability": "data.sources.security",
+                "detail": item.get("recommendation"),
+            }
+            for item in findings
+        ],
+        "agent_consumption": {
+            "api": f"/api/v1/db-config/connections/{name}/security-scan",
+            "task_api": "/api/v1/tasks",
+            "fields": ["score", "status", "findings", "candidate_tasks", "controls"],
+            "uses": ["validate_secret_ref", "detect_sensitive_fields", "plan_field_masking", "enforce_scope_columns"],
+        },
+    }
+
+
 @router.post("/connections/{name}/test")
 def test_saved_db_connection(name: str, url: str = Query("", description="临时连接串，仅用于测试，不保存"),
                              user: User = Depends(require_role("tenant_admin"))):
@@ -480,6 +529,66 @@ def _metadata_summary(row: dict[str, Any], tables: list[dict[str, Any]]) -> dict
         "capabilities": row.get("capabilities") or [],
         "generated_at": _now(),
     }
+
+
+def _security_findings(row: dict[str, Any], tables: list[dict[str, Any]], readiness: dict[str, Any]) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    gaps = set(readiness.get("gaps") or [])
+    if "missing_secret_ref" in gaps:
+        findings.append(
+            {
+                "id": "missing_secret_ref",
+                "severity": "high",
+                "penalty": 24,
+                "title": "缺少 SecretRef",
+                "detail": "连接未配置 env:// 或 vault:// 密钥引用。",
+                "recommendation": "只保存 SecretRef，不保存明文连接串或密码；生产环境接入 SecretRef 审计。",
+            }
+        )
+    if not row.get("readonly") and "sql" in (row.get("capabilities") or []):
+        findings.append(
+            {
+                "id": "writeable_sql_source",
+                "severity": "medium",
+                "penalty": 12,
+                "title": "SQL 数据源未启用只读策略",
+                "detail": "用于元数据发现和采样的数据源建议默认只读。",
+                "recommendation": "将 readonly 设为 true；写入链路统一走受控数据接入和审批动作。",
+            }
+        )
+    sensitive_fields = {
+        str(column.get("name") or "")
+        for table in tables
+        for column in table.get("columns") or []
+        if any(token in str(column.get("name") or "").lower() for token in ("email", "phone", "mobile", "name", "id_card"))
+    }
+    if sensitive_fields:
+        findings.append(
+            {
+                "id": "sensitive_fields_detected",
+                "severity": "medium",
+                "penalty": min(18, 6 + len(sensitive_fields) * 2),
+                "title": "发现敏感字段候选",
+                "detail": "、".join(sorted(sensitive_fields)[:8]),
+                "recommendation": "为敏感字段绑定字段级 mask，确保 API、导出和 Agent packet 统一脱敏。",
+            }
+        )
+    required_scope = {"tenant_code", "business_code", "project_id"}
+    for table in tables:
+        columns = {str(col.get("name") or "") for col in table.get("columns") or []}
+        missing = sorted(required_scope - columns)
+        if missing:
+            findings.append(
+                {
+                    "id": f"missing_scope_columns:{table.get('name')}",
+                    "severity": "medium",
+                    "penalty": 8,
+                    "title": "缺少三码隔离字段",
+                    "detail": f"{table.get('name')} 缺少 {', '.join(missing)}",
+                    "recommendation": "采样、同步和数据服务发布前必须确认 tenant_code/business_code/project_id 隔离字段或显式映射。",
+                }
+            )
+    return findings
 
 
 def _test_sql_url(db_type: str, url: str) -> dict:

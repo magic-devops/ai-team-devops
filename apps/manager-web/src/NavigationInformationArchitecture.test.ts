@@ -64,4 +64,11 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "settingsAppearance", path: "#/settings/appearance"');
     expect(navigationSource).toContain('pageElement(SettingsPage, { initialModule: "storage", focused: true })');
   });
+
+  it("keeps data source management split into connection metadata and security governance routes", () => {
+    expect(navigationSource).toContain('key: "dataSources"');
+    expect(navigationSource).toContain('数据源管理：连接目录、SecretRef、元数据发现、安全治理与 Schema Registry 同步');
+    expect(navigationSource).toContain('key: "dataSourcesSecurity", path: "#/data/sources/security"');
+    expect(navigationSource).toContain('pageElement(DataSourcesWorkbenchPage, { focused: true, initialView: "security" })');
+  });
 });

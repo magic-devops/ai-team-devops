@@ -10,7 +10,7 @@ import { getToken } from "@/lib/authStorage";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { RefreshButton, WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
-type DataSourceView = "overview" | "connections" | "metadata";
+type DataSourceView = "overview" | "connections" | "metadata" | "security";
 
 type SourceForm = {
   name: string;
@@ -56,14 +56,19 @@ const VIEW_META: Record<DataSourceView, { title: string; description: string }> 
   overview: { title: "数据源管理", description: "连接、密钥引用、元数据发现和接入同步的统一入口。" },
   connections: { title: "数据源连接目录", description: "维护连接元数据、能力声明、只读策略和 SecretRef。" },
   metadata: { title: "数据源元数据同步", description: "预览表字段并同步到数据接入 Schema Registry。" },
+  security: { title: "数据源安全治理", description: "扫描 SecretRef、只读策略、敏感字段和三码隔离字段。" },
 };
+
+function normalizeView(view?: string): DataSourceView {
+  return view && VIEW_META[view as DataSourceView] ? (view as DataSourceView) : "overview";
+}
 
 export function DataSourcesWorkbench({
   focused = false,
   initialView = "overview",
 }: {
   focused?: boolean;
-  initialView?: DataSourceView;
+  initialView?: string;
 }) {
   const authed = Boolean(getToken());
   const { message } = App.useApp();
@@ -73,6 +78,7 @@ export function DataSourcesWorkbench({
   const [selectedName, setSelectedName] = useState("");
   const [previewPayload, setPreviewPayload] = useState<any>(null);
   const [syncPayload, setSyncPayload] = useState<any>(null);
+  const [securityPayload, setSecurityPayload] = useState<any>(null);
   const [form] = Form.useForm<SourceForm>();
 
   const connQ = useQuery({ queryKey: ["dbConnections"], queryFn: api.dbConnections, enabled: authed });
@@ -158,10 +164,20 @@ export function DataSourcesWorkbench({
     onError: (e) => message.error((e as Error).message),
   });
 
+  const securityMut = useMutation({
+    mutationFn: (name: string) => api.dbSecurityScan(name, { sample_limit: 80 }),
+    onSuccess: (payload, name) => {
+      setSelectedName(name);
+      setSecurityPayload(payload);
+      message.success("安全扫描已完成");
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+
   if (!authed) return <NeedLogin />;
   if (connQ.isLoading || summaryQ.isLoading) return <LoadingBlock />;
 
-  const view = initialView;
+  const view = normalizeView(initialView);
   const shell = VIEW_META[view];
 
   return (
@@ -217,6 +233,19 @@ export function DataSourcesWorkbench({
           onSync={(name) => syncMut.mutate(name)}
         />
       ) : null}
+      {view === "security" ? (
+        <SecurityPanel
+          sources={sources}
+          selectedName={selectedSource?.name ?? ""}
+          scanPayload={securityPayload}
+          scanning={securityMut.isPending}
+          onSelect={(name) => {
+            setSelectedName(name);
+            setSecurityPayload(null);
+          }}
+          onScan={(name) => securityMut.mutate(name)}
+        />
+      ) : null}
 
       <SourceEditor
         open={editOpen}
@@ -239,12 +268,13 @@ function Overview({ summary }: { summary: any }) {
     { href: "#/data/sources/connections", icon: Database, title: "连接目录", desc: "维护数据源、SecretRef 和能力声明" },
     { href: "#/data/sources/metadata", icon: FileSearch, title: "元数据同步", desc: "发现表字段并注册到 Schema Registry" },
     { href: "#/data/ingest/schema", icon: Link2, title: "Schema Registry", desc: "查看已同步的数据接入结构" },
+    { href: "#/data/sources/security", icon: ShieldCheck, title: "安全治理", desc: "扫描 SecretRef、敏感字段和隔离字段" },
   ];
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <WorkbenchPanel title="核心入口">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {modules.map(({ href, icon: Icon, title, desc }) => (
             <a key={href} href={href} className="group rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
               <Icon className="mb-3 h-5 w-5 text-[var(--brand)]" />
@@ -258,6 +288,83 @@ function Overview({ summary }: { summary: any }) {
         <CompactKV title="按角色" value={summary.by_role ?? {}} />
         <CompactKV title="按类型" value={summary.by_type ?? {}} />
         <CompactKV title="能力" value={summary.capabilities ?? {}} />
+      </WorkbenchPanel>
+    </div>
+  );
+}
+
+function SecurityPanel({
+  sources,
+  selectedName,
+  scanPayload,
+  scanning,
+  onSelect,
+  onScan,
+}: {
+  sources: SourceRow[];
+  selectedName: string;
+  scanPayload: any;
+  scanning: boolean;
+  onSelect: (name: string) => void;
+  onScan: (name: string) => void;
+}) {
+  const findings = scanPayload?.findings ?? [];
+  return (
+    <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <WorkbenchPanel title="扫描范围">
+        <Space direction="vertical" className="w-full">
+          <Select
+            className="w-full"
+            value={selectedName || undefined}
+            placeholder="选择数据源"
+            options={sources.map((item) => ({ value: item.name, label: `${item.name} · ${item.type}` }))}
+            onChange={onSelect}
+          />
+          <Button className="w-full" type="primary" disabled={!selectedName} loading={scanning} onClick={() => onScan(selectedName)}>
+            运行安全扫描
+          </Button>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs leading-5 text-[var(--muted)]">
+            扫描覆盖 SecretRef、只读策略、敏感字段候选、tenant_code/business_code/project_id 隔离字段，并输出 Agent 可消费治理任务候选。
+          </div>
+        </Space>
+      </WorkbenchPanel>
+      <WorkbenchPanel title="安全结果">
+        {!scanPayload ? (
+          <EmptyHint />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-4">
+              <Metric label="安全分" value={scanPayload.score ?? 0} />
+              <Metric label="状态" value={scanPayload.status ?? "-"} />
+              <Metric label="问题" value={findings.length} />
+              <Metric label="任务候选" value={scanPayload.candidate_tasks?.length ?? 0} />
+            </div>
+            <Table
+              rowKey="id"
+              size="small"
+              pagination={{ pageSize: 8 }}
+              dataSource={findings}
+              columns={[
+                { title: "风险", dataIndex: "severity", width: 100, render: (v) => <Tag color={v === "high" ? "red" : "orange"}>{v}</Tag> },
+                { title: "问题", dataIndex: "title", width: 180 },
+                { title: "说明", dataIndex: "detail" },
+                { title: "建议", dataIndex: "recommendation" },
+              ]}
+              scroll={{ x: 900 }}
+            />
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+              <p className="text-sm font-semibold text-[var(--text)]">治理控制点</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {Object.entries(scanPayload.controls ?? {}).map(([key, value]) => (
+                  <div key={key} className="flex items-center justify-between gap-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs">
+                    <span className="font-mono text-[var(--muted)]">{key}</span>
+                    <span className="text-right font-semibold text-[var(--text)]">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </WorkbenchPanel>
     </div>
   );

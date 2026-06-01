@@ -56,6 +56,7 @@ def test_datasource_summary_metadata_preview_and_sync_to_schema_registry(tmp_pat
 
         summary = db_config.db_connections_summary(user=user)
         preview = db_config.preview_connection_metadata("billing-ob", db_config.MetadataPreviewIn(sample_limit=10), user=user)
+        security = db_config.scan_connection_security("billing-ob", db_config.MetadataPreviewIn(sample_limit=10), user=user)
         synced = db_config.sync_connection_metadata("billing-ob", db_config.MetadataSyncIn(owner="DataOps"), user=user)
 
     assert saved["config"]["name"] == "billing-ob"
@@ -66,6 +67,10 @@ def test_datasource_summary_metadata_preview_and_sync_to_schema_registry(tmp_pat
     assert preview["metadata"]["tables"] == 1
     assert preview["metadata"]["pii_candidates"] == 1
     assert preview["tables"][0]["name"] == "dwd_orders"
+    assert security["score"] < 100
+    assert security["controls"]["secret_ref_required"] is True
+    assert any(item["id"] == "sensitive_fields_detected" for item in security["findings"])
+    assert any(str(item["id"]).startswith("data-source-security-billing-ob-") for item in security["candidate_tasks"])
     assert synced["ingest_connector"]["extra"]["source_connection_name"] == "billing-ob"
     assert synced["schema_registry"]["total"] == 1
     assert synced["schema_registry"]["items"][0]["table_name"] == "dwd_orders"
