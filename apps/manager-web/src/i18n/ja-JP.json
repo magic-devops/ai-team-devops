@@ -3174,6 +3174,8 @@
       "frontendPerformanceScore": "性能スコア",
       "performanceChunks": "Chunk 数",
       "performanceOversize": "予算超過",
+      "performanceInitialOversize": "初期超過",
+      "performanceDeferredOversize": "遅延超過",
       "performanceRouteChunks": "ルート Chunk",
       "performanceVendorChunks": "Vendor Chunk",
       "performanceShellChunks": "シェル Chunk",
@@ -3187,6 +3189,13 @@
       "performanceTaskResult": "性能タスク: 予定 {{planned}} 件、作成 {{created}} 件、スキップ {{skipped}} 件。",
       "performanceChunk": "ビルド成果物",
       "performanceSize": "サイズ",
+      "performanceLoadScope": "ロード範囲",
+      "performanceLoadScopeValue": {
+        "initial": "初期",
+        "deferred-visualization": "遅延グラフ",
+        "route-lazy": "ルート遅延",
+        "shared": "共有"
+      },
       "performanceBudget": "予算",
       "noPerformanceRows": "ビルド成果物がありません。先にフロントエンドをビルドしてください。",
       "performanceBudgetStatus": {

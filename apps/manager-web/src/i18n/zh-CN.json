@@ -3662,6 +3662,8 @@
       "frontendPerformanceScore": "性能治理分",
       "performanceChunks": "Chunk 数",
       "performanceOversize": "超预算",
+      "performanceInitialOversize": "首屏超预算",
+      "performanceDeferredOversize": "延迟超预算",
       "performanceRouteChunks": "路由 Chunk",
       "performanceVendorChunks": "Vendor Chunk",
       "performanceShellChunks": "主壳 Chunk",
@@ -3675,6 +3677,13 @@
       "performanceTaskResult": "性能任务：计划 {{planned}} 个，已创建 {{created}} 个，跳过 {{skipped}} 个。",
       "performanceChunk": "构建产物",
       "performanceSize": "大小",
+      "performanceLoadScope": "加载范围",
+      "performanceLoadScopeValue": {
+        "initial": "首屏",
+        "deferred-visualization": "延迟图谱",
+        "route-lazy": "路由懒载",
+        "shared": "共享"
+      },
       "performanceBudget": "预算",
       "noPerformanceRows": "暂无构建产物数据，请先执行前端构建",
       "performanceBudgetStatus": {

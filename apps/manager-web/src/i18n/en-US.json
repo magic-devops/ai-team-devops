@@ -3517,6 +3517,8 @@
       "frontendPerformanceScore": "Performance score",
       "performanceChunks": "Chunks",
       "performanceOversize": "Oversize",
+      "performanceInitialOversize": "Initial oversize",
+      "performanceDeferredOversize": "Deferred oversize",
       "performanceRouteChunks": "Route chunks",
       "performanceVendorChunks": "Vendor chunks",
       "performanceShellChunks": "Shell chunks",
@@ -3530,6 +3532,13 @@
       "performanceTaskResult": "Performance tasks: planned {{planned}}, created {{created}}, skipped {{skipped}}.",
       "performanceChunk": "Build asset",
       "performanceSize": "Size",
+      "performanceLoadScope": "Load scope",
+      "performanceLoadScopeValue": {
+        "initial": "Initial",
+        "deferred-visualization": "Deferred graph",
+        "route-lazy": "Route lazy",
+        "shared": "Shared"
+      },
       "performanceBudget": "Budget",
       "noPerformanceRows": "No build assets yet. Run the frontend build first.",
       "performanceBudgetStatus": {

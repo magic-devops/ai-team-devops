@@ -1064,8 +1064,8 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Metric label={t("page.systemMap.performanceChunks")} value={frontendPerformanceQ.data?.summary?.chunks ?? 0} />
               <Metric label={t("page.systemMap.performanceOversize")} value={frontendPerformanceQ.data?.summary?.oversize_raw ?? 0} />
-              <Metric label={t("page.systemMap.performanceRouteChunks")} value={frontendPerformanceQ.data?.summary?.route_chunks ?? 0} />
-              <Metric label={t("page.systemMap.performanceGzip")} value={`${frontendPerformanceQ.data?.summary?.total_gzip_kb ?? 0}KB`} />
+              <Metric label={t("page.systemMap.performanceInitialOversize")} value={frontendPerformanceQ.data?.summary?.initial_oversize ?? 0} />
+              <Metric label={t("page.systemMap.performanceDeferredOversize")} value={frontendPerformanceQ.data?.summary?.deferred_oversize ?? 0} />
             </div>
           </div>
           <div className="space-y-3">
@@ -1104,10 +1104,11 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
                 </div>
               </div>
             ) : null}
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-4">
+              <Metric label={t("page.systemMap.performanceRouteChunks")} value={frontendPerformanceQ.data?.summary?.route_chunks ?? 0} />
               <Metric label={t("page.systemMap.performanceVendorChunks")} value={frontendPerformanceQ.data?.summary?.vendor_chunks ?? 0} />
               <Metric label={t("page.systemMap.performanceShellChunks")} value={frontendPerformanceQ.data?.summary?.shell_chunks ?? 0} />
-              <Metric label={t("page.systemMap.performanceTotal")} value={`${frontendPerformanceQ.data?.summary?.total_kb ?? 0}KB`} />
+              <Metric label={t("page.systemMap.performanceGzip")} value={`${frontendPerformanceQ.data?.summary?.total_gzip_kb ?? 0}KB`} />
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
               <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.performanceRecommendations")}</p>
@@ -1142,6 +1143,16 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
                   dataIndex: "gzip_kb",
                   width: 110,
                   render: (value: number) => <span className="font-mono text-sm text-[var(--muted-strong)]">{value}KB</span>,
+                },
+                {
+                  title: t("page.systemMap.performanceLoadScope"),
+                  dataIndex: "load_scope",
+                  width: 160,
+                  render: (value: string) => {
+                    const scope = String(value || "shared");
+                    const color = scope === "initial" ? "red" : scope.startsWith("deferred") || scope === "route-lazy" ? "blue" : "default";
+                    return <Tag color={color}>{t(`page.systemMap.performanceLoadScopeValue.${scope}`, { defaultValue: scope })}</Tag>;
+                  },
                 },
                 {
                   title: t("page.systemMap.performanceBudget"),

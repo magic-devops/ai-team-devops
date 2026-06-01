@@ -202,12 +202,13 @@ def test_system_pages_frontend_performance_exposes_chunk_budget_evidence():
 
     assert payload["ok"] is True
     assert payload["summary"]["score"] >= 0
-    assert {"chunks", "route_chunks", "vendor_chunks", "oversize_raw", "total_gzip_kb"} <= set(payload["summary"])
+    assert {"chunks", "route_chunks", "vendor_chunks", "oversize_raw", "initial_oversize", "deferred_oversize", "total_gzip_kb"} <= set(payload["summary"])
     assert payload["budgets"]["chunk_raw_kb"] == 500
     assert payload["agent_consumption"]["api"] == "/api/v1/system/pages/frontend-performance"
+    assert "summary.initial_oversize" in payload["agent_consumption"]["fields"]
     if payload["available"]:
         first = payload["top_chunks"][0]
-        assert {"name", "type", "size_kb", "gzip_kb", "budget"} <= set(first)
+        assert {"name", "type", "load_scope", "size_kb", "gzip_kb", "budget"} <= set(first)
 
 
 def test_system_pages_frontend_performance_tasks_are_idempotent(monkeypatch):

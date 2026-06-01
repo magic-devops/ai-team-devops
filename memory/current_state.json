@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-01T11:31:45Z",
+  "updated_at": "2026-06-01T11:40:20Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -391,12 +391,13 @@
       "完成 Task 130 OpsCenter 运行中枢与专业子模块契约收口：System Pages 将 #/system/ops-center 父入口从 48 个 API 的大契约收敛为 /summary 与 /im-briefing 轻量运行中枢，部署流水线、告警源治理、RCA、Runbook 和自愈策略各自登记独立页面契约、能力码、API 清单和子能力；OpsCenter Hub 补齐三语种文案、AI 分析入口、运行信号徽标和自适应专业入口卡片；体验审计确认 140 个模块全部 simple，watch/complex/mobile_risk 均为 0，菜单健康问题为 0。",
       "完成 Task 131 页面能力动作授权闭环：System Pages 为每个页面 capability 自动输出 read/write/admin 页级 actions，并将页级动作计入 action_count，使无子模块页面也具备按钮级权限、菜单治理和 Agent 操作判断契约；manager-web capability flatten 支持 page-level action grants，CapabilityGate/Agent 可直接消费 *.read/*.write/*.admin 能力；体验审计 permission_gap 从 74 降为 0，140 个模块全部 simple。",
       "完成 Task 132 前端性能治理产品化闭环：Manager 新增 /api/v1/system/pages/frontend-performance，按 dist/assets 真实构建产物输出 chunk 数、raw/gzip 大小、超 500KB/180KB 预算风险、Top chunks 和 AI 拆分建议；SystemMap 新增 #/system-map/performance 独立聚焦页，使用 Ant Design Table/Tag/Metric 展示性能预算、构建命令和拆分建议，导航、三语种文案、System Pages 页面契约与测试同步登记；当前体验治理 141 个模块全部 simple，permission_gap=0，性能治理分 49/risk，已明确后续大包拆分对象。",
-      "完成 Task 133 前端性能风险任务化闭环：Manager 新增 /api/v1/system/pages/frontend-performance/tasks，按超预算和关注 chunk 幂等生成 source=system_frontend_performance 治理任务；SystemMap 性能治理页新增预览/生成性能任务和结果反馈；EChartsPanel 改为懒加载当前 echarts 版本可解析的运行时模块，Vite manualChunks 细分 AntV、AntD、ECharts vendor 以便持续治理大包风险；体验审计 141 个模块全部 simple，permission_gap=0。"
+      "完成 Task 133 前端性能风险任务化闭环：Manager 新增 /api/v1/system/pages/frontend-performance/tasks，按超预算和关注 chunk 幂等生成 source=system_frontend_performance 治理任务；SystemMap 性能治理页新增预览/生成性能任务和结果反馈；EChartsPanel 改为懒加载当前 echarts 版本可解析的运行时模块，Vite manualChunks 细分 AntV、AntD、ECharts vendor 以便持续治理大包风险；体验审计 141 个模块全部 simple，permission_gap=0。",
+      "完成 Task 134 前端性能加载范围治理增强：System Pages 前端性能治理新增 load_scope、initial_oversize 与 deferred_oversize，区分首屏主壳、路由懒载和延迟图谱包，性能任务描述同步标注首屏阻塞/低频延迟加载影响；SystemMap 性能页展示首屏超预算、延迟超预算和加载范围列；全局 AI 命令面板从 App 主壳拆为 CommandPalette 懒加载组件，保持 AI 优先入口但不把低频命令搜索逻辑塞进首屏；真实构建通过，当前严格口径性能治理分 78/watch，initial_oversize=1，deferred_oversize=1。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 133 前端性能风险任务化闭环已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，大包风险已可从 SystemMap 预览并生成治理任务；下一步继续按治理任务拆分 AntV/ECharts/AntD/main chunk、修复循环 chunk 警告，并推进字段级 ABAC、生产就绪和真实外部集成。"
+    "current": "Task 134 前端性能加载范围治理增强已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，前端性能治理严格口径为 78/watch，initial_oversize=1，deferred_oversize=1；下一步继续拆主壳 index chunk、推进 AntV 图谱运行时拆分，并持续完善生产就绪和真实外部集成。"
   },
   "metrics": {
     "completion_rate": 100,

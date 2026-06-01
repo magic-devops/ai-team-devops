@@ -229,8 +229,10 @@ LLM Gateway 模型评测控制面已补齐第一版：`POST /api/v1/llm-gateway/
 | 知识图谱与多模态记忆 | Lance、OpenSearch、Graph RAG、本体记忆 | P1 | 规约、代码、需求、运行证据、数据血缘统一进入知识/记忆层 | 租户向量 namespace、记忆生命周期、脱敏、证据回传 |
 | 调度与工作流内核 | Temporal-ready WorkflowOps、Redis Streams、Outbox/DLQ、CloudEvents | P1 | 调度中心输出 AI 可消费任务包、DAG、事件唤醒和质量卡点 | 幂等键、重试策略、人工审批、执行证据 |
 | Agent/MCP/A2A 运行底座 | sop-agentd、MCP Hub、A2A Gateway、Skill Marketplace | P0 | 统一 Agent 注册、能力画像、工具权限、心跳、任务领取和执行回写；SDK IPC 支持 Unix Socket / Windows named pipe、结构化诊断和离线降级 | 工具白名单、沙箱执行、HMAC/JWT、动作审计 |
-| 产品化前端 | React 18、Ant Design 6、TanStack Query、lazy chunks | P0 | 专业域菜单、模块 Manifest、细粒度 capability 和 AI surfaces | 域/模块/子能力注册、按钮动作审计、页面地图校验 |
+| 产品化前端 | React 18、Ant Design 6、TanStack Query、lazy chunks | P0 | 专业域菜单、模块 Manifest、细粒度 capability、AI surfaces 和构建性能治理 | 域/模块/子能力注册、按钮动作审计、页面地图校验、chunk 预算 |
 | 安全可观测治理 | OpenTelemetry、Prometheus、Grafana、Loki、Audit WORM、ABAC | P2 | 日志、指标、链路、审计、用量、账单和审批策略统一治理 | 字段级权限、审计不可篡改、配额限流、策略审批 |
+
+前端性能治理已接入真实构建产物审计：`/api/v1/system/pages/frontend-performance` 读取 `manager-web/dist/assets`，按 raw/gzip 预算、`load_scope`、`initial_oversize` 和 `deferred_oversize` 输出 Top chunks、风险和 AI 拆分建议；`EChartsPanel` 使用 ECharts 5.0 的按需运行时模块，避免图表页面加载整包 ECharts；全局 AI 命令面板拆为 `CommandPalette` 懒加载组件，AI 优先入口仍保留在主壳，但搜索、命令目录和工具计划候选只在打开面板时加载。当前真实构建严格口径性能治理分为 78/watch，剩余重点是主壳 index chunk 和 AntV 图谱运行时。
 
 ## 7. 调度中心目标能力
 

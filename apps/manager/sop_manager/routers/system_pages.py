@@ -2015,26 +2015,30 @@ def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, a
     name = str(item.get("name") or "")
     budget = item.get("budget") or {}
     status = str(budget.get("status") or "watch")
+    load_scope = str(item.get("load_scope") or "shared")
+    impact = "首屏阻塞" if load_scope == "initial" else "低频延迟加载" if load_scope.startswith(("deferred", "route-lazy")) else "共享依赖"
     return {
         "title": f"拆分前端构建产物：{name}",
         "description": "\n".join(
             [
                 f"chunk: {name}",
                 f"type: {item.get('type') or ''}",
+                f"load_scope: {load_scope}",
+                f"impact: {impact}",
                 f"size_kb: {item.get('size_kb')}",
                 f"gzip_kb: {item.get('gzip_kb')}",
                 f"budget_status: {status}",
                 "",
                 "optimization_scope:",
-                "- 优先确认是否属于首屏主壳、Vendor 或专业工作台路由 chunk",
-                "- 将低频图表、抽屉、表单和复杂依赖改为按需 import",
+                "- 首屏 initial chunk 优先拆命令面板、菜单偏好和低频治理面板",
+                "- deferred/route-lazy chunk 保持低频入口后置，并继续拆图谱、图表和复杂依赖",
                 "- 保持页面聚焦、移动端首屏轻量和成熟组件复用",
                 "",
                 "budget:",
                 json.dumps(budget, ensure_ascii=False, indent=2),
             ]
         ).strip(),
-        "priority": "P0" if status == "risk" else priority,
+        "priority": "P0" if status == "risk" and load_scope == "initial" else "P1" if status == "risk" else priority,
         "estimate": "M" if status == "risk" else "S",
         "assigned_to": assigned_to or "FrontendAgent",
         "dev_tool": "codex",
@@ -4103,7 +4107,18 @@ def _module_manifest(*, role: str | None = None) -> dict[str, Any]:
         },
         "frontend": {
             "code_splitting": True,
-            "chunk_strategy": ["react-vendor", "query-vendor", "ui-vendor", "icon-vendor", "i18n-vendor", "vendor", "route-chunks"],
+            "chunk_strategy": [
+                "react-vendor",
+                "query-vendor",
+                "antd-core-vendor",
+                "antd-runtime-vendor",
+                "echarts-vendor",
+                "antv-vendor",
+                "icon-vendor",
+                "i18n-vendor",
+                "vendor",
+                "route-chunks",
+            ],
             "module_registry_source": "apps/manager-web/src/navigation.tsx",
             "page_registry_source": "apps/manager/sop_manager/routers/system_pages.py",
         },
@@ -4128,6 +4143,17 @@ def _chunk_type(filename: str) -> str:
     return "route"
 
 
+def _chunk_load_scope(filename: str, chunk_type: str) -> str:
+    lowered = filename.lower()
+    if chunk_type == "shell":
+        return "initial"
+    if lowered.startswith(("antv-vendor", "echarts-", "echarts-core-vendor", "echarts-charts-vendor", "echarts-components-vendor")):
+        return "deferred-visualization"
+    if chunk_type == "route":
+        return "route-lazy"
+    return "shared"
+
+
 def _frontend_performance_payload() -> dict[str, Any]:
     assets_dir = _manager_web_dist_assets_dir()
     files = sorted(assets_dir.glob("*.js")) if assets_dir.exists() else []
@@ -4137,12 +4163,14 @@ def _frontend_performance_payload() -> dict[str, Any]:
         size_bytes = len(content)
         gzip_bytes = len(gzip.compress(content))
         chunk_type = _chunk_type(file.name)
+        load_scope = _chunk_load_scope(file.name, chunk_type)
         over_raw_budget = size_bytes > 500 * 1024
         over_gzip_budget = gzip_bytes > 180 * 1024
         chunks.append(
             {
                 "name": file.name,
                 "type": chunk_type,
+                "load_scope": load_scope,
                 "size_bytes": size_bytes,
                 "size_kb": round(size_bytes / 1024, 1),
                 "gzip_bytes": gzip_bytes,
@@ -4163,7 +4191,9 @@ def _frontend_performance_payload() -> dict[str, Any]:
     oversize_gzip = [item for item in chunks if item["budget"]["over_gzip_budget"]]
     route_oversize = [item for item in oversize_raw if item["type"] == "route"]
     vendor_oversize = [item for item in oversize_raw if item["type"] == "vendor"]
-    score = max(0, 100 - len(oversize_gzip) * 12 - len(route_oversize) * 7 - len(vendor_oversize) * 5)
+    initial_oversize = [item for item in oversize_raw if item.get("load_scope") == "initial"]
+    deferred_oversize = [item for item in oversize_raw if str(item.get("load_scope") or "").startswith(("deferred", "route-lazy"))]
+    score = max(0, 100 - len(oversize_gzip) * 10 - len(route_oversize) * 6 - len(vendor_oversize) * 4 - len(initial_oversize) * 8)
     status = "excellent" if score >= 92 else "good" if score >= 82 else "watch" if score >= 68 else "risk"
     recommendations: list[str] = []
     if not files:
@@ -4172,9 +4202,15 @@ def _frontend_performance_payload() -> dict[str, Any]:
         names = ", ".join(str(item["name"]).split("-")[0] for item in route_oversize[:4])
         recommendations.append(f"优先继续拆分路由工作台 chunk：{names}，把低频抽屉、图表和表单逻辑后置加载。")
     if vendor_oversize:
-        recommendations.append("继续拆分 Ant Design、ECharts、AntV 等 vendor 包，避免首屏加载与专业工作台强耦合。")
+        vendor_names = {str(item["name"]).split("-")[0] for item in vendor_oversize}
+        if vendor_names == {"antv"}:
+            recommendations.append("当前仅 AntV 图谱包仍超过预算；优先将 G6 图谱运行时继续后置到血缘/编排等低频图谱场景。")
+        else:
+            recommendations.append("继续拆分超预算 vendor 包，避免首屏加载与专业工作台强耦合。")
     if any(item["type"] == "shell" and item["budget"]["over_raw_budget"] for item in chunks):
         recommendations.append("主壳 index/main chunk 仍偏大，后续可把命令面板、菜单偏好和低频治理面板改为按需 import。")
+    if deferred_oversize and not initial_oversize:
+        recommendations.append("当前超预算主要是延迟加载 chunk；继续保持首屏轻量，按图谱/血缘/编排专业入口逐步拆包。")
     if not recommendations:
         recommendations.append("当前构建产物未发现超 500KB raw chunk，可进入移动端首屏真实渲染和交互耗时检查。")
     return {
@@ -4192,6 +4228,8 @@ def _frontend_performance_payload() -> dict[str, Any]:
             "total_gzip_kb": round(gzip_total / 1024, 1),
             "oversize_raw": len(oversize_raw),
             "oversize_gzip": len(oversize_gzip),
+            "initial_oversize": len(initial_oversize),
+            "deferred_oversize": len(deferred_oversize),
         },
         "budgets": {
             "chunk_raw_kb": 500,
@@ -4208,7 +4246,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
             "task_api": "/api/v1/system/pages/frontend-performance/tasks",
             "route": "#/system-map/performance",
             "build_command": "pnpm --dir apps/manager-web build",
-            "fields": ["summary.score", "summary.oversize_raw", "top_chunks", "recommendations"],
+            "fields": ["summary.score", "summary.initial_oversize", "summary.deferred_oversize", "top_chunks", "recommendations"],
         },
     }
 
