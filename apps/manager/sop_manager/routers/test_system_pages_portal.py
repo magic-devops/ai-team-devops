@@ -216,7 +216,7 @@ def test_system_pages_experience_tasks_preview_modules_for_ui_simplification():
             domain="all",
             status="all",
             q="",
-            include_simple=False,
+            include_simple=True,
             max_items=3,
             priority="P1",
             assigned_to="Designer",
@@ -254,7 +254,7 @@ def test_system_pages_experience_tasks_apply_is_idempotent(monkeypatch):
     monkeypatch.setattr(system_pages_module, "list_tasks", fake_list_tasks)
     monkeypatch.setattr(system_pages_module, "create_task", fake_create_task)
 
-    body = ExperienceTaskIn(dry_run=False, status="all", include_simple=False, max_items=2)
+    body = ExperienceTaskIn(dry_run=False, status="all", include_simple=True, max_items=2)
     first = system_page_experience_tasks(body)
     second = system_page_experience_tasks(body)
 
@@ -935,18 +935,20 @@ def test_system_pages_llm_gateway_contract_exposes_production_controls():
 
 
 def test_system_pages_ops_center_contract_exposes_self_heal_guardrails():
-    payload = system_pages_readiness(q="智能运维中心")
+    payload = system_pages_readiness()
 
-    ops = next(item for item in payload["items"] if item["id"] == "opsCenter")
-    apis = set(ops["implementation_contract"]["apis"])
+    ops_hub = next(item for item in payload["items"] if item["id"] == "opsCenter")
+    self_heal = next(item for item in payload["items"] if item["id"] == "opsCenterSelfHeal")
+    apis = set(self_heal["implementation_contract"]["apis"])
+    assert ops_hub["implementation_contract"]["apis"] == ["/api/v1/ops-center/summary", "/api/v1/ops-center/im-briefing"]
     assert "/api/v1/ops-center/self-heal/actions" in apis
     assert "/api/v1/ops-center/self-heal/actions/{id}/approve" in apis
     assert "/api/v1/ops-center/self-heal/actions/{id}/apply" in apis
     assert "/api/v1/ops-center/self-heal/actions/{id}/verify" in apis
     assert "/api/v1/ops-center/self-heal/actions/{id}/rollback" in apis
-    assert "自愈审批" in ops["capabilities"]
-    assert "动作验证" in ops["capabilities"]
-    assert "回滚留证" in ops["capabilities"]
+    assert "自愈审批" in self_heal["capabilities"]
+    assert "动作验证" in self_heal["capabilities"]
+    assert "回滚留证" in self_heal["capabilities"]
 
     capability_payload = system_page_capabilities()
     ops_capability = next(item for item in capability_payload["items"] if item["id"] == "opsCenter")
@@ -960,9 +962,11 @@ def test_system_pages_experience_review_scores_modular_api_density():
     payload = system_pages_experience_review(q="智能运维中心")
     ops = next(item for item in payload["items"] if item["id"] == "opsCenter")
 
+    assert ops["status"] == "simple"
+    assert ops["implementation_contract"]["api_count"] == 2
     assert ops["implementation_contract"]["submodule_count"] >= 5
     assert "密度" in ops["dimensions"]["simplicity"]["detail"]
-    assert ops["dimensions"]["simplicity"]["score"] >= 60
+    assert ops["dimensions"]["simplicity"]["score"] >= 90
 
 
 def test_system_pages_settings_contract_exposes_storage_migration():

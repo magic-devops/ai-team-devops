@@ -311,6 +311,25 @@
       "windows": "Execution windows",
       "runbook": "Runbook governance",
       "self-heal": "Self-healing policy",
+      "release_flow": "Release flow",
+      "executor": "Executor",
+      "callbacks": "Callback evidence",
+      "alert_sources": "Alert sources",
+      "noise_policies": "Noise policies",
+      "slo_escalation": "SLO escalation",
+      "strategy_canary": "Strategy canary",
+      "strategy_linkage": "Strategy linkage",
+      "alert_events": "Alert events",
+      "incident_list": "Incident list",
+      "verification": "Verification plan",
+      "insights": "Smart insights",
+      "tasking": "Tasking",
+      "runbook_library": "Runbook library",
+      "versions": "Version governance",
+      "policies": "Policy catalog",
+      "evaluation": "Evaluation",
+      "guardrail_actions": "Guardrail actions",
+      "rollback": "Rollback evidence",
       "agent_directory": "Agent directory",
       "credential_rotation": "Credential rotation",
       "heartbeat": "Heartbeat",
@@ -3979,7 +3998,39 @@
     },
     "opsCenter": {
       "hubTitle": "Ops Center",
-      "hubDesc": "Pipelines, RCA, Runbooks and self-healing policies"
+      "hubDesc": "A light production ops hub: check health, find risks, and enter focused modules.",
+      "aiAction": "AI analysis",
+      "modulesTitle": "Focused modules",
+      "metricBadge": "{{count}} runtime signals",
+      "metrics": {
+        "pipelines": "Pipelines",
+        "openAlerts": "Open alerts",
+        "rcaOpen": "Open RCA",
+        "runbooks": "Runbooks",
+        "guardrailActions": "Guardrail actions"
+      },
+      "modules": {
+        "pipeline": {
+          "label": "Deployment pipeline",
+          "desc": "Release, approval, execution evidence and callbacks"
+        },
+        "alerts": {
+          "label": "Alert governance",
+          "desc": "Sources, noise reduction, SLO and canary policy"
+        },
+        "rca": {
+          "label": "Root cause analysis",
+          "desc": "Incident attribution, verification and tasks"
+        },
+        "runbook": {
+          "label": "Runbook governance",
+          "desc": "Versions, diffs, evidence and archive"
+        },
+        "self-heal": {
+          "label": "Self-healing",
+          "desc": "Approval, apply, verify and rollback evidence"
+        }
+      }
     },
     "dataIngest": {
       "hubTitle": "Data Ingest Center",

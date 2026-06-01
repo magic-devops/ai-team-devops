@@ -390,6 +390,25 @@
       "windows": "実行ウィンドウ",
       "runbook": "Runbook ガバナンス",
       "self-heal": "自己修復ポリシー",
+      "release_flow": "リリースフロー",
+      "executor": "実行器",
+      "callbacks": "コールバック証跡",
+      "alert_sources": "アラートソース",
+      "noise_policies": "ノイズ削減策略",
+      "slo_escalation": "SLO エスカレーション",
+      "strategy_canary": "策略カナリア",
+      "strategy_linkage": "策略連携",
+      "alert_events": "アラートイベント",
+      "incident_list": "障害一覧",
+      "verification": "検証計画",
+      "insights": "スマート洞察",
+      "tasking": "タスク化",
+      "runbook_library": "Runbook ライブラリ",
+      "versions": "バージョン治理",
+      "policies": "策略カタログ",
+      "evaluation": "策略評価",
+      "guardrail_actions": "ガードレール操作",
+      "rollback": "ロールバック証跡",
       "agent_directory": "Agent ディレクトリ",
       "credential_rotation": "認証情報ローテーション",
       "heartbeat": "ハートビート",
@@ -3482,7 +3501,39 @@
     },
     "opsCenter": {
       "hubTitle": "インテリジェント運用センター",
-      "hubDesc": "パイプライン、RCA、Runbook、自己修復"
+      "hubDesc": "本番運用の軽量ハブ：健康確認、リスク発見、専門モジュールへの導線。",
+      "aiAction": "AI 分析",
+      "modulesTitle": "専門入口",
+      "metricBadge": "{{count}} 件の運用シグナル",
+      "metrics": {
+        "pipelines": "パイプライン",
+        "openAlerts": "未解決アラート",
+        "rcaOpen": "未処理 RCA",
+        "runbooks": "Runbook",
+        "guardrailActions": "ガードレール操作"
+      },
+      "modules": {
+        "pipeline": {
+          "label": "デプロイパイプライン",
+          "desc": "リリース、承認、実行証跡、コールバック"
+        },
+        "alerts": {
+          "label": "アラートガバナンス",
+          "desc": "収集、ノイズ削減、SLO、カナリア策略"
+        },
+        "rca": {
+          "label": "根因分析",
+          "desc": "障害帰因、検証、タスク化"
+        },
+        "runbook": {
+          "label": "Runbook ガバナンス",
+          "desc": "バージョン、差分、証跡、アーカイブ"
+        },
+        "self-heal": {
+          "label": "自己修復",
+          "desc": "承認、適用、検証、ロールバック証跡"
+        }
+      }
     },
     "dataIngest": {
       "hubTitle": "データ取り込みセンター",

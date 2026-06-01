@@ -412,6 +412,25 @@
       "evidence": "质量证据",
       "runbook": "Runbook",
       "self-heal": "自愈策略",
+      "release_flow": "发布流",
+      "executor": "执行器",
+      "callbacks": "回调证据",
+      "alert_sources": "告警源",
+      "noise_policies": "降噪策略",
+      "slo_escalation": "SLO 升级",
+      "strategy_canary": "策略灰度",
+      "strategy_linkage": "策略联动",
+      "alert_events": "告警事件",
+      "incident_list": "故障清单",
+      "verification": "验证计划",
+      "insights": "智能洞察",
+      "tasking": "任务化",
+      "runbook_library": "Runbook 库",
+      "versions": "版本治理",
+      "policies": "策略目录",
+      "evaluation": "策略评估",
+      "guardrail_actions": "护栏动作",
+      "rollback": "回滚留证",
       "lineage_graph": "血缘图谱",
       "impact_analysis": "影响分析",
       "dataset_relation": "数据集关系",
@@ -4308,7 +4327,39 @@
     },
     "opsCenter": {
       "hubTitle": "智能运维中心",
-      "hubDesc": "部署流水线、根因分析、Runbook 与自愈策略统一管理"
+      "hubDesc": "生产运维轻量中枢：看健康、找风险、进专业模块处理。",
+      "aiAction": "AI 分析",
+      "modulesTitle": "专业入口",
+      "metricBadge": "{{count}} 条运行信号",
+      "metrics": {
+        "pipelines": "流水线",
+        "openAlerts": "开放告警",
+        "rcaOpen": "待处理 RCA",
+        "runbooks": "Runbook",
+        "guardrailActions": "护栏动作"
+      },
+      "modules": {
+        "pipeline": {
+          "label": "部署流水线",
+          "desc": "发布、审批、执行证据与回调"
+        },
+        "alerts": {
+          "label": "告警源治理",
+          "desc": "采集、降噪、SLO 与策略灰度"
+        },
+        "rca": {
+          "label": "根因分析",
+          "desc": "故障归因、验证和任务化闭环"
+        },
+        "runbook": {
+          "label": "Runbook 治理",
+          "desc": "版本、差异、证据与归档"
+        },
+        "self-heal": {
+          "label": "自愈策略",
+          "desc": "审批、执行、验证和回滚留证"
+        }
+      }
     },
     "dataIngest": {
       "hubTitle": "数据接入中心",

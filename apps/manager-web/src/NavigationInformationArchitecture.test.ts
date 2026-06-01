@@ -82,4 +82,14 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "data_context", path: "#/data/sources"');
     expect(navigationSource).not.toContain('subnav("intelligence", "knowledge", "rag", "memory", "rules", "distill", "specs", "design_docs", "datasources", "worker", "sync", "events", "usage")');
   });
+
+  it("keeps ops center as a light hub with focused production ops modules", () => {
+    expect(navigationSource).toContain('key: "opsCenter", path: "#/system/ops-center"');
+    expect(navigationSource).toContain('subnav("system/ops-center", "pipeline", "alerts", "rca", "runbook", "self-heal")');
+    expect(navigationSource).toContain('key: "opsCenterPipeline", path: "#/system/ops-center/pipeline"');
+    expect(navigationSource).toContain('key: "opsCenterAlerts", path: "#/system/ops-center/alerts"');
+    expect(navigationSource).toContain('key: "opsCenterRca", path: "#/system/ops-center/rca"');
+    expect(navigationSource).toContain('key: "opsCenterRunbook", path: "#/system/ops-center/runbook"');
+    expect(navigationSource).toContain('key: "opsCenterSelfHeal", path: "#/system/ops-center/self-heal"');
+  });
 });

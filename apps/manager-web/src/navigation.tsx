@@ -504,6 +504,7 @@ const ITEM_CATEGORY: Record<string, string> = {
   a2aEvidence: "a2a-protocol",
   opsCenter: "smart-ops",
   opsCenterPipeline: "smart-ops",
+  opsCenterAlerts: "smart-ops",
   opsCenterRca: "smart-ops",
   opsCenterRunbook: "smart-ops",
   opsCenterSelfHeal: "smart-ops",
