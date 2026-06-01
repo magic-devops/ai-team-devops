@@ -44,4 +44,15 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('path: "#/data/ingest/batch"');
     expect(navigationSource).toContain('initialTab: "jobs"');
   });
+
+  it("keeps agent run operations split between focused AgentOps and platform SLO governance", () => {
+    expect(navigationSource).toContain('key: "agentRuns"');
+    expect(navigationSource).toContain('Agent 运行中心：运行列表、心跳、能力画像、SLO 与再平衡任务化');
+    expect(navigationSource).toContain('key: "run_list", path: "#/ai/agent-ops/runs"');
+    expect(navigationSource).toContain('key: "heartbeat", path: "#/ai/agent-ops/heartbeat"');
+    expect(navigationSource).toContain('key: "capability_profiles", path: "#/ai/agent-ops/profiles"');
+    expect(navigationSource).toContain('key: "retry", path: "#/ai/agent-ops/retry"');
+    expect(navigationSource).toContain('key: "evidence", path: "#/tasks?tab=scheduler&panel=agent-reports"');
+    expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');
+  });
 });

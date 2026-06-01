@@ -743,9 +743,42 @@ def test_system_pages_agent_runs_contract_exposes_retry_lifecycle():
 
     agent_runs = next(item for item in payload["items"] if item["id"] == "agentRuns")
     apis = set(agent_runs["implementation_contract"]["apis"])
+    assert "/api/v1/agents/runs/slo" in apis
+    assert "/api/v1/agents/runs/rebalance-tasks" in apis
+    assert "/api/v1/agent-runs/{id}/heartbeat" in apis
+    assert "/api/v1/agent-runs/{id}/status" in apis
     assert "/api/v1/agent-runs/{id}/retry" in apis
     assert "/api/v1/agent-runs/{id}/cancel" in apis
+    assert "/api/v1/tasks/agent-feed/reports" in apis
+    assert agent_runs["implementation_contract"]["submodule_count"] >= 6
+    assert agent_runs["implementation_contract"]["action_count"] >= 18
+    assert "心跳监控" in agent_runs["capabilities"]
     assert "失败重试" in agent_runs["capabilities"]
+    assert "Agent SLO" in agent_runs["capabilities"]
+    assert "自动再平衡任务" in agent_runs["capabilities"]
+
+
+def test_system_pages_agent_runs_exposes_focused_submodule_paths():
+    payload = system_page_capabilities()
+    agent_runs = next(item for item in payload["items"] if item["id"] == "agentRuns")
+    submodules = {item["id"]: item for item in agent_runs["submodules"]}
+
+    assert {"run_list", "heartbeat", "capability_profiles", "retry", "evidence", "slo_rebalance"} <= set(submodules)
+    assert submodules["run_list"]["path"] == "#/ai/agent-ops/runs"
+    assert submodules["heartbeat"]["path"] == "#/ai/agent-ops/heartbeat"
+    assert submodules["capability_profiles"]["path"] == "#/ai/agent-ops/profiles"
+    assert submodules["retry"]["path"] == "#/ai/agent-ops/retry"
+    assert submodules["slo_rebalance"]["path"] == "#/platforms/agent-runs"
+    assert submodules["slo_rebalance"]["capability"] == "ecosystem.platforms.agent-runs.slo_rebalance"
+
+
+def test_system_pages_experience_review_scores_agent_runs_route_density():
+    payload = system_pages_experience_review(q="Agent 运行中心")
+    agent_runs = next(item for item in payload["items"] if item["id"] == "agentRuns")
+
+    assert agent_runs["implementation_contract"]["submodule_count"] >= 6
+    assert "密度" in agent_runs["dimensions"]["simplicity"]["detail"]
+    assert agent_runs["status"] == "simple"
 
 
 def test_system_pages_a2a_contract_exposes_agent_run_traceability():
