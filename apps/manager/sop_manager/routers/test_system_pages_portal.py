@@ -166,6 +166,34 @@ def test_system_pages_experience_review_scores_menu_ux_permissions_and_ai_editab
     assert "permission_rule" in first["ui_contract"]
 
 
+def test_system_pages_capabilities_expose_page_level_actions_for_permissions():
+    payload = system_page_capabilities()
+
+    assert payload["ok"] is True
+    assert payload["summary"]["actions"] >= payload["summary"]["total"] * 3
+
+    no_submodule_page = next(item for item in payload["items"] if item["id"] == "vibe")
+    action_ids = {item["id"] for item in no_submodule_page["actions"]}
+    action_capabilities = {item["capability"] for item in no_submodule_page["actions"]}
+
+    assert action_ids == {"read", "write", "admin"}
+    assert {
+        f"{no_submodule_page['capability']}.read",
+        f"{no_submodule_page['capability']}.write",
+        f"{no_submodule_page['capability']}.admin",
+    } <= action_capabilities
+    assert no_submodule_page["action_count"] >= 3
+
+
+def test_system_pages_experience_review_has_no_permission_action_gap():
+    payload = system_pages_experience_review()
+
+    assert payload["summary"]["permission_gap"] == 0
+    for item in payload["items"]:
+        assert item["dimensions"]["permission"]["score"] >= 86
+        assert item["implementation_contract"]["action_count"] >= 3
+
+
 def test_system_pages_experience_review_filters_domain_status_and_keyword():
     payload = system_pages_experience_review(domain="governance", status="all", q="治理")
 

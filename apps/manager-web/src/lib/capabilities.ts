@@ -31,6 +31,7 @@ export type CapabilityGrant = {
   permission?: Partial<Record<CapabilityAction, string[]>>;
   allowed?: Partial<Record<CapabilityAction, boolean>>;
   visible?: boolean;
+  actions?: CapabilitySubmoduleAction[];
   submodules?: CapabilitySubmodule[];
   submodule_count?: number;
   action_count?: number;
@@ -61,6 +62,22 @@ export function flattenCapabilityGrants(items: CapabilityGrant[], role: string):
   const grants: CapabilityGrant[] = [];
   for (const item of items) {
     grants.push({ ...item, source: item.source ?? "module" });
+    for (const action of item.actions ?? []) {
+      grants.push({
+        id: `${item.id ?? item.capability}.${action.id}`,
+        name: action.name,
+        domain: item.domain,
+        domain_name: item.domain_name,
+        path: item.path,
+        capability: action.capability,
+        parent_capability: item.capability,
+        action_id: action.id,
+        permission: actionGrantPermission(action),
+        allowed: actionGrantAllowed(action, role),
+        visible: item.visible,
+        source: "action",
+      });
+    }
     for (const submodule of item.submodules ?? []) {
       grants.push({
         id: `${item.id ?? item.capability}.${submodule.id ?? submodule.capability}`,

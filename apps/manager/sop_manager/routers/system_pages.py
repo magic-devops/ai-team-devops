@@ -786,6 +786,14 @@ def _submodules_for(page_id: str, capability: str, policies: dict[str, list[str]
     return rows
 
 
+def _capability_actions_for(capability: str, policies: dict[str, list[str]]) -> list[dict[str, Any]]:
+    return [
+        {"id": "read", "name": "查看", "capability": f"{capability}.read", "roles": policies["read"]},
+        {"id": "write", "name": "编辑", "capability": f"{capability}.write", "roles": policies["write"]},
+        {"id": "admin", "name": "管理", "capability": f"{capability}.admin", "roles": policies["admin"]},
+    ]
+
+
 class BacklogTaskIn(BaseModel):
     ids: list[str] = Field(default_factory=list)
     dry_run: bool = True
@@ -3571,6 +3579,7 @@ def _capability_registry(react: list[dict[str, Any]]) -> list[dict[str, Any]]:
         policies = DOMAIN_ROLE_MATRIX.get(domain, DOMAIN_ROLE_MATRIX["overview"])
         ai_surfaces = AI_SURFACE_BY_DOMAIN.get(domain, ["copilot"])
         submodules = _submodules_for(page_id, capability, policies)
+        actions = _capability_actions_for(capability, policies)
         rows.append(
             {
                 "id": page_id,
@@ -3584,9 +3593,10 @@ def _capability_registry(react: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "write": policies["write"],
                     "admin": policies["admin"],
                 },
+                "actions": actions,
                 "submodules": submodules,
                 "submodule_count": len(submodules),
-                "action_count": sum(len(row.get("actions", [])) for row in submodules),
+                "action_count": len(actions) + sum(len(row.get("actions", [])) for row in submodules),
                 "ai": {
                     "enabled": True,
                     "entry": "#/copilot",
