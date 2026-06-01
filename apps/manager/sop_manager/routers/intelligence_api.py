@@ -27,76 +27,65 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
     worker_sum = worker.get("summary") or {}
     domains = [
         {
-            "id": "knowledge",
+            "id": "knowledge_assets",
             "path": "#/intelligence/kb",
             "capability": "ai.intelligence.knowledge",
             "category": "ai-knowledge",
+            "links": [
+                {"id": "knowledge", "path": "#/intelligence/kb", "capability": "ai.intelligence.knowledge"},
+            ],
         },
         {
-            "id": "rag",
+            "id": "retrieval_memory",
             "path": "#/intelligence/rag",
             "capability": "ai.intelligence.rag",
             "category": "ai-knowledge",
+            "links": [
+                {"id": "rag", "path": "#/intelligence/rag", "capability": "ai.intelligence.rag"},
+                {"id": "memory", "path": "#/intelligence/memory", "capability": "ai.intelligence.memory"},
+            ],
         },
         {
-            "id": "memory",
-            "path": "#/intelligence/memory",
-            "capability": "ai.intelligence.memory",
-            "category": "ai-knowledge",
-        },
-        {
-            "id": "rules",
+            "id": "rules_distill",
             "path": "#/intelligence/rules",
             "capability": "ai.intelligence.rules",
             "category": "ai-knowledge",
+            "links": [
+                {"id": "rules", "path": "#/intelligence/rules", "capability": "ai.intelligence.rules"},
+                {"id": "distill", "path": "#/intelligence/distill", "capability": "ai.intelligence.distill"},
+            ],
         },
         {
-            "id": "distill",
-            "path": "#/intelligence/distill",
-            "capability": "ai.intelligence.distill",
-            "category": "ai-knowledge",
-        },
-        {
-            "id": "specs",
-            "path": "#/intelligence/specs",
-            "capability": "ai.intelligence.specs",
-            "category": "ai-knowledge",
-        },
-        {
-            "id": "design-docs",
-            "path": "#/intelligence/design-docs",
-            "capability": "ai.intelligence.design-docs",
-            "category": "ai-knowledge",
-        },
-        {
-            "id": "datasources",
-            "path": "#/intelligence/datasources",
-            "capability": "ai.intelligence.datasources",
-            "category": "ai-knowledge",
-        },
-        {
-            "id": "worker",
+            "id": "runtime_ops",
             "path": "#/intelligence/worker",
             "capability": "ai.intelligence.worker",
             "category": "ai-runtime-ops",
+            "links": [
+                {"id": "worker", "path": "#/intelligence/worker", "capability": "ai.intelligence.worker"},
+                {"id": "sync", "path": "#/intelligence/sync", "capability": "ai.intelligence.sync"},
+                {"id": "events", "path": "#/intelligence/events", "capability": "ai.intelligence.events"},
+                {"id": "usage", "path": "#/intelligence/usage", "capability": "ai.intelligence.usage"},
+            ],
         },
         {
-            "id": "sync",
-            "path": "#/intelligence/sync",
-            "capability": "ai.intelligence.sync",
-            "category": "ai-runtime-ops",
+            "id": "spec_designs",
+            "path": "#/intelligence/specs",
+            "capability": "ai.intelligence.specs",
+            "category": "ai-knowledge",
+            "links": [
+                {"id": "specs", "path": "#/intelligence/specs", "capability": "ai.intelligence.specs"},
+                {"id": "design-docs", "path": "#/intelligence/design-docs", "capability": "ai.intelligence.design-docs"},
+            ],
         },
         {
-            "id": "events",
-            "path": "#/intelligence/events",
-            "capability": "ai.intelligence.events",
-            "category": "ai-runtime-ops",
-        },
-        {
-            "id": "usage",
-            "path": "#/intelligence/usage",
-            "capability": "ai.intelligence.usage",
-            "category": "ai-runtime-ops",
+            "id": "data_context",
+            "path": "#/data/sources",
+            "capability": "data.sources",
+            "category": "data-source-governance",
+            "links": [
+                {"id": "datasources", "path": "#/data/sources", "capability": "data.sources"},
+                {"id": "datasources-security", "path": "#/data/sources/security", "capability": "data.sources.security"},
+            ],
         },
     ]
     return {
@@ -113,10 +102,12 @@ def intelligence_hub(db: Session = Depends(get_session)) -> dict[str, Any]:
             "redis_worker": worker.get("redis"),
         },
         "stack_layers": [
-            {"id": "knowledge", "name": "Knowledge", "maturity": 86},
-            {"id": "memory", "name": "Memory", "maturity": 86},
-            {"id": "rules", "name": "Rules & Distill", "maturity": 84},
-            {"id": "runtime", "name": "Worker & Sync", "maturity": 82},
+            {"id": "knowledge_assets", "name": "Knowledge assets", "maturity": 88},
+            {"id": "retrieval_memory", "name": "Retrieval & Memory", "maturity": 88},
+            {"id": "rules_distill", "name": "Rules & Distill", "maturity": 86},
+            {"id": "runtime_ops", "name": "Runtime Ops", "maturity": 84},
+            {"id": "spec_designs", "name": "Specs & Designs", "maturity": 86},
+            {"id": "data_context", "name": "Data Context", "maturity": 90},
         ],
         "domains": domains,
     }

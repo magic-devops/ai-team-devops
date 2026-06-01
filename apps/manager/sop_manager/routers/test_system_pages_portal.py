@@ -176,6 +176,39 @@ def test_system_pages_experience_review_filters_domain_status_and_keyword():
         assert "治理" in f"{item['id']} {item['name']} {' '.join(item.get('recommendations', []))}"
 
 
+def test_system_pages_intelligence_contract_is_light_clustered_hub():
+    capabilities = system_page_capabilities()
+    readiness = system_pages_readiness()
+
+    intelligence = next(item for item in capabilities["items"] if item["id"] == "intelligence")
+    readiness_item = next(item for item in readiness["items"] if item["id"] == "intelligence")
+    submodules = {item["id"]: item for item in intelligence["submodules"]}
+
+    assert readiness_item["implementation_contract"]["apis"] == ["/api/v1/intelligence/hub"]
+    assert {
+        "knowledge_assets",
+        "retrieval_memory",
+        "rules_distill",
+        "runtime_ops",
+        "spec_designs",
+        "data_context",
+    } <= set(submodules)
+    assert len(submodules) == 6
+    assert submodules["runtime_ops"]["path"] == "#/intelligence/worker"
+    assert submodules["data_context"]["path"] == "#/data/sources"
+
+
+def test_system_pages_experience_review_scores_intelligence_as_simple_hub():
+    payload = system_pages_experience_review(q="智能与知识")
+
+    intelligence = next(item for item in payload["items"] if item["id"] == "intelligence")
+
+    assert intelligence["status"] == "simple"
+    assert intelligence["implementation_contract"]["api_count"] == 1
+    assert intelligence["implementation_contract"]["submodule_count"] == 6
+    assert intelligence["dimensions"]["responsive"]["score"] >= 90
+
+
 def test_system_pages_experience_tasks_preview_modules_for_ui_simplification():
     result = system_page_experience_tasks(
         ExperienceTaskIn(

@@ -10,6 +10,12 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 const DOMAIN_ICONS: Record<string, LucideIcon> = {
+  knowledge_assets: Library,
+  retrieval_memory: Search,
+  rules_distill: ShieldCheck,
+  runtime_ops: Cpu,
+  spec_designs: FileCode,
+  data_context: Database,
   knowledge: Library,
   rag: Search,
   memory: Brain,
@@ -25,6 +31,12 @@ const DOMAIN_ICONS: Record<string, LucideIcon> = {
 };
 
 const DOMAIN_I18N: Record<string, string> = {
+  knowledge_assets: "nav.sub.knowledge_assets",
+  retrieval_memory: "nav.sub.retrieval_memory",
+  rules_distill: "nav.sub.rules_distill",
+  runtime_ops: "nav.sub.runtime_ops",
+  spec_designs: "nav.sub.spec_designs",
+  data_context: "nav.sub.data_context",
   knowledge: "nav.knowledgeBase",
   rag: "nav.ragSearch",
   memory: "nav.aiMemory",
@@ -93,7 +105,7 @@ export function IntelligenceHub() {
 
       <Card title={t("page.intelligence.domainsTitle")}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {domains.map((domain: { id: string; path: string }) => {
+          {domains.map((domain: { id: string; path: string; links?: Array<{ id: string; path: string }> }) => {
             const Icon = DOMAIN_ICONS[domain.id] ?? Brain;
             const labelKey = DOMAIN_I18N[domain.id];
             return (
@@ -111,6 +123,18 @@ export function IntelligenceHub() {
                     <ArrowRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
                   </span>
                   <span className="mt-0.5 block text-xs text-[var(--muted)]">{domain.path}</span>
+                  {domain.links?.length ? (
+                    <span className="mt-3 flex flex-wrap gap-1.5">
+                      {domain.links.slice(0, 4).map((link) => {
+                        const linkKey = DOMAIN_I18N[link.id];
+                        return (
+                          <span key={`${domain.id}-${link.id}`} className="rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--muted)]">
+                            {linkKey ? t(linkKey) : link.id}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  ) : null}
                 </span>
               </a>
             );
