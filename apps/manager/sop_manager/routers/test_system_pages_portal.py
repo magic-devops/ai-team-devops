@@ -933,15 +933,37 @@ def test_system_pages_experience_review_scores_modular_api_density():
 
 
 def test_system_pages_settings_contract_exposes_storage_migration():
-    payload = system_pages_readiness(q="设置")
+    payload = system_pages_readiness(q="生产存储")
 
-    settings = next(item for item in payload["items"] if item["id"] == "settings")
-    apis = set(settings["implementation_contract"]["apis"])
+    storage = next(item for item in payload["items"] if item["id"] == "settingsStorage")
+    apis = set(storage["implementation_contract"]["apis"])
     assert "/api/v1/system/ops/storage/migration-plan" in apis
     assert "/api/v1/system/ops/storage/migration-smoke" in apis
-    assert "OceanBase 迁移" in settings["capabilities"]
-    assert "备份恢复清单" in settings["capabilities"]
-    assert "SQLite 开发路径" in settings["capabilities"]
+    assert "OceanBase 迁移" in storage["capabilities"]
+    assert "备份恢复清单" in storage["capabilities"]
+    assert "SQLite 开发路径" in storage["capabilities"]
+
+
+def test_system_pages_settings_hub_stays_light_and_routes_to_focused_modules():
+    readiness = system_pages_readiness(q="系统配置中心")
+    settings_contract = next(item for item in readiness["items"] if item["id"] == "settings")
+    capability_payload = system_page_capabilities()
+    settings_capability = next(item for item in capability_payload["items"] if item["id"] == "settings")
+    submodules = {item["id"]: item for item in settings_capability["submodules"]}
+
+    assert settings_contract["implementation_contract"]["apis"] == ["/api/v1/settings/hub"]
+    assert {"account", "runtime", "management_entries", "sso", "billing", "profiles", "observability", "storage", "appearance"} <= set(submodules)
+    assert submodules["management_entries"]["path"] == "#/settings/workspace"
+    assert submodules["storage"]["capability"] == "system.settings.storage"
+
+
+def test_system_pages_experience_review_scores_settings_as_simple_hub():
+    payload = system_pages_experience_review(q="系统配置中心")
+    settings = next(item for item in payload["items"] if item["id"] == "settings")
+
+    assert settings["status"] == "simple"
+    assert settings["implementation_contract"]["api_count"] == 1
+    assert settings["implementation_contract"]["submodule_count"] >= 9
 
 
 def test_system_pages_data_quality_contract_exposes_executable_runtime():

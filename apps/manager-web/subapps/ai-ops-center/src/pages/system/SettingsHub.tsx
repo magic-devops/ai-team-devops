@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BarChart3, CloudCog, Cpu, SearchCheck, Settings, ShieldCheck, UserCog } from "lucide-react";
+import { ArrowRight, BarChart3, CloudCog, Cpu, Database, ExternalLink, Palette, SearchCheck, Settings, ShieldCheck, UserCog } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
@@ -12,19 +12,25 @@ import { WorkbenchStats } from "@/pages/shared/workbenchUi";
 const DOMAIN_I18N: Record<string, string> = {
   account: "nav.settingsAccount",
   runtime: "nav.settingsRuntime",
+  workspace: "nav.settingsWorkspace",
   sso: "nav.settingsSso",
   billing: "nav.settingsBilling",
   profiles: "nav.settingsProfiles",
   observability: "nav.settingsObservability",
+  storage: "nav.settingsStorage",
+  appearance: "nav.settingsAppearance",
 };
 
 const DOMAIN_ICONS: Record<string, LucideIcon> = {
   account: UserCog,
   runtime: Cpu,
+  workspace: ExternalLink,
   sso: ShieldCheck,
   billing: BarChart3,
   profiles: CloudCog,
   observability: SearchCheck,
+  storage: Database,
+  appearance: Palette,
 };
 
 export function SettingsHub() {

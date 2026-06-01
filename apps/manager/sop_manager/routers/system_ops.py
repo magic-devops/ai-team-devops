@@ -4388,10 +4388,12 @@ def settings_hub(_: Any = Depends(current_user)) -> dict[str, Any]:
         "domains": [
             {"id": "account", "path": "#/settings/account", "capability": "system.settings.account"},
             {"id": "runtime", "path": "#/settings/runtime", "capability": "system.settings.runtime"},
+            {"id": "workspace", "path": "#/settings/workspace", "capability": "system.settings.workspace"},
             {"id": "sso", "path": "#/settings/sso", "capability": "system.settings.sso"},
             {"id": "billing", "path": "#/settings/billing", "capability": "system.settings.billing"},
             {"id": "profiles", "path": "#/settings/profiles", "capability": "system.settings.profiles"},
             {"id": "observability", "path": "#/settings/observability", "capability": "system.settings.observability"},
             {"id": "storage", "path": "#/settings/storage", "capability": "system.settings.storage"},
+            {"id": "appearance", "path": "#/settings/appearance", "capability": "system.settings.appearance"},
         ],
     }

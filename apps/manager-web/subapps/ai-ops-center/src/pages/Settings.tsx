@@ -54,9 +54,12 @@ const SETTINGS_ROUTE_MODULES: Record<string, SettingsModule> = {
 const SETTINGS_MODULE_PATHS: Partial<Record<SettingsModule, string>> = {
   account: "#/settings/account",
   runtime: "#/settings/runtime",
+  workspace: "#/settings/workspace",
   observability: "#/settings/observability",
   profiles: "#/settings/profiles",
+  storage: "#/settings/storage",
   sso: "#/settings/sso",
+  appearance: "#/settings/appearance",
   billing: "#/settings/billing",
 };
 
@@ -69,6 +72,10 @@ function readSettingsModuleFromHash(): SettingsModule {
   return SETTINGS_ROUTE_MODULES[routeModule] || "account";
 }
 
+function normalizeSettingsModule(module?: string): SettingsModule | undefined {
+  return module && SETTINGS_ROUTE_MODULES[module] ? SETTINGS_ROUTE_MODULES[module] : undefined;
+}
+
 function settingsModuleHref(module: SettingsModule): string {
   return SETTINGS_MODULE_PATHS[module] || `#/settings/account?module=${module}`;
 }
@@ -77,11 +84,11 @@ function currentRedirectTarget() {
   return `${window.location.pathname}${window.location.search}${window.location.hash}` || "/?shell=1#/dashboard";
 }
 
-export function Settings() {
+export function Settings({ initialModule, focused: _focused = false }: { initialModule?: string; focused?: boolean } = {}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
-  const [activeModule, setActiveModule] = useState<SettingsModule>(() => readSettingsModuleFromHash());
+  const [activeModule, setActiveModule] = useState<SettingsModule>(() => normalizeSettingsModule(initialModule) || readSettingsModuleFromHash());
   const opsModuleActive = activeModule === "runtime" || activeModule === "observability";
   const token = getToken();
   const projectId = getProjectId();
@@ -346,6 +353,11 @@ export function Settings() {
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, []);
+
+  useEffect(() => {
+    const normalized = normalizeSettingsModule(initialModule);
+    if (normalized) setActiveModule(normalized);
+  }, [initialModule]);
 
   useEffect(() => {
     const subscription = ssoRiskSubscription.data?.subscription;

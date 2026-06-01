@@ -55,4 +55,13 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "evidence", path: "#/tasks?tab=scheduler&panel=agent-reports"');
     expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');
   });
+
+  it("keeps settings as a light hub with focused runtime configuration routes", () => {
+    expect(navigationSource).toContain('key: "settings"');
+    expect(navigationSource).toContain('系统配置治理中心：账户、运行态、SSO、计费、部署、存储与观测');
+    expect(navigationSource).toContain('key: "management_entries", path: "#/settings/workspace"');
+    expect(navigationSource).toContain('key: "settingsStorage", path: "#/settings/storage"');
+    expect(navigationSource).toContain('key: "settingsAppearance", path: "#/settings/appearance"');
+    expect(navigationSource).toContain('pageElement(SettingsPage, { initialModule: "storage", focused: true })');
+  });
 });
