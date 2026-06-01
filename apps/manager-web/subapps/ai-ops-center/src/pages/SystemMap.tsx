@@ -19,6 +19,7 @@ type SystemMapSection =
   | "overview"
   | "registry"
   | "readiness"
+  | "performance"
   | "isolation"
   | "source-scan"
   | "baseline-compare"
@@ -99,6 +100,11 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const productionReadinessQ = useQuery({
     queryKey: ["systemPagesProductionReadiness", domain, productionStage, keyword],
     queryFn: () => api.systemPagesProductionReadiness({ domain, stage: productionStage, q: keyword.trim() }),
+    enabled: authed,
+  });
+  const frontendPerformanceQ = useQuery({
+    queryKey: ["systemPagesFrontendPerformance"],
+    queryFn: api.systemPagesFrontendPerformance,
     enabled: authed,
   });
   const experienceReviewQ = useQuery({
@@ -381,6 +387,7 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const sectionOptions: Array<{ label: string; value: SystemMapSection }> = [
     { label: t("nav.pageRegistry"), value: "registry" },
     { label: t("nav.moduleReadinessGovernance"), value: "readiness" },
+    { label: t("nav.frontendPerformanceGovernance"), value: "performance" },
     { label: t("nav.threeCodeIsolationGovernance"), value: "isolation" },
     { label: t("nav.sourceIsolationScan"), value: "source-scan" },
     { label: t("nav.isolationBaselineCompare"), value: "baseline-compare" },
@@ -394,6 +401,7 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const showOverview = section === "overview";
   const showRegistry = section === "registry";
   const showReadiness = section === "readiness";
+  const showPerformance = section === "performance";
   const showIsolationGovernance = section === "isolation";
   const showSourceScan = section === "source-scan";
   const showBaselineCompare = section === "baseline-compare";
@@ -588,6 +596,7 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
             const pathBySection: Partial<Record<SystemMapSection, string>> = {
               "baseline-compare": "baseline-compare",
               "module-contract": "contract",
+              performance: "performance",
               "source-scan": "source-scan",
               isolation: "three-code-isolation",
               tasks: "governance-tasks",
@@ -1018,6 +1027,89 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
               ) : null}
             </div>
             ) : null}
+          </div>
+        </div>
+      </Card>
+      ) : null}
+
+      {showPerformance ? (
+      <Card title={t("page.systemMap.frontendPerformanceTitle")}>
+        <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+            <p className="text-xs text-[var(--muted)]">{t("page.systemMap.frontendPerformanceScore")}</p>
+            <div className="mt-2 flex items-end gap-2">
+              <span className="text-4xl font-semibold text-[var(--text)]">{frontendPerformanceQ.data?.summary?.score ?? 0}</span>
+              <span className="pb-1 text-sm text-[var(--muted)]">/ 100</span>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[var(--muted)]">{frontendPerformanceQ.data?.agent_consumption?.purpose}</p>
+            <code className="mt-3 block rounded-lg bg-[var(--control-bg)] px-2.5 py-1 text-xs text-[var(--text)]">
+              {frontendPerformanceQ.data?.agent_consumption?.build_command ?? "pnpm --dir apps/manager-web build"}
+            </code>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Metric label={t("page.systemMap.performanceChunks")} value={frontendPerformanceQ.data?.summary?.chunks ?? 0} />
+              <Metric label={t("page.systemMap.performanceOversize")} value={frontendPerformanceQ.data?.summary?.oversize_raw ?? 0} />
+              <Metric label={t("page.systemMap.performanceRouteChunks")} value={frontendPerformanceQ.data?.summary?.route_chunks ?? 0} />
+              <Metric label={t("page.systemMap.performanceGzip")} value={`${frontendPerformanceQ.data?.summary?.total_gzip_kb ?? 0}KB`} />
+            </div>
+          </div>
+          <div className="space-y-3">
+            {frontendPerformanceQ.isError ? <ErrorBlock message={(frontendPerformanceQ.error as Error).message} /> : null}
+            <div className="grid gap-2 md:grid-cols-3">
+              <Metric label={t("page.systemMap.performanceVendorChunks")} value={frontendPerformanceQ.data?.summary?.vendor_chunks ?? 0} />
+              <Metric label={t("page.systemMap.performanceShellChunks")} value={frontendPerformanceQ.data?.summary?.shell_chunks ?? 0} />
+              <Metric label={t("page.systemMap.performanceTotal")} value={`${frontendPerformanceQ.data?.summary?.total_kb ?? 0}KB`} />
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+              <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.performanceRecommendations")}</p>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {(frontendPerformanceQ.data?.recommendations ?? []).map((item: string) => (
+                  <p key={item} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs leading-5 text-[var(--muted-strong)]">{item}</p>
+                ))}
+              </div>
+            </div>
+            <Table
+              rowKey="name"
+              size="small"
+              columns={[
+                {
+                  title: t("page.systemMap.performanceChunk"),
+                  dataIndex: "name",
+                  render: (value: string, row: any) => (
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs font-semibold text-[var(--text)]">{value}</p>
+                      <p className="mt-1 text-[11px] text-[var(--muted)]">{row.type}</p>
+                    </div>
+                  ),
+                },
+                {
+                  title: t("page.systemMap.performanceSize"),
+                  dataIndex: "size_kb",
+                  width: 110,
+                  render: (value: number) => <span className="font-mono text-sm text-[var(--text)]">{value}KB</span>,
+                },
+                {
+                  title: t("page.systemMap.performanceGzip"),
+                  dataIndex: "gzip_kb",
+                  width: 110,
+                  render: (value: number) => <span className="font-mono text-sm text-[var(--muted-strong)]">{value}KB</span>,
+                },
+                {
+                  title: t("page.systemMap.performanceBudget"),
+                  dataIndex: "budget",
+                  width: 130,
+                  render: (value: any) => {
+                    const statusValue = String(value?.status || "ok");
+                    const color = statusValue === "risk" ? "red" : statusValue === "watch" ? "gold" : "green";
+                    return <Tag color={color}>{t(`page.systemMap.performanceBudgetStatus.${statusValue}`)}</Tag>;
+                  },
+                },
+              ]}
+              dataSource={frontendPerformanceQ.data?.top_chunks ?? []}
+              loading={frontendPerformanceQ.isLoading || frontendPerformanceQ.isFetching}
+              pagination={false}
+              scroll={{ x: 720 }}
+              locale={{ emptyText: t("page.systemMap.noPerformanceRows") }}
+            />
           </div>
         </div>
       </Card>

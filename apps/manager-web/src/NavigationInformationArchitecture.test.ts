@@ -19,7 +19,7 @@ describe("navigation information architecture", () => {
   });
 
   it("groups manifest capabilities and actions under one module contract entry", () => {
-    expect(navigationSource).toContain('subnav("systemMap", "registry", "contract", "readiness", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "migration")');
+    expect(navigationSource).toContain('subnav("systemMap", "registry", "contract", "readiness", "performance", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "migration")');
     expect(navigationSource).toContain('key: "moduleContract"');
     expect(navigationSource).toContain('path: "#/system-map/contract"');
     expect(navigationSource).toContain('hidden: true, parentKey: "moduleContract"');
@@ -28,6 +28,7 @@ describe("navigation information architecture", () => {
     expect(systemMapSource).toContain('type ContractPanel = "manifest" | "capabilities" | "actions"');
     expect(systemMapSource).toContain('const showOverview = section === "overview"');
     expect(systemMapSource).toContain('const showRegistry = section === "registry"');
+    expect(systemMapSource).toContain('const showPerformance = section === "performance"');
     expect(systemMapSource).toContain('activeContractPanel === "capabilities"');
   });
 

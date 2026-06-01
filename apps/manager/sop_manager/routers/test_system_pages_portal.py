@@ -25,6 +25,7 @@ from sop_manager.routers.system_pages import (
     system_page_registry_validate,
     system_page_experience_tasks,
     system_pages_experience_review,
+    system_pages_frontend_performance,
     system_pages_hub,
     system_pages_production_readiness,
     system_pages_readiness,
@@ -192,6 +193,19 @@ def test_system_pages_experience_review_has_no_permission_action_gap():
     for item in payload["items"]:
         assert item["dimensions"]["permission"]["score"] >= 86
         assert item["implementation_contract"]["action_count"] >= 3
+
+
+def test_system_pages_frontend_performance_exposes_chunk_budget_evidence():
+    payload = system_pages_frontend_performance()
+
+    assert payload["ok"] is True
+    assert payload["summary"]["score"] >= 0
+    assert {"chunks", "route_chunks", "vendor_chunks", "oversize_raw", "total_gzip_kb"} <= set(payload["summary"])
+    assert payload["budgets"]["chunk_raw_kb"] == 500
+    assert payload["agent_consumption"]["api"] == "/api/v1/system/pages/frontend-performance"
+    if payload["available"]:
+        first = payload["top_chunks"][0]
+        assert {"name", "type", "size_kb", "gzip_kb", "budget"} <= set(first)
 
 
 def test_system_pages_experience_review_filters_domain_status_and_keyword():

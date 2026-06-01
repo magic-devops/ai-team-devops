@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import gzip
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1064,6 +1065,7 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "webhooks", "path": "#/notify/webhooks", "domain": "ecosystem", "capability": "ecosystem.notify.webhooks"},
     {"id": "audit", "path": "#/audit", "domain": "governance", "capability": "governance.audit"},
     {"id": "systemMap", "path": "#/system-map", "domain": "governance", "capability": "governance.system-map"},
+    {"id": "frontendPerformanceGovernance", "path": "#/system-map/performance", "domain": "governance", "capability": "governance.system-map.frontend-performance"},
     {"id": "settings", "path": "#/settings", "domain": "system", "capability": "system.settings"},
     {"id": "settingsAccount", "path": "#/settings/account", "domain": "system", "capability": "system.settings.account"},
     {"id": "settingsRuntime", "path": "#/settings/runtime", "domain": "system", "capability": "system.settings.runtime"},
@@ -1255,7 +1257,8 @@ REACT_PAGES: list[dict[str, Any]] = [
     {"id": "llmGatewayEval", "name": "模型评测", "domain": "ecosystem", "path": "#/ai/llm-gateway/eval", "status": "active", "maturity": 96, "apis": ["/api/v1/llm-gateway/model-evals/runs", "/api/v1/llm-gateway/model-evals/run", "/api/v1/llm-gateway/model-evals/tasks", "/api/v1/llm-gateway/provider-health", "/api/v1/llm-gateway/throttle"], "capabilities": ["评测 Suite", "模型排名", "质量评分", "成本效率评分", "延迟 SLO", "Prompt 安全评分", "评测历史", "评测任务化", "Agent consumption"], "next": ["真实在线评测执行器", "人工标注反馈集"]},
     {"id": "platformOps", "name": "运行治理", "domain": "ecosystem", "path": "#/platforms/ops", "status": "active", "maturity": 86, "apis": ["/api/v1/platforms/ops-plan", "/api/v1/platforms/ops-tasks"], "capabilities": ["健康评分", "风险清单", "治理 Runbook", "AI 操作包", "治理任务预览", "治理任务落地"], "next": ["多工具 SLO", "Agent 执行审计", "自愈策略"]},
     {"id": "cliTools", "name": "CLI 工具", "domain": "ecosystem", "path": "#/platforms/cli", "status": "active", "maturity": 86, "apis": ["/api/v1/cli", "/api/v1/cli/run"], "capabilities": ["工具目录", "受控执行", "自定义工具", "安装提示"], "next": ["执行审计", "配额策略"]},
-    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 94, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest", "/api/v1/system/pages/readiness", "/api/v1/system/pages/production-readiness", "/api/v1/system/pages/experience-review", "/api/v1/system/pages/experience-review/tasks", "/api/v1/system/pages/readiness/tasks", "/api/v1/system/pages/governance-tasks", "/api/v1/system/pages/governance-tasks/bulk-update", "/api/v1/system/pages/isolation-audit", "/api/v1/system/pages/isolation-audit/scan", "/api/v1/system/pages/isolation-audit/scan/runs", "/api/v1/system/pages/isolation-audit/scan/runs/compare", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", "/api/v1/system/pages/isolation-audit/scan/tasks", "/api/v1/system/pages/isolation-audit/tasks"], "capabilities": ["治理中心", "子路由聚焦", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "体验治理矩阵", "体验治理任务化", "生产就绪矩阵", "细粒度权限", "模块动作目录", "治理任务运营", "治理任务批量处置", "模块完整度任务化", "三码隔离任务化", "隔离源代码扫描", "隔离扫描快照", "智能基线对比", "对比风险任务化", "隔离源码任务化"], "next": ["页面插件清单", "按钮级权限矩阵"]},
+    {"id": "systemMap", "name": "模块治理", "domain": "governance", "path": "#/system-map", "status": "active", "maturity": 94, "apis": ["/api/v1/system/pages/hub", "/api/v1/system/pages", "/api/v1/system/pages/domains", "/api/v1/system/pages/manifest", "/api/v1/system/pages/readiness", "/api/v1/system/pages/production-readiness", "/api/v1/system/pages/experience-review", "/api/v1/system/pages/experience-review/tasks", "/api/v1/system/pages/readiness/tasks", "/api/v1/system/pages/governance-tasks", "/api/v1/system/pages/governance-tasks/bulk-update", "/api/v1/system/pages/isolation-audit", "/api/v1/system/pages/isolation-audit/scan", "/api/v1/system/pages/isolation-audit/scan/runs", "/api/v1/system/pages/isolation-audit/scan/runs/compare", "/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", "/api/v1/system/pages/isolation-audit/scan/tasks", "/api/v1/system/pages/isolation-audit/tasks"], "capabilities": ["治理中心", "子路由聚焦", "模块注册表", "能力地图", "legacy 能力承接", "域成熟度", "体验治理矩阵", "体验治理任务化", "生产就绪矩阵", "细粒度权限", "模块动作目录", "治理任务运营", "治理任务批量处置", "模块完整度任务化", "三码隔离任务化", "隔离源代码扫描", "隔离扫描快照", "智能基线对比", "对比风险任务化", "隔离源码任务化"], "next": ["页面插件清单", "字段级权限矩阵"]},
+    {"id": "frontendPerformanceGovernance", "name": "前端性能治理", "domain": "governance", "path": "#/system-map/performance", "status": "active", "maturity": 90, "capability": "governance.system-map.frontend-performance", "apis": ["/api/v1/system/pages/frontend-performance"], "capabilities": ["构建产物审计", "Chunk 预算", "路由拆分证据", "移动首屏性能治理", "AI 拆包建议"], "next": ["真实 Web Vitals 采集", "移动端截图性能门禁"]},
     {"id": "opsCenter", "name": "智能运维中心", "domain": "system", "path": "#/system/ops-center", "status": "active", "maturity": 99, "apis": ["/api/v1/ops-center/summary", "/api/v1/ops-center/im-briefing"], "capabilities": ["运行中枢", "健康摘要", "风险简报", "AI 运维入口", "专业模块分流"], "next": []},
     {"id": "opsCenterPipeline", "name": "部署流水线", "domain": "system", "path": "#/system/ops-center/pipeline", "status": "active", "maturity": 94, "capability": "system.ops-center.pipeline", "apis": ["/api/v1/ops-center/pipelines"], "capabilities": ["部署流水线", "发布阶段", "审批证据", "执行记录"], "next": ["外部执行目标分层"]},
     {"id": "opsCenterAlerts", "name": "告警源治理", "domain": "system", "path": "#/system/ops-center/alerts", "status": "active", "maturity": 96, "capability": "system.ops-center.alerts", "apis": ["/api/v1/ops-center/alert-sources", "/api/v1/ops-center/alert-sources/{id}/test", "/api/v1/ops-center/alert-sources/{id}/toggle", "/api/v1/ops-center/alert-sources/sync", "/api/v1/ops-center/alerts", "/api/v1/ops-center/alert-noise/policies", "/api/v1/ops-center/alert-noise/evaluate", "/api/v1/ops-center/alert-noise/evaluations", "/api/v1/ops-center/alert-noise/silences", "/api/v1/ops-center/alert-noise/recommendations", "/api/v1/ops-center/alert-noise/recommendations/{recommendation_id}/action", "/api/v1/ops-center/alert-noise/strategy-compare", "/api/v1/ops-center/alert-noise/strategy-compare/runs", "/api/v1/ops-center/alert-noise/slo-prediction", "/api/v1/ops-center/alert-noise/slo-prediction/runs", "/api/v1/ops-center/alert-noise/slo-escalation-policy", "/api/v1/ops-center/alert-noise/slo-escalation/run", "/api/v1/ops-center/alert-noise/slo-escalation/runs", "/api/v1/ops-center/alert-noise/strategy-canary/audit", "/api/v1/ops-center/alert-noise/strategy-canary/audits", "/api/v1/ops-center/alert-noise/strategy-canary/audits/{audit_id}/action", "/api/v1/ops-center/strategy-linkage/runs", "/api/v1/ops-center/strategy-linkage/run"], "capabilities": ["生产告警源", "告警源测试", "告警同步", "告警标准化", "告警降噪策略", "维护静默窗口", "策略智能推荐", "策略 A/B 对比", "跨源 SLO 预测", "SLO 自动升级", "策略灰度准入审计", "跨模块策略联动"], "next": ["外部 CMDB/ITSM 联动"]},
@@ -4055,6 +4058,102 @@ def _module_manifest(*, role: str | None = None) -> dict[str, Any]:
     }
 
 
+def _manager_web_dist_assets_dir() -> Path:
+    return Path(__file__).resolve().parents[4] / "apps" / "manager-web" / "dist" / "assets"
+
+
+def _chunk_type(filename: str) -> str:
+    if "vendor" in filename:
+        return "vendor"
+    if filename.startswith(("index-", "main-", "bootstrap-")):
+        return "shell"
+    return "route"
+
+
+def _frontend_performance_payload() -> dict[str, Any]:
+    assets_dir = _manager_web_dist_assets_dir()
+    files = sorted(assets_dir.glob("*.js")) if assets_dir.exists() else []
+    chunks: list[dict[str, Any]] = []
+    for file in files:
+        content = file.read_bytes()
+        size_bytes = len(content)
+        gzip_bytes = len(gzip.compress(content))
+        chunk_type = _chunk_type(file.name)
+        over_raw_budget = size_bytes > 500 * 1024
+        over_gzip_budget = gzip_bytes > 180 * 1024
+        chunks.append(
+            {
+                "name": file.name,
+                "type": chunk_type,
+                "size_bytes": size_bytes,
+                "size_kb": round(size_bytes / 1024, 1),
+                "gzip_bytes": gzip_bytes,
+                "gzip_kb": round(gzip_bytes / 1024, 1),
+                "budget": {
+                    "raw_kb": 500,
+                    "gzip_kb": 180,
+                    "over_raw_budget": over_raw_budget,
+                    "over_gzip_budget": over_gzip_budget,
+                    "status": "risk" if over_gzip_budget else "watch" if over_raw_budget else "ok",
+                },
+            }
+        )
+    by_type = Counter(str(item["type"]) for item in chunks)
+    raw_total = sum(int(item["size_bytes"]) for item in chunks)
+    gzip_total = sum(int(item["gzip_bytes"]) for item in chunks)
+    oversize_raw = [item for item in chunks if item["budget"]["over_raw_budget"]]
+    oversize_gzip = [item for item in chunks if item["budget"]["over_gzip_budget"]]
+    route_oversize = [item for item in oversize_raw if item["type"] == "route"]
+    vendor_oversize = [item for item in oversize_raw if item["type"] == "vendor"]
+    score = max(0, 100 - len(oversize_gzip) * 12 - len(route_oversize) * 7 - len(vendor_oversize) * 5)
+    status = "excellent" if score >= 92 else "good" if score >= 82 else "watch" if score >= 68 else "risk"
+    recommendations: list[str] = []
+    if not files:
+        recommendations.append("先执行 pnpm --dir apps/manager-web build 生成 dist/assets 后再查看真实性能证据。")
+    if route_oversize:
+        names = ", ".join(str(item["name"]).split("-")[0] for item in route_oversize[:4])
+        recommendations.append(f"优先继续拆分路由工作台 chunk：{names}，把低频抽屉、图表和表单逻辑后置加载。")
+    if vendor_oversize:
+        recommendations.append("继续拆分 Ant Design、ECharts、AntV 等 vendor 包，避免首屏加载与专业工作台强耦合。")
+    if any(item["type"] == "shell" and item["budget"]["over_raw_budget"] for item in chunks):
+        recommendations.append("主壳 index/main chunk 仍偏大，后续可把命令面板、菜单偏好和低频治理面板改为按需 import。")
+    if not recommendations:
+        recommendations.append("当前构建产物未发现超 500KB raw chunk，可进入移动端首屏真实渲染和交互耗时检查。")
+    return {
+        "ok": True,
+        "assets_dir": str(assets_dir),
+        "available": bool(files),
+        "summary": {
+            "score": score,
+            "status": status,
+            "chunks": len(chunks),
+            "route_chunks": by_type.get("route", 0),
+            "vendor_chunks": by_type.get("vendor", 0),
+            "shell_chunks": by_type.get("shell", 0),
+            "total_kb": round(raw_total / 1024, 1),
+            "total_gzip_kb": round(gzip_total / 1024, 1),
+            "oversize_raw": len(oversize_raw),
+            "oversize_gzip": len(oversize_gzip),
+        },
+        "budgets": {
+            "chunk_raw_kb": 500,
+            "chunk_gzip_kb": 180,
+            "route_goal": "专业工作台按路由懒加载，低频图表和抽屉按操作懒加载。",
+            "mobile_goal": "移动端只加载当前聚焦模块，不因菜单或图表库阻塞首屏。",
+        },
+        "top_chunks": sorted(chunks, key=lambda item: int(item["size_bytes"]), reverse=True)[:16],
+        "oversize_chunks": sorted(oversize_raw, key=lambda item: int(item["size_bytes"]), reverse=True),
+        "recommendations": recommendations,
+        "agent_consumption": {
+            "purpose": "供 AI 和开发者按真实构建产物识别大包、拆分低频工作台和验证前端自适配性能治理。",
+            "api": "/api/v1/system/pages/frontend-performance",
+            "route": "#/system-map/performance",
+            "build_command": "pnpm --dir apps/manager-web build",
+            "fields": ["summary.score", "summary.oversize_raw", "top_chunks", "recommendations"],
+        },
+    }
+
+
 @router.get("/manifest")
 def system_page_manifest() -> dict[str, Any]:
     return _module_manifest()
@@ -4635,6 +4734,11 @@ def system_pages_experience_review(
     if status and status not in {"all", "simple", "watch", "complex"}:
         status = "all"
     return _module_experience_review_payload(domain=domain, status=status, q=q)
+
+
+@router.get("/frontend-performance")
+def system_pages_frontend_performance() -> dict[str, Any]:
+    return _frontend_performance_payload()
 
 
 @router.post("/experience-review/tasks")

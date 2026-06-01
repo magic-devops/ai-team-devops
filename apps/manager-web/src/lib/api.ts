@@ -955,6 +955,7 @@ export const api = {
     });
     return request<any>(`/api/v1/system/pages/experience-review${qs.toString() ? `?${qs}` : ""}`);
   },
+  systemPagesFrontendPerformance: () => request<any>("/api/v1/system/pages/frontend-performance"),
   systemPagesExperienceTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_simple?: boolean }) =>
     request<any>("/api/v1/system/pages/experience-review/tasks", {
       method: "POST",

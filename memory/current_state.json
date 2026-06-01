@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-01T11:15:32Z",
+  "updated_at": "2026-06-01T11:24:42Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -389,12 +389,13 @@
       "完成 Task 128 数据源安全治理闭环增强：Manager db-config 新增 /api/v1/db-config/connections/{name}/security-scan，基于连接配置和元数据表字段输出 SecretRef、只读策略、敏感字段候选、tenant_code/business_code/project_id 三码隔离字段检查、安全分、治理控制点和 Agent 可消费任务候选；DataSources 工作台新增 #/data/sources/security 专业入口，使用 Ant Design Select/Button/Table 展示扫描范围、风险、治理控制点与任务候选；System Pages、导航、能力码和三语种文案同步补齐，体验审计确认 dataSources 从 watch 提升为 simple。",
       "完成 Task 129 Intelligence 智能与知识中枢轻量化：System Pages 将 #/intelligence 从 12 个子能力直铺收敛为知识资产、检索与记忆、规则与蒸馏、运行治理、规约方案、数据上下文 6 个能力簇，父入口只保留 /api/v1/intelligence/hub；Intelligence Hub API 返回能力簇与子入口 links，前端导航和 Hub 卡片按簇分流到真实专业页面并补齐三语种文案；体验审计确认 intelligence 从 watch 提升为 simple，剩余 watch 收敛到 OpsCenter。",
       "完成 Task 130 OpsCenter 运行中枢与专业子模块契约收口：System Pages 将 #/system/ops-center 父入口从 48 个 API 的大契约收敛为 /summary 与 /im-briefing 轻量运行中枢，部署流水线、告警源治理、RCA、Runbook 和自愈策略各自登记独立页面契约、能力码、API 清单和子能力；OpsCenter Hub 补齐三语种文案、AI 分析入口、运行信号徽标和自适应专业入口卡片；体验审计确认 140 个模块全部 simple，watch/complex/mobile_risk 均为 0，菜单健康问题为 0。",
-      "完成 Task 131 页面能力动作授权闭环：System Pages 为每个页面 capability 自动输出 read/write/admin 页级 actions，并将页级动作计入 action_count，使无子模块页面也具备按钮级权限、菜单治理和 Agent 操作判断契约；manager-web capability flatten 支持 page-level action grants，CapabilityGate/Agent 可直接消费 *.read/*.write/*.admin 能力；体验审计 permission_gap 从 74 降为 0，140 个模块全部 simple。"
+      "完成 Task 131 页面能力动作授权闭环：System Pages 为每个页面 capability 自动输出 read/write/admin 页级 actions，并将页级动作计入 action_count，使无子模块页面也具备按钮级权限、菜单治理和 Agent 操作判断契约；manager-web capability flatten 支持 page-level action grants，CapabilityGate/Agent 可直接消费 *.read/*.write/*.admin 能力；体验审计 permission_gap 从 74 降为 0，140 个模块全部 simple。",
+      "完成 Task 132 前端性能治理产品化闭环：Manager 新增 /api/v1/system/pages/frontend-performance，按 dist/assets 真实构建产物输出 chunk 数、raw/gzip 大小、超 500KB/180KB 预算风险、Top chunks 和 AI 拆分建议；SystemMap 新增 #/system-map/performance 独立聚焦页，使用 Ant Design Table/Tag/Metric 展示性能预算、构建命令和拆分建议，导航、三语种文案、System Pages 页面契约与测试同步登记；当前体验治理 141 个模块全部 simple，permission_gap=0，性能治理分 49/risk，已明确后续大包拆分对象。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 131 页面能力动作授权闭环已完成；当前体验治理 140 个模块全部 simple，permission_gap=0，下一步继续沿字段级 ABAC、生产就绪、真实外部集成和大包拆分方向增强平台能力。"
+    "current": "Task 132 前端性能治理产品化闭环已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，前端性能治理分 49/risk，下一步继续拆分 AntD/ECharts/AntV vendor、主壳 index chunk，并推进字段级 ABAC、生产就绪和真实外部集成。"
   },
   "metrics": {
     "completion_rate": 100,

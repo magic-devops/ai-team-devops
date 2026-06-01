@@ -72,7 +72,7 @@ describe("SystemMap isolation source scanner", () => {
   });
 
   it("keeps system governance menu grouped into clear modular units", () => {
-    expect(navigationSource).toContain('subnav("systemMap", "registry", "contract", "readiness", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "migration")');
+    expect(navigationSource).toContain('subnav("systemMap", "registry", "contract", "readiness", "performance", "three-code-isolation", "source-scan", "baseline-compare", "governance-tasks", "migration")');
     expect(navigationSource).toContain('key: "moduleReadinessGovernance"');
     expect(navigationSource).toContain('capability: "governance.system-map.readiness"');
     expect(navigationSource).toContain('key: "threeCodeIsolationGovernance"');
