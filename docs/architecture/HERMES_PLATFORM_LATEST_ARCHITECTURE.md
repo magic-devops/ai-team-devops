@@ -618,6 +618,15 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 账户模块通过 `React.lazy/Suspense` 仅在 `activeModule=account` 时加载，继续减少 Settings 大工作台的默认维护面。
 - 生产构建生成独立 `SettingsAccountPanel` chunk；该模式可继续扩展到 SSO、Billing、Profile 等重配置模块。
 
+### 10.23 Settings 管理入口按需模块
+
+管理入口从 Settings 父页面的内联快捷卡片抽离为可独立维护、可按需加载的专业模块：
+
+- `settings/SettingsWorkspacePanel` 承载组织权限、智能中枢、Vibe、编排、搜索与统一登录入口，所有入口仍指向真实业务深链或登录页，不退化成静态展示。
+- `Settings.tsx` 仅在 `activeModule=workspace` 时通过 `React.lazy/Suspense` 加载管理入口模块，父页面继续只负责模块导航与运行编排。
+- 管理入口模块使用响应式网格，桌面端保持紧凑扫描效率，移动端自然堆叠，避免把低频入口堆成超长 Settings 页面。
+- 生产构建生成独立 `SettingsWorkspacePanel` chunk；后续商业计费、企业 SSO、环境 Profile 和生产存储可以继续按“轻量父页 + 专业子模块 + 真实深链/动作”的模式拆分。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

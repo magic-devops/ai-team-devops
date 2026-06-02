@@ -6,6 +6,7 @@ const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/Settings.tsx"), "utf8");
 const appearanceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAppearancePanel.tsx"), "utf8");
 const accountSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAccountPanel.tsx"), "utf8");
+const workspaceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsWorkspacePanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -117,5 +118,19 @@ describe("Settings workbench UX contract", () => {
     expect(accountSource).toContain("tenantLabel");
     expect(accountSource).toContain("projectId");
     expect(accountSource).toContain("sm:grid-cols-2 xl:grid-cols-4");
+  });
+
+  it("keeps workspace management entries as an independent lazy module", () => {
+    expect(source).toContain('lazy(() => import("./settings/SettingsWorkspacePanel")');
+    expect(source).toContain("SettingsWorkspacePanel");
+    expect(source).not.toContain('SettingLink href="#/organization"');
+    expect(workspaceSource).toContain("export function SettingsWorkspacePanel");
+    expect(workspaceSource).toContain('href="#/organization"');
+    expect(workspaceSource).toContain('href="#/intelligence"');
+    expect(workspaceSource).toContain('href="#/vibe"');
+    expect(workspaceSource).toContain('href="#/orchestration"');
+    expect(workspaceSource).toContain('href="#/search"');
+    expect(workspaceSource).toContain('href="/login.html"');
+    expect(workspaceSource).toContain("md:grid-cols-2 xl:grid-cols-4");
   });
 });

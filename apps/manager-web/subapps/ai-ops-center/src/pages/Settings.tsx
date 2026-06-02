@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, KeyRound, ListChecks, MessageSquare, Network, PackageCheck, Palette, PlayCircle, Rocket, Search, Send, ServerCog, ShieldCheck, SlidersHorizontal, Terminal, UsersRound } from "lucide-react";
+import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, KeyRound, ListChecks, MessageSquare, Network, PackageCheck, Palette, PlayCircle, Rocket, Search, Send, ServerCog, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,6 +11,7 @@ import { SettingsWorkbenchHeader } from "@/pages/admin/SettingsWorkbenchHeader";
 
 const SettingsAppearancePanel = lazy(() => import("./settings/SettingsAppearancePanel").then((m) => ({ default: m.SettingsAppearancePanel })));
 const SettingsAccountPanel = lazy(() => import("./settings/SettingsAccountPanel").then((m) => ({ default: m.SettingsAccountPanel })));
+const SettingsWorkspacePanel = lazy(() => import("./settings/SettingsWorkspacePanel").then((m) => ({ default: m.SettingsWorkspacePanel })));
 
 type SettingsModule = "account" | "runtime" | "observability" | "workspace" | "profiles" | "storage" | "sso" | "appearance" | "billing";
 type SsoRiskEscalationAction = "create_tasks" | "send_im";
@@ -1534,16 +1535,9 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
       ) : null}
 
       {activeModule === "workspace" ? (
-        <Card title={t("page.settings.workspaceCard")}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <SettingLink href="#/organization" icon={<UsersRound className="h-5 w-5" />} title={t("page.settings.orgTitle")} body={t("page.settings.orgDesc")} />
-            <SettingLink href="#/intelligence" icon={<Database className="h-5 w-5" />} title={t("page.settings.dbTitle")} body={t("page.settings.dbDesc")} />
-            <SettingLink href="#/vibe" icon={<Terminal className="h-5 w-5" />} title={t("page.settings.vibeTitle")} body={t("page.settings.vibeDesc")} />
-            <SettingLink href="#/orchestration" icon={<Network className="h-5 w-5" />} title={t("page.settings.orchestrationTitle")} body={t("page.settings.orchestrationDesc")} />
-            <SettingLink href="#/search" icon={<Search className="h-5 w-5" />} title={t("page.settings.searchTitle")} body={t("page.settings.searchDesc")} />
-            <SettingLink href="/login.html" icon={<ShieldCheck className="h-5 w-5" />} title={t("page.settings.loginTitle")} body={t("page.settings.loginDesc")} external />
-          </div>
-        </Card>
+        <Suspense fallback={<div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">{t("common.loading")}</div>}>
+          <SettingsWorkspacePanel />
+        </Suspense>
       ) : null}
 
       {activeModule === "profiles" ? (

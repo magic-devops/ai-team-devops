@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T06:32:00Z",
+  "updated_at": "2026-06-02T06:38:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -399,12 +399,13 @@
       "完成 Task 138 生产就绪缺口任务化闭环：Manager 新增 POST /api/v1/system/pages/production-readiness/tasks，按 domain/stage/q/ids 筛选生产就绪矩阵，将未 production_ready 模块幂等生成 source=system_page_production_readiness 治理任务；任务描述包含运行数据、外部连接、异步 Worker、测试覆盖、部署证据、可观测和权限策略各维度缺口与整改建议；SystemMap 生产就绪矩阵新增预览生产任务/生成生产任务和结果摘要，治理任务看板新增生产就绪来源，三语种文案、前后端契约测试和真实 smoke 同步验证。",
       "完成 Task 139 SystemMap 模块契约中心精简化：将 Manifest、能力权限和模块动作三段重复大块从 SystemMap 主页面抽离为 SystemModuleContractPanel 独立组件；#/system-map/contract 成为统一契约中心，旧 #/system-map/manifest、#/system-map/capabilities、#/system-map/actions 深链继续可用但以同一组件内三视图呈现；移动端使用卡片流，桌面端使用紧凑表格感，动作预览/执行、权限矩阵、Agent consumption 和运行历史仍保持真实可用；三语种文案、导航 IA 契约测试、模块契约测试和生产构建已验证。",
       "完成 Task 140 Settings 外观主题子模块按需加载：将 Settings 外观主题卡片、主题偏好状态、sop-theme 监听和主题切换动作抽离为 settings/SettingsAppearancePanel 独立组件；Settings 父页面仅在 activeModule=appearance 时通过 React.lazy/Suspense 加载该模块，保留真实 setThemePreference 与本地偏好同步能力，移动端继续使用响应式主题卡片；Settings UX 契约测试和生产构建已验证，构建产物新增 1.55KB raw/0.78KB gzip 的 SettingsAppearancePanel 独立 chunk。",
-      "完成 Task 141 Settings 账户会话子模块按需加载：将账户会话卡片、用户/租户/项目作用域展示、未选项目提示、会话错误态和登出按钮抽离为 settings/SettingsAccountPanel 独立组件；Settings 父页面仅保留 logout mutation 编排，并在 activeModule=account 时通过 React.lazy/Suspense 加载账户模块；登出仍复用真实 api.logout、clearSession、query invalidation 和 login 跳转。目标测试 93 passed，生产构建新增 3.23KB raw/1.21KB gzip 的 SettingsAccountPanel 独立 chunk，Settings 主 chunk 下降到 256.63KB raw/40.20KB gzip。"
+      "完成 Task 141 Settings 账户会话子模块按需加载：将账户会话卡片、用户/租户/项目作用域展示、未选项目提示、会话错误态和登出按钮抽离为 settings/SettingsAccountPanel 独立组件；Settings 父页面仅保留 logout mutation 编排，并在 activeModule=account 时通过 React.lazy/Suspense 加载账户模块；登出仍复用真实 api.logout、clearSession、query invalidation 和 login 跳转。目标测试 93 passed，生产构建新增 3.23KB raw/1.21KB gzip 的 SettingsAccountPanel 独立 chunk，Settings 主 chunk 下降到 256.63KB raw/40.20KB gzip。",
+      "完成 Task 142 Settings 管理入口子模块按需加载：将 workspace 管理入口卡片抽离为 settings/SettingsWorkspacePanel 独立组件；Settings 父页面仅在 activeModule=workspace 时通过 React.lazy/Suspense 加载该模块，保留组织权限、智能中枢、Vibe、编排、搜索与统一登录的真实跳转入口；目标测试 94 passed，生产构建新增 2.17KB raw/0.84KB gzip 的 SettingsWorkspacePanel 独立 chunk，Settings 主 chunk 下降到 256.03KB raw/40.07KB gzip。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 141 Settings 账户会话子模块按需加载已完成；Settings 父页继续瘦身，账户会话与外观主题均已独立 chunk 按需加载，目标测试 93 passed，生产构建通过；下一步继续拆 Settings 的商业计费、SSO 或环境 Profile 等重模块。"
+    "current": "Task 142 Settings 管理入口子模块按需加载已完成；Settings 父页继续瘦身，账户会话、外观主题和管理入口均已独立 chunk 按需加载，目标测试 94 passed，生产构建通过；下一步继续拆 Settings 的商业计费、SSO 或环境 Profile 等重模块。"
   },
   "metrics": {
     "completion_rate": 100,
