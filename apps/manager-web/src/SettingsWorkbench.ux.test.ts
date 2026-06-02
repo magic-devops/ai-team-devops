@@ -9,6 +9,7 @@ const accountSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/page
 const workspaceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsWorkspacePanel.tsx"), "utf8");
 const runtimeSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsRuntimePanel.tsx"), "utf8");
 const storageSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsStoragePanel.tsx"), "utf8");
+const billingSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsBillingPanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -84,17 +85,24 @@ describe("Settings workbench UX contract", () => {
 
   it("keeps billing subscription policy and payment in a focused drawer flow", () => {
     expect(source).toContain("billingDrawerOpen");
-    expect(source).toContain("billingControlQuickSummary");
-    expect(source).toContain("billingOpenDrawer");
-    expect(source).toContain("setBillingDrawerOpen(true)");
-    expect(source).toContain("billingSubscriptionStep");
-    expect(source).toContain("billingOverageStep");
-    expect(source).toContain("billingPaymentStep");
-    expect(source).toContain("updateBilling.mutate()");
-    expect(source).toContain("updateOveragePolicy.mutate()");
-    expect(source).toContain("recordPayment.mutate()");
-    expect(source).toContain("overageDraft.approval_threshold_percent");
-    expect(source).toContain("paymentDraft.method");
+    expect(source).toContain('lazy(() => import("./settings/SettingsBillingPanel")');
+    expect(source).toContain("SettingsBillingPanel");
+    expect(source).not.toContain("billingControlQuickSummary rounded-2xl");
+    expect(billingSource).toContain("export function SettingsBillingPanel");
+    expect(billingSource).toContain("billingControlQuickSummary");
+    expect(billingSource).toContain("billingOpenDrawer");
+    expect(billingSource).toContain("setBillingDrawerOpen(true)");
+    expect(billingSource).toContain("billingSubscriptionStep");
+    expect(billingSource).toContain("billingOverageStep");
+    expect(billingSource).toContain("billingPaymentStep");
+    expect(billingSource).toContain("updateBilling.mutate()");
+    expect(billingSource).toContain("updateOveragePolicy.mutate()");
+    expect(billingSource).toContain("recordPayment.mutate()");
+    expect(billingSource).toContain("overageDraft.approval_threshold_percent");
+    expect(billingSource).toContain("paymentDraft.method");
+    expect(billingSource).toContain("api.billingInvoiceCsvUrl");
+    expect(billingSource).toContain("invoiceAudit.data?.items");
+    expect(billingSource).toContain("checkEntitlement.mutate()");
   });
 
   it("keeps appearance settings as an independent lightweight module", () => {
