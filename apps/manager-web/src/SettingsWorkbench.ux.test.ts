@@ -8,6 +8,7 @@ const appearanceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/p
 const accountSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAccountPanel.tsx"), "utf8");
 const workspaceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsWorkspacePanel.tsx"), "utf8");
 const runtimeSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsRuntimePanel.tsx"), "utf8");
+const storageSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsStoragePanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -149,5 +150,20 @@ describe("Settings workbench UX contract", () => {
     expect(runtimeSource).toContain("setLogFilter");
     expect(runtimeSource).toContain("setTraceFilter");
     expect(runtimeSource).toContain("xl:grid-cols-[minmax(0,1fr)_24rem]");
+  });
+
+  it("keeps production storage as an independent lazy module", () => {
+    expect(source).toContain('lazy(() => import("./settings/SettingsStoragePanel")');
+    expect(source).toContain("SettingsStoragePanel");
+    expect(source).not.toContain("storageBackupRestore\")}</p>");
+    expect(storageSource).toContain("export function SettingsStoragePanel");
+    expect(storageSource).toContain("opsStorageMigrationPlan.refetch()");
+    expect(storageSource).toContain("runStorageSmoke.mutate()");
+    expect(storageSource).toContain("storageSmokeResult?.checks");
+    expect(storageSource).toContain("backup_restore_checklist");
+    expect(storageSource).toContain("storageCoreTables");
+    expect(storageSource).toContain("storageScopeColumns");
+    expect(storageSource).toContain("storageScopeIndexes");
+    expect(storageSource).toContain("xl:grid-cols-[24rem_minmax(0,1fr)]");
   });
 });

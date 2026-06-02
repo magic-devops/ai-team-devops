@@ -637,6 +637,16 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 响应式布局保留“主内容 + 侧栏”的桌面效率，移动端自然降为单列；日志列表使用固定高度滚动，避免长日志撑爆配置页。
 - 生产构建生成独立 `SettingsRuntimePanel` chunk；这为继续拆分 Billing、SSO、Profile 这类重配置模块提供了同一套模式：父页编排数据，专业模块承载交互。
 
+### 10.25 Settings 生产存储按需模块
+
+生产存储从 Settings 父页面抽离为独立的迁移与验证控制面：
+
+- `settings/SettingsStoragePanel` 承载 OceanBase/文件型 store 迁移计划、目标库信息、当前 SQLite 路径、核心表、三码字段、三码索引、迁移文件、备份恢复 checklist 和 smoke checks。
+- `Settings.tsx` 只保留 `opsStorageMigrationPlan` 查询、`runStorageSmoke` mutation、`storageSmokeResult` 状态和模块编排，生产存储 UI 不再占用父页面维护面。
+- 存储模块保留真实操作：刷新迁移计划、运行 smoke、查看迁移文件大小和备份恢复清单，避免变成静态说明页。
+- 响应式布局使用左侧目标与 smoke、右侧指标与迁移列表；移动端自然单列，迁移文件保持紧凑行展示。
+- 生产构建生成独立 `SettingsStoragePanel` chunk；下一步可继续按同样方式拆商业计费、企业 SSO 和环境 Profile 这三个重模块。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

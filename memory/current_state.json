@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T06:48:00Z",
+  "updated_at": "2026-06-02T06:56:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -401,12 +401,13 @@
       "完成 Task 140 Settings 外观主题子模块按需加载：将 Settings 外观主题卡片、主题偏好状态、sop-theme 监听和主题切换动作抽离为 settings/SettingsAppearancePanel 独立组件；Settings 父页面仅在 activeModule=appearance 时通过 React.lazy/Suspense 加载该模块，保留真实 setThemePreference 与本地偏好同步能力，移动端继续使用响应式主题卡片；Settings UX 契约测试和生产构建已验证，构建产物新增 1.55KB raw/0.78KB gzip 的 SettingsAppearancePanel 独立 chunk。",
       "完成 Task 141 Settings 账户会话子模块按需加载：将账户会话卡片、用户/租户/项目作用域展示、未选项目提示、会话错误态和登出按钮抽离为 settings/SettingsAccountPanel 独立组件；Settings 父页面仅保留 logout mutation 编排，并在 activeModule=account 时通过 React.lazy/Suspense 加载账户模块；登出仍复用真实 api.logout、clearSession、query invalidation 和 login 跳转。目标测试 93 passed，生产构建新增 3.23KB raw/1.21KB gzip 的 SettingsAccountPanel 独立 chunk，Settings 主 chunk 下降到 256.63KB raw/40.20KB gzip。",
       "完成 Task 142 Settings 管理入口子模块按需加载：将 workspace 管理入口卡片抽离为 settings/SettingsWorkspacePanel 独立组件；Settings 父页面仅在 activeModule=workspace 时通过 React.lazy/Suspense 加载该模块，保留组织权限、智能中枢、Vibe、编排、搜索与统一登录的真实跳转入口；目标测试 94 passed，生产构建新增 2.17KB raw/0.84KB gzip 的 SettingsWorkspacePanel 独立 chunk，Settings 主 chunk 下降到 256.03KB raw/40.07KB gzip。",
-      "完成 Task 143 Settings 运行观测子模块按需加载：将 runtime/observability 的 health、metrics、events、trace root cause、日志筛选和日志文件侧栏抽离为 settings/SettingsRuntimePanel 独立组件；Settings 父页面仅保留 useQuery 数据源、logFilter/traceFilter 状态和 activeModule 编排，通过 React.lazy/Suspense 在运行状态或日志观测子路由加载。目标测试 95 passed，TypeScript noEmit 与生产构建通过，新增 13.36KB raw/3.38KB gzip 的 SettingsRuntimePanel 独立 chunk，Settings 主 chunk 下降到 245.12KB raw/38.13KB gzip。"
+      "完成 Task 143 Settings 运行观测子模块按需加载：将 runtime/observability 的 health、metrics、events、trace root cause、日志筛选和日志文件侧栏抽离为 settings/SettingsRuntimePanel 独立组件；Settings 父页面仅保留 useQuery 数据源、logFilter/traceFilter 状态和 activeModule 编排，通过 React.lazy/Suspense 在运行状态或日志观测子路由加载。目标测试 95 passed，TypeScript noEmit 与生产构建通过，新增 13.36KB raw/3.38KB gzip 的 SettingsRuntimePanel 独立 chunk，Settings 主 chunk 下降到 245.12KB raw/38.13KB gzip。",
+      "完成 Task 144 Settings 生产存储子模块按需加载：将 storage 的 OceanBase/文件型 store 迁移计划、目标库信息、核心表/三码字段/索引指标、迁移文件、备份恢复 checklist 和 smoke checks 抽离为 settings/SettingsStoragePanel 独立组件；Settings 父页面仅保留 opsStorageMigrationPlan 查询、runStorageSmoke mutation、storageSmokeResult 状态和 activeModule 编排，通过 React.lazy/Suspense 在生产存储子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 7.12KB raw/1.95KB gzip 的 SettingsStoragePanel 独立 chunk，Settings 主 chunk 下降到 239.70KB raw/37.33KB gzip。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 143 Settings 运行观测子模块按需加载已完成；Settings 父页继续瘦身，账户会话、外观主题、管理入口和运行观测均已独立 chunk 按需加载，目标测试 95 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 Settings 的商业计费、SSO 或环境 Profile 等重模块。"
+    "current": "Task 144 Settings 生产存储子模块按需加载已完成；Settings 父页继续瘦身，账户会话、外观主题、管理入口、运行观测和生产存储均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 Settings 的商业计费、SSO 或环境 Profile 等重模块。"
   },
   "metrics": {
     "completion_rate": 100,
