@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/Settings.tsx"), "utf8");
 const appearanceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAppearancePanel.tsx"), "utf8");
+const accountSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAccountPanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -103,5 +104,18 @@ describe("Settings workbench UX contract", () => {
     expect(appearanceSource).toContain("setThemePreference(theme)");
     expect(appearanceSource).toContain('window.addEventListener("sop-theme"');
     expect(appearanceSource).toContain("sm:grid-cols-2 xl:grid-cols-4");
+  });
+
+  it("keeps account session controls as an independent lazy module", () => {
+    expect(source).toContain('lazy(() => import("./settings/SettingsAccountPanel")');
+    expect(source).toContain("SettingsAccountPanel");
+    expect(source).toContain("onLogout={() => logout.mutate()}");
+    expect(source).not.toContain("const [themePref, setThemePref]");
+    expect(accountSource).toContain("export function SettingsAccountPanel");
+    expect(accountSource).toContain("LogOut");
+    expect(accountSource).toContain("logoutPending");
+    expect(accountSource).toContain("tenantLabel");
+    expect(accountSource).toContain("projectId");
+    expect(accountSource).toContain("sm:grid-cols-2 xl:grid-cols-4");
   });
 });

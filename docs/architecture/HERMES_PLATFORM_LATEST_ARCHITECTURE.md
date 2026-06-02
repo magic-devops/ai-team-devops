@@ -609,6 +609,15 @@ SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
 - 外观模块仍保留真实本地偏好同步和响应式主题卡片，移动端/桌面端都能直接切换主题，不是静态展示。
 - 生产构建生成独立 `SettingsAppearancePanel` chunk，后续商业计费、SSO、环境 Profile 等重模块可以按同一模式继续拆分。
 
+### 10.22 Settings 账户会话按需模块
+
+Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的独立子模块：
+
+- `settings/SettingsAccountPanel` 承载账户身份、邮箱/角色、租户、项目、会话错误态、未选项目提示和登出按钮。
+- `Settings.tsx` 保留 `api.logout`、`clearSession`、query invalidation 和登录页跳转编排，账户组件只接收 `onLogout` 与展示数据，职责边界清晰。
+- 账户模块通过 `React.lazy/Suspense` 仅在 `activeModule=account` 时加载，继续减少 Settings 大工作台的默认维护面。
+- 生产构建生成独立 `SettingsAccountPanel` chunk；该模式可继续扩展到 SSO、Billing、Profile 等重配置模块。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

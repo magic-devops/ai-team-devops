@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, KeyRound, ListChecks, LogOut, MessageSquare, Network, PackageCheck, Palette, PlayCircle, Rocket, Search, Send, ServerCog, ShieldCheck, SlidersHorizontal, Terminal, UsersRound } from "lucide-react";
+import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, KeyRound, ListChecks, MessageSquare, Network, PackageCheck, Palette, PlayCircle, Rocket, Search, Send, ServerCog, ShieldCheck, SlidersHorizontal, Terminal, UsersRound } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { clearSession, getProjectId, getToken } from "@/lib/authStorage";
 import { SettingsWorkbenchHeader } from "@/pages/admin/SettingsWorkbenchHeader";
 
 const SettingsAppearancePanel = lazy(() => import("./settings/SettingsAppearancePanel").then((m) => ({ default: m.SettingsAppearancePanel })));
+const SettingsAccountPanel = lazy(() => import("./settings/SettingsAccountPanel").then((m) => ({ default: m.SettingsAccountPanel })));
 
 type SettingsModule = "account" | "runtime" | "observability" | "workspace" | "profiles" | "storage" | "sso" | "appearance" | "billing";
 type SsoRiskEscalationAction = "create_tasks" | "send_im";
@@ -1360,42 +1361,15 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
 
       <section className="min-w-0 space-y-5">
       {activeModule === "account" ? (
-        <Card
-          title={t("page.settings.accountCard")}
-          actions={<StatusPill tone={me.isError ? "danger" : "ok"} label={me.isError ? t("page.settings.sessionError") : t("auth.secure")} />}
-        >
-          <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
-                  <ShieldCheck className="h-7 w-7" />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-lg font-semibold text-[var(--text)]">{me.data?.username || t("auth.account")}</p>
-                  <p className="truncate text-xs text-[var(--muted)]">{me.data?.email || me.data?.role || t("auth.loggedIn")}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-medium text-[var(--text)] shadow-sm hover:bg-[var(--surface-muted)] disabled:opacity-50"
-                disabled={logout.isPending}
-                onClick={() => logout.mutate()}
-              >
-                <LogOut className="h-4 w-4 text-[var(--brand)]" />
-                {t("auth.logout")}
-              </button>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Info label={t("auth.status")} value={t("auth.loggedIn")} />
-              <Info label={t("auth.role")} value={me.data?.role || "-"} />
-              <Info label={t("auth.tenant")} value={tenantLabel} />
-              <Info label={t("auth.project")} value={projectId || "-"} />
-            </div>
-          </div>
-          {me.isError ? <ErrorLine message={(me.error as Error).message} /> : null}
-          {!projectId ? <HintLine message={t("auth.noProject")} /> : null}
-        </Card>
+        <Suspense fallback={<div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">{t("common.loading")}</div>}>
+          <SettingsAccountPanel
+            me={me}
+            tenantLabel={tenantLabel}
+            projectId={projectId}
+            logoutPending={logout.isPending}
+            onLogout={() => logout.mutate()}
+          />
+        </Suspense>
       ) : null}
 
       {opsModuleActive ? (
