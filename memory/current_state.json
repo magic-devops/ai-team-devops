@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T07:31:00Z",
+  "updated_at": "2026-06-02T07:29:38Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -405,17 +405,18 @@
       "完成 Task 144 Settings 生产存储子模块按需加载：将 storage 的 OceanBase/文件型 store 迁移计划、目标库信息、核心表/三码字段/索引指标、迁移文件、备份恢复 checklist 和 smoke checks 抽离为 settings/SettingsStoragePanel 独立组件；Settings 父页面仅保留 opsStorageMigrationPlan 查询、runStorageSmoke mutation、storageSmokeResult 状态和 activeModule 编排，通过 React.lazy/Suspense 在生产存储子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 7.12KB raw/1.95KB gzip 的 SettingsStoragePanel 独立 chunk，Settings 主 chunk 下降到 239.70KB raw/37.33KB gzip。",
       "完成 Task 145 Settings 商业计费子模块按需加载：将 billing 的订阅与套餐、超额策略、权益试算、经营指标、账单草稿、CSV 导出、账单历史、状态流转、审计记录、收款登记、收款历史和分步抽屉抽离为 settings/SettingsBillingPanel 独立组件；Settings 父页面仅保留 billing 相关 useQuery、draft 状态、mutation 编排和 activeModule 编排，通过 React.lazy/Suspense 在商业计费子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 24.30KB raw/4.97KB gzip 的 SettingsBillingPanel 独立 chunk，Settings 主 chunk 下降到 218.28KB raw/34.19KB gzip。",
       "完成 Task 146 Settings 企业 SSO 子模块按需加载：将 SSO Provider 配置、OIDC/SAML 模板、密钥脱敏输入、SCIM Token 轮换与测试、角色映射预览、风险报表、风险任务化、IM 简报、风险订阅、自动升级、处置 Runbook、Runbook 步骤流转和 SCIM 审计从 Settings 父页面抽离为 settings/SettingsSsoPanel 独立组件；Settings 父页面仅保留 sso 相关 useQuery、draft 状态、mutation 编排和 activeModule 编排，通过 React.lazy/Suspense 在企业 SSO 子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 67.80KB raw/11.08KB gzip 的 SettingsSsoPanel 独立 chunk，Settings 主 chunk 下降到 154.98KB raw/25.60KB gzip。",
-      "完成 Task 147 Settings 环境 Profile 与部署发布子模块按需加载：将环境 Profile 草稿/模板/列表、部署包、审批、灰度策略、灰度指标源、灰度 IM、回滚演练、回滚 Runbook、跨环境执行审计、一键部署流水线、真实执行器、分布式执行目标、外部执行回调、流水线自愈诊断从 Settings 父页面抽离为 settings/SettingsProfilesPanel 独立组件；Settings 父页面仅保留 profiles 相关 useQuery、draft 状态、mutation 编排、派生选择 ID 和 activeModule 编排，通过 React.lazy/Suspense 在环境 Profile 子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 110.28KB raw/15.19KB gzip 的 SettingsProfilesPanel 独立 chunk，Settings 主 chunk 下降到 51.73KB raw/12.51KB gzip。"
+      "完成 Task 147 Settings 环境 Profile 与部署发布子模块按需加载：将环境 Profile 草稿/模板/列表、部署包、审批、灰度策略、灰度指标源、灰度 IM、回滚演练、回滚 Runbook、跨环境执行审计、一键部署流水线、真实执行器、分布式执行目标、外部执行回调、流水线自愈诊断从 Settings 父页面抽离为 settings/SettingsProfilesPanel 独立组件；Settings 父页面仅保留 profiles 相关 useQuery、draft 状态、mutation 编排、派生选择 ID 和 activeModule 编排，通过 React.lazy/Suspense 在环境 Profile 子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 110.28KB raw/15.19KB gzip 的 SettingsProfilesPanel 独立 chunk，Settings 主 chunk 下降到 51.73KB raw/12.51KB gzip。",
+      "完成 Task 148 OpsCenter 告警源治理子模块按需加载：将告警源配置/测试/同步、外部告警列表、降噪策略、静默规则、降噪评估、策略推荐、A/B 对比、跨源 SLO 预测、SLO 自动升级、策略灰度审计和跨模块策略联动从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterAlertSourcesPanel 独立组件；父页面保留真实 query、状态、mutation、IM 通道选择和 tab 编排，并在告警源治理子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 63.16KB raw/10.43KB gzip 的 OpsCenterAlertSourcesPanel 独立 chunk，OpsCenterWorkbench 主 chunk 保持为 82.78KB raw/17.50KB gzip，OpsCenter 开始从 3000+ 行大工作台向专业模块化控制面收敛。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 144 Settings 生产存储子模块按需加载已完成；Settings 父页继续瘦身，账户会话、外观主题、管理入口、运行观测和生产存储均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 Settings 的商业计费、SSO 或环境 Profile 等重模块。"
+    "current": "Task 148 OpsCenter 告警源治理子模块按需加载已完成；告警源治理的真实配置、降噪、SLO、灰度审计和跨模块联动均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter RCA、Runbook 或 A2A/LLM Gateway 重工作台。"
   },
   "metrics": {
     "completion_rate": 100,
     "velocity": 0,
     "blockers_count": 0
   },
-  "current": "Task 147 Settings 环境 Profile 与部署发布子模块按需加载已完成；Settings 父页已从大工作台收敛为轻量模块编排壳，账户会话、运行观测、管理入口、环境 Profile/部署发布、生产存储、企业 SSO、外观主题和商业计费均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续检查其它大工作台如 OpsCenter、A2A、LLM Gateway 的页面拆分和交互简化。"
+  "current": "Task 148 OpsCenter 告警源治理子模块按需加载已完成；告警源治理的真实配置、降噪、SLO、灰度审计和跨模块联动均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter RCA、Runbook 或 A2A/LLM Gateway 重工作台。"
 }

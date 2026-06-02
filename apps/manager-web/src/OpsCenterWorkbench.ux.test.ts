@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench.tsx"), "utf8");
+const alertSourcesSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterAlertSourcesPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
   it("keeps OpsCenter modules routable and focused", () => {
@@ -21,71 +22,84 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("Segmented");
     expect(source).toContain("opsCenterModeSwitch");
     expect(source).toContain("opsCenterModuleQuickSummary");
+    expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterAlertSourcesPanel\")");
+    expect(source).toContain("<Suspense fallback=");
     expect(source).toContain("AI 分析当前模块");
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
   });
 
   it("keeps alert source setup in a focused drawer flow", () => {
     expect(source).toContain("alertSourceDrawerOpen");
-    expect(source).toContain("alertSourceFocusedDrawer");
-    expect(source).toContain("setAlertSourceDrawerOpen(true)");
-    expect(source).toContain("配置生产告警源");
-    expect(source).toContain("<Steps");
-    expect(source).toContain("<Form");
-    expect(source).toContain("createAlertSource.mutate()");
-    expect(source).toContain("只保存 SecretRef，不保存明文密钥");
-    expect(source).not.toContain("告警源名称 *");
-    expect(source).not.toContain("<textarea className=\"input-base min-h-32 w-full font-mono text-xs\" placeholder=\"样例 payload JSON，用于无外网或 Webhook dry-run 测试\"");
+    expect(source).toContain("OpsCenterAlertSourcesPanel");
+    expect(source).not.toContain("alertSourceFocusedDrawer");
+    expect(alertSourcesSource).toContain("export function OpsCenterAlertSourcesPanel");
+    expect(alertSourcesSource).toContain("alertSourceFocusedDrawer");
+    expect(alertSourcesSource).toContain("setAlertSourceDrawerOpen(true)");
+    expect(alertSourcesSource).toContain("配置生产告警源");
+    expect(alertSourcesSource).toContain("<Steps");
+    expect(alertSourcesSource).toContain("<Form");
+    expect(alertSourcesSource).toContain("createAlertSource.mutate()");
+    expect(alertSourcesSource).toContain("只保存 SecretRef，不保存明文密钥");
+    expect(alertSourcesSource).not.toContain("告警源名称 *");
+    expect(alertSourcesSource).not.toContain("<textarea className=\"input-base min-h-32 w-full font-mono text-xs\" placeholder=\"样例 payload JSON，用于无外网或 Webhook dry-run 测试\"");
   });
 
   it("keeps alert noise policy and silence setup in a focused drawer flow", () => {
     expect(source).toContain("alertNoiseConfigDrawer");
-    expect(source).toContain("alertNoiseFocusedDrawer");
-    expect(source).toContain("setAlertNoiseConfigDrawer(\"policy\")");
-    expect(source).toContain("setAlertNoiseConfigDrawer(\"silence\")");
-    expect(source).toContain("配置降噪策略");
-    expect(source).toContain("配置告警静默");
-    expect(source).toContain("createAlertNoisePolicy.mutate()");
-    expect(source).toContain("createAlertSilence.mutate()");
-    expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"策略名称\"");
-    expect(source).not.toContain("<textarea className=\"input-base min-h-16 w-full font-mono text-xs\" placeholder=\"匹配器 key=value，每行一个\"");
+    expect(source).toContain("OpsCenterAlertSourcesPanel");
+    expect(source).not.toContain("alertNoiseFocusedDrawer");
+    expect(alertSourcesSource).toContain("alertNoiseFocusedDrawer");
+    expect(alertSourcesSource).toContain("setAlertNoiseConfigDrawer(\"policy\")");
+    expect(alertSourcesSource).toContain("setAlertNoiseConfigDrawer(\"silence\")");
+    expect(alertSourcesSource).toContain("配置降噪策略");
+    expect(alertSourcesSource).toContain("配置告警静默");
+    expect(alertSourcesSource).toContain("createAlertNoisePolicy.mutate()");
+    expect(alertSourcesSource).toContain("createAlertSilence.mutate()");
+    expect(alertSourcesSource).not.toContain("<input className=\"input-base w-full\" placeholder=\"策略名称\"");
+    expect(alertSourcesSource).not.toContain("<textarea className=\"input-base min-h-16 w-full font-mono text-xs\" placeholder=\"匹配器 key=value，每行一个\"");
   });
 
   it("keeps SLO escalation setup in a focused drawer flow", () => {
     expect(source).toContain("alertSloEscalationDrawerOpen");
-    expect(source).toContain("alertSloEscalationFocusedDrawer");
-    expect(source).toContain("setAlertSloEscalationDrawerOpen(true)");
-    expect(source).toContain("配置 SLO 自动升级");
-    expect(source).toContain("当前升级策略");
-    expect(source).toContain("saveAlertSloEscalationPolicy.mutate()");
-    expect(source).toContain("runAlertSloEscalation.mutate(true)");
-    expect(source).toContain("runAlertSloEscalation.mutate(false)");
-    expect(source).not.toContain("<select className=\"input-base\" value={alertSloEscalationForm.min_risk_level}");
-    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertSloEscalationForm.note}");
+    expect(source).toContain("OpsCenterAlertSourcesPanel");
+    expect(source).not.toContain("alertSloEscalationFocusedDrawer");
+    expect(alertSourcesSource).toContain("alertSloEscalationFocusedDrawer");
+    expect(alertSourcesSource).toContain("setAlertSloEscalationDrawerOpen(true)");
+    expect(alertSourcesSource).toContain("配置 SLO 自动升级");
+    expect(alertSourcesSource).toContain("当前升级策略");
+    expect(alertSourcesSource).toContain("saveAlertSloEscalationPolicy.mutate()");
+    expect(alertSourcesSource).toContain("runAlertSloEscalation.mutate(true)");
+    expect(alertSourcesSource).toContain("runAlertSloEscalation.mutate(false)");
+    expect(alertSourcesSource).not.toContain("<select className=\"input-base\" value={alertSloEscalationForm.min_risk_level}");
+    expect(alertSourcesSource).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertSloEscalationForm.note}");
   });
 
   it("keeps strategy canary audit setup in a focused drawer flow", () => {
     expect(source).toContain("alertStrategyCanaryDrawerOpen");
-    expect(source).toContain("alertStrategyCanaryFocusedDrawer");
-    expect(source).toContain("setAlertStrategyCanaryDrawerOpen(true)");
-    expect(source).toContain("配置策略灰度审计");
-    expect(source).toContain("审计配置摘要");
-    expect(source).toContain("runAlertStrategyCanaryAudit.mutate()");
-    expect(source).toContain("updateAlertStrategyCanary.mutate");
-    expect(source).not.toContain("<select className=\"input-base\" value={alertStrategyCanaryForm.policy_id}");
-    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertStrategyCanaryForm.note}");
+    expect(source).toContain("OpsCenterAlertSourcesPanel");
+    expect(source).not.toContain("alertStrategyCanaryFocusedDrawer");
+    expect(alertSourcesSource).toContain("alertStrategyCanaryFocusedDrawer");
+    expect(alertSourcesSource).toContain("setAlertStrategyCanaryDrawerOpen(true)");
+    expect(alertSourcesSource).toContain("配置策略灰度审计");
+    expect(alertSourcesSource).toContain("审计配置摘要");
+    expect(alertSourcesSource).toContain("runAlertStrategyCanaryAudit.mutate()");
+    expect(alertSourcesSource).toContain("updateAlertStrategyCanary.mutate");
+    expect(alertSourcesSource).not.toContain("<select className=\"input-base\" value={alertStrategyCanaryForm.policy_id}");
+    expect(alertSourcesSource).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={alertStrategyCanaryForm.note}");
   });
 
   it("keeps cross-module linkage setup in a focused drawer flow", () => {
     expect(source).toContain("opsStrategyLinkageDrawerOpen");
-    expect(source).toContain("opsStrategyLinkageFocusedDrawer");
-    expect(source).toContain("setOpsStrategyLinkageDrawerOpen(true)");
-    expect(source).toContain("配置跨模块联动");
-    expect(source).toContain("联动配置摘要");
-    expect(source).toContain("runOpsStrategyLinkage.mutate(true)");
-    expect(source).toContain("runOpsStrategyLinkage.mutate(false)");
-    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"动作 create_task,im_notify\" value={opsStrategyLinkageForm.actions}");
-    expect(source).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={opsStrategyLinkageForm.note}");
+    expect(source).toContain("OpsCenterAlertSourcesPanel");
+    expect(source).not.toContain("opsStrategyLinkageFocusedDrawer");
+    expect(alertSourcesSource).toContain("opsStrategyLinkageFocusedDrawer");
+    expect(alertSourcesSource).toContain("setOpsStrategyLinkageDrawerOpen(true)");
+    expect(alertSourcesSource).toContain("配置跨模块联动");
+    expect(alertSourcesSource).toContain("联动配置摘要");
+    expect(alertSourcesSource).toContain("runOpsStrategyLinkage.mutate(true)");
+    expect(alertSourcesSource).toContain("runOpsStrategyLinkage.mutate(false)");
+    expect(alertSourcesSource).not.toContain("<input className=\"input-base\" placeholder=\"动作 create_task,im_notify\" value={opsStrategyLinkageForm.actions}");
+    expect(alertSourcesSource).not.toContain("<textarea className=\"input-base mt-2 min-h-16 w-full text-xs\" value={opsStrategyLinkageForm.note}");
   });
 
   it("keeps RCA insight configuration in a focused drawer flow", () => {

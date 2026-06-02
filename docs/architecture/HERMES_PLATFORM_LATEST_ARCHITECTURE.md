@@ -677,6 +677,16 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 响应式布局保持“Profile 状态 + 发布运维流水”的主从结构；高风险/多步骤操作继续使用抽屉和预览优先流程，避免把生产操作设计成一个超长表单。
 - 生产构建生成独立 `SettingsProfilesPanel` chunk，Settings 主 chunk 下降为轻量编排壳；后续治理重点转向 OpsCenter、A2A、LLM Gateway 等其它大工作台的模块拆分与交互简化。
 
+### 10.29 OpsCenter 告警源治理按需模块
+
+OpsCenter 开始从 3000+ 行大工作台向“运行中枢 + 专业治理模块”收敛：
+
+- 告警源治理从 `OpsCenterWorkbench.tsx` 抽离为 `system/ops-center/OpsCenterAlertSourcesPanel`，覆盖生产告警源配置、SecretRef、测试、同步、外部告警、降噪策略、静默规则、策略推荐、A/B 对比、SLO 预测、SLO 自动升级、策略灰度审计和跨模块运维策略联动。
+- 父工作台继续持有真实 query、mutation、IM 通道选择、hash tab 和模块身份区；告警源治理视图通过 `React.lazy/Suspense` 仅在用户进入告警模块时加载。
+- 子模块保留完整操作闭环：配置抽屉、降噪抽屉、SLO 升级抽屉、灰度审计抽屉和联动抽屉都继续执行真实 API mutation，并展示运行结果、审批状态、任务和 IM 证据。
+- 响应式布局延续 data-dense 控制台风格，桌面端保留双栏扫描效率，移动端自然单列；父页面不再堆叠低频告警治理表单。
+- 这为后续 RCA、Runbook、自愈策略继续拆成独立按需模块提供模板，也让权限控制、System Pages 能力治理和 AI 单点改造有更清晰的落点。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |
