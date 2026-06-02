@@ -627,6 +627,16 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 管理入口模块使用响应式网格，桌面端保持紧凑扫描效率，移动端自然堆叠，避免把低频入口堆成超长 Settings 页面。
 - 生产构建生成独立 `SettingsWorkspacePanel` chunk；后续商业计费、企业 SSO、环境 Profile 和生产存储可以继续按“轻量父页 + 专业子模块 + 真实深链/动作”的模式拆分。
 
+### 10.24 Settings 运行观测按需模块
+
+运行状态与日志观测从 Settings 父页面抽离为真实可操作的运行控制面：
+
+- `settings/SettingsRuntimePanel` 承载 Manager health、metrics、events、observability、Trace 根因导航、日志筛选和日志文件侧栏，继续复用真实 API 和筛选状态。
+- `Settings.tsx` 只保留 `health`、`opsObservability`、`opsLogs`、`opsTraceSummary` 查询，以及 `logFilter/traceFilter` 状态；运行视图和日志交互由子模块维护。
+- `#/settings/runtime` 与 `#/settings/observability` 复用同一运行观测模块，但标题和入口语义按 active module 区分，避免两套相似页面重复堆叠。
+- 响应式布局保留“主内容 + 侧栏”的桌面效率，移动端自然降为单列；日志列表使用固定高度滚动，避免长日志撑爆配置页。
+- 生产构建生成独立 `SettingsRuntimePanel` chunk；这为继续拆分 Billing、SSO、Profile 这类重配置模块提供了同一套模式：父页编排数据，专业模块承载交互。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

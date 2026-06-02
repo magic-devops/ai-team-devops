@@ -7,6 +7,7 @@ const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/Setti
 const appearanceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAppearancePanel.tsx"), "utf8");
 const accountSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAccountPanel.tsx"), "utf8");
 const workspaceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsWorkspacePanel.tsx"), "utf8");
+const runtimeSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsRuntimePanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -132,5 +133,21 @@ describe("Settings workbench UX contract", () => {
     expect(workspaceSource).toContain('href="#/search"');
     expect(workspaceSource).toContain('href="/login.html"');
     expect(workspaceSource).toContain("md:grid-cols-2 xl:grid-cols-4");
+  });
+
+  it("keeps runtime and observability as an independent lazy module", () => {
+    expect(source).toContain('lazy(() => import("./settings/SettingsRuntimePanel")');
+    expect(source).toContain("SettingsRuntimePanel");
+    expect(source).not.toContain('SettingLink href="/api/v1/health"');
+    expect(runtimeSource).toContain("export function SettingsRuntimePanel");
+    expect(runtimeSource).toContain('href="/api/v1/health"');
+    expect(runtimeSource).toContain('href="/metrics"');
+    expect(runtimeSource).toContain('href="/api/v1/events"');
+    expect(runtimeSource).toContain('href="/api/v1/system/ops/observability"');
+    expect(runtimeSource).toContain("opsTraceSummary.refetch()");
+    expect(runtimeSource).toContain("opsLogs.data?.items");
+    expect(runtimeSource).toContain("setLogFilter");
+    expect(runtimeSource).toContain("setTraceFilter");
+    expect(runtimeSource).toContain("xl:grid-cols-[minmax(0,1fr)_24rem]");
   });
 });
