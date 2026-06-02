@@ -7,6 +7,7 @@ const root = resolve(__dirname, "..");
 describe("app shell performance governance", () => {
   const appSource = readFileSync(resolve(root, "src/App.tsx"), "utf8");
   const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandPalette.tsx"), "utf8");
+  const mobileNavDrawerSource = readFileSync(resolve(root, "src/components/MobileNavDrawer.tsx"), "utf8");
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
   const zh = JSON.parse(readFileSync(resolve(root, "src/i18n/zh-CN.json"), "utf8"));
 
@@ -18,6 +19,15 @@ describe("app shell performance governance", () => {
     expect(commandPaletteSource).toContain("export function CommandPalette");
     expect(commandPaletteSource).toContain("api.copilotCommands");
     expect(commandPaletteSource).toContain("api.workspaceSearch");
+  });
+
+  it("loads the mobile navigation drawer only on small-screen demand", () => {
+    expect(appSource).toContain("MobileNavDrawerLazy");
+    expect(appSource).toContain('lazy(() => import("./components/MobileNavDrawer")');
+    expect(appSource).toContain("mobileNavOpen ? (");
+    expect(mobileNavDrawerSource).toContain("export function MobileNavDrawer");
+    expect(mobileNavDrawerSource).toContain('data-testid="mobile-nav-filtered-micro-apps"');
+    expect(mobileNavDrawerSource).toContain("onOpenCommand");
   });
 
   it("shows build chunk load scope so first-screen and deferred risks are not mixed", () => {

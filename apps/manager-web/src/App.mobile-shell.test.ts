@@ -6,16 +6,19 @@ const root = resolve(__dirname, "..");
 
 describe("mobile console shell", () => {
   const appSource = readFileSync(resolve(root, "src/App.tsx"), "utf8");
+  const mobileNavDrawerSource = readFileSync(resolve(root, "src/components/MobileNavDrawer.tsx"), "utf8");
   const cssSource = readFileSync(resolve(root, "src/index.css"), "utf8");
 
   it("exposes a mobile drawer navigation surface", () => {
+    expect(appSource).toContain("MobileNavDrawerLazy");
+    expect(appSource).toContain('lazy(() => import("./components/MobileNavDrawer")');
     expect(appSource).toContain('data-testid="mobile-nav-toggle"');
-    expect(appSource).toContain('data-testid="mobile-nav-drawer"');
-    expect(appSource).toContain('data-testid="mobile-nav-search"');
-    expect(appSource).toContain('data-testid="mobile-nav-filtered-micro-apps"');
+    expect(mobileNavDrawerSource).toContain('data-testid="mobile-nav-drawer"');
+    expect(mobileNavDrawerSource).toContain('data-testid="mobile-nav-search"');
+    expect(mobileNavDrawerSource).toContain('data-testid="mobile-nav-filtered-micro-apps"');
     expect(appSource).toContain("mobileNavOpen");
     expect(appSource).toContain("mobileNavKeyword");
-    expect(appSource).toContain("mobileNavTerm");
+    expect(mobileNavDrawerSource).toContain("const term = keyword.trim().toLowerCase()");
   });
 
   it("exposes a mobile action bar for core intelligent workflows", () => {
