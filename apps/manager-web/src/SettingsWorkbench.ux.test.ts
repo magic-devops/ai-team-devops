@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/Settings.tsx"), "utf8");
+const appearanceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsAppearancePanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -90,5 +91,17 @@ describe("Settings workbench UX contract", () => {
     expect(source).toContain("recordPayment.mutate()");
     expect(source).toContain("overageDraft.approval_threshold_percent");
     expect(source).toContain("paymentDraft.method");
+  });
+
+  it("keeps appearance settings as an independent lightweight module", () => {
+    expect(source).toContain("SettingsAppearancePanel");
+    expect(source).toContain('lazy(() => import("./settings/SettingsAppearancePanel")');
+    expect(source).toContain("<Suspense");
+    expect(source).not.toContain("const [themePref, setThemePref]");
+    expect(appearanceSource).toContain("export function SettingsAppearancePanel");
+    expect(appearanceSource).toContain("THEME_OPTIONS.map");
+    expect(appearanceSource).toContain("setThemePreference(theme)");
+    expect(appearanceSource).toContain('window.addEventListener("sop-theme"');
+    expect(appearanceSource).toContain("sm:grid-cols-2 xl:grid-cols-4");
   });
 });

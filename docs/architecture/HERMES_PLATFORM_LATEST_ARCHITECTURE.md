@@ -600,6 +600,15 @@ SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
 - 移动端默认卡片流，桌面端保留紧凑表格感；能力矩阵、AI surfaces、动作预览/执行、动作运行历史和 Agent consumption 都保持可操作，不是静态样子。
 - 这为后续权限矩阵、菜单管理、Agent 自动改代码和模块动作扩展提供单一稳定落点，降低 SystemMap 大页维护成本。
 
+### 10.21 Settings 外观主题按需模块
+
+系统配置继续从“超大工作台”向“轻量父页 + 专业子模块”演进：
+
+- 外观主题从 `Settings.tsx` 内联卡片抽离为 `settings/SettingsAppearancePanel`，主题偏好状态、`sop-theme` 监听和 `setThemePreference` 动作都在子模块内维护。
+- `Settings.tsx` 通过 `React.lazy` 与 `Suspense` 仅在 `activeModule=appearance` 时加载外观模块，父页不再为低频外观配置持有状态。
+- 外观模块仍保留真实本地偏好同步和响应式主题卡片，移动端/桌面端都能直接切换主题，不是静态展示。
+- 生产构建生成独立 `SettingsAppearancePanel` chunk，后续商业计费、SSO、环境 Profile 等重模块可以按同一模式继续拆分。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, BadgeDollarSign, CloudCog, Database, ExternalLink, FileText, KeyRound, ListChecks, LogOut, MessageSquare, Network, PackageCheck, Palette, PlayCircle, Rocket, Search, Send, ServerCog, ShieldCheck, SlidersHorizontal, Terminal, UsersRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Drawer, Form, Input, Select, Space, Steps, Switch } from "antd";
 import { Card } from "@/components/Card";
 import { api } from "@/lib/api";
 import { clearSession, getProjectId, getToken } from "@/lib/authStorage";
-import { getThemePreference, setThemePreference, THEME_OPTIONS, type ThemePreference } from "@/lib/theme";
 import { SettingsWorkbenchHeader } from "@/pages/admin/SettingsWorkbenchHeader";
+
+const SettingsAppearancePanel = lazy(() => import("./settings/SettingsAppearancePanel").then((m) => ({ default: m.SettingsAppearancePanel })));
 
 type SettingsModule = "account" | "runtime" | "observability" | "workspace" | "profiles" | "storage" | "sso" | "appearance" | "billing";
 type SsoRiskEscalationAction = "create_tasks" | "send_im";
@@ -87,7 +88,6 @@ function currentRedirectTarget() {
 export function Settings({ initialModule, focused: _focused = false }: { initialModule?: string; focused?: boolean } = {}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
   const [activeModule, setActiveModule] = useState<SettingsModule>(() => normalizeSettingsModule(initialModule) || readSettingsModuleFromHash());
   const opsModuleActive = activeModule === "runtime" || activeModule === "observability";
   const token = getToken();
@@ -340,12 +340,6 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
     enabled: Boolean(token) && activeModule === "sso" && Boolean(selectedSsoProvider) && selectedSsoProviderExists,
     retry: false,
   });
-
-  useEffect(() => {
-    const sync = () => setThemePref(getThemePreference());
-    window.addEventListener("sop-theme", sync);
-    return () => window.removeEventListener("sop-theme", sync);
-  }, []);
 
   useEffect(() => {
     const sync = () => setActiveModule(readSettingsModuleFromHash());
@@ -4649,31 +4643,9 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
       ) : null}
 
       {activeModule === "appearance" ? (
-        <Card title={t("page.settings.themeCard")}>
-          <p className="mb-3 text-sm leading-6 text-[var(--muted)]">{t("theme.hint")}</p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {THEME_OPTIONS.map((theme) => (
-              <button
-                key={theme}
-                type="button"
-                onClick={() => {
-                  setThemePreference(theme);
-                  setThemePref(theme);
-                }}
-                className={`rounded-xl border p-3 text-left transition ${
-                  themePref === theme
-                    ? "border-[var(--brand)] bg-[var(--brand-softer)] text-[var(--text)]"
-                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted-strong)] hover:bg-[var(--surface-muted)]"
-                }`}
-              >
-                <span className="mb-2 flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
-                  <Palette className="h-4 w-4" />
-                </span>
-                <span className="block text-sm font-semibold">{t(`theme.${theme}`)}</span>
-              </button>
-            ))}
-          </div>
-        </Card>
+        <Suspense fallback={<div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">{t("common.loading")}</div>}>
+          <SettingsAppearancePanel />
+        </Suspense>
       ) : null}
 
       {activeModule === "billing" ? (
