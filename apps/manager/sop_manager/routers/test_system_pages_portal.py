@@ -10,6 +10,7 @@ from sop_manager.routers.system_pages import (
     IsolationTaskIn,
     FrontendPerformanceTaskIn,
     GovernanceTaskBulkUpdateIn,
+    ProductionReadinessTaskIn,
     ReadinessTaskIn,
     system_page_menu_health,
     system_page_capabilities,
@@ -28,6 +29,7 @@ from sop_manager.routers.system_pages import (
     system_pages_experience_review,
     system_pages_frontend_performance,
     system_pages_frontend_performance_tasks,
+    system_pages_production_readiness_tasks,
     system_pages_hub,
     system_pages_production_readiness,
     system_pages_readiness,
@@ -133,6 +135,35 @@ def test_system_pages_production_readiness_splits_contract_runtime_and_productio
         "observability",
         "permission_policy",
     } <= set(first["dimensions"])
+
+
+def test_system_pages_production_readiness_tasks_are_idempotent(monkeypatch):
+    created: list[dict] = []
+
+    def fake_list_tasks(**filters):
+        return created if filters.get("source") == "system_page_production_readiness" else []
+
+    def fake_create_task(body):
+        row = body.model_dump()
+        row["id"] = f"T-prod-{len(created) + 1}"
+        row["status"] = "pending"
+        created.append(row)
+        return row
+
+    monkeypatch.setattr(system_pages_module, "list_tasks", fake_list_tasks)
+    monkeypatch.setattr(system_pages_module, "create_task", fake_create_task)
+
+    body = ProductionReadinessTaskIn(dry_run=False, stage="contract_complete", max_items=2)
+    first = system_pages_production_readiness_tasks(body)
+    second = system_pages_production_readiness_tasks(body)
+
+    assert first["ok"] is True
+    assert first["summary"]["created"] > 0
+    assert first["agent_consumption"]["source"] == "system_page_production_readiness"
+    assert all(item["source"] == "system_page_production_readiness" for item in created)
+    assert all(str(item["source_report_id"]).startswith("production-readiness:") for item in created)
+    assert second["summary"]["created"] == 0
+    assert second["summary"]["skipped"] == first["summary"]["created"]
 
 
 def test_system_pages_experience_review_scores_menu_ux_permissions_and_ai_editability():

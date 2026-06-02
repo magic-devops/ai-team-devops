@@ -19,16 +19,26 @@ export function SystemProductionReadinessPanel({
   stage,
   loading,
   errorMessage,
+  taskResult,
+  taskPending,
+  canCreateTasks,
   domainLabel,
   onStageChange,
+  onPreviewTasks,
+  onCreateTasks,
 }: {
   rows: any[];
   data?: any;
   stage: string;
   loading: boolean;
   errorMessage?: string;
+  taskResult?: any;
+  taskPending?: boolean;
+  canCreateTasks?: boolean;
   domainLabel: (id: string) => string;
   onStageChange: (stage: string) => void;
+  onPreviewTasks?: () => void;
+  onCreateTasks?: () => void;
 }) {
   const { t } = useTranslation();
   const columns = useMemo<ColumnsType<any>>(
@@ -116,9 +126,34 @@ export function SystemProductionReadinessPanel({
               value,
             }))}
           />
+          <button
+            type="button"
+            onClick={onPreviewTasks}
+            disabled={taskPending}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] hover:border-[var(--brand)]/50 disabled:opacity-50"
+          >
+            {t("page.systemMap.previewProductionTasks")}
+          </button>
+          <button
+            type="button"
+            onClick={onCreateTasks}
+            disabled={taskPending || !canCreateTasks}
+            className="rounded-lg bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-50"
+          >
+            {t("page.systemMap.createProductionTasks")}
+          </button>
         </div>
       </div>
       {errorMessage ? <ErrorBlock message={errorMessage} /> : null}
+      {taskResult ? (
+        <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted-strong)]">
+          {t("page.systemMap.productionTaskResult", {
+            planned: taskResult.summary?.planned ?? 0,
+            created: taskResult.summary?.created ?? 0,
+            skipped: taskResult.summary?.skipped ?? 0,
+          })}
+        </div>
+      ) : null}
       <Table
         rowKey="id"
         size="small"

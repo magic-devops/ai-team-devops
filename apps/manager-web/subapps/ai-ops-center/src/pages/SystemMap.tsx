@@ -171,6 +171,7 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const caps = useCapabilities();
   const [taskResult, setTaskResult] = useState<any>(null);
   const [readinessTaskResult, setReadinessTaskResult] = useState<any>(null);
+  const [productionTaskResult, setProductionTaskResult] = useState<any>(null);
   const [experienceTaskResult, setExperienceTaskResult] = useState<any>(null);
   const [performanceTaskResult, setPerformanceTaskResult] = useState<any>(null);
   const [isolationTaskResult, setIsolationTaskResult] = useState<any>(null);
@@ -203,6 +204,24 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
       }),
     onSuccess: (data) => {
       setReadinessTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
+    },
+  });
+  const productionReadinessTasks = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.systemPagesProductionReadinessTasks({
+        dry_run: dryRun,
+        domain,
+        stage: productionStage,
+        q: keyword.trim(),
+        include_production_ready: false,
+        priority: productionStage === "gap" || productionStage === "contract_complete" ? "P0" : "P1",
+        assigned_to: "PlatformOwner",
+        max_items: 12,
+      }),
+    onSuccess: (data) => {
+      setProductionTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
     },
@@ -989,8 +1008,13 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
                 stage={productionStage}
                 loading={productionReadinessQ.isLoading || productionReadinessQ.isFetching}
                 errorMessage={productionReadinessQ.isError ? (productionReadinessQ.error as Error).message : undefined}
+                taskResult={productionTaskResult}
+                taskPending={productionReadinessTasks.isPending}
+                canCreateTasks={canWriteSystemPages}
                 domainLabel={domainLabel}
                 onStageChange={setProductionStage}
+                onPreviewTasks={() => productionReadinessTasks.mutate({ dryRun: true })}
+                onCreateTasks={() => productionReadinessTasks.mutate({ dryRun: false })}
               />
             ) : null}
             {readinessDetailView === "readiness" ? (

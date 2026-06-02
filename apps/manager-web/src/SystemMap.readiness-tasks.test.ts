@@ -20,9 +20,15 @@ describe("SystemMap readiness task generation", () => {
   it("exposes production readiness as a first-class SystemMap data source", () => {
     expect(apiSource).toContain("systemPagesProductionReadiness");
     expect(apiSource).toContain("/api/v1/system/pages/production-readiness");
+    expect(apiSource).toContain("systemPagesProductionReadinessTasks");
+    expect(apiSource).toContain("/api/v1/system/pages/production-readiness/tasks");
     expect(systemMapSource).toContain("api.systemPagesProductionReadiness");
+    expect(systemMapSource).toContain("api.systemPagesProductionReadinessTasks");
     expect(systemMapSource).toContain("SystemProductionReadinessPanel");
     expect(productionPanelSource).toContain("productionReadinessTitle");
+    expect(productionPanelSource).toContain("previewProductionTasks");
+    expect(productionPanelSource).toContain("createProductionTasks");
+    expect(productionPanelSource).toContain("productionTaskResult");
     expect(productionPanelSource).toContain("export function SystemProductionReadinessPanel");
     expect(productionPanelSource).toContain("systemProductionReadinessPanel");
     expect(productionPanelSource).toContain("productionDimensions");
@@ -61,6 +67,8 @@ describe("SystemMap readiness task generation", () => {
     expect(zh.page.systemMap.previewReadinessTasks).toBe("预览完整度任务");
     expect(zh.page.systemMap.createReadinessTasks).toBe("生成完整度任务");
     expect(zh.page.systemMap.productionReadinessTitle).toBe("生产就绪矩阵");
+    expect(zh.page.systemMap.previewProductionTasks).toBe("预览生产任务");
+    expect(zh.page.systemMap.createProductionTasks).toBe("生成生产任务");
     expect(zh.page.systemMap.productionStageValue.production_ready).toBe("生产就绪");
     expect(zh.page.systemMap.experienceReviewTitle).toBe("体验与产品化治理");
     expect(zh.page.systemMap.readinessDetailViewValue.experience).toBe("体验治理");

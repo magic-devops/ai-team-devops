@@ -580,6 +580,16 @@ SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
 - `/api/v1/system/pages/frontend-performance` 新增 `user-activated-visualization` 加载范围与 `user_activated_oversize` 指标，避免把用户主动打开的低频大图谱库误判为首屏或普通路由风险。
 - 真实构建后 `initial_oversize=0`、`deferred_oversize=0`、`user_activated_oversize=1`，AntV 大包仍存在但不会阻塞默认页面体验。
 
+### 10.19 生产就绪缺口任务化闭环
+
+生产就绪矩阵从“展示三档状态”升级为“可派发、可跟踪、可由 Agent 消费”的治理闭环：
+
+- `POST /api/v1/system/pages/production-readiness/tasks` 支持按 `domain/stage/q/ids` 筛选模块，默认排除已 production_ready 模块，将 contract/runtime 阶段缺口预览或落库为治理任务。
+- 任务来源统一为 `system_page_production_readiness`，`source_report_id=production-readiness:{module_id}`，重复执行 dry-run/apply 不会重复创建同一模块任务。
+- 任务描述写入生产阶段、readiness 分、production 分、运行数据、外部连接、异步 Worker、测试覆盖、部署证据、可观测和权限策略维度，以及对应整改建议。
+- SystemMap 生产就绪矩阵新增“预览生产任务 / 生成生产任务”，直接复用当前筛选条件，不在页面内堆叠额外复杂表单。
+- 治理任务看板新增“生产就绪”来源，使后续平台 Owner、前端、后端和 AI Agent 可以统一领取和追踪生产化缺口。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

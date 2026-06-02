@@ -822,6 +822,11 @@ export const api = {
     });
     return request<any>(`/api/v1/system/pages/production-readiness${qs.toString() ? `?${qs}` : ""}`);
   },
+  systemPagesProductionReadinessTasks: (body: { ids?: string[]; domain?: string; stage?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_production_ready?: boolean }) =>
+    request<any>("/api/v1/system/pages/production-readiness/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   systemPagesExperienceReview: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {

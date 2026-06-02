@@ -814,6 +814,18 @@ class ReadinessTaskIn(BaseModel):
     include_complete: bool = False
 
 
+class ProductionReadinessTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    domain: str = "all"
+    stage: str = Field("all", pattern="^(all|gap|contract_complete|runtime_ready|production_ready)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "PlatformOwner"
+    max_items: int = Field(12, ge=1, le=100)
+    include_production_ready: bool = False
+
+
 class ExperienceTaskIn(BaseModel):
     ids: list[str] = Field(default_factory=list)
     domain: str = "all"
@@ -1623,6 +1635,14 @@ def _existing_readiness_task_ids() -> set[str]:
     return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
 
 
+def _existing_production_readiness_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_production_readiness")
+    except Exception:
+        return set()
+    return {str(x.get("source_report_id") or "") for x in existing if x.get("source_report_id")}
+
+
 def _existing_experience_task_ids() -> set[str]:
     try:
         existing = list_tasks(source="system_page_experience")
@@ -1685,6 +1705,13 @@ SYSTEM_PAGE_GOVERNANCE_TASK_SOURCES: list[dict[str, str]] = [
         "route": "#/system-map/readiness",
         "task_api": "/api/v1/system/pages/readiness/tasks",
         "cli": "sop pages readiness-tasks --dry-run --json",
+    },
+    {
+        "source": "system_page_production_readiness",
+        "label": "生产就绪",
+        "route": "#/system-map/production",
+        "task_api": "/api/v1/system/pages/production-readiness/tasks",
+        "cli": "sop pages production-readiness-tasks --dry-run --json",
     },
     {
         "source": "system_frontend_performance",
@@ -2046,6 +2073,52 @@ def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, a
         "source_report_id": f"frontend-performance:{name}",
         "source_report_title": name,
         "debug_notes": f"Generated from SystemMap frontend performance: {name}",
+    }
+
+
+def _production_readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    module_id = str(item.get("id") or "")
+    dimensions = item.get("dimensions") or {}
+    gaps = [
+        (key, value)
+        for key, value in dimensions.items()
+        if isinstance(value, dict) and str(value.get("status") or "") not in {"ready", "not_required"}
+    ]
+    stage = str(item.get("stage") or "contract_complete")
+    priority_value = "P0" if stage == "gap" else "P1" if stage == "contract_complete" else priority
+    recommendations = [str(x) for x in item.get("recommendations") or [] if str(x).strip()]
+    return {
+        "title": f"补齐生产就绪证据：{item.get('name') or module_id}",
+        "description": "\n".join(
+            [
+                f"module_id: {module_id}",
+                f"route: {item.get('path') or ''}",
+                f"domain: {item.get('domain_name') or item.get('domain') or ''}",
+                f"stage: {stage}",
+                f"readiness_score: {item.get('readiness_score')}",
+                f"production_score: {item.get('production_score')}",
+                "",
+                "production_gaps:",
+                *[
+                    f"- {key}: status={value.get('status')} score={value.get('score')} recommendation={value.get('recommendation') or ''}"
+                    for key, value in gaps
+                ],
+                "",
+                "recommendations:",
+                *[f"- {x}" for x in recommendations],
+                "",
+                "dimensions:",
+                json.dumps(dimensions, ensure_ascii=False, indent=2),
+            ]
+        ).strip(),
+        "priority": priority_value,
+        "estimate": "M" if gaps else "S",
+        "assigned_to": assigned_to or "PlatformOwner",
+        "dev_tool": "codex",
+        "source": "system_page_production_readiness",
+        "source_report_id": f"production-readiness:{module_id}",
+        "source_report_title": str(item.get("name") or module_id),
+        "debug_notes": f"Generated from SystemMap production readiness: {module_id}",
     }
 
 
@@ -2979,7 +3052,7 @@ def _module_production_readiness_payload(*, domain: str | None = None, stage: st
         "agent_consumption": {
             "purpose": "供 SystemMap、CLI 和 Agent 区分契约完整、运行可用和生产就绪，避免页面 complete 掩盖真实生产缺口。",
             "api": "/api/v1/system/pages/production-readiness",
-            "task_api": "/api/v1/system/pages/readiness/tasks",
+            "task_api": "/api/v1/system/pages/production-readiness/tasks",
             "recommended_next": ["先补 runtime_ready 的关键证据", "把 production gap 转为治理任务", "按外部连接和异步执行要求补 smoke"],
             "fields": ["items.contract_complete", "items.runtime_ready", "items.production_ready", "items.dimensions"],
         },
@@ -4836,6 +4909,59 @@ def system_pages_production_readiness(
     if stage and stage not in {"all", "gap", "contract_complete", "runtime_ready", "production_ready"}:
         stage = "all"
     return _module_production_readiness_payload(domain=domain, stage=stage, q=q)
+
+
+@router.post("/production-readiness/tasks")
+def system_pages_production_readiness_tasks(body: ProductionReadinessTaskIn) -> dict[str, Any]:
+    stage = body.stage if body.stage in {"all", "gap", "contract_complete", "runtime_ready", "production_ready"} else "all"
+    payload = _module_production_readiness_payload(
+        domain=body.domain if body.domain and body.domain != "all" else None,
+        stage=stage,
+        q=body.q,
+    )
+    rows = payload.get("items") or []
+    selected = {str(x) for x in body.ids or [] if str(x).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("id") or "") in selected]
+    if not body.include_production_ready:
+        rows = [item for item in rows if not item.get("production_ready")]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_production_readiness_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _production_readiness_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+            existing_ids.add(report_id)
+    return {
+        "ok": True,
+        "dry_run": body.dry_run,
+        "filters": {
+            "ids": sorted(selected),
+            "domain": body.domain or "all",
+            "stage": stage,
+            "q": body.q,
+            "include_production_ready": body.include_production_ready,
+        },
+        "planned": planned,
+        "created": created,
+        "skipped": skipped,
+        "summary": {"planned": len(planned), "created": len(created), "skipped": len(skipped)},
+        "agent_consumption": {
+            "purpose": "把契约完整但未生产就绪的模块转成可分派治理任务，补齐运行证据、外部连接、异步 Worker、测试、部署和观测。",
+            "source": "system_page_production_readiness",
+            "api": "/api/v1/system/pages/production-readiness/tasks",
+            "cli": "sop pages production-readiness-tasks --dry-run --json",
+            "task_center": SYSTEM_TASK_CENTER_ROUTE,
+        },
+    }
 
 
 @router.get("/experience-review")
