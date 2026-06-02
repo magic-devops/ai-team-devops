@@ -657,6 +657,16 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 响应式布局保持指标卡、用量额度、出账、收款和审计分区清晰；移动端自然单列，账单与收款列表保留紧凑扫描能力。
 - 生产构建生成独立 `SettingsBillingPanel` chunk；下一步继续拆企业 SSO 或环境 Profile，持续降低 Settings 单页复杂度。
 
+### 10.27 Settings 企业 SSO 按需模块
+
+企业 SSO 从 Settings 父页面抽离为独立的身份安全控制面：
+
+- `settings/SettingsSsoPanel` 承载 SSO Provider 配置、OIDC/SAML 模板、密钥脱敏输入、SCIM Token 轮换与测试、角色映射预览、风险报表、风险任务化、IM 简报、风险订阅、自动升级、处置 Runbook、Runbook 步骤流转和 SCIM 审计。
+- `Settings.tsx` 只保留 SSO 查询、draft 状态、mutation 编排和 active module 编排，SSO 复杂 UI 不再占用父页面维护面。
+- 企业 SSO 模块保留真实操作：保存/测试 Provider、轮换 SCIM Token、预览角色映射、生成风险任务、发送 IM、运行订阅、执行自动升级、生成处置 Runbook、标记 Runbook 步骤和查看审计证据。
+- 响应式布局保持“Provider 配置 + 身份安全治理”双栏效率，风险任务、IM、升级和 Runbook 使用抽屉承载配置，移动端自然单列，避免把所有安全操作堆成一个长表单。
+- 生产构建生成独立 `SettingsSsoPanel` chunk，Settings 主 chunk 继续下降；下一步拆环境 Profile/部署发布重模块。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

@@ -10,6 +10,7 @@ const workspaceSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pa
 const runtimeSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsRuntimePanel.tsx"), "utf8");
 const storageSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsStoragePanel.tsx"), "utf8");
 const billingSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsBillingPanel.tsx"), "utf8");
+const ssoSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsSsoPanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
@@ -37,50 +38,57 @@ describe("Settings workbench UX contract", () => {
 
   it("keeps SSO risk governance tasking in a focused drawer flow", () => {
     expect(source).toContain("ssoRiskTaskDrawerOpen");
-    expect(source).toContain("ssoRiskTaskQuickSummary");
-    expect(source).toContain("ssoRiskTaskOpenDrawer");
-    expect(source).toContain("setSsoRiskTaskDrawerOpen(true)");
-    expect(source).toContain("Switch checked={ssoRiskTaskDraft.include_low}");
-    expect(source).toContain("runSsoRiskTasks.mutate(true)");
-    expect(source).toContain("runSsoRiskTasks.mutate(false)");
+    expect(source).toContain('lazy(() => import("./settings/SettingsSsoPanel")');
+    expect(source).toContain("SettingsSsoPanel");
+    expect(source).not.toContain("ssoRiskTaskQuickSummary");
+    expect(ssoSource).toContain("export function SettingsSsoPanel");
+    expect(ssoSource).toContain("ssoRiskTaskQuickSummary");
+    expect(ssoSource).toContain("ssoRiskTaskOpenDrawer");
+    expect(ssoSource).toContain("setSsoRiskTaskDrawerOpen(true)");
+    expect(ssoSource).toContain("Switch checked={ssoRiskTaskDraft.include_low}");
+    expect(ssoSource).toContain("runSsoRiskTasks.mutate(true)");
+    expect(ssoSource).toContain("runSsoRiskTasks.mutate(false)");
   });
 
   it("keeps SSO risk IM notification in a focused drawer flow", () => {
     expect(source).toContain("ssoRiskImDrawerOpen");
-    expect(source).toContain("ssoRiskImQuickSummary");
-    expect(source).toContain("ssoRiskImOpenDrawer");
-    expect(source).toContain("setSsoRiskImDrawerOpen(true)");
-    expect(source).toContain('mode="multiple"');
-    expect(source).toContain("Switch checked={ssoRiskImDraft.include_low}");
-    expect(source).toContain("runSsoRiskIm.mutate(true)");
-    expect(source).toContain("runSsoRiskIm.mutate(false)");
+    expect(source).not.toContain("ssoRiskImQuickSummary");
+    expect(ssoSource).toContain("ssoRiskImQuickSummary");
+    expect(ssoSource).toContain("ssoRiskImOpenDrawer");
+    expect(ssoSource).toContain("setSsoRiskImDrawerOpen(true)");
+    expect(ssoSource).toContain('mode="multiple"');
+    expect(ssoSource).toContain("Switch checked={ssoRiskImDraft.include_low}");
+    expect(ssoSource).toContain("runSsoRiskIm.mutate(true)");
+    expect(ssoSource).toContain("runSsoRiskIm.mutate(false)");
   });
 
   it("keeps SSO risk auto escalation in a focused drawer flow", () => {
     expect(source).toContain("ssoRiskEscalationDrawerOpen");
-    expect(source).toContain("ssoRiskEscalationQuickSummary");
-    expect(source).toContain("ssoRiskEscalationOpenDrawer");
-    expect(source).toContain("setSsoRiskEscalationDrawerOpen(true)");
-    expect(source).toContain("Switch checked={ssoRiskEscalationDraft[item.key]}");
-    expect(source).toContain("ssoRiskEscalationDraft.actions");
-    expect(source).toContain("saveSsoRiskEscalation.mutate()");
-    expect(source).toContain("runSsoRiskEscalation.mutate(true)");
-    expect(source).toContain("runSsoRiskEscalation.mutate(false)");
+    expect(source).not.toContain("ssoRiskEscalationQuickSummary");
+    expect(ssoSource).toContain("ssoRiskEscalationQuickSummary");
+    expect(ssoSource).toContain("ssoRiskEscalationOpenDrawer");
+    expect(ssoSource).toContain("setSsoRiskEscalationDrawerOpen(true)");
+    expect(ssoSource).toContain("Switch checked={ssoRiskEscalationDraft[item.key]}");
+    expect(ssoSource).toContain("ssoRiskEscalationDraft.actions");
+    expect(ssoSource).toContain("saveSsoRiskEscalation.mutate()");
+    expect(ssoSource).toContain("runSsoRiskEscalation.mutate(true)");
+    expect(ssoSource).toContain("runSsoRiskEscalation.mutate(false)");
   });
 
   it("keeps SSO risk Runbook in a focused drawer flow", () => {
     expect(source).toContain("ssoRiskRunbookDrawerOpen");
-    expect(source).toContain("ssoRiskRunbookQuickSummary");
-    expect(source).toContain("ssoRiskRunbookOpenDrawer");
-    expect(source).toContain("setSsoRiskRunbookDrawerOpen(true)");
-    expect(source).toContain("Switch checked={ssoRiskRunbookDraft.include_low}");
-    expect(source).toContain("ssoRiskRunbookDraft.channels");
-    expect(source).toContain("createSsoRiskRunbook.mutate()");
-    expect(source).toContain('action: "preview_tasks"');
-    expect(source).toContain('action: "create_tasks"');
-    expect(source).toContain('action: "send_im"');
-    expect(source).toContain('action: "verify"');
-    expect(source).toContain('action: "archive"');
+    expect(source).not.toContain("ssoRiskRunbookQuickSummary");
+    expect(ssoSource).toContain("ssoRiskRunbookQuickSummary");
+    expect(ssoSource).toContain("ssoRiskRunbookOpenDrawer");
+    expect(ssoSource).toContain("setSsoRiskRunbookDrawerOpen(true)");
+    expect(ssoSource).toContain("Switch checked={ssoRiskRunbookDraft.include_low}");
+    expect(ssoSource).toContain("ssoRiskRunbookDraft.channels");
+    expect(ssoSource).toContain("createSsoRiskRunbook.mutate()");
+    expect(ssoSource).toContain('action: "preview_tasks"');
+    expect(ssoSource).toContain('action: "create_tasks"');
+    expect(ssoSource).toContain('action: "send_im"');
+    expect(ssoSource).toContain('action: "verify"');
+    expect(ssoSource).toContain('action: "archive"');
   });
 
   it("keeps billing subscription policy and payment in a focused drawer flow", () => {
