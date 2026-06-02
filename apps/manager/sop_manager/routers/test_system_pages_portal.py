@@ -203,12 +203,20 @@ def test_system_pages_frontend_performance_exposes_chunk_budget_evidence():
     assert payload["ok"] is True
     assert payload["summary"]["score"] >= 0
     assert {"chunks", "route_chunks", "vendor_chunks", "oversize_raw", "initial_oversize", "deferred_oversize", "total_gzip_kb"} <= set(payload["summary"])
+    assert "shared_chunks" in payload["summary"]
     assert payload["budgets"]["chunk_raw_kb"] == 500
     assert payload["agent_consumption"]["api"] == "/api/v1/system/pages/frontend-performance"
     assert "summary.initial_oversize" in payload["agent_consumption"]["fields"]
     if payload["available"]:
         first = payload["top_chunks"][0]
         assert {"name", "type", "load_scope", "size_kb", "gzip_kb", "budget"} <= set(first)
+
+
+def test_system_pages_frontend_performance_classifies_navigation_registry_as_initial_shell():
+    assert system_pages_module._chunk_type("navigation-registry-Abc123.js") == "shell"
+    assert system_pages_module._chunk_load_scope("navigation-registry-Abc123.js", "shell") == "initial"
+    assert system_pages_module._chunk_type("api-client-Abc123.js") == "shared"
+    assert system_pages_module._chunk_load_scope("api-client-Abc123.js", "shared") == "shared"
 
 
 def test_system_pages_frontend_performance_tasks_are_idempotent(monkeypatch):

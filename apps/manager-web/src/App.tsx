@@ -36,7 +36,7 @@ import {
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectSelector } from "./components/ProjectSelector";
-import { api } from "./lib/api";
+import { appShellApi } from "./lib/appShellApi";
 import {
   BUSINESS_CODE_KEY,
   clearSession,
@@ -176,7 +176,7 @@ function ThemeMenu() {
 function UserMenu({ authed }: { authed: boolean }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+  const me = useQuery({ queryKey: ["authMe"], queryFn: appShellApi.authMe, enabled: authed, retry: false });
   const loginHref = `/login.html?redirect=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`;
 
   if (!authed) {
@@ -243,7 +243,7 @@ function UserMenu({ authed }: { authed: boolean }) {
           <DropdownMenu.Item
             className="mt-2 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm outline-none hover:bg-[var(--surface-muted)] data-[highlighted]:bg-[var(--surface-muted)]"
             onSelect={() => {
-              void api.logout().catch(() => undefined);
+              void appShellApi.logout().catch(() => undefined);
               clearSession();
               void qc.invalidateQueries();
               window.location.assign("/login.html");
@@ -592,15 +592,15 @@ export function App() {
   const lastSyncedRecentSignatureRef = useRef("");
   useEffect(() => subscribeMenuPrefs(setMenuPrefs), []);
   const authed = Boolean(getToken());
-  const me = useQuery({ queryKey: ["authMe"], queryFn: api.authMe, enabled: authed, retry: false });
+  const me = useQuery({ queryKey: ["authMe"], queryFn: appShellApi.authMe, enabled: authed, retry: false });
   const menuPrefsRemote = useQuery({
     queryKey: ["systemPagesMenuPreferencesMe"],
-    queryFn: api.systemPagesMenuPreferencesMe,
+    queryFn: appShellApi.systemPagesMenuPreferencesMe,
     enabled: authed,
     retry: false,
   });
   const syncMenuPrefs = useMutation({
-    mutationFn: api.systemPagesMenuPreferencesUpdate,
+    mutationFn: appShellApi.systemPagesMenuPreferencesUpdate,
   });
   const capabilities = useCapabilities();
 

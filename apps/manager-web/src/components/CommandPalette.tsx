@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Bot, Command, Cpu, Rows3, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/api";
+import { appShellApi } from "../lib/appShellApi";
 import { NAV } from "../navigation";
 
 type PaletteItem = {
@@ -51,14 +51,14 @@ export function CommandPalette({ open, setOpen, authed }: { open: boolean; setOp
 
   const workspaceQ = useQuery({
     queryKey: ["workspaceSearch", q],
-    queryFn: () => api.workspaceSearch(q.trim()),
+    queryFn: () => appShellApi.workspaceSearch(q.trim()),
     enabled: authed && open && q.trim().length >= 2,
     retry: false,
   });
 
   const commands = useQuery({
     queryKey: ["copilotCommands", q],
-    queryFn: () => api.copilotCommands(q, 16),
+    queryFn: () => appShellApi.copilotCommands(q, 16),
     enabled: authed && open && q.trim().length >= 1,
     retry: false,
   });

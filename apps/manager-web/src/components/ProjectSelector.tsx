@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
-import { api } from "../lib/api";
+import { appShellApi } from "../lib/appShellApi";
 import { getBusinessCode, getProjectId, getTenantCode, getToken, setWorkspaceScope } from "../lib/authStorage";
 
 type ProjectRow = {
@@ -30,17 +30,17 @@ export function ProjectSelector() {
 
   const projects = useQuery({
     queryKey: ["projects"],
-    queryFn: api.projects,
+    queryFn: appShellApi.projects,
     enabled: authed,
   });
   const businesses = useQuery({
     queryKey: ["businesses"],
-    queryFn: api.businesses,
+    queryFn: appShellApi.businesses,
     enabled: authed,
   });
   const me = useQuery({
     queryKey: ["authMe"],
-    queryFn: api.authMe,
+    queryFn: appShellApi.authMe,
     enabled: authed,
     retry: false,
   });

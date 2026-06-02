@@ -43,8 +43,10 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
           const normalized = id.replaceAll("\\", "/");
+          if (normalized.includes("/src/navigation.tsx") || normalized.includes("/src/microApps.ts")) return "navigation-registry";
+          if (normalized.includes("/src/lib/api.ts")) return "api-client";
+          if (!normalized.includes("node_modules")) return undefined;
           if (/node_modules\/(react|react-dom|scheduler)\//.test(normalized)) return "react-vendor";
           if (normalized.includes("@tanstack")) return "query-vendor";
           if (normalized.includes("@ant-design/x")) return "antdx-vendor";

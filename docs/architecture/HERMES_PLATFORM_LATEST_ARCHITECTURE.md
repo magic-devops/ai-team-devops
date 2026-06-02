@@ -560,6 +560,16 @@ SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
 - `POST /api/v1/analytics/decision/tasks` 可将决策动作按优先级、负责人、执行工具和任务数量预览或生成 `source=analytics_decision_attribution` 治理任务。
 - Analytics 洞察报告工作台新增“智能决策归因引擎”独立单元，支持解释、证据查看、任务预览和任务落库，避免把决策能力隐藏在普通报表列表中。
 
+### 10.17 前端主壳首屏性能分层
+
+平台主壳从“所有导航、项目作用域和 API 聚合混在 index”升级为可治理的首屏分层：
+
+- Vite 将 `src/navigation.tsx` 与 `src/microApps.ts` 固定拆为 `navigation-registry` chunk，承载菜单注册、微应用注册和图标映射，System Pages 将其识别为首屏 shell 证据。
+- 页面级 `lib/api.ts` 固定拆为 `api-client` chunk，只由懒加载专业工作台消费；App、ProjectSelector、CommandPalette 改用 `lib/appShellApi.ts` 访问认证、菜单偏好、项目/业务线和命令搜索等主壳必需接口。
+- `lib/http.ts` 承载统一请求、Token、三码作用域、默认项目补齐、认证失效跳转和非 JSON 指标请求的基础能力，避免多个轻量 API 重复实现鉴权逻辑。
+- `/api/v1/system/pages/frontend-performance` 把 `navigation-registry` 归为 `shell/initial`，继续按 `initial_oversize` 与 `deferred_oversize` 分开治理首屏阻塞和低频图谱包。
+- 真实生产构建后 `index` 主 chunk 为 486.24KB raw、146.97KB gzip，首屏超预算清零；当前性能治理分为 86/good，剩余风险集中在延迟加载的 `antv-vendor` 图谱包。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

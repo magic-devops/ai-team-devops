@@ -4138,8 +4138,10 @@ def _manager_web_dist_assets_dir() -> Path:
 def _chunk_type(filename: str) -> str:
     if "vendor" in filename:
         return "vendor"
-    if filename.startswith(("index-", "main-", "bootstrap-")):
+    if filename.startswith(("index-", "main-", "bootstrap-", "navigation-registry-")):
         return "shell"
+    if filename.startswith("api-client-"):
+        return "shared"
     return "route"
 
 
@@ -4208,7 +4210,9 @@ def _frontend_performance_payload() -> dict[str, Any]:
         else:
             recommendations.append("继续拆分超预算 vendor 包，避免首屏加载与专业工作台强耦合。")
     if any(item["type"] == "shell" and item["budget"]["over_raw_budget"] for item in chunks):
-        recommendations.append("主壳 index/main chunk 仍偏大，后续可把命令面板、菜单偏好和低频治理面板改为按需 import。")
+        if any(str(item["name"]).startswith("navigation-registry-") for item in chunks if item["budget"]["over_raw_budget"]):
+            recommendations.append("导航注册表 chunk 仍偏大，后续继续拆菜单元数据、图标映射和微应用定义，避免首屏主壳被低频治理信息拖重。")
+        recommendations.append("主壳 index/main/navigation chunk 仍偏大，后续可把菜单偏好、图标映射和低频治理面板继续改为按需 import。")
     if deferred_oversize and not initial_oversize:
         recommendations.append("当前超预算主要是延迟加载 chunk；继续保持首屏轻量，按图谱/血缘/编排专业入口逐步拆包。")
     if not recommendations:
@@ -4224,6 +4228,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
             "route_chunks": by_type.get("route", 0),
             "vendor_chunks": by_type.get("vendor", 0),
             "shell_chunks": by_type.get("shell", 0),
+            "shared_chunks": by_type.get("shared", 0),
             "total_kb": round(raw_total / 1024, 1),
             "total_gzip_kb": round(gzip_total / 1024, 1),
             "oversize_raw": len(oversize_raw),
