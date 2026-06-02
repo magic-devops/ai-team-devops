@@ -697,6 +697,16 @@ RCA 从 OpsCenter 父工作台抽离为独立的根因治理控制面：
 - 手工创建和智能归因配置都使用 Ant Design Drawer/Form/Steps，主区域只保留摘要、候选、验证结果和 RCA 列表，减少长表单堆叠。
 - 该模式让 OpsCenter 父页面逐步变成轻量运行中枢，后续 Runbook 和自愈策略可以继续按同样边界拆分。
 
+### 10.31 OpsCenter Runbook 治理按需模块
+
+Runbook 从 OpsCenter 父工作台抽离为独立的执行手册治理控制面：
+
+- `system/ops-center/OpsCenterRunbooksPanel` 承载 Runbook 列表、首版创建、编辑生成新版本、不可变版本历史、历史恢复、版本归档、差异对比、执行证据回填、证据确认/归档/重开和治理审计。
+- `OpsCenterWorkbench.tsx` 保留 Runbook 查询、版本查询、证据查询、mutation 和 tab 编排；用户进入 `#/system/ops-center/runbook` 时才加载 Runbook 子模块。
+- Runbook 模块继续走真实后端闭环：`opsRunbookCreate/Update` 生成版本，`opsRunbookVersionDiff/Action` 做差异与恢复，`opsRunbookEvidenceBackfill/Action` 维护执行证据。
+- 创建/编辑使用 Ant Design Drawer/Form/Steps，主区域聚焦版本列表、证据缺口和审计记录，不把所有表单、版本、证据同时堆在父页面。
+- 这让 OpsCenter 的告警、RCA、Runbook 三个高复杂模块都具备独立维护面，后续 AI 修改可以只落到对应专业组件。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

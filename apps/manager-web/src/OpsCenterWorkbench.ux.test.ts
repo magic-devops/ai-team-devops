@@ -6,6 +6,7 @@ const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench.tsx"), "utf8");
 const alertSourcesSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterAlertSourcesPanel.tsx"), "utf8");
 const rcaSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterRcaPanel.tsx"), "utf8");
+const runbooksSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterRunbooksPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
   it("keeps OpsCenter modules routable and focused", () => {
@@ -25,6 +26,7 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("opsCenterModuleQuickSummary");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterAlertSourcesPanel\")");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRcaPanel\")");
+    expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRunbooksPanel\")");
     expect(source).toContain("<Suspense fallback=");
     expect(source).toContain("AI 分析当前模块");
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
@@ -138,16 +140,22 @@ describe("OpsCenter workbench UX contract", () => {
 
   it("keeps Runbook version editing in a focused drawer flow", () => {
     expect(source).toContain("runbookEditorDrawerOpen");
-    expect(source).toContain("runbookEditorFocusedDrawer");
-    expect(source).toContain("setRunbookEditorDrawerOpen(true)");
-    expect(source).toContain("新建 Runbook");
-    expect(source).toContain("编辑 Runbook 版本");
-    expect(source).toContain("Runbook 身份");
-    expect(source).toContain("执行步骤");
-    expect(source).toContain("版本证据");
-    expect(source).toContain("saveRb.mutate()");
-    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Runbook 名称 *\" value={rbForm.name}");
-    expect(source).not.toContain("<textarea className=\"input-base w-full h-24 resize-none\" placeholder=\"操作步骤（每行一步）\"");
+    expect(source).toContain("OpsCenterRunbooksPanel");
+    expect(source).not.toContain("runbookEditorFocusedDrawer");
+    expect(runbooksSource).toContain("export function OpsCenterRunbooksPanel");
+    expect(runbooksSource).toContain("runbookEditorFocusedDrawer");
+    expect(runbooksSource).toContain("setRunbookEditorDrawerOpen(true)");
+    expect(runbooksSource).toContain("新建 Runbook");
+    expect(runbooksSource).toContain("编辑 Runbook 版本");
+    expect(runbooksSource).toContain("Runbook 身份");
+    expect(runbooksSource).toContain("执行步骤");
+    expect(runbooksSource).toContain("版本证据");
+    expect(runbooksSource).toContain("saveRb.mutate()");
+    expect(runbooksSource).toContain("backfillRunbookEvidence.mutate");
+    expect(runbooksSource).toContain("compareRunbookVersions.mutate");
+    expect(runbooksSource).toContain("updateRunbookEvidence.mutate");
+    expect(runbooksSource).not.toContain("<input className=\"input-base\" placeholder=\"Runbook 名称 *\" value={rbForm.name}");
+    expect(runbooksSource).not.toContain("<textarea className=\"input-base w-full h-24 resize-none\" placeholder=\"操作步骤（每行一步）\"");
   });
 
   it("keeps self-heal policy and signal setup in focused drawer flows", () => {
