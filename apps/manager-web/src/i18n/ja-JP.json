@@ -3336,6 +3336,17 @@
       "missingLegacyConsole": "旧入口不足",
       "domainMismatch": "領域不一致",
       "brokenTargets": "無効な移行先",
+      "moduleContractCenter": "モジュール契約センター",
+      "contractPanel": {
+        "title": "モジュール契約センター",
+        "subtitle": "Manifest、権限能力、実行可能アクションを 1 つの集中ユニットで管理し、重複した重いページを避けます。",
+        "manifestTitle": "モジュール一覧",
+        "manifestDescription": "シェル、CLI、Agent が利用する表示モジュール、分割ロード、ローカル文脈ファイルです。",
+        "capabilitiesTitle": "能力権限",
+        "capabilitiesDescription": "ロール境界、サブ能力、AI サーフェスの網羅をモジュールごとに確認します。",
+        "actionsTitle": "モジュールアクション",
+        "actionsDescription": "ナビゲーション、タスク、Copilot 連携をつなぐ監査可能なアクションをプレビューまたは実行します。"
+      },
       "moduleManifest": "モジュール Manifest",
       "manifestVersion": "Manifest バージョン",
       "visibleModules": "表示可能モジュール",

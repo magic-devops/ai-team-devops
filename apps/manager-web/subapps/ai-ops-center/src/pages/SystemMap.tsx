@@ -12,6 +12,7 @@ import { useCapabilities } from "@/lib/capabilities";
 import { IsolationSourceScanPanel } from "./system/IsolationSourceScanPanel";
 import { SystemExperiencePriorityPanel } from "./system/SystemExperiencePriorityPanel";
 import { SystemGovernanceTasksPanel } from "./system/SystemGovernanceTasksPanel";
+import { SystemModuleContractPanel } from "./system/SystemModuleContractPanel";
 import { SystemProductionReadinessPanel } from "./system/SystemProductionReadinessPanel";
 
 type ViewMode = "react" | "legacy" | "all";
@@ -442,9 +443,6 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
   const showBaselineCompare = section === "baseline-compare";
   const showIsolation = showIsolationGovernance || showSourceScan || showBaselineCompare;
   const showTasks = section === "tasks";
-  const showManifest = isContractSection && activeContractPanel === "manifest";
-  const showActions = isContractSection && activeContractPanel === "actions";
-  const showCapabilities = isContractSection && activeContractPanel === "capabilities";
   const showMigration = section === "migration";
   const pageColumns: ColumnsType<any> = [
     {
@@ -645,30 +643,6 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
           ]}
         />
       </div>
-
-      {isContractSection ? (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
-          <Segmented
-            value={activeContractPanel}
-            onChange={(value) => {
-              const next = value as ContractPanel;
-              setContractPanel(next);
-              setSection(next);
-              const pathByPanel: Record<ContractPanel, string> = {
-                manifest: "manifest",
-                capabilities: "capabilities",
-                actions: "actions",
-              };
-              window.location.hash = `#/system-map/${pathByPanel[next]}`;
-            }}
-            options={[
-              { label: t("nav.moduleManifest"), value: "manifest" },
-              { label: t("nav.capabilityGovernance"), value: "capabilities" },
-              { label: t("page.systemMap.moduleActions"), value: "actions" },
-            ]}
-          />
-        </div>
-      ) : null}
 
       {showOverview ? (
       <Card title={t("page.systemMap.whatIsThis")}>
@@ -1374,249 +1348,32 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
       </Card>
       ) : null}
 
-      {showManifest ? (
-      <Card title={t("page.systemMap.moduleManifest")}>
-        <div className="grid gap-3 lg:grid-cols-[1.1fr_1.4fr]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Metric label={t("page.systemMap.manifestVersion")} value={manifestQ.data?.version ?? "-"} />
-            <Metric label={t("page.systemMap.visibleModules")} value={manifestQ.data?.quality?.visible_module_count ?? manifestQ.data?.modules?.length ?? 0} />
-            <Metric label={t("page.systemMap.legacyModules")} value={manifestQ.data?.legacy_modules?.length ?? 0} />
-            <Metric label={t("page.systemMap.codeSplitting")} value={manifestQ.data?.frontend?.code_splitting ? "on" : "off"} />
-          </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-            <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.moduleManifestHint")}</p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(manifestQ.data?.frontend?.chunk_strategy ?? []).map((chunk: string) => (
-                <span key={chunk} className="rounded-full bg-[var(--control-bg)] px-2.5 py-1 font-mono text-[11px] text-[var(--muted-strong)]">
-                  {chunk}
-                </span>
-              ))}
-            </div>
-            <div className="mt-3 grid gap-2 text-xs text-[var(--muted)] md:grid-cols-2">
-              <Info label={t("page.systemMap.registrySource")} value={manifestQ.data?.frontend?.module_registry_source ?? "-"} />
-              <Info label={t("page.systemMap.securitySource")} value={manifestQ.data?.security?.capability_check ?? "-"} />
-            </div>
-          </div>
-          {manifestQ.data?.ai?.agent_consumption ? (
-            <div className="lg:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.agentConsumption")}</p>
-                  <p className="mt-1 text-xs text-[var(--muted)]">{manifestQ.data.ai.agent_consumption.purpose}</p>
-                </div>
-                <code className="rounded-lg bg-[var(--control-bg)] px-2.5 py-1 text-xs text-[var(--text)]">
-                  {manifestQ.data.ai.agent_consumption.refresh_command}
-                </code>
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
-                {Object.entries(manifestQ.data.ai.agent_consumption.local_files ?? {}).map(([key, value]) => (
-                  <Info key={key} label={key} value={String(value)} />
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {(manifestQ.data.ai.agent_consumption.selector_fields ?? []).map((field: string) => (
-                  <span key={field} className="rounded-full bg-[var(--control-bg)] px-2.5 py-1 font-mono text-[11px] text-[var(--muted-strong)]">
-                    {field}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </Card>
-      ) : null}
-
-      {showActions ? (
-      <Card title={t("page.systemMap.moduleActions")}>
-        <div className="grid gap-3 xl:grid-cols-[20rem_1fr]">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            <Metric label={t("page.systemMap.actionTotal")} value={actionsQ.data?.summary?.actions ?? 0} />
-            <Metric label={t("page.systemMap.actionAllowed")} value={actionsQ.data?.summary?.allowed ?? 0} />
-            <Metric label={t("page.systemMap.actionBlocked")} value={actionsQ.data?.summary?.blocked ?? 0} />
-            <Metric label={t("page.systemMap.actionModules")} value={actionsQ.data?.summary?.modules ?? 0} />
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-            <div className="grid grid-cols-[1fr_1fr_8rem_10rem] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs font-semibold text-[var(--muted)]">
-              <span>{t("page.systemMap.action")}</span>
-              <span>{t("page.systemMap.module")}</span>
-              <span>{t("page.systemMap.actionType")}</span>
-              <span>{t("page.systemMap.actionPlan")}</span>
-            </div>
-            {(actionsQ.data?.items ?? []).slice(0, 10).map((item: any) => {
-              const runnable = canRunModuleAction(item);
-              return (
-                <div key={`${item.module_id}-${item.id}`} className="grid grid-cols-[1fr_1fr_8rem_10rem] items-center gap-3 border-b border-[var(--border)] px-4 py-3 last:border-0">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[var(--text)]">{item.name}</p>
-                    <p className="mt-1 truncate text-xs text-[var(--muted)]">{item.description}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-[var(--text)]">{item.module_name}</p>
-                    <code className="mt-1 block truncate text-xs text-[var(--muted)]">{item.capability}</code>
-                  </div>
-                  <span className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold ${runnable ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200" : "bg-rose-500/10 text-rose-700 dark:text-rose-200"}`}>
-                    {item.type}
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      disabled={!runnable || planAction.isPending}
-                      onClick={() => planAction.mutate({ moduleId: String(item.module_id), actionId: String(item.id) })}
-                      title={!runnable ? t("capability.denied") : undefined}
-                      className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {t("page.systemMap.previewPlan")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!runnable || executeAction.isPending}
-                      onClick={() => executeAction.mutate({ moduleId: String(item.module_id), actionId: String(item.id) })}
-                      title={!runnable ? t("capability.denied") : undefined}
-                      className="rounded-lg bg-[var(--brand)] px-2 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {t("page.systemMap.executeAction")}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-            {!actionsQ.data?.items?.length ? (
-              <div className="px-4 py-6 text-sm text-[var(--muted)]">{t("page.systemMap.noActions")}</div>
-            ) : null}
-          </div>
-        </div>
-        {actionPlan ? (
-          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">{actionPlan.action?.name}</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">{actionPlan.module?.name} · {actionPlan.action?.target}</p>
-              </div>
-              <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--brand)]">{actionPlan.role}</span>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              {(actionPlan.steps ?? []).map((step: any) => (
-                <div key={step.order} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <p className="text-xs font-semibold text-[var(--text)]">{step.order}. {step.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{step.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        {actionResult ? (
-          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-            <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.actionResult")}</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              {actionResult.executed ? t("page.systemMap.actionExecuted") : actionResult.reason || actionResult.result?.type || "-"}
-            </p>
-            <pre className="mt-3 max-h-64 overflow-auto rounded-xl bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted-strong)]">
-              {JSON.stringify(actionResult.result ?? actionResult, null, 2)}
-            </pre>
-          </div>
-        ) : null}
-        <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.actionRuns")}</p>
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                {t("page.systemMap.actionRunsHint", { total: actionRunsQ.data?.total ?? 0 })}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--surface)]"
-              onClick={() => void actionRunsQ.refetch()}
-            >
-              {t("common.refresh")}
-            </button>
-          </div>
-          <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <div className="grid grid-cols-[1fr_9rem_7rem_8rem] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-semibold text-[var(--muted)]">
-              <span>{t("page.systemMap.module")}</span>
-              <span>{t("page.systemMap.action")}</span>
-              <span>{t("page.systemMap.runResult")}</span>
-              <span>{t("page.systemMap.runTime")}</span>
-            </div>
-            {(actionRunsQ.data?.items ?? []).slice(0, 8).map((run: any) => (
-              <div key={run.id} className="grid grid-cols-[1fr_9rem_7rem_8rem] items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-xs last:border-0">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-[var(--text)]">{run.module_name || run.module_id}</p>
-                  <p className="mt-0.5 truncate font-mono text-[11px] text-[var(--muted)]">{run.id}</p>
-                </div>
-                <span className="truncate text-[var(--muted-strong)]">{run.action_name || run.action_id}</span>
-                <span className={`w-fit rounded-full px-2 py-0.5 font-semibold ${run.executed ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200" : "bg-amber-500/10 text-amber-700 dark:text-amber-200"}`}>
-                  {run.result_type || "-"}
-                </span>
-                <span className="truncate font-mono text-[11px] text-[var(--muted)]">{String(run.created_at || "").replace("T", " ").replace("Z", "")}</span>
-              </div>
-            ))}
-            {!actionRunsQ.data?.items?.length ? (
-              <div className="px-3 py-5 text-sm text-[var(--muted)]">{t("page.systemMap.noActionRuns")}</div>
-            ) : null}
-          </div>
-        </div>
-      </Card>
-      ) : null}
-
-      {showCapabilities ? (
-      <Card title={t("page.systemMap.capabilityGovernance")}>
-        <div className="grid gap-3 lg:grid-cols-[22rem_1fr]">
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            <Metric label={t("page.systemMap.capabilityTotal")} value={capabilitiesQ.data?.summary?.total ?? q.data?.capability_registry?.length ?? 0} />
-            <Metric label={t("page.systemMap.submoduleTotal")} value={capabilitiesQ.data?.summary?.submodules ?? "-"} />
-            <Metric label={t("page.systemMap.actionPermissionTotal")} value={capabilitiesQ.data?.summary?.actions ?? "-"} />
-            <Metric label={t("page.systemMap.aiEnabled")} value={capabilitiesQ.data?.summary?.ai_enabled ?? q.data?.capability_registry?.filter?.((x: any) => x.ai?.enabled)?.length ?? 0} />
-            <Metric label={t("page.systemMap.roleCount")} value={capabilitiesQ.data?.roles?.length ?? 5} />
-            <Metric label={t("page.systemMap.currentRole")} value={currentRole} />
-            <Metric label={t("page.systemMap.visibleCapabilities")} value={caps.summary?.visible ?? "-"} />
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-            <div className="grid grid-cols-[1fr_1fr_1.2fr_1.2fr_1.3fr] gap-3 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs font-semibold text-[var(--muted)]">
-              <span>{t("page.systemMap.module")}</span>
-              <span>{t("page.systemMap.capabilityCode")}</span>
-              <span>{t("page.systemMap.submodules")}</span>
-              <span>{t("page.systemMap.permissionRoles")}</span>
-              <span>{t("page.systemMap.aiSurfaces")}</span>
-            </div>
-            {capabilityRows.slice(0, 10).map((item: any) => {
-              const canRead = (item.permission?.read ?? []).includes(currentRole);
-              const canWrite = (item.permission?.write ?? []).includes(currentRole);
-              const canAdmin = (item.permission?.admin ?? []).includes(currentRole);
-              return (
-              <div key={item.id} className="grid grid-cols-[1fr_1fr_1.2fr_1.2fr_1.3fr] items-start gap-3 border-b border-[var(--border)] px-4 py-3 last:border-0">
-                <div className="min-w-0">
-                  <a href={item.path} className="truncate text-sm font-semibold text-[var(--text)] hover:text-[var(--brand)]">{item.name}</a>
-                  <p className="mt-1 truncate text-xs text-[var(--muted)]">{item.domain_name}</p>
-                </div>
-                <code className="truncate rounded-lg bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--brand)]">{item.capability}</code>
-                <div className="flex flex-wrap gap-1">
-                  {(item.submodules ?? []).slice(0, 4).map((sub: any) => (
-                    <span key={sub.id} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] text-[var(--muted-strong)]">{sub.name}</span>
-                  ))}
-                  {(item.submodules ?? []).length > 4 ? <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] text-[var(--brand)]">+{(item.submodules ?? []).length - 4}</span> : null}
-                </div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex flex-wrap gap-1">
-                    <PermissionBadge active={canRead} label={t("page.systemMap.read")} />
-                    <PermissionBadge active={canWrite} label={t("page.systemMap.write")} />
-                    <PermissionBadge active={canAdmin} label={t("page.systemMap.admin")} />
-                  </div>
-                  <p className="line-clamp-1 text-[var(--muted)]">{(item.permission?.read ?? []).join(", ")}</p>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {(item.ai?.surfaces ?? []).slice(0, 5).map((surface: string) => (
-                    <span key={surface} className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[11px] text-[var(--brand)]">{surface}</span>
-                  ))}
-                </div>
-              </div>
-            );
-            })}
-            {!capabilityRows.length ? (
-              <div className="px-4 py-6 text-sm text-[var(--muted)]">{t("page.systemMap.noCapabilities")}</div>
-            ) : null}
-          </div>
-        </div>
+      {isContractSection ? (
+      <Card title={t("page.systemMap.moduleContractCenter")}>
+        <SystemModuleContractPanel
+          activePanel={activeContractPanel}
+          manifestData={manifestQ.data}
+          actionsData={actionsQ.data}
+          actionRunsData={actionRunsQ.data}
+          capabilityRows={capabilityRows}
+          capabilitySummary={capabilitiesQ.data?.summary ?? { total: q.data?.capability_registry?.length ?? 0 }}
+          roleCount={capabilitiesQ.data?.roles?.length ?? 5}
+          currentRole={currentRole}
+          visibleCapabilities={caps.summary?.visible ?? "-"}
+          actionPlan={actionPlan}
+          actionResult={actionResult}
+          planPending={planAction.isPending}
+          executePending={executeAction.isPending}
+          canRunModuleAction={canRunModuleAction}
+          onPanelChange={(panel) => {
+            setContractPanel(panel);
+            setSection(panel);
+            window.location.hash = `#/system-map/${panel}`;
+          }}
+          onPreviewAction={(moduleId, actionId) => planAction.mutate({ moduleId, actionId })}
+          onExecuteAction={(moduleId, actionId) => executeAction.mutate({ moduleId, actionId })}
+          onRefreshActionRuns={() => void actionRunsQ.refetch()}
+        />
       </Card>
       ) : null}
 
@@ -1856,19 +1613,5 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <p className="font-mono text-sm font-semibold text-[var(--text)]">{value}</p>
       <p className="mt-0.5 text-[11px] text-[var(--muted)]">{label}</p>
     </div>
-  );
-}
-
-function PermissionBadge({ active, label }: { active: boolean; label: string }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-        active
-          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200"
-          : "bg-[var(--surface-muted)] text-[var(--muted)]"
-      }`}
-    >
-      {label}
-    </span>
   );
 }

@@ -3695,6 +3695,17 @@
       "missingLegacyConsole": "Missing legacy",
       "domainMismatch": "Domain mismatch",
       "brokenTargets": "Broken targets",
+      "moduleContractCenter": "Module contract center",
+      "contractPanel": {
+        "title": "Module contract center",
+        "subtitle": "Manage module manifest, permission capabilities, and executable actions in one focused unit instead of three repetitive heavy pages.",
+        "manifestTitle": "Module manifest",
+        "manifestDescription": "Visible modules, chunking evidence, and local context files consumed by the shell, CLI, and Agents.",
+        "capabilitiesTitle": "Capabilities",
+        "capabilitiesDescription": "Review role boundaries, sub-capabilities, and AI surface coverage for each module.",
+        "actionsTitle": "Module actions",
+        "actionsDescription": "Preview or run auditable actions that connect navigation, tasks, and Copilot handoffs."
+      },
       "moduleManifest": "Module manifest",
       "manifestVersion": "Manifest version",
       "visibleModules": "Visible modules",

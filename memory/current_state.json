@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T14:15:30Z",
+  "updated_at": "2026-06-02T06:25:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -396,12 +396,13 @@
       "完成 Task 135 移动端导航抽屉主壳拆分：将 App.tsx 内联移动端微应用导航抽屉抽离为 components/MobileNavDrawer.tsx，并通过 React.lazy/Suspense 仅在 mobileNavOpen 时加载；保留移动端搜索、微应用菜单过滤、AI 命令入口、Copilot 快捷入口、高频动作和空状态；App.mobile-shell 与 AppPerformanceGovernance 契约测试同步验证移动抽屉仍完整可用且按需加载；真实构建生成独立 MobileNavDrawer chunk，体验治理仍为 141 simple，permission_gap=0，性能严格口径保持 78/watch，说明下一步需继续治理导航注册和共享依赖。",
       "完成 Task 136 App 主壳首屏性能收口：Vite 将 src/navigation.tsx 与 src/microApps.ts 拆为 navigation-registry chunk，将页面级 lib/api.ts 固定为 api-client chunk；新增 lib/http.ts 与 lib/appShellApi.ts，App、ProjectSelector、CommandPalette 只加载认证、作用域、菜单偏好、项目/业务线和命令搜索等主壳必需接口，页面专用 API 留给懒加载工作台；System Pages 将 navigation-registry 识别为 shell/initial 并补契约测试。真实生产构建 index 降到 486.24KB raw/146.97KB gzip，性能治理分提升到 86/good，initial_oversize=0，deferred_oversize=1，剩余风险为延迟图谱 antv-vendor。",
       "完成 Task 137 图谱运行时用户主动加载体验收口：LineageGraph 和 WorkflowDag 默认展示轻量血缘分列/步骤链视图，只有用户点击打开交互图谱/DAG 时才加载 AntV G6，保留 engine=antv 显式兼容入口；System Pages 性能治理新增 user-activated-visualization 加载范围和 user_activated_oversize 指标，SystemMap 三语种文案同步。真实生产构建保持 index 486.40KB raw/147.01KB gzip，性能治理分 86/good，initial_oversize=0，deferred_oversize=0，user_activated_oversize=1，体验治理 141 simple。",
-      "完成 Task 138 生产就绪缺口任务化闭环：Manager 新增 POST /api/v1/system/pages/production-readiness/tasks，按 domain/stage/q/ids 筛选生产就绪矩阵，将未 production_ready 模块幂等生成 source=system_page_production_readiness 治理任务；任务描述包含运行数据、外部连接、异步 Worker、测试覆盖、部署证据、可观测和权限策略各维度缺口与整改建议；SystemMap 生产就绪矩阵新增预览生产任务/生成生产任务和结果摘要，治理任务看板新增生产就绪来源，三语种文案、前后端契约测试和真实 smoke 同步验证。"
+      "完成 Task 138 生产就绪缺口任务化闭环：Manager 新增 POST /api/v1/system/pages/production-readiness/tasks，按 domain/stage/q/ids 筛选生产就绪矩阵，将未 production_ready 模块幂等生成 source=system_page_production_readiness 治理任务；任务描述包含运行数据、外部连接、异步 Worker、测试覆盖、部署证据、可观测和权限策略各维度缺口与整改建议；SystemMap 生产就绪矩阵新增预览生产任务/生成生产任务和结果摘要，治理任务看板新增生产就绪来源，三语种文案、前后端契约测试和真实 smoke 同步验证。",
+      "完成 Task 139 SystemMap 模块契约中心精简化：将 Manifest、能力权限和模块动作三段重复大块从 SystemMap 主页面抽离为 SystemModuleContractPanel 独立组件；#/system-map/contract 成为统一契约中心，旧 #/system-map/manifest、#/system-map/capabilities、#/system-map/actions 深链继续可用但以同一组件内三视图呈现；移动端使用卡片流，桌面端使用紧凑表格感，动作预览/执行、权限矩阵、Agent consumption 和运行历史仍保持真实可用；三语种文案、导航 IA 契约测试、模块契约测试和生产构建已验证。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 138 生产就绪缺口任务化闭环已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，前端性能治理严格口径为 86/good，initial_oversize=0，deferred_oversize=0，user_activated_oversize=1，index 主 chunk 487.05KB raw/147.11KB gzip；下一步继续推进真实外部集成、生产就绪缺口落地执行和更小图谱引擎替换评估。"
+    "current": "Task 139 SystemMap 模块契约中心精简化已完成；Manifest、能力权限和模块动作不再作为三个重复大页维护，而是统一为可深链、可切换、移动端卡片化的契约中心组件；当前目标测试 91 passed，前端生产构建通过，SystemMap chunk 101.57KB raw/18.93KB gzip；下一步继续推进其他复杂工作台的模块化与生产功能闭环。"
   },
   "metrics": {
     "completion_rate": 100,

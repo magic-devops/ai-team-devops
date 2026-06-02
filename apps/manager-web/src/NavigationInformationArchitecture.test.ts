@@ -9,6 +9,7 @@ describe("navigation information architecture", () => {
   const projectsSource = readFileSync(resolve(root, "subapps/main-admin/src/pages/Projects.tsx"), "utf8");
   const projectsRouteSource = readFileSync(resolve(root, "subapps/main-admin/src/pages/projects/deliveryKitNav.ts"), "utf8");
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
+  const systemModuleContractSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/SystemModuleContractPanel.tsx"), "utf8");
 
   it("keeps project portfolio and business-line governance from competing in the main menu", () => {
     expect(navigationSource).toContain('subnav("projects", "portfolio", "tenants", "tenant_users", "project_members", "delivery-kit")');
@@ -29,7 +30,9 @@ describe("navigation information architecture", () => {
     expect(systemMapSource).toContain('const showOverview = section === "overview"');
     expect(systemMapSource).toContain('const showRegistry = section === "registry"');
     expect(systemMapSource).toContain('const showPerformance = section === "performance"');
-    expect(systemMapSource).toContain('activeContractPanel === "capabilities"');
+    expect(systemMapSource).toContain("SystemModuleContractPanel");
+    expect(systemModuleContractSource).toContain('activePanel === "capabilities"');
+    expect(systemModuleContractSource).toContain("contractPanel.actionsTitle");
   });
 
   it("keeps data ingest professional routes focused instead of reusing one generic tab", () => {

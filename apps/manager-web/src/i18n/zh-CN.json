@@ -3840,6 +3840,17 @@
       "missingLegacyConsole": "缺旧入口",
       "domainMismatch": "域不一致",
       "brokenTargets": "目标失效",
+      "moduleContractCenter": "模块契约中心",
+      "contractPanel": {
+        "title": "模块契约中心",
+        "subtitle": "统一管理菜单清单、权限能力码和可执行动作，避免 Manifest、Capabilities、Actions 被拆成三个重复大页。",
+        "manifestTitle": "模块清单",
+        "manifestDescription": "给前端壳、CLI 和 Agent 消费的可见模块、分包和本地上下文文件。",
+        "capabilitiesTitle": "能力权限",
+        "capabilitiesDescription": "按角色查看读写管边界、子能力和 AI 能力面覆盖。",
+        "actionsTitle": "模块动作",
+        "actionsDescription": "预览或执行可审计动作，把导航、任务和 Copilot 调用串成闭环。"
+      },
       "moduleManifest": "模块 Manifest",
       "manifestVersion": "Manifest 版本",
       "visibleModules": "当前可见模块",
