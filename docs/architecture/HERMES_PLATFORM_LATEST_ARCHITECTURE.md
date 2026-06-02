@@ -707,6 +707,16 @@ Runbook 从 OpsCenter 父工作台抽离为独立的执行手册治理控制面�
 - 创建/编辑使用 Ant Design Drawer/Form/Steps，主区域聚焦版本列表、证据缺口和审计记录，不把所有表单、版本、证据同时堆在父页面。
 - 这让 OpsCenter 的告警、RCA、Runbook 三个高复杂模块都具备独立维护面，后续 AI 修改可以只落到对应专业组件。
 
+### 10.32 OpsCenter 自愈治理按需模块
+
+自愈策略从 OpsCenter 父工作台抽离为独立的生产护栏控制面：
+
+- `system/ops-center/OpsCenterSelfHealPanel` 承载自愈策略创建、运行信号输入、决策评估、治理任务预览/生成、策略启停/删除/手动应用、护栏动作队列、审批、应用、验证、回滚和审计载荷。
+- `OpsCenterWorkbench.tsx` 保留自愈查询、评估历史查询、动作队列查询、mutation、选中动作派生和 tab 编排；用户进入 `#/system/ops-center/self-heal` 时才加载自愈子模块。
+- 自愈模块继续走真实后端闭环：`opsSelfHealEvaluate` 生成决策，`opsSelfHealTasks` 任务化，`opsSelfHealActionApprove/Apply/Verify/Rollback` 完成受控动作处置。
+- 策略创建、信号评估和动作处置都使用 Ant Design Drawer/Form/Steps，主区保留摘要、决策、任务和动作队列，避免把生产操作铺成一个超长页面。
+- 至此 OpsCenter 的告警源、RCA、Runbook、自愈四个高复杂专业模块都具备独立按需加载边界，父工作台更接近轻量运行中枢。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

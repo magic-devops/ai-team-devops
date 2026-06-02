@@ -7,6 +7,7 @@ const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/syste
 const alertSourcesSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterAlertSourcesPanel.tsx"), "utf8");
 const rcaSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterRcaPanel.tsx"), "utf8");
 const runbooksSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterRunbooksPanel.tsx"), "utf8");
+const selfHealSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterSelfHealPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
   it("keeps OpsCenter modules routable and focused", () => {
@@ -27,6 +28,7 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterAlertSourcesPanel\")");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRcaPanel\")");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRunbooksPanel\")");
+    expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterSelfHealPanel\")");
     expect(source).toContain("<Suspense fallback=");
     expect(source).toContain("AI 分析当前模块");
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
@@ -161,35 +163,41 @@ describe("OpsCenter workbench UX contract", () => {
   it("keeps self-heal policy and signal setup in focused drawer flows", () => {
     expect(source).toContain("selfHealPolicyDrawerOpen");
     expect(source).toContain("selfHealSignalDrawerOpen");
-    expect(source).toContain("selfHealPolicyFocusedDrawer");
-    expect(source).toContain("selfHealSignalFocusedDrawer");
-    expect(source).toContain("setSelfHealPolicyDrawerOpen(true)");
-    expect(source).toContain("setSelfHealSignalDrawerOpen(true)");
-    expect(source).toContain("新建自愈策略");
-    expect(source).toContain("配置自愈评估信号");
-    expect(source).toContain("createSh.mutate()");
-    expect(source).toContain("evaluateSh.mutate()");
-    expect(source).toContain("createHealTasks.mutate(true)");
-    expect(source).toContain("createHealTasks.mutate(false)");
-    expect(source).not.toContain("<input className=\"input-base w-full\" placeholder=\"触发条件 * (如 cpu > 90)\"");
-    expect(source).not.toContain("<textarea\n                  className=\"input-base min-h-32 w-full font-mono text-xs\"");
+    expect(source).toContain("OpsCenterSelfHealPanel");
+    expect(source).not.toContain("selfHealPolicyFocusedDrawer");
+    expect(source).not.toContain("selfHealSignalFocusedDrawer");
+    expect(selfHealSource).toContain("export function OpsCenterSelfHealPanel");
+    expect(selfHealSource).toContain("selfHealPolicyFocusedDrawer");
+    expect(selfHealSource).toContain("selfHealSignalFocusedDrawer");
+    expect(selfHealSource).toContain("setSelfHealPolicyDrawerOpen(true)");
+    expect(selfHealSource).toContain("setSelfHealSignalDrawerOpen(true)");
+    expect(selfHealSource).toContain("新建自愈策略");
+    expect(selfHealSource).toContain("配置自愈评估信号");
+    expect(selfHealSource).toContain("createSh.mutate()");
+    expect(selfHealSource).toContain("evaluateSh.mutate()");
+    expect(selfHealSource).toContain("createHealTasks.mutate(true)");
+    expect(selfHealSource).toContain("createHealTasks.mutate(false)");
+    expect(selfHealSource).not.toContain("<input className=\"input-base w-full\" placeholder=\"触发条件 * (如 cpu > 90)\"");
+    expect(selfHealSource).not.toContain("<textarea\n                  className=\"input-base min-h-32 w-full font-mono text-xs\"");
   });
 
   it("keeps self-heal guarded action handling in a focused drawer flow", () => {
     expect(source).toContain("selfHealActionDrawerOpen");
     expect(source).toContain("selectedHealActionId");
     expect(source).toContain("selectedHealAction");
-    expect(source).toContain("selfHealActionFocusedDrawer");
-    expect(source).toContain("处置自愈护栏动作");
-    expect(source).toContain("处理动作");
-    expect(source).toContain("actionStepIndex");
-    expect(source).toContain("approveAction.mutate(selectedHealAction.id)");
-    expect(source).toContain("applyAction.mutate(selectedHealAction.id)");
-    expect(source).toContain("verifyAction.mutate(selectedHealAction.id)");
-    expect(source).toContain("rollbackAction.mutate(selectedHealAction.id)");
-    expect(source).not.toContain("onClick={() => approveAction.mutate(item.id)}");
-    expect(source).not.toContain("onClick={() => applyAction.mutate(item.id)}");
-    expect(source).not.toContain("onClick={() => verifyAction.mutate(item.id)}");
-    expect(source).not.toContain("onClick={() => rollbackAction.mutate(item.id)}");
+    expect(source).toContain("OpsCenterSelfHealPanel");
+    expect(source).not.toContain("selfHealActionFocusedDrawer");
+    expect(selfHealSource).toContain("selfHealActionFocusedDrawer");
+    expect(selfHealSource).toContain("处置自愈护栏动作");
+    expect(selfHealSource).toContain("处理动作");
+    expect(selfHealSource).toContain("actionStepIndex");
+    expect(selfHealSource).toContain("approveAction.mutate(selectedHealAction.id)");
+    expect(selfHealSource).toContain("applyAction.mutate(selectedHealAction.id)");
+    expect(selfHealSource).toContain("verifyAction.mutate(selectedHealAction.id)");
+    expect(selfHealSource).toContain("rollbackAction.mutate(selectedHealAction.id)");
+    expect(selfHealSource).not.toContain("onClick={() => approveAction.mutate(item.id)}");
+    expect(selfHealSource).not.toContain("onClick={() => applyAction.mutate(item.id)}");
+    expect(selfHealSource).not.toContain("onClick={() => verifyAction.mutate(item.id)}");
+    expect(selfHealSource).not.toContain("onClick={() => rollbackAction.mutate(item.id)}");
   });
 });
