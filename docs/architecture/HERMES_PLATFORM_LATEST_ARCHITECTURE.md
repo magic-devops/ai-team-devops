@@ -570,6 +570,16 @@ SSO 已补齐 IdP 自动开通/停用用户的 SCIM 入站协议：
 - `/api/v1/system/pages/frontend-performance` 把 `navigation-registry` 归为 `shell/initial`，继续按 `initial_oversize` 与 `deferred_oversize` 分开治理首屏阻塞和低频图谱包。
 - 真实生产构建后 `index` 主 chunk 为 486.24KB raw、146.97KB gzip，首屏超预算清零；当前性能治理分为 86/good，剩余风险集中在延迟加载的 `antv-vendor` 图谱包。
 
+### 10.18 图谱运行时用户主动加载
+
+血缘和工作流图谱从“进入页面自动拉取 AntV G6”调整为“默认轻量视图 + 用户主动打开交互图谱”：
+
+- `LineageGraph` 默认展示可横向滚动的轻量血缘分列视图，节点选择、上下游检索和移动端阅读优先可用；需要拖拽、缩放和自动布局时再点击“打开交互图谱”加载 AntV G6。
+- `WorkflowDag` 默认展示轻量步骤链，运行态、失败态和当前步骤仍可一眼识别；需要交互 DAG 时再点击“打开交互 DAG”加载 AntV G6。
+- `engine="antv"` 仍保留为显式兼容入口，适合后续对少数专业图谱页做强交互默认策略。
+- `/api/v1/system/pages/frontend-performance` 新增 `user-activated-visualization` 加载范围与 `user_activated_oversize` 指标，避免把用户主动打开的低频大图谱库误判为首屏或普通路由风险。
+- 真实构建后 `initial_oversize=0`、`deferred_oversize=0`、`user_activated_oversize=1`，AntV 大包仍存在但不会阻塞默认页面体验。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

@@ -22,12 +22,13 @@ export function LineageGraph({
   onSelect?: (id: string) => void;
   engine?: "antv" | "lite";
 }) {
-  const [lite, setLite] = useState(engine === "lite");
+  const [interactive, setInteractive] = useState(engine === "antv");
+  const [lite, setLite] = useState(engine !== "antv");
   const g6Data = useMemo(() => toG6GraphData(nodes, edges, { selectedId }), [nodes, edges, selectedId]);
 
   if (!nodes.length) return null;
 
-  if (!lite && g6Data.nodes.length) {
+  if (interactive && !lite && g6Data.nodes.length) {
     return (
       <Suspense fallback={<LineageLite nodes={nodes} edges={edges} selectedId={selectedId} onSelect={onSelect} />}>
         <AntvGraphLazy
@@ -45,7 +46,24 @@ export function LineageGraph({
     );
   }
 
-  return <LineageLite nodes={nodes} edges={edges} selectedId={selectedId} onSelect={onSelect} />;
+  return (
+    <div className="space-y-2">
+      <LineageLite nodes={nodes} edges={edges} selectedId={selectedId} onSelect={onSelect} />
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--muted)]">
+        <span>轻量血缘视图优先加载；需要拖拽、缩放和自动布局时再打开交互图谱。</span>
+        <button
+          type="button"
+          onClick={() => {
+            setLite(false);
+            setInteractive(true);
+          }}
+          className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 font-semibold text-[var(--text)] hover:border-[var(--brand)]/50 hover:text-[var(--brand)]"
+        >
+          打开交互图谱
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function LineageLite({

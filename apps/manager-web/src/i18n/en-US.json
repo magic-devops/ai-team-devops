@@ -3536,6 +3536,7 @@
       "performanceLoadScopeValue": {
         "initial": "Initial",
         "deferred-visualization": "Deferred graph",
+        "user-activated-visualization": "User opened graph",
         "route-lazy": "Route lazy",
         "shared": "Shared"
       },

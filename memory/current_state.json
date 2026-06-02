@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T14:02:05Z",
+  "updated_at": "2026-06-02T14:08:40Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -394,12 +394,13 @@
       "完成 Task 133 前端性能风险任务化闭环：Manager 新增 /api/v1/system/pages/frontend-performance/tasks，按超预算和关注 chunk 幂等生成 source=system_frontend_performance 治理任务；SystemMap 性能治理页新增预览/生成性能任务和结果反馈；EChartsPanel 改为懒加载当前 echarts 版本可解析的运行时模块，Vite manualChunks 细分 AntV、AntD、ECharts vendor 以便持续治理大包风险；体验审计 141 个模块全部 simple，permission_gap=0。",
       "完成 Task 134 前端性能加载范围治理增强：System Pages 前端性能治理新增 load_scope、initial_oversize 与 deferred_oversize，区分首屏主壳、路由懒载和延迟图谱包，性能任务描述同步标注首屏阻塞/低频延迟加载影响；SystemMap 性能页展示首屏超预算、延迟超预算和加载范围列；全局 AI 命令面板从 App 主壳拆为 CommandPalette 懒加载组件，保持 AI 优先入口但不把低频命令搜索逻辑塞进首屏；真实构建通过，当前严格口径性能治理分 78/watch，initial_oversize=1，deferred_oversize=1。",
       "完成 Task 135 移动端导航抽屉主壳拆分：将 App.tsx 内联移动端微应用导航抽屉抽离为 components/MobileNavDrawer.tsx，并通过 React.lazy/Suspense 仅在 mobileNavOpen 时加载；保留移动端搜索、微应用菜单过滤、AI 命令入口、Copilot 快捷入口、高频动作和空状态；App.mobile-shell 与 AppPerformanceGovernance 契约测试同步验证移动抽屉仍完整可用且按需加载；真实构建生成独立 MobileNavDrawer chunk，体验治理仍为 141 simple，permission_gap=0，性能严格口径保持 78/watch，说明下一步需继续治理导航注册和共享依赖。",
-      "完成 Task 136 App 主壳首屏性能收口：Vite 将 src/navigation.tsx 与 src/microApps.ts 拆为 navigation-registry chunk，将页面级 lib/api.ts 固定为 api-client chunk；新增 lib/http.ts 与 lib/appShellApi.ts，App、ProjectSelector、CommandPalette 只加载认证、作用域、菜单偏好、项目/业务线和命令搜索等主壳必需接口，页面专用 API 留给懒加载工作台；System Pages 将 navigation-registry 识别为 shell/initial 并补契约测试。真实生产构建 index 降到 486.24KB raw/146.97KB gzip，性能治理分提升到 86/good，initial_oversize=0，deferred_oversize=1，剩余风险为延迟图谱 antv-vendor。"
+      "完成 Task 136 App 主壳首屏性能收口：Vite 将 src/navigation.tsx 与 src/microApps.ts 拆为 navigation-registry chunk，将页面级 lib/api.ts 固定为 api-client chunk；新增 lib/http.ts 与 lib/appShellApi.ts，App、ProjectSelector、CommandPalette 只加载认证、作用域、菜单偏好、项目/业务线和命令搜索等主壳必需接口，页面专用 API 留给懒加载工作台；System Pages 将 navigation-registry 识别为 shell/initial 并补契约测试。真实生产构建 index 降到 486.24KB raw/146.97KB gzip，性能治理分提升到 86/good，initial_oversize=0，deferred_oversize=1，剩余风险为延迟图谱 antv-vendor。",
+      "完成 Task 137 图谱运行时用户主动加载体验收口：LineageGraph 和 WorkflowDag 默认展示轻量血缘分列/步骤链视图，只有用户点击打开交互图谱/DAG 时才加载 AntV G6，保留 engine=antv 显式兼容入口；System Pages 性能治理新增 user-activated-visualization 加载范围和 user_activated_oversize 指标，SystemMap 三语种文案同步。真实生产构建保持 index 486.40KB raw/147.01KB gzip，性能治理分 86/good，initial_oversize=0，deferred_oversize=0，user_activated_oversize=1，体验治理 141 simple。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 136 App 主壳首屏性能收口已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，前端性能治理严格口径为 86/good，initial_oversize=0，deferred_oversize=1，index 主 chunk 486.24KB raw/146.97KB gzip；下一步继续推进 AntV 图谱运行时延迟拆分、生产就绪和真实外部集成。"
+    "current": "Task 137 图谱运行时用户主动加载体验收口已完成；当前体验治理 141 个模块全部 simple，permission_gap=0，前端性能治理严格口径为 86/good，initial_oversize=0，deferred_oversize=0，user_activated_oversize=1，index 主 chunk 486.40KB raw/147.01KB gzip；下一步继续推进生产就绪、真实外部集成和更小图谱引擎替换评估。"
   },
   "metrics": {
     "completion_rate": 100,

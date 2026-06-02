@@ -9,6 +9,8 @@ describe("app shell performance governance", () => {
   const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandPalette.tsx"), "utf8");
   const mobileNavDrawerSource = readFileSync(resolve(root, "src/components/MobileNavDrawer.tsx"), "utf8");
   const projectSelectorSource = readFileSync(resolve(root, "src/components/ProjectSelector.tsx"), "utf8");
+  const lineageGraphSource = readFileSync(resolve(root, "src/pages/shared/LineageGraph.tsx"), "utf8");
+  const workflowDagSource = readFileSync(resolve(root, "src/pages/shared/WorkflowDag.tsx"), "utf8");
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
   const viteSource = readFileSync(resolve(root, "vite.config.ts"), "utf8");
   const zh = JSON.parse(readFileSync(resolve(root, "src/i18n/zh-CN.json"), "utf8"));
@@ -45,6 +47,7 @@ describe("app shell performance governance", () => {
     expect(systemMapSource).toContain("performanceLoadScopeValue");
     expect(zh.page.systemMap.performanceLoadScopeValue.initial).toBe("首屏");
     expect(zh.page.systemMap.performanceLoadScopeValue["deferred-visualization"]).toBe("延迟图谱");
+    expect(zh.page.systemMap.performanceLoadScopeValue["user-activated-visualization"]).toBe("用户打开图谱");
   });
 
   it("keeps the navigation registry outside the main application chunk", () => {
@@ -52,5 +55,12 @@ describe("app shell performance governance", () => {
     expect(viteSource).toContain("api-client");
     expect(viteSource).toContain("/src/navigation.tsx");
     expect(viteSource).toContain("/src/microApps.ts");
+  });
+
+  it("keeps heavy graph rendering behind explicit user activation", () => {
+    expect(lineageGraphSource).toContain('useState(engine === "antv")');
+    expect(lineageGraphSource).toContain("打开交互图谱");
+    expect(workflowDagSource).toContain('useState(engine === "antv")');
+    expect(workflowDagSource).toContain("打开交互 DAG");
   });
 });

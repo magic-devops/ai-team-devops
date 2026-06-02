@@ -3681,6 +3681,7 @@
       "performanceLoadScopeValue": {
         "initial": "首屏",
         "deferred-visualization": "延迟图谱",
+        "user-activated-visualization": "用户打开图谱",
         "route-lazy": "路由懒载",
         "shared": "共享"
       },

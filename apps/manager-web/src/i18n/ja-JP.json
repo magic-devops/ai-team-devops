@@ -3193,6 +3193,7 @@
       "performanceLoadScopeValue": {
         "initial": "初期",
         "deferred-visualization": "遅延グラフ",
+        "user-activated-visualization": "ユーザー起動グラフ",
         "route-lazy": "ルート遅延",
         "shared": "共有"
       },

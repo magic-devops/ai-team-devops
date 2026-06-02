@@ -4149,7 +4149,9 @@ def _chunk_load_scope(filename: str, chunk_type: str) -> str:
     lowered = filename.lower()
     if chunk_type == "shell":
         return "initial"
-    if lowered.startswith(("antv-vendor", "echarts-", "echarts-core-vendor", "echarts-charts-vendor", "echarts-components-vendor")):
+    if lowered.startswith("antv-vendor"):
+        return "user-activated-visualization"
+    if lowered.startswith(("echarts-", "echarts-core-vendor", "echarts-charts-vendor", "echarts-components-vendor")):
         return "deferred-visualization"
     if chunk_type == "route":
         return "route-lazy"
@@ -4195,6 +4197,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
     vendor_oversize = [item for item in oversize_raw if item["type"] == "vendor"]
     initial_oversize = [item for item in oversize_raw if item.get("load_scope") == "initial"]
     deferred_oversize = [item for item in oversize_raw if str(item.get("load_scope") or "").startswith(("deferred", "route-lazy"))]
+    user_activated_oversize = [item for item in oversize_raw if str(item.get("load_scope") or "").startswith("user-activated")]
     score = max(0, 100 - len(oversize_gzip) * 10 - len(route_oversize) * 6 - len(vendor_oversize) * 4 - len(initial_oversize) * 8)
     status = "excellent" if score >= 92 else "good" if score >= 82 else "watch" if score >= 68 else "risk"
     recommendations: list[str] = []
@@ -4206,7 +4209,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
     if vendor_oversize:
         vendor_names = {str(item["name"]).split("-")[0] for item in vendor_oversize}
         if vendor_names == {"antv"}:
-            recommendations.append("当前仅 AntV 图谱包仍超过预算；优先将 G6 图谱运行时继续后置到血缘/编排等低频图谱场景。")
+            recommendations.append("当前仅 AntV 图谱包仍超过预算；默认轻量视图已避免进入页面即加载，后续可继续评估更小图谱引擎或按场景替换 G6。")
         else:
             recommendations.append("继续拆分超预算 vendor 包，避免首屏加载与专业工作台强耦合。")
     if any(item["type"] == "shell" and item["budget"]["over_raw_budget"] for item in chunks):
@@ -4235,6 +4238,7 @@ def _frontend_performance_payload() -> dict[str, Any]:
             "oversize_gzip": len(oversize_gzip),
             "initial_oversize": len(initial_oversize),
             "deferred_oversize": len(deferred_oversize),
+            "user_activated_oversize": len(user_activated_oversize),
         },
         "budgets": {
             "chunk_raw_kb": 500,
@@ -4251,7 +4255,14 @@ def _frontend_performance_payload() -> dict[str, Any]:
             "task_api": "/api/v1/system/pages/frontend-performance/tasks",
             "route": "#/system-map/performance",
             "build_command": "pnpm --dir apps/manager-web build",
-            "fields": ["summary.score", "summary.initial_oversize", "summary.deferred_oversize", "top_chunks", "recommendations"],
+            "fields": [
+                "summary.score",
+                "summary.initial_oversize",
+                "summary.deferred_oversize",
+                "summary.user_activated_oversize",
+                "top_chunks",
+                "recommendations",
+            ],
         },
     }
 
