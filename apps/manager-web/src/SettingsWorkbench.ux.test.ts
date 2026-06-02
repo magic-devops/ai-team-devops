@@ -11,29 +11,45 @@ const runtimeSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/page
 const storageSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsStoragePanel.tsx"), "utf8");
 const billingSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsBillingPanel.tsx"), "utf8");
 const ssoSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsSsoPanel.tsx"), "utf8");
+const profilesSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/settings/SettingsProfilesPanel.tsx"), "utf8");
 
 describe("Settings workbench UX contract", () => {
   it("keeps environment Profile editing in a focused drawer flow", () => {
     expect(source).toContain("profileDrawerOpen");
-    expect(source).toContain("<Drawer");
-    expect(source).toContain("<Form");
-    expect(source).toContain("<Steps");
-    expect(source).toContain("setProfileDrawerOpen(true)");
+    expect(source).toContain('lazy(() => import("./settings/SettingsProfilesPanel")');
+    expect(source).toContain("SettingsProfilesPanel");
+    expect(source).not.toContain("profileQuickSummary");
+    expect(profilesSource).toContain("export function SettingsProfilesPanel");
+    expect(profilesSource).toContain("<Drawer");
+    expect(profilesSource).toContain("<Form");
+    expect(profilesSource).toContain("<Steps");
+    expect(profilesSource).toContain("setProfileDrawerOpen(true)");
+    expect(profilesSource).toContain("saveProfile.mutate()");
   });
 
   it("keeps the Profiles main surface focused on status, templates, and lists", () => {
-    expect(source).toContain("profileQuickSummary");
+    expect(profilesSource).toContain("profileQuickSummary");
+    expect(profilesSource).toContain("opsProfiles.data?.doctor?.checks");
+    expect(profilesSource).toContain("opsProfiles.data?.templates");
+    expect(profilesSource).toContain("opsProfiles.data?.items");
     expect(source).not.toContain("onSubmit={(e) => {\n                e.preventDefault();\n                if (!profileDraft.name.trim()) return;\n                saveProfile.mutate();\n              }}");
   });
 
   it("keeps release pipeline creation in a preview-first drawer flow", () => {
     expect(source).toContain("deploymentPipelineDrawerOpen");
-    expect(source).toContain("pipelineQuickSummary");
-    expect(source).toContain("pipelineOpenDrawer");
-    expect(source).toContain("setDeploymentPipelineDrawerOpen(true)");
-    expect(source).toContain("Switch checked={deploymentPipelineDraft.dry_run}");
-    expect(source).toContain("createDeploymentPipeline.mutate(true)");
-    expect(source).toContain("createDeploymentPipeline.mutate(false)");
+    expect(source).not.toContain("pipelineQuickSummary");
+    expect(profilesSource).toContain("pipelineQuickSummary");
+    expect(profilesSource).toContain("pipelineOpenDrawer");
+    expect(profilesSource).toContain("setDeploymentPipelineDrawerOpen(true)");
+    expect(profilesSource).toContain("Switch checked={deploymentPipelineDraft.dry_run}");
+    expect(profilesSource).toContain("createDeploymentPackage.mutate()");
+    expect(profilesSource).toContain("createDeploymentApproval.mutate()");
+    expect(profilesSource).toContain("createDeploymentCanaryPolicy.mutate()");
+    expect(profilesSource).toContain("createDeploymentPipeline.mutate(true)");
+    expect(profilesSource).toContain("createDeploymentPipeline.mutate(false)");
+    expect(profilesSource).toContain("executeDeploymentPipeline.mutate(true)");
+    expect(profilesSource).toContain("callbackDeploymentPipelineExecution.mutate()");
+    expect(profilesSource).toContain("remediateDeploymentPipeline.mutate(false)");
   });
 
   it("keeps SSO risk governance tasking in a focused drawer flow", () => {

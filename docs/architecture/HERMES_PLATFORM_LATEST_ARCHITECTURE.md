@@ -667,6 +667,16 @@ Settings 父页面继续瘦身，账户会话从内联 JSX 改为真实可用的
 - 响应式布局保持“Provider 配置 + 身份安全治理”双栏效率，风险任务、IM、升级和 Runbook 使用抽屉承载配置，移动端自然单列，避免把所有安全操作堆成一个长表单。
 - 生产构建生成独立 `SettingsSsoPanel` chunk，Settings 主 chunk 继续下降；下一步拆环境 Profile/部署发布重模块。
 
+### 10.28 Settings 环境 Profile 与部署发布按需模块
+
+环境 Profile 与部署发布从 Settings 父页面抽离为独立的生产运维控制面：
+
+- `settings/SettingsProfilesPanel` 承载环境 Profile 草稿、模板、列表、部署包、审批、灰度策略、灰度指标源、灰度 IM、回滚演练、回滚 Runbook、跨环境执行审计、一键部署流水线、真实执行器、分布式执行目标、外部执行回调和流水线自愈诊断。
+- `Settings.tsx` 只保留 Profile/Deployment 查询、draft 状态、mutation 编排、派生选择 ID 和 active module 编排，不再把发布运维复杂 UI 混在父页面。
+- 真实操作保留：创建部署包、申请审批、执行灰度、采集指标、发送 IM、创建回滚演练/Runbook、登记执行审计、预览/创建流水线、执行受控命令、同步外部回调、管理分布式执行目标和生成自愈任务。
+- 响应式布局保持“Profile 状态 + 发布运维流水”的主从结构；高风险/多步骤操作继续使用抽屉和预览优先流程，避免把生产操作设计成一个超长表单。
+- 生产构建生成独立 `SettingsProfilesPanel` chunk，Settings 主 chunk 下降为轻量编排壳；后续治理重点转向 OpsCenter、A2A、LLM Gateway 等其它大工作台的模块拆分与交互简化。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |
