@@ -687,6 +687,16 @@ OpsCenter 开始从 3000+ 行大工作台向“运行中枢 + 专业治理模块
 - 响应式布局延续 data-dense 控制台风格，桌面端保留双栏扫描效率，移动端自然单列；父页面不再堆叠低频告警治理表单。
 - 这为后续 RCA、Runbook、自愈策略继续拆成独立按需模块提供模板，也让权限控制、System Pages 能力治理和 AI 单点改造有更清晰的落点。
 
+### 10.30 OpsCenter RCA 治理按需模块
+
+RCA 从 OpsCenter 父工作台抽离为独立的根因治理控制面：
+
+- `system/ops-center/OpsCenterRcaPanel` 承载手工 RCA 创建、智能根因归因、候选证据、Runbook 推荐、归因任务化、智能归因生成 RCA、验证计划、验证并关闭和 RCA 列表证据。
+- `OpsCenterWorkbench.tsx` 保留 RCA 查询、mutation、结果状态和 tab 编排；用户进入 `#/system/ops-center/rca` 时才通过 `React.lazy/Suspense` 加载 RCA 子模块。
+- RCA 模块继续走真实后端闭环：`opsRcaInsights` 生成候选，`opsRcaInsightTasks` 预览或创建治理任务，`opsRcaInsightCreateRca` 自动入库，`opsRcaVerificationPlan/opsRcaVerify` 完成关闭前验证。
+- 手工创建和智能归因配置都使用 Ant Design Drawer/Form/Steps，主区域只保留摘要、候选、验证结果和 RCA 列表，减少长表单堆叠。
+- 该模式让 OpsCenter 父页面逐步变成轻量运行中枢，后续 Runbook 和自愈策略可以继续按同样边界拆分。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

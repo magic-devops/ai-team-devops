@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const root = resolve(__dirname, "..");
 const source = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench.tsx"), "utf8");
 const alertSourcesSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterAlertSourcesPanel.tsx"), "utf8");
+const rcaSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterRcaPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
   it("keeps OpsCenter modules routable and focused", () => {
@@ -23,6 +24,7 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("opsCenterModeSwitch");
     expect(source).toContain("opsCenterModuleQuickSummary");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterAlertSourcesPanel\")");
+    expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRcaPanel\")");
     expect(source).toContain("<Suspense fallback=");
     expect(source).toContain("AI 分析当前模块");
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
@@ -104,29 +106,34 @@ describe("OpsCenter workbench UX contract", () => {
 
   it("keeps RCA insight configuration in a focused drawer flow", () => {
     expect(source).toContain("rcaInsightDrawerOpen");
-    expect(source).toContain("rcaInsightFocusedDrawer");
-    expect(source).toContain("setRcaInsightDrawerOpen(true)");
-    expect(source).toContain("配置智能根因归因");
-    expect(source).toContain("归因范围");
-    expect(source).toContain("任务化参数");
-    expect(source).toContain("analyzeRcaInsights.mutate()");
-    expect(source).toContain("createRcaInsightTasks.mutate(true)");
-    expect(source).toContain("createRcaInsightTasks.mutate(false)");
-    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"Agent Run ID\" value={rcaInsightFilter.run_id}");
-    expect(source).not.toContain("<select className=\"input-base\" value={rcaInsightFilter.priority}");
+    expect(source).toContain("OpsCenterRcaPanel");
+    expect(source).not.toContain("rcaInsightFocusedDrawer");
+    expect(rcaSource).toContain("export function OpsCenterRcaPanel");
+    expect(rcaSource).toContain("rcaInsightFocusedDrawer");
+    expect(rcaSource).toContain("setRcaInsightDrawerOpen(true)");
+    expect(rcaSource).toContain("配置智能根因归因");
+    expect(rcaSource).toContain("归因范围");
+    expect(rcaSource).toContain("任务化参数");
+    expect(rcaSource).toContain("analyzeRcaInsights.mutate()");
+    expect(rcaSource).toContain("createRcaInsightTasks.mutate(true)");
+    expect(rcaSource).toContain("createRcaInsightTasks.mutate(false)");
+    expect(rcaSource).not.toContain("<input className=\"input-base\" placeholder=\"Agent Run ID\" value={rcaInsightFilter.run_id}");
+    expect(rcaSource).not.toContain("<select className=\"input-base\" value={rcaInsightFilter.priority}");
   });
 
   it("keeps manual RCA creation in a focused drawer flow", () => {
     expect(source).toContain("rcaCreateDrawerOpen");
-    expect(source).toContain("rcaCreateFocusedDrawer");
-    expect(source).toContain("setRcaCreateDrawerOpen(true)");
-    expect(source).toContain("新建 RCA");
-    expect(source).toContain("事件信息");
-    expect(source).toContain("根因与处置");
-    expect(source).toContain("创建后闭环");
-    expect(source).toContain("createRca.mutate()");
-    expect(source).not.toContain("<input className=\"input-base\" placeholder=\"事件 ID *\" value={rcaForm.incident_id}");
-    expect(source).not.toContain("<textarea className=\"input-base w-full h-16 resize-none\" placeholder=\"根因描述 *\"");
+    expect(source).toContain("OpsCenterRcaPanel");
+    expect(source).not.toContain("rcaCreateFocusedDrawer");
+    expect(rcaSource).toContain("rcaCreateFocusedDrawer");
+    expect(rcaSource).toContain("setRcaCreateDrawerOpen(true)");
+    expect(rcaSource).toContain("新建 RCA");
+    expect(rcaSource).toContain("事件信息");
+    expect(rcaSource).toContain("根因与处置");
+    expect(rcaSource).toContain("创建后闭环");
+    expect(rcaSource).toContain("createRca.mutate()");
+    expect(rcaSource).not.toContain("<input className=\"input-base\" placeholder=\"事件 ID *\" value={rcaForm.incident_id}");
+    expect(rcaSource).not.toContain("<textarea className=\"input-base w-full h-16 resize-none\" placeholder=\"根因描述 *\"");
   });
 
   it("keeps Runbook version editing in a focused drawer flow", () => {

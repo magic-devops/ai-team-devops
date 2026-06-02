@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-02T07:29:38Z",
+  "updated_at": "2026-06-02T07:42:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -406,17 +406,18 @@
       "完成 Task 145 Settings 商业计费子模块按需加载：将 billing 的订阅与套餐、超额策略、权益试算、经营指标、账单草稿、CSV 导出、账单历史、状态流转、审计记录、收款登记、收款历史和分步抽屉抽离为 settings/SettingsBillingPanel 独立组件；Settings 父页面仅保留 billing 相关 useQuery、draft 状态、mutation 编排和 activeModule 编排，通过 React.lazy/Suspense 在商业计费子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 24.30KB raw/4.97KB gzip 的 SettingsBillingPanel 独立 chunk，Settings 主 chunk 下降到 218.28KB raw/34.19KB gzip。",
       "完成 Task 146 Settings 企业 SSO 子模块按需加载：将 SSO Provider 配置、OIDC/SAML 模板、密钥脱敏输入、SCIM Token 轮换与测试、角色映射预览、风险报表、风险任务化、IM 简报、风险订阅、自动升级、处置 Runbook、Runbook 步骤流转和 SCIM 审计从 Settings 父页面抽离为 settings/SettingsSsoPanel 独立组件；Settings 父页面仅保留 sso 相关 useQuery、draft 状态、mutation 编排和 activeModule 编排，通过 React.lazy/Suspense 在企业 SSO 子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 67.80KB raw/11.08KB gzip 的 SettingsSsoPanel 独立 chunk，Settings 主 chunk 下降到 154.98KB raw/25.60KB gzip。",
       "完成 Task 147 Settings 环境 Profile 与部署发布子模块按需加载：将环境 Profile 草稿/模板/列表、部署包、审批、灰度策略、灰度指标源、灰度 IM、回滚演练、回滚 Runbook、跨环境执行审计、一键部署流水线、真实执行器、分布式执行目标、外部执行回调、流水线自愈诊断从 Settings 父页面抽离为 settings/SettingsProfilesPanel 独立组件；Settings 父页面仅保留 profiles 相关 useQuery、draft 状态、mutation 编排、派生选择 ID 和 activeModule 编排，通过 React.lazy/Suspense 在环境 Profile 子路由加载。目标测试 96 passed，TypeScript noEmit 与生产构建通过，新增 110.28KB raw/15.19KB gzip 的 SettingsProfilesPanel 独立 chunk，Settings 主 chunk 下降到 51.73KB raw/12.51KB gzip。",
-      "完成 Task 148 OpsCenter 告警源治理子模块按需加载：将告警源配置/测试/同步、外部告警列表、降噪策略、静默规则、降噪评估、策略推荐、A/B 对比、跨源 SLO 预测、SLO 自动升级、策略灰度审计和跨模块策略联动从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterAlertSourcesPanel 独立组件；父页面保留真实 query、状态、mutation、IM 通道选择和 tab 编排，并在告警源治理子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 63.16KB raw/10.43KB gzip 的 OpsCenterAlertSourcesPanel 独立 chunk，OpsCenterWorkbench 主 chunk 保持为 82.78KB raw/17.50KB gzip，OpsCenter 开始从 3000+ 行大工作台向专业模块化控制面收敛。"
+      "完成 Task 148 OpsCenter 告警源治理子模块按需加载：将告警源配置/测试/同步、外部告警列表、降噪策略、静默规则、降噪评估、策略推荐、A/B 对比、跨源 SLO 预测、SLO 自动升级、策略灰度审计和跨模块策略联动从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterAlertSourcesPanel 独立组件；父页面保留真实 query、状态、mutation、IM 通道选择和 tab 编排，并在告警源治理子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 63.16KB raw/10.43KB gzip 的 OpsCenterAlertSourcesPanel 独立 chunk，OpsCenterWorkbench 主 chunk 保持为 82.78KB raw/17.50KB gzip，OpsCenter 开始从 3000+ 行大工作台向专业模块化控制面收敛。",
+      "完成 Task 149 OpsCenter RCA 治理子模块按需加载：将手工 RCA 创建、智能根因归因、归因任务化、智能归因生成 RCA、RCA 验证计划、验证并关闭和 RCA 列表证据从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterRcaPanel 独立组件；父页面保留真实 query、状态、mutation 和 tab 编排，并在 RCA 子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 17.51KB raw/4.15KB gzip 的 OpsCenterRcaPanel 独立 chunk，OpsCenterWorkbench 主 chunk 降到 66.95KB raw/15.13KB gzip。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 148 OpsCenter 告警源治理子模块按需加载已完成；告警源治理的真实配置、降噪、SLO、灰度审计和跨模块联动均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter RCA、Runbook 或 A2A/LLM Gateway 重工作台。"
+    "current": "Task 149 OpsCenter RCA 治理子模块按需加载已完成；手工 RCA、智能归因、任务化、生成 RCA 和验证闭环均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter Runbook、自愈或 A2A/LLM Gateway 重工作台。"
   },
   "metrics": {
     "completion_rate": 100,
     "velocity": 0,
     "blockers_count": 0
   },
-  "current": "Task 148 OpsCenter 告警源治理子模块按需加载已完成；告警源治理的真实配置、降噪、SLO、灰度审计和跨模块联动均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter RCA、Runbook 或 A2A/LLM Gateway 重工作台。"
+  "current": "Task 149 OpsCenter RCA 治理子模块按需加载已完成；手工 RCA、智能归因、任务化、生成 RCA 和验证闭环均已独立 chunk 按需加载，目标测试 96 passed，TypeScript noEmit 和生产构建通过；下一步继续拆 OpsCenter Runbook、自愈或 A2A/LLM Gateway 重工作台。"
 }
