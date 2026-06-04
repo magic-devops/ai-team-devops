@@ -731,9 +731,44 @@
     "dataServices": {
       "title": "Data services"
     },
+    "agentRuns": {
+      "tabs": {
+        "runs": "Runs",
+        "heartbeat": "Heartbeat",
+        "profiles": "Profiles",
+        "retry": "Retry"
+      },
+      "heartbeatTitle": "Heartbeat monitor",
+      "retryTitle": "Failure retry",
+      "unboundTask": "No task bound",
+      "heartbeatCount": "Heartbeats",
+      "confidence": "Confidence",
+      "lastUpdated": "Last updated",
+      "sendHeartbeat": "Send heartbeat",
+      "emptyRunning": "No running Agents",
+      "retryAction": "Retry",
+      "addEvidence": "Add evidence",
+      "emptyRetry": "No failed or retrying runs"
+    },
     "dataQuality": {
       "hubTitle": "Data Quality Center",
-      "hubDesc": "Quality rules, runs, alerts and reports"
+      "hubDesc": "Quality rules, runs, alerts and reports",
+      "tabs": {
+        "rules": "Rules",
+        "runs": "Runs",
+        "alerts": "Alerts",
+        "reports": "Reports"
+      },
+      "reportsTitle": "Quality reports",
+      "reportRunTotal": "Runs",
+      "reportFailedRuns": "Failed runs",
+      "reportOpenAlerts": "Open alerts",
+      "reportAverageScore": "Average score",
+      "recentRunQuality": "Recent run quality",
+      "emptyRuns": "No run data",
+      "alertRootCauseSummary": "Alert root causes",
+      "unattributed": "Unattributed",
+      "emptyAlerts": "No alert data"
     },
     "dataDevelopment": {
       "title": "Data development"
@@ -4133,7 +4168,24 @@
     },
     "metricsCenter": {
       "hubTitle": "Metrics Center",
-      "hubDesc": "Metric catalog, semantic layer, API publish and monitoring"
+      "hubDesc": "Metric catalog, semantic layer, API publish and monitoring",
+      "tabs": {
+        "catalog": "Catalog",
+        "semantic": "Semantic layer",
+        "published": "Published APIs",
+        "monitor": "Monitor"
+      },
+      "monitorTitle": "Metrics monitor",
+      "metricTotal": "Metrics",
+      "publishedApi": "Published APIs",
+      "semanticCoverage": "Semantic versions",
+      "formulaIssues": "Formula issues",
+      "serviceHealth": "Service health",
+      "emptyPublishedServices": "No published services",
+      "governanceTodos": "Governance todos",
+      "unpublishedApi": "API not published",
+      "formulaNeedsFix": "Formula validation needs fixing",
+      "emptyGovernanceTodos": "No governance todos"
     },
     "tagService": {
       "hubTitle": "Tag Service",

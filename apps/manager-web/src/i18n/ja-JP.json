@@ -700,9 +700,44 @@
     "dataServices": {
       "title": "データサービス"
     },
+    "agentRuns": {
+      "tabs": {
+        "runs": "実行一覧",
+        "heartbeat": "ハートビート",
+        "profiles": "能力プロファイル",
+        "retry": "失敗リトライ"
+      },
+      "heartbeatTitle": "ハートビート監視",
+      "retryTitle": "失敗リトライ",
+      "unboundTask": "タスク未紐付け",
+      "heartbeatCount": "ハートビート数",
+      "confidence": "信頼度",
+      "lastUpdated": "最終更新",
+      "sendHeartbeat": "ハートビート送信",
+      "emptyRunning": "実行中の Agent はありません",
+      "retryAction": "リトライ",
+      "addEvidence": "証跡追加",
+      "emptyRetry": "失敗またはリトライ中の実行はありません"
+    },
     "dataQuality": {
       "hubTitle": "データ品質センター",
-      "hubDesc": "品質ルール、実行、アラート、レポート"
+      "hubDesc": "品質ルール、実行、アラート、レポート",
+      "tabs": {
+        "rules": "品質ルール",
+        "runs": "実行記録",
+        "alerts": "アラート対応",
+        "reports": "品質レポート"
+      },
+      "reportsTitle": "品質レポート",
+      "reportRunTotal": "実行総数",
+      "reportFailedRuns": "失敗実行",
+      "reportOpenAlerts": "未対応アラート",
+      "reportAverageScore": "平均品質スコア",
+      "recentRunQuality": "最近の実行品質",
+      "emptyRuns": "実行データはありません",
+      "alertRootCauseSummary": "アラート根因サマリー",
+      "unattributed": "未分類",
+      "emptyAlerts": "アラートデータはありません"
     },
     "dataDevelopment": {
       "title": "データ開発"
@@ -3646,7 +3681,24 @@
     },
     "metricsCenter": {
       "hubTitle": "メトリクスセンター",
-      "hubDesc": "メトリクスカタログ、セマンティック層、API公開"
+      "hubDesc": "メトリクスカタログ、セマンティック層、API公開",
+      "tabs": {
+        "catalog": "指標カタログ",
+        "semantic": "セマンティック層",
+        "published": "公開 API",
+        "monitor": "監視"
+      },
+      "monitorTitle": "指標監視",
+      "metricTotal": "指標総数",
+      "publishedApi": "公開 API",
+      "semanticCoverage": "セマンティック版適用",
+      "formulaIssues": "式の異常",
+      "serviceHealth": "公開サービス健康度",
+      "emptyPublishedServices": "公開サービスはありません",
+      "governanceTodos": "ガバナンス ToDo",
+      "unpublishedApi": "API 未公開",
+      "formulaNeedsFix": "式検証の修正が必要",
+      "emptyGovernanceTodos": "ガバナンス ToDo はありません"
     },
     "tagService": {
       "hubTitle": "タグサービス",

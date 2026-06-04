@@ -6,6 +6,9 @@ const root = resolve(__dirname, "..");
 const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8");
 const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandPalette.tsx"), "utf8");
 const menuManagementSource = readFileSync(resolve(root, "src/pages/admin/MenuManagement.tsx"), "utf8");
+const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
+const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
+const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
 
 describe("navigation i18n coverage", () => {
@@ -32,5 +35,23 @@ describe("navigation i18n coverage", () => {
     expect(menuManagementSource).toContain('t("page.menuManagement.issueError")');
     expect(menuManagementSource).toContain('t("page.menuManagement.issueWarning")');
     expect(navigationSource).not.toContain('key: "menuManagement", path: "#/admin/menu", el: pageElement(MenuManagementPage), group: "governance", icon: Rows3, category: "module-governance", capability: "governance.menu-management", badge: "new", description:');
+  });
+
+  it("localizes focused AgentOps and data governance subviews", () => {
+    for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
+      expect(messages.page.agentRuns.tabs.heartbeat).toBeTruthy();
+      expect(messages.page.agentRuns.retryAction).toBeTruthy();
+      expect(messages.page.dataQuality.tabs.reports).toBeTruthy();
+      expect(messages.page.dataQuality.reportAverageScore).toBeTruthy();
+      expect(messages.page.metricsCenter.tabs.monitor).toBeTruthy();
+      expect(messages.page.metricsCenter.emptyGovernanceTodos).toBeTruthy();
+    }
+    expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
+    expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
+    expect(dataQualitySource).toContain("page.dataQuality.tabs.");
+    expect(dataQualitySource).toContain('t("page.dataQuality.reportAverageScore")');
+    expect(metricsSource).toContain('t("page.metricsCenter.tabs.monitor")');
+    expect(metricsSource).toContain('t("page.metricsCenter.emptyGovernanceTodos")');
   });
 });

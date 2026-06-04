@@ -860,9 +860,44 @@
     "dataServices": {
       "title": "数据服务"
     },
+    "agentRuns": {
+      "tabs": {
+        "runs": "运行列表",
+        "heartbeat": "心跳监控",
+        "profiles": "能力画像",
+        "retry": "失败重试"
+      },
+      "heartbeatTitle": "心跳监控",
+      "retryTitle": "失败重试",
+      "unboundTask": "未绑定任务",
+      "heartbeatCount": "心跳数",
+      "confidence": "置信度",
+      "lastUpdated": "最近更新",
+      "sendHeartbeat": "发送心跳",
+      "emptyRunning": "暂无运行中的 Agent",
+      "retryAction": "重试",
+      "addEvidence": "补证据",
+      "emptyRetry": "暂无失败或重试中的运行"
+    },
     "dataQuality": {
       "hubTitle": "数据质量中心",
-      "hubDesc": "质量规则目录、运行记录、告警处置与质量报告"
+      "hubDesc": "质量规则目录、运行记录、告警处置与质量报告",
+      "tabs": {
+        "rules": "质量规则",
+        "runs": "运行记录",
+        "alerts": "告警处置",
+        "reports": "质量报告"
+      },
+      "reportsTitle": "质量报告",
+      "reportRunTotal": "运行总数",
+      "reportFailedRuns": "失败运行",
+      "reportOpenAlerts": "开放告警",
+      "reportAverageScore": "平均质量分",
+      "recentRunQuality": "最近运行质量",
+      "emptyRuns": "暂无运行数据",
+      "alertRootCauseSummary": "告警根因摘要",
+      "unattributed": "未归因",
+      "emptyAlerts": "暂无告警数据"
     },
     "dataDevelopment": {
       "title": "数据开发"
@@ -4462,7 +4497,24 @@
     },
     "metricsCenter": {
       "hubTitle": "指标中心",
-      "hubDesc": "指标语义层、目录管理、API 发布与监控告警"
+      "hubDesc": "指标语义层、目录管理、API 发布与监控告警",
+      "tabs": {
+        "catalog": "指标目录",
+        "semantic": "语义层",
+        "published": "已发布 API",
+        "monitor": "监控"
+      },
+      "monitorTitle": "指标监控",
+      "metricTotal": "指标总数",
+      "publishedApi": "已发布 API",
+      "semanticCoverage": "语义版本覆盖",
+      "formulaIssues": "公式异常",
+      "serviceHealth": "发布服务健康",
+      "emptyPublishedServices": "暂无已发布服务",
+      "governanceTodos": "治理待办",
+      "unpublishedApi": "未发布 API",
+      "formulaNeedsFix": "公式校验待修正",
+      "emptyGovernanceTodos": "暂无治理待办"
     },
     "tagService": {
       "hubTitle": "标签服务",

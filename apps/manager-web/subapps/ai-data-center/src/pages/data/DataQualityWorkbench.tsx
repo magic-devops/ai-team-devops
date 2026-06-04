@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -24,6 +25,7 @@ const DEFAULT_SAMPLE = `[
 
 export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -122,17 +124,23 @@ export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }
   const rules = (rulesQ.data?.items ?? []).filter((r: any) => !q || r.name?.toLowerCase().includes(q.toLowerCase()));
   const runs = runsQ.data?.items ?? [];
   const alerts = alertsQ.data?.items ?? [];
+  const openAlerts = alerts.filter((a: any) => a.status === "open");
+  const scoredRuns = runs.filter((r: any) => r.score != null);
+  const averageQualityScore = scoredRuns.length
+    ? `${((scoredRuns.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0) / scoredRuns.length) * 100).toFixed(1)}%`
+    : "—";
+  const tabLabel = (value: Tab) => t(`page.dataQuality.tabs.${value}`);
 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell title="数据质量中心" description="质量规则管理、运行记录与告警处置">
         <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["rules", "runs", "alerts", "reports"] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "rules" ? "质量规则" : t === "runs" ? "运行记录" : t === "alerts" ? "告警处置" : "质量报告"}
-              {t === "alerts" && alerts.filter((a: any) => a.status === "open").length > 0 &&
-                <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{alerts.filter((a: any) => a.status === "open").length}</span>}
+          {(["rules", "runs", "alerts", "reports"] as Tab[]).map(tabId => (
+            <button key={tabId} onClick={() => setTab(tabId)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === tabId ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
+              {tabLabel(tabId)}
+              {tabId === "alerts" && openAlerts.length > 0 &&
+                <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{openAlerts.length}</span>}
             </button>
           ))}
         </div>
@@ -288,32 +296,28 @@ export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }
         )}
 
         {tab === "reports" && (
-          <WorkbenchPanel title="质量报告" actions={<RefreshButton onClick={() => { void runsQ.refetch(); void alertsQ.refetch(); }} pending={runsQ.isFetching || alertsQ.isFetching} />}>
+          <WorkbenchPanel title={t("page.dataQuality.reportsTitle")} actions={<RefreshButton onClick={() => { void runsQ.refetch(); void alertsQ.refetch(); }} pending={runsQ.isFetching || alertsQ.isFetching} />}>
             <div className="mb-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">运行总数</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.dataQuality.reportRunTotal")}</p>
                 <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{runs.length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">失败运行</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.dataQuality.reportFailedRuns")}</p>
                 <p className="mt-1 text-2xl font-semibold text-red-600">{runs.filter((r: any) => r.status === "failed").length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">开放告警</p>
-                <p className="mt-1 text-2xl font-semibold text-orange-600">{alerts.filter((a: any) => a.status === "open").length}</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.dataQuality.reportOpenAlerts")}</p>
+                <p className="mt-1 text-2xl font-semibold text-orange-600">{openAlerts.length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">平均质量分</p>
-                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">
-                  {runs.filter((r: any) => r.score != null).length
-                    ? `${((runs.filter((r: any) => r.score != null).reduce((sum: number, r: any) => sum + Number(r.score || 0), 0) / runs.filter((r: any) => r.score != null).length) * 100).toFixed(1)}%`
-                    : "—"}
-                </p>
+                <p className="text-xs text-[var(--muted)]">{t("page.dataQuality.reportAverageScore")}</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{averageQualityScore}</p>
               </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="mb-3 text-sm font-semibold text-[var(--text)]">最近运行质量</p>
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">{t("page.dataQuality.recentRunQuality")}</p>
                 <div className="space-y-2">
                   {runs.slice(0, 8).map((run: any) => (
                     <div key={run.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
@@ -321,11 +325,11 @@ export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }
                       <span className={run.status === "failed" ? "text-red-600" : "text-green-600"}>{run.status} · {run.score != null ? `${(Number(run.score) * 100).toFixed(1)}%` : "—"}</span>
                     </div>
                   ))}
-                  {!runs.length && <div className="py-6 text-center text-sm text-[var(--muted)]">暂无运行数据</div>}
+                  {!runs.length && <div className="py-6 text-center text-sm text-[var(--muted)]">{t("page.dataQuality.emptyRuns")}</div>}
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="mb-3 text-sm font-semibold text-[var(--text)]">告警根因摘要</p>
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">{t("page.dataQuality.alertRootCauseSummary")}</p>
                 <div className="space-y-2">
                   {alerts.slice(0, 8).map((alert: any) => (
                     <div key={alert.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
@@ -333,10 +337,10 @@ export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }
                         <span className="min-w-0 truncate font-medium text-[var(--text)]">{alert.message}</span>
                         <span className={SEVERITY_COLOR[alert.severity] ?? ""}>{alert.severity}</span>
                       </div>
-                      <p className="mt-1 truncate text-[var(--muted)]">{alert.alert_attribution?.root_causes?.join(", ") || "未归因"}</p>
+                      <p className="mt-1 truncate text-[var(--muted)]">{alert.alert_attribution?.root_causes?.join(", ") || t("page.dataQuality.unattributed")}</p>
                     </div>
                   ))}
-                  {!alerts.length && <div className="py-6 text-center text-sm text-[var(--muted)]">暂无告警数据</div>}
+                  {!alerts.length && <div className="py-6 text-center text-sm text-[var(--muted)]">{t("page.dataQuality.emptyAlerts")}</div>}
                 </div>
               </div>
             </div>

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -16,6 +17,7 @@ function splitList(value: string) {
 
 export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -81,6 +83,9 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
   if (!authed) return <NeedLogin />;
   const catalog = catalogQ.data?.items ?? [];
   const published = publishedQ.data?.items ?? [];
+  const metricsWithSemanticVersion = catalog.filter((m: any) => m.semantic_version);
+  const metricsWithFormulaIssues = catalog.filter((m: any) => m.formula_validation && !m.formula_validation.valid);
+  const governanceTodos = catalog.filter((m: any) => !m.api_endpoint || (m.formula_validation && !m.formula_validation.valid));
   const activeMetric = catalog.find((m: any) => m.id === activeMetricId) ?? catalog[0];
   const versions = versionsQ.data?.items ?? [];
   const selectMetric = (id: string) => {
@@ -94,10 +99,16 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
     <div className="w-full space-y-4">
       <WorkbenchShell title="指标中心" description="指标目录管理与 API 发布">
         <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["catalog", "semantic", "published", "monitor"] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "catalog" ? `指标目录 (${catalog.length})` : t === "semantic" ? "语义层" : t === "published" ? `已发布 API (${published.length})` : "监控"}
+          {(["catalog", "semantic", "published", "monitor"] as Tab[]).map(tabId => (
+            <button key={tabId} onClick={() => setTab(tabId)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === tabId ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
+              {tabId === "catalog"
+                ? `${t("page.metricsCenter.tabs.catalog")} (${catalog.length})`
+                : tabId === "semantic"
+                  ? t("page.metricsCenter.tabs.semantic")
+                  : tabId === "published"
+                    ? `${t("page.metricsCenter.tabs.published")} (${published.length})`
+                    : t("page.metricsCenter.tabs.monitor")}
             </button>
           ))}
         </div>
@@ -297,28 +308,28 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
         )}
 
         {tab === "monitor" && (
-          <WorkbenchPanel title="指标监控" actions={<RefreshButton onClick={() => { void catalogQ.refetch(); void publishedQ.refetch(); }} pending={catalogQ.isFetching || publishedQ.isFetching} />}>
+          <WorkbenchPanel title={t("page.metricsCenter.monitorTitle")} actions={<RefreshButton onClick={() => { void catalogQ.refetch(); void publishedQ.refetch(); }} pending={catalogQ.isFetching || publishedQ.isFetching} />}>
             <div className="mb-4 grid gap-3 md:grid-cols-4">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">指标总数</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.metricsCenter.metricTotal")}</p>
                 <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{catalog.length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">已发布 API</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.metricsCenter.publishedApi")}</p>
                 <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{published.length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">语义版本覆盖</p>
-                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{catalog.filter((m: any) => m.semantic_version).length}</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.metricsCenter.semanticCoverage")}</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{metricsWithSemanticVersion.length}</p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="text-xs text-[var(--muted)]">公式异常</p>
-                <p className="mt-1 text-2xl font-semibold text-orange-600">{catalog.filter((m: any) => m.formula_validation && !m.formula_validation.valid).length}</p>
+                <p className="text-xs text-[var(--muted)]">{t("page.metricsCenter.formulaIssues")}</p>
+                <p className="mt-1 text-2xl font-semibold text-orange-600">{metricsWithFormulaIssues.length}</p>
               </div>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="mb-3 text-sm font-semibold text-[var(--text)]">发布服务健康</p>
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">{t("page.metricsCenter.serviceHealth")}</p>
                 <div className="space-y-2">
                   {published.slice(0, 8).map((item: any) => (
                     <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
@@ -326,20 +337,20 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
                       <span className="rounded-full bg-green-50 px-2 py-0.5 font-medium text-green-700">healthy</span>
                     </div>
                   ))}
-                  {!published.length && <div className="py-6 text-center text-sm text-[var(--muted)]">暂无已发布服务</div>}
+                  {!published.length && <div className="py-6 text-center text-sm text-[var(--muted)]">{t("page.metricsCenter.emptyPublishedServices")}</div>}
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <p className="mb-3 text-sm font-semibold text-[var(--text)]">治理待办</p>
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">{t("page.metricsCenter.governanceTodos")}</p>
                 <div className="space-y-2">
-                  {catalog.filter((m: any) => !m.api_endpoint || (m.formula_validation && !m.formula_validation.valid)).slice(0, 8).map((metric: any) => (
+                  {governanceTodos.slice(0, 8).map((metric: any) => (
                     <div key={metric.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
                       <p className="font-medium text-[var(--text)]">{metric.name}</p>
-                      <p className="mt-1 text-[var(--muted)]">{!metric.api_endpoint ? "未发布 API" : "公式校验待修正"}</p>
+                      <p className="mt-1 text-[var(--muted)]">{!metric.api_endpoint ? t("page.metricsCenter.unpublishedApi") : t("page.metricsCenter.formulaNeedsFix")}</p>
                     </div>
                   ))}
-                  {!catalog.filter((m: any) => !m.api_endpoint || (m.formula_validation && !m.formula_validation.valid)).length && (
-                    <div className="py-6 text-center text-sm text-[var(--muted)]">暂无治理待办</div>
+                  {!governanceTodos.length && (
+                    <div className="py-6 text-center text-sm text-[var(--muted)]">{t("page.metricsCenter.emptyGovernanceTodos")}</div>
                   )}
                 </div>
               </div>

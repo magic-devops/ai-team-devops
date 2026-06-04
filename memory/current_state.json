@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-04T01:55:00Z",
+  "updated_at": "2026-06-04T02:28:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -410,17 +410,18 @@
       "完成 Task 149 OpsCenter RCA 治理子模块按需加载：将手工 RCA 创建、智能根因归因、归因任务化、智能归因生成 RCA、RCA 验证计划、验证并关闭和 RCA 列表证据从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterRcaPanel 独立组件；父页面保留真实 query、状态、mutation 和 tab 编排，并在 RCA 子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 17.51KB raw/4.15KB gzip 的 OpsCenterRcaPanel 独立 chunk，OpsCenterWorkbench 主 chunk 降到 66.95KB raw/15.13KB gzip。",
       "完成 Task 150 OpsCenter Runbook 治理子模块按需加载：将 Runbook 版本治理、首版创建、编辑生成新版本、版本差异对比、历史恢复/归档、执行证据自动回填、证据确认/归档/重开和治理审计从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterRunbooksPanel 独立组件；父页面保留真实 query、状态、mutation 和 tab 编排，并在 Runbook 子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 14.60KB raw/4.08KB gzip 的 OpsCenterRunbooksPanel 独立 chunk，OpsCenterWorkbench 主 chunk 降到 53.80KB raw/12.76KB gzip。",
       "完成 Task 151 OpsCenter 自愈治理子模块按需加载：将自愈策略创建、信号评估、决策结果、治理任务预览/生成、策略启停/删除/手动应用、生产护栏动作队列、审批/应用/验证/回滚和审计载荷从 OpsCenterWorkbench 父页面抽离为 system/ops-center/OpsCenterSelfHealPanel 独立组件；父页面保留真实 query、状态、mutation、选中动作派生和 tab 编排，并在自愈子路由通过 React.lazy/Suspense 加载。目标测试、TypeScript noEmit 和生产构建通过，新增 19.08KB raw/4.32KB gzip 的 OpsCenterSelfHealPanel 独立 chunk，OpsCenterWorkbench 主 chunk 降到 36.70KB raw/10.02KB gzip。",
-      "完成 Task 152 导航 IA 子路由真实聚焦与菜单多语言收口：为 marketplace/catalog/installed/ratings、analytics reports/assets/subscription/action-tasks、audit chain/events/actions/approvals、agent ops runs/heartbeat/profiles/retry、data quality reports、metrics semantic/monitor、tag API 等专业入口补齐真实 initialModule/initialTab/initialView，避免多个菜单落到同一泛化页面；Marketplace 新增评分与签名治理视图，Audit 将动作运行与审批队列拆为独立子模块，AgentRuns 新增心跳监控和失败重试视图，数据质量和指标中心补齐质量报告与监控视图；CommandPalette 优先读取 page.<key>.description，MenuManagement 健康状态消除英文 fallback。目标 IA/i18n 测试 101 passed，TypeScript noEmit 和生产构建通过。"
+      "完成 Task 152 导航 IA 子路由真实聚焦与菜单多语言收口：为 marketplace/catalog/installed/ratings、analytics reports/assets/subscription/action-tasks、audit chain/events/actions/approvals、agent ops runs/heartbeat/profiles/retry、data quality reports、metrics semantic/monitor、tag API 等专业入口补齐真实 initialModule/initialTab/initialView，避免多个菜单落到同一泛化页面；Marketplace 新增评分与签名治理视图，Audit 将动作运行与审批队列拆为独立子模块，AgentRuns 新增心跳监控和失败重试视图，数据质量和指标中心补齐质量报告与监控视图；CommandPalette 优先读取 page.<key>.description，MenuManagement 健康状态消除英文 fallback。目标 IA/i18n 测试 101 passed，TypeScript noEmit 和生产构建通过。",
+      "完成 Task 153 专业子视图多语言与交互收敛：Agent 运行中心心跳监控/失败重试、数据质量质量报告、指标中心监控视图新增 page 级 i18n 文案，覆盖三语种 tab、指标卡、空状态、操作按钮和治理提示；前端将重复运行态筛选、质量分均值、指标治理待办等派生数据收敛为局部变量，降低子视图维护复杂度；新增 NavigationI18nCoverage 契约测试，防止新增专业入口再次出现英文 fallback 或硬编码文案。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 152 导航 IA 子路由真实聚焦与菜单多语言收口已完成；多个专业入口不再共享泛化 Tab，Marketplace、Audit、AgentRuns、报告、数据质量、指标与标签等入口均能进入真实聚焦视图，目标测试 101 passed，TypeScript noEmit 和生产构建通过。"
+    "current": "Task 153 专业子视图多语言与交互收敛已完成；AgentRuns 心跳/重试、数据质量报告、指标监控均接入三语种 page 文案并补契约测试，继续推进剩余页面的简单高效与真实可用。"
   },
   "metrics": {
     "completion_rate": 100,
     "velocity": 0,
     "blockers_count": 0
   },
-  "current": "Task 152 导航 IA 子路由真实聚焦与菜单多语言收口已完成；多个专业入口不再共享泛化 Tab，Marketplace、Audit、AgentRuns、报告、数据质量、指标与标签等入口均能进入真实聚焦视图，目标测试 101 passed，TypeScript noEmit 和生产构建通过。"
+  "current": "Task 153 专业子视图多语言与交互收敛已完成；AgentRuns 心跳/重试、数据质量报告、指标监控均接入三语种 page 文案并补契约测试，继续推进剩余页面的简单高效与真实可用。"
 }
