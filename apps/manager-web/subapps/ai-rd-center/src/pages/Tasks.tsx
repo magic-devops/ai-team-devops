@@ -65,6 +65,32 @@ const statusColor: Record<string, string> = {
 };
 
 type Tab = "list" | "board" | "priority" | "sprint" | "deps" | "scheduler";
+type SchedulerPanel = "ops" | "insights" | "agent" | "quality" | "events";
+
+const SCHEDULER_PANELS: SchedulerPanel[] = ["ops", "insights", "agent", "quality", "events"];
+const LEGACY_PANEL_ALIASES: Record<string, SchedulerPanel> = {
+  "agent-feed": "agent",
+  "agent-reports": "agent",
+  "bulk-governance": "quality",
+  "quality-governance": "quality",
+  "event-wakeups": "events",
+  events: "events",
+};
+
+function normalizeSchedulerPanel(value?: string): SchedulerPanel {
+  if (!value) return "ops";
+  if ((SCHEDULER_PANELS as readonly string[]).includes(value)) return value as SchedulerPanel;
+  return LEGACY_PANEL_ALIASES[value] ?? "ops";
+}
+
+function readSchedulerPanelFromHash(): SchedulerPanel | null {
+  const hash = typeof window === "undefined" ? "" : window.location.hash;
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex < 0) return null;
+  const params = new URLSearchParams(hash.slice(queryIndex + 1));
+  const panel = params.get("panel");
+  return panel ? normalizeSchedulerPanel(panel) : null;
+}
 
 function TaskCard({
   task,
@@ -140,7 +166,15 @@ function TaskCard({
   );
 }
 
-export function Tasks({ initialTab = "list", focused = false }: { initialTab?: Tab; focused?: boolean }) {
+export function Tasks({
+  initialTab = "list",
+  focused = false,
+  initialSchedulerPanel = "ops",
+}: {
+  initialTab?: Tab;
+  focused?: boolean;
+  initialSchedulerPanel?: SchedulerPanel | string;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
@@ -170,7 +204,7 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
   const [schedulerRunQuery, setSchedulerRunQuery] = useState("");
   const [schedulerIncludeArchived, setSchedulerIncludeArchived] = useState(false);
-  const [schedulerPanel, setSchedulerPanel] = useState("ops");
+  const [schedulerPanel, setSchedulerPanel] = useState<SchedulerPanel>(() => readSchedulerPanelFromHash() ?? normalizeSchedulerPanel(initialSchedulerPanel));
   const [schedulerRunbookResult, setSchedulerRunbookResult] = useState<any>(null);
   const [schedulerInsightTasksResult, setSchedulerInsightTasksResult] = useState<any>(null);
   const [qualityPolicyDraft, setQualityPolicyDraft] = useState({
@@ -190,6 +224,10 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    setSchedulerPanel(readSchedulerPanelFromHash() ?? normalizeSchedulerPanel(initialSchedulerPanel));
+  }, [initialSchedulerPanel]);
 
   const allTasksQ = useQuery({
     queryKey: ["tasks", taskQuery, statusFilter, priorityFilter, sourceFilter],
@@ -683,6 +721,9 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
 
   const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || dispatchMut.isPending || schedulerMut.isPending || schedulerActionMut.isPending || schedulerRunbookMut.isPending || schedulerInsightTasksMut.isPending || sprintOpsTasksMut.isPending || qualityPolicyMut.isPending || qualityTasksMut.isPending;
   const canBulkUpdate = selectedTaskIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAssignee.trim());
+  const focusedSchedulerPanel = focused && tab === "scheduler" && schedulerPanel !== "ops";
+  const showSchedulerPlanning = tab === "scheduler" && (!focusedSchedulerPanel || schedulerPanel === "insights");
+  const schedulerLayoutClass = showSchedulerPlanning ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]" : "space-y-4";
 
   if (!authed) {
     return <div className="text-sm text-rose-600">{t("auth.dashboardNeedLogin")}</div>;
@@ -1065,7 +1106,8 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
       ) : null}
 
       {tab === "scheduler" ? (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_28rem]">
+        <div className={schedulerLayoutClass}>
+          {showSchedulerPlanning ? (
           <div className="space-y-4">
             <Card
               title={t("page.tasks.schedulerTitle")}
@@ -1255,13 +1297,14 @@ export function Tasks({ initialTab = "list", focused = false }: { initialTab?: T
               />
             </Card>
           </div>
+          ) : null}
 
-          <div className="space-y-4 xl:sticky xl:top-4 xl:self-start">
+          <div className={showSchedulerPlanning ? "space-y-4 xl:sticky xl:top-4 xl:self-start" : "space-y-4"}>
             <Card title={t("page.tasks.schedulerConsole")}>
               <Segmented
                 block
                 value={schedulerPanel}
-                onChange={(value) => setSchedulerPanel(String(value))}
+                onChange={(value) => setSchedulerPanel(normalizeSchedulerPanel(String(value)))}
                 options={[
                   { label: t("page.tasks.schedulerPanelOps"), value: "ops" },
                   { label: t("page.tasks.schedulerPanelInsights"), value: "insights" },

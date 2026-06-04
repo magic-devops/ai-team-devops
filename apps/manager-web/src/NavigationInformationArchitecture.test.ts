@@ -60,8 +60,23 @@ describe("navigation information architecture", () => {
     expect(agentRunsSource).toContain('type AgentRunsTab = "runs" | "heartbeat" | "profiles" | "retry"');
     expect(agentRunsSource).toContain('tab === "heartbeat"');
     expect(agentRunsSource).toContain('tab === "retry"');
-    expect(navigationSource).toContain('key: "evidence", path: "#/tasks?tab=scheduler&panel=agent-reports"');
+    expect(navigationSource).toContain('key: "evidence", path: "#/tasks/agent-feed"');
     expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');
+  });
+
+  it("keeps task scheduler subroutes focused on real Agent feed and quality governance panels", () => {
+    const tasksSource = readFileSync(resolve(root, "subapps/ai-rd-center/src/pages/Tasks.tsx"), "utf8");
+    expect(navigationSource).toContain('"tasks.agent_feed": "#/tasks/agent-feed"');
+    expect(navigationSource).toContain('"tasks.bulk_governance": "#/tasks/quality-governance"');
+    expect(navigationSource).toContain('key: "taskAgentFeed", path: "#/tasks/agent-feed", el: pageElement(TasksPage, { initialTab: "scheduler", focused: true, initialSchedulerPanel: "agent" })');
+    expect(navigationSource).toContain('key: "taskQualityGovernance", path: "#/tasks/quality-governance", el: pageElement(TasksPage, { initialTab: "scheduler", focused: true, initialSchedulerPanel: "quality" })');
+    expect(navigationSource).toContain('key: "taskSchedulerEvents", path: "#/tasks/scheduler-events", el: pageElement(TasksPage, { initialTab: "scheduler", focused: true, initialSchedulerPanel: "events" })');
+    expect(navigationSource).not.toContain('"tasks.agent_feed": "#/tasks?tab=scheduler&panel=agent-feed"');
+    expect(navigationSource).not.toContain('"tasks.bulk_governance": "#/tasks?tab=scheduler&panel=bulk-governance"');
+    expect(tasksSource).toContain('type SchedulerPanel = "ops" | "insights" | "agent" | "quality" | "events"');
+    expect(tasksSource).toContain("readSchedulerPanelFromHash");
+    expect(tasksSource).toContain('const focusedSchedulerPanel = focused && tab === "scheduler" && schedulerPanel !== "ops"');
+    expect(tasksSource).toContain("showSchedulerPlanning ? (");
   });
 
   it("keeps settings as a light hub with focused runtime configuration routes", () => {

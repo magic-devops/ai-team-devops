@@ -72,6 +72,9 @@
     "taskSprints": "Sprints",
     "taskDependencies": "Task dependencies",
     "taskScheduler": "DAG scheduler",
+    "taskAgentFeed": "Agent task feed",
+    "taskQualityGovernance": "Task quality governance",
+    "taskSchedulerEvents": "Scheduler event wakeups",
     "workflows": "Workflow orchestration",
     "workflowTemplates": "Workflow templates",
     "workflowInstances": "Run instances",
@@ -288,6 +291,12 @@
       "sync_events": "Sync events",
       "documents": "Knowledge documents",
       "index": "Index",
+      "execution_table": "Execution list",
+      "kanban": "Kanban board",
+      "dag_dependencies": "Task dependencies",
+      "scheduler_center": "DAG scheduler",
+      "agent_feed": "Agent task feed",
+      "bulk_governance": "Task quality governance",
       "access_review": "Access review",
       "create_business": "Create business",
       "candidate_users": "Candidate users",
@@ -700,6 +709,15 @@
     },
     "taskScheduler": {
       "title": "DAG scheduler"
+    },
+    "taskAgentFeed": {
+      "title": "Agent task feed"
+    },
+    "taskQualityGovernance": {
+      "title": "Task quality governance"
+    },
+    "taskSchedulerEvents": {
+      "title": "Scheduler event wakeups"
     },
     "knowledgeBase": {
       "title": "Knowledge base"

@@ -56,6 +56,9 @@
     "taskSprints": "スプリント",
     "taskDependencies": "タスク依存",
     "taskScheduler": "DAG スケジューラー",
+    "taskAgentFeed": "Agent タスク Feed",
+    "taskQualityGovernance": "タスク品質ガバナンス",
+    "taskSchedulerEvents": "スケジューラーイベント",
     "workflows": "ワークフロー編成",
     "marketplace": "アセット市場",
     "audit": "セキュリティ監査",
@@ -367,6 +370,12 @@
       "sync_events": "同期イベント",
       "documents": "ナレッジ文書",
       "index": "インデックス",
+      "execution_table": "実行一覧",
+      "kanban": "カンバン",
+      "dag_dependencies": "タスク依存",
+      "scheduler_center": "DAG スケジューラー",
+      "agent_feed": "Agent タスク Feed",
+      "bulk_governance": "タスク品質ガバナンス",
       "access_review": "アクセスレビュー",
       "create_business": "事業作成",
       "candidate_users": "候補メンバー",
@@ -669,6 +678,15 @@
     },
     "taskScheduler": {
       "title": "DAG スケジューラー"
+    },
+    "taskAgentFeed": {
+      "title": "Agent タスク Feed"
+    },
+    "taskQualityGovernance": {
+      "title": "タスク品質ガバナンス"
+    },
+    "taskSchedulerEvents": {
+      "title": "スケジューラーイベント"
     },
     "knowledgeBase": {
       "title": "ナレッジベース"

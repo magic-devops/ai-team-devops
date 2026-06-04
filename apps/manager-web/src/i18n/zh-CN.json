@@ -81,6 +81,9 @@
     "taskSprints": "迭代 Sprint",
     "taskDependencies": "任务依赖",
     "taskScheduler": "任务依赖调度",
+    "taskAgentFeed": "Agent 任务 Feed",
+    "taskQualityGovernance": "任务质量治理",
+    "taskSchedulerEvents": "调度事件唤醒",
     "workflows": "流程编排",
     "workflowTemplates": "流程模板",
     "workflowInstances": "运行实例",
@@ -376,8 +379,8 @@
       "kanban": "状态看板",
       "dag_dependencies": "任务依赖关系",
       "scheduler_center": "依赖调度执行",
-      "agent_feed": "Agent Feed",
-      "bulk_governance": "批量治理",
+      "agent_feed": "Agent 任务 Feed",
+      "bulk_governance": "任务质量治理",
       "instances": "运行实例",
       "events": "事件流水",
       "signals": "信号控制",
@@ -829,6 +832,15 @@
     },
     "taskScheduler": {
       "title": "任务依赖调度"
+    },
+    "taskAgentFeed": {
+      "title": "Agent 任务 Feed"
+    },
+    "taskQualityGovernance": {
+      "title": "任务质量治理"
+    },
+    "taskSchedulerEvents": {
+      "title": "调度事件唤醒"
     },
     "knowledgeBase": {
       "title": "知识库"
