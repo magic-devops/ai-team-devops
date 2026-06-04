@@ -3647,7 +3647,42 @@
     },
     "knowledgeGraph": {
       "hubTitle": "ナレッジグラフ",
-      "hubDesc": "コード・要件・仕様の統合ナレッジグラフ"
+      "hubDesc": "コード・要件・仕様の統合ナレッジグラフ",
+      "workbenchTitle": "ナレッジグラフ",
+      "workbenchDesc": "コード、要件、仕様、Agent、実行証跡を1つのグラフにまとめ、Graph RAG検索と影響分析を支援します。",
+      "focusedHint": "フォーカス入口では、このモジュールの高頻度操作だけを表示します。全体フローはナレッジグラフハブで確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "ナレッジグラフへ戻る",
+      "metricNodes": "ノード数",
+      "metricEdges": "関係エッジ",
+      "metricEntityTypes": "エンティティ種別",
+      "metricSources": "知識ソース",
+      "tabs": {
+        "build": {
+          "label": "グラフ構築",
+          "title": "ナレッジグラフ構築",
+          "description": "エンティティ種別、ソース許可、再構築ポリシーを選び、コード、要件、仕様、Agent、データ資産のプロジェクトグラフを生成します。",
+          "focus": "エンティティ種別、ソース許可、構築結果"
+        },
+        "query": {
+          "label": "Graph RAG",
+          "title": "Graph RAG検索",
+          "description": "自然言語でエンティティ、近傍ノード、証跡チェーンを検索し、命中したエンティティをリネージやプロファイルに渡します。",
+          "focus": "自然言語検索、エンティティ命中、証跡チェーン"
+        },
+        "lineage": {
+          "label": "リネージ",
+          "title": "ナレッジリネージ",
+          "description": "エンティティを中心に上流、下流、関係エッジを確認し、要件、タスク、コード、仕様への影響範囲を把握します。",
+          "focus": "エンティティリネージ、影響範囲、関係証跡"
+        },
+        "profile": {
+          "label": "エンティティプロファイル",
+          "title": "エンティティプロファイル統合",
+          "description": "グラフ近傍、メモリ証跡、証跡リンクを統合し、Agentが直接利用できるコンテキストパケットを作ります。",
+          "focus": "エンティティ文脈、メモリ証跡、Agent packet"
+        }
+      }
     },
     "a2aGateway": {
       "hubTitle": "A2Aゲートウェイ",

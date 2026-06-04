@@ -4134,7 +4134,42 @@
     },
     "knowledgeGraph": {
       "hubTitle": "Knowledge Graph",
-      "hubDesc": "Unified knowledge graph for code, requirements and specs"
+      "hubDesc": "Unified knowledge graph for code, requirements and specs",
+      "workbenchTitle": "Knowledge Graph",
+      "workbenchDesc": "Build one graph for code, requirements, specs, agents and runtime evidence with Graph RAG search and impact analysis.",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the knowledge graph hub for the full flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Knowledge Graph",
+      "metricNodes": "Nodes",
+      "metricEdges": "Edges",
+      "metricEntityTypes": "Entity types",
+      "metricSources": "Knowledge sources",
+      "tabs": {
+        "build": {
+          "label": "Graph build",
+          "title": "Knowledge Graph Build",
+          "description": "Choose entity types, source admission and rebuild policy to generate the project graph for code, requirements, specs, agents and data assets.",
+          "focus": "Entity types, source admission, build result"
+        },
+        "query": {
+          "label": "Graph RAG",
+          "title": "Graph RAG Search",
+          "description": "Search entities, neighbors and evidence chains in natural language, then send matched entities to lineage or profile views.",
+          "focus": "Natural language query, entity hits, evidence chain"
+        },
+        "lineage": {
+          "label": "Lineage",
+          "title": "Knowledge Lineage",
+          "description": "Inspect upstream, downstream and relationship edges around an entity to understand requirement, task, code and spec impact.",
+          "focus": "Entity lineage, impact scope, relationship evidence"
+        },
+        "profile": {
+          "label": "Entity profile",
+          "title": "Entity Profile Merge",
+          "description": "Merge graph neighbors, memory evidence and evidence links into an Agent-ready context packet.",
+          "focus": "Entity context, memory evidence, Agent packet"
+        }
+      }
     },
     "a2aGateway": {
       "hubTitle": "A2A Gateway",

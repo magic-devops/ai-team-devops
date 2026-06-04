@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Bot, GitBranch, Layers, Network, Search, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
@@ -13,11 +14,39 @@ type Tab = "build" | "query" | "lineage" | "profile";
 const ENTITY_TYPES = ["requirement", "task", "issue", "code_file", "spec", "design_doc", "agent", "metric", "tag", "knowledge"];
 const EDGE_TYPES = ["", "depends_on", "mentions", "co_occurs"];
 
-const TABS: Array<{ id: Tab; label: string; icon: typeof Layers }> = [
-  { id: "build", label: "图谱构建", icon: Layers },
-  { id: "query", label: "图谱查询", icon: Search },
-  { id: "lineage", label: "血缘关联", icon: GitBranch },
-  { id: "profile", label: "实体画像", icon: UserRound },
+const TABS: Array<{ id: Tab; labelKey: string; titleKey: string; descriptionKey: string; focusKey: string; icon: typeof Layers }> = [
+  {
+    id: "build",
+    labelKey: "page.knowledgeGraph.tabs.build.label",
+    titleKey: "page.knowledgeGraph.tabs.build.title",
+    descriptionKey: "page.knowledgeGraph.tabs.build.description",
+    focusKey: "page.knowledgeGraph.tabs.build.focus",
+    icon: Layers,
+  },
+  {
+    id: "query",
+    labelKey: "page.knowledgeGraph.tabs.query.label",
+    titleKey: "page.knowledgeGraph.tabs.query.title",
+    descriptionKey: "page.knowledgeGraph.tabs.query.description",
+    focusKey: "page.knowledgeGraph.tabs.query.focus",
+    icon: Search,
+  },
+  {
+    id: "lineage",
+    labelKey: "page.knowledgeGraph.tabs.lineage.label",
+    titleKey: "page.knowledgeGraph.tabs.lineage.title",
+    descriptionKey: "page.knowledgeGraph.tabs.lineage.description",
+    focusKey: "page.knowledgeGraph.tabs.lineage.focus",
+    icon: GitBranch,
+  },
+  {
+    id: "profile",
+    labelKey: "page.knowledgeGraph.tabs.profile.label",
+    titleKey: "page.knowledgeGraph.tabs.profile.title",
+    descriptionKey: "page.knowledgeGraph.tabs.profile.description",
+    focusKey: "page.knowledgeGraph.tabs.profile.focus",
+    icon: UserRound,
+  },
 ];
 
 function shortDate(value?: string | null) {
@@ -41,7 +70,8 @@ function EmptyBlock({ text }: { text: string }) {
   );
 }
 
-export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build" }: { focused?: boolean; initialTab?: Tab }) {
+export function KnowledgeGraphWorkbench({ focused = false, initialTab = "build" }: { focused?: boolean; initialTab?: Tab }) {
+  const { t } = useTranslation();
   const authed = Boolean(getToken());
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -122,6 +152,12 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
   );
   const entities = entitiesQ.data?.items ?? [];
   const edges = edgesQ.data?.items ?? [];
+  const activeMetaDef = TABS.find((item) => item.id === tab) ?? TABS[0];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
 
   if (!authed) return <NeedLogin />;
 
@@ -134,8 +170,8 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title="知识图谱"
-        description="构建代码、需求、规约、Agent 与运行证据的统一图谱，支持 Graph RAG 查询和影响分析"
+        title={focused ? activeMeta.title : t("page.knowledgeGraph.workbenchTitle")}
+        description={focused ? activeMeta.description : t("page.knowledgeGraph.workbenchDesc")}
         actions={
           <>
             <AiAssistButton onClick={() => setAiOpen(true)} />
@@ -144,28 +180,41 @@ export function KnowledgeGraphWorkbench({ focused: _focused, initialTab = "build
         }
         metrics={
           <WorkbenchStats items={[
-            { label: "节点数", value: summary.nodes ?? 0 },
-            { label: "关系边", value: summary.edges ?? 0 },
-            { label: "实体类型", value: summary.entity_types ?? 0 },
-            { label: "知识源", value: summaryQ.data?.source_documents ?? summary.documents ?? 0 },
+            { label: t("page.knowledgeGraph.metricNodes"), value: summary.nodes ?? 0 },
+            { label: t("page.knowledgeGraph.metricEdges"), value: summary.edges ?? 0 },
+            { label: t("page.knowledgeGraph.metricEntityTypes"), value: summary.entity_types ?? 0 },
+            { label: t("page.knowledgeGraph.metricSources"), value: summaryQ.data?.source_documents ?? summary.documents ?? 0 },
           ]} />
         }
       />
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-[var(--border)]">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition ${
-              tab === id ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        {focused ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.knowledgeGraph.focusedTag")}</span>
+              <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+              <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.knowledgeGraph.focusedHint")}</span>
+            </div>
+            <a href="#/ai/knowledge-graph" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.knowledgeGraph.backToHub")}</a>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {TABS.map(({ id, labelKey, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  tab === id ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {tab === "build" ? (

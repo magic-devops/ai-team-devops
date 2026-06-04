@@ -4457,7 +4457,42 @@
     },
     "knowledgeGraph": {
       "hubTitle": "知识图谱",
-      "hubDesc": "构建代码、需求、规约与运行证据的统一知识图谱"
+      "hubDesc": "构建代码、需求、规约与运行证据的统一知识图谱",
+      "workbenchTitle": "知识图谱",
+      "workbenchDesc": "构建代码、需求、规约、Agent 与运行证据的统一图谱，支持 Graph RAG 查询和影响分析",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整链路请回到知识图谱总览。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回知识图谱",
+      "metricNodes": "节点数",
+      "metricEdges": "关系边",
+      "metricEntityTypes": "实体类型",
+      "metricSources": "知识源",
+      "tabs": {
+        "build": {
+          "label": "图谱构建",
+          "title": "知识图谱构建",
+          "description": "选择实体类型、来源准入和重建策略，生成项目级代码、需求、规约、Agent 与数据资产图谱。",
+          "focus": "实体类型、来源准入、构建结果"
+        },
+        "query": {
+          "label": "Graph RAG",
+          "title": "Graph RAG 查询",
+          "description": "用自然语言查询实体、邻居节点和证据链，并把命中实体带入血缘分析或实体画像。",
+          "focus": "自然语言查询、实体命中、证据链"
+        },
+        "lineage": {
+          "label": "血缘关联",
+          "title": "知识血缘关联",
+          "description": "围绕实体查看上游、下游和关系边，定位需求、任务、代码和规约的影响范围。",
+          "focus": "实体血缘、影响范围、关系证据"
+        },
+        "profile": {
+          "label": "实体画像",
+          "title": "实体画像合并",
+          "description": "合并图谱邻居、记忆证据和证据链接，形成 Agent 可直接消费的上下文包。",
+          "focus": "实体上下文、记忆证据、Agent packet"
+        }
+      }
     },
     "a2aGateway": {
       "hubTitle": "A2A 网关",

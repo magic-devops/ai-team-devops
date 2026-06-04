@@ -106,6 +106,20 @@ describe("navigation information architecture", () => {
     expect(a2aSource).not.toContain('{ label: "协议健康", value: "health" }');
   });
 
+  it("keeps knowledge graph routes focused on build query lineage and profile modules", () => {
+    const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "knowledgeGraph", path: "#/ai/knowledge-graph"');
+    expect(navigationSource).toContain('subnav("ai/knowledge-graph", "build", "query", "lineage", "profile")');
+    expect(navigationSource).toContain('key: "knowledgeGraphBuild", path: "#/ai/knowledge-graph/build", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true, initialTab: "build" })');
+    expect(navigationSource).toContain('key: "knowledgeGraphProfile", path: "#/ai/knowledge-graph/profile", el: pageElement(KnowledgeGraphWorkbenchPage, { focused: true, initialTab: "profile" })');
+    expect(knowledgeGraphSource).toContain('export function KnowledgeGraphWorkbench({ focused = false');
+    expect(knowledgeGraphSource).toContain("page.knowledgeGraph.tabs.");
+    expect(knowledgeGraphSource).toContain('t("page.knowledgeGraph.focusedHint")');
+    expect(knowledgeGraphSource).toContain('focused ? (');
+    expect(knowledgeGraphSource).not.toContain("focused: _focused");
+    expect(knowledgeGraphSource).not.toContain('title="知识图谱"');
+  });
+
   it("keeps settings as a light hub with focused runtime configuration routes", () => {
     expect(navigationSource).toContain('key: "settings"');
     expect(navigationSource).toContain('系统配置治理中心：账户、运行态、SSO、计费、部署、存储与观测');

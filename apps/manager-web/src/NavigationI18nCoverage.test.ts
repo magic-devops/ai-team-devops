@@ -9,6 +9,7 @@ const menuManagementSource = readFileSync(resolve(root, "src/pages/admin/MenuMan
 const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
 const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
 const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
+const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench.tsx"), "utf8");
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
@@ -84,5 +85,19 @@ describe("navigation i18n coverage", () => {
     expect(a2aSource).toContain('t("page.a2aGateway.workbenchTitle")');
     expect(a2aSource).toContain("page.a2aGateway.tabLabels.");
     expect(a2aSource).toContain("page.a2aGateway.tabs.");
+  });
+
+  it("localizes knowledge graph focused route chrome", () => {
+    for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
+      expect(messages.page.knowledgeGraph.workbenchTitle).toBeTruthy();
+      expect(messages.page.knowledgeGraph.focusedHint).toBeTruthy();
+      expect(messages.page.knowledgeGraph.metricNodes).toBeTruthy();
+      expect(messages.page.knowledgeGraph.tabs.build.label).toBeTruthy();
+      expect(messages.page.knowledgeGraph.tabs.lineage.title).toBeTruthy();
+      expect(messages.page.knowledgeGraph.tabs.profile.focus).toBeTruthy();
+    }
+    expect(knowledgeGraphSource).toContain('t("page.knowledgeGraph.workbenchTitle")');
+    expect(knowledgeGraphSource).toContain("page.knowledgeGraph.tabs.");
   });
 });
