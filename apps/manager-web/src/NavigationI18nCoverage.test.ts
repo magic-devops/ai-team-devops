@@ -8,6 +8,7 @@ const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandP
 const menuManagementSource = readFileSync(resolve(root, "src/pages/admin/MenuManagement.tsx"), "utf8");
 const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
 const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
+const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
@@ -68,5 +69,20 @@ describe("navigation i18n coverage", () => {
     }
     expect(llmGatewaySource).toContain('t("page.llmGateway.workbenchTitle")');
     expect(llmGatewaySource).toContain("page.llmGateway.tabs.");
+  });
+
+  it("localizes A2A protocol focused route chrome", () => {
+    for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
+      expect(messages.page.a2aGateway.workbenchTitle).toBeTruthy();
+      expect(messages.page.a2aGateway.focusedHint).toBeTruthy();
+      expect(messages.page.a2aGateway.metricHealth).toBeTruthy();
+      expect(messages.page.a2aGateway.tabLabels.registry).toBeTruthy();
+      expect(messages.page.a2aGateway.tabs.registry.title).toBeTruthy();
+      expect(messages.page.a2aGateway.tabs.dispatches.focus).toBeTruthy();
+    }
+    expect(a2aSource).toContain('t("page.a2aGateway.workbenchTitle")');
+    expect(a2aSource).toContain("page.a2aGateway.tabLabels.");
+    expect(a2aSource).toContain("page.a2aGateway.tabs.");
   });
 });

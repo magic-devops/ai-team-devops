@@ -3651,7 +3651,69 @@
     },
     "a2aGateway": {
       "hubTitle": "A2Aゲートウェイ",
-      "hubDesc": "A2Aプロトコル：エージェント登録・協議・ディスパッチ"
+      "hubDesc": "A2Aプロトコル：エージェント登録・協議・ディスパッチ",
+      "workbenchTitle": "A2Aゲートウェイ",
+      "workbenchDesc": "A2Aプロトコル運用：登録、能力協議、ディスパッチパケット、証跡、ガバナンスタスク",
+      "focusedHint": "フォーカス入口では、このモジュールの高頻度操作だけを表示します。全体フローはゲートウェイハブで確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "A2Aゲートウェイへ戻る",
+      "metricHealth": "プロトコル健康度",
+      "metricRegistered": "登録済みAgent",
+      "metricTrusted": "信頼済みAgent",
+      "metricSlaOverdue": "SLA超過",
+      "metricWindowRisk": "ウィンドウリスク",
+      "tabLabels": {
+        "health": "プロトコル健康",
+        "registry": "Agent登録",
+        "negotiate": "能力協議",
+        "sessions": "セッション履歴",
+        "sla": "外部SLA",
+        "windows": "実行ウィンドウ",
+        "dispatches": "タスク分配",
+        "evidence": "実行証跡"
+      },
+      "tabs": {
+        "health": {
+          "title": "A2Aプロトコル健康",
+          "description": "プロトコル健康度、実行リスク、IMブリーフ、ガバナンスタスクをA2A概要で確認します。",
+          "focus": "健康状態、リスクブリーフ、ガバナンスタスク"
+        },
+        "registry": {
+          "title": "A2A Agent登録",
+          "description": "外部Agent登録、認証情報ローテーション、ハートビート、信頼ポリシー、タスク取得を管理します。",
+          "focus": "登録、認証情報、ハートビート、信頼許可"
+        },
+        "negotiate": {
+          "title": "A2A能力協議",
+          "description": "タスク目標、能力、優先度、リスクポリシーから実行可能Agentを推薦し、追跡可能な分配候補を生成します。",
+          "focus": "タスク目標、能力マッチング、推薦分配"
+        },
+        "sessions": {
+          "title": "A2A協議タイムライン",
+          "description": "協議、分配、再試行、証跡、品質イベントを追跡し、Agent間実行の問題を特定します。",
+          "focus": "セッション、イベント、実行履歴"
+        },
+        "sla": {
+          "title": "A2A外部SLA",
+          "description": "外部Agentの実行期限、証跡不足、タイムアウト昇格、SLAポリシーを管理します。",
+          "focus": "SLA、昇格、証跡不足ガバナンス"
+        },
+        "windows": {
+          "title": "A2A実行ウィンドウ",
+          "description": "リース、確認、進捗停滞、自動操作を監査し、更新、回収、再分配できる状態を保ちます。",
+          "focus": "リース、停滞、自動操作"
+        },
+        "dispatches": {
+          "title": "A2Aタスク分配",
+          "description": "分配記録、プロトコルパケット、再試行、再分配、Agent Run連携を確認します。",
+          "focus": "分配記録、パケット、再試行と再分配"
+        },
+        "evidence": {
+          "title": "A2A実行証跡",
+          "description": "実行証跡、品質スコア、Agent Run状態同期を監査可能な外部Agent納品ループに集約します。",
+          "focus": "証跡、品質、Run状態"
+        }
+      }
     },
     "opsCenter": {
       "hubTitle": "インテリジェント運用センター",

@@ -22,11 +22,15 @@ describe("A2A workbench UX contract", () => {
 
   it("uses the focused route state to remove repeated gateway chrome", () => {
     expect(source).toContain("A2A_TAB_META");
+    expect(source).toContain("const TAB_KEYS: Tab[]");
     expect(source).toContain("activeMeta");
     expect(source).toContain("showGlobalMetrics");
-    expect(source).toContain('title={focused ? activeMeta.title : "A2A 网关"}');
-    expect(source).toContain("当前聚焦");
-    expect(source).toContain("返回 A2A 网关");
+    expect(source).toContain('title={focused ? activeMeta.title : t("page.a2aGateway.workbenchTitle")}');
+    expect(source).toContain('t("page.a2aGateway.focusedHint")');
+    expect(source).toContain('t("page.a2aGateway.backToHub")');
+    expect(source).toContain("page.a2aGateway.tabLabels.");
+    expect(source).toContain("page.a2aGateway.tabs.");
+    expect(source).not.toContain('{ label: "协议健康", value: "health" }');
     expect(source).not.toContain("focused: _focused");
   });
 

@@ -4138,7 +4138,69 @@
     },
     "a2aGateway": {
       "hubTitle": "A2A Gateway",
-      "hubDesc": "A2A protocol: agent registry, negotiation, dispatch and evidence"
+      "hubDesc": "A2A protocol: agent registry, negotiation, dispatch and evidence",
+      "workbenchTitle": "A2A Gateway",
+      "workbenchDesc": "A2A protocol operations: registry, capability negotiation, dispatch packets, evidence and governance tasks",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the gateway hub for the full flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to A2A Gateway",
+      "metricHealth": "Protocol health",
+      "metricRegistered": "Registered agents",
+      "metricTrusted": "Trusted agents",
+      "metricSlaOverdue": "SLA overdue",
+      "metricWindowRisk": "Window risk",
+      "tabLabels": {
+        "health": "Protocol health",
+        "registry": "Agent registry",
+        "negotiate": "Negotiation",
+        "sessions": "Session timeline",
+        "sla": "External SLA",
+        "windows": "Execution windows",
+        "dispatches": "Task dispatch",
+        "evidence": "Evidence"
+      },
+      "tabs": {
+        "health": {
+          "title": "A2A Protocol Health",
+          "description": "Review protocol health, runtime risk, IM briefings and governance tasks from one A2A overview.",
+          "focus": "Health posture, risk briefings, governance tasks"
+        },
+        "registry": {
+          "title": "A2A Agent Registry",
+          "description": "Manage external agent registration, credential rotation, heartbeat, trust policy and task pull access.",
+          "focus": "Registry, credentials, heartbeat, trust admission"
+        },
+        "negotiate": {
+          "title": "A2A Capability Negotiation",
+          "description": "Recommend executable agents by task goal, capability, priority and risk policy, then produce traceable dispatch candidates.",
+          "focus": "Task goal, capability matching, recommended dispatch"
+        },
+        "sessions": {
+          "title": "A2A Negotiation Timeline",
+          "description": "Trace negotiation, dispatch, retry, evidence and quality events to locate cross-agent execution issues.",
+          "focus": "Sessions, events, execution trail"
+        },
+        "sla": {
+          "title": "A2A External SLA",
+          "description": "Govern external agent timeliness, missing evidence, timeout escalation and SLA policy so dispatches stay controlled.",
+          "focus": "SLA, escalation, missing-evidence governance"
+        },
+        "windows": {
+          "title": "A2A Execution Windows",
+          "description": "Audit leases, acknowledgements, stale progress and automated actions so execution windows can renew, expire and reassign.",
+          "focus": "Leases, stale progress, automated actions"
+        },
+        "dispatches": {
+          "title": "A2A Task Dispatch",
+          "description": "Review dispatch records, protocol packets, retries, reassignment and Agent Run linkage for task-level traceability.",
+          "focus": "Dispatch records, packets, retry and reassignment"
+        },
+        "evidence": {
+          "title": "A2A Execution Evidence",
+          "description": "Collect evidence, quality scores and Agent Run status sync into an auditable external-agent delivery loop.",
+          "focus": "Evidence, quality, Run status"
+        }
+      }
     },
     "opsCenter": {
       "hubTitle": "Ops Center",
