@@ -3622,7 +3622,28 @@
     },
     "llmGateway": {
       "hubTitle": "LLMゲートウェイ",
-      "hubDesc": "モデルルーティング、コスト管理、スロットル"
+      "hubDesc": "モデルルーティング、コスト管理、スロットル",
+      "workbenchTitle": "LLMゲートウェイ",
+      "workbenchDesc": "LLM ルーティング、事前判断、コスト帰因、制限、Fallback ガバナンス",
+      "focusedHint": "専門サブルートです。このモジュールの高頻度操作だけを表示します。全体はゲートウェイハブで確認できます。",
+      "focusedTag": "フォーカス",
+      "metricHealth": "ゲートウェイ健康度",
+      "metricRequests": "総リクエスト",
+      "metricBudget": "予算ガード($)",
+      "metricRoutes": "有効ルート",
+      "metricProviders": "健全 Provider",
+      "tabs": {
+        "health": "健康管理",
+        "policy": "本番ポリシー",
+        "routes": "ルート",
+        "decision": "呼び出し判断",
+        "drill": "Fallback 演習",
+        "cost": "コスト",
+        "attribution": "コスト帰因",
+        "eval": "モデル評価",
+        "audit": "Prompt 監査",
+        "throttle": "レート制限"
+      }
     },
     "knowledgeGraph": {
       "hubTitle": "ナレッジグラフ",

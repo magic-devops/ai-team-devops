@@ -4109,7 +4109,28 @@
     },
     "llmGateway": {
       "hubTitle": "LLM Gateway",
-      "hubDesc": "Model routing, cost control and throttle policies"
+      "hubDesc": "Model routing, cost control and throttle policies",
+      "workbenchTitle": "LLM Gateway",
+      "workbenchDesc": "Unified LLM routing, pre-call decisions, cost attribution, throttling and fallback governance",
+      "focusedHint": "Focused subroute: only the high-frequency controls for this module are shown. Open the gateway hub for the full surface.",
+      "focusedTag": "Focused",
+      "metricHealth": "Gateway health",
+      "metricRequests": "Requests",
+      "metricBudget": "Budget guardrail ($)",
+      "metricRoutes": "Active routes",
+      "metricProviders": "Healthy providers",
+      "tabs": {
+        "health": "Health",
+        "policy": "Production policy",
+        "routes": "Routes",
+        "decision": "Call decision",
+        "drill": "Fallback drill",
+        "cost": "Cost",
+        "attribution": "Attribution",
+        "eval": "Model evaluation",
+        "audit": "Prompt audit",
+        "throttle": "Throttling"
+      }
     },
     "knowledgeGraph": {
       "hubTitle": "Knowledge Graph",

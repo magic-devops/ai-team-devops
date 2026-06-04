@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Form, Input, InputNumber, Segmented, Select, Space, Steps, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { getToken } from "@/lib/authStorage";
 import { NeedLogin, RefreshButton } from "@/components/PageStates";
@@ -11,18 +12,7 @@ import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 
 type Tab = "health" | "policy" | "routes" | "decision" | "drill" | "cost" | "attribution" | "eval" | "audit" | "throttle";
 
-const tabs: Array<{ key: Tab; label: string }> = [
-  { key: "health", label: "健康治理" },
-  { key: "policy", label: "生产策略" },
-  { key: "routes", label: "路由规则" },
-  { key: "decision", label: "调用决策" },
-  { key: "drill", label: "Fallback 演练" },
-  { key: "cost", label: "成本统计" },
-  { key: "attribution", label: "成本归因" },
-  { key: "eval", label: "模型评测" },
-  { key: "audit", label: "Prompt 审计" },
-  { key: "throttle", label: "限流策略" },
-];
+const TAB_KEYS: Tab[] = ["health", "policy", "routes", "decision", "drill", "cost", "attribution", "eval", "audit", "throttle"];
 
 function badgeClass(level: string) {
   if (level === "critical" || level === "high" || level === "blocked" || level === "down" || level === "unhealthy") return "bg-red-50 text-red-700 ring-red-100";
@@ -92,7 +82,8 @@ const DEFAULT_POLICY_FORM = {
 };
 const DEFAULT_PROVIDER_HEALTH_FORM = { model_id: "", status: "healthy", latency_ms: 800, error_rate: 0, note: "" };
 
-export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }: { focused?: boolean; initialTab?: Tab }) {
+export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: { focused?: boolean; initialTab?: Tab }) {
+  const { t } = useTranslation();
   const authed = Boolean(getToken());
   const qc = useQueryClient();
   const [routeForm] = Form.useForm();
@@ -344,6 +335,7 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   const routes = routesQ.data?.items ?? [];
   const throttles = throttleQ.data?.items ?? [];
   const risks = summary.risks ?? [];
+  const tabLabel = (key: Tab) => t(`page.llmGateway.tabs.${key}`);
   const routeColumns: ColumnsType<any> = [
     {
       title: "路由名称",
@@ -459,8 +451,8 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title="模型网关"
-        description="统一 LLM 路由、调用前决策、成本归因、限流策略与 fallback 治理"
+        title={t("page.llmGateway.workbenchTitle")}
+        description={t("page.llmGateway.workbenchDesc")}
         actions={
           <>
             <AiAssistButton onClick={() => setAiOpen(true)} />
@@ -469,16 +461,25 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
         }
         metrics={
           <WorkbenchStats items={[
-            { label: "网关健康分", value: summary.health_score ?? 0, trend: (summary.health_score ?? 0) >= 80 ? "up" : "down" },
-            { label: "总请求数", value: summary.total_requests ?? 0 },
-            { label: "预算护栏($)", value: policy.daily_budget_usd ?? 0 },
-            { label: "活跃路由", value: summary.active_routes ?? routes.filter((r: any) => r.enabled).length },
-            { label: "Provider 健康", value: providerHealth.filter((item: any) => ["healthy", "ok", "active"].includes(String(item.status || "").toLowerCase())).length },
+            { label: t("page.llmGateway.metricHealth"), value: summary.health_score ?? 0, trend: (summary.health_score ?? 0) >= 80 ? "up" : "down" },
+            { label: t("page.llmGateway.metricRequests"), value: summary.total_requests ?? 0 },
+            { label: t("page.llmGateway.metricBudget"), value: policy.daily_budget_usd ?? 0 },
+            { label: t("page.llmGateway.metricRoutes"), value: summary.active_routes ?? routes.filter((r: any) => r.enabled).length },
+            { label: t("page.llmGateway.metricProviders"), value: providerHealth.filter((item: any) => ["healthy", "ok", "active"].includes(String(item.status || "").toLowerCase())).length },
           ]} />
         }
       />
 
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+        {focused ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+            <div>
+              <div className="text-sm font-semibold text-[var(--text)]">{tabLabel(tab)}</div>
+              <div className="text-xs text-[var(--muted)]">{t("page.llmGateway.focusedHint")}</div>
+            </div>
+            <Tag color="blue">{t("page.llmGateway.focusedTag")}</Tag>
+          </div>
+        ) : (
         <Segmented
           value={tab}
           onChange={(value) => {
@@ -491,11 +492,12 @@ export function LlmGatewayWorkbench({ focused: _focused, initialTab = "health" }
             setShowEvalDrawer(false);
             setShowAuditDrawer(false);
           }}
-          options={tabs.map((item) => ({
-            label: item.key === "routes" ? `${item.label} (${routes.length})` : item.label,
-            value: item.key,
+          options={TAB_KEYS.map((key) => ({
+            label: key === "routes" ? `${tabLabel(key)} (${routes.length})` : tabLabel(key),
+            value: key,
           }))}
         />
+        )}
       </div>
 
       {tab === "health" && (

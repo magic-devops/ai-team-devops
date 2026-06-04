@@ -79,6 +79,19 @@ describe("navigation information architecture", () => {
     expect(tasksSource).toContain("showSchedulerPlanning ? (");
   });
 
+  it("keeps LLM gateway focused routes from rendering as one generic tab-heavy workbench", () => {
+    const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "llmGatewayPolicy", path: "#/ai/llm-gateway/policy", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "policy" })');
+    expect(navigationSource).toContain('key: "llmGatewayAttribution", path: "#/ai/llm-gateway/attribution", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "attribution" })');
+    expect(navigationSource).toContain('key: "llmGatewayEval", path: "#/ai/llm-gateway/eval", el: pageElement(LlmGatewayWorkbenchPage, { focused: true, initialTab: "eval" })');
+    expect(llmGatewaySource).toContain("const TAB_KEYS: Tab[]");
+    expect(llmGatewaySource).toContain('const tabLabel = (key: Tab) => t(`page.llmGateway.tabs.${key}`)');
+    expect(llmGatewaySource).toContain("focused ? (");
+    expect(llmGatewaySource).toContain('t("page.llmGateway.focusedHint")');
+    expect(llmGatewaySource).not.toContain('label: "健康治理"');
+    expect(llmGatewaySource).not.toContain('title="模型网关"');
+  });
+
   it("keeps settings as a light hub with focused runtime configuration routes", () => {
     expect(navigationSource).toContain('key: "settings"');
     expect(navigationSource).toContain('系统配置治理中心：账户、运行态、SSO、计费、部署、存储与观测');

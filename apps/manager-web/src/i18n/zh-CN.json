@@ -4432,7 +4432,28 @@
     },
     "llmGateway": {
       "hubTitle": "模型网关",
-      "hubDesc": "统一 LLM 路由、成本控制与限流策略管理"
+      "hubDesc": "统一 LLM 路由、成本控制与限流策略管理",
+      "workbenchTitle": "模型网关",
+      "workbenchDesc": "统一 LLM 路由、调用前决策、成本归因、限流策略与 fallback 治理",
+      "focusedHint": "当前为专业子入口，只展示本模块高频操作；返回模型网关可查看完整能力。",
+      "focusedTag": "聚焦模式",
+      "metricHealth": "网关健康分",
+      "metricRequests": "总请求数",
+      "metricBudget": "预算护栏($)",
+      "metricRoutes": "活跃路由",
+      "metricProviders": "Provider 健康",
+      "tabs": {
+        "health": "健康治理",
+        "policy": "生产策略",
+        "routes": "路由规则",
+        "decision": "调用决策",
+        "drill": "Fallback 演练",
+        "cost": "成本统计",
+        "attribution": "成本归因",
+        "eval": "模型评测",
+        "audit": "Prompt 审计",
+        "throttle": "限流策略"
+      }
     },
     "knowledgeGraph": {
       "hubTitle": "知识图谱",

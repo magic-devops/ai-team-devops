@@ -7,6 +7,7 @@ const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8
 const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandPalette.tsx"), "utf8");
 const menuManagementSource = readFileSync(resolve(root, "src/pages/admin/MenuManagement.tsx"), "utf8");
 const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
+const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
@@ -53,5 +54,19 @@ describe("navigation i18n coverage", () => {
     expect(dataQualitySource).toContain('t("page.dataQuality.reportAverageScore")');
     expect(metricsSource).toContain('t("page.metricsCenter.tabs.monitor")');
     expect(metricsSource).toContain('t("page.metricsCenter.emptyGovernanceTodos")');
+  });
+
+  it("localizes LLM gateway focused route chrome", () => {
+    for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
+      const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
+      expect(messages.page.llmGateway.workbenchTitle).toBeTruthy();
+      expect(messages.page.llmGateway.focusedHint).toBeTruthy();
+      expect(messages.page.llmGateway.metricHealth).toBeTruthy();
+      expect(messages.page.llmGateway.tabs.policy).toBeTruthy();
+      expect(messages.page.llmGateway.tabs.attribution).toBeTruthy();
+      expect(messages.page.llmGateway.tabs.eval).toBeTruthy();
+    }
+    expect(llmGatewaySource).toContain('t("page.llmGateway.workbenchTitle")');
+    expect(llmGatewaySource).toContain("page.llmGateway.tabs.");
   });
 });
