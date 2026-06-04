@@ -4702,7 +4702,40 @@
     },
     "tagService": {
       "hubTitle": "标签服务",
-      "hubDesc": "标签目录、自动打标规则、画像本体与标签 API 服务"
+      "hubDesc": "标签目录、自动打标规则、画像本体与标签 API 服务",
+      "workbenchTitle": "标签服务",
+      "workbenchDesc": "标签目录、自动打标规则、画像本体与标签 API 服务",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整标签治理链路请回到标签服务。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回标签服务",
+      "tabs": {
+        "catalog": "标签目录",
+        "rules": "打标规则",
+        "ontology": "画像本体",
+        "profiles": "画像构建"
+      },
+      "modules": {
+        "catalog": {
+          "title": "标签目录",
+          "description": "管理标签名称、分类、值类型、适用实体和 owner，支撑标签资产目录治理。",
+          "focus": "标签资产、分类、适用实体"
+        },
+        "rules": {
+          "title": "自动打标规则",
+          "description": "维护实体条件、输出值和优先级，并用样本数据测试规则命中结果。",
+          "focus": "规则条件、优先级、样本测试"
+        },
+        "ontology": {
+          "title": "画像本体",
+          "description": "注册画像实体并发布标签契约，支撑标签 API 和 Agent 上下文消费。",
+          "focus": "实体本体、契约发布、标签 API"
+        },
+        "profiles": {
+          "title": "画像构建",
+          "description": "基于样本记录构建并发布画像，查看构建历史、命中量和覆盖率。",
+          "focus": "画像构建、发布、覆盖率"
+        }
+      }
     },
     "dataDev": {
       "title": "数据开发工作台",

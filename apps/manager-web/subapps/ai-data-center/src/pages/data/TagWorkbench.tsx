@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -8,6 +9,33 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type Tab = "catalog" | "rules" | "ontology" | "profiles";
+const TAB_KEYS: Tab[] = ["catalog", "rules", "ontology", "profiles"];
+const TAB_META: Record<Tab, { labelKey: string; titleKey: string; descriptionKey: string; focusKey: string }> = {
+  catalog: {
+    labelKey: "page.tagService.tabs.catalog",
+    titleKey: "page.tagService.modules.catalog.title",
+    descriptionKey: "page.tagService.modules.catalog.description",
+    focusKey: "page.tagService.modules.catalog.focus",
+  },
+  rules: {
+    labelKey: "page.tagService.tabs.rules",
+    titleKey: "page.tagService.modules.rules.title",
+    descriptionKey: "page.tagService.modules.rules.description",
+    focusKey: "page.tagService.modules.rules.focus",
+  },
+  ontology: {
+    labelKey: "page.tagService.tabs.ontology",
+    titleKey: "page.tagService.modules.ontology.title",
+    descriptionKey: "page.tagService.modules.ontology.description",
+    focusKey: "page.tagService.modules.ontology.focus",
+  },
+  profiles: {
+    labelKey: "page.tagService.tabs.profiles",
+    titleKey: "page.tagService.modules.profiles.title",
+    descriptionKey: "page.tagService.modules.profiles.description",
+    focusKey: "page.tagService.modules.profiles.focus",
+  },
+};
 
 const DEFAULT_PROFILE_RECORDS = `[
   {"agent_id":"a-1","quality_score":92,"tier":"gold"},
@@ -18,8 +46,9 @@ function splitList(value: string) {
   return value.split(",").map(item => item.trim()).filter(Boolean);
 }
 
-export function TagWorkbench({ focused: _focused, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
+export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -106,17 +135,37 @@ export function TagWorkbench({ focused: _focused, initialTab = "catalog" }: { fo
   const rules = rulesQ.data?.items ?? [];
   const entities = ontologyQ.data?.entities ?? [];
   const builds = profileBuildsQ.data?.items ?? [];
+  const activeMetaDef = TAB_META[tab];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
+  const tabLabel = (tabId: Tab) => tabId === "catalog" ? `${t(TAB_META[tabId].labelKey)} (${tags.length})` : t(TAB_META[tabId].labelKey);
 
   return (
     <div className="w-full space-y-4">
-      <WorkbenchShell title="标签服务" description="标签目录、自动打标规则与画像本体管理">
-        <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["catalog", "rules", "ontology", "profiles"] as Tab[]).map(t => (
-            <button key={t} onClick={() => { setTab(t); setShowForm(false); }}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "catalog" ? `标签目录 (${tags.length})` : t === "rules" ? "打标规则" : t === "ontology" ? "画像本体" : "画像构建"}
-            </button>
-          ))}
+      <WorkbenchShell title={focused ? activeMeta.title : t("page.tagService.workbenchTitle")} description={focused ? activeMeta.description : t("page.tagService.workbenchDesc")}>
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+          {focused ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.tagService.focusedTag")}</span>
+                <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.tagService.focusedHint")}</span>
+              </div>
+              <a href="#/data/tags" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.tagService.backToHub")}</a>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {TAB_KEYS.map(tabId => (
+                <button key={tabId} onClick={() => { setTab(tabId); setShowForm(false); }}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === tabId ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}>
+                  {tabLabel(tabId)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === "catalog" && (

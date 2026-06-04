@@ -187,9 +187,12 @@ describe("navigation information architecture", () => {
   it("keeps data quality metrics and tag service subroutes from sharing generic tabs", () => {
     const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
     const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
+    const tagSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/TagWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "dataQualityReports", path: "#/data/quality/reports", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "reports" })');
     expect(navigationSource).toContain('key: "metricsSemantic", path: "#/data/metrics/semantic", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "semantic" })');
     expect(navigationSource).toContain('key: "metricsMonitor", path: "#/data/metrics/monitor", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "monitor" })');
+    expect(navigationSource).toContain('key: "tagCatalog", path: "#/data/tags/catalog", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "catalog" })');
+    expect(navigationSource).toContain('key: "tagRules", path: "#/data/tags/rules", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "rules" })');
     expect(navigationSource).toContain('key: "tagApi", path: "#/data/tags/api", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "profiles" })');
     expect(dataQualitySource).toContain('type Tab = "rules" | "runs" | "alerts" | "reports"');
     expect(dataQualitySource).toContain('tab === "reports"');
@@ -205,6 +208,11 @@ describe("navigation information architecture", () => {
     expect(metricsSource).toContain("page.metricsCenter.modules.");
     expect(metricsSource).toContain('t("page.metricsCenter.focusedHint")');
     expect(metricsSource).not.toContain("focused: _focused");
+    expect(tagSource).toContain("const TAB_KEYS: Tab[]");
+    expect(tagSource).toContain('export function TagWorkbench({ focused = false');
+    expect(tagSource).toContain("page.tagService.modules.");
+    expect(tagSource).toContain('t("page.tagService.focusedHint")');
+    expect(tagSource).not.toContain("focused: _focused");
   });
 
   it("keeps ops center as a light hub with focused production ops modules", () => {

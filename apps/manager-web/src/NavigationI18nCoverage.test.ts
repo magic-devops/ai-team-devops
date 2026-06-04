@@ -12,6 +12,7 @@ const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ec
 const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench.tsx"), "utf8");
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
+const tagSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/TagWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
 
 describe("navigation i18n coverage", () => {
@@ -57,6 +58,11 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.metricsCenter.modules.semantic.title).toBeTruthy();
       expect(messages.page.metricsCenter.modules.monitor.focus).toBeTruthy();
       expect(messages.page.metricsCenter.emptyGovernanceTodos).toBeTruthy();
+      expect(messages.page.tagService.workbenchTitle).toBeTruthy();
+      expect(messages.page.tagService.focusedHint).toBeTruthy();
+      expect(messages.page.tagService.tabs.rules).toBeTruthy();
+      expect(messages.page.tagService.modules.ontology.title).toBeTruthy();
+      expect(messages.page.tagService.modules.profiles.focus).toBeTruthy();
     }
     expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
     expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
@@ -68,6 +74,9 @@ describe("navigation i18n coverage", () => {
     expect(metricsSource).toContain("page.metricsCenter.modules.");
     expect(metricsSource).toContain('t("page.metricsCenter.workbenchTitle")');
     expect(metricsSource).toContain('t("page.metricsCenter.emptyGovernanceTodos")');
+    expect(tagSource).toContain("page.tagService.tabs.");
+    expect(tagSource).toContain("page.tagService.modules.");
+    expect(tagSource).toContain('t("page.tagService.workbenchTitle")');
   });
 
   it("localizes LLM gateway focused route chrome", () => {

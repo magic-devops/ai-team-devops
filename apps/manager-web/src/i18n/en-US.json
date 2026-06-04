@@ -4379,7 +4379,40 @@
     },
     "tagService": {
       "hubTitle": "Tag Service",
-      "hubDesc": "Tag catalog, rules, ontology and tag API"
+      "hubDesc": "Tag catalog, rules, ontology and tag API",
+      "workbenchTitle": "Tag Service",
+      "workbenchDesc": "Tag catalog, auto-tagging rules, profile ontology and tag API service",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the tag service hub for the full governance flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Tag Service",
+      "tabs": {
+        "catalog": "Tag catalog",
+        "rules": "Tagging rules",
+        "ontology": "Profile ontology",
+        "profiles": "Profile build"
+      },
+      "modules": {
+        "catalog": {
+          "title": "Tag Catalog",
+          "description": "Manage tag names, categories, value types, applicable entities and owners for tag asset governance.",
+          "focus": "Tag assets, categories, applicable entities"
+        },
+        "rules": {
+          "title": "Auto-tagging Rules",
+          "description": "Maintain entity conditions, output values and priorities, then test rule matches with sample data.",
+          "focus": "Rule conditions, priority, sample test"
+        },
+        "ontology": {
+          "title": "Profile Ontology",
+          "description": "Register profile entities and publish tag contracts for tag APIs and Agent context consumption.",
+          "focus": "Entity ontology, contract publish, tag API"
+        },
+        "profiles": {
+          "title": "Profile Build",
+          "description": "Build and publish profiles from sample records, then review history, match count and coverage.",
+          "focus": "Profile build, publish, coverage"
+        }
+      }
     },
     "dataDev": {
       "title": "Data Dev Workbench",
