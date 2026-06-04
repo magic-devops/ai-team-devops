@@ -10,6 +10,30 @@ import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type Tab = "rules" | "runs" | "alerts" | "reports";
 
+const TAB_KEYS: Tab[] = ["rules", "runs", "alerts", "reports"];
+const TAB_META: Record<Tab, { titleKey: string; descriptionKey: string; focusKey: string }> = {
+  rules: {
+    titleKey: "page.dataQuality.modules.rules.title",
+    descriptionKey: "page.dataQuality.modules.rules.description",
+    focusKey: "page.dataQuality.modules.rules.focus",
+  },
+  runs: {
+    titleKey: "page.dataQuality.modules.runs.title",
+    descriptionKey: "page.dataQuality.modules.runs.description",
+    focusKey: "page.dataQuality.modules.runs.focus",
+  },
+  alerts: {
+    titleKey: "page.dataQuality.modules.alerts.title",
+    descriptionKey: "page.dataQuality.modules.alerts.description",
+    focusKey: "page.dataQuality.modules.alerts.focus",
+  },
+  reports: {
+    titleKey: "page.dataQuality.modules.reports.title",
+    descriptionKey: "page.dataQuality.modules.reports.description",
+    focusKey: "page.dataQuality.modules.reports.focus",
+  },
+};
+
 const SEVERITY_COLOR: Record<string, string> = {
   critical: "text-red-600 bg-red-50",
   high: "text-orange-600 bg-orange-50",
@@ -23,7 +47,7 @@ const DEFAULT_SAMPLE = `[
   {"id":"asset-1","owner":"","score":130,"email":"bad-email","updated_at":"2026-05-19T06:00:00+00:00"}
 ]`;
 
-export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }: { focused?: boolean; initialTab?: Tab }) {
+export function DataQualityWorkbench({ focused = false, initialTab = "rules" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
   const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
@@ -130,19 +154,38 @@ export function DataQualityWorkbench({ focused: _focused, initialTab = "rules" }
     ? `${((scoredRuns.reduce((sum: number, r: any) => sum + Number(r.score || 0), 0) / scoredRuns.length) * 100).toFixed(1)}%`
     : "—";
   const tabLabel = (value: Tab) => t(`page.dataQuality.tabs.${value}`);
+  const activeMetaDef = TAB_META[tab];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
 
   return (
     <div className="w-full space-y-4">
-      <WorkbenchShell title="数据质量中心" description="质量规则管理、运行记录与告警处置">
-        <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["rules", "runs", "alerts", "reports"] as Tab[]).map(tabId => (
-            <button key={tabId} onClick={() => setTab(tabId)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === tabId ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {tabLabel(tabId)}
-              {tabId === "alerts" && openAlerts.length > 0 &&
-                <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{openAlerts.length}</span>}
-            </button>
-          ))}
+      <WorkbenchShell title={focused ? activeMeta.title : t("page.dataQuality.workbenchTitle")} description={focused ? activeMeta.description : t("page.dataQuality.workbenchDesc")}>
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+          {focused ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataQuality.focusedTag")}</span>
+                <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataQuality.focusedHint")}</span>
+              </div>
+              <a href="#/data/quality" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataQuality.backToHub")}</a>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {TAB_KEYS.map(tabId => (
+                <button key={tabId} onClick={() => setTab(tabId)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === tabId ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}>
+                  {tabLabel(tabId)}
+                  {tabId === "alerts" && openAlerts.length > 0 &&
+                    <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-xs text-white">{openAlerts.length}</span>}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === "rules" && (

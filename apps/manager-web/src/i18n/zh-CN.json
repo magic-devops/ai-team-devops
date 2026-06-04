@@ -894,11 +894,38 @@
     "dataQuality": {
       "hubTitle": "数据质量中心",
       "hubDesc": "质量规则目录、运行记录、告警处置与质量报告",
+      "workbenchTitle": "数据质量中心",
+      "workbenchDesc": "质量规则管理、运行记录、告警处置与质量报告",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整质量治理链路请回到数据质量中心。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回数据质量中心",
       "tabs": {
         "rules": "质量规则",
         "runs": "运行记录",
         "alerts": "告警处置",
         "reports": "质量报告"
+      },
+      "modules": {
+        "rules": {
+          "title": "质量规则目录",
+          "description": "管理数据质量规则、字段配置、严重度和样本运行，支撑真实规则新增、删除与即时评估。",
+          "focus": "规则目录、样本运行、字段配置"
+        },
+        "runs": {
+          "title": "质量运行记录",
+          "description": "查看质量运行状态、质量分、失败行和根因信息，并对运行中记录完成评估。",
+          "focus": "运行状态、质量分、根因记录"
+        },
+        "alerts": {
+          "title": "质量告警处置",
+          "description": "处置开放质量告警、预览修复任务，并把数据问题闭环到治理任务。",
+          "focus": "开放告警、根因、修复任务"
+        },
+        "reports": {
+          "title": "质量报告",
+          "description": "汇总运行总数、失败运行、开放告警和平均质量分，输出质量运营视图。",
+          "focus": "质量指标、趋势摘要、根因分布"
+        }
       },
       "reportsTitle": "质量报告",
       "reportRunTotal": "运行总数",

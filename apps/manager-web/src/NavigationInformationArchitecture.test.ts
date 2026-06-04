@@ -193,6 +193,11 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "tagApi", path: "#/data/tags/api", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "profiles" })');
     expect(dataQualitySource).toContain('type Tab = "rules" | "runs" | "alerts" | "reports"');
     expect(dataQualitySource).toContain('tab === "reports"');
+    expect(dataQualitySource).toContain("const TAB_KEYS: Tab[]");
+    expect(dataQualitySource).toContain('export function DataQualityWorkbench({ focused = false');
+    expect(dataQualitySource).toContain("page.dataQuality.modules.");
+    expect(dataQualitySource).toContain('t("page.dataQuality.focusedHint")');
+    expect(dataQualitySource).not.toContain("focused: _focused");
     expect(metricsSource).toContain('type Tab = "catalog" | "semantic" | "published" | "monitor"');
     expect(metricsSource).toContain('tab === "monitor"');
   });

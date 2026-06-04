@@ -771,11 +771,38 @@
     "dataQuality": {
       "hubTitle": "Data Quality Center",
       "hubDesc": "Quality rules, runs, alerts and reports",
+      "workbenchTitle": "Data Quality Center",
+      "workbenchDesc": "Quality rule management, run records, alert handling and quality reports",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the data quality hub for the full governance flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Data Quality",
       "tabs": {
         "rules": "Rules",
         "runs": "Runs",
         "alerts": "Alerts",
         "reports": "Reports"
+      },
+      "modules": {
+        "rules": {
+          "title": "Quality Rule Catalog",
+          "description": "Manage quality rules, field config, severity and sample runs with real create, delete and immediate evaluation actions.",
+          "focus": "Rule catalog, sample run, field config"
+        },
+        "runs": {
+          "title": "Quality Run Records",
+          "description": "Review run status, quality scores, failed rows and root causes, then finish running evaluations.",
+          "focus": "Run status, quality score, root cause"
+        },
+        "alerts": {
+          "title": "Quality Alert Handling",
+          "description": "Resolve open quality alerts, preview fix tasks and close data issues through governance tasks.",
+          "focus": "Open alerts, root causes, fix tasks"
+        },
+        "reports": {
+          "title": "Quality Reports",
+          "description": "Summarize runs, failed runs, open alerts and average score into an operational quality view.",
+          "focus": "Quality metrics, trend summary, root cause distribution"
+        }
       },
       "reportsTitle": "Quality reports",
       "reportRunTotal": "Runs",
