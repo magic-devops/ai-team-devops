@@ -4739,7 +4739,66 @@
     },
     "dataDev": {
       "title": "数据开发工作台",
-      "desc": "SQL 编辑器、Spark/Flink 作业管理与调度配置"
+      "desc": "模板建模、调度编排、Agent 执行包、质量证据和自动化 Runbook",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整开发链路请回到数据开发工作台。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回数据开发",
+      "emptyEngineTemplates": "暂无当前引擎模板，可返回数据开发工作台创建或切换模板引擎。",
+      "tabs": {
+        "templates": "开发模板",
+        "schedules": "调度运行",
+        "agent_feed": "Agent 执行包",
+        "evidence": "质量证据",
+        "runbook": "Runbook"
+      },
+      "metrics": {
+        "templates": "开发模板",
+        "schedules": "调度运行",
+        "readyPackets": "待领取包",
+        "qualityBlocked": "质量阻断"
+      },
+      "modules": {
+        "templates": {
+          "title": "开发模板目录",
+          "description": "管理 SQL、Spark、Flink、Python 和 dbt 开发模板，沉淀资产、owner、质量卡点和执行工具。",
+          "focus": "模板资产、引擎、质量卡点"
+        },
+        "sql_editor": {
+          "title": "SQL 开发",
+          "description": "聚焦 SQL 模板资产，快速选择模板、生成任务并进入调度执行链路。",
+          "focus": "SQL 模板、任务生成、质量门"
+        },
+        "spark_jobs": {
+          "title": "Spark 作业",
+          "description": "聚焦 Spark 作业模板，面向批处理开发、质量卡点和 Agent 执行包编排。",
+          "focus": "Spark 作业、批处理模板、Agent 包"
+        },
+        "flink_jobs": {
+          "title": "Flink 作业",
+          "description": "聚焦 Flink 作业模板，面向实时开发、任务生成和质量证据回写。",
+          "focus": "Flink 作业、实时模板、证据回写"
+        },
+        "schedules": {
+          "title": "调度运行",
+          "description": "按策略、并发度、优先级和执行工具预览或应用调度，查看重放、归档和运行记录。",
+          "focus": "调度策略、dry-run、运行重放"
+        },
+        "agent_feed": {
+          "title": "Agent 执行包",
+          "description": "查看调度生成的 Agent 执行包，支持领取、心跳和交付证据回写。",
+          "focus": "执行包、领取、心跳、报告"
+        },
+        "evidence": {
+          "title": "质量证据",
+          "description": "汇总 Agent 回写的质量分、缺失门禁和产物链接，并将异常证据任务化。",
+          "focus": "质量决策、缺失门禁、治理任务"
+        },
+        "runbook": {
+          "title": "自动化 Runbook",
+          "description": "按未领取执行包、质量阻断和缺证据自动生成处置步骤与治理任务。",
+          "focus": "自动处置、步骤预览、任务化"
+        }
+      }
     }
   },
   "projectSelector": {

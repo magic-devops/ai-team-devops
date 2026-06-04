@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Bot, CheckCircle2, Clock, GitBranch, Play, RefreshCw, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
@@ -12,18 +13,64 @@ import { buildSchedulePayload, derivePacketStats, toggleTemplateSelection } from
 type Tab = "templates" | "schedules" | "agent_feed" | "evidence" | "runbook";
 
 type LegacyTab = "sql_editor" | "spark_jobs" | "flink_jobs" | "schedules";
+type FocusKey = Tab | LegacyTab;
 
-const TAB_ITEMS: Array<{ id: Tab; label: string }> = [
-  { id: "templates", label: "开发模板" },
-  { id: "schedules", label: "调度运行" },
-  { id: "agent_feed", label: "Agent 执行包" },
-  { id: "evidence", label: "质量证据" },
-  { id: "runbook", label: "Runbook" },
+const TAB_ITEMS: Array<{ id: Tab; labelKey: string }> = [
+  { id: "templates", labelKey: "page.dataDev.tabs.templates" },
+  { id: "schedules", labelKey: "page.dataDev.tabs.schedules" },
+  { id: "agent_feed", labelKey: "page.dataDev.tabs.agent_feed" },
+  { id: "evidence", labelKey: "page.dataDev.tabs.evidence" },
+  { id: "runbook", labelKey: "page.dataDev.tabs.runbook" },
 ];
 
 const ENGINES = ["SQL", "Spark", "Flink", "Python", "dbt"];
 const POLICIES = ["quality_first", "balanced", "throughput", "cost_saver"];
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
+const FOCUS_META: Record<FocusKey, { titleKey: string; descriptionKey: string; focusKey: string; engine?: string }> = {
+  templates: {
+    titleKey: "page.dataDev.modules.templates.title",
+    descriptionKey: "page.dataDev.modules.templates.description",
+    focusKey: "page.dataDev.modules.templates.focus",
+  },
+  schedules: {
+    titleKey: "page.dataDev.modules.schedules.title",
+    descriptionKey: "page.dataDev.modules.schedules.description",
+    focusKey: "page.dataDev.modules.schedules.focus",
+  },
+  agent_feed: {
+    titleKey: "page.dataDev.modules.agent_feed.title",
+    descriptionKey: "page.dataDev.modules.agent_feed.description",
+    focusKey: "page.dataDev.modules.agent_feed.focus",
+  },
+  evidence: {
+    titleKey: "page.dataDev.modules.evidence.title",
+    descriptionKey: "page.dataDev.modules.evidence.description",
+    focusKey: "page.dataDev.modules.evidence.focus",
+  },
+  runbook: {
+    titleKey: "page.dataDev.modules.runbook.title",
+    descriptionKey: "page.dataDev.modules.runbook.description",
+    focusKey: "page.dataDev.modules.runbook.focus",
+  },
+  sql_editor: {
+    titleKey: "page.dataDev.modules.sql_editor.title",
+    descriptionKey: "page.dataDev.modules.sql_editor.description",
+    focusKey: "page.dataDev.modules.sql_editor.focus",
+    engine: "SQL",
+  },
+  spark_jobs: {
+    titleKey: "page.dataDev.modules.spark_jobs.title",
+    descriptionKey: "page.dataDev.modules.spark_jobs.description",
+    focusKey: "page.dataDev.modules.spark_jobs.focus",
+    engine: "Spark",
+  },
+  flink_jobs: {
+    titleKey: "page.dataDev.modules.flink_jobs.title",
+    descriptionKey: "page.dataDev.modules.flink_jobs.description",
+    focusKey: "page.dataDev.modules.flink_jobs.focus",
+    engine: "Flink",
+  },
+};
 
 function normalizeTab(tab?: Tab | LegacyTab): Tab {
   if (tab === "schedules") return "schedules";
@@ -54,10 +101,12 @@ function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
   );
 }
 
-export function DataDevWorkbench({ focused: _focused, initialTab }: { focused?: boolean; initialTab?: Tab | LegacyTab }) {
+export function DataDevWorkbench({ focused = false, initialTab }: { focused?: boolean; initialTab?: Tab | LegacyTab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(normalizeTab(initialTab));
+  const focusKey: FocusKey = focused && initialTab && tab === normalizeTab(initialTab) ? initialTab : tab;
   const [aiOpen, setAiOpen] = useState(false);
   const [q, setQ] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -111,6 +160,15 @@ export function DataDevWorkbench({ focused: _focused, initialTab }: { focused?: 
   const schedules = schedulesQ.data?.items ?? [];
   const packets = agentFeedQ.data?.items ?? [];
   const evidence = evidenceQ.data?.items ?? [];
+  const activeMetaDef = FOCUS_META[focusKey] ?? FOCUS_META[tab];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
+  const visibleTemplates = activeMetaDef.engine && tab === "templates"
+    ? templates.filter((tpl: any) => String(tpl.engine ?? "").toLowerCase() === activeMetaDef.engine?.toLowerCase())
+    : templates;
   const packetStats = useMemo(() => derivePacketStats(packets), [packets]);
 
   const upsertTemplate = useMutation({
@@ -222,30 +280,44 @@ export function DataDevWorkbench({ focused: _focused, initialTab }: { focused?: 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title="数据开发工作台"
-        description="模板建模、调度编排、Agent 执行包、质量证据和自动化 Runbook"
+        title={focused ? activeMeta.title : t("page.dataDev.title")}
+        description={focused ? activeMeta.description : t("page.dataDev.desc")}
         actions={<AiAssistButton onClick={() => setAiOpen(true)} />}
         metrics={
           <WorkbenchStats items={[
-            { label: "开发模板", value: summary.dev_templates ?? templates.length ?? 0 },
-            { label: "调度运行", value: summary.schedules ?? schedules.length ?? 0 },
-            { label: "待领取包", value: summary.ready_unclaimed ?? packetStats.ready ?? 0 },
-            { label: "质量阻断", value: summary.quality_blocked ?? 0, trend: (summary.quality_blocked ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.dataDev.metrics.templates"), value: summary.dev_templates ?? templates.length ?? 0 },
+            { label: t("page.dataDev.metrics.schedules"), value: summary.schedules ?? schedules.length ?? 0 },
+            { label: t("page.dataDev.metrics.readyPackets"), value: summary.ready_unclaimed ?? packetStats.ready ?? 0 },
+            { label: t("page.dataDev.metrics.qualityBlocked"), value: summary.quality_blocked ?? 0, trend: (summary.quality_blocked ?? 0) > 0 ? "down" : "neutral" },
           ]} />
         }
       />
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-[var(--border)]">
-        {TAB_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition ${tab === item.id ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        {focused ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataDev.focusedTag")}</span>
+              <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+              {activeMetaDef.engine ? <span className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--brand)]">{activeMetaDef.engine}</span> : null}
+              <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataDev.focusedHint")}</span>
+            </div>
+            <a href="#/data/dev" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataDev.backToHub")}</a>
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-wrap gap-1">
+            {TAB_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTab(item.id)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === item.id ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}
+              >
+                {t(item.labelKey)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {tab === "templates" ? (
@@ -300,8 +372,8 @@ export function DataDevWorkbench({ focused: _focused, initialTab }: { focused?: 
                 </tr>
               </thead>
               <tbody>
-                {templates.length === 0 ? <EmptyRow colSpan={6} text="暂无数据开发模板，点击「新建模板」创建第一条。" /> : null}
-                {templates.map((tpl: any) => (
+                {visibleTemplates.length === 0 ? <EmptyRow colSpan={6} text={activeMetaDef.engine ? t("page.dataDev.emptyEngineTemplates") : "暂无数据开发模板，点击「新建模板」创建第一条。"} /> : null}
+                {visibleTemplates.map((tpl: any) => (
                   <tr key={tpl.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
                     <td className="py-3 pr-4">
                       <input type="checkbox" checked={selectedIds.includes(tpl.id)} onChange={() => setSelectedIds((ids) => toggleTemplateSelection(ids, tpl.id))} />

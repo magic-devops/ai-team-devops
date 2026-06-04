@@ -13,6 +13,7 @@ const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/s
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const tagSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/TagWorkbench.tsx"), "utf8");
+const dataDevSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataDevWorkbench.tsx"), "utf8");
 const navItemKeys = Array.from(navigationSource.matchAll(/^\s*\{ key: "([^"]+)", path:/gm)).map((match) => match[1]);
 
 describe("navigation i18n coverage", () => {
@@ -63,6 +64,12 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.tagService.tabs.rules).toBeTruthy();
       expect(messages.page.tagService.modules.ontology.title).toBeTruthy();
       expect(messages.page.tagService.modules.profiles.focus).toBeTruthy();
+      expect(messages.page.dataDev.focusedHint).toBeTruthy();
+      expect(messages.page.dataDev.tabs.agent_feed).toBeTruthy();
+      expect(messages.page.dataDev.metrics.readyPackets).toBeTruthy();
+      expect(messages.page.dataDev.modules.sql_editor.title).toBeTruthy();
+      expect(messages.page.dataDev.modules.spark_jobs.focus).toBeTruthy();
+      expect(messages.page.dataDev.modules.schedules.description).toBeTruthy();
     }
     expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
     expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
@@ -77,6 +84,9 @@ describe("navigation i18n coverage", () => {
     expect(tagSource).toContain("page.tagService.tabs.");
     expect(tagSource).toContain("page.tagService.modules.");
     expect(tagSource).toContain('t("page.tagService.workbenchTitle")');
+    expect(dataDevSource).toContain("page.dataDev.tabs.");
+    expect(dataDevSource).toContain("page.dataDev.modules.");
+    expect(dataDevSource).toContain('t("page.dataDev.title")');
   });
 
   it("localizes LLM gateway focused route chrome", () => {

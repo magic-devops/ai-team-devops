@@ -3929,7 +3929,66 @@
     },
     "dataDev": {
       "title": "データ開発ワークベンチ",
-      "desc": "SQLエディタ、Spark/Flinkジョブ、スケジューリング"
+      "desc": "テンプレート設計、スケジューリング、Agent パケット、品質証跡、自動 Runbook",
+      "focusedHint": "フォーカス入口では、このモジュールの高頻度操作だけを表示します。全体の開発フローはデータ開発で確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "データ開発へ戻る",
+      "emptyEngineTemplates": "このエンジンのテンプレートはまだありません。データ開発へ戻って作成するか、テンプレートエンジンを切り替えてください。",
+      "tabs": {
+        "templates": "開発テンプレート",
+        "schedules": "スケジュール実行",
+        "agent_feed": "Agent パケット",
+        "evidence": "品質証跡",
+        "runbook": "Runbook"
+      },
+      "metrics": {
+        "templates": "開発テンプレート",
+        "schedules": "スケジュール実行",
+        "readyPackets": "未取得パケット",
+        "qualityBlocked": "品質ブロック"
+      },
+      "modules": {
+        "templates": {
+          "title": "開発テンプレートカタログ",
+          "description": "SQL、Spark、Flink、Python、dbt のテンプレートを資産、owner、品質ゲート、実行ツールとともに管理します。",
+          "focus": "テンプレート資産、エンジン、品質ゲート"
+        },
+        "sql_editor": {
+          "title": "SQL 開発",
+          "description": "SQL テンプレートに集中し、テンプレート選択、タスク生成、スケジュール実行へ進めます。",
+          "focus": "SQL テンプレート、タスク生成、品質ゲート"
+        },
+        "spark_jobs": {
+          "title": "Spark ジョブ",
+          "description": "バッチ開発向けの Spark ジョブテンプレート、品質ゲート、Agent パケット編成に集中します。",
+          "focus": "Spark ジョブ、バッチテンプレート、Agent パケット"
+        },
+        "flink_jobs": {
+          "title": "Flink ジョブ",
+          "description": "リアルタイム開発向けの Flink ジョブテンプレート、タスク生成、品質証跡の回写に集中します。",
+          "focus": "Flink ジョブ、リアルタイムテンプレート、証跡回写"
+        },
+        "schedules": {
+          "title": "スケジュール実行",
+          "description": "ポリシー、並列度、優先度、実行ツールごとにスケジュールをプレビューまたは適用し、リプレイとアーカイブを確認します。",
+          "focus": "スケジュール策略、dry-run、リプレイ"
+        },
+        "agent_feed": {
+          "title": "Agent パケット",
+          "description": "スケジュールで生成された Agent 実行パケットを確認し、取得、ハートビート、納品証跡の回写を行います。",
+          "focus": "パケット、取得、ハートビート、報告"
+        },
+        "evidence": {
+          "title": "品質証跡",
+          "description": "Agent 報告の品質スコア、未充足ゲート、成果物リンクを確認し、例外をガバナンスタスク化します。",
+          "focus": "品質判定、未充足ゲート、治理タスク"
+        },
+        "runbook": {
+          "title": "自動 Runbook",
+          "description": "未取得パケット、品質ブロック、証跡不足に対する処置ステップとガバナンスタスクを生成します。",
+          "focus": "自動処置、ステッププレビュー、タスク化"
+        }
+      }
     }
   },
   "projectSelector": {

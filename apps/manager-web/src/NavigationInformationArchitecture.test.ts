@@ -188,12 +188,17 @@ describe("navigation information architecture", () => {
     const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
     const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
     const tagSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/TagWorkbench.tsx"), "utf8");
+    const dataDevSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataDevWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "dataQualityReports", path: "#/data/quality/reports", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "reports" })');
     expect(navigationSource).toContain('key: "metricsSemantic", path: "#/data/metrics/semantic", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "semantic" })');
     expect(navigationSource).toContain('key: "metricsMonitor", path: "#/data/metrics/monitor", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "monitor" })');
     expect(navigationSource).toContain('key: "tagCatalog", path: "#/data/tags/catalog", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "catalog" })');
     expect(navigationSource).toContain('key: "tagRules", path: "#/data/tags/rules", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "rules" })');
     expect(navigationSource).toContain('key: "tagApi", path: "#/data/tags/api", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "profiles" })');
+    expect(navigationSource).toContain('key: "dataDevSql", path: "#/data/dev/sql_editor", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "sql_editor" })');
+    expect(navigationSource).toContain('key: "dataDevSpark", path: "#/data/dev/spark_jobs", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "spark_jobs" })');
+    expect(navigationSource).toContain('key: "dataDevFlink", path: "#/data/dev/flink_jobs", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "flink_jobs" })');
+    expect(navigationSource).toContain('key: "dataDevSchedules", path: "#/data/dev/schedules", el: pageElement(DataDevWorkbenchPage, { focused: true, initialTab: "schedules" })');
     expect(dataQualitySource).toContain('type Tab = "rules" | "runs" | "alerts" | "reports"');
     expect(dataQualitySource).toContain('tab === "reports"');
     expect(dataQualitySource).toContain("const TAB_KEYS: Tab[]");
@@ -213,6 +218,12 @@ describe("navigation information architecture", () => {
     expect(tagSource).toContain("page.tagService.modules.");
     expect(tagSource).toContain('t("page.tagService.focusedHint")');
     expect(tagSource).not.toContain("focused: _focused");
+    expect(dataDevSource).toContain('export function DataDevWorkbench({ focused = false');
+    expect(dataDevSource).toContain("type FocusKey = Tab | LegacyTab");
+    expect(dataDevSource).toContain("page.dataDev.modules.");
+    expect(dataDevSource).toContain('t("page.dataDev.focusedHint")');
+    expect(dataDevSource).toContain("visibleTemplates");
+    expect(dataDevSource).not.toContain("focused: _focused");
   });
 
   it("keeps ops center as a light hub with focused production ops modules", () => {
