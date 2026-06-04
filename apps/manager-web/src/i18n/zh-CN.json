@@ -122,6 +122,7 @@
     "skillsHub": "技能中心",
     "skillsCatalog": "技能目录",
     "skillsRepos": "技能仓库",
+    "skillsInstalled": "已安装技能",
     "devFlow": "研发全流程",
     "devFlowWorkbench": "研发工作台",
     "issuesTracker": "问题跟踪",
@@ -772,7 +773,9 @@
       "backendHealthy": "后端注册表健康，没有返回高优先级问题。",
       "realtimeHealth": "实时健康检查",
       "realtimeHealthDesc": "每次编辑都会调用 validateNavRegistry()，用于发现重复路径、父级缺失和能力码问题。",
-      "frontendHealthy": "导航注册表健康，没有发现 error 或 warn。",
+      "frontendHealthy": "导航注册表健康，没有发现错误或告警。",
+      "issueError": "错误",
+      "issueWarning": "告警",
       "hidden": "已隐藏",
       "missingCapability": "缺少能力码",
       "taskPreviewToast": "已预览 {{planned}} 个治理任务，跳过 {{skipped}} 个已存在任务",
@@ -1458,13 +1461,23 @@
       "action": "操作",
       "module": {
         "catalog": "资产目录",
-        "installed": "已安装"
+        "installed": "已安装",
+        "ratings": "评分与签名"
       },
       "avgRating": "平均评分",
       "signed": "已签名包",
       "chartType": "资产类型分布",
       "chartSignature": "签名状态分布",
       "rating": "评分",
+      "ratingSignature": "评分与签名治理",
+      "signatureAll": "全部签名状态",
+      "ratingAll": "全部评分",
+      "ratingHigh": "高评分",
+      "ratingLow": "待改进",
+      "ratingEmpty": "暂无评分",
+      "signatureVerify": "签名验证",
+      "review": "查看",
+      "selectAsset": "请选择一个资产查看签名与评分。",
       "version": "版本",
       "registry": "Registry",
       "score": "分数",
@@ -1564,6 +1577,7 @@
         "chain": "链完整性",
         "events": "事件流水",
         "actions": "模块动作",
+        "approvals": "动作审批",
         "record": "手动留痕"
       }
     },
@@ -2181,6 +2195,12 @@
     "analyticsReports": {
       "title": "洞察报告",
       "workbenchDesc": "报告资产运营、订阅通知与行动任务化，支撑 NLQ/概览快照的持续洞察交付。",
+      "view": {
+        "overview": "报告总览",
+        "assets": "报告资产",
+        "subscription": "报告订阅",
+        "actionTasks": "报告转任务"
+      },
       "intelligenceTitle": "智能报表运营",
       "avgScore": "平均健康分",
       "healthStatus": "运营状态",

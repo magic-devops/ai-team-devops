@@ -23,15 +23,16 @@ function pieToRecord(items?: Array<{ name: string; value: number }>) {
 }
 import { getProjectId, getToken } from "@/lib/authStorage";
 
-type AuditModule = "chain" | "events" | "actions" | "record";
+type AuditModule = "chain" | "events" | "actions" | "approvals" | "record";
+type AuditProps = { initialModule?: AuditModule };
 
 const inputClass = "rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20";
 
-export function Audit() {
+export function Audit({ initialModule = "chain" }: AuditProps) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
-  const [module, setModule] = useState<AuditModule>("chain");
+  const [module, setModule] = useState<AuditModule>(initialModule);
   const [q, setQ] = useState("");
   const [riskLevel, setRiskLevel] = useState("all");
   const [approvalStatus, setApprovalStatus] = useState("pending");
@@ -57,8 +58,11 @@ export function Audit() {
   });
   const events = useQuery({ queryKey: ["audit-events", q], queryFn: () => api.auditEvents(q, 1, 100), enabled: authed && module === "events" });
   const actionPolicy = useQuery({ queryKey: ["audit-action-policy"], queryFn: api.systemPagesActionPolicy, enabled: authed && module === "actions" });
-  const approvals = useQuery({ queryKey: ["audit-action-approvals", approvalStatus], queryFn: () => api.systemPagesActionApprovals(approvalStatus, 100), enabled: authed && module === "actions" });
-  const actionRuns = useQuery({ queryKey: ["audit-action-runs", riskLevel], queryFn: () => api.systemPagesActionRuns(100, "", "", riskLevel), enabled: authed && module === "actions" });
+  const approvals = useQuery({ queryKey: ["audit-action-approvals", approvalStatus], queryFn: () => api.systemPagesActionApprovals(approvalStatus, 100), enabled: authed && module === "approvals" });
+  const actionRuns = useQuery({ queryKey: ["audit-action-runs", riskLevel], queryFn: () => api.systemPagesActionRuns(100, "", "", riskLevel), enabled: authed && (module === "actions" || module === "approvals") });
+  useEffect(() => {
+    setModule(initialModule);
+  }, [initialModule]);
   useEffect(() => {
     const policy = actionPolicy.data?.policy;
     if (!policy) return;
@@ -149,6 +153,7 @@ export function Audit() {
     { id: "chain", label: t("page.audit.module.chain") },
     { id: "events", label: t("page.audit.module.events") },
     { id: "actions", label: t("page.audit.module.actions") },
+    { id: "approvals", label: t("page.audit.module.approvals") },
     { id: "record", label: t("page.audit.module.record") },
   ];
 
@@ -382,66 +387,6 @@ export function Audit() {
             </Card>
 
             <Card
-              title={t("page.audit.approvalQueue")}
-              actions={
-                <select className={inputClass} value={approvalStatus} onChange={(e) => setApprovalStatus(e.target.value)}>
-                  <option value="pending">{t("page.audit.approvalStatus.pending")}</option>
-                  <option value="approved">{t("page.audit.approvalStatus.approved")}</option>
-                  <option value="rejected">{t("page.audit.approvalStatus.rejected")}</option>
-                  <option value="all">{t("page.audit.riskAll")}</option>
-                </select>
-              }
-            >
-              {approvals.error ? <ErrorBlock message={(approvals.error as Error).message} /> : null}
-              <div className="mb-3 grid gap-3 md:grid-cols-3">
-                <Metric label={t("page.audit.pendingApprovals")} value={approvals.data?.summary?.pending ?? 0} />
-                <Metric label={t("page.audit.approvalTotal")} value={approvals.data?.total ?? 0} />
-                <Metric label={t("page.audit.approvalEditable")} value={approvals.data?.editable ? "on" : "off"} />
-              </div>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {(approvals.data?.items ?? []).slice(0, 8).map((item: any) => (
-                  <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-[var(--text)]">{item.module_name || item.module_id}</p>
-                        <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{item.id} · {item.run_id}</p>
-                      </div>
-                      <RiskBadge level={String(item.risk?.level || "low")} score={Number(item.risk?.score ?? 0)} />
-                    </div>
-                    <p className="mt-3 text-sm text-[var(--muted-strong)]">{item.action_name || item.action_id}</p>
-                    <p className="mt-1 text-xs text-[var(--muted)]">{item.policy?.decision || "-"} · {item.reason}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="rounded-full bg-[var(--surface)] px-2 py-1 text-xs text-[var(--muted-strong)]">{item.status}</span>
-                      {item.status === "pending" ? (
-                        <>
-                          <button
-                            type="button"
-                            disabled={!approvals.data?.editable || reviewApproval.isPending}
-                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                            onClick={() => reviewApproval.mutate({ id: item.id, status: "approved" })}
-                          >
-                            {t("page.audit.approve")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!approvals.data?.editable || reviewApproval.isPending}
-                            className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-600 disabled:opacity-50"
-                            onClick={() => reviewApproval.mutate({ id: item.id, status: "rejected" })}
-                          >
-                            {t("page.audit.reject")}
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-              </div>
-              {!approvals.isLoading && !(approvals.data?.items ?? []).length ? (
-                <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">{t("page.audit.noApprovals")}</div>
-              ) : null}
-            </Card>
-
-            <Card
               title={t("page.audit.actionRuns")}
               actions={
                 <select className={inputClass} value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)}>
@@ -501,6 +446,107 @@ export function Audit() {
                 ) : null}
               </div>
             </div>
+            </Card>
+          </div>
+        ) : null}
+
+        {module === "approvals" ? (
+          <div className="space-y-4">
+            <Card
+              title={t("page.audit.approvalQueue")}
+              actions={
+                <select className={inputClass} value={approvalStatus} onChange={(e) => setApprovalStatus(e.target.value)}>
+                  <option value="pending">{t("page.audit.approvalStatus.pending")}</option>
+                  <option value="approved">{t("page.audit.approvalStatus.approved")}</option>
+                  <option value="rejected">{t("page.audit.approvalStatus.rejected")}</option>
+                  <option value="all">{t("page.audit.riskAll")}</option>
+                </select>
+              }
+            >
+              {approvals.isLoading ? <LoadingBlock /> : null}
+              {approvals.error ? <ErrorBlock message={(approvals.error as Error).message} /> : null}
+              <div className="mb-3 grid gap-3 md:grid-cols-3">
+                <Metric label={t("page.audit.pendingApprovals")} value={approvals.data?.summary?.pending ?? 0} />
+                <Metric label={t("page.audit.approvalTotal")} value={approvals.data?.total ?? 0} />
+                <Metric label={t("page.audit.approvalEditable")} value={approvals.data?.editable ? "on" : "off"} />
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {(approvals.data?.items ?? []).slice(0, 12).map((item: any) => (
+                  <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text)]">{item.module_name || item.module_id}</p>
+                        <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{item.id} · {item.run_id}</p>
+                      </div>
+                      <RiskBadge level={String(item.risk?.level || "low")} score={Number(item.risk?.score ?? 0)} />
+                    </div>
+                    <p className="mt-3 text-sm text-[var(--muted-strong)]">{item.action_name || item.action_id}</p>
+                    <p className="mt-1 text-xs text-[var(--muted)]">{item.policy?.decision || "-"} · {item.reason}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-[var(--surface)] px-2 py-1 text-xs text-[var(--muted-strong)]">{item.status}</span>
+                      {item.status === "pending" ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={!approvals.data?.editable || reviewApproval.isPending}
+                            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                            onClick={() => reviewApproval.mutate({ id: item.id, status: "approved" })}
+                          >
+                            {t("page.audit.approve")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!approvals.data?.editable || reviewApproval.isPending}
+                            className="rounded-lg border border-rose-300 px-3 py-1.5 text-xs font-semibold text-rose-600 disabled:opacity-50"
+                            onClick={() => reviewApproval.mutate({ id: item.id, status: "rejected" })}
+                          >
+                            {t("page.audit.reject")}
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+              {!approvals.isLoading && !(approvals.data?.items ?? []).length ? (
+                <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">{t("page.audit.noApprovals")}</div>
+              ) : null}
+            </Card>
+
+            <Card
+              title={t("page.audit.actionRuns")}
+              actions={
+                <select className={inputClass} value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)}>
+                  <option value="all">{t("page.audit.riskAll")}</option>
+                  <option value="critical">{t("page.audit.risk.critical")}</option>
+                  <option value="high">{t("page.audit.risk.high")}</option>
+                  <option value="medium">{t("page.audit.risk.medium")}</option>
+                  <option value="low">{t("page.audit.risk.low")}</option>
+                </select>
+              }
+            >
+              {actionRuns.isLoading ? <LoadingBlock /> : null}
+              {actionRuns.error ? <ErrorBlock message={(actionRuns.error as Error).message} /> : null}
+              <div className="mb-4 grid gap-3 md:grid-cols-4">
+                <Metric label={t("page.audit.actionRunTotal")} value={actionRuns.data?.total ?? 0} />
+                <Metric label={t("page.audit.actionRunExecuted")} value={actionRuns.data?.summary?.executed ?? 0} />
+                <Metric label={t("page.audit.actionRunModules")} value={Object.keys(actionRuns.data?.summary?.by_module ?? {}).length} />
+                <Metric label={t("page.audit.highestRisk")} value={actionRuns.data?.summary?.highest_risk ?? 0} />
+              </div>
+              <div className="space-y-2">
+                {(actionRuns.data?.items ?? []).slice(0, 8).map((row: any) => (
+                  <div key={row.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono font-semibold text-[var(--text)]">{row.id}</p>
+                      <p className="truncate text-[var(--muted)]">{row.module_name || row.module_id} · {row.action_name || row.action_id}</p>
+                    </div>
+                    <RiskBadge level={String(row.risk?.level || "low")} score={Number(row.risk?.score ?? 0)} />
+                  </div>
+                ))}
+                {!actionRuns.isLoading && !(actionRuns.data?.items ?? []).length ? (
+                  <div className="rounded-2xl border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--muted)]">{t("page.audit.noActionRuns")}</div>
+                ) : null}
+              </div>
             </Card>
           </div>
         ) : null}

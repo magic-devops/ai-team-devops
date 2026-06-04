@@ -717,6 +717,17 @@ Runbook 从 OpsCenter 父工作台抽离为独立的执行手册治理控制面�
 - 策略创建、信号评估和动作处置都使用 Ant Design Drawer/Form/Steps，主区保留摘要、决策、任务和动作队列，避免把生产操作铺成一个超长页面。
 - 至此 OpsCenter 的告警源、RCA、Runbook、自愈四个高复杂专业模块都具备独立按需加载边界，父工作台更接近轻量运行中枢。
 
+### 10.33 子路由真实聚焦与菜单多语言治理
+
+菜单入口不再允许多个专业子菜单落到同一泛化页面：
+
+- `navigation.tsx` 引入 `SUBMODULE_ROUTE_OVERRIDES`，模块卡片、命令面板和侧栏子入口统一跳到已实现路由，避免默认拼接 hash 形成假菜单。
+- Marketplace 的目录、已安装、评分签名分别进入真实 `initialModule`；评分签名视图直接展示签名状态、评分筛选、签名校验、安装和评分提交。
+- 洞察报告的资产、订阅和转任务分别进入 `initialView`，报告资产操作、订阅测试和行动任务化不再堆在同一首屏。
+- Audit 将链校验、事件流水、模块动作和动作审批拆成真实 `initialModule`；AgentOps 将运行列表、心跳监控、能力画像和失败重试拆成真实 `initialTab`。
+- 数据质量补齐质量报告视图，指标中心补齐语义层与监控视图；标签 API 入口进入画像/API 相关视图，减少“不同菜单长得一样”的体验。
+- `CommandPalette` 优先读取 `page.<key>.description`，`MenuManagement` 健康状态补齐 zh-CN/en-US/ja-JP 文案，菜单管理、命令搜索和页面标题使用同一多语言来源。
+
 ## 11. 迭代路线
 
 | 阶段 | 目标 | 关键交付 |

@@ -34,7 +34,7 @@ export function CommandPalette({ open, setOpen, authed }: { open: boolean; setOp
     for (const item of NAV) {
       if (item.hidden) continue;
       const label = t(`nav.${item.key}`, { defaultValue: item.key });
-      const description = item.description || t(`page.${item.key}.desc`, { defaultValue: item.path });
+      const description = item.description || t(`page.${item.key}.description`, { defaultValue: t(`page.${item.key}.desc`, { defaultValue: item.path }) });
       const hay = `${label} ${description} ${item.path} ${item.key}`.toLowerCase();
       if (!hay.includes(needle)) continue;
       rows.push({

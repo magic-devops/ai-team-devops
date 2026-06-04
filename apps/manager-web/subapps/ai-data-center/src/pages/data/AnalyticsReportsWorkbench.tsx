@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BrainCircuit, ClipboardList, PlayCircle, RefreshCcw, Wand2 } from "lucide-react";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
@@ -14,17 +14,24 @@ const EChartsDonutLazy = lazy(() =>
   import("@/components/charts/EChartsDonut").then((m) => ({ default: m.EChartsDonut })),
 );
 
+type ReportsView = "overview" | "assets" | "subscription" | "actionTasks";
+
 function pieToRecord(items?: Array<{ name: string; value: number }>) {
   const out: Record<string, number> = {};
   for (const row of items ?? []) out[row.name] = row.value;
   return out;
 }
 
-export function AnalyticsReportsWorkbench() {
+type ReportsWorkbenchProps = {
+  initialView?: ReportsView;
+};
+
+export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsWorkbenchProps) {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
   const [aiOpen, setAiOpen] = useState(false);
+  const [view, setView] = useState<ReportsView>(initialView);
   const [taskPreviews, setTaskPreviews] = useState<any[]>([]);
   const [decisionResult, setDecisionResult] = useState<any>(null);
   const [decisionTaskPreviews, setDecisionTaskPreviews] = useState<any[]>([]);
@@ -141,6 +148,13 @@ export function AnalyticsReportsWorkbench() {
   const intelligenceSummary = intelligence.summary ?? {};
   const topDrivers = intelligence.top_drivers ?? [];
   const recommendations = intelligence.recommendations ?? [];
+  const showOverview = view === "overview";
+  const showAssets = view === "overview" || view === "assets";
+  const showActionTasks = view === "overview" || view === "actionTasks";
+
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
 
   if (!authed) return <NeedLogin />;
   if (!hasProject) return <p className="text-sm text-amber-700">{t("projectSelector.hint")}</p>;
@@ -153,15 +167,29 @@ export function AnalyticsReportsWorkbench() {
         actions={
           <>
             <AiAssistButton onClick={() => setAiOpen(true)} />
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              disabled={createInsight.isPending}
-              onClick={() => createInsight.mutate()}
-            >
-              <Wand2 className="size-4" />
-              {createInsight.isPending ? t("common.loading") : t("page.analytics.generateInsight")}
-            </button>
+            <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1">
+              {(["overview", "assets", "subscription", "actionTasks"] as ReportsView[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={`rounded-md px-2.5 py-1 text-sm font-medium ${view === item ? "bg-[var(--brand)] text-white" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}
+                  onClick={() => setView(item)}
+                >
+                  {t(`page.analyticsReports.view.${item}`)}
+                </button>
+              ))}
+            </div>
+            {showOverview || showAssets ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                disabled={createInsight.isPending}
+                onClick={() => createInsight.mutate()}
+              >
+                <Wand2 className="size-4" />
+                {createInsight.isPending ? t("common.loading") : t("page.analytics.generateInsight")}
+              </button>
+            ) : null}
             <RefreshButton
               onClick={() => {
                 void summaryQ.refetch();
@@ -204,6 +232,7 @@ export function AnalyticsReportsWorkbench() {
           />
         }
       >
+        {showOverview || showAssets ? (
         <WorkbenchPanel title={t("page.analyticsReports.intelligenceTitle")}>
           <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
             <div className="space-y-3">
@@ -297,7 +326,9 @@ export function AnalyticsReportsWorkbench() {
             </div>
           ) : null}
         </WorkbenchPanel>
+        ) : null}
 
+        {showOverview || showActionTasks ? (
         <WorkbenchPanel
           title={t("page.analyticsReports.decisionEngineTitle")}
           actions={
@@ -469,7 +500,9 @@ export function AnalyticsReportsWorkbench() {
             </div>
           </div>
         </WorkbenchPanel>
+        ) : null}
 
+        {showOverview || showAssets ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Object.keys(pieToRecord(chartsQ.data?.by_status)).length ? (
             <WorkbenchPanel title={t("page.analyticsReports.chartStatus")}>
@@ -493,10 +526,11 @@ export function AnalyticsReportsWorkbench() {
             </WorkbenchPanel>
           ) : null}
         </div>
+        ) : null}
       </WorkbenchShell>
 
       {summaryQ.error ? <ErrorBlock message={(summaryQ.error as Error).message} /> : null}
-      <Analytics section="reports" reportsLayout="module" />
+      <Analytics section="reports" reportsLayout="module" reportsView={view} />
 
       <AiAssistDrawer
         open={aiOpen}

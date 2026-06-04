@@ -50,12 +50,16 @@ describe("navigation information architecture", () => {
   });
 
   it("keeps agent run operations split between focused AgentOps and platform SLO governance", () => {
+    const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "agentRuns"');
     expect(navigationSource).toContain('Agent 运行中心：运行列表、心跳、能力画像、SLO 与再平衡任务化');
-    expect(navigationSource).toContain('key: "run_list", path: "#/ai/agent-ops/runs"');
-    expect(navigationSource).toContain('key: "heartbeat", path: "#/ai/agent-ops/heartbeat"');
-    expect(navigationSource).toContain('key: "capability_profiles", path: "#/ai/agent-ops/profiles"');
-    expect(navigationSource).toContain('key: "retry", path: "#/ai/agent-ops/retry"');
+    expect(navigationSource).toContain('key: "agentOpsRuns", path: "#/ai/agent-ops/runs", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "runs" })');
+    expect(navigationSource).toContain('key: "agentOpsHeartbeat", path: "#/ai/agent-ops/heartbeat", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "heartbeat" })');
+    expect(navigationSource).toContain('key: "agentOpsProfiles", path: "#/ai/agent-ops/profiles", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "profiles" })');
+    expect(navigationSource).toContain('key: "agentOpsRetry", path: "#/ai/agent-ops/retry", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "retry" })');
+    expect(agentRunsSource).toContain('type AgentRunsTab = "runs" | "heartbeat" | "profiles" | "retry"');
+    expect(agentRunsSource).toContain('tab === "heartbeat"');
+    expect(agentRunsSource).toContain('tab === "retry"');
     expect(navigationSource).toContain('key: "evidence", path: "#/tasks?tab=scheduler&panel=agent-reports"');
     expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');
   });
@@ -87,6 +91,56 @@ describe("navigation information architecture", () => {
     expect(navigationSource).not.toContain('subnav("intelligence", "knowledge", "rag", "memory", "rules", "distill", "specs", "design_docs", "datasources", "worker", "sync", "events", "usage")');
   });
 
+  it("keeps marketplace catalog installed and rating signature routes focused", () => {
+    const marketplaceSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/Marketplace.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "marketplaceCatalog", path: "#/marketplace/catalog", el: pageElement(MarketplacePage, { initialModule: "catalog" })');
+    expect(navigationSource).toContain('key: "marketplaceInstalled", path: "#/marketplace/installed", el: pageElement(MarketplacePage, { initialModule: "installed" })');
+    expect(navigationSource).toContain('key: "marketplaceRatings", path: "#/marketplace/ratings", el: pageElement(MarketplacePage, { initialModule: "ratings" })');
+    expect(marketplaceSource).toContain('type MarketModule = "catalog" | "installed" | "ratings"');
+    expect(marketplaceSource).toContain('function RatingSignatureWorkbench');
+    expect(marketplaceSource).toContain('signatureFilter');
+    expect(marketplaceSource).toContain('ratingRows');
+  });
+
+  it("keeps report assets subscription and action task routes focused", () => {
+    const reportsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/AnalyticsReportsWorkbench.tsx"), "utf8");
+    const analyticsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/Analytics.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "reportAssets", path: "#/analytics/reports/assets", el: pageElement(AnalyticsReportsWorkbenchPage, { initialView: "assets" })');
+    expect(navigationSource).toContain('key: "reportSubscription", path: "#/analytics/reports/subscription", el: pageElement(AnalyticsReportsWorkbenchPage, { initialView: "subscription" })');
+    expect(navigationSource).toContain('key: "reportActionTasks", path: "#/analytics/reports/action-tasks", el: pageElement(AnalyticsReportsWorkbenchPage, { initialView: "actionTasks" })');
+    expect(reportsSource).toContain('type ReportsView = "overview" | "assets" | "subscription" | "actionTasks"');
+    expect(reportsSource).toContain('reportsView={view}');
+    expect(analyticsSource).toContain('export type ReportsView = "overview" | "assets" | "subscription" | "actionTasks"');
+    expect(analyticsSource).toContain('const showReportAssets');
+    expect(analyticsSource).toContain('const showReportSubscription');
+    expect(analyticsSource).toContain('const showReportActionTasks');
+  });
+
+  it("keeps audit chain events module actions and approvals routes focused", () => {
+    const auditSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/Audit.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "auditChain", path: "#/audit/chain", el: pageElement(AuditPage, { initialModule: "chain" })');
+    expect(navigationSource).toContain('key: "auditEvents", path: "#/audit/events", el: pageElement(AuditPage, { initialModule: "events" })');
+    expect(navigationSource).toContain('key: "auditModuleActions", path: "#/audit/module-actions", el: pageElement(AuditPage, { initialModule: "actions" })');
+    expect(navigationSource).toContain('key: "auditApprovals", path: "#/audit/approvals", el: pageElement(AuditPage, { initialModule: "approvals" })');
+    expect(auditSource).toContain('type AuditModule = "chain" | "events" | "actions" | "approvals" | "record"');
+    expect(auditSource).toContain('type AuditProps = { initialModule?: AuditModule }');
+    expect(auditSource).toContain('module === "actions" || module === "approvals"');
+    expect(auditSource).toContain('module === "approvals"');
+  });
+
+  it("keeps data quality metrics and tag service subroutes from sharing generic tabs", () => {
+    const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
+    const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "dataQualityReports", path: "#/data/quality/reports", el: pageElement(DataQualityWorkbenchPage, { focused: true, initialTab: "reports" })');
+    expect(navigationSource).toContain('key: "metricsSemantic", path: "#/data/metrics/semantic", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "semantic" })');
+    expect(navigationSource).toContain('key: "metricsMonitor", path: "#/data/metrics/monitor", el: pageElement(MetricsWorkbenchPage, { focused: true, initialTab: "monitor" })');
+    expect(navigationSource).toContain('key: "tagApi", path: "#/data/tags/api", el: pageElement(TagWorkbenchPage, { focused: true, initialTab: "profiles" })');
+    expect(dataQualitySource).toContain('type Tab = "rules" | "runs" | "alerts" | "reports"');
+    expect(dataQualitySource).toContain('tab === "reports"');
+    expect(metricsSource).toContain('type Tab = "catalog" | "semantic" | "published" | "monitor"');
+    expect(metricsSource).toContain('tab === "monitor"');
+  });
+
   it("keeps ops center as a light hub with focused production ops modules", () => {
     expect(navigationSource).toContain('key: "opsCenter", path: "#/system/ops-center"');
     expect(navigationSource).toContain('subnav("system/ops-center", "pipeline", "alerts", "rca", "runbook", "self-heal")');
@@ -95,5 +149,22 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "opsCenterRca", path: "#/system/ops-center/rca"');
     expect(navigationSource).toContain('key: "opsCenterRunbook", path: "#/system/ops-center/runbook"');
     expect(navigationSource).toContain('key: "opsCenterSelfHeal", path: "#/system/ops-center/self-heal"');
+  });
+
+  it("keeps submodule quick links aligned with implemented routes instead of default camel-case hashes", () => {
+    expect(navigationSource).toContain("const SUBMODULE_ROUTE_OVERRIDES");
+    expect(navigationSource).toContain('SUBMODULE_ROUTE_OVERRIDES[`${pageKey}.${key}`]');
+    expect(navigationSource).toContain('"analyticsReports.report_assets": "#/analytics/reports/assets"');
+    expect(navigationSource).toContain('"analyticsReports.report_subscription": "#/analytics/reports/subscription"');
+    expect(navigationSource).toContain('"analyticsReports.action_tasks": "#/analytics/reports/action-tasks"');
+    expect(navigationSource).toContain('"marketplace.rating": "#/marketplace/ratings"');
+    expect(navigationSource).toContain('"marketplace.signature": "#/marketplace/ratings"');
+    expect(navigationSource).toContain('key: "skillsInstalled", path: "#/skills-hub/installed", el: pageElement(SkillsHubPage, { initialTab: "installed", focused: true })');
+    expect(navigationSource).toContain('"audit.hash_chain": "#/audit/chain"');
+    expect(navigationSource).toContain('"audit.module_actions": "#/audit/module-actions"');
+    expect(navigationSource).toContain('"systemMap.registry": "#/system-map/registry"');
+    expect(navigationSource).toContain('"systemMap.governance-tasks": "#/system-map/governance-tasks"');
+    expect(navigationSource).toContain('"devFlow.pipeline": "#/dev-flow/workbench"');
+    expect(navigationSource).not.toContain('path: `#/${pageKey}/${key}`');
   });
 });

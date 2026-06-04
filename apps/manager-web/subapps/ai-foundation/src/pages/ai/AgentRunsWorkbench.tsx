@@ -17,14 +17,15 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const TERMINAL_STATUSES = new Set(["success", "failed", "cancelled"]);
+type AgentRunsTab = "runs" | "heartbeat" | "profiles" | "retry";
 
-export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: { focused?: boolean; initialTab?: "runs" | "profiles" }) {
+export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: { focused?: boolean; initialTab?: AgentRunsTab }) {
   const authed = Boolean(getToken());
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<"runs" | "profiles">(initialTab);
+  const [tab, setTab] = useState<AgentRunsTab>(initialTab);
 
   const summaryQ = useQuery({ queryKey: ["agentRunsSummaryV2"], queryFn: api.agentRunsSummaryV2, enabled: authed });
   const runsQ = useQuery({ queryKey: ["agentRunsList", statusFilter], queryFn: () => api.agentRunsList("", statusFilter), enabled: authed });
@@ -82,10 +83,10 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
       />
 
       <div className="flex gap-1 border-b border-[var(--border)]">
-        {(["runs", "profiles"] as const).map(t => (
+        {(["runs", "heartbeat", "profiles", "retry"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-            {t === "runs" ? "运行列表" : "能力画像"}
+            {t === "runs" ? "运行列表" : t === "heartbeat" ? "心跳监控" : t === "profiles" ? "能力画像" : "失败重试"}
           </button>
         ))}
       </div>
@@ -134,6 +135,40 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
         </WorkbenchPanel>
       )}
 
+      {tab === "heartbeat" && (
+        <WorkbenchPanel title="心跳监控" actions={<RefreshButton onClick={() => { void runsQ.refetch(); void summaryQ.refetch(); }} pending={runsQ.isFetching} />}>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {runs.filter((r: any) => r.status === "running").map((r: any) => (
+              <div key={r.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm font-semibold text-[var(--text)]">{r.agent_id}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{r.task_id || "未绑定任务"}</p>
+                  </div>
+                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{r.status}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg bg-[var(--surface-raised)] p-2">
+                    <p className="font-semibold text-[var(--text)]">{r.heartbeat_count ?? 0}</p>
+                    <p className="text-[var(--muted)]">心跳数</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--surface-raised)] p-2">
+                    <p className="font-semibold text-[var(--text)]">{r.confidence != null ? `${(r.confidence * 100).toFixed(0)}%` : "—"}</p>
+                    <p className="text-[var(--muted)]">置信度</p>
+                  </div>
+                  <div className="rounded-lg bg-[var(--surface-raised)] p-2">
+                    <p className="font-semibold text-[var(--text)]">{r.updated_at?.slice(11, 19) || "—"}</p>
+                    <p className="text-[var(--muted)]">最近更新</p>
+                  </div>
+                </div>
+                <button onClick={() => heartbeat.mutate(r.id)} className="mt-3 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--brand)] hover:bg-[var(--brand-soft)]">发送心跳</button>
+              </div>
+            ))}
+            {!runs.filter((r: any) => r.status === "running").length && <p className="rounded-xl border border-dashed border-[var(--border)] py-10 text-center text-sm text-[var(--muted)] lg:col-span-2">暂无运行中的 Agent</p>}
+          </div>
+        </WorkbenchPanel>
+      )}
+
       {tab === "profiles" && (
         <WorkbenchPanel title="能力画像" actions={<RefreshButton onClick={() => void profilesQ.refetch()} pending={profilesQ.isFetching} />}>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -148,6 +183,27 @@ export function AgentRunsWorkbench({ focused: _focused, initialTab = "runs" }: {
                 </div>
               </div>
             ))}
+          </div>
+        </WorkbenchPanel>
+      )}
+
+      {tab === "retry" && (
+        <WorkbenchPanel title="失败重试" actions={<RefreshButton onClick={() => { void runsQ.refetch(); void summaryQ.refetch(); }} pending={runsQ.isFetching} />}>
+          <div className="space-y-3">
+            {runs.filter((r: any) => r.status === "failed" || r.status === "retrying").map((r: any) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-sm font-semibold text-[var(--text)]">{r.agent_id}</p>
+                  <p className="mt-1 truncate text-xs text-[var(--muted)]">{r.task_id || "未绑定任务"} · retry {r.retry_count ?? 0}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[r.status] ?? ""}`}>{r.status}</span>
+                  <button disabled={retryRun.isPending || r.status === "retrying"} onClick={() => retryRun.mutate(r.id)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-xs text-white disabled:opacity-50">重试</button>
+                  <button onClick={() => writeEvidence.mutate(r.id)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--brand)]">补证据</button>
+                </div>
+              </div>
+            ))}
+            {!runs.filter((r: any) => r.status === "failed" || r.status === "retrying").length && <p className="rounded-xl border border-dashed border-[var(--border)] py-10 text-center text-sm text-[var(--muted)]">暂无失败或重试中的运行</p>}
           </div>
         </WorkbenchPanel>
       )}

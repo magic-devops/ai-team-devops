@@ -111,6 +111,7 @@
     "skillsHub": "Skills hub",
     "skillsCatalog": "Skills catalog",
     "skillsRepos": "Skill repos",
+    "skillsInstalled": "Installed skills",
     "devFlow": "Dev flow",
     "devFlowWorkbench": "Dev workbench",
     "issuesTracker": "Issue tracker",
@@ -644,6 +645,8 @@
       "realtimeHealth": "Live health check",
       "realtimeHealthDesc": "Each edit runs validateNavRegistry() to detect duplicate paths, missing parents, and capability-code issues.",
       "frontendHealthy": "Navigation registry is healthy; no error or warning found.",
+      "issueError": "Error",
+      "issueWarning": "Warning",
       "hidden": "Hidden",
       "missingCapability": "Missing capability",
       "taskPreviewToast": "Previewed {{planned}} governance tasks, skipped {{skipped}} existing tasks",
@@ -1327,13 +1330,23 @@
       "action": "Action",
       "module": {
         "catalog": "Asset catalog",
-        "installed": "Installed"
+        "installed": "Installed",
+        "ratings": "Ratings and signatures"
       },
       "avgRating": "Avg rating",
       "chartType": "By asset type",
       "chartSignature": "By signature status",
       "signed": "Signed packages",
       "rating": "Rating",
+      "ratingSignature": "Rating and signature governance",
+      "signatureAll": "All signature states",
+      "ratingAll": "All ratings",
+      "ratingHigh": "High rated",
+      "ratingLow": "Needs improvement",
+      "ratingEmpty": "No ratings",
+      "signatureVerify": "Signature verification",
+      "review": "Review",
+      "selectAsset": "Select an asset to inspect signatures and ratings.",
       "version": "Version",
       "registry": "Registry",
       "score": "Score",
@@ -1433,6 +1446,7 @@
         "chain": "Chain integrity",
         "events": "Event ledger",
         "actions": "Module actions",
+        "approvals": "Action approvals",
         "record": "Manual evidence"
       }
     },
@@ -2050,6 +2064,12 @@
     "analyticsReports": {
       "title": "Insight reports",
       "workbenchDesc": "Report asset ops, subscriptions, and action-task automation from NLQ/overview snapshots.",
+      "view": {
+        "overview": "Overview",
+        "assets": "Report assets",
+        "subscription": "Report subscription",
+        "actionTasks": "Report to tasks"
+      },
       "intelligenceTitle": "Report intelligence ops",
       "avgScore": "Avg health score",
       "healthStatus": "Ops status",

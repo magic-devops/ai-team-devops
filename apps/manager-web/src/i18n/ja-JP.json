@@ -85,6 +85,7 @@
     "skillsHub": "スキルセンター",
     "skillsCatalog": "スキル一覧",
     "skillsRepos": "スキルリポジトリ",
+    "skillsInstalled": "インストール済みスキル",
     "devFlow": "開発フロー",
     "vibe": "Vibe Coding",
     "globalSearch": "グローバル検索",
@@ -615,7 +616,9 @@
       "backendHealthy": "バックエンドレジストリは正常で、高優先度の問題はありません。",
       "realtimeHealth": "リアルタイムヘルスチェック",
       "realtimeHealthDesc": "編集ごとに validateNavRegistry() を実行し、重複パス、親の欠落、能力コード問題を検出します。",
-      "frontendHealthy": "ナビゲーションレジストリは正常で、error / warn はありません。",
+      "frontendHealthy": "ナビゲーションレジストリは正常で、エラーや警告はありません。",
+      "issueError": "エラー",
+      "issueWarning": "警告",
       "hidden": "非表示",
       "missingCapability": "能力コードなし",
       "taskPreviewToast": "{{planned}} 件のガバナンスタスクをプレビューし、既存 {{skipped}} 件をスキップしました",
@@ -1138,10 +1141,30 @@
       "action": "操作",
       "module": {
         "catalog": "アセットカタログ",
-        "installed": "インストール済み"
+        "installed": "インストール済み",
+        "ratings": "評価と署名"
       },
       "chartType": "タイプ分布",
-      "chartSignature": "署名状態分布"
+      "chartSignature": "署名状態分布",
+      "ratingSignature": "評価と署名の治理",
+      "signatureAll": "すべての署名状態",
+      "ratingAll": "すべての評価",
+      "ratingHigh": "高評価",
+      "ratingLow": "改善対象",
+      "ratingEmpty": "未評価",
+      "signatureVerify": "署名検証",
+      "review": "確認",
+      "selectAsset": "アセットを選択して署名と評価を確認してください。",
+      "avgRating": "平均評価",
+      "signed": "署名済みパッケージ",
+      "rating": "評価",
+      "version": "バージョン",
+      "registry": "Registry",
+      "score": "スコア",
+      "comment": "コメント",
+      "installedOk": "インストールしました",
+      "uninstalled": "アンインストールしました",
+      "ratingSubmitted": "評価を送信しました"
     },
     "audit": {
       "title": "監査コンプライアンス",
@@ -1224,6 +1247,7 @@
         "chain": "チェーン整合性",
         "events": "イベント台帳",
         "actions": "モジュールアクション",
+        "approvals": "アクション承認",
         "record": "手動証跡"
       }
     },
@@ -1809,6 +1833,12 @@
     "analyticsReports": {
       "title": "インサイトレポート",
       "workbenchDesc": "レポート資産運用、購読通知、アクションタスク化（NLQ/概要スナップショット連携）。",
+      "view": {
+        "overview": "概要",
+        "assets": "レポート資産",
+        "subscription": "レポート購読",
+        "actionTasks": "レポートからタスク"
+      },
       "intelligenceTitle": "レポート知能運用",
       "avgScore": "平均ヘルススコア",
       "healthStatus": "運用状態",

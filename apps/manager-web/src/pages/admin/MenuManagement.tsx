@@ -602,8 +602,8 @@ function HealthPanel({ issues }: { issues: ReturnType<typeof validateNavRegistry
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{t("page.menuManagement.frontendHealthy")}</div>
         ) : (
           <>
-            <IssueList title="Error" issues={errors} tone="error" />
-            <IssueList title="Warn" issues={warns} tone="warn" />
+            <IssueList title={t("page.menuManagement.issueError")} issues={errors} tone="error" />
+            <IssueList title={t("page.menuManagement.issueWarning")} issues={warns} tone="warn" />
           </>
         )}
       </div>

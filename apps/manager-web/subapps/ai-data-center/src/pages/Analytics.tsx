@@ -11,6 +11,7 @@ export type AnalyticsSection = "overview" | "blueprint" | "reports" | "catalog" 
 export type CatalogPanel = "assets" | "metrics" | "services" | "quality" | "development";
 export type CatalogLayout = "legacy" | "module";
 export type ReportsLayout = "legacy" | "module";
+export type ReportsView = "overview" | "assets" | "subscription" | "actionTasks";
 
 function MetricTile({ label, value }: { label: string; value: number | string }) {
   return (
@@ -38,11 +39,13 @@ export function Analytics({
   initialCatalogPanel = "assets",
   catalogLayout = "legacy",
   reportsLayout = "legacy",
+  reportsView = "overview",
 }: {
   section?: AnalyticsSection;
   initialCatalogPanel?: CatalogPanel;
   catalogLayout?: CatalogLayout;
   reportsLayout?: ReportsLayout;
+  reportsView?: ReportsView;
 }) {
   const { t } = useTranslation();
   const authed = Boolean(getToken());
@@ -193,6 +196,9 @@ export function Analytics({
 
   const catalogChrome = section !== "catalog" || catalogLayout === "legacy";
   const activeCatalogPanel = catalogLayout === "module" ? initialCatalogPanel : catalogPanel;
+  const showReportAssets = reportsView === "overview" || reportsView === "assets";
+  const showReportSubscription = reportsView === "overview" || reportsView === "subscription";
+  const showReportActionTasks = reportsView === "overview" || reportsView === "actionTasks";
 
   const nlq = useMutation({
     mutationFn: () => api.analyticsNlq(question.trim()),
@@ -761,15 +767,17 @@ export function Analytics({
         title={t("page.analytics.reports")}
         actions={
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              disabled={createInsightReport.isPending}
-              onClick={() => createInsightReport.mutate()}
-            >
-              <Brain className="h-4 w-4" />
-              {t("page.analytics.generateInsight")}
-            </button>
+            {showReportAssets ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                disabled={createInsightReport.isPending}
+                onClick={() => createInsightReport.mutate()}
+              >
+                <Brain className="h-4 w-4" />
+                {t("page.analytics.generateInsight")}
+              </button>
+            ) : null}
             <RefreshButton
               onClick={() => {
                 void reports.refetch();
@@ -792,6 +800,7 @@ export function Analytics({
           <MetricTile label={t("page.analytics.attributionReports")} value={reportsSummary.data?.summary?.attribution_reports ?? 0} />
         </div>
         ) : null}
+        {showReportAssets || showReportActionTasks ? (
         <div className="mb-4 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 md:grid-cols-[minmax(0,1fr)_12rem_12rem]">
           <input
             className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
@@ -820,6 +829,8 @@ export function Analytics({
             <option value="insight">{t("page.analytics.sourceInsight")}</option>
           </select>
         </div>
+        ) : null}
+        {showReportSubscription ? (
         <div className="mb-4 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div>
             <h3 className="text-sm font-semibold text-[var(--text)]">{t("page.analytics.reportSubscription")}</h3>
@@ -874,12 +885,14 @@ export function Analytics({
             {t("page.analytics.testSubscription")}
           </button>
         </div>
-        {testSubscription.isError ? <ErrorBlock message={(testSubscription.error as Error).message} /> : null}
-        {testSubscription.data ? (
+        ) : null}
+        {showReportSubscription && testSubscription.isError ? <ErrorBlock message={(testSubscription.error as Error).message} /> : null}
+        {showReportSubscription && testSubscription.data ? (
           <pre className="mb-4 max-h-40 overflow-auto rounded-2xl bg-slate-950 p-3 text-xs text-slate-100">
             {JSON.stringify(testSubscription.data.results ?? testSubscription.data, null, 2)}
           </pre>
         ) : null}
+        {showReportAssets || showReportActionTasks ? (
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {(reports.data?.items ?? []).map((report: any) => {
             const draft = reportMetaDraft(report);
@@ -898,15 +911,17 @@ export function Analytics({
                   </div>
                   <p className="mt-1 font-mono text-xs text-[var(--muted)]">{report.created_at}</p>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-rose-500 disabled:opacity-50"
-                  disabled={deleteReport.isPending}
-                  onClick={() => deleteReport.mutate(String(report.id))}
-                  title={t("page.analytics.deleteReport")}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {showReportAssets ? (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-rose-500 disabled:opacity-50"
+                    disabled={deleteReport.isPending}
+                    onClick={() => deleteReport.mutate(String(report.id))}
+                    title={t("page.analytics.deleteReport")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : null}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-[var(--muted-strong)]">
@@ -976,6 +991,7 @@ export function Analytics({
                     ))}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {showReportAssets ? (
                     <button
                       type="button"
                       className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
@@ -984,22 +1000,27 @@ export function Analytics({
                     >
                       {t("page.analytics.refreshAttribution")}
                     </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
-                      disabled={previewAttributionTasks.isPending}
-                      onClick={() => previewAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
-                    >
-                      {t("page.analytics.previewAttributionTasks")}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                      disabled={createAttributionTasks.isPending}
-                      onClick={() => createAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
-                    >
-                      {t("page.analytics.createAttributionTasks")}
-                    </button>
+                    ) : null}
+                    {showReportActionTasks ? (
+                    <>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
+                        disabled={previewAttributionTasks.isPending}
+                        onClick={() => previewAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                      >
+                        {t("page.analytics.previewAttributionTasks")}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                        disabled={createAttributionTasks.isPending}
+                        onClick={() => createAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                      >
+                        {t("page.analytics.createAttributionTasks")}
+                      </button>
+                    </>
+                    ) : null}
                   </div>
                   {attributionPreview.length ? (
                     <ul className="mt-3 space-y-1 rounded-lg bg-[var(--surface)] p-2">
@@ -1014,6 +1035,7 @@ export function Analytics({
                   ) : null}
                 </div>
               ) : null}
+              {showReportAssets ? (
               <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
                 <button
                   type="button"
@@ -1044,6 +1066,8 @@ export function Analytics({
                   </button>
                 ) : null}
               </div>
+              ) : null}
+              {showReportAssets ? (
               <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
                 <div className="grid gap-2 sm:grid-cols-2">
                   <input
@@ -1091,6 +1115,8 @@ export function Analytics({
                   </button>
                 </div>
               </div>
+              ) : null}
+              {showReportAssets ? (
               <div className="mt-3 grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <select
                   className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text)]"
@@ -1114,6 +1140,8 @@ export function Analytics({
                   {t("page.analytics.notifyReport")}
                 </button>
               </div>
+              ) : null}
+              {showReportActionTasks ? (
               <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
                 <div className="flex items-center gap-2">
                   <ListChecks className="h-4 w-4 text-[var(--brand)]" />
@@ -1183,6 +1211,7 @@ export function Analytics({
                   </ul>
                 ) : null}
               </div>
+              ) : null}
               {report.last_notified_at ? (
                 <p className="mt-2 text-xs text-[var(--muted)]">
                   {t("page.analytics.lastNotified")}: {report.last_notified_at}
@@ -1197,6 +1226,7 @@ export function Analytics({
             </div>
           ) : null}
         </div>
+        ) : null}
         </Card>
       ) : null}
 

@@ -7,7 +7,7 @@ import { NeedLogin, RefreshButton } from "@/components/PageStates";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
-type Tab = "catalog" | "semantic" | "published";
+type Tab = "catalog" | "semantic" | "published" | "monitor";
 const METRIC_TYPES = ["atomic", "derived", "composite"];
 
 function splitList(value: string) {
@@ -28,7 +28,7 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
   const [impactResult, setImpactResult] = useState<any>(null);
 
   const catalogQ = useQuery({ queryKey: ["metricsCatalog"], queryFn: () => api.metricsCatalog(), enabled: authed });
-  const publishedQ = useQuery({ queryKey: ["metricsPublished"], queryFn: () => api.metricsPublished(), enabled: authed && tab === "published" });
+  const publishedQ = useQuery({ queryKey: ["metricsPublished"], queryFn: () => api.metricsPublished(), enabled: authed && (tab === "published" || tab === "monitor") });
   const versionsQ = useQuery({ queryKey: ["metricVersions", activeMetricId], queryFn: () => api.metricVersions(activeMetricId), enabled: authed && tab === "semantic" && Boolean(activeMetricId) });
 
   const create = useMutation({
@@ -94,10 +94,10 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
     <div className="w-full space-y-4">
       <WorkbenchShell title="指标中心" description="指标目录管理与 API 发布">
         <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["catalog", "semantic", "published"] as Tab[]).map(t => (
+          {(["catalog", "semantic", "published", "monitor"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "catalog" ? `指标目录 (${catalog.length})` : t === "semantic" ? "语义层" : `已发布 API (${published.length})`}
+              {t === "catalog" ? `指标目录 (${catalog.length})` : t === "semantic" ? "语义层" : t === "published" ? `已发布 API (${published.length})` : "监控"}
             </button>
           ))}
         </div>
@@ -292,6 +292,57 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
                   ))}
                 </tbody>
               </table>
+            </div>
+          </WorkbenchPanel>
+        )}
+
+        {tab === "monitor" && (
+          <WorkbenchPanel title="指标监控" actions={<RefreshButton onClick={() => { void catalogQ.refetch(); void publishedQ.refetch(); }} pending={catalogQ.isFetching || publishedQ.isFetching} />}>
+            <div className="mb-4 grid gap-3 md:grid-cols-4">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="text-xs text-[var(--muted)]">指标总数</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{catalog.length}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="text-xs text-[var(--muted)]">已发布 API</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{published.length}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="text-xs text-[var(--muted)]">语义版本覆盖</p>
+                <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{catalog.filter((m: any) => m.semantic_version).length}</p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="text-xs text-[var(--muted)]">公式异常</p>
+                <p className="mt-1 text-2xl font-semibold text-orange-600">{catalog.filter((m: any) => m.formula_validation && !m.formula_validation.valid).length}</p>
+              </div>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">发布服务健康</p>
+                <div className="space-y-2">
+                  {published.slice(0, 8).map((item: any) => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                      <span className="min-w-0 truncate font-mono text-[var(--brand)]">{item.endpoint}</span>
+                      <span className="rounded-full bg-green-50 px-2 py-0.5 font-medium text-green-700">healthy</span>
+                    </div>
+                  ))}
+                  {!published.length && <div className="py-6 text-center text-sm text-[var(--muted)]">暂无已发布服务</div>}
+                </div>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">治理待办</p>
+                <div className="space-y-2">
+                  {catalog.filter((m: any) => !m.api_endpoint || (m.formula_validation && !m.formula_validation.valid)).slice(0, 8).map((metric: any) => (
+                    <div key={metric.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                      <p className="font-medium text-[var(--text)]">{metric.name}</p>
+                      <p className="mt-1 text-[var(--muted)]">{!metric.api_endpoint ? "未发布 API" : "公式校验待修正"}</p>
+                    </div>
+                  ))}
+                  {!catalog.filter((m: any) => !m.api_endpoint || (m.formula_validation && !m.formula_validation.valid)).length && (
+                    <div className="py-6 text-center text-sm text-[var(--muted)]">暂无治理待办</div>
+                  )}
+                </div>
+              </div>
             </div>
           </WorkbenchPanel>
         )}
