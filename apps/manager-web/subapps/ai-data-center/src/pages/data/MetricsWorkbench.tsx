@@ -9,13 +9,36 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type Tab = "catalog" | "semantic" | "published" | "monitor";
+const TAB_KEYS: Tab[] = ["catalog", "semantic", "published", "monitor"];
+const TAB_META: Record<Tab, { titleKey: string; descriptionKey: string; focusKey: string }> = {
+  catalog: {
+    titleKey: "page.metricsCenter.modules.catalog.title",
+    descriptionKey: "page.metricsCenter.modules.catalog.description",
+    focusKey: "page.metricsCenter.modules.catalog.focus",
+  },
+  semantic: {
+    titleKey: "page.metricsCenter.modules.semantic.title",
+    descriptionKey: "page.metricsCenter.modules.semantic.description",
+    focusKey: "page.metricsCenter.modules.semantic.focus",
+  },
+  published: {
+    titleKey: "page.metricsCenter.modules.published.title",
+    descriptionKey: "page.metricsCenter.modules.published.description",
+    focusKey: "page.metricsCenter.modules.published.focus",
+  },
+  monitor: {
+    titleKey: "page.metricsCenter.modules.monitor.title",
+    descriptionKey: "page.metricsCenter.modules.monitor.description",
+    focusKey: "page.metricsCenter.modules.monitor.focus",
+  },
+};
 const METRIC_TYPES = ["atomic", "derived", "composite"];
 
 function splitList(value: string) {
   return value.split(",").map(item => item.trim()).filter(Boolean);
 }
 
-export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
+export function MetricsWorkbench({ focused = false, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
   const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
@@ -94,23 +117,41 @@ export function MetricsWorkbench({ focused: _focused, initialTab = "catalog" }: 
     setImpactResult(null);
     setTab("semantic");
   };
+  const activeMetaDef = TAB_META[tab];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
+  const tabLabel = (tabId: Tab) => {
+    if (tabId === "catalog") return `${t("page.metricsCenter.tabs.catalog")} (${catalog.length})`;
+    if (tabId === "published") return `${t("page.metricsCenter.tabs.published")} (${published.length})`;
+    return t(`page.metricsCenter.tabs.${tabId}`);
+  };
 
   return (
     <div className="w-full space-y-4">
-      <WorkbenchShell title="指标中心" description="指标目录管理与 API 发布">
-        <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["catalog", "semantic", "published", "monitor"] as Tab[]).map(tabId => (
-            <button key={tabId} onClick={() => setTab(tabId)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === tabId ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {tabId === "catalog"
-                ? `${t("page.metricsCenter.tabs.catalog")} (${catalog.length})`
-                : tabId === "semantic"
-                  ? t("page.metricsCenter.tabs.semantic")
-                  : tabId === "published"
-                    ? `${t("page.metricsCenter.tabs.published")} (${published.length})`
-                    : t("page.metricsCenter.tabs.monitor")}
-            </button>
-          ))}
+      <WorkbenchShell title={focused ? activeMeta.title : t("page.metricsCenter.workbenchTitle")} description={focused ? activeMeta.description : t("page.metricsCenter.workbenchDesc")}>
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+          {focused ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.metricsCenter.focusedTag")}</span>
+                <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.metricsCenter.focusedHint")}</span>
+              </div>
+              <a href="#/data/metrics" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.metricsCenter.backToHub")}</a>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {TAB_KEYS.map(tabId => (
+                <button key={tabId} onClick={() => setTab(tabId)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === tabId ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}>
+                  {tabLabel(tabId)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === "catalog" && (

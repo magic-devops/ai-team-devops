@@ -4332,11 +4332,38 @@
     "metricsCenter": {
       "hubTitle": "Metrics Center",
       "hubDesc": "Metric catalog, semantic layer, API publish and monitoring",
+      "workbenchTitle": "Metrics Center",
+      "workbenchDesc": "Metric catalog management, semantic governance, API publishing and service monitoring",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the metrics hub for the full governance flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Metrics Center",
       "tabs": {
         "catalog": "Catalog",
         "semantic": "Semantic layer",
         "published": "Published APIs",
         "monitor": "Monitor"
+      },
+      "modules": {
+        "catalog": {
+          "title": "Metric Catalog",
+          "description": "Register metric definitions, domains, formulas, dimensions, source assets and owners for catalog governance.",
+          "focus": "Metric registration, formula, owner"
+        },
+        "semantic": {
+          "title": "Metric Semantic Layer",
+          "description": "Maintain semantic versions, query contracts, sample queries and lineage impact analysis so metrics stay explainable and traceable.",
+          "focus": "Semantic versions, query contract, lineage impact"
+        },
+        "published": {
+          "title": "Metric API Publishing",
+          "description": "Review published metric APIs, endpoints and publish times for business systems and AI question answering.",
+          "focus": "API endpoints, publish records, service consumption"
+        },
+        "monitor": {
+          "title": "Metric Service Monitor",
+          "description": "Summarize metric count, published services, semantic coverage and formula issues into governance todos.",
+          "focus": "Service health, semantic coverage, governance todos"
+        }
       },
       "monitorTitle": "Metrics monitor",
       "metricTotal": "Metrics",

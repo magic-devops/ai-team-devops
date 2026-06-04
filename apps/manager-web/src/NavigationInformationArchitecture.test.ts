@@ -200,6 +200,11 @@ describe("navigation information architecture", () => {
     expect(dataQualitySource).not.toContain("focused: _focused");
     expect(metricsSource).toContain('type Tab = "catalog" | "semantic" | "published" | "monitor"');
     expect(metricsSource).toContain('tab === "monitor"');
+    expect(metricsSource).toContain("const TAB_KEYS: Tab[]");
+    expect(metricsSource).toContain('export function MetricsWorkbench({ focused = false');
+    expect(metricsSource).toContain("page.metricsCenter.modules.");
+    expect(metricsSource).toContain('t("page.metricsCenter.focusedHint")');
+    expect(metricsSource).not.toContain("focused: _focused");
   });
 
   it("keeps ops center as a light hub with focused production ops modules", () => {

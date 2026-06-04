@@ -52,6 +52,10 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.dataQuality.modules.alerts.focus).toBeTruthy();
       expect(messages.page.dataQuality.reportAverageScore).toBeTruthy();
       expect(messages.page.metricsCenter.tabs.monitor).toBeTruthy();
+      expect(messages.page.metricsCenter.workbenchTitle).toBeTruthy();
+      expect(messages.page.metricsCenter.focusedHint).toBeTruthy();
+      expect(messages.page.metricsCenter.modules.semantic.title).toBeTruthy();
+      expect(messages.page.metricsCenter.modules.monitor.focus).toBeTruthy();
       expect(messages.page.metricsCenter.emptyGovernanceTodos).toBeTruthy();
     }
     expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
@@ -60,7 +64,9 @@ describe("navigation i18n coverage", () => {
     expect(dataQualitySource).toContain("page.dataQuality.modules.");
     expect(dataQualitySource).toContain('t("page.dataQuality.workbenchTitle")');
     expect(dataQualitySource).toContain('t("page.dataQuality.reportAverageScore")');
-    expect(metricsSource).toContain('t("page.metricsCenter.tabs.monitor")');
+    expect(metricsSource).toContain("page.metricsCenter.tabs.");
+    expect(metricsSource).toContain("page.metricsCenter.modules.");
+    expect(metricsSource).toContain('t("page.metricsCenter.workbenchTitle")');
     expect(metricsSource).toContain('t("page.metricsCenter.emptyGovernanceTodos")');
   });
 

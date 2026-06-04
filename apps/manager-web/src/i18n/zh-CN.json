@@ -4655,11 +4655,38 @@
     "metricsCenter": {
       "hubTitle": "指标中心",
       "hubDesc": "指标语义层、目录管理、API 发布与监控告警",
+      "workbenchTitle": "指标中心",
+      "workbenchDesc": "指标目录管理、语义层治理、API 发布与服务监控",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整指标治理链路请回到指标中心。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回指标中心",
       "tabs": {
         "catalog": "指标目录",
         "semantic": "语义层",
         "published": "已发布 API",
         "monitor": "监控"
+      },
+      "modules": {
+        "catalog": {
+          "title": "指标目录",
+          "description": "注册指标口径、业务域、公式、维度、源资产和 owner，支撑指标目录治理。",
+          "focus": "指标注册、公式、owner"
+        },
+        "semantic": {
+          "title": "指标语义层",
+          "description": "维护语义版本、查询契约、样本查询和血缘影响分析，确保指标可解释可追踪。",
+          "focus": "语义版本、查询契约、血缘影响"
+        },
+        "published": {
+          "title": "指标 API 发布",
+          "description": "查看已发布指标 API、Endpoint 和发布时间，支撑业务系统与 AI 问数消费。",
+          "focus": "API Endpoint、发布记录、服务消费"
+        },
+        "monitor": {
+          "title": "指标服务监控",
+          "description": "汇总指标数量、发布服务、语义覆盖和公式异常，输出指标治理待办。",
+          "focus": "服务健康、语义覆盖、治理待办"
+        }
       },
       "monitorTitle": "指标监控",
       "metricTotal": "指标总数",

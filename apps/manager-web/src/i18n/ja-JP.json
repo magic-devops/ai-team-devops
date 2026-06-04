@@ -3845,11 +3845,38 @@
     "metricsCenter": {
       "hubTitle": "メトリクスセンター",
       "hubDesc": "メトリクスカタログ、セマンティック層、API公開",
+      "workbenchTitle": "メトリクスセンター",
+      "workbenchDesc": "メトリクスカタログ管理、セマンティックガバナンス、API公開、サービス監視",
+      "focusedHint": "フォーカス入口では、このモジュールの高頻度操作だけを表示します。全体のメトリクスガバナンスはハブで確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "メトリクスセンターへ戻る",
       "tabs": {
         "catalog": "指標カタログ",
         "semantic": "セマンティック層",
         "published": "公開 API",
         "monitor": "監視"
+      },
+      "modules": {
+        "catalog": {
+          "title": "メトリクスカタログ",
+          "description": "指標定義、ドメイン、式、ディメンション、ソース資産、owner を登録し、カタログを管理します。",
+          "focus": "指標登録、式、owner"
+        },
+        "semantic": {
+          "title": "メトリクスセマンティック層",
+          "description": "セマンティック版、クエリ契約、サンプルクエリ、リネージ影響分析を管理し、指標を説明可能で追跡可能にします。",
+          "focus": "セマンティック版、クエリ契約、リネージ影響"
+        },
+        "published": {
+          "title": "メトリクスAPI公開",
+          "description": "公開済みメトリクスAPI、Endpoint、公開時刻を確認し、業務システムとAI問数の利用を支えます。",
+          "focus": "API Endpoint、公開記録、サービス利用"
+        },
+        "monitor": {
+          "title": "メトリクスサービス監視",
+          "description": "指標数、公開サービス、セマンティック適用、式の異常を集約し、ガバナンスToDoを出します。",
+          "focus": "サービス健康度、セマンティック適用、ガバナンスToDo"
+        }
       },
       "monitorTitle": "指標監視",
       "metricTotal": "指標総数",
