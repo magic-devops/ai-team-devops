@@ -4267,36 +4267,68 @@
     "opsCenter": {
       "hubTitle": "Ops Center",
       "hubDesc": "A light production ops hub: check health, find risks, and enter focused modules.",
+      "workbenchTitle": "Ops Center",
+      "workbenchDesc": "Production ops control plane for deployment pipelines, alert sources, RCA, runbooks and self-healing policies.",
       "aiAction": "AI analysis",
+      "focusedHint": "Focused entry keeps only the core handling area for this ops module. Open Ops Center for the full operations flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Ops overview",
       "modulesTitle": "Focused modules",
       "metricBadge": "{{count}} runtime signals",
       "metrics": {
+        "healthScore": "Health score",
+        "failedPipelines": "Failed pipelines",
+        "externalAlerts": "External alerts",
+        "selfHealMatched": "Self-heal hits",
+        "approvalQueue": "Approval queue",
         "pipelines": "Pipelines",
         "openAlerts": "Open alerts",
         "rcaOpen": "Open RCA",
         "runbooks": "Runbooks",
         "guardrailActions": "Guardrail actions"
       },
+      "tabs": {
+        "pipeline": "Pipeline",
+        "alerts": "Alerts",
+        "rca": "RCA",
+        "runbook": "Runbook",
+        "self-heal": "Self-heal"
+      },
       "modules": {
         "pipeline": {
           "label": "Deployment pipeline",
-          "desc": "Release, approval, execution evidence and callbacks"
+          "desc": "Release, approval, execution evidence and callbacks",
+          "description": "Controlled release operations for releases, executors, external callbacks and deployment evidence.",
+          "output": "Output: controlled releases, execution evidence, self-heal diagnostics",
+          "focus": "Release flow, execution evidence, callback closure"
         },
         "alerts": {
           "label": "Alert governance",
-          "desc": "Sources, noise reduction, SLO and canary policy"
+          "desc": "Sources, noise reduction, SLO and canary policy",
+          "description": "Production alert ingestion, noise policies, SLO prediction, strategy canary and cross-module strategy linkage.",
+          "output": "Output: normalized alerts, noise policies, SLO escalation tasks",
+          "focus": "Alert sources, noise policy, SLO escalation"
         },
         "rca": {
           "label": "Root cause analysis",
-          "desc": "Incident attribution, verification and tasks"
+          "desc": "Incident attribution, verification and tasks",
+          "description": "Intelligent attribution, RCA creation, verification plans, governance task generation and incident closure.",
+          "output": "Output: root-cause candidates, RCA records, governance tasks",
+          "focus": "Intelligent attribution, verification plan, tasking"
         },
         "runbook": {
           "label": "Runbook governance",
-          "desc": "Versions, diffs, evidence and archive"
+          "desc": "Versions, diffs, evidence and archive",
+          "description": "Runbook version governance, diff comparison, execution evidence backfill and audit archiving.",
+          "output": "Output: executable runbooks, version evidence, audit records",
+          "focus": "Runbook versions, diff comparison, evidence archive"
         },
         "self-heal": {
           "label": "Self-healing",
-          "desc": "Approval, apply, verify and rollback evidence"
+          "desc": "Approval, apply, verify and rollback evidence",
+          "description": "Self-healing governance for signal evaluation, guardrail approval, automated repair, verification and rollback evidence.",
+          "output": "Output: self-heal decisions, guardrail actions, verification evidence",
+          "focus": "Policy match, guardrail approval, rollback evidence"
         }
       }
     },

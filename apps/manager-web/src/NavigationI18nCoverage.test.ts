@@ -7,6 +7,7 @@ const navigationSource = readFileSync(resolve(root, "src/navigation.tsx"), "utf8
 const commandPaletteSource = readFileSync(resolve(root, "src/components/CommandPalette.tsx"), "utf8");
 const menuManagementSource = readFileSync(resolve(root, "src/pages/admin/MenuManagement.tsx"), "utf8");
 const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/AgentRunsWorkbench.tsx"), "utf8");
+const opsCenterSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench.tsx"), "utf8");
 const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
 const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
 const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench.tsx"), "utf8");
@@ -48,6 +49,12 @@ describe("navigation i18n coverage", () => {
       const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
       expect(messages.page.agentRuns.tabs.heartbeat).toBeTruthy();
       expect(messages.page.agentRuns.retryAction).toBeTruthy();
+      expect(messages.page.opsCenter.workbenchTitle).toBeTruthy();
+      expect(messages.page.opsCenter.focusedHint).toBeTruthy();
+      expect(messages.page.opsCenter.metrics.healthScore).toBeTruthy();
+      expect(messages.page.opsCenter.tabs.alerts).toBeTruthy();
+      expect(messages.page.opsCenter.modules.pipeline.description).toBeTruthy();
+      expect(messages.page.opsCenter.modules["self-heal"].focus).toBeTruthy();
       expect(messages.page.dataIngest.workbenchTitle).toBeTruthy();
       expect(messages.page.dataIngest.focusedHint).toBeTruthy();
       expect(messages.page.dataIngest.tabs.schemas).toBeTruthy();
@@ -76,9 +83,18 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.dataDev.modules.sql_editor.title).toBeTruthy();
       expect(messages.page.dataDev.modules.spark_jobs.focus).toBeTruthy();
       expect(messages.page.dataDev.modules.schedules.description).toBeTruthy();
+      expect(messages.page.opsCenter.workbenchTitle).toBeTruthy();
+      expect(messages.page.opsCenter.focusedHint).toBeTruthy();
+      expect(messages.page.opsCenter.tabs.pipeline).toBeTruthy();
+      expect(messages.page.opsCenter.metrics.healthScore).toBeTruthy();
+      expect(messages.page.opsCenter.modules.alerts.output).toBeTruthy();
+      expect(messages.page.opsCenter.modules["self-heal"].focus).toBeTruthy();
     }
     expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
     expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
+    expect(opsCenterSource).toContain('t("page.opsCenter.workbenchTitle")');
+    expect(opsCenterSource).toContain("page.opsCenter.modules.");
+    expect(opsCenterSource).toContain("page.opsCenter.metrics.");
     expect(dataIngestSource).toContain("page.dataIngest.tabs.");
     expect(dataIngestSource).toContain("page.dataIngest.modules.");
     expect(dataIngestSource).toContain('t("page.dataIngest.workbenchTitle")');
@@ -96,6 +112,9 @@ describe("navigation i18n coverage", () => {
     expect(dataDevSource).toContain("page.dataDev.tabs.");
     expect(dataDevSource).toContain("page.dataDev.modules.");
     expect(dataDevSource).toContain('t("page.dataDev.title")');
+    expect(opsCenterSource).toContain("page.opsCenter.tabs.");
+    expect(opsCenterSource).toContain("page.opsCenter.modules.");
+    expect(opsCenterSource).toContain('t("page.opsCenter.workbenchTitle")');
   });
 
   it("localizes LLM gateway focused route chrome", () => {

@@ -3780,36 +3780,68 @@
     "opsCenter": {
       "hubTitle": "インテリジェント運用センター",
       "hubDesc": "本番運用の軽量ハブ：健康確認、リスク発見、専門モジュールへの導線。",
+      "workbenchTitle": "インテリジェント運用センター",
+      "workbenchDesc": "デプロイパイプライン、アラートソース、RCA、Runbook、自己修復ポリシーの本番運用制御面。",
       "aiAction": "AI 分析",
+      "focusedHint": "フォーカス入口では、この運用モジュールの主要な処理領域だけを表示します。全体の運用フローは運用センターで確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "運用概要へ戻る",
       "modulesTitle": "専門入口",
       "metricBadge": "{{count}} 件の運用シグナル",
       "metrics": {
+        "healthScore": "健康スコア",
+        "failedPipelines": "失敗パイプライン",
+        "externalAlerts": "外部アラート",
+        "selfHealMatched": "自己修復ヒット",
+        "approvalQueue": "承認キュー",
         "pipelines": "パイプライン",
         "openAlerts": "未解決アラート",
         "rcaOpen": "未処理 RCA",
         "runbooks": "Runbook",
         "guardrailActions": "ガードレール操作"
       },
+      "tabs": {
+        "pipeline": "パイプライン",
+        "alerts": "アラート",
+        "rca": "RCA",
+        "runbook": "Runbook",
+        "self-heal": "自己修復"
+      },
       "modules": {
         "pipeline": {
           "label": "デプロイパイプライン",
-          "desc": "リリース、承認、実行証跡、コールバック"
+          "desc": "リリース、承認、実行証跡、コールバック",
+          "description": "リリース、実行器、外部コールバック、デプロイ証跡を扱う制御されたリリース運用モジュール。",
+          "output": "出力：制御済みリリース、実行証跡、自己修復診断",
+          "focus": "リリース流、実行証跡、コールバック完了"
         },
         "alerts": {
           "label": "アラートガバナンス",
-          "desc": "収集、ノイズ削減、SLO、カナリア策略"
+          "desc": "収集、ノイズ削減、SLO、カナリア策略",
+          "description": "本番アラート収集、ノイズ削減、SLO 予測、戦略カナリア、モジュール横断の戦略連携。",
+          "output": "出力：標準化アラート、ノイズ削減策略、SLO エスカレーションタスク",
+          "focus": "アラートソース、ノイズ策略、SLO エスカレーション"
         },
         "rca": {
           "label": "根因分析",
-          "desc": "障害帰因、検証、タスク化"
+          "desc": "障害帰因、検証、タスク化",
+          "description": "知的な帰因、RCA 作成、検証計画、ガバナンスタスク生成、障害クローズ。",
+          "output": "出力：根因候補、RCA 記録、ガバナンスタスク",
+          "focus": "知的帰因、検証計画、タスク化"
         },
         "runbook": {
           "label": "Runbook ガバナンス",
-          "desc": "バージョン、差分、証跡、アーカイブ"
+          "desc": "バージョン、差分、証跡、アーカイブ",
+          "description": "Runbook のバージョン管理、差分比較、実行証跡の補完、監査アーカイブ。",
+          "output": "出力：実行可能 Runbook、バージョン証跡、監査記録",
+          "focus": "Runbook 版数、差分比較、証跡アーカイブ"
         },
         "self-heal": {
           "label": "自己修復",
-          "desc": "承認、適用、検証、ロールバック証跡"
+          "desc": "承認、適用、検証、ロールバック証跡",
+          "description": "シグナル評価、ガードレール承認、自動修復、検証、ロールバック証跡の自己修復ガバナンス。",
+          "output": "出力：自己修復判断、ガードレール操作、検証証跡",
+          "focus": "ポリシーヒット、ガードレール承認、ロールバック証跡"
         }
       }
     },

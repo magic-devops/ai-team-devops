@@ -233,6 +233,7 @@ describe("navigation information architecture", () => {
   });
 
   it("keeps ops center as a light hub with focused production ops modules", () => {
+    const opsCenterSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/OpsCenterWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "opsCenter", path: "#/system/ops-center"');
     expect(navigationSource).toContain('subnav("system/ops-center", "pipeline", "alerts", "rca", "runbook", "self-heal")');
     expect(navigationSource).toContain('key: "opsCenterPipeline", path: "#/system/ops-center/pipeline"');
@@ -240,6 +241,12 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "opsCenterRca", path: "#/system/ops-center/rca"');
     expect(navigationSource).toContain('key: "opsCenterRunbook", path: "#/system/ops-center/runbook"');
     expect(navigationSource).toContain('key: "opsCenterSelfHeal", path: "#/system/ops-center/self-heal"');
+    expect(opsCenterSource).toContain('export function OpsCenterWorkbench({ focused = false');
+    expect(opsCenterSource).toContain("page.opsCenter.modules.");
+    expect(opsCenterSource).toContain('t("page.opsCenter.focusedHint")');
+    expect(opsCenterSource).toContain('!focused ? <div className="opsCenterModeSwitch');
+    expect(opsCenterSource).not.toContain("focused: _focused");
+    expect(opsCenterSource).not.toContain('title="智能运维中心"');
   });
 
   it("keeps submodule quick links aligned with implemented routes instead of default camel-case hashes", () => {

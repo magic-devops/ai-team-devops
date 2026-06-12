@@ -30,7 +30,7 @@ describe("OpsCenter workbench UX contract", () => {
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterRunbooksPanel\")");
     expect(source).toContain("lazy(() => import(\"./ops-center/OpsCenterSelfHealPanel\")");
     expect(source).toContain("<Suspense fallback=");
-    expect(source).toContain("AI 分析当前模块");
+    expect(source).toContain('t("page.opsCenter.aiAction")');
     expect(source).not.toContain("border-b-2 transition ${tab === t.id");
   });
 

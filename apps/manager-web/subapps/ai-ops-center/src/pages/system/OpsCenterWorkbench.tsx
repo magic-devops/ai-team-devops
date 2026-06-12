@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Segmented } from "antd";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -25,41 +26,46 @@ const OPS_CENTER_TAB_ROUTES: Record<string, Tab> = {
   "self-heal": "self-heal",
 };
 
-const OPS_CENTER_TAB_META: Record<Tab, { href: string; label: string; shortLabel: string; desc: string; output: string }> = {
+const OPS_CENTER_TAB_META: Record<Tab, { href: string; labelKey: string; shortLabelKey: string; descKey: string; outputKey: string; focusKey: string }> = {
   pipelines: {
     href: "#/system/ops-center/pipeline",
-    label: "部署流水线",
-    shortLabel: "流水线",
-    desc: "发布、执行器、外部回调和发布证据。",
-    output: "输出：受控发布记录、执行证据、自愈诊断",
+    labelKey: "page.opsCenter.modules.pipeline.label",
+    shortLabelKey: "page.opsCenter.tabs.pipeline",
+    descKey: "page.opsCenter.modules.pipeline.description",
+    outputKey: "page.opsCenter.modules.pipeline.output",
+    focusKey: "page.opsCenter.modules.pipeline.focus",
   },
   "alert-sources": {
     href: "#/system/ops-center/alerts",
-    label: "告警源治理",
-    shortLabel: "告警源",
-    desc: "生产告警采集、降噪、SLO 预测和策略联动。",
-    output: "输出：标准化告警、降噪策略、SLO 升级任务",
+    labelKey: "page.opsCenter.modules.alerts.label",
+    shortLabelKey: "page.opsCenter.tabs.alerts",
+    descKey: "page.opsCenter.modules.alerts.description",
+    outputKey: "page.opsCenter.modules.alerts.output",
+    focusKey: "page.opsCenter.modules.alerts.focus",
   },
   rca: {
     href: "#/system/ops-center/rca",
-    label: "根因分析",
-    shortLabel: "RCA",
-    desc: "智能归因、RCA 创建、验证计划和闭环关闭。",
-    output: "输出：根因候选、RCA 记录、治理任务",
+    labelKey: "page.opsCenter.modules.rca.label",
+    shortLabelKey: "page.opsCenter.tabs.rca",
+    descKey: "page.opsCenter.modules.rca.description",
+    outputKey: "page.opsCenter.modules.rca.output",
+    focusKey: "page.opsCenter.modules.rca.focus",
   },
   runbooks: {
     href: "#/system/ops-center/runbook",
-    label: "Runbook",
-    shortLabel: "Runbook",
-    desc: "版本治理、差异对比、执行证据和审计归档。",
-    output: "输出：可执行手册、版本证据、审计记录",
+    labelKey: "page.opsCenter.modules.runbook.label",
+    shortLabelKey: "page.opsCenter.tabs.runbook",
+    descKey: "page.opsCenter.modules.runbook.description",
+    outputKey: "page.opsCenter.modules.runbook.output",
+    focusKey: "page.opsCenter.modules.runbook.focus",
   },
   "self-heal": {
     href: "#/system/ops-center/self-heal",
-    label: "自愈策略",
-    shortLabel: "自愈",
-    desc: "信号评估、护栏审批、自动修复和回滚留证。",
-    output: "输出：自愈决策、护栏动作、验证证据",
+    labelKey: "page.opsCenter.modules.self-heal.label",
+    shortLabelKey: "page.opsCenter.tabs.self-heal",
+    descKey: "page.opsCenter.modules.self-heal.description",
+    outputKey: "page.opsCenter.modules.self-heal.output",
+    focusKey: "page.opsCenter.modules.self-heal.focus",
   },
 };
 
@@ -95,8 +101,9 @@ function parseJsonPayload(value: string) {
   return JSON.parse(text) as unknown;
 }
 
-export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines" }: { focused?: boolean; initialTab?: Tab }) {
+export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(() => readOpsCenterTabFromHash(initialTab));
@@ -772,18 +779,24 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
   if (!authed) return <NeedLogin />;
 
   const TABS: { id: Tab; label: string; count: number | null }[] = [
-    { id: "pipelines", label: OPS_CENTER_TAB_META.pipelines.shortLabel, count: pipQ.data?.items?.length ?? 0 },
-    { id: "alert-sources", label: OPS_CENTER_TAB_META["alert-sources"].shortLabel, count: alertSourcesQ.data?.items?.length ?? 0 },
-    { id: "rca", label: OPS_CENTER_TAB_META.rca.shortLabel, count: rcaQ.data?.items?.length ?? null },
-    { id: "runbooks", label: OPS_CENTER_TAB_META.runbooks.shortLabel, count: rbQ.data?.items?.length ?? null },
-    { id: "self-heal", label: OPS_CENTER_TAB_META["self-heal"].shortLabel, count: shQ.data?.items?.length ?? null },
+    { id: "pipelines", label: t(OPS_CENTER_TAB_META.pipelines.shortLabelKey), count: pipQ.data?.items?.length ?? 0 },
+    { id: "alert-sources", label: t(OPS_CENTER_TAB_META["alert-sources"].shortLabelKey), count: alertSourcesQ.data?.items?.length ?? 0 },
+    { id: "rca", label: t(OPS_CENTER_TAB_META.rca.shortLabelKey), count: rcaQ.data?.items?.length ?? null },
+    { id: "runbooks", label: t(OPS_CENTER_TAB_META.runbooks.shortLabelKey), count: rbQ.data?.items?.length ?? null },
+    { id: "self-heal", label: t(OPS_CENTER_TAB_META["self-heal"].shortLabelKey), count: shQ.data?.items?.length ?? null },
   ];
+  const activeModule = {
+    label: t(activeTabMeta.labelKey),
+    description: t(activeTabMeta.descKey),
+    output: t(activeTabMeta.outputKey),
+    focus: t(activeTabMeta.focusKey),
+  };
 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell
-        title="智能运维中心"
-        description="部署流水线、生产告警源、根因分析、Runbook 与自愈策略"
+        title={focused ? activeModule.label : t("page.opsCenter.workbenchTitle")}
+        description={focused ? activeModule.description : t("page.opsCenter.workbenchDesc")}
         actions={
           <>
             <AiAssistButton onClick={() => setAiOpen(true)} />
@@ -792,12 +805,12 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
         }
         metrics={
           <WorkbenchStats items={[
-            { label: "健康分", value: summaryQ.data?.summary?.health_score ?? 100, trend: (summaryQ.data?.summary?.health_score ?? 100) < 80 ? "down" : "neutral" },
-            { label: "失败流水线", value: summaryQ.data?.summary?.pipelines_failed ?? 0, trend: (summaryQ.data?.summary?.pipelines_failed ?? 0) > 0 ? "down" : "neutral" },
-            { label: "未关闭 RCA", value: summaryQ.data?.summary?.rca_open ?? 0, trend: (summaryQ.data?.summary?.rca_open ?? 0) > 0 ? "down" : "neutral" },
-            { label: "外部告警", value: summaryQ.data?.summary?.external_open_alerts ?? 0, trend: (summaryQ.data?.summary?.external_high_alerts ?? 0) > 0 ? "down" : "neutral" },
-            { label: "自愈命中", value: summaryQ.data?.summary?.self_heal_matched ?? 0 },
-            { label: "审批队列", value: summaryQ.data?.summary?.self_heal_approval_queue ?? 0, trend: (summaryQ.data?.summary?.self_heal_approval_queue ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.opsCenter.metrics.healthScore"), value: summaryQ.data?.summary?.health_score ?? 100, trend: (summaryQ.data?.summary?.health_score ?? 100) < 80 ? "down" : "neutral" },
+            { label: t("page.opsCenter.metrics.failedPipelines"), value: summaryQ.data?.summary?.pipelines_failed ?? 0, trend: (summaryQ.data?.summary?.pipelines_failed ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.opsCenter.metrics.rcaOpen"), value: summaryQ.data?.summary?.rca_open ?? 0, trend: (summaryQ.data?.summary?.rca_open ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.opsCenter.metrics.externalAlerts"), value: summaryQ.data?.summary?.external_open_alerts ?? 0, trend: (summaryQ.data?.summary?.external_high_alerts ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.opsCenter.metrics.selfHealMatched"), value: summaryQ.data?.summary?.self_heal_matched ?? 0 },
+            { label: t("page.opsCenter.metrics.approvalQueue"), value: summaryQ.data?.summary?.self_heal_approval_queue ?? 0, trend: (summaryQ.data?.summary?.self_heal_approval_queue ?? 0) > 0 ? "down" : "neutral" },
           ]} />
         }
       >
@@ -854,22 +867,24 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--brand)]">OpsCenter</span>
-              <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs text-[var(--muted-strong)]">{activeTabMeta.output}</span>
+              {focused ? <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-semibold text-[var(--muted-strong)]">{t("page.opsCenter.focusedTag")}</span> : null}
+              <span className="rounded-full bg-[var(--surface-muted)] px-2.5 py-1 text-xs text-[var(--muted-strong)]">{focused ? activeModule.focus : activeModule.output}</span>
             </div>
-            <h2 className="mt-3 text-lg font-semibold text-[var(--text)]">{activeTabMeta.label}</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">{activeTabMeta.desc}</p>
+            <h2 className="mt-3 text-lg font-semibold text-[var(--text)]">{activeModule.label}</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--muted)]">{activeModule.description}</p>
+            {focused ? <p className="mt-1 text-xs text-[var(--muted)]">{t("page.opsCenter.focusedHint")}</p> : null}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col lg:items-end">
             <button type="button" onClick={() => setAiOpen(true)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
-              AI 分析当前模块
+              {t("page.opsCenter.aiAction")}
             </button>
             <a href="#/system/ops-center" className="rounded-lg border border-[var(--border)] px-3 py-2 text-center text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
-              返回运维总览
+              {t("page.opsCenter.backToHub")}
             </a>
           </div>
         </div>
 
-        <div className="opsCenterModeSwitch mb-4 overflow-x-auto pb-1">
+        {!focused ? <div className="opsCenterModeSwitch mb-4 overflow-x-auto pb-1">
           <Segmented
             block
             value={tab}
@@ -889,10 +904,10 @@ export function OpsCenterWorkbench({ focused: _focused, initialTab = "pipelines"
               ),
             }))}
           />
-        </div>
+        </div> : null}
 
         {tab === "pipelines" && (
-          <WorkbenchPanel title="部署流水线" actions={
+          <WorkbenchPanel title={t("page.opsCenter.modules.pipeline.label")} actions={
             <div className="flex gap-2">
               <AiAssistButton onClick={() => setAiOpen(true)} />
               <RefreshButton onClick={() => void pipQ.refetch()} pending={pipQ.isFetching} />
