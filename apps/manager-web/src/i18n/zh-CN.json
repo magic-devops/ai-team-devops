@@ -4590,42 +4590,79 @@
     "opsCenter": {
       "hubTitle": "智能运维中心",
       "hubDesc": "生产运维轻量中枢：看健康、找风险、进专业模块处理。",
+      "workbenchTitle": "智能运维中心",
+      "workbenchDesc": "部署流水线、生产告警源、根因分析、Runbook 与自愈策略的生产运维控制面。",
       "aiAction": "AI 分析",
+      "focusedHint": "聚焦入口只保留当前运维模块的核心处理区，完整运维编排请回到智能运维中心。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回运维总览",
       "modulesTitle": "专业入口",
       "metricBadge": "{{count}} 条运行信号",
       "metrics": {
+        "healthScore": "健康分",
+        "failedPipelines": "失败流水线",
+        "externalAlerts": "外部告警",
+        "selfHealMatched": "自愈命中",
+        "approvalQueue": "审批队列",
         "pipelines": "流水线",
         "openAlerts": "开放告警",
         "rcaOpen": "待处理 RCA",
         "runbooks": "Runbook",
         "guardrailActions": "护栏动作"
       },
+      "tabs": {
+        "pipeline": "流水线",
+        "alerts": "告警源",
+        "rca": "RCA",
+        "runbook": "Runbook",
+        "self-heal": "自愈"
+      },
       "modules": {
         "pipeline": {
           "label": "部署流水线",
-          "desc": "发布、审批、执行证据与回调"
+          "desc": "发布、审批、执行证据与回调",
+          "description": "发布、执行器、外部回调和发布证据的受控发布运维模块。",
+          "output": "输出：受控发布记录、执行证据、自愈诊断",
+          "focus": "发布流、执行证据、回调闭环"
         },
         "alerts": {
           "label": "告警源治理",
-          "desc": "采集、降噪、SLO 与策略灰度"
+          "desc": "采集、降噪、SLO 与策略灰度",
+          "description": "生产告警采集、降噪策略、SLO 预测、策略灰度和跨模块策略联动。",
+          "output": "输出：标准化告警、降噪策略、SLO 升级任务",
+          "focus": "告警源、降噪策略、SLO 升级"
         },
         "rca": {
           "label": "根因分析",
-          "desc": "故障归因、验证和任务化闭环"
+          "desc": "故障归因、验证和任务化闭环",
+          "description": "智能归因、RCA 创建、验证计划、治理任务生成和故障闭环关闭。",
+          "output": "输出：根因候选、RCA 记录、治理任务",
+          "focus": "智能归因、验证计划、任务化"
         },
         "runbook": {
           "label": "Runbook 治理",
-          "desc": "版本、差异、证据与归档"
+          "desc": "版本、差异、证据与归档",
+          "description": "Runbook 版本治理、差异对比、执行证据回填和审计归档。",
+          "output": "输出：可执行手册、版本证据、审计记录",
+          "focus": "手册版本、差异对比、证据归档"
         },
         "self-heal": {
           "label": "自愈策略",
-          "desc": "审批、执行、验证和回滚留证"
+          "desc": "审批、执行、验证和回滚留证",
+          "description": "信号评估、护栏审批、自动修复、验证和回滚留证的自愈治理模块。",
+          "output": "输出：自愈决策、护栏动作、验证证据",
+          "focus": "策略命中、护栏审批、回滚留证"
         }
       }
     },
     "dataIngest": {
       "hubTitle": "数据接入中心",
       "hubDesc": "连接器管理、Schema Registry、CDC 实时接入与批量作业",
+      "workbenchTitle": "数据接入中心",
+      "workbenchDesc": "连接器、Schema 注册、CDC 游标和批量作业的接入控制面",
+      "focusedHint": "聚焦入口只保留本模块高频操作，完整接入链路请回到数据接入中心。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回数据接入中心",
       "modulesTitle": "功能模块",
       "metrics": {
         "connectors": "连接器",
@@ -4633,22 +4670,40 @@
         "rowsToday": "今日接入行数",
         "cdcStreams": "CDC 流"
       },
+      "tabs": {
+        "connectors": "连接器",
+        "schemas": "Schema Registry",
+        "runs": "CDC 与运行历史",
+        "jobs": "批量作业"
+      },
       "modules": {
         "connectors": {
           "label": "连接器管理",
-          "desc": "数据库、消息队列与 API 连接器"
+          "desc": "数据库、消息队列与 API 连接器",
+          "title": "连接器管理",
+          "description": "统一管理数据库、消息队列、对象存储和 API 连接器，支持连接测试、Dry-run 采样和 Schema 发现。",
+          "focus": "连接器 CRUD、连接测试、Schema 发现"
         },
         "schema": {
           "label": "Schema Registry",
-          "desc": "数据结构注册与版本管理"
+          "desc": "数据结构注册与版本管理",
+          "title": "Schema Registry",
+          "description": "查看由连接器发现和 Dry-run 写入的表结构、字段类型、来源连接器和版本记录。",
+          "focus": "表结构注册、字段版本、来源追踪"
         },
         "cdc": {
           "label": "CDC 实时接入",
-          "desc": "游标、运行历史与进度回写"
+          "desc": "游标、运行历史与进度回写",
+          "title": "CDC 游标与运行历史",
+          "description": "集中查看 CDC 游标、接入运行记录、行数回写和失败状态，支撑实时接入运维。",
+          "focus": "CDC 游标、运行追踪、进度回写"
         },
         "batch": {
           "label": "批量接入作业",
-          "desc": "批处理接入、运行和完成回写"
+          "desc": "批处理接入、运行和完成回写",
+          "title": "批量接入作业",
+          "description": "创建批量、CDC 或流式接入作业，配置调度、源表、目标表、批大小并执行运行闭环。",
+          "focus": "作业配置、调度参数、运行闭环"
         }
       }
     },

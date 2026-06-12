@@ -4303,6 +4303,11 @@
     "dataIngest": {
       "hubTitle": "Data Ingest Center",
       "hubDesc": "Connectors, Schema Registry, CDC and batch jobs",
+      "workbenchTitle": "Data Ingest Center",
+      "workbenchDesc": "Ingest control plane for connectors, schema registry, CDC cursors and batch jobs",
+      "focusedHint": "Focused entry keeps only the frequent controls for this module. Open the data ingest center for the full ingest flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Data Ingest Center",
       "modulesTitle": "Modules",
       "metrics": {
         "connectors": "Connectors",
@@ -4310,22 +4315,40 @@
         "rowsToday": "Rows today",
         "cdcStreams": "CDC streams"
       },
+      "tabs": {
+        "connectors": "Connectors",
+        "schemas": "Schema Registry",
+        "runs": "CDC and run history",
+        "jobs": "Batch jobs"
+      },
       "modules": {
         "connectors": {
           "label": "Connectors",
-          "desc": "Database, message queue and API connectors"
+          "desc": "Database, message queue and API connectors",
+          "title": "Connector Management",
+          "description": "Manage database, queue, object storage and API connectors with connection tests, dry-run sampling and schema discovery.",
+          "focus": "Connector CRUD, tests, schema discovery"
         },
         "schema": {
           "label": "Schema Registry",
-          "desc": "Schema registration and version management"
+          "desc": "Schema registration and version management",
+          "title": "Schema Registry",
+          "description": "Review table schemas, field types, source connectors and version records discovered by connectors and dry-runs.",
+          "focus": "Schema registration, field versions, source tracing"
         },
         "cdc": {
           "label": "CDC ingest",
-          "desc": "Cursors, run history and progress callbacks"
+          "desc": "Cursors, run history and progress callbacks",
+          "title": "CDC Cursors and Run History",
+          "description": "Track CDC cursors, ingest runs, row count callbacks and failure states for realtime ingest operations.",
+          "focus": "CDC cursors, run tracing, progress callback"
         },
         "batch": {
           "label": "Batch jobs",
-          "desc": "Batch ingest, runs and completion callbacks"
+          "desc": "Batch ingest, runs and completion callbacks",
+          "title": "Batch Ingest Jobs",
+          "description": "Create batch, CDC or stream ingest jobs with schedule, source table, target table, batch size and run closure.",
+          "focus": "Job config, schedule parameters, run closure"
         }
       }
     },

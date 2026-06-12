@@ -36,6 +36,7 @@ describe("navigation information architecture", () => {
   });
 
   it("keeps data ingest professional routes focused instead of reusing one generic tab", () => {
+    const dataIngestSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataIngestWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "dataIngest"');
     expect(navigationSource).toContain('path: "#/data/ingest"');
     expect(navigationSource).toContain('subnav("data/ingest", "connectors", "schema", "cdc", "batch")');
@@ -47,6 +48,11 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('initialTab: "runs"');
     expect(navigationSource).toContain('path: "#/data/ingest/batch"');
     expect(navigationSource).toContain('initialTab: "jobs"');
+    expect(dataIngestSource).toContain('export function DataIngestWorkbench({ focused = false');
+    expect(dataIngestSource).toContain("const TAB_KEYS: Tab[]");
+    expect(dataIngestSource).toContain("page.dataIngest.modules.");
+    expect(dataIngestSource).toContain('t("page.dataIngest.focusedHint")');
+    expect(dataIngestSource).not.toContain("focused: _focused");
   });
 
   it("keeps agent run operations split between focused AgentOps and platform SLO governance", () => {

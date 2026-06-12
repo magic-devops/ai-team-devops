@@ -10,6 +10,7 @@ const agentRunsSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pa
 const llmGatewaySource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/LlmGatewayWorkbench.tsx"), "utf8");
 const a2aSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ecosystem/A2aWorkbench.tsx"), "utf8");
 const knowledgeGraphSource = readFileSync(resolve(root, "subapps/ai-foundation/src/pages/ai/KnowledgeGraphWorkbench.tsx"), "utf8");
+const dataIngestSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataIngestWorkbench.tsx"), "utf8");
 const dataQualitySource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/DataQualityWorkbench.tsx"), "utf8");
 const metricsSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetricsWorkbench.tsx"), "utf8");
 const tagSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/TagWorkbench.tsx"), "utf8");
@@ -47,6 +48,11 @@ describe("navigation i18n coverage", () => {
       const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
       expect(messages.page.agentRuns.tabs.heartbeat).toBeTruthy();
       expect(messages.page.agentRuns.retryAction).toBeTruthy();
+      expect(messages.page.dataIngest.workbenchTitle).toBeTruthy();
+      expect(messages.page.dataIngest.focusedHint).toBeTruthy();
+      expect(messages.page.dataIngest.tabs.schemas).toBeTruthy();
+      expect(messages.page.dataIngest.modules.connectors.title).toBeTruthy();
+      expect(messages.page.dataIngest.modules.cdc.focus).toBeTruthy();
       expect(messages.page.dataQuality.tabs.reports).toBeTruthy();
       expect(messages.page.dataQuality.workbenchTitle).toBeTruthy();
       expect(messages.page.dataQuality.focusedHint).toBeTruthy();
@@ -73,6 +79,9 @@ describe("navigation i18n coverage", () => {
     }
     expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
     expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
+    expect(dataIngestSource).toContain("page.dataIngest.tabs.");
+    expect(dataIngestSource).toContain("page.dataIngest.modules.");
+    expect(dataIngestSource).toContain('t("page.dataIngest.workbenchTitle")');
     expect(dataQualitySource).toContain("page.dataQuality.tabs.");
     expect(dataQualitySource).toContain("page.dataQuality.modules.");
     expect(dataQualitySource).toContain('t("page.dataQuality.workbenchTitle")');

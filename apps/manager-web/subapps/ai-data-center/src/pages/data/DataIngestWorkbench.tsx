@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -9,11 +10,36 @@ import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 type Tab = "connectors" | "jobs" | "schemas" | "runs";
 
+const TAB_KEYS: Tab[] = ["connectors", "schemas", "runs", "jobs"];
+const TAB_META: Record<Tab, { titleKey: string; descriptionKey: string; focusKey: string }> = {
+  connectors: {
+    titleKey: "page.dataIngest.modules.connectors.title",
+    descriptionKey: "page.dataIngest.modules.connectors.description",
+    focusKey: "page.dataIngest.modules.connectors.focus",
+  },
+  schemas: {
+    titleKey: "page.dataIngest.modules.schema.title",
+    descriptionKey: "page.dataIngest.modules.schema.description",
+    focusKey: "page.dataIngest.modules.schema.focus",
+  },
+  runs: {
+    titleKey: "page.dataIngest.modules.cdc.title",
+    descriptionKey: "page.dataIngest.modules.cdc.description",
+    focusKey: "page.dataIngest.modules.cdc.focus",
+  },
+  jobs: {
+    titleKey: "page.dataIngest.modules.batch.title",
+    descriptionKey: "page.dataIngest.modules.batch.description",
+    focusKey: "page.dataIngest.modules.batch.focus",
+  },
+};
+
 const CONNECTOR_TYPES = ["mysql", "postgresql", "kafka", "s3", "api", "dingtalk", "wechat", "oceanbase", "starrocks"];
 const INGEST_MODES = ["batch", "cdc", "stream"];
 
-export function DataIngestWorkbench({ focused: _focused, initialTab = "connectors" }: { focused?: boolean; initialTab?: Tab }) {
+export function DataIngestWorkbench({ focused = false, initialTab = "connectors" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -88,21 +114,45 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
   const schemaItems = schemaRegistryQ.data?.items ?? [];
   const runs = runsQ.data?.items ?? [];
   const cursors = cursorsQ.data?.items ?? [];
+  const activeMetaDef = TAB_META[tab];
+  const activeMeta = {
+    title: t(activeMetaDef.titleKey),
+    description: t(activeMetaDef.descriptionKey),
+    focus: t(activeMetaDef.focusKey),
+  };
+  const tabLabel = (value: Tab) => {
+    if (value === "connectors") return `${t("page.dataIngest.tabs.connectors")} (${connectors.length})`;
+    if (value === "jobs") return `${t("page.dataIngest.tabs.jobs")} (${jobs.length})`;
+    return t(`page.dataIngest.tabs.${value}`);
+  };
 
   return (
     <div className="w-full space-y-4">
-      <WorkbenchShell title="数据接入中心" description="连接器管理与接入作业配置">
-        <div className="flex gap-1 border-b border-[var(--border)] mb-4">
-          {(["connectors", "jobs", "schemas", "runs"] as Tab[]).map(t => (
-            <button key={t} onClick={() => { setTab(t); setShowForm(false); }}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition ${tab === t ? "border-[var(--brand)] text-[var(--brand)]" : "border-transparent text-[var(--muted)] hover:text-[var(--text)]"}`}>
-              {t === "connectors" ? `连接器 (${connectors.length})` : t === "jobs" ? `接入作业 (${jobs.length})` : t === "schemas" ? "Schema Registry" : "运行历史"}
-            </button>
-          ))}
+      <WorkbenchShell title={focused ? activeMeta.title : t("page.dataIngest.workbenchTitle")} description={focused ? activeMeta.description : t("page.dataIngest.workbenchDesc")}>
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+          {focused ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataIngest.focusedTag")}</span>
+                <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
+                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataIngest.focusedHint")}</span>
+              </div>
+              <a href="#/data/ingest" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataIngest.backToHub")}</a>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {TAB_KEYS.map(tabId => (
+                <button key={tabId} onClick={() => { setTab(tabId); setShowForm(false); }}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === tabId ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}>
+                  {tabLabel(tabId)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {tab === "connectors" && (
-          <WorkbenchPanel title="连接器管理" actions={
+          <WorkbenchPanel title={t("page.dataIngest.modules.connectors.title")} actions={
             <div className="flex gap-2">
               <AiAssistButton onClick={() => setAiOpen(true)} />
               <RefreshButton onClick={() => void connQ.refetch()} pending={connQ.isFetching} />
@@ -188,7 +238,7 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
 	        )}
 
         {tab === "jobs" && (
-          <WorkbenchPanel title="接入作业" actions={
+          <WorkbenchPanel title={t("page.dataIngest.modules.batch.title")} actions={
             <div className="flex gap-2">
               <RefreshButton onClick={() => void jobsQ.refetch()} pending={jobsQ.isFetching} />
               <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建作业</button>
@@ -251,7 +301,7 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
         )}
 
         {tab === "schemas" && (
-          <WorkbenchPanel title="Schema Registry" actions={<RefreshButton onClick={() => void schemaRegistryQ.refetch()} pending={schemaRegistryQ.isFetching} />}>
+          <WorkbenchPanel title={t("page.dataIngest.modules.schema.title")} actions={<RefreshButton onClick={() => void schemaRegistryQ.refetch()} pending={schemaRegistryQ.isFetching} />}>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {schemaItems.length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无 Schema，请先执行 Dry-run 或发现 Schema</p>}
               {schemaItems.map((s: any) => (
@@ -266,7 +316,7 @@ export function DataIngestWorkbench({ focused: _focused, initialTab = "connector
         )}
 
         {tab === "runs" && (
-          <WorkbenchPanel title="运行历史与 CDC 游标" actions={<RefreshButton onClick={() => { void runsQ.refetch(); void cursorsQ.refetch(); }} pending={runsQ.isFetching || cursorsQ.isFetching} />}>
+          <WorkbenchPanel title={t("page.dataIngest.modules.cdc.title")} actions={<RefreshButton onClick={() => { void runsQ.refetch(); void cursorsQ.refetch(); }} pending={runsQ.isFetching || cursorsQ.isFetching} />}>
             <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {cursors.map((c: any) => (
                 <div key={c.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
