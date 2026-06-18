@@ -48,7 +48,7 @@ export function SystemMapHub() {
           <WorkbenchStats
             items={[
               { label: t("page.systemMap.hubReact"), value: summary.react_pages ?? 0 },
-              { label: "微应用", value: summary.micro_apps ?? microApps.length },
+              { label: t("page.systemMap.hubMicroApps"), value: summary.micro_apps ?? microApps.length },
               { label: t("page.systemMap.hubLegacy"), value: summary.legacy_pages ?? 0 },
               { label: t("page.systemMap.hubMaturity"), value: `${summary.avg_maturity ?? 0}%` },
               { label: t("page.systemMap.hubIssues"), value: summary.validation_issues ?? 0 },
@@ -57,7 +57,7 @@ export function SystemMapHub() {
         }
       />
       {microApps.length ? (
-        <Card title="微应用控制面">
+        <Card title={t("page.systemMap.microAppControlPlane")}>
           <div className="grid gap-3 lg:grid-cols-2">
             {microApps.map((app: {
               id: string;
@@ -103,10 +103,10 @@ export function SystemMapHub() {
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                     <span className="rounded-lg bg-[var(--surface-muted)] px-2 py-1.5 text-[var(--muted-strong)]">
-                      模块 {app.module_count}
+                      {t("page.systemMap.hubModules")} {app.module_count}
                     </span>
                     <span className="rounded-lg bg-[var(--surface-muted)] px-2 py-1.5 text-[var(--muted-strong)]">
-                      能力 {app.capability_count}
+                      {t("page.systemMap.hubCapabilities")} {app.capability_count}
                     </span>
                     <span className="rounded-lg bg-[var(--surface-muted)] px-2 py-1.5 text-[var(--muted-strong)]">
                       {app.entry}

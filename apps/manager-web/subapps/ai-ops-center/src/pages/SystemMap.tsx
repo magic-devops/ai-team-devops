@@ -56,7 +56,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`inline-flex h-6 w-fit items-center rounded-full px-2.5 text-xs font-medium ${cls}`}>{status}</span>;
 }
 
-export function SystemMap({ initialSection = "overview" }: { focused?: boolean; initialSection?: SystemMapSection }) {
+export function SystemMap({ focused = false, initialSection = "overview" }: { focused?: boolean; initialSection?: SystemMapSection }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
@@ -432,8 +432,31 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
     { label: t("nav.sub.migration", { defaultValue: "迁移任务" }), value: "migration" },
   ];
   const isContractSection = section === "module-contract" || section === "manifest" || section === "capabilities" || section === "actions";
+  const isFocusedRoute = focused && section !== "overview";
   const activeContractPanel: ContractPanel =
     section === "capabilities" || section === "actions" || section === "manifest" ? section : contractPanel;
+  const displayedSection = isContractSection ? "module-contract" : section;
+  const displayedSectionLabel = sectionOptions.find((item) => item.value === displayedSection)?.label ?? t("page.systemMap.title");
+  const focusedHintKey = isContractSection ? "contract" : displayedSection;
+  const navigateSection = (value: SystemMapSection | "overview") => {
+    if (value === "overview") {
+      setSection("overview");
+      window.location.hash = "#/system-map";
+      return;
+    }
+    setSection(value as SystemMapSection);
+    if (value === "module-contract") setContractPanel("manifest");
+    const pathBySection: Partial<Record<SystemMapSection, string>> = {
+      "baseline-compare": "baseline-compare",
+      "module-contract": "contract",
+      performance: "performance",
+      "source-scan": "source-scan",
+      isolation: "three-code-isolation",
+      tasks: "governance-tasks",
+    };
+    const nextPath = pathBySection[value as SystemMapSection] ?? String(value);
+    window.location.hash = `#/system-map/${nextPath}`;
+  };
   const showOverview = section === "overview";
   const showRegistry = section === "registry";
   const showReadiness = section === "readiness";
@@ -598,8 +621,12 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
             <Layers3 className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-lg font-semibold text-[var(--text)]">{t("page.systemMap.title")}</h1>
-            <p className="text-sm text-[var(--muted)]">{t("page.systemMap.subtitle")}</p>
+            <h1 className="text-lg font-semibold text-[var(--text)]">{isFocusedRoute ? displayedSectionLabel : t("page.systemMap.title")}</h1>
+            <p className="text-sm text-[var(--muted)]">
+              {isFocusedRoute
+                ? t(`page.systemMap.focusHint.${focusedHintKey}`, { defaultValue: t("page.systemMap.subtitle") })
+                : t("page.systemMap.subtitle")}
+            </p>
           </div>
         </div>
         <button
@@ -615,34 +642,33 @@ export function SystemMap({ initialSection = "overview" }: { focused?: boolean; 
       {q.isLoading ? <LoadingBlock /> : null}
       {q.isError ? <ErrorBlock message={(q.error as Error).message} /> : null}
 
-      <div className="systemMapFocusedNav overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
-        <Segmented
-          value={isContractSection ? "module-contract" : section}
-          onChange={(value) => {
-            if (value === "overview") {
-              setSection("overview");
-              window.location.hash = "#/system-map";
-              return;
-            }
-            setSection(value as SystemMapSection);
-            if (value === "module-contract") setContractPanel("manifest");
-            const pathBySection: Partial<Record<SystemMapSection, string>> = {
-              "baseline-compare": "baseline-compare",
-              "module-contract": "contract",
-              performance: "performance",
-              "source-scan": "source-scan",
-              isolation: "three-code-isolation",
-              tasks: "governance-tasks",
-            };
-            const nextPath = pathBySection[value as SystemMapSection] ?? String(value);
-            window.location.hash = `#/system-map/${nextPath}`;
-          }}
-          options={[
-            { label: t("nav.systemMap"), value: "overview" },
-            ...sectionOptions,
-          ]}
-        />
-      </div>
+      {isFocusedRoute ? (
+        <div className="systemMapFocusedNav flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="min-w-0">
+            <a className="text-xs font-medium text-[var(--brand)] hover:underline" href="#/system-map">
+              {t("page.systemMap.backToHub")}
+            </a>
+            <p className="mt-1 text-sm font-semibold text-[var(--text)]">{displayedSectionLabel}</p>
+          </div>
+          <Select
+            className="min-w-56"
+            value={displayedSection}
+            onChange={(value) => navigateSection(value as SystemMapSection)}
+            options={sectionOptions.map((item) => ({ label: item.label, value: item.value }))}
+          />
+        </div>
+      ) : (
+        <div className="systemMapFocusedNav overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2">
+          <Segmented
+            value={displayedSection}
+            onChange={(value) => navigateSection(value as SystemMapSection | "overview")}
+            options={[
+              { label: t("nav.systemMap"), value: "overview" },
+              ...sectionOptions,
+            ]}
+          />
+        </div>
+      )}
 
       {showOverview ? (
       <Card title={t("page.systemMap.whatIsThis")}>

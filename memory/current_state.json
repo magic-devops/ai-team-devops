@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-12T14:28:04Z",
+  "updated_at": "2026-06-18T04:55:00Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -421,17 +421,18 @@
       "完成 Task 160 标签服务聚焦子路由与多语言收敛：Tag 工作台不再忽略 focused 入参，标签目录、打标规则、画像本体和画像/API 子路由进入时显示当前专业模块身份、聚焦职责和返回标签服务动作，父入口才展示模块切换；保留标签创建删除、规则创建测试、实体注册契约发布、画像构建与发布真实功能；Workbench 标题、描述、模块职责和聚焦提示接入 page.tagService 三语种文案；导航 IA 与 i18n 契约测试同步防止标签专业入口退化为同一个泛化大页面。",
       "完成 Task 161 数据开发工作台聚焦子路由与引擎分流：DataDev 工作台不再忽略 focused 入参，SQL 开发、Spark 作业、Flink 作业和调度历史子路由进入时显示当前专业模块身份、聚焦职责和返回数据开发动作；SQL/Spark/Flink 入口复用真实模板目录能力但按引擎过滤模板，避免三个菜单落到完全相同页面；保留模板 upsert、任务预览/生成、调度 dry-run/apply、执行包领取/心跳/回写、质量证据任务化和 Runbook 任务化真实功能；Workbench 标题、指标、模块职责和聚焦提示接入 page.dataDev 三语种文案，导航 IA 与 i18n 契约测试同步防退化。",
       "完成 Task 162 数据接入中心聚焦子路由与多语言收敛：DataIngest 工作台不再忽略 focused 入参，连接器、Schema Registry、CDC 游标/运行历史和批量作业子路由进入时显示当前专业模块身份、聚焦职责和返回数据接入中心动作，父入口才展示模块切换；保留连接器创建/测试/Dry-run/Schema 发现、Schema Registry、接入作业创建/运行/完成回写、运行历史和 CDC 游标真实功能；Workbench 标题、描述、模块职责和聚焦提示接入 page.dataIngest 三语种文案，导航 IA 与 i18n 契约测试同步防止数据接入专业入口退化为大杂烩页面。",
-      "完成 Task 163 智能运维中心聚焦子路由与多语言收敛：OpsCenter 工作台不再忽略 focused 入参，部署流水线、告警源治理、RCA、Runbook 和自愈策略子路由进入时显示当前专业模块标题、职责、输出/聚焦标签和返回运维总览动作，父入口才展示完整 Segmented 模块切换；保留流水线、告警源、RCA、Runbook、自愈策略和护栏动作等真实子模块懒加载能力；Workbench 标题、指标卡、模块描述、输出说明和 AI 分析动作接入 page.opsCenter 三语种文案，导航 IA 与 i18n 契约测试同步防止运维专业入口退化为同一个大页面。"
+      "完成 Task 163 智能运维中心聚焦子路由与多语言收敛：OpsCenter 工作台不再忽略 focused 入参，部署流水线、告警源治理、RCA、Runbook 和自愈策略子路由进入时显示当前专业模块标题、职责、输出/聚焦标签和返回运维总览动作，父入口才展示完整 Segmented 模块切换；保留流水线、告警源、RCA、Runbook、自愈策略和护栏动作等真实子模块懒加载能力；Workbench 标题、指标卡、模块描述、输出说明和 AI 分析动作接入 page.opsCenter 三语种文案，导航 IA 与 i18n 契约测试同步防止运维专业入口退化为同一个大页面。",
+      "完成 Task 164 SystemMap 聚焦子路由轻量化与 Hub 多语言收口：SystemMap focused 子路由现在显示当前专业模块标题、聚焦说明、返回模块治理总览和轻量模块切换，不再在子页顶部展示完整大分段导航；#/system-map/registry、readiness、performance、three-code-isolation、source-scan、baseline-compare、governance-tasks、contract、migration 保留真实查询、任务化、动作预览/执行和权限链路；SystemMapHub 微应用控制面、微应用/模块/能力指标补齐三语种 i18n，避免中英文混杂和菜单 fallback。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 163 智能运维中心聚焦子路由与多语言收敛已完成；部署流水线、告警源、RCA、Runbook 和自愈入口不再展示完整模块切换条，继续推进剩余复杂工作台的简单高效、模块化和产品化。"
+    "current": "Task 164 SystemMap 聚焦子路由轻量化与 Hub 多语言收口已完成；继续推进剩余页面的专业子路由、真实功能闭环、多语言和自适配体验优化。"
   },
   "metrics": {
     "completion_rate": 100,
     "velocity": 0,
     "blockers_count": 0
   },
-  "current": "Task 163 智能运维中心聚焦子路由与多语言收敛已完成；部署流水线、告警源、RCA、Runbook 和自愈入口不再展示完整模块切换条，继续推进剩余复杂工作台的简单高效、模块化和产品化。"
+  "current": "Task 164 SystemMap 聚焦子路由轻量化与 Hub 多语言收口已完成；继续推进剩余页面的专业子路由、真实功能闭环、多语言和自适配体验优化。"
 }
