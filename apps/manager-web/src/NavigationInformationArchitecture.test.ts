@@ -144,10 +144,37 @@ describe("navigation information architecture", () => {
   });
 
   it("keeps data source management split into connection metadata and security governance routes", () => {
+    const dataSourcesSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/intelligence/DataSourcesWorkbench.tsx"), "utf8");
+    const metadataSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetadataManagementWorkbench.tsx"), "utf8");
     expect(navigationSource).toContain('key: "dataSources"');
     expect(navigationSource).toContain('数据源管理：连接目录、SecretRef、元数据发现、安全治理与 Schema Registry 同步');
     expect(navigationSource).toContain('key: "dataSourcesSecurity", path: "#/data/sources/security"');
     expect(navigationSource).toContain('pageElement(DataSourcesWorkbenchPage, { focused: true, initialView: "security" })');
+    expect(dataSourcesSource).toContain('const VIEW_KEYS: DataSourceView[]');
+    expect(dataSourcesSource).toContain("page.dataSources.modules.");
+    expect(dataSourcesSource).toContain('t("page.dataSources.focusedHint")');
+    expect(dataSourcesSource).toContain('t("page.dataSources.workbenchTitle")');
+    expect(dataSourcesSource).toContain("VIEW_HREF");
+    expect(navigationSource).toContain('key: "metadataManagement"');
+    expect(navigationSource).toContain('submodules: subnav("data/metadata", "overview", "assets", "fields", "lineage")');
+    expect(metadataSource).toContain("const VIEW_KEYS: MetadataView[]");
+    expect(metadataSource).toContain("page.metadataManagement.modules.");
+    expect(metadataSource).toContain('t("page.metadataManagement.focusedHint")');
+    expect(metadataSource).toContain('t("page.metadataManagement.workbenchTitle")');
+  });
+
+  it("keeps metadata management split into focused asset field and lineage routes", () => {
+    const metadataSource = readFileSync(resolve(root, "subapps/ai-data-center/src/pages/data/MetadataManagementWorkbench.tsx"), "utf8");
+    expect(navigationSource).toContain('key: "metadataManagement"');
+    expect(navigationSource).toContain('元数据管理：资产、字段、分类和血缘影响');
+    expect(navigationSource).toContain('key: "metadataFields", path: "#/data/metadata/fields"');
+    expect(navigationSource).toContain('key: "metadataLineage", path: "#/data/metadata/lineage"');
+    expect(navigationSource).toContain('pageElement(MetadataManagementWorkbenchPage, { focused: true, initialView: "assets" })');
+    expect(metadataSource).toContain("page.metadataManagement.modules.");
+    expect(metadataSource).toContain('t("page.metadataManagement.workbenchTitle")');
+    expect(metadataSource).toContain('t("page.metadataManagement.focusedHint")');
+    expect(metadataSource).toContain('api.metadataClassifyAsset');
+    expect(metadataSource).not.toContain("focused: _focused");
   });
 
   it("keeps intelligence as a light hub while focused pages own the detailed work", () => {

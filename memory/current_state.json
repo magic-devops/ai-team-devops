@@ -1,7 +1,7 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-19T04:08:00Z",
+  "updated_at": "2026-06-19T04:12:21Z",
   "phase": "INIT",
   "sprint": null,
   "tasks": {
@@ -423,17 +423,18 @@
       "完成 Task 162 数据接入中心聚焦子路由与多语言收敛：DataIngest 工作台不再忽略 focused 入参，连接器、Schema Registry、CDC 游标/运行历史和批量作业子路由进入时显示当前专业模块身份、聚焦职责和返回数据接入中心动作，父入口才展示模块切换；保留连接器创建/测试/Dry-run/Schema 发现、Schema Registry、接入作业创建/运行/完成回写、运行历史和 CDC 游标真实功能；Workbench 标题、描述、模块职责和聚焦提示接入 page.dataIngest 三语种文案，导航 IA 与 i18n 契约测试同步防止数据接入专业入口退化为大杂烩页面。",
       "完成 Task 163 智能运维中心聚焦子路由与多语言收敛：OpsCenter 工作台不再忽略 focused 入参，部署流水线、告警源治理、RCA、Runbook 和自愈策略子路由进入时显示当前专业模块标题、职责、输出/聚焦标签和返回运维总览动作，父入口才展示完整 Segmented 模块切换；保留流水线、告警源、RCA、Runbook、自愈策略和护栏动作等真实子模块懒加载能力；Workbench 标题、指标卡、模块描述、输出说明和 AI 分析动作接入 page.opsCenter 三语种文案，导航 IA 与 i18n 契约测试同步防止运维专业入口退化为同一个大页面。",
       "完成 Task 164 SystemMap 聚焦子路由轻量化与 Hub 多语言收口：SystemMap focused 子路由现在显示当前专业模块标题、聚焦说明、返回模块治理总览和轻量模块切换，不再在子页顶部展示完整大分段导航；#/system-map/registry、readiness、performance、three-code-isolation、source-scan、baseline-compare、governance-tasks、contract、migration 保留真实查询、任务化、动作预览/执行和权限链路；SystemMapHub 微应用控制面、微应用/模块/能力指标补齐三语种 i18n，避免中英文混杂和菜单 fallback。",
-      "完成 Task 165 Agent 运行中心聚焦化与交互产品化：AgentRunsWorkbench 不再吞掉 focused 入参，运行列表、心跳监控、能力画像和失败重试子路由进入时展示当前模块标题、聚焦说明、返回 AgentOps 和轻量模块切换；运行列表从手写 table/select/button 升级为 Ant Design Table/Select/Button/Tag，并为移动端提供卡片流；保留真实创建运行、心跳、状态流转、重试、取消、补证据和删除 API；AgentOpsHub 模块卡片和指标补齐三语种 i18n，导航 IA/i18n 契约测试防止回退。"
+      "完成 Task 165 Agent 运行中心聚焦化与交互产品化：AgentRunsWorkbench 不再吞掉 focused 入参，运行列表、心跳监控、能力画像和失败重试子路由进入时展示当前模块标题、聚焦说明、返回 AgentOps 和轻量模块切换；运行列表从手写 table/select/button 升级为 Ant Design Table/Select/Button/Tag，并为移动端提供卡片流；保留真实创建运行、心跳、状态流转、重试、取消、补证据和删除 API；AgentOpsHub 模块卡片和指标补齐三语种 i18n，导航 IA/i18n 契约测试防止回退。",
+      "完成 Task 166 数据源与元数据管理聚焦模块契约和多语言产品化：DataSourcesWorkbench 抽出 overview/connections/metadata/security 模块配置和真实路由跳转，focused 子路由显示当前模块标题、聚焦职责、返回数据源管理和轻量模块切换；MetadataManagementWorkbench 补齐 overview/assets/fields/lineage 模块配置、聚焦切换、指标、治理弹窗、字段/资产/血缘文案和 AI 助手多语言；保留连接 CRUD、连通性测试、元数据预览/同步、安全扫描、资产分类治理和血缘影响查询等真实 API 闭环；导航 IA 与 i18n 契约测试同步防止核心数据治理入口退化为硬编码页面。"
     ],
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 165 Agent 运行中心聚焦化与交互产品化已完成；继续推进剩余页面的专业子路由、真实功能闭环、多语言和自适配体验优化。"
+    "current": "Task 166 数据源与元数据管理聚焦模块契约和多语言产品化已完成；继续推进标签服务、指标中心等核心数据治理模块的专业化和智能化闭环。"
   },
   "metrics": {
     "completion_rate": 100,
     "velocity": 0,
     "blockers_count": 0
   },
-  "current": "Task 165 Agent 运行中心聚焦化与交互产品化已完成；继续推进剩余页面的专业子路由、真实功能闭环、多语言和自适配体验优化。"
+  "current": "Task 166 数据源与元数据管理聚焦模块契约和多语言产品化已完成；继续推进标签服务、指标中心等核心数据治理模块的专业化和智能化闭环。"
 }

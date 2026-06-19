@@ -3,6 +3,7 @@ import { App, Button, Form, Input, Modal, Select, Space, Table, Tag as AntTag } 
 import type { ColumnsType } from "antd/es/table";
 import { Database, FileSearch, Network, RefreshCcw, ShieldCheck, Tags } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
@@ -11,6 +12,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 type MetadataView = "overview" | "assets" | "fields" | "lineage";
+const VIEW_KEYS: MetadataView[] = ["overview", "assets", "fields", "lineage"];
 
 type AssetRow = {
   id: string;
@@ -51,11 +53,11 @@ type ClassifyForm = {
   note?: string;
 };
 
-const VIEW_META: Record<MetadataView, { title: string; description: string }> = {
-  overview: { title: "元数据管理", description: "资产、字段、分类和血缘影响的统一元数据控制面。" },
-  assets: { title: "元数据资产目录", description: "维护资产负责人、状态、密级、标签和治理规则。" },
-  fields: { title: "字段元数据", description: "按资产和敏感级别检索字段、类型、来源和分类候选。" },
-  lineage: { title: "血缘影响分析", description: "按资产查看上下游影响范围和变更风险。" },
+const VIEW_HREF: Record<MetadataView, string> = {
+  overview: "#/data/metadata/overview",
+  assets: "#/data/metadata/assets",
+  fields: "#/data/metadata/fields",
+  lineage: "#/data/metadata/lineage",
 };
 
 const SECURITY_LEVELS = ["public", "internal", "confidential", "restricted"];
@@ -76,15 +78,20 @@ function scoreColor(score?: number) {
   return "red";
 }
 
+function normalizeView(view?: string): MetadataView {
+  return view && VIEW_KEYS.includes(view as MetadataView) ? (view as MetadataView) : "overview";
+}
+
 export function MetadataManagementWorkbench({
   focused = false,
   initialView = "overview",
 }: {
   focused?: boolean;
-  initialView?: MetadataView;
+  initialView?: string;
 }) {
   const authed = Boolean(getToken());
   const { message } = App.useApp();
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const [domain, setDomain] = useState("");
   const [status, setStatus] = useState("");
@@ -97,7 +104,7 @@ export function MetadataManagementWorkbench({
   const [editingAsset, setEditingAsset] = useState<AssetRow | null>(null);
   const [form] = Form.useForm<ClassifyForm>();
 
-  const view = initialView;
+  const view = normalizeView(initialView);
   const summaryQ = useQuery({ queryKey: ["metadataSummary"], queryFn: api.metadataSummary, enabled: authed });
   const assetsQ = useQuery({
     queryKey: ["metadataAssets", domain, status, assetQ],
@@ -155,7 +162,7 @@ export function MetadataManagementWorkbench({
       setClassifyOpen(false);
       setEditingAsset(null);
       refreshAll();
-      message.success("元数据分类已更新");
+      message.success(t("page.metadataManagement.updated"));
     },
     onError: (err) => message.error((err as Error).message),
   });
@@ -166,32 +173,56 @@ export function MetadataManagementWorkbench({
   if (!authed) return <NeedLogin />;
   if (summaryQ.isLoading || assetsQ.isLoading) return <LoadingBlock />;
 
-  const shell = VIEW_META[view];
+  const viewOptions = VIEW_KEYS.map((key) => ({
+    value: key,
+    label: t(`page.metadataManagement.modules.${key}.title`),
+  }));
 
   return (
     <WorkbenchShell
-      title={shell.title}
-      description={focused ? shell.description : "企业元数据管理控制面。"}
+      title={focused ? t(`page.metadataManagement.modules.${view}.title`) : t("page.metadataManagement.workbenchTitle")}
+      description={focused ? t(`page.metadataManagement.modules.${view}.description`) : t("page.metadataManagement.workbenchDesc")}
       actions={
         <Space wrap>
           <AiAssistButton onClick={() => setAiOpen(true)} />
-          <Button icon={<RefreshCcw className="h-4 w-4" />} onClick={refreshAll}>刷新</Button>
+          <Button icon={<RefreshCcw className="h-4 w-4" />} onClick={refreshAll}>{t("common.refresh")}</Button>
         </Space>
       }
       metrics={
         <WorkbenchStats
           items={[
-            { label: "资产", value: summary.assets ?? 0 },
-            { label: "字段", value: summary.fields ?? 0 },
-            { label: "敏感字段", value: summary.sensitive_fields ?? 0 },
-            { label: "元数据健康", value: summary.metadata_score ?? 0 },
+            { label: t("page.metadataManagement.metrics.assets"), value: summary.assets ?? 0 },
+            { label: t("page.metadataManagement.metrics.fields"), value: summary.fields ?? 0 },
+            { label: t("page.metadataManagement.metrics.sensitiveFields"), value: summary.sensitive_fields ?? 0 },
+            { label: t("page.metadataManagement.metrics.metadataScore"), value: summary.metadata_score ?? 0 },
           ]}
         />
       }
     >
-      {view === "overview" ? <Overview summary={summary} domains={domains} /> : null}
+      {focused ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.metadataManagement.focusedTag")}</span>
+              <a href="#/data/metadata" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.metadataManagement.backToHub")}</a>
+              <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.metadataManagement.focusedHint")}</span>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-[var(--text)]">{t(`page.metadataManagement.modules.${view}.title`)}</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t(`page.metadataManagement.modules.${view}.focus`)}</p>
+          </div>
+          <Select
+            className="min-w-52"
+            value={view}
+            options={viewOptions}
+            onChange={(next) => { window.location.hash = VIEW_HREF[next as MetadataView].slice(1); }}
+          />
+        </div>
+      ) : null}
+
+      {view === "overview" ? <Overview summary={summary} domains={domains} t={t} /> : null}
       {view === "assets" ? (
         <AssetsPanel
+          t={t}
           assets={assets}
           loading={assetsQ.isFetching}
           domain={domain}
@@ -206,6 +237,7 @@ export function MetadataManagementWorkbench({
       ) : null}
       {view === "fields" ? (
         <FieldsPanel
+          t={t}
           assets={assetOptions}
           fields={fields}
           loading={fieldsQ.isFetching}
@@ -219,6 +251,7 @@ export function MetadataManagementWorkbench({
       ) : null}
       {view === "lineage" ? (
         <LineagePanel
+          t={t}
           assetOptions={assetOptions}
           assetId={defaultLineageAsset}
           onAsset={(value) => setSelectedAssetId(value)}
@@ -228,6 +261,7 @@ export function MetadataManagementWorkbench({
       ) : null}
 
       <ClassifyModal
+        t={t}
         open={classifyOpen}
         asset={editingAsset}
         form={form}
@@ -235,16 +269,16 @@ export function MetadataManagementWorkbench({
         onCancel={() => setClassifyOpen(false)}
         onSubmit={(values) => classifyMut.mutate(values)}
       />
-      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="metadata-management" title="元数据管理 AI 助手" initialPrompt="请分析当前资产负责人、敏感字段、质量规则和血缘声明缺口，并生成可执行的元数据治理建议。" />
+      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="metadata-management" title={t("page.metadataManagement.aiTitle")} initialPrompt={t("page.metadataManagement.aiPrompt")} />
     </WorkbenchShell>
   );
 }
 
-function Overview({ summary, domains }: { summary: any; domains: Array<{ name: string; count: number }> }) {
+function Overview({ summary, domains, t }: { summary: any; domains: Array<{ name: string; count: number }>; t: (key: string) => string }) {
   const modules = [
-    { href: "#/data/metadata/assets", icon: Database, title: "资产目录", desc: "负责人、密级、标签与质量规则" },
-    { href: "#/data/metadata/fields", icon: FileSearch, title: "字段元数据", desc: "字段类型、来源、敏感候选与分类" },
-    { href: "#/data/metadata/lineage", icon: Network, title: "血缘影响", desc: "上下游影响和变更风险范围" },
+    { key: "assets", href: "#/data/metadata/assets", icon: Database },
+    { key: "fields", href: "#/data/metadata/fields", icon: FileSearch },
+    { key: "lineage", href: "#/data/metadata/lineage", icon: Network },
   ];
   return (
     <div className="space-y-4">
@@ -256,8 +290,8 @@ function Overview({ summary, domains }: { summary: any; domains: Array<{ name: s
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-[var(--brand-soft)] p-2 text-[var(--brand)]"><Icon className="h-5 w-5" /></span>
                 <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-[var(--text)]">{item.title}</span>
-                  <span className="mt-1 block text-xs text-[var(--muted)]">{item.desc}</span>
+                  <span className="block text-sm font-semibold text-[var(--text)]">{t(`page.metadataManagement.modules.${item.key}.title`)}</span>
+                  <span className="mt-1 block text-xs text-[var(--muted)]">{t(`page.metadataManagement.modules.${item.key}.focus`)}</span>
                 </span>
               </div>
             </a>
@@ -265,16 +299,16 @@ function Overview({ summary, domains }: { summary: any; domains: Array<{ name: s
         })}
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <WorkbenchPanel title="治理缺口">
+        <WorkbenchPanel title={t("page.metadataManagement.panels.gaps")}>
           <div className="grid gap-3 sm:grid-cols-3">
-            <RiskTile label="缺负责人资产" value={summary.missing_owner ?? 0} tone="red" />
-            <RiskTile label="缺血缘资产" value={summary.missing_lineage ?? 0} tone="gold" />
-            <RiskTile label="质量观察资产" value={summary.quality_watch ?? 0} tone="blue" />
+            <RiskTile label={t("page.metadataManagement.gaps.missingOwner")} value={summary.missing_owner ?? 0} tone="red" />
+            <RiskTile label={t("page.metadataManagement.gaps.missingLineage")} value={summary.missing_lineage ?? 0} tone="gold" />
+            <RiskTile label={t("page.metadataManagement.gaps.qualityWatch")} value={summary.quality_watch ?? 0} tone="blue" />
           </div>
         </WorkbenchPanel>
-        <WorkbenchPanel title="领域分布">
+        <WorkbenchPanel title={t("page.metadataManagement.panels.domainDistribution")}>
           <div className="space-y-2">
-            {domains.length === 0 ? <p className="text-sm text-[var(--muted)]">暂无领域资产</p> : null}
+            {domains.length === 0 ? <p className="text-sm text-[var(--muted)]">{t("page.metadataManagement.emptyDomains")}</p> : null}
             {domains.map((item) => (
               <div key={item.name} className="flex items-center justify-between rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
                 <span>{item.name}</span>
@@ -299,6 +333,7 @@ function RiskTile({ label, value, tone }: { label: string; value: number; tone: 
 }
 
 function AssetsPanel({
+  t,
   assets,
   loading,
   domain,
@@ -310,6 +345,7 @@ function AssetsPanel({
   onSearch,
   onClassify,
 }: {
+  t: (key: string) => string;
   assets: AssetRow[];
   loading: boolean;
   domain: string;
@@ -323,7 +359,7 @@ function AssetsPanel({
 }) {
   const columns: ColumnsType<AssetRow> = [
     {
-      title: "资产",
+      title: t("page.metadataManagement.assets.asset"),
       dataIndex: "name",
       render: (_, row) => (
         <div className="min-w-[180px]">
@@ -332,25 +368,25 @@ function AssetsPanel({
         </div>
       ),
     },
-    { title: "领域", dataIndex: "domain", width: 110, render: (value) => <AntTag>{value}</AntTag> },
-    { title: "来源", dataIndex: "source", width: 140 },
-    { title: "负责人", dataIndex: "owner", width: 120, render: (value) => value || <span className="text-red-500">待补齐</span> },
-    { title: "密级", dataIndex: "security_level", width: 120, render: (value) => <AntTag color={value === "restricted" || value === "confidential" ? "red" : "blue"}>{value}</AntTag> },
-    { title: "质量", dataIndex: "quality_score", width: 100, render: (value) => <AntTag color={scoreColor(value)}>{value ?? 0}</AntTag> },
-    { title: "血缘", dataIndex: "lineage_count", width: 90, render: (value) => value || <span className="text-amber-600">待声明</span> },
+    { title: t("page.metadataManagement.assets.domain"), dataIndex: "domain", width: 110, render: (value) => <AntTag>{value}</AntTag> },
+    { title: t("page.metadataManagement.assets.source"), dataIndex: "source", width: 140 },
+    { title: t("page.metadataManagement.assets.owner"), dataIndex: "owner", width: 120, render: (value) => value || <span className="text-red-500">{t("page.metadataManagement.assets.missingOwner")}</span> },
+    { title: t("page.metadataManagement.assets.securityLevel"), dataIndex: "security_level", width: 120, render: (value) => <AntTag color={value === "restricted" || value === "confidential" ? "red" : "blue"}>{value}</AntTag> },
+    { title: t("page.metadataManagement.assets.quality"), dataIndex: "quality_score", width: 100, render: (value) => <AntTag color={scoreColor(value)}>{value ?? 0}</AntTag> },
+    { title: t("page.metadataManagement.assets.lineage"), dataIndex: "lineage_count", width: 90, render: (value) => value || <span className="text-amber-600">{t("page.metadataManagement.assets.missingLineage")}</span> },
     {
-      title: "操作",
+      title: t("page.metadataManagement.assets.actions"),
       key: "actions",
       width: 120,
-      render: (_, row) => <Button size="small" icon={<ShieldCheck className="h-4 w-4" />} onClick={() => onClassify(row)}>分类治理</Button>,
+      render: (_, row) => <Button size="small" icon={<ShieldCheck className="h-4 w-4" />} onClick={() => onClassify(row)}>{t("page.metadataManagement.assets.classify")}</Button>,
     },
   ];
   return (
-    <WorkbenchPanel title="资产目录">
+    <WorkbenchPanel title={t("page.metadataManagement.modules.assets.title")}>
       <div className="mb-4 grid gap-3 lg:grid-cols-[180px_180px_1fr]">
-        <Select allowClear placeholder="领域" value={domain || undefined} options={domainOptions} onChange={(value) => onDomain(value || "")} />
-        <Select allowClear placeholder="状态" value={status || undefined} options={STATUSES.map((value) => ({ label: value, value }))} onChange={(value) => onStatus(value || "")} />
-        <Input.Search placeholder="搜索资产、来源、负责人或标签" value={assetQ} onChange={(event) => onSearch(event.target.value)} allowClear />
+        <Select allowClear placeholder={t("page.metadataManagement.assets.domain")} value={domain || undefined} options={domainOptions} onChange={(value) => onDomain(value || "")} />
+        <Select allowClear placeholder={t("page.metadataManagement.assets.status")} value={status || undefined} options={STATUSES.map((value) => ({ label: value, value }))} onChange={(value) => onStatus(value || "")} />
+        <Input.Search placeholder={t("page.metadataManagement.assets.searchPlaceholder")} value={assetQ} onChange={(event) => onSearch(event.target.value)} allowClear />
       </div>
       <Table rowKey="id" columns={columns} dataSource={assets} loading={loading} size="middle" scroll={{ x: 980 }} pagination={{ pageSize: 10 }} />
     </WorkbenchPanel>
@@ -358,6 +394,7 @@ function AssetsPanel({
 }
 
 function FieldsPanel({
+  t,
   assets,
   fields,
   loading,
@@ -368,6 +405,7 @@ function FieldsPanel({
   onQuery,
   onSensitive,
 }: {
+  t: (key: string) => string;
   assets: Array<{ label: string; value: string }>;
   fields: FieldRow[];
   loading: boolean;
@@ -380,7 +418,7 @@ function FieldsPanel({
 }) {
   const columns: ColumnsType<FieldRow> = [
     {
-      title: "字段",
+      title: t("page.metadataManagement.fields.field"),
       dataIndex: "name",
       render: (_, row) => (
         <div className="min-w-[180px]">
@@ -389,18 +427,18 @@ function FieldsPanel({
         </div>
       ),
     },
-    { title: "类型", dataIndex: "type", width: 120 },
-    { title: "来源", dataIndex: "source", width: 150 },
-    { title: "敏感级别", dataIndex: "sensitivity", width: 120, render: (value) => <AntTag color={value === "sensitive" ? "red" : "green"}>{value}</AntTag> },
-    { title: "分类", dataIndex: "classification", width: 150 },
-    { title: "质量标记", dataIndex: "quality_flags", render: (value) => asList(value).map((flag) => <AntTag key={flag} color="gold">{flag}</AntTag>) },
+    { title: t("page.metadataManagement.fields.type"), dataIndex: "type", width: 120 },
+    { title: t("page.metadataManagement.fields.source"), dataIndex: "source", width: 150 },
+    { title: t("page.metadataManagement.fields.sensitivity"), dataIndex: "sensitivity", width: 120, render: (value) => <AntTag color={value === "sensitive" ? "red" : "green"}>{value}</AntTag> },
+    { title: t("page.metadataManagement.fields.classification"), dataIndex: "classification", width: 150 },
+    { title: t("page.metadataManagement.fields.qualityFlags"), dataIndex: "quality_flags", render: (value) => asList(value).map((flag) => <AntTag key={flag} color="gold">{flag}</AntTag>) },
   ];
   return (
-    <WorkbenchPanel title="字段目录">
+    <WorkbenchPanel title={t("page.metadataManagement.modules.fields.title")}>
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(240px,360px)_180px_1fr]">
-        <Select allowClear showSearch placeholder="选择资产" value={assetId || undefined} options={assets} onChange={(value) => onAsset(value || "")} optionFilterProp="label" />
-        <Select value={sensitive} options={[{ label: "全部字段", value: "all" }, { label: "仅敏感字段", value: "sensitive" }, { label: "仅普通字段", value: "normal" }]} onChange={onSensitive} />
-        <Input.Search placeholder="搜索字段、类型、来源" value={query} onChange={(event) => onQuery(event.target.value)} allowClear />
+        <Select allowClear showSearch placeholder={t("page.metadataManagement.fields.selectAsset")} value={assetId || undefined} options={assets} onChange={(value) => onAsset(value || "")} optionFilterProp="label" />
+        <Select value={sensitive} options={[{ label: t("page.metadataManagement.fields.allFields"), value: "all" }, { label: t("page.metadataManagement.fields.sensitiveOnly"), value: "sensitive" }, { label: t("page.metadataManagement.fields.normalOnly"), value: "normal" }]} onChange={onSensitive} />
+        <Input.Search placeholder={t("page.metadataManagement.fields.searchPlaceholder")} value={query} onChange={(event) => onQuery(event.target.value)} allowClear />
       </div>
       <Table rowKey="id" columns={columns} dataSource={fields} loading={loading} size="middle" scroll={{ x: 880 }} pagination={{ pageSize: 10 }} />
     </WorkbenchPanel>
@@ -408,12 +446,14 @@ function FieldsPanel({
 }
 
 function LineagePanel({
+  t,
   assetOptions,
   assetId,
   onAsset,
   impact,
   loading,
 }: {
+  t: (key: string) => string;
   assetOptions: Array<{ label: string; value: string }>;
   assetId: string;
   onAsset: (value: string) => void;
@@ -424,12 +464,12 @@ function LineagePanel({
   const downstream = impact?.downstream ?? [];
   return (
     <div className="space-y-4">
-      <WorkbenchPanel title="资产选择">
-        <Select className="w-full max-w-xl" showSearch placeholder="选择资产" value={assetId || undefined} options={assetOptions} onChange={onAsset} optionFilterProp="label" />
+      <WorkbenchPanel title={t("page.metadataManagement.lineage.assetSelect")}>
+        <Select className="w-full max-w-xl" showSearch placeholder={t("page.metadataManagement.fields.selectAsset")} value={assetId || undefined} options={assetOptions} onChange={onAsset} optionFilterProp="label" />
       </WorkbenchPanel>
       <div className="grid gap-4 lg:grid-cols-2">
-        <LineageList title="上游依赖" rows={upstream} loading={loading} empty="暂无上游依赖" />
-        <LineageList title="下游影响" rows={downstream} loading={loading} empty="暂无下游影响" />
+        <LineageList title={t("page.metadataManagement.lineage.upstream")} rows={upstream} loading={loading} empty={t("page.metadataManagement.lineage.emptyUpstream")} />
+        <LineageList title={t("page.metadataManagement.lineage.downstream")} rows={downstream} loading={loading} empty={t("page.metadataManagement.lineage.emptyDownstream")} />
       </div>
     </div>
   );
@@ -453,6 +493,7 @@ function LineageList({ title, rows, loading, empty }: { title: string; rows: any
 }
 
 function ClassifyModal({
+  t,
   open,
   asset,
   form,
@@ -460,6 +501,7 @@ function ClassifyModal({
   onCancel,
   onSubmit,
 }: {
+  t: (key: string, options?: Record<string, unknown>) => string;
   open: boolean;
   asset: AssetRow | null;
   form: ReturnType<typeof Form.useForm<ClassifyForm>>[0];
@@ -468,34 +510,34 @@ function ClassifyModal({
   onSubmit: (values: ClassifyForm) => void;
 }) {
   return (
-    <Modal title={asset ? `分类治理：${asset.name}` : "分类治理"} open={open} onCancel={onCancel} onOk={() => form.submit()} confirmLoading={saving} destroyOnClose>
+    <Modal title={asset ? t("page.metadataManagement.classify.titleWithAsset", { name: asset.name }) : t("page.metadataManagement.classify.title")} open={open} onCancel={onCancel} onOk={() => form.submit()} confirmLoading={saving} destroyOnClose>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
-        <Form.Item name="owner" label="负责人" rules={[{ required: true, message: "请输入负责人" }]}>
+        <Form.Item name="owner" label={t("page.metadataManagement.assets.owner")} rules={[{ required: true, message: t("page.metadataManagement.classify.ownerRequired") }]}>
           <Input placeholder="DataOps" />
         </Form.Item>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Form.Item name="security_level" label="密级">
+          <Form.Item name="security_level" label={t("page.metadataManagement.assets.securityLevel")}>
             <Select options={SECURITY_LEVELS.map((value) => ({ label: value, value }))} />
           </Form.Item>
-          <Form.Item name="status" label="状态">
+          <Form.Item name="status" label={t("page.metadataManagement.assets.status")}>
             <Select options={STATUSES.map((value) => ({ label: value, value }))} />
           </Form.Item>
         </div>
-        <Form.Item name="tags" label="标签">
-          <Select mode="tags" tokenSeparators={[","]} placeholder="输入后回车" suffixIcon={<Tags className="h-4 w-4" />} />
+        <Form.Item name="tags" label={t("page.metadataManagement.classify.tags")}>
+          <Select mode="tags" tokenSeparators={[","]} placeholder={t("page.metadataManagement.classify.tagsPlaceholder")} suffixIcon={<Tags className="h-4 w-4" />} />
         </Form.Item>
-        <Form.Item name="quality_rules" label="质量规则">
+        <Form.Item name="quality_rules" label={t("page.metadataManagement.classify.qualityRules")}>
           <Select mode="multiple" options={QUALITY_RULES.map((value) => ({ label: value, value }))} />
         </Form.Item>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Form.Item name="lineage_upstream" label="上游节点">
+          <Form.Item name="lineage_upstream" label={t("page.metadataManagement.lineage.upstream")}>
             <Select mode="tags" tokenSeparators={[","]} placeholder="requirements" />
           </Form.Item>
-          <Form.Item name="lineage_downstream" label="下游节点">
+          <Form.Item name="lineage_downstream" label={t("page.metadataManagement.lineage.downstream")}>
             <Select mode="tags" tokenSeparators={[","]} placeholder="analytics_reports" />
           </Form.Item>
         </div>
-        <Form.Item name="note" label="治理备注">
+        <Form.Item name="note" label={t("page.metadataManagement.classify.note")}>
           <Input.TextArea rows={3} maxLength={500} />
         </Form.Item>
       </Form>

@@ -866,6 +866,98 @@
     "dataAssets": {
       "title": "数据资产"
     },
+    "metadataManagement": {
+      "workbenchTitle": "元数据管理",
+      "workbenchDesc": "资产、字段、分类、质量规则和血缘影响的统一元数据控制面",
+      "focusedHint": "聚焦入口只保留本模块高频治理动作，完整资产链路请回到元数据管理。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回元数据管理",
+      "updated": "元数据分类已更新",
+      "aiTitle": "元数据管理 AI 助手",
+      "aiPrompt": "请分析当前资产负责人、敏感字段、质量规则和血缘声明缺口，并生成可执行的元数据治理建议。",
+      "metrics": {
+        "assets": "资产",
+        "fields": "字段",
+        "sensitiveFields": "敏感字段",
+        "metadataScore": "元数据健康"
+      },
+      "modules": {
+        "overview": {
+          "title": "元数据总览",
+          "description": "聚合资产健康、治理缺口、领域分布和常用入口，快速判断元数据治理状态。",
+          "focus": "健康指标、治理缺口、模块入口"
+        },
+        "assets": {
+          "title": "资产目录",
+          "description": "维护资产负责人、状态、密级、标签、质量规则和分类治理动作。",
+          "focus": "负责人、密级、标签、质量规则"
+        },
+        "fields": {
+          "title": "字段元数据",
+          "description": "按资产和敏感级别检索字段、类型、来源和分类候选。",
+          "focus": "字段检索、敏感识别、分类候选"
+        },
+        "lineage": {
+          "title": "血缘影响",
+          "description": "按资产查看上下游依赖、下游影响范围和变更风险。",
+          "focus": "上下游影响、变更范围、依赖节点"
+        }
+      },
+      "panels": {
+        "gaps": "治理缺口",
+        "domainDistribution": "领域分布"
+      },
+      "gaps": {
+        "missingOwner": "缺负责人资产",
+        "missingLineage": "缺血缘资产",
+        "qualityWatch": "质量观察资产"
+      },
+      "assets": {
+        "asset": "资产",
+        "domain": "领域",
+        "source": "来源",
+        "owner": "负责人",
+        "status": "状态",
+        "securityLevel": "密级",
+        "quality": "质量",
+        "lineage": "血缘",
+        "actions": "操作",
+        "classify": "分类治理",
+        "missingOwner": "待补齐",
+        "missingLineage": "待声明",
+        "searchPlaceholder": "搜索资产、来源、负责人或标签"
+      },
+      "fields": {
+        "field": "字段",
+        "type": "类型",
+        "source": "来源",
+        "sensitivity": "敏感级别",
+        "classification": "分类",
+        "qualityFlags": "质量标记",
+        "selectAsset": "选择资产",
+        "allFields": "全部字段",
+        "sensitiveOnly": "仅敏感字段",
+        "normalOnly": "仅普通字段",
+        "searchPlaceholder": "搜索字段、类型、来源"
+      },
+      "lineage": {
+        "assetSelect": "资产选择",
+        "upstream": "上游依赖",
+        "downstream": "下游影响",
+        "emptyUpstream": "暂无上游依赖",
+        "emptyDownstream": "暂无下游影响"
+      },
+      "classify": {
+        "title": "分类治理",
+        "titleWithAsset": "分类治理：{{name}}",
+        "ownerRequired": "请输入负责人",
+        "tags": "标签",
+        "tagsPlaceholder": "输入后回车",
+        "qualityRules": "质量规则",
+        "note": "治理备注"
+      },
+      "emptyDomains": "暂无领域资产"
+    },
     "dataMetricsTags": {
       "title": "指标与标签"
     },
@@ -4454,7 +4546,40 @@
     "dataSources": {
       "title": "数据源",
       "desc": "管理 MySQL/OceanBase/PostgreSQL 等远端连接与连通性测试。",
-      "focusedHint": "数据库连接",
+      "workbenchTitle": "数据源管理",
+      "workbenchDesc": "连接目录、SecretRef、元数据发现、安全治理与 Schema Registry 同步控制面。",
+      "focusedHint": "聚焦入口只保留当前数据源模块关键操作，完整链路请返回数据源管理。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回数据源管理",
+      "createSource": "新建数据源",
+      "modules": {
+        "overview": {
+          "title": "数据源总览",
+          "description": "查看数据源健康、角色分布、类型覆盖和核心治理入口。",
+          "focus": "健康概览、覆盖分布、核心入口"
+        },
+        "connections": {
+          "title": "连接目录",
+          "description": "维护连接元数据、能力声明、只读策略和 SecretRef。",
+          "focus": "连接 CRUD、连通性测试、SecretRef"
+        },
+        "metadata": {
+          "title": "元数据同步",
+          "description": "预览表字段、敏感候选，并同步到数据接入 Schema Registry。",
+          "focus": "字段预览、敏感候选、Schema Registry"
+        },
+        "security": {
+          "title": "安全治理",
+          "description": "扫描 SecretRef、只读策略、敏感字段和 tenant_code/business_code/project_id 隔离字段。",
+          "focus": "SecretRef、只读策略、三码隔离"
+        }
+      },
+      "metrics": {
+        "total": "数据源",
+        "ready": "就绪",
+        "watch": "观察",
+        "readinessScore": "健康分"
+      },
       "total": "连接数",
       "drivers": "驱动",
       "add": "添加连接",
@@ -4467,7 +4592,9 @@
       "testOk": "连接测试通过",
       "deleted": "连接已删除",
       "edit": "编辑",
-      "confirmDelete": "确认删除该连接？"
+      "confirmDelete": "确认删除该连接？",
+      "aiTitle": "数据源管理 AI 助手",
+      "aiPrompt": "请分析当前数据源健康、SecretRef 配置、元数据发现和接入同步风险，给出治理任务建议。"
     },
     "legacyHub": {
       "title": "Legacy 迁移中心",

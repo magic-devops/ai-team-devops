@@ -712,6 +712,98 @@
     "dataAssets": {
       "title": "データ資産"
     },
+    "metadataManagement": {
+      "workbenchTitle": "メタデータ管理",
+      "workbenchDesc": "資産、フィールド、分類、品質ルール、リネージ影響の統合コントロールプレーン。",
+      "focusedHint": "フォーカス入口では、このモジュールの高頻度ガバナンス操作だけを表示します。全体フローはメタデータ管理へ戻って確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "メタデータへ戻る",
+      "updated": "メタデータ分類を更新しました",
+      "aiTitle": "メタデータ管理 AI",
+      "aiPrompt": "現在の資産オーナー、機微フィールド、品質ルール、リネージ宣言の不足を分析し、実行可能なメタデータガバナンス提案を生成してください。",
+      "metrics": {
+        "assets": "資産",
+        "fields": "フィールド",
+        "sensitiveFields": "機微フィールド",
+        "metadataScore": "メタデータ健全性"
+      },
+      "modules": {
+        "overview": {
+          "title": "メタデータ概要",
+          "description": "資産健全性、ガバナンス不足、ドメイン分布、主要入口を集約します。",
+          "focus": "健全性指標、ガバナンス不足、モジュール入口"
+        },
+        "assets": {
+          "title": "資産カタログ",
+          "description": "資産オーナー、状態、機密レベル、タグ、品質ルール、分類ガバナンスを管理します。",
+          "focus": "オーナー、機密レベル、タグ、品質ルール"
+        },
+        "fields": {
+          "title": "フィールドメタデータ",
+          "description": "資産と機微レベルでフィールド、型、ソース、分類候補を検索します。",
+          "focus": "フィールド検索、機微検出、分類候補"
+        },
+        "lineage": {
+          "title": "リネージ影響",
+          "description": "資産ごとに上流依存、下流影響、変更リスク範囲を確認します。",
+          "focus": "上流、下流、変更範囲"
+        }
+      },
+      "panels": {
+        "gaps": "ガバナンス不足",
+        "domainDistribution": "ドメイン分布"
+      },
+      "gaps": {
+        "missingOwner": "オーナー未設定資産",
+        "missingLineage": "リネージ未宣言資産",
+        "qualityWatch": "品質監視資産"
+      },
+      "assets": {
+        "asset": "資産",
+        "domain": "ドメイン",
+        "source": "ソース",
+        "owner": "オーナー",
+        "status": "状態",
+        "securityLevel": "機密レベル",
+        "quality": "品質",
+        "lineage": "リネージ",
+        "actions": "操作",
+        "classify": "ガバナンス",
+        "missingOwner": "未設定",
+        "missingLineage": "未宣言",
+        "searchPlaceholder": "資産、ソース、オーナー、タグを検索"
+      },
+      "fields": {
+        "field": "フィールド",
+        "type": "型",
+        "source": "ソース",
+        "sensitivity": "機微レベル",
+        "classification": "分類",
+        "qualityFlags": "品質フラグ",
+        "selectAsset": "資産を選択",
+        "allFields": "全フィールド",
+        "sensitiveOnly": "機微のみ",
+        "normalOnly": "通常のみ",
+        "searchPlaceholder": "フィールド、型、ソースを検索"
+      },
+      "lineage": {
+        "assetSelect": "資産選択",
+        "upstream": "上流依存",
+        "downstream": "下流影響",
+        "emptyUpstream": "上流依存はありません",
+        "emptyDownstream": "下流影響はありません"
+      },
+      "classify": {
+        "title": "分類ガバナンス",
+        "titleWithAsset": "分類ガバナンス: {{name}}",
+        "ownerRequired": "オーナーを入力してください",
+        "tags": "タグ",
+        "tagsPlaceholder": "入力して Enter",
+        "qualityRules": "品質ルール",
+        "note": "ガバナンスメモ"
+      },
+      "emptyDomains": "ドメイン資産はありません"
+    },
     "dataMetricsTags": {
       "title": "指標とタグ"
     },
@@ -3625,6 +3717,50 @@
       "createIsolationTasks": "隔離タスクを生成",
       "isolationTaskResult": "隔離タスク: 予定 {{planned}} 件、作成 {{created}} 件、スキップ {{skipped}} 件。",
       "domain": "領域"
+    },
+    "dataSources": {
+      "title": "データソース",
+      "desc": "リモートデータベース接続と疎通テストを管理します。",
+      "workbenchTitle": "データソース管理",
+      "workbenchDesc": "接続カタログ、SecretRef、メタデータ検出、セキュリティガバナンス、Schema Registry 同期の管理画面です。",
+      "focusedHint": "フォーカス入口では、このデータソースモジュールの主要操作だけを表示します。全体フローはデータソース管理へ戻って確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "データソース管理へ戻る",
+      "createSource": "データソース作成",
+      "modules": {
+        "overview": {
+          "title": "データソース概要",
+          "description": "データソースの健康状態、ロール分布、タイプ網羅、主要ガバナンス入口を確認します。",
+          "focus": "健康概要、カバレッジ、主要入口"
+        },
+        "connections": {
+          "title": "接続カタログ",
+          "description": "接続メタデータ、能力宣言、読み取り専用ポリシー、SecretRef を管理します。",
+          "focus": "接続 CRUD、疎通テスト、SecretRef"
+        },
+        "metadata": {
+          "title": "メタデータ同期",
+          "description": "テーブルとフィールドをプレビューし、センシティブ候補を確認して Schema Registry へ同期します。",
+          "focus": "フィールドプレビュー、センシティブ候補、Schema Registry"
+        },
+        "security": {
+          "title": "セキュリティガバナンス",
+          "description": "SecretRef、読み取り専用ポリシー、センシティブフィールド、tenant_code/business_code/project_id 分離フィールドをスキャンします。",
+          "focus": "SecretRef、読み取り専用、三コード分離"
+        }
+      },
+      "metrics": {
+        "total": "データソース",
+        "ready": "準備完了",
+        "watch": "監視",
+        "readinessScore": "健康スコア"
+      },
+      "add": "接続追加",
+      "test": "テスト",
+      "saved": "保存しました",
+      "testOk": "接続 OK",
+      "aiTitle": "データソース AI アシスタント",
+      "aiPrompt": "現在のデータソース健康状態、SecretRef 設定、メタデータ検出、取り込み同期リスクを分析し、ガバナンスタスクを提案してください。"
     },
     "legacyConsole": {
       "title": "Legacy ワークベンチ",

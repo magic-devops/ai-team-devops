@@ -3,6 +3,7 @@ import { App, Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Sel
 import type { ColumnsType } from "antd/es/table";
 import { Database, FileSearch, Link2, Plus, RefreshCcw, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
@@ -11,6 +12,7 @@ import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { RefreshButton, WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 type DataSourceView = "overview" | "connections" | "metadata" | "security";
+const VIEW_KEYS: DataSourceView[] = ["overview", "connections", "metadata", "security"];
 
 type SourceForm = {
   name: string;
@@ -52,15 +54,15 @@ const DEFAULT_SOURCE: SourceForm = {
   secret_ref: "",
 };
 
-const VIEW_META: Record<DataSourceView, { title: string; description: string }> = {
-  overview: { title: "数据源管理", description: "连接、密钥引用、元数据发现和接入同步的统一入口。" },
-  connections: { title: "数据源连接目录", description: "维护连接元数据、能力声明、只读策略和 SecretRef。" },
-  metadata: { title: "数据源元数据同步", description: "预览表字段并同步到数据接入 Schema Registry。" },
-  security: { title: "数据源安全治理", description: "扫描 SecretRef、只读策略、敏感字段和三码隔离字段。" },
+const VIEW_HREF: Record<DataSourceView, string> = {
+  overview: "#/data/sources/overview",
+  connections: "#/data/sources/connections",
+  metadata: "#/data/sources/metadata",
+  security: "#/data/sources/security",
 };
 
 function normalizeView(view?: string): DataSourceView {
-  return view && VIEW_META[view as DataSourceView] ? (view as DataSourceView) : "overview";
+  return view && VIEW_KEYS.includes(view as DataSourceView) ? (view as DataSourceView) : "overview";
 }
 
 export function DataSourcesWorkbench({
@@ -72,6 +74,7 @@ export function DataSourcesWorkbench({
 }) {
   const authed = Boolean(getToken());
   const { message } = App.useApp();
+  const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingName, setEditingName] = useState<string | null>(null);
@@ -178,30 +181,53 @@ export function DataSourcesWorkbench({
   if (connQ.isLoading || summaryQ.isLoading) return <LoadingBlock />;
 
   const view = normalizeView(initialView);
-  const shell = VIEW_META[view];
+  const viewOptions = VIEW_KEYS.map((key) => ({
+    value: key,
+    label: t(`page.dataSources.modules.${key}.title`),
+  }));
 
   return (
     <WorkbenchShell
-      title={shell.title}
-      description={focused ? shell.description : "企业数据源管理控制面。"}
+      title={focused ? t(`page.dataSources.modules.${view}.title`) : t("page.dataSources.workbenchTitle")}
+      description={focused ? t(`page.dataSources.modules.${view}.description`) : t("page.dataSources.workbenchDesc")}
       actions={
         <Space wrap>
           <AiAssistButton onClick={() => setAiOpen(true)} />
-          <Button icon={<RefreshCcw className="h-4 w-4" />} onClick={refreshAll}>刷新</Button>
-          {view === "connections" ? <Button icon={<Plus className="h-4 w-4" />} type="primary" onClick={openCreate}>新建数据源</Button> : null}
+          <Button icon={<RefreshCcw className="h-4 w-4" />} onClick={refreshAll}>{t("common.refresh")}</Button>
+          {view === "connections" ? <Button icon={<Plus className="h-4 w-4" />} type="primary" onClick={openCreate}>{t("page.dataSources.createSource")}</Button> : null}
         </Space>
       }
       metrics={
         <WorkbenchStats
           items={[
-            { label: "数据源", value: summary.total ?? sources.length },
-            { label: "就绪", value: summary.ready ?? 0, trend: "up" },
-            { label: "观察", value: summary.watch ?? 0 },
-            { label: "健康分", value: summary.readiness_score ?? 0 },
+            { label: t("page.dataSources.metrics.total"), value: summary.total ?? sources.length },
+            { label: t("page.dataSources.metrics.ready"), value: summary.ready ?? 0, trend: "up" },
+            { label: t("page.dataSources.metrics.watch"), value: summary.watch ?? 0 },
+            { label: t("page.dataSources.metrics.readinessScore"), value: summary.readiness_score ?? 0 },
           ]}
         />
       }
     >
+      {focused ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataSources.focusedTag")}</span>
+              <a href="#/data/sources" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataSources.backToHub")}</a>
+              <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataSources.focusedHint")}</span>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-[var(--text)]">{t(`page.dataSources.modules.${view}.title`)}</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t(`page.dataSources.modules.${view}.focus`)}</p>
+          </div>
+          <Select
+            className="min-w-52"
+            value={view}
+            options={viewOptions}
+            onChange={(next) => { window.location.hash = VIEW_HREF[next as DataSourceView].slice(1); }}
+          />
+        </div>
+      ) : null}
+
       {view === "overview" ? <Overview summary={summary} /> : null}
       {view === "connections" ? (
         <ConnectionsPanel
@@ -258,7 +284,7 @@ export function DataSourcesWorkbench({
         onCancel={() => setEditOpen(false)}
         onSubmit={(v) => saveMut.mutate({ ...DEFAULT_SOURCE, ...v })}
       />
-      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="data-sources" title="数据源管理 AI 助手" initialPrompt="请分析当前数据源健康、SecretRef 配置、元数据发现和接入同步风险，给出治理任务建议。" />
+      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="data-sources" title={t("page.dataSources.aiTitle")} initialPrompt={t("page.dataSources.aiPrompt")} />
     </WorkbenchShell>
   );
 }

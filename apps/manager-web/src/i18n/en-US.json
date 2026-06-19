@@ -743,6 +743,98 @@
     "dataAssets": {
       "title": "Data assets"
     },
+    "metadataManagement": {
+      "workbenchTitle": "Metadata Management",
+      "workbenchDesc": "Unified control plane for assets, fields, classification, quality rules and lineage impact.",
+      "focusedHint": "Focused entry keeps only the frequent governance actions for this module. Open Metadata Management for the full flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Metadata",
+      "updated": "Metadata classification updated",
+      "aiTitle": "Metadata Management AI",
+      "aiPrompt": "Analyze current asset owners, sensitive fields, quality rules and lineage declaration gaps, then generate actionable metadata governance recommendations.",
+      "metrics": {
+        "assets": "Assets",
+        "fields": "Fields",
+        "sensitiveFields": "Sensitive fields",
+        "metadataScore": "Metadata health"
+      },
+      "modules": {
+        "overview": {
+          "title": "Metadata Overview",
+          "description": "Aggregate asset health, governance gaps, domain distribution and frequent entry points.",
+          "focus": "Health metrics, governance gaps, module entry points"
+        },
+        "assets": {
+          "title": "Asset Catalog",
+          "description": "Maintain asset owner, status, security level, tags, quality rules and classification actions.",
+          "focus": "Owner, security level, tags, quality rules"
+        },
+        "fields": {
+          "title": "Field Metadata",
+          "description": "Search fields by asset and sensitivity with type, source and classification candidates.",
+          "focus": "Field search, sensitive detection, classification candidates"
+        },
+        "lineage": {
+          "title": "Lineage Impact",
+          "description": "Inspect upstream dependencies, downstream impact and change risk for an asset.",
+          "focus": "Upstream, downstream, change scope"
+        }
+      },
+      "panels": {
+        "gaps": "Governance gaps",
+        "domainDistribution": "Domain distribution"
+      },
+      "gaps": {
+        "missingOwner": "Assets missing owner",
+        "missingLineage": "Assets missing lineage",
+        "qualityWatch": "Quality watch assets"
+      },
+      "assets": {
+        "asset": "Asset",
+        "domain": "Domain",
+        "source": "Source",
+        "owner": "Owner",
+        "status": "Status",
+        "securityLevel": "Security level",
+        "quality": "Quality",
+        "lineage": "Lineage",
+        "actions": "Actions",
+        "classify": "Govern",
+        "missingOwner": "Missing",
+        "missingLineage": "Declare",
+        "searchPlaceholder": "Search asset, source, owner or tag"
+      },
+      "fields": {
+        "field": "Field",
+        "type": "Type",
+        "source": "Source",
+        "sensitivity": "Sensitivity",
+        "classification": "Classification",
+        "qualityFlags": "Quality flags",
+        "selectAsset": "Select asset",
+        "allFields": "All fields",
+        "sensitiveOnly": "Sensitive only",
+        "normalOnly": "Normal only",
+        "searchPlaceholder": "Search field, type or source"
+      },
+      "lineage": {
+        "assetSelect": "Asset selection",
+        "upstream": "Upstream dependencies",
+        "downstream": "Downstream impact",
+        "emptyUpstream": "No upstream dependencies",
+        "emptyDownstream": "No downstream impact"
+      },
+      "classify": {
+        "title": "Classification governance",
+        "titleWithAsset": "Classification governance: {{name}}",
+        "ownerRequired": "Enter an owner",
+        "tags": "Tags",
+        "tagsPlaceholder": "Type and press Enter",
+        "qualityRules": "Quality rules",
+        "note": "Governance note"
+      },
+      "emptyDomains": "No domain assets"
+    },
     "dataMetricsTags": {
       "title": "Metrics & tags"
     },
@@ -4159,10 +4251,46 @@
     "dataSources": {
       "title": "Data sources",
       "desc": "Remote database connections and connectivity tests.",
+      "workbenchTitle": "Data Source Management",
+      "workbenchDesc": "Connection catalog, SecretRef, metadata discovery, security governance and Schema Registry sync.",
+      "focusedHint": "Focused entry keeps only the key controls for this data source module. Return to data sources for the full flow.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Data Sources",
+      "createSource": "New data source",
+      "modules": {
+        "overview": {
+          "title": "Data Source Overview",
+          "description": "Review source health, role distribution, type coverage and core governance entry points.",
+          "focus": "Health overview, coverage, core entries"
+        },
+        "connections": {
+          "title": "Connection Catalog",
+          "description": "Maintain connection metadata, capability declarations, read-only policy and SecretRef.",
+          "focus": "Connection CRUD, connectivity test, SecretRef"
+        },
+        "metadata": {
+          "title": "Metadata Sync",
+          "description": "Preview tables and fields, identify sensitive candidates and sync to Schema Registry.",
+          "focus": "Field preview, sensitive candidates, Schema Registry"
+        },
+        "security": {
+          "title": "Security Governance",
+          "description": "Scan SecretRef, read-only policy, sensitive fields and tenant_code/business_code/project_id isolation fields.",
+          "focus": "SecretRef, read-only policy, three-code isolation"
+        }
+      },
+      "metrics": {
+        "total": "Sources",
+        "ready": "Ready",
+        "watch": "Watch",
+        "readinessScore": "Health score"
+      },
       "add": "Add connection",
       "test": "Test",
       "saved": "Saved",
-      "testOk": "Connection OK"
+      "testOk": "Connection OK",
+      "aiTitle": "Data Source AI Assistant",
+      "aiPrompt": "Analyze current data source health, SecretRef configuration, metadata discovery and ingest sync risks, then suggest governance tasks."
     },
     "designDocs": {
       "title": "Design docs",
