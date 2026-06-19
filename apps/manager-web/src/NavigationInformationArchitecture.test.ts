@@ -64,8 +64,16 @@ describe("navigation information architecture", () => {
     expect(navigationSource).toContain('key: "agentOpsProfiles", path: "#/ai/agent-ops/profiles", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "profiles" })');
     expect(navigationSource).toContain('key: "agentOpsRetry", path: "#/ai/agent-ops/retry", el: pageElement(AgentRunsWorkbenchPage, { focused: true, initialTab: "retry" })');
     expect(agentRunsSource).toContain('type AgentRunsTab = "runs" | "heartbeat" | "profiles" | "retry"');
+    expect(agentRunsSource).toContain("const TAB_KEYS: AgentRunsTab[]");
     expect(agentRunsSource).toContain('tab === "heartbeat"');
     expect(agentRunsSource).toContain('tab === "retry"');
+    expect(agentRunsSource).toContain('export function AgentRunsWorkbench({ focused = false');
+    expect(agentRunsSource).toContain('t("page.agentRuns.focusedHint")');
+    expect(agentRunsSource).toContain('t("page.agentRuns.focusedTag")');
+    expect(agentRunsSource).toContain('t("page.agentRuns.workbenchTitle")');
+    expect(agentRunsSource).toContain("page.agentRuns.modules.");
+    expect(agentRunsSource).toContain("focused ? (");
+    expect(agentRunsSource).not.toContain("focused: _focused");
     expect(navigationSource).toContain('key: "evidence", path: "#/tasks/agent-feed"');
     expect(navigationSource).toContain('key: "slo_rebalance", path: "#/platforms/agent-runs"');
   });

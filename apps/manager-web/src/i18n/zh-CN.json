@@ -873,15 +873,67 @@
       "title": "数据服务"
     },
     "agentRuns": {
+      "workbenchTitle": "Agent 运行中心",
+      "workbenchDesc": "Agent 运行生命周期管理：运行列表、心跳监控、能力画像与失败重试",
+      "focusedHint": "聚焦入口只保留本模块关键操作，完整 AgentOps 治理请返回运行中心。",
+      "focusedTag": "聚焦模块",
+      "backToHub": "返回 Agent 运行中心",
       "tabs": {
         "runs": "运行列表",
         "heartbeat": "心跳监控",
         "profiles": "能力画像",
         "retry": "失败重试"
       },
+      "modules": {
+        "runs": {
+          "title": "运行列表",
+          "description": "查看所有 Agent 运行记录、任务绑定、状态流转、证据和人工干预动作。",
+          "focus": "运行记录、状态流转、证据补录"
+        },
+        "heartbeat": {
+          "title": "心跳监控",
+          "description": "只关注运行中的 Agent 心跳、置信度和最近更新时间，便于快速判断存活状态。",
+          "focus": "运行中 Agent、心跳、最近更新时间"
+        },
+        "profiles": {
+          "title": "能力画像",
+          "description": "按 Agent 汇总运行次数、成功率和平均耗时，识别稳定交付能力。",
+          "focus": "成功率、耗时、能力画像"
+        },
+        "retry": {
+          "title": "失败重试",
+          "description": "聚焦失败或重试中的运行，支持重试、补证据和恢复处置。",
+          "focus": "失败运行、重试、恢复证据"
+        }
+      },
+      "metrics": {
+        "total": "总运行数",
+        "running": "运行中",
+        "successRate": "成功率",
+        "avgDuration": "平均耗时(s)"
+      },
+      "panels": {
+        "runs": "运行记录",
+        "profiles": "能力画像"
+      },
       "heartbeatTitle": "心跳监控",
       "retryTitle": "失败重试",
       "unboundTask": "未绑定任务",
+      "status": "状态",
+      "retryCount": "重试",
+      "startedAt": "开始时间",
+      "searchPlaceholder": "搜索 Agent / Task ID",
+      "allStatuses": "全部状态",
+      "createRun": "新建运行",
+      "emptyRuns": "暂无运行记录",
+      "emptyProfiles": "暂无画像数据",
+      "actions": {
+        "heartbeat": "心跳",
+        "start": "开始",
+        "success": "成功",
+        "cancel": "取消",
+        "delete": "删除"
+      },
       "heartbeatCount": "心跳数",
       "confidence": "置信度",
       "lastUpdated": "最近更新",
@@ -889,7 +941,9 @@
       "emptyRunning": "暂无运行中的 Agent",
       "retryAction": "重试",
       "addEvidence": "补证据",
-      "emptyRetry": "暂无失败或重试中的运行"
+      "emptyRetry": "暂无失败或重试中的运行",
+      "aiTitle": "AI Agent 运行助手",
+      "aiPrompt": "分析当前 Agent 运行记录，找出失败、超时、心跳异常和重试优化建议。"
     },
     "dataQuality": {
       "hubTitle": "数据质量中心",
@@ -4471,7 +4525,8 @@
     },
     "agentOps": {
       "hubTitle": "Agent 运行中心",
-      "hubDesc": "Agent 运行生命周期管理：运行列表、心跳监控、能力画像与失败重试"
+      "hubDesc": "Agent 运行生命周期管理：运行列表、心跳监控、能力画像与失败重试",
+      "modulesTitle": "专业模块"
     },
     "llmGateway": {
       "hubTitle": "模型网关",

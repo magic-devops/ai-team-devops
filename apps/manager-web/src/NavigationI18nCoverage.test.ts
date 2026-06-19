@@ -47,6 +47,17 @@ describe("navigation i18n coverage", () => {
   it("localizes focused AgentOps and data governance subviews", () => {
     for (const locale of ["zh-CN", "en-US", "ja-JP"] as const) {
       const messages = JSON.parse(readFileSync(resolve(root, `src/i18n/${locale}.json`), "utf8"));
+      expect(messages.page.agentOps.modulesTitle).toBeTruthy();
+      expect(messages.page.agentRuns.workbenchTitle).toBeTruthy();
+      expect(messages.page.agentRuns.workbenchDesc).toBeTruthy();
+      expect(messages.page.agentRuns.focusedHint).toBeTruthy();
+      expect(messages.page.agentRuns.focusedTag).toBeTruthy();
+      expect(messages.page.agentRuns.modules.runs.title).toBeTruthy();
+      expect(messages.page.agentRuns.modules.runs.description).toBeTruthy();
+      expect(messages.page.agentRuns.modules.heartbeat.focus).toBeTruthy();
+      expect(messages.page.agentRuns.modules.profiles.focus).toBeTruthy();
+      expect(messages.page.agentRuns.metrics.successRate).toBeTruthy();
+      expect(messages.page.agentRuns.panels.runs).toBeTruthy();
       expect(messages.page.agentRuns.tabs.heartbeat).toBeTruthy();
       expect(messages.page.agentRuns.retryAction).toBeTruthy();
       expect(messages.page.opsCenter.workbenchTitle).toBeTruthy();
@@ -90,8 +101,12 @@ describe("navigation i18n coverage", () => {
       expect(messages.page.opsCenter.modules.alerts.output).toBeTruthy();
       expect(messages.page.opsCenter.modules["self-heal"].focus).toBeTruthy();
     }
-    expect(agentRunsSource).toContain('t("page.agentRuns.tabs.heartbeat")');
+    expect(agentRunsSource).toContain("page.agentRuns.tabs.${id}");
     expect(agentRunsSource).toContain('t("page.agentRuns.emptyRetry")');
+    expect(agentRunsSource).toContain('t("page.agentRuns.workbenchTitle")');
+    expect(agentRunsSource).toContain('t("page.agentRuns.focusedHint")');
+    expect(agentRunsSource).toContain("page.agentRuns.modules.");
+    expect(agentRunsSource).toContain("page.agentRuns.metrics.");
     expect(opsCenterSource).toContain('t("page.opsCenter.workbenchTitle")');
     expect(opsCenterSource).toContain("page.opsCenter.modules.");
     expect(opsCenterSource).toContain("page.opsCenter.metrics.");

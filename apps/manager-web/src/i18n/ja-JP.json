@@ -719,15 +719,67 @@
       "title": "データサービス"
     },
     "agentRuns": {
+      "workbenchTitle": "エージェント実行センター",
+      "workbenchDesc": "エージェント実行ライフサイクル管理: 実行、ハートビート、能力プロファイル、失敗リトライ。",
+      "focusedHint": "フォーカス入口では、このモジュールの主要操作だけを表示します。全体の AgentOps は実行センターへ戻って確認できます。",
+      "focusedTag": "フォーカス",
+      "backToHub": "Agent 実行センターへ戻る",
       "tabs": {
         "runs": "実行一覧",
         "heartbeat": "ハートビート",
         "profiles": "能力プロファイル",
         "retry": "失敗リトライ"
       },
+      "modules": {
+        "runs": {
+          "title": "実行一覧",
+          "description": "Agent 実行、タスク紐付け、状態遷移、証跡、手動操作を確認します。",
+          "focus": "実行記録、状態遷移、証跡"
+        },
+        "heartbeat": {
+          "title": "ハートビート監視",
+          "description": "実行中 Agent のハートビート、信頼度、最終更新に集中します。",
+          "focus": "実行中 Agent、ハートビート、最終更新"
+        },
+        "profiles": {
+          "title": "能力プロファイル",
+          "description": "Agent 別の実行数、成功率、平均時間を集計します。",
+          "focus": "成功率、時間、能力プロファイル"
+        },
+        "retry": {
+          "title": "失敗リトライ",
+          "description": "失敗またはリトライ中の実行に集中し、再試行、証跡追加、復旧を行います。",
+          "focus": "失敗実行、リトライ、復旧証跡"
+        }
+      },
+      "metrics": {
+        "total": "総実行数",
+        "running": "実行中",
+        "successRate": "成功率",
+        "avgDuration": "平均時間(s)"
+      },
+      "panels": {
+        "runs": "実行記録",
+        "profiles": "能力プロファイル"
+      },
       "heartbeatTitle": "ハートビート監視",
       "retryTitle": "失敗リトライ",
       "unboundTask": "タスク未紐付け",
+      "status": "状態",
+      "retryCount": "リトライ",
+      "startedAt": "開始時刻",
+      "searchPlaceholder": "Agent / Task ID を検索",
+      "allStatuses": "全状態",
+      "createRun": "実行を作成",
+      "emptyRuns": "実行記録がありません",
+      "emptyProfiles": "プロファイルデータがありません",
+      "actions": {
+        "heartbeat": "ハートビート",
+        "start": "開始",
+        "success": "成功",
+        "cancel": "取消",
+        "delete": "削除"
+      },
       "heartbeatCount": "ハートビート数",
       "confidence": "信頼度",
       "lastUpdated": "最終更新",
@@ -735,7 +787,9 @@
       "emptyRunning": "実行中の Agent はありません",
       "retryAction": "リトライ",
       "addEvidence": "証跡追加",
-      "emptyRetry": "失敗またはリトライ中の実行はありません"
+      "emptyRetry": "失敗またはリトライ中の実行はありません",
+      "aiTitle": "AI Agent 実行アシスタント",
+      "aiPrompt": "現在の Agent 実行を分析し、失敗、タイムアウト、ハートビート異常、リトライ最適化を提案してください。"
     },
     "dataQuality": {
       "hubTitle": "データ品質センター",
@@ -3669,7 +3723,8 @@
     },
     "agentOps": {
       "hubTitle": "エージェント実行センター",
-      "hubDesc": "エージェント実行ライフサイクル管理"
+      "hubDesc": "エージェント実行ライフサイクル管理",
+      "modulesTitle": "専門モジュール"
     },
     "llmGateway": {
       "hubTitle": "LLMゲートウェイ",

@@ -750,15 +750,67 @@
       "title": "Data services"
     },
     "agentRuns": {
+      "workbenchTitle": "Agent Ops Center",
+      "workbenchDesc": "Agent run lifecycle management: runs, heartbeat, capability profiles, and failure retry.",
+      "focusedHint": "Focused entry keeps only the key controls for this module. Return to Agent Ops for full governance.",
+      "focusedTag": "Focused",
+      "backToHub": "Back to Agent Ops",
       "tabs": {
         "runs": "Runs",
         "heartbeat": "Heartbeat",
         "profiles": "Profiles",
         "retry": "Retry"
       },
+      "modules": {
+        "runs": {
+          "title": "Run list",
+          "description": "Review Agent runs, task bindings, status transitions, evidence, and manual actions.",
+          "focus": "Run records, status transitions, evidence"
+        },
+        "heartbeat": {
+          "title": "Heartbeat monitor",
+          "description": "Focus on running Agent heartbeats, confidence, and last update time.",
+          "focus": "Running Agents, heartbeats, last update"
+        },
+        "profiles": {
+          "title": "Capability profiles",
+          "description": "Summarize run volume, success rate, and average duration by Agent.",
+          "focus": "Success rate, duration, capability profile"
+        },
+        "retry": {
+          "title": "Failure retry",
+          "description": "Focus on failed or retrying runs, then retry, add evidence, or recover.",
+          "focus": "Failed runs, retry, recovery evidence"
+        }
+      },
+      "metrics": {
+        "total": "Total runs",
+        "running": "Running",
+        "successRate": "Success rate",
+        "avgDuration": "Avg duration(s)"
+      },
+      "panels": {
+        "runs": "Run records",
+        "profiles": "Capability profiles"
+      },
       "heartbeatTitle": "Heartbeat monitor",
       "retryTitle": "Failure retry",
       "unboundTask": "No task bound",
+      "status": "Status",
+      "retryCount": "Retries",
+      "startedAt": "Started",
+      "searchPlaceholder": "Search Agent / Task ID",
+      "allStatuses": "All statuses",
+      "createRun": "Create run",
+      "emptyRuns": "No run records",
+      "emptyProfiles": "No profile data",
+      "actions": {
+        "heartbeat": "Heartbeat",
+        "start": "Start",
+        "success": "Success",
+        "cancel": "Cancel",
+        "delete": "Delete"
+      },
       "heartbeatCount": "Heartbeats",
       "confidence": "Confidence",
       "lastUpdated": "Last updated",
@@ -766,7 +818,9 @@
       "emptyRunning": "No running Agents",
       "retryAction": "Retry",
       "addEvidence": "Add evidence",
-      "emptyRetry": "No failed or retrying runs"
+      "emptyRetry": "No failed or retrying runs",
+      "aiTitle": "AI Agent Run Assistant",
+      "aiPrompt": "Analyze current Agent runs and identify failures, timeouts, heartbeat anomalies, and retry optimization suggestions."
     },
     "dataQuality": {
       "hubTitle": "Data Quality Center",
@@ -4148,7 +4202,8 @@
     },
     "agentOps": {
       "hubTitle": "Agent Ops Center",
-      "hubDesc": "Agent run lifecycle: runs, heartbeat, profiles, retry"
+      "hubDesc": "Agent run lifecycle: runs, heartbeat, profiles, retry",
+      "modulesTitle": "Focused modules"
     },
     "llmGateway": {
       "hubTitle": "LLM Gateway",
