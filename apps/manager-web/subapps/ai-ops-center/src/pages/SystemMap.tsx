@@ -111,6 +111,11 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     queryFn: () => api.pagesInteractionAnalysis({ domain, q: keyword.trim(), status: "all", limit: 80 }),
     enabled: authed,
   });
+  const interactionOpsQ = useQuery({
+    queryKey: ["pagesInteractionOps", domain, keyword],
+    queryFn: () => api.pagesInteractionOps({ domain, q: keyword.trim(), status: "watch", limit: 80 }),
+    enabled: authed,
+  });
   const graphLoopQ = useQuery({
     queryKey: ["graphLoopSummary"],
     queryFn: api.graphLoopSummary,
@@ -235,6 +240,9 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const [productionTaskResult, setProductionTaskResult] = useState<any>(null);
   const [experienceTaskResult, setExperienceTaskResult] = useState<any>(null);
   const [interactionTaskResult, setInteractionTaskResult] = useState<any>(null);
+  const [interactionOpsTaskResult, setInteractionOpsTaskResult] = useState<any>(null);
+  const [interactionOpsMemoryResult, setInteractionOpsMemoryResult] = useState<any>(null);
+  const [interactionOpsExportResult, setInteractionOpsExportResult] = useState<any>(null);
   const [performanceTaskResult, setPerformanceTaskResult] = useState<any>(null);
   const [isolationTaskResult, setIsolationTaskResult] = useState<any>(null);
   const [isolationScanTaskResult, setIsolationScanTaskResult] = useState<any>(null);
@@ -341,6 +349,51 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
     },
+  });
+  const interactionOpsTasks = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.pagesInteractionOpsTasks({
+        dry_run: dryRun,
+        domain,
+        status: "watch",
+        q: keyword.trim(),
+        include_low: false,
+        priority: "P1",
+        assigned_to: "GovernanceOps",
+        max_items: 12,
+        idempotency_key: `system-map:${domain}:${keyword.trim()}:tasks`,
+      }),
+    onSuccess: (data) => {
+      setInteractionOpsTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
+      void qc.invalidateQueries({ queryKey: ["pagesInteractionOps"] });
+    },
+  });
+  const interactionOpsMemory = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.pagesInteractionOpsMemory({
+        dry_run: dryRun,
+        domain,
+        status: "watch",
+        q: keyword.trim(),
+        kind: "long",
+        write_kb: true,
+        idempotency_key: `system-map:${domain}:${keyword.trim()}:memory`,
+      }),
+    onSuccess: setInteractionOpsMemoryResult,
+  });
+  const interactionOpsExport = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.pagesInteractionOpsExport({
+        dry_run: dryRun,
+        domain,
+        status: "watch",
+        q: keyword.trim(),
+        include_events: true,
+        idempotency_key: `system-map:${domain}:${keyword.trim()}:export`,
+      }),
+    onSuccess: setInteractionOpsExportResult,
   });
   const performanceTasks = useMutation({
     mutationFn: ({ dryRun }: { dryRun: boolean }) =>
@@ -558,6 +611,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const canWriteSystemPages = caps.can("governance.system-map", "write") || caps.can("system.pages", "write");
   const canExecuteGraphLoop = canWriteSystemPages || caps.can("governance.graph-loop", "write") || caps.can("governance.graph-loop", "admin");
   const canApproveGraphLoop = canWriteSystemPages || caps.can("governance.graph-loop.approve", "write") || caps.can("governance.graph-loop", "admin");
+  const canWriteInteractionOps = canWriteSystemPages || caps.can("governance.interaction-ops", "write");
+  const canExportInteractionOps = canWriteSystemPages || caps.can("governance.interaction-ops", "write");
   const canReadMigrationBacklog = caps.can("governance.system-map.migration.read", "read") || caps.can("governance.system-map.migration", "read") || canWriteSystemPages;
   const canWriteMigrationBacklog = caps.can("governance.system-map.migration.write", "write") || caps.can("governance.system-map.migration", "write") || canWriteSystemPages;
   const canRunModuleAction = (item: any) => {
@@ -626,6 +681,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const showMigration = section === "migration";
   const productizationMetrics = [
     { key: "readiness", label: t("page.systemMap.aiNativeReadiness", { defaultValue: "全域就绪" }), value: fullReadinessQ.data?.summary?.score ?? 0, icon: ShieldCheck },
+    { key: "interactionOps", label: t("page.systemMap.interactionOpsRisks", { defaultValue: "治理交付风险" }), value: interactionOpsQ.data?.summary?.total ?? 0, icon: Activity },
     { key: "interaction", label: t("page.systemMap.interactionScore", { defaultValue: "交互评分" }), value: interactionAnalysisQ.data?.summary?.avg_interaction_score ?? 0, icon: CheckCircle2 },
     { key: "graph", label: t("page.systemMap.aiNativeGraphLoop", { defaultValue: "Graph Loop" }), value: graphLoopQ.data?.summary?.persisted_runs ?? graphLoopRunRows.length, icon: Network },
     { key: "slo", label: t("page.systemMap.graphLoopSlo", { defaultValue: "运行 SLO" }), value: graphLoopSlo.score ?? graphLoopQ.data?.summary?.slo?.score ?? 0, icon: Activity },
@@ -638,11 +694,15 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     ...(graphLoopQ.data?.cli ?? []),
     ...(devFlowLifecycleQ.data?.cli ?? []),
     ...(productizationQ.data?.cli ?? []),
+    ...(interactionOpsQ.data?.cli ?? []),
     ...(interactionAnalysisQ.data?.cli ?? []),
     ...(skillsRuntimeQ.data?.cli ?? []),
     ...(pluginsGovernanceQ.data?.cli ?? []),
   ].slice(0, 8);
   const productizationRows = productizationQ.data?.items ?? [];
+  const interactionOpsRows = interactionOpsQ.data?.items ?? [];
+  const interactionOpsCommand = `sop pages interaction-ops --domain ${domain} --q ${keyword.trim()} --status watch --json`;
+  const interactionOpsCliRows = (interactionOpsQ.data?.cli ?? []).length ? interactionOpsQ.data?.cli : [{ id: "read", command: interactionOpsCommand }];
   const interactionRows = interactionAnalysisQ.data?.items ?? [];
   const interactionRiskRows = interactionRows.filter((item: any) => item.status !== "ready").slice(0, 8);
   const pageColumns: ColumnsType<any> = [
@@ -1189,6 +1249,163 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                 ))}
               </div>
             )}
+            {showProductization ? (
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_24rem]">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--text)]">
+                        {t("page.systemMap.interactionOpsControlRoom", { defaultValue: "治理交付控制室" })}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        {t("page.systemMap.interactionOpsHint", {
+                          defaultValue: "把 SystemMap、DevFlow、Tasks 与 Graph Loop 合成 risk lanes、execution lanes、evidence lanes。",
+                        })}
+                      </p>
+                    </div>
+                    <Space wrap>
+                      <Tag color={(interactionOpsQ.data?.summary?.high ?? 0) > 0 ? "red" : (interactionOpsQ.data?.summary?.medium ?? 0) > 0 ? "gold" : "green"}>
+                        {interactionOpsQ.data?.summary?.health ?? 100}/100
+                      </Tag>
+                      <Button size="small" href="#/tasks?source=interaction_ops">
+                        {t("page.systemMap.openInteractionOpsTasks", { defaultValue: "任务追踪" })}
+                      </Button>
+                    </Space>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-4">
+                    <Metric label={t("page.systemMap.interactionOpsHigh", { defaultValue: "高风险" })} value={interactionOpsQ.data?.summary?.high ?? 0} />
+                    <Metric label={t("page.systemMap.interactionOpsMedium", { defaultValue: "中风险" })} value={interactionOpsQ.data?.summary?.medium ?? 0} />
+                    <Metric label={t("page.systemMap.interactionOpsBlocked", { defaultValue: "阻塞" })} value={interactionOpsQ.data?.summary?.blocked ?? 0} />
+                    <Metric label={t("page.systemMap.interactionOpsTrace", { defaultValue: "Trace" })} value={String(interactionOpsQ.data?.trace_id || "-").slice(0, 8)} />
+                  </div>
+                  <Table
+                    className="mt-3"
+                    rowKey="id"
+                    size="small"
+                    dataSource={interactionOpsRows.slice(0, 10)}
+                    loading={interactionOpsQ.isLoading || interactionOpsQ.isFetching}
+                    pagination={false}
+                    scroll={{ x: 860 }}
+                    locale={{ emptyText: t("page.systemMap.interactionOpsEmpty", { defaultValue: "暂无治理交付风险" }) }}
+                    columns={[
+                      { title: t("page.systemMap.lane", { defaultValue: "Lane" }), dataIndex: "lane", width: 110, render: (value) => <Tag>{value}</Tag> },
+                      {
+                        title: t("page.systemMap.risk", { defaultValue: "风险" }),
+                        dataIndex: "title",
+                        render: (value, row: any) => (
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--text)]">{value}</p>
+                            <p className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">{typeof row.evidence === "string" ? row.evidence : JSON.stringify(row.evidence ?? {})}</p>
+                          </div>
+                        ),
+                      },
+                      { title: t("page.systemMap.status"), dataIndex: "status", width: 120, render: (value) => <StatusBadge status={String(value || "-")} /> },
+                      { title: t("page.systemMap.severity"), dataIndex: "severity", width: 96, render: (value) => <Tag color={value === "high" ? "red" : value === "medium" ? "gold" : "blue"}>{value}</Tag> },
+                      {
+                        title: "CLI",
+                        dataIndex: "command",
+                        width: 260,
+                        render: (value) => (
+                          <button type="button" className="max-w-full cursor-pointer truncate font-mono text-xs text-[var(--brand)] hover:underline" onClick={() => copyCli(String(value || ""))}>
+                            {value}
+                          </button>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.interactionOpsActions", { defaultValue: "闭环操作台" })}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button size="small" onClick={() => interactionOpsTasks.mutate({ dryRun: true })} loading={interactionOpsTasks.isPending}>
+                      {t("page.systemMap.previewInteractionOpsTasks", { defaultValue: "预览任务" })}
+                    </Button>
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => interactionOpsTasks.mutate({ dryRun: false })}
+                      loading={interactionOpsTasks.isPending}
+                      disabled={!canWriteInteractionOps}
+                      title={!canWriteInteractionOps ? t("capability.denied") : undefined}
+                    >
+                      {t("page.systemMap.applyInteractionOpsTasks", { defaultValue: "生成任务" })}
+                    </Button>
+                    <Button size="small" onClick={() => interactionOpsMemory.mutate({ dryRun: true })} loading={interactionOpsMemory.isPending}>
+                      {t("page.systemMap.previewInteractionOpsMemory", { defaultValue: "预览记忆" })}
+                    </Button>
+                    <Button
+                      size="small"
+                      onClick={() => interactionOpsMemory.mutate({ dryRun: false })}
+                      loading={interactionOpsMemory.isPending}
+                      disabled={!canWriteInteractionOps}
+                    >
+                      {t("page.systemMap.writeInteractionOpsMemory", { defaultValue: "写入记忆" })}
+                    </Button>
+                    <Button size="small" onClick={() => interactionOpsExport.mutate({ dryRun: true })} loading={interactionOpsExport.isPending}>
+                      {t("page.systemMap.previewInteractionOpsExport", { defaultValue: "预览导出" })}
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<FileDown className="h-3.5 w-3.5" />}
+                      onClick={() => interactionOpsExport.mutate({ dryRun: false })}
+                      loading={interactionOpsExport.isPending}
+                      disabled={!canExportInteractionOps}
+                    >
+                      {t("page.systemMap.exportInteractionOpsAudit", { defaultValue: "导出审计" })}
+                    </Button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {[
+                      interactionOpsTaskResult
+                        ? t("page.systemMap.interactionOpsTaskResult", {
+                            defaultValue: "任务 计划 {{planned}} / 生成 {{created}} / 跳过 {{skipped}}",
+                            planned: interactionOpsTaskResult.summary?.planned ?? 0,
+                            created: interactionOpsTaskResult.summary?.created ?? 0,
+                            skipped: interactionOpsTaskResult.summary?.skipped ?? 0,
+                          })
+                        : "",
+                      interactionOpsMemoryResult
+                        ? t("page.systemMap.interactionOpsMemoryResult", {
+                            defaultValue: "记忆 {{written}} · {{items}} 项",
+                            written: interactionOpsMemoryResult.summary?.written ? "written" : "preview",
+                            items: interactionOpsMemoryResult.summary?.items ?? 0,
+                          })
+                        : "",
+                      interactionOpsExportResult
+                        ? t("page.systemMap.interactionOpsExportResult", {
+                            defaultValue: "审计包 {{package}} · {{items}} 项",
+                            package: interactionOpsExportResult.summary?.package_id ?? "-",
+                            items: interactionOpsExportResult.summary?.items ?? 0,
+                          })
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .map((text) => (
+                        <div key={text} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--muted-strong)]">
+                          {text}
+                        </div>
+                      ))}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {interactionOpsCliRows.slice(0, 4).map((item: any, index: number) => (
+                      <Tooltip key={`${item.id}-${index}`} title={item.command}>
+                        <button
+                          type="button"
+                          className="block w-full cursor-pointer truncate rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left font-mono text-xs text-[var(--brand)] hover:border-[var(--brand)]"
+                          onClick={() => copyCli(String(item.command || ""))}
+                        >
+                          {item.command}
+                        </button>
+                      </Tooltip>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Metric label={t("page.systemMap.policyMode", { defaultValue: "权限模式" })} value={canWriteInteractionOps ? "ABAC" : "read-only"} />
+                    <Metric label={t("page.systemMap.auditTrace", { defaultValue: "Trace" })} value={String(interactionOpsQ.data?.audit?.event || "interaction_ops").slice(0, 14)} />
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {showProductization ? (
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)]">
                 <Table

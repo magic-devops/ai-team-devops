@@ -182,6 +182,161 @@ def interaction_tasks(
     console.print(tbl)
 
 
+@app.command("interaction-ops")
+def interaction_ops(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("watch", "--status", help="状态过滤：all/ready/watch/risk/blocked/failed/interrupted"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    limit: int = typer.Option(50, "--limit", help="展示风险数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    try:
+        out = get_client().pages_interaction_ops(domain=domain, status=status, q=q, limit=limit)
+    except Exception as e:
+        warn(f"Manager pages interaction ops 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("health", summary.get("health", 0))
+    kv("risks", summary.get("total", len(out.get("items") or [])))
+    kv("high", summary.get("high", 0))
+    kv("medium", summary.get("medium", 0))
+    tbl = Table(title="interaction ops", show_header=True, header_style="bold")
+    for col in ("id", "lane", "status", "severity", "title", "command"):
+        tbl.add_column(col)
+    for item in _items(out)[: max(1, min(int(limit or 50), 100))]:
+        tbl.add_row(
+            str(item.get("id", ""))[:34],
+            str(item.get("lane", "")),
+            str(item.get("status", "")),
+            str(item.get("severity", "")),
+            str(item.get("title", ""))[:42],
+            str(item.get("command", ""))[:70],
+        )
+    console.print(tbl)
+
+
+@app.command("interaction-ops-tasks")
+def interaction_ops_tasks(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("watch", "--status", help="状态过滤：all/ready/watch/risk/blocked/failed/interrupted"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔风险 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际生成任务"),
+    include_low: bool = typer.Option(False, "--include-low", help="包含低风险项"),
+    priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("GovernanceOps", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    idempotency_key: str = typer.Option("", "--idempotency-key", help="幂等键"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    body = {
+        "ids": [item.strip() for item in ids.split(",") if item.strip()],
+        "domain": domain,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_low": include_low,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+        "idempotency_key": idempotency_key,
+    }
+    try:
+        out = get_client().pages_interaction_ops_tasks(**body)
+    except Exception as e:
+        warn(f"Manager pages interaction ops tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run", summary.get("dry_run")))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="interaction ops tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or out.get("items") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
+@app.command("interaction-ops-memory")
+def interaction_ops_memory(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("watch", "--status", help="状态过滤：all/ready/watch/risk/blocked/failed/interrupted"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔风险 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际写入 memory/kb 账本"),
+    kind: str = typer.Option("long", "--kind", help="记忆类型：short/long/episodic"),
+    write_kb: bool = typer.Option(True, "--write-kb/--memory-only", help="同时声明 KB 写入意图"),
+    idempotency_key: str = typer.Option("", "--idempotency-key", help="幂等键"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    body = {
+        "ids": [item.strip() for item in ids.split(",") if item.strip()],
+        "domain": domain,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "kind": kind,
+        "write_kb": write_kb,
+        "idempotency_key": idempotency_key,
+    }
+    try:
+        out = get_client().pages_interaction_ops_memory(**body)
+    except Exception as e:
+        warn(f"Manager pages interaction ops memory 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", summary.get("dry_run"))
+    kv("written", summary.get("written"))
+    kv("items", summary.get("items"))
+    kv("record", summary.get("record_id"))
+
+
+@app.command("interaction-ops-export")
+def interaction_ops_export(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("watch", "--status", help="状态过滤：all/ready/watch/risk/blocked/failed/interrupted"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔风险 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际写入审计包"),
+    include_events: bool = typer.Option(True, "--include-events/--no-events", help="包含 Graph Loop 事件摘要"),
+    idempotency_key: str = typer.Option("", "--idempotency-key", help="幂等键"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    body = {
+        "ids": [item.strip() for item in ids.split(",") if item.strip()],
+        "domain": domain,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_events": include_events,
+        "idempotency_key": idempotency_key,
+    }
+    try:
+        out = get_client().pages_interaction_ops_export(**body)
+    except Exception as e:
+        warn(f"Manager pages interaction ops export 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", summary.get("dry_run"))
+    kv("package", summary.get("package_id"))
+    kv("items", summary.get("items"))
+    kv("path", out.get("path") or "-")
+
+
 def _write_runtime_json(default_name: str, payload: Any, out: str = "") -> Path:
     target = Path(out).expanduser() if out else get_config().project_path / ".sop-runtime" / default_name
     if not target.is_absolute():

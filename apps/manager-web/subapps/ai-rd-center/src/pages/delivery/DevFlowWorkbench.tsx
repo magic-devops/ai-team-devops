@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, App, Button, Card, Space, Statistic, Steps, Table, Tag, Typography } from "antd";
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { SprintBurndownChart } from "@/pages/shared/SprintBurndownChart";
@@ -27,6 +27,12 @@ export function DevFlowWorkbench() {
   const q = useQuery({ queryKey: ["devFlowSummary"], queryFn: api.devFlowSummary });
   const templatesQ = useQuery({ queryKey: ["devFlowTemplates"], queryFn: api.devFlowTemplates });
   const opsPlanQ = useQuery({ queryKey: ["devFlowOpsPlan"], queryFn: api.devFlowOpsPlan });
+  const lifecycleQ = useQuery({ queryKey: ["devFlowLifecycle"], queryFn: api.devFlowLifecycle });
+  const interactionOpsQ = useQuery({
+    queryKey: ["devFlowInteractionOps"],
+    queryFn: () => api.pagesInteractionOps({ domain: "delivery", status: "watch", limit: 20 }),
+  });
+  const [interactionOpsTaskResult, setInteractionOpsTaskResult] = useState<any>(null);
 
   const startWfMut = useMutation({
     mutationFn: (body: { type: string; args?: Record<string, unknown> }) => api.startWorkflow(body),
@@ -52,6 +58,29 @@ export function DevFlowWorkbench() {
         }),
       );
       void opsPlanQ.refetch();
+    },
+    onError: (e) => message.error((e as Error).message),
+  });
+  const interactionOpsTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.pagesInteractionOpsTasks({
+        dry_run: dryRun,
+        domain: "delivery",
+        status: "watch",
+        priority: "P1",
+        assigned_to: "FlowOps Agent",
+        max_items: 12,
+        idempotency_key: "dev-flow:interaction-ops:delivery",
+      }),
+    onSuccess: (data) => {
+      setInteractionOpsTaskResult(data);
+      message.success(
+        t("page.devFlow.interactionOpsTasksResult", {
+          planned: data?.summary?.planned ?? 0,
+          created: data?.summary?.created ?? 0,
+        }),
+      );
+      void interactionOpsQ.refetch();
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -125,6 +154,98 @@ export function DevFlowWorkbench() {
               }
             />
           ) : null}
+
+          <WorkbenchPanel title={t("page.devFlow.interactionOpsTitle")}>
+            <div className="grid gap-3 xl:grid-cols-[18rem_minmax(0,1fr)_20rem]">
+              <Card size="small" className="border-[var(--border)]">
+                <Statistic
+                  title={t("page.devFlow.deliveryHealth")}
+                  value={interactionOpsQ.data?.summary?.health ?? 100}
+                  suffix="/100"
+                  valueStyle={{
+                    color:
+                      (interactionOpsQ.data?.summary?.health ?? 100) < 60
+                        ? "#dc2626"
+                        : (interactionOpsQ.data?.summary?.health ?? 100) < 80
+                          ? "#d97706"
+                          : "#059669",
+                  }}
+                />
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="font-mono text-lg font-semibold text-[var(--text)]">{interactionOpsQ.data?.summary?.high ?? 0}</p>
+                    <p className="text-xs text-[var(--muted)]">{t("page.devFlow.highRisk")}</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-lg font-semibold text-[var(--text)]">{interactionOpsQ.data?.summary?.blocked ?? 0}</p>
+                    <p className="text-xs text-[var(--muted)]">{t("page.devFlow.blocked")}</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-lg font-semibold text-[var(--text)]">{lifecycleQ.data?.summary?.total ?? 0}</p>
+                    <p className="text-xs text-[var(--muted)]">{t("page.devFlow.lifecycleStages")}</p>
+                  </div>
+                </div>
+              </Card>
+              <Table
+                rowKey={(row: any) => String(row.id)}
+                dataSource={interactionOpsQ.data?.items ?? []}
+                loading={interactionOpsQ.isLoading || lifecycleQ.isLoading}
+                size="small"
+                pagination={false}
+                scroll={{ x: 860 }}
+                locale={{ emptyText: t("page.devFlow.noInteractionOpsRisks") }}
+                columns={[
+                  { title: t("page.devFlow.lane"), dataIndex: "lane", width: 110, render: (value: string) => <Tag>{value}</Tag> },
+                  {
+                    title: t("page.devFlow.risk"),
+                    dataIndex: "title",
+                    render: (value: string, row: any) => (
+                      <div>
+                        <div className="text-sm font-medium text-[var(--text)]">{value}</div>
+                        <div className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">{typeof row.evidence === "string" ? row.evidence : JSON.stringify(row.evidence ?? {})}</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    title: t("page.devFlow.severity"),
+                    dataIndex: "severity",
+                    width: 100,
+                    render: (value: string) => <Tag color={value === "high" ? "red" : value === "medium" ? "gold" : "blue"}>{value}</Tag>,
+                  },
+                  {
+                    title: t("page.devFlow.command"),
+                    dataIndex: "command",
+                    width: 260,
+                    render: (value: string) => <code className="text-[10px] text-[var(--brand)]">{value}</code>,
+                  },
+                ]}
+              />
+              <Card size="small" className="border-[var(--border)]">
+                <Space direction="vertical" className="w-full" size="small">
+                  <Button block size="small" loading={interactionOpsTasksMut.isPending} onClick={() => interactionOpsTasksMut.mutate(true)}>
+                    {t("page.devFlow.previewInteractionOpsTasks")}
+                  </Button>
+                  <Button block size="small" type="primary" loading={interactionOpsTasksMut.isPending} onClick={() => interactionOpsTasksMut.mutate(false)}>
+                    {t("page.devFlow.createInteractionOpsTasks")}
+                  </Button>
+                  <Button block size="small" href="#/system-map/productization">
+                    {t("page.devFlow.openGraphLoopControlRoom")}
+                  </Button>
+                  <code className="block rounded bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--brand)]">
+                    sop pages interaction-ops --domain delivery --json
+                  </code>
+                  {interactionOpsTaskResult ? (
+                    <div className="rounded border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-xs text-[var(--muted)]">
+                      {t("page.devFlow.interactionOpsTasksResult", {
+                        planned: interactionOpsTaskResult?.summary?.planned ?? 0,
+                        created: interactionOpsTaskResult?.summary?.created ?? 0,
+                      })}
+                    </div>
+                  ) : null}
+                </Space>
+              </Card>
+            </div>
+          </WorkbenchPanel>
 
           <WorkbenchPanel title={t("page.devFlow.opsPlan")}>
             <div className="grid gap-3 xl:grid-cols-[16rem_minmax(0,1fr)]">

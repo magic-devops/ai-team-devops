@@ -74,6 +74,7 @@ def system_readiness_full() -> dict[str, Any]:
         probe_call("graph_loop_store", "Graph Loop store/schema", lambda: __import__("sop_manager.routers.graph_loop", fromlist=["get_graph_loop_store"]).get_graph_loop_store().diagnostics()),
         probe_call("graph_loop_slo", "Graph Loop SLO", lambda: __import__("sop_manager.routers.graph_loop", fromlist=["graph_loop_slo"]).graph_loop_slo()),
         probe_call("dev_flow", "dev-flow ops plan", lambda: __import__("sop_manager.routers.dev_flow", fromlist=["dev_flow_ops_plan"]).dev_flow_ops_plan()),
+        probe_call("interaction_ops", "interaction ops control room", lambda: __import__("sop_manager.routers.pages_productization", fromlist=["pages_interaction_ops"]).pages_interaction_ops(domain="all", status="watch", limit=20)),
         probe_call("skills", "skills catalog", lambda: __import__("sop_manager.routers.skills", fromlist=["list_skills"]).list_skills()),
     ]
     summary = summarize_items(items)
@@ -92,6 +93,7 @@ def system_readiness_full() -> dict[str, Any]:
         actions=[
             {"id": "read", "label": "读取全域 readiness", "method": "GET", "path": "/api/v1/system/readiness/full", "risk": "low"},
             {"id": "pages", "label": "页面产品化治理", "method": "GET", "path": "/api/v1/pages/productization", "risk": "low"},
+            {"id": "interaction-ops", "label": "治理交付控制室", "method": "GET", "path": "/api/v1/pages/interaction-ops", "risk": "medium"},
             {"id": "graph-loop", "label": "Graph Loop 控制面", "method": "GET", "path": "/api/v1/graph-loop/summary", "risk": "medium"},
             {"id": "dev-flow", "label": "研发生命周期", "method": "GET", "path": "/api/v1/dev-flow/lifecycle", "risk": "low"},
         ],
@@ -99,12 +101,14 @@ def system_readiness_full() -> dict[str, Any]:
             {"id": "read", "command": "sop system readiness --full --json"},
             {"id": "doctor", "command": "sop doctor --json"},
             {"id": "pages", "command": "sop pages health --json"},
+            {"id": "interaction-ops", "command": "sop pages interaction-ops --json"},
             {"id": "graph-loop", "command": "sop graph-loop summary --json"},
             {"id": "make", "command": "make full-readiness"},
         ],
         permissions=[
             {"capability": "system.readiness", "actions": ["read", "export"]},
             {"capability": "governance.system-map", "actions": ["read", "write", "execute", "approve"]},
+            {"capability": "governance.interaction-ops", "actions": ["read", "write", "execute", "export"]},
             {"capability": "delivery.dev-flow", "actions": ["read", "write", "execute"]},
         ],
         audit={"event": "system_readiness_full", "project_path": str(project)},
@@ -112,6 +116,10 @@ def system_readiness_full() -> dict[str, Any]:
             "purpose": "One-shot release-readiness packet for backend, frontend, CLI, SDK, permission, scope, scripts and deployment checks.",
             "followups": [
                 "/api/v1/pages/productization",
+                "/api/v1/pages/interaction-ops",
+                "/api/v1/pages/interaction-ops/tasks",
+                "/api/v1/pages/interaction-ops/memory",
+                "/api/v1/pages/interaction-ops/export",
                 "/api/v1/graph-loop/summary",
                 "/api/v1/graph-loop/slo",
                 "/api/v1/graph-loop/runs/{run_id}",

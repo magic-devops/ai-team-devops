@@ -220,6 +220,8 @@ export function Tasks({
   const [agentName, setAgentName] = useState("HermesAgent");
   const [claimResult, setClaimResult] = useState<any>(null);
   const [agentPlanResult, setAgentPlanResult] = useState<any>(null);
+  const [interactionOpsMemoryResult, setInteractionOpsMemoryResult] = useState<any>(null);
+  const [interactionOpsExportResult, setInteractionOpsExportResult] = useState<any>(null);
 
   useEffect(() => {
     setTab(initialTab);
@@ -233,6 +235,11 @@ export function Tasks({
     queryKey: ["tasks", taskQuery, statusFilter, priorityFilter, sourceFilter],
     queryFn: () => api.tasks({ q: taskQuery.trim(), status: statusFilter, priority: priorityFilter, source: sourceFilter }),
     enabled: authed && hasProject && (tab === "list" || tab === "board" || tab === "priority" || tab === "deps"),
+  });
+  const interactionOpsQ = useQuery({
+    queryKey: ["tasksInteractionOps", taskQuery],
+    queryFn: () => api.pagesInteractionOps({ domain: "delivery", q: taskQuery.trim(), status: "watch", limit: 30 }),
+    enabled: authed && hasProject,
   });
 
   const summaryQ = useQuery({
@@ -387,6 +394,31 @@ export function Tasks({
       void qc.invalidateQueries({ queryKey: ["taskDependencies"] });
       if (sprintId) void qc.invalidateQueries({ queryKey: ["sprint-progress", sprintId] });
     },
+  });
+  const interactionOpsMemoryMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.pagesInteractionOpsMemory({
+        dry_run: dryRun,
+        domain: "delivery",
+        q: taskQuery.trim(),
+        status: "watch",
+        kind: "episodic",
+        write_kb: true,
+        idempotency_key: `tasks:${taskQuery.trim()}:interaction-ops-memory`,
+      }),
+    onSuccess: setInteractionOpsMemoryResult,
+  });
+  const interactionOpsExportMut = useMutation({
+    mutationFn: (dryRun: boolean) =>
+      api.pagesInteractionOpsExport({
+        dry_run: dryRun,
+        domain: "delivery",
+        q: taskQuery.trim(),
+        status: "watch",
+        include_events: true,
+        idempotency_key: `tasks:${taskQuery.trim()}:interaction-ops-export`,
+      }),
+    onSuccess: setInteractionOpsExportResult,
   });
 
   const dispatchMut = useMutation({
@@ -719,7 +751,7 @@ export function Tasks({
     patchTask.mutate({ id: dragId, patch: { status: targetStatus } });
   };
 
-  const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || dispatchMut.isPending || schedulerMut.isPending || schedulerActionMut.isPending || schedulerRunbookMut.isPending || schedulerInsightTasksMut.isPending || sprintOpsTasksMut.isPending || qualityPolicyMut.isPending || qualityTasksMut.isPending;
+  const busy = patchTask.isPending || reorderBoard.isPending || createTaskMut.isPending || deleteTaskMut.isPending || bulkUpdateMut.isPending || interactionOpsMemoryMut.isPending || interactionOpsExportMut.isPending || dispatchMut.isPending || schedulerMut.isPending || schedulerActionMut.isPending || schedulerRunbookMut.isPending || schedulerInsightTasksMut.isPending || sprintOpsTasksMut.isPending || qualityPolicyMut.isPending || qualityTasksMut.isPending;
   const canBulkUpdate = selectedTaskIds.length > 0 && Boolean(bulkStatus || bulkPriority || bulkAssignee.trim());
   const focusedSchedulerPanel = focused && tab === "scheduler" && schedulerPanel !== "ops";
   const showSchedulerPlanning = tab === "scheduler" && (!focusedSchedulerPanel || schedulerPanel === "insights");
@@ -909,6 +941,7 @@ export function Tasks({
               { value: "", label: t("page.tasks.allSources") },
               { value: "manual", label: t("page.tasks.sourceManual") },
               { value: "analytics_report", label: t("page.tasks.sourceAnalyticsReport") },
+              { value: "interaction_ops", label: t("page.tasks.sourceInteractionOps") },
               { value: "system_page_backlog", label: t("page.tasks.sourceSystemBacklog") },
               { value: "project_bootstrap", label: t("page.tasks.sourceProjectBootstrap") },
             ]}
@@ -924,6 +957,72 @@ export function Tasks({
             {t("page.tasks.clearFilters")}
           </Button>
         </div>
+      </Card>
+
+      <Card title={t("page.tasks.interactionOpsTitle")}>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="grid gap-3 md:grid-cols-4">
+            <Statistic title={t("page.tasks.interactionOpsHealth")} value={interactionOpsQ.data?.summary?.health ?? 100} suffix="/100" />
+            <Statistic title={t("page.tasks.interactionOpsHigh")} value={interactionOpsQ.data?.summary?.high ?? 0} />
+            <Statistic title={t("page.tasks.interactionOpsBlocked")} value={interactionOpsQ.data?.summary?.blocked ?? 0} />
+            <Statistic title={t("page.tasks.interactionOpsItems")} value={interactionOpsQ.data?.summary?.total ?? 0} />
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+            <div className="flex flex-wrap gap-2">
+              <Button size="small" onClick={() => setSourceFilter("interaction_ops")}>
+                {t("page.tasks.filterInteractionOps")}
+              </Button>
+              <Button size="small" href="#/system-map/productization">
+                {t("page.tasks.viewInteractionOpsSource")}
+              </Button>
+              <Button size="small" loading={interactionOpsMemoryMut.isPending} onClick={() => interactionOpsMemoryMut.mutate(false)}>
+                {t("page.tasks.backfillInteractionOpsEvidence")}
+              </Button>
+              <Button size="small" loading={interactionOpsExportMut.isPending} onClick={() => interactionOpsExportMut.mutate(true)}>
+                {t("page.tasks.previewInteractionOpsExport")}
+              </Button>
+            </div>
+            <code className="mt-3 block rounded bg-[var(--surface)] px-2 py-1 text-xs text-[var(--brand)]">
+              sop pages interaction-ops --domain delivery --q "{taskQuery.trim()}" --json
+            </code>
+            {interactionOpsMemoryResult || interactionOpsExportResult ? (
+              <div className="mt-2 space-y-1 text-xs text-[var(--muted)]">
+                {interactionOpsMemoryResult ? (
+                  <p>{t("page.tasks.interactionOpsMemoryResult", { items: interactionOpsMemoryResult.summary?.items ?? 0 })}</p>
+                ) : null}
+                {interactionOpsExportResult ? (
+                  <p>{t("page.tasks.interactionOpsExportResult", { package: interactionOpsExportResult.summary?.package_id ?? "-" })}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <Table
+          className="mt-3"
+          rowKey={(row: any) => String(row.id)}
+          dataSource={interactionOpsQ.data?.items ?? []}
+          loading={interactionOpsQ.isLoading}
+          size="small"
+          pagination={false}
+          scroll={{ x: 820 }}
+          locale={{ emptyText: t("page.tasks.noInteractionOpsRisks") }}
+          columns={[
+            { title: t("page.tasks.source"), dataIndex: "source", width: 130, render: (_value, row: any) => <Tag>{row.source_type || row.source}</Tag> },
+            {
+              title: t("page.tasks.task"),
+              dataIndex: "title",
+              render: (value, row: any) => (
+                <div>
+                  <p className="text-sm font-medium text-[var(--text)]">{value}</p>
+                  <p className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">{typeof row.evidence === "string" ? row.evidence : JSON.stringify(row.evidence ?? {})}</p>
+                </div>
+              ),
+            },
+            { title: t("page.tasks.statusLabel"), dataIndex: "status", width: 120, render: (value) => <Tag>{value}</Tag> },
+            { title: t("page.tasks.priority"), dataIndex: "severity", width: 110, render: (value) => <Tag color={value === "high" ? "red" : value === "medium" ? "gold" : "blue"}>{value}</Tag> },
+            { title: "CLI", dataIndex: "command", width: 260, render: (value) => <Typography.Text code copyable className="!text-xs">{value}</Typography.Text> },
+          ]}
+        />
       </Card>
 
       <Modal

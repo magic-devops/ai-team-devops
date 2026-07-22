@@ -918,6 +918,29 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  pagesInteractionOps: (params: { domain?: string; q?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.domain && params.domain !== "all") qs.set("domain", params.domain);
+    if (params.q) qs.set("q", params.q);
+    if (params.status && params.status !== "watch") qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/pages/interaction-ops${qs.toString() ? `?${qs}` : ""}`);
+  },
+  pagesInteractionOpsTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_low?: boolean; idempotency_key?: string }) =>
+    request<any>("/api/v1/pages/interaction-ops/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  pagesInteractionOpsMemory: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; kind?: string; write_kb?: boolean; idempotency_key?: string }) =>
+    request<any>("/api/v1/pages/interaction-ops/memory", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  pagesInteractionOpsExport: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; include_events?: boolean; idempotency_key?: string }) =>
+    request<any>("/api/v1/pages/interaction-ops/export", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   graphLoopSummary: () => request<any>("/api/v1/graph-loop/summary"),
   graphLoopSlo: (runId?: string) => request<any>(runId ? `/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/slo` : "/api/v1/graph-loop/slo"),
   graphLoopRuns: (limit = 20) => request<any>(`/api/v1/graph-loop/runs?limit=${encodeURIComponent(String(limit))}`),
