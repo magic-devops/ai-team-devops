@@ -218,6 +218,9 @@ class ManagerClient:
             params={"domain": domain, "q": q, "status": status, "limit": limit},
         )
 
+    def pages_interaction_tasks(self, **body: Any) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/pages/interaction-analysis/tasks", json_body=body)
+
     def skills_runtime(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/skills/runtime")
 

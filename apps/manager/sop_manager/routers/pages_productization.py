@@ -3,10 +3,24 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 from sop_manager.routers.productization_contract import summarize_items, unified_payload
+from sop_manager.routers.tasks import TaskCreate, create_task, list_tasks
 
 router = APIRouter(prefix="/api/v1/pages", tags=["pages-productization"])
+
+
+class InteractionTaskIn(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+    domain: str = "all"
+    status: str = Field("watch", pattern="^(all|ready|watch|risk)$")
+    q: str = ""
+    dry_run: bool = True
+    priority: str = Field("P1", pattern="^P[0-3]$")
+    assigned_to: str = "Designer"
+    max_items: int = Field(12, ge=1, le=100)
+    include_ready: bool = False
 
 
 PRODUCTIZATION_SURFACES = [
@@ -166,6 +180,60 @@ def _interaction_rows(domain: str = "all", q: str = "", status: str = "all") -> 
     return rows
 
 
+def _existing_interaction_task_ids() -> set[str]:
+    try:
+        existing = list_tasks(source="system_page_interaction")
+    except Exception:
+        return set()
+    return {str(item.get("source_report_id") or "") for item in existing if item.get("source_report_id")}
+
+
+def _interaction_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+    module_id = str(item.get("id") or "")
+    gaps = [gap for gap in item.get("gaps") or [] if isinstance(gap, dict)]
+    checks = [check for check in item.get("interaction_checks") or [] if isinstance(check, dict)]
+    analysis_basis = item.get("analysis_basis") or {}
+    return {
+        "title": f"优化页面交互闭环：{item.get('label') or module_id}",
+        "description": "\n".join(
+            [
+                f"module_id: {module_id}",
+                f"path: {item.get('path') or ''}",
+                f"domain: {item.get('domain') or ''}",
+                f"interaction_status: {item.get('status')}",
+                f"interaction_score: {item.get('interaction_score')}",
+                "",
+                "interaction_gaps:",
+                *[
+                    f"- {gap.get('id')}: status={gap.get('status')} recommendation={gap.get('recommendation')}"
+                    for gap in gaps[:10]
+                ],
+                "",
+                "interaction_checks:",
+                *[
+                    f"- {check.get('id')}: status={check.get('status')} evidence={check.get('evidence')}"
+                    for check in checks[:12]
+                ],
+                "",
+                "required_closure:",
+                "- 保持指标摘要、筛选搜索、主工作区、操作台、AI/CLI、权限、审计证据同屏闭环。",
+                "- 补足键盘可达、响应式、加载、空状态和错误态 smoke 证据。",
+                "",
+                "analysis_basis:",
+                str(analysis_basis),
+            ]
+        ).strip(),
+        "priority": priority,
+        "estimate": "M" if str(item.get("status")) == "risk" else "S",
+        "assigned_to": assigned_to or "Designer",
+        "dev_tool": "codex",
+        "source": "system_page_interaction",
+        "source_report_id": f"interaction:{module_id}",
+        "source_report_title": str(item.get("label") or module_id),
+        "debug_notes": f"Generated from pages interaction analysis: {module_id}",
+    }
+
+
 @router.get("/productization")
 def pages_productization(domain: str = "all", q: str = "") -> dict[str, Any]:
     rows = _filter_navigation_rows(_navigation_registry(), domain=domain, q=q)
@@ -231,14 +299,14 @@ def pages_interaction_analysis(domain: str = "all", q: str = "", status: str = "
         items=rows[:capped_limit],
         actions=[
             {"id": "read", "label": "读取交互分析", "method": "GET", "path": "/api/v1/pages/interaction-analysis", "risk": "low"},
-            {"id": "taskize", "label": "将交互缺口任务化", "method": "POST", "path": "/api/v1/system/pages/experience-tasks", "risk": "medium"},
+            {"id": "taskize", "label": "将交互缺口任务化", "method": "POST", "path": "/api/v1/pages/interaction-analysis/tasks", "risk": "medium"},
             {"id": "visual-smoke", "label": "运行页面视觉 smoke", "method": "CLI", "path": "sop pages health --json", "risk": "low"},
         ],
         cli=[
             {"id": "read", "command": f"sop pages interaction-analysis --domain {domain} --q {q} --status {status} --json"},
             {"id": "risk", "command": f"sop pages interaction-analysis --domain {domain} --q {q} --status risk --json"},
             {"id": "watch", "command": f"sop pages interaction-analysis --domain {domain} --q {q} --status watch --json"},
-            {"id": "taskize", "command": "sop pages readiness --status risk --json"},
+            {"id": "taskize", "command": f"sop pages interaction-tasks --domain {domain} --q {q} --status watch --dry-run --json"},
             {"id": "doctor", "command": "sop pages health --json"},
         ],
         permissions=[
@@ -255,10 +323,81 @@ def pages_interaction_analysis(domain: str = "all", q: str = "", status: str = "
             "api": "/api/v1/pages/interaction-analysis",
             "cli": "sop pages interaction-analysis --json",
             "standards": [{"id": sid, "label": label, "requirement": requirement, "weight": weight} for sid, label, requirement, weight in INTERACTION_STANDARDS],
-            "next_task_api": "/api/v1/system/pages/experience-tasks",
+            "next_task_api": "/api/v1/pages/interaction-analysis/tasks",
             "evidence_boundary": "Static registry analysis; visual, keyboard and loading-state proof still requires targeted browser smoke.",
         },
         extra={
             "standards": [{"id": sid, "label": label, "requirement": requirement, "weight": weight} for sid, label, requirement, weight in INTERACTION_STANDARDS],
         },
+    )
+
+
+@router.post("/interaction-analysis/tasks")
+def pages_interaction_tasks(body: InteractionTaskIn) -> dict[str, Any]:
+    status = body.status if body.status in {"all", "ready", "watch", "risk"} else "watch"
+    rows = _interaction_rows(domain=body.domain, q=body.q, status=status)
+    selected = {str(item) for item in body.ids or [] if str(item).strip()}
+    if selected:
+        rows = [item for item in rows if str(item.get("id") or "") in selected]
+    if not body.include_ready:
+        rows = [item for item in rows if str(item.get("status") or "") != "ready"]
+    rows = rows[: max(1, min(int(body.max_items or 12), 100))]
+    existing_ids = _existing_interaction_task_ids()
+    planned: list[dict[str, Any]] = []
+    created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for item in rows:
+        payload_item = _interaction_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        report_id = str(payload_item.get("source_report_id") or "")
+        if report_id in existing_ids:
+            skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
+            continue
+        planned.append(payload_item)
+        if not body.dry_run:
+            created.append(create_task(TaskCreate(**payload_item)))
+            existing_ids.add(report_id)
+    return unified_payload(
+        summary={
+            "ok": True,
+            "planned": len(planned),
+            "created": len(created),
+            "skipped": len(skipped),
+            "dry_run": body.dry_run,
+        },
+        items=planned,
+        actions=[
+            {"id": "preview", "label": "预览交互治理任务", "method": "POST", "path": "/api/v1/pages/interaction-analysis/tasks", "risk": "low"},
+            {"id": "create", "label": "生成交互治理任务", "method": "POST", "path": "/api/v1/pages/interaction-analysis/tasks", "risk": "medium"},
+            {"id": "tasks", "label": "查看任务中心", "method": "NAVIGATE", "path": "#/tasks", "risk": "low"},
+        ],
+        cli=[
+            {"id": "preview", "command": f"sop pages interaction-tasks --domain {body.domain} --q {body.q} --status {status} --dry-run --json"},
+            {"id": "create", "command": f"sop pages interaction-tasks --domain {body.domain} --q {body.q} --status {status} --create --json"},
+        ],
+        permissions=[
+            {"capability": "governance.system-map", "actions": ["read", "write", "execute"]},
+            {"capability": "system.pages", "actions": ["read", "write", "admin"]},
+        ],
+        audit={
+            "event": "pages_interaction_tasks",
+            "filters": {
+                "ids": sorted(selected),
+                "domain": body.domain,
+                "q": body.q,
+                "status": status,
+                "include_ready": body.include_ready,
+                "max_items": body.max_items,
+            },
+            "created": [item.get("id") for item in created],
+            "skipped": skipped,
+        },
+        agent_consumption={
+            "purpose": "Turn page interaction analysis gaps into idempotent governance tasks for designers, frontend engineers and AI agents.",
+            "source": "system_page_interaction",
+            "api": "/api/v1/pages/interaction-analysis/tasks",
+            "cli": "sop pages interaction-tasks --dry-run --json",
+            "task_center": "#/tasks",
+            "fields": ["items.source_report_id", "items.description", "summary.planned", "summary.created", "audit.skipped"],
+        },
+        extra={"dry_run": body.dry_run, "planned": planned, "created": created, "skipped": skipped},
     )

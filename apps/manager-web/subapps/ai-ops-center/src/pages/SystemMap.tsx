@@ -234,6 +234,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const [readinessTaskResult, setReadinessTaskResult] = useState<any>(null);
   const [productionTaskResult, setProductionTaskResult] = useState<any>(null);
   const [experienceTaskResult, setExperienceTaskResult] = useState<any>(null);
+  const [interactionTaskResult, setInteractionTaskResult] = useState<any>(null);
   const [performanceTaskResult, setPerformanceTaskResult] = useState<any>(null);
   const [isolationTaskResult, setIsolationTaskResult] = useState<any>(null);
   const [isolationScanTaskResult, setIsolationScanTaskResult] = useState<any>(null);
@@ -319,6 +320,24 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       }),
     onSuccess: (data) => {
       setExperienceTaskResult(data);
+      void qc.invalidateQueries({ queryKey: ["tasks"] });
+      void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
+    },
+  });
+  const interactionTasks = useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) =>
+      api.pagesInteractionTasks({
+        dry_run: dryRun,
+        domain,
+        status: "watch",
+        q: keyword.trim(),
+        include_ready: false,
+        priority: "P1",
+        assigned_to: "Designer",
+        max_items: 12,
+      }),
+    onSuccess: (data) => {
+      setInteractionTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["systemPagesGovernanceTasks"] });
     },
@@ -1199,6 +1218,36 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
                     <Metric label="Watch" value={interactionAnalysisQ.data?.summary?.watch ?? 0} />
                     <Metric label="Risk" value={interactionAnalysisQ.data?.summary?.risk ?? 0} />
                   </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button size="small" onClick={() => interactionTasks.mutate({ dryRun: true })} loading={interactionTasks.isPending}>
+                      {t("page.systemMap.previewInteractionTasks", { defaultValue: "预览交互任务" })}
+                    </Button>
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => interactionTasks.mutate({ dryRun: false })}
+                      loading={interactionTasks.isPending}
+                      disabled={!canWriteSystemPages}
+                      title={!canWriteSystemPages ? t("capability.denied") : undefined}
+                    >
+                      {t("page.systemMap.createInteractionTasks", { defaultValue: "生成交互任务" })}
+                    </Button>
+                  </div>
+                  {interactionTaskResult ? (
+                    <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs text-[var(--muted-strong)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          {t("page.systemMap.interactionTaskResult", {
+                            defaultValue: "计划 {{planned}} / 已生成 {{created}} / 已跳过 {{skipped}}",
+                            planned: interactionTaskResult.summary?.planned ?? 0,
+                            created: interactionTaskResult.summary?.created ?? 0,
+                            skipped: interactionTaskResult.summary?.skipped ?? 0,
+                          })}
+                        </span>
+                        <span className="font-mono text-[11px] text-[var(--brand)]">{interactionTaskResult.agent_consumption?.cli}</span>
+                      </div>
+                    </div>
+                  ) : null}
                   <Table
                     className="mt-3"
                     rowKey="id"

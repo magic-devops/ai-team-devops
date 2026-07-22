@@ -13,7 +13,9 @@ describe("SystemMap interaction analysis productization", () => {
 
   it("wires the interaction analysis API through the frontend client", () => {
     expect(apiSource).toContain("pagesInteractionAnalysis");
+    expect(apiSource).toContain("pagesInteractionTasks");
     expect(apiSource).toContain("/api/v1/pages/interaction-analysis");
+    expect(apiSource).toContain("/api/v1/pages/interaction-analysis/tasks");
     expect(apiSource).toContain("status");
     expect(apiSource).toContain("limit");
   });
@@ -23,6 +25,9 @@ describe("SystemMap interaction analysis productization", () => {
     expect(systemMapSource).toContain("pagesInteractionAnalysis");
     expect(systemMapSource).toContain("interactionScore");
     expect(systemMapSource).toContain("interactionRiskRows");
+    expect(systemMapSource).toContain("interactionTasks");
+    expect(systemMapSource).toContain("interactionTaskResult");
+    expect(systemMapSource).toContain("canWriteSystemPages");
     expect(systemMapSource).toContain("interactionAnalysisHint");
     expect(systemMapSource).toContain("sop pages interaction-analysis");
   });
@@ -33,6 +38,7 @@ describe("SystemMap interaction analysis productization", () => {
     const ja = JSON.parse(jaSource);
 
     expect(zh.page.systemMap.interactionAnalysis).toBe("全域交互分析");
+    expect(zh.page.systemMap.createInteractionTasks).toBe("生成交互任务");
     expect(en.page.systemMap.interactionScore).toBe("Interaction score");
     expect(ja.page.systemMap.interactionNoRisk).toBe("インタラクションリスクはありません");
   });

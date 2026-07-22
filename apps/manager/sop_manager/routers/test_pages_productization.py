@@ -1,4 +1,4 @@
-from sop_manager.routers.pages_productization import pages_interaction_analysis, pages_productization
+from sop_manager.routers.pages_productization import InteractionTaskIn, pages_interaction_analysis, pages_interaction_tasks, pages_productization
 
 
 def test_pages_productization_links_interaction_analysis_cli_and_api():
@@ -32,3 +32,28 @@ def test_pages_interaction_analysis_filters_status():
 
     assert all(item["status"] == "watch" for item in payload["items"])
     assert payload["audit"]["filters"]["status"] == "watch"
+
+
+def test_pages_interaction_tasks_preview_gap_tasks():
+    result = pages_interaction_tasks(
+        InteractionTaskIn(
+            dry_run=True,
+            domain="all",
+            status="watch",
+            q="",
+            max_items=3,
+            priority="P1",
+            assigned_to="Designer",
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert result["summary"]["planned"] > 0
+    assert result["summary"]["created"] == 0
+    first = result["planned"][0]
+    assert first["source"] == "system_page_interaction"
+    assert first["source_report_id"].startswith("interaction:")
+    assert "interaction_score" in first["description"]
+    assert "interaction_gaps" in first["description"]
+    assert result["agent_consumption"]["api"] == "/api/v1/pages/interaction-analysis/tasks"

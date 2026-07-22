@@ -137,6 +137,51 @@ def interaction_analysis(
     console.print(tbl)
 
 
+@app.command("interaction-tasks")
+def interaction_tasks(
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("watch", "--status", help="交互状态过滤：all/ready/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    ids: str = typer.Option("", "--ids", help="逗号分隔模块 ID；为空则使用筛选结果"),
+    dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
+    include_ready: bool = typer.Option(False, "--include-ready", help="包含 ready 模块，用于持续增强"),
+    priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
+    assigned_to: str = typer.Option("Designer", "--assigned-to", help="负责人"),
+    max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    body = {
+        "ids": [item.strip() for item in ids.split(",") if item.strip()],
+        "domain": domain,
+        "status": status,
+        "q": q,
+        "dry_run": dry_run,
+        "include_ready": include_ready,
+        "priority": priority,
+        "assigned_to": assigned_to,
+        "max_items": max_items,
+    }
+    try:
+        out = get_client().pages_interaction_tasks(**body)
+    except Exception as e:
+        warn(f"Manager pages interaction tasks 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("dry_run", out.get("dry_run", summary.get("dry_run")))
+    kv("planned", summary.get("planned", 0))
+    kv("created", summary.get("created", 0))
+    kv("skipped", summary.get("skipped", 0))
+    tbl = Table(title="interaction tasks", show_header=True, header_style="bold")
+    for col in ("source_report_id", "priority", "title"):
+        tbl.add_column(col)
+    for item in (out.get("planned") or out.get("items") or [])[: max(1, min(int(max_items or 12), 100))]:
+        tbl.add_row(str(item.get("source_report_id", "")), str(item.get("priority", "")), str(item.get("title", ""))[:80])
+    console.print(tbl)
+
+
 def _write_runtime_json(default_name: str, payload: Any, out: str = "") -> Path:
     target = Path(out).expanduser() if out else get_config().project_path / ".sop-runtime" / default_name
     if not target.is_absolute():

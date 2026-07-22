@@ -913,6 +913,11 @@ export const api = {
     if (params.limit) qs.set("limit", String(params.limit));
     return request<any>(`/api/v1/pages/interaction-analysis${qs.toString() ? `?${qs}` : ""}`);
   },
+  pagesInteractionTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_ready?: boolean }) =>
+    request<any>("/api/v1/pages/interaction-analysis/tasks", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   graphLoopSummary: () => request<any>("/api/v1/graph-loop/summary"),
   graphLoopSlo: (runId?: string) => request<any>(runId ? `/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/slo` : "/api/v1/graph-loop/slo"),
   graphLoopRuns: (limit = 20) => request<any>(`/api/v1/graph-loop/runs?limit=${encodeURIComponent(String(limit))}`),
