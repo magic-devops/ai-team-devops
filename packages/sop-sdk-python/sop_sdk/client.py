@@ -204,6 +204,20 @@ class ManagerClient:
     def pages_productization(self, *, domain: str = "all", q: str = "") -> dict[str, Any]:
         return self._request("GET", "/api/v1/pages/productization", params={"domain": domain, "q": q})
 
+    def pages_interaction_analysis(
+        self,
+        *,
+        domain: str = "all",
+        q: str = "",
+        status: str = "all",
+        limit: int = 80,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/api/v1/pages/interaction-analysis",
+            params={"domain": domain, "q": q, "status": status, "limit": limit},
+        )
+
     def skills_runtime(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/skills/runtime")
 

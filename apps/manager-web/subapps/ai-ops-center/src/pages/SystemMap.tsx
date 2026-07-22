@@ -106,6 +106,11 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     queryFn: () => api.pagesProductization({ domain, q: keyword.trim() }),
     enabled: authed,
   });
+  const interactionAnalysisQ = useQuery({
+    queryKey: ["pagesInteractionAnalysis", domain, keyword],
+    queryFn: () => api.pagesInteractionAnalysis({ domain, q: keyword.trim(), status: "all", limit: 80 }),
+    enabled: authed,
+  });
   const graphLoopQ = useQuery({
     queryKey: ["graphLoopSummary"],
     queryFn: api.graphLoopSummary,
@@ -602,6 +607,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const showMigration = section === "migration";
   const productizationMetrics = [
     { key: "readiness", label: t("page.systemMap.aiNativeReadiness", { defaultValue: "全域就绪" }), value: fullReadinessQ.data?.summary?.score ?? 0, icon: ShieldCheck },
+    { key: "interaction", label: t("page.systemMap.interactionScore", { defaultValue: "交互评分" }), value: interactionAnalysisQ.data?.summary?.avg_interaction_score ?? 0, icon: CheckCircle2 },
     { key: "graph", label: t("page.systemMap.aiNativeGraphLoop", { defaultValue: "Graph Loop" }), value: graphLoopQ.data?.summary?.persisted_runs ?? graphLoopRunRows.length, icon: Network },
     { key: "slo", label: t("page.systemMap.graphLoopSlo", { defaultValue: "运行 SLO" }), value: graphLoopSlo.score ?? graphLoopQ.data?.summary?.slo?.score ?? 0, icon: Activity },
     { key: "dev", label: t("page.systemMap.aiNativeLifecycle", { defaultValue: "研发阶段" }), value: devFlowLifecycleQ.data?.summary?.total ?? 0, icon: Layers3 },
@@ -613,10 +619,13 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     ...(graphLoopQ.data?.cli ?? []),
     ...(devFlowLifecycleQ.data?.cli ?? []),
     ...(productizationQ.data?.cli ?? []),
+    ...(interactionAnalysisQ.data?.cli ?? []),
     ...(skillsRuntimeQ.data?.cli ?? []),
     ...(pluginsGovernanceQ.data?.cli ?? []),
   ].slice(0, 8);
   const productizationRows = productizationQ.data?.items ?? [];
+  const interactionRows = interactionAnalysisQ.data?.items ?? [];
+  const interactionRiskRows = interactionRows.filter((item: any) => item.status !== "ready").slice(0, 8);
   const pageColumns: ColumnsType<any> = [
     {
       title: t("page.systemMap.page"),
@@ -1162,20 +1171,61 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
               </div>
             )}
             {showProductization ? (
-              <Table
-                rowKey="id"
-                size="small"
-                dataSource={productizationRows.slice(0, 12)}
-                loading={productizationQ.isLoading || productizationQ.isFetching}
-                pagination={false}
-                scroll={{ x: 900 }}
-                columns={[
-                  { title: t("page.systemMap.module"), dataIndex: "label", render: (_value, row: any) => <a href={row.path}>{row.label}</a> },
-                  { title: t("page.systemMap.domain"), dataIndex: "domain", width: 120 },
-                  { title: t("page.systemMap.capability"), dataIndex: "capability", width: 260 },
-                  { title: "CLI", dataIndex: "cli", render: (value) => <button type="button" className="cursor-pointer font-mono text-xs text-[var(--brand)] hover:underline" onClick={() => copyCli(String(value || ""))}>{value}</button> },
-                ]}
-              />
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)]">
+                <Table
+                  rowKey="id"
+                  size="small"
+                  dataSource={productizationRows.slice(0, 12)}
+                  loading={productizationQ.isLoading || productizationQ.isFetching}
+                  pagination={false}
+                  scroll={{ x: 900 }}
+                  columns={[
+                    { title: t("page.systemMap.module"), dataIndex: "label", render: (_value, row: any) => <a href={row.path}>{row.label}</a> },
+                    { title: t("page.systemMap.domain"), dataIndex: "domain", width: 120 },
+                    { title: t("page.systemMap.capability"), dataIndex: "capability", width: 260 },
+                    { title: "CLI", dataIndex: "cli", render: (value) => <button type="button" className="cursor-pointer font-mono text-xs text-[var(--brand)] hover:underline" onClick={() => copyCli(String(value || ""))}>{value}</button> },
+                  ]}
+                />
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">{t("page.systemMap.interactionAnalysis", { defaultValue: "全域交互分析" })}</p>
+                      <p className="mt-1 text-xs text-[var(--muted)]">{t("page.systemMap.interactionAnalysisHint", { defaultValue: "按指标、筛选、工作区、操作闭环、AI/CLI、权限和审计快速定位交互风险。" })}</p>
+                    </div>
+                    <StatusBadge status={String(interactionAnalysisQ.data?.summary?.risk ? "watch" : "ready")} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <Metric label="Ready" value={interactionAnalysisQ.data?.summary?.ready ?? 0} />
+                    <Metric label="Watch" value={interactionAnalysisQ.data?.summary?.watch ?? 0} />
+                    <Metric label="Risk" value={interactionAnalysisQ.data?.summary?.risk ?? 0} />
+                  </div>
+                  <Table
+                    className="mt-3"
+                    rowKey="id"
+                    size="small"
+                    dataSource={interactionRiskRows}
+                    loading={interactionAnalysisQ.isLoading || interactionAnalysisQ.isFetching}
+                    pagination={false}
+                    scroll={{ x: 560 }}
+                    locale={{ emptyText: t("page.systemMap.interactionNoRisk", { defaultValue: "暂无交互风险" }) }}
+                    columns={[
+                      { title: t("page.systemMap.module"), dataIndex: "label", render: (_value, row: any) => <a href={row.path}>{row.label}</a> },
+                      { title: t("page.systemMap.status"), dataIndex: "status", width: 88, render: (value) => <StatusBadge status={String(value || "-")} /> },
+                      { title: t("page.systemMap.score"), dataIndex: "interaction_score", width: 72 },
+                      { title: t("page.systemMap.gap"), dataIndex: "primary_gap", ellipsis: true },
+                    ]}
+                  />
+                  <Tooltip title={interactionAnalysisQ.data?.cli?.[0]?.command || `sop pages interaction-analysis --domain ${domain} --q ${keyword.trim()} --json`}>
+                    <button
+                      type="button"
+                      className="mt-3 block w-full cursor-pointer truncate rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left font-mono text-xs text-[var(--brand)] hover:border-[var(--brand)]"
+                      onClick={() => copyCli(String(interactionAnalysisQ.data?.cli?.[0]?.command || `sop pages interaction-analysis --domain ${domain} --q ${keyword.trim()} --json`))}
+                    >
+                      {interactionAnalysisQ.data?.cli?.[0]?.command || `sop pages interaction-analysis --domain ${domain} --q ${keyword.trim()} --json`}
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
             ) : null}
           </div>
       </Card>

@@ -97,6 +97,46 @@ def productize(
     console.print(tbl)
 
 
+@app.command("interaction-analysis")
+def interaction_analysis(
+    module: str = typer.Option("", "--module", help="按模块 ID/名称过滤"),
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    status: str = typer.Option("all", "--status", help="交互状态过滤：all/ready/watch/risk"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    limit: int = typer.Option(20, "--limit", help="展示模块数量"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    keyword = module or q
+    try:
+        out = get_client().pages_interaction_analysis(domain=domain, q=keyword, status=status, limit=limit)
+    except Exception as e:
+        warn(f"Manager pages interaction analysis 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("score", summary.get("avg_interaction_score", summary.get("score", 0)))
+    kv("ready", summary.get("ready", 0))
+    kv("watch", summary.get("watch", 0))
+    kv("risk", summary.get("risk", 0))
+    kv("mode", summary.get("analysis_mode", "static_registry_contract"))
+    tbl = Table(title="pages interaction analysis", show_header=True, header_style="bold")
+    for col in ("id", "domain", "status", "score", "primary_gap", "next_cli"):
+        tbl.add_column(col)
+    for item in _items(out)[: max(1, min(int(limit or 20), 100))]:
+        quick_actions = item.get("quick_actions") or []
+        tbl.add_row(
+            str(item.get("id", ""))[:34],
+            str(item.get("domain", "")),
+            str(item.get("status", "")),
+            str(item.get("interaction_score", "")),
+            str(item.get("primary_gap", ""))[:28],
+            str(quick_actions[0] if quick_actions else item.get("cli", ""))[:64],
+        )
+    console.print(tbl)
+
+
 def _write_runtime_json(default_name: str, payload: Any, out: str = "") -> Path:
     target = Path(out).expanduser() if out else get_config().project_path / ".sop-runtime" / default_name
     if not target.is_absolute():

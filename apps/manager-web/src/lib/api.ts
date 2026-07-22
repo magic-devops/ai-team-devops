@@ -905,6 +905,14 @@ export const api = {
     if (params.q) qs.set("q", params.q);
     return request<any>(`/api/v1/pages/productization${qs.toString() ? `?${qs}` : ""}`);
   },
+  pagesInteractionAnalysis: (params: { domain?: string; q?: string; status?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.domain && params.domain !== "all") qs.set("domain", params.domain);
+    if (params.q) qs.set("q", params.q);
+    if (params.status && params.status !== "all") qs.set("status", params.status);
+    if (params.limit) qs.set("limit", String(params.limit));
+    return request<any>(`/api/v1/pages/interaction-analysis${qs.toString() ? `?${qs}` : ""}`);
+  },
   graphLoopSummary: () => request<any>("/api/v1/graph-loop/summary"),
   graphLoopSlo: (runId?: string) => request<any>(runId ? `/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/slo` : "/api/v1/graph-loop/slo"),
   graphLoopRuns: (limit = 20) => request<any>(`/api/v1/graph-loop/runs?limit=${encodeURIComponent(String(limit))}`),
