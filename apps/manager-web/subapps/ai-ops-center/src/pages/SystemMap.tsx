@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Checkbox, Input, Segmented, Select, Space, Table, Tag } from "antd";
+import { Button, Checkbox, Input, Segmented, Select, Space, Table, Tag, Tooltip } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ArrowRight, Layers3, RotateCw } from "lucide-react";
+import { Activity, Archive, ArrowRight, CheckCircle2, FileDown, GitBranch, Layers3, Network, Play, RotateCw, ShieldCheck, Terminal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
@@ -18,6 +18,7 @@ import { SystemProductionReadinessPanel } from "./system/SystemProductionReadine
 type ViewMode = "react" | "legacy" | "all";
 type SystemMapSection =
   | "overview"
+  | "productization"
   | "registry"
   | "readiness"
   | "performance"
@@ -78,6 +79,8 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const [includeProtectedIsolation, setIncludeProtectedIsolation] = useState(false);
   const [includeProtectedIsolationScan, setIncludeProtectedIsolationScan] = useState(false);
   const [selectedBacklogIds, setSelectedBacklogIds] = useState<string[]>([]);
+  const [selectedGraphRunId, setSelectedGraphRunId] = useState("");
+  const [graphLoopActionResult, setGraphLoopActionResult] = useState<any>(null);
   const q = useQuery({
     queryKey: ["systemPages", mode, domain, status, keyword],
     queryFn: () => api.systemPages({ view: mode, domain, status, q: keyword.trim() }),
@@ -91,6 +94,57 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const healthQ = useQuery({
     queryKey: ["systemPagesHealth"],
     queryFn: api.systemPagesHealth,
+    enabled: authed,
+  });
+  const fullReadinessQ = useQuery({
+    queryKey: ["systemReadinessFull"],
+    queryFn: api.systemReadinessFull,
+    enabled: authed,
+  });
+  const productizationQ = useQuery({
+    queryKey: ["pagesProductization", domain, keyword],
+    queryFn: () => api.pagesProductization({ domain, q: keyword.trim() }),
+    enabled: authed,
+  });
+  const graphLoopQ = useQuery({
+    queryKey: ["graphLoopSummary"],
+    queryFn: api.graphLoopSummary,
+    enabled: authed,
+  });
+  const graphLoopRunsQ = useQuery({
+    queryKey: ["graphLoopRuns"],
+    queryFn: () => api.graphLoopRuns(20),
+    enabled: authed,
+  });
+  const activeGraphRunId = selectedGraphRunId || String((graphLoopRunsQ.data?.items ?? [])[0]?.run_id || "");
+  const graphLoopDetailQ = useQuery({
+    queryKey: ["graphLoopDetail", activeGraphRunId],
+    queryFn: () => api.graphLoopDetail(activeGraphRunId),
+    enabled: authed && Boolean(activeGraphRunId),
+  });
+  const graphLoopEventsQ = useQuery({
+    queryKey: ["graphLoopEvents", activeGraphRunId],
+    queryFn: () => api.graphLoopEvents(activeGraphRunId),
+    enabled: authed && Boolean(activeGraphRunId),
+  });
+  const graphLoopSloQ = useQuery({
+    queryKey: ["graphLoopSlo", activeGraphRunId],
+    queryFn: () => api.graphLoopSlo(activeGraphRunId),
+    enabled: authed && Boolean(activeGraphRunId),
+  });
+  const skillsRuntimeQ = useQuery({
+    queryKey: ["skillsRuntime"],
+    queryFn: api.skillsRuntime,
+    enabled: authed,
+  });
+  const pluginsGovernanceQ = useQuery({
+    queryKey: ["pluginsGovernance"],
+    queryFn: api.pluginsGovernance,
+    enabled: authed,
+  });
+  const devFlowLifecycleQ = useQuery({
+    queryKey: ["devFlowLifecycle"],
+    queryFn: api.devFlowLifecycle,
     enabled: authed,
   });
   const readinessQ = useQuery({
@@ -170,6 +224,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     retry: false,
   });
   const caps = useCapabilities();
+  const currentRole = caps.role || String(me.data?.role || "viewer");
   const [taskResult, setTaskResult] = useState<any>(null);
   const [readinessTaskResult, setReadinessTaskResult] = useState<any>(null);
   const [productionTaskResult, setProductionTaskResult] = useState<any>(null);
@@ -374,6 +429,70 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       }
     },
   });
+  const refreshGraphLoop = () => {
+    void qc.invalidateQueries({ queryKey: ["graphLoopSummary"] });
+    void qc.invalidateQueries({ queryKey: ["graphLoopRuns"] });
+    void qc.invalidateQueries({ queryKey: ["graphLoopDetail"] });
+    void qc.invalidateQueries({ queryKey: ["graphLoopEvents"] });
+    void qc.invalidateQueries({ queryKey: ["graphLoopSlo"] });
+  };
+  const createGraphLoopRun = useMutation({
+    mutationFn: () =>
+      api.graphLoopRun({
+        goal: keyword.trim() || "Hermes/SOP AI-native delivery loop",
+        mode: "apply",
+        owner: currentRole || "GraphLoop Operator",
+        quality_bar: "strict",
+      }),
+    onSuccess: (data) => {
+      const runId = String(data?.summary?.run_id || data?.run?.run_id || "");
+      if (runId) setSelectedGraphRunId(runId);
+      setGraphLoopActionResult(data);
+      refreshGraphLoop();
+    },
+  });
+  const transitionGraphLoopRun = useMutation({
+    mutationFn: ({ action, nodeId }: { action: string; nodeId?: string }) =>
+      api.graphLoopTransition(activeGraphRunId, {
+        action,
+        node_id: nodeId || "",
+        note: keyword.trim() || `SystemMap productization ${action}`,
+        actor: currentRole || "GraphLoop Operator",
+        idempotency_key: `${activeGraphRunId}-${action}-${Date.now()}`,
+      }),
+    onSuccess: (data) => {
+      setGraphLoopActionResult(data);
+      refreshGraphLoop();
+    },
+  });
+  const decideGraphLoopInterrupt = useMutation({
+    mutationFn: ({ interruptId, decision }: { interruptId: string; decision: string }) =>
+      api.graphLoopInterruptDecision(activeGraphRunId, interruptId, {
+        decision,
+        actor: currentRole || "GraphLoop Approver",
+        note: keyword.trim() || `SystemMap interrupt ${decision}`,
+        edited_payload: {},
+        idempotency_key: `${activeGraphRunId}-${interruptId}-${decision}-${Date.now()}`,
+      }),
+    onSuccess: (data) => {
+      setGraphLoopActionResult(data);
+      refreshGraphLoop();
+    },
+  });
+  const replayGraphLoopRun = useMutation({
+    mutationFn: (mode: "dry-run" | "apply") =>
+      api.graphLoopReplay(activeGraphRunId, {
+        mode,
+        actor: currentRole || "GraphLoop Operator",
+        note: keyword.trim() || "SystemMap replay",
+        idempotency_key: `${activeGraphRunId}-replay-${mode}-${Date.now()}`,
+      }),
+    onSuccess: setGraphLoopActionResult,
+  });
+  const exportGraphLoopRun = useMutation({
+    mutationFn: () => api.graphLoopExport(activeGraphRunId, { format: "json", include_events: true, actor: currentRole || "GraphLoop Operator" }),
+    onSuccess: setGraphLoopActionResult,
+  });
 
   const domainLabels = useMemo(() => {
     const map = new Map<string, string>();
@@ -405,8 +524,16 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const readinessRows = readinessQ.data?.items ?? [];
   const experienceRows = experienceReviewQ.data?.items ?? [];
   const productionRows = productionReadinessQ.data?.items ?? [];
-  const currentRole = caps.role || String(me.data?.role || "viewer");
+  const graphLoopRunRows = graphLoopRunsQ.data?.items ?? [];
+  const activeGraphRun = graphLoopDetailQ.data?.run ?? graphLoopRunRows.find((item: any) => String(item.run_id) === activeGraphRunId) ?? graphLoopQ.data?.run ?? {};
+  const graphLoopNodes = graphLoopDetailQ.data?.graph?.nodes ?? activeGraphRun?.nodes ?? graphLoopQ.data?.graph?.nodes ?? graphLoopQ.data?.items ?? [];
+  const graphLoopEdges = graphLoopDetailQ.data?.graph?.edges ?? activeGraphRun?.edges ?? graphLoopQ.data?.graph?.edges ?? [];
+  const graphLoopEvents = graphLoopEventsQ.data?.items ?? activeGraphRun?.events ?? [];
+  const graphLoopSlo = graphLoopSloQ.data?.summary ?? activeGraphRun?.slo ?? graphLoopQ.data?.summary?.slo ?? {};
+  const pendingGraphInterrupts = (activeGraphRun?.interrupts ?? []).filter((item: any) => item.status === "pending");
   const canWriteSystemPages = caps.can("governance.system-map", "write") || caps.can("system.pages", "write");
+  const canExecuteGraphLoop = canWriteSystemPages || caps.can("governance.graph-loop", "write") || caps.can("governance.graph-loop", "admin");
+  const canApproveGraphLoop = canWriteSystemPages || caps.can("governance.graph-loop.approve", "write") || caps.can("governance.graph-loop", "admin");
   const canReadMigrationBacklog = caps.can("governance.system-map.migration.read", "read") || caps.can("governance.system-map.migration", "read") || canWriteSystemPages;
   const canWriteMigrationBacklog = caps.can("governance.system-map.migration.write", "write") || caps.can("governance.system-map.migration", "write") || canWriteSystemPages;
   const canRunModuleAction = (item: any) => {
@@ -420,7 +547,11 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     setExperienceStatus(String(item?.status || "all"));
     setKeyword(String(item?.id || item?.name || ""));
   };
+  const copyCli = (command: string) => {
+    if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(command);
+  };
   const sectionOptions: Array<{ label: string; value: SystemMapSection }> = [
+    { label: t("nav.systemMapProductization", { defaultValue: "全域闭环" }), value: "productization" },
     { label: t("nav.pageRegistry"), value: "registry" },
     { label: t("nav.moduleReadinessGovernance"), value: "readiness" },
     { label: t("nav.frontendPerformanceGovernance"), value: "performance" },
@@ -449,6 +580,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     const pathBySection: Partial<Record<SystemMapSection, string>> = {
       "baseline-compare": "baseline-compare",
       "module-contract": "contract",
+      productization: "productization",
       performance: "performance",
       "source-scan": "source-scan",
       isolation: "three-code-isolation",
@@ -458,6 +590,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     window.location.hash = `#/system-map/${nextPath}`;
   };
   const showOverview = section === "overview";
+  const showProductization = section === "productization";
   const showRegistry = section === "registry";
   const showReadiness = section === "readiness";
   const showPerformance = section === "performance";
@@ -467,6 +600,23 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const showIsolation = showIsolationGovernance || showSourceScan || showBaselineCompare;
   const showTasks = section === "tasks";
   const showMigration = section === "migration";
+  const productizationMetrics = [
+    { key: "readiness", label: t("page.systemMap.aiNativeReadiness", { defaultValue: "全域就绪" }), value: fullReadinessQ.data?.summary?.score ?? 0, icon: ShieldCheck },
+    { key: "graph", label: t("page.systemMap.aiNativeGraphLoop", { defaultValue: "Graph Loop" }), value: graphLoopQ.data?.summary?.persisted_runs ?? graphLoopRunRows.length, icon: Network },
+    { key: "slo", label: t("page.systemMap.graphLoopSlo", { defaultValue: "运行 SLO" }), value: graphLoopSlo.score ?? graphLoopQ.data?.summary?.slo?.score ?? 0, icon: Activity },
+    { key: "dev", label: t("page.systemMap.aiNativeLifecycle", { defaultValue: "研发阶段" }), value: devFlowLifecycleQ.data?.summary?.total ?? 0, icon: Layers3 },
+    { key: "skills", label: t("page.systemMap.aiNativeSkills", { defaultValue: "技能运行" }), value: skillsRuntimeQ.data?.summary?.skills ?? 0, icon: Terminal },
+    { key: "plugins", label: t("page.systemMap.aiNativePlugins", { defaultValue: "插件治理" }), value: pluginsGovernanceQ.data?.summary?.plugins ?? 0, icon: ShieldCheck },
+  ];
+  const productizationCommands = [
+    ...(fullReadinessQ.data?.cli ?? []),
+    ...(graphLoopQ.data?.cli ?? []),
+    ...(devFlowLifecycleQ.data?.cli ?? []),
+    ...(productizationQ.data?.cli ?? []),
+    ...(skillsRuntimeQ.data?.cli ?? []),
+    ...(pluginsGovernanceQ.data?.cli ?? []),
+  ].slice(0, 8);
+  const productizationRows = productizationQ.data?.items ?? [];
   const pageColumns: ColumnsType<any> = [
     {
       title: t("page.systemMap.page"),
@@ -713,6 +863,322 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         <SummaryTile label={t("page.systemMap.legacyPages")} value={q.data?.summary?.legacy?.total ?? 0} sub={`${q.data?.summary?.legacy?.avg_maturity ?? 0}%`} />
         <SummaryTile label={t("page.systemMap.allPages")} value={q.data?.summary?.all?.total ?? 0} sub={`${q.data?.summary?.all?.avg_maturity ?? 0}%`} />
       </div>
+      ) : null}
+
+      {showOverview || showProductization ? (
+      <Card
+        title={t("page.systemMap.aiNativeProductizationTitle", { defaultValue: "全域智能化闭环" })}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void fullReadinessQ.refetch()} loading={fullReadinessQ.isFetching}>
+              {t("common.refresh")}
+            </Button>
+            <Button type="primary" href="#/system-map/productization">
+              {t("page.systemMap.openAiNativeProductization", { defaultValue: "打开闭环工作台" })}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-5">
+              {productizationMetrics.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs text-[var(--muted)]">{item.label}</p>
+                      <Icon className="h-4 w-4 text-[var(--brand)]" />
+                    </div>
+                    <p className="mt-2 font-mono text-2xl font-semibold text-[var(--text)]">{item.value}</p>
+                  </div>
+                );
+              })}
+            </div>
+            {showProductization ? (
+              <div className="grid gap-4 xl:grid-cols-[18rem_minmax(0,1fr)_22rem]">
+                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Graph Loop</p>
+                    <Select
+                      className="mt-2 w-full"
+                      placeholder="run_id"
+                      value={activeGraphRunId || undefined}
+                      onChange={(value) => setSelectedGraphRunId(String(value))}
+                      options={graphLoopRunRows.map((item: any) => ({
+                        label: `${item.run_id} · ${item.status}`,
+                        value: String(item.run_id),
+                      }))}
+                    />
+                  </div>
+                  <Input.Search
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                    placeholder={t("common.search")}
+                    allowClear
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Metric label="Status" value={String(activeGraphRun?.status || graphLoopQ.data?.summary?.status || "-")} />
+                    <Metric label="SLO" value={String(graphLoopSlo.status || "-")} />
+                    <Metric label="Events" value={graphLoopEvents.length} />
+                    <Metric label="Interrupts" value={pendingGraphInterrupts.length} />
+                  </div>
+                  <Table
+                    rowKey="run_id"
+                    size="small"
+                    dataSource={graphLoopRunRows.slice(0, 8)}
+                    pagination={false}
+                    columns={[
+                      {
+                        title: "Run",
+                        dataIndex: "run_id",
+                        render: (value, row: any) => (
+                          <button
+                            type="button"
+                            className="max-w-full cursor-pointer truncate font-mono text-xs text-[var(--brand)] hover:underline"
+                            onClick={() => setSelectedGraphRunId(String(value || row.run_id))}
+                          >
+                            {value}
+                          </button>
+                        ),
+                      },
+                      { title: "SLO", dataIndex: ["slo", "status"], width: 86, render: (_value, row: any) => <Tag>{row.slo?.status || row.status}</Tag> },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text)]">{activeGraphRun?.goal || graphLoopQ.data?.summary?.goal || "Hermes/SOP AI-native delivery loop"}</p>
+                        <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{activeGraphRunId || graphLoopQ.data?.summary?.run_id || "dry-run"}</p>
+                      </div>
+                      <Space wrap>
+                        <Tag color={graphLoopSlo.status === "healthy" ? "green" : graphLoopSlo.status === "risk" ? "red" : "gold"}>{graphLoopSlo.status || "watch"}</Tag>
+                        <Button size="small" icon={<RotateCw className="h-3.5 w-3.5" />} onClick={() => refreshGraphLoop()} />
+                      </Space>
+                    </div>
+                    <div className="mt-4 overflow-x-auto">
+                      <div className="flex min-w-[760px] items-stretch gap-2">
+                        {graphLoopNodes.map((node: any, index: number) => {
+                          const color =
+                            node.status === "succeeded"
+                              ? "border-emerald-400 bg-emerald-500/10"
+                              : node.status === "running"
+                                ? "border-sky-400 bg-sky-500/10"
+                                : node.status === "waiting_approval" || node.status === "blocked" || node.status === "failed"
+                                  ? "border-rose-400 bg-rose-500/10"
+                                  : "border-[var(--border)] bg-[var(--surface)]";
+                          return (
+                            <div key={node.id} className="flex flex-1 items-center gap-2">
+                              <button
+                                type="button"
+                                className={`min-h-28 w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-colors duration-200 hover:border-[var(--brand)] ${color}`}
+                                onClick={() => transitionGraphLoopRun.mutate({ action: "start", nodeId: String(node.id || "") })}
+                                disabled={!canExecuteGraphLoop || !activeGraphRunId}
+                                title={!canExecuteGraphLoop ? t("capability.denied") : undefined}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <GitBranch className="mt-0.5 h-4 w-4 shrink-0 text-[var(--brand)]" />
+                                  <Tag>{node.status || "pending"}</Tag>
+                                </div>
+                                <p className="mt-2 line-clamp-2 text-sm font-semibold text-[var(--text)]">{node.label}</p>
+                                <p className="mt-1 line-clamp-2 text-[11px] text-[var(--muted)]">{node.quality_gate}</p>
+                              </button>
+                              {index < graphLoopNodes.length - 1 ? <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)]" /> : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <Table
+                      rowKey="id"
+                      size="small"
+                      dataSource={graphLoopNodes}
+                      pagination={false}
+                      scroll={{ x: 760 }}
+                      columns={[
+                        { title: "Node", dataIndex: "label", render: (value, row: any) => <span className="text-sm font-medium text-[var(--text)]">{value || row.id}</span> },
+                        { title: "Type", dataIndex: "type", width: 110 },
+                        { title: "Status", dataIndex: "status", width: 130, render: (value) => <StatusBadge status={String(value || "pending")} /> },
+                        { title: "Gate", dataIndex: "quality_gate", render: (value) => <span className="line-clamp-1 text-xs text-[var(--muted)]">{value}</span> },
+                      ]}
+                    />
+                    <Table
+                      rowKey="id"
+                      size="small"
+                      dataSource={graphLoopEdges}
+                      pagination={false}
+                      scroll={{ x: 520 }}
+                      columns={[
+                        { title: "Source", dataIndex: "source", width: 150 },
+                        { title: "Target", dataIndex: "target", width: 150 },
+                        { title: "Condition", dataIndex: "condition", render: (value) => <span className="line-clamp-1 text-xs text-[var(--muted)]">{value}</span> },
+                      ]}
+                    />
+                  </div>
+                  <Table
+                    rowKey={(row: any) => row.id || `${row.event}-${row.at}`}
+                    size="small"
+                    dataSource={graphLoopEvents.slice(0, 8)}
+                    pagination={false}
+                    columns={[
+                      { title: "Event", dataIndex: "event", width: 180 },
+                      { title: "Actor", dataIndex: "actor", width: 160 },
+                      { title: "Trace", dataIndex: "trace_id", render: (value) => <span className="font-mono text-xs">{String(value || "").slice(0, 16)}</span> },
+                      { title: "At", dataIndex: "at", width: 210 },
+                    ]}
+                  />
+                </div>
+                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="primary"
+                      icon={<Play className="h-4 w-4" />}
+                      onClick={() => createGraphLoopRun.mutate()}
+                      loading={createGraphLoopRun.isPending}
+                      disabled={!canExecuteGraphLoop}
+                      title={!canExecuteGraphLoop ? t("capability.denied") : undefined}
+                    >
+                      Apply
+                    </Button>
+                    <Button
+                      icon={<CheckCircle2 className="h-4 w-4" />}
+                      onClick={() => transitionGraphLoopRun.mutate({ action: "complete" })}
+                      loading={transitionGraphLoopRun.isPending}
+                      disabled={!canExecuteGraphLoop || !activeGraphRunId}
+                    >
+                      Complete
+                    </Button>
+                    <Button
+                      icon={<Activity className="h-4 w-4" />}
+                      onClick={() => transitionGraphLoopRun.mutate({ action: "interrupt" })}
+                      loading={transitionGraphLoopRun.isPending}
+                      disabled={!canApproveGraphLoop || !activeGraphRunId}
+                    >
+                      Interrupt
+                    </Button>
+                    <Button
+                      icon={<RotateCw className="h-4 w-4" />}
+                      onClick={() => transitionGraphLoopRun.mutate({ action: "retry" })}
+                      loading={transitionGraphLoopRun.isPending}
+                      disabled={!canExecuteGraphLoop || !activeGraphRunId}
+                    >
+                      Retry
+                    </Button>
+                    <Button
+                      icon={<Archive className="h-4 w-4" />}
+                      onClick={() => transitionGraphLoopRun.mutate({ action: "rollback" })}
+                      loading={transitionGraphLoopRun.isPending}
+                      disabled={!canExecuteGraphLoop || !activeGraphRunId}
+                    >
+                      Rollback
+                    </Button>
+                    <Button
+                      icon={<FileDown className="h-4 w-4" />}
+                      onClick={() => exportGraphLoopRun.mutate()}
+                      loading={exportGraphLoopRun.isPending}
+                      disabled={!activeGraphRunId}
+                    >
+                      Export
+                    </Button>
+                  </div>
+                  {pendingGraphInterrupts.length ? (
+                    <div className="space-y-2">
+                      {pendingGraphInterrupts.map((item: any) => (
+                        <div key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2">
+                          <p className="truncate text-xs font-semibold text-[var(--text)]">{item.reason}</p>
+                          <Space className="mt-2" wrap>
+                            {["approve", "edit", "reject"].map((decision) => (
+                              <Button
+                                key={decision}
+                                size="small"
+                                onClick={() => decideGraphLoopInterrupt.mutate({ interruptId: String(item.id), decision })}
+                                loading={decideGraphLoopInterrupt.isPending}
+                                disabled={!canApproveGraphLoop}
+                              >
+                                {decision}
+                              </Button>
+                            ))}
+                          </Space>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={() => replayGraphLoopRun.mutate("dry-run")} disabled={!activeGraphRunId} loading={replayGraphLoopRun.isPending}>
+                      Replay
+                    </Button>
+                    <Button onClick={() => replayGraphLoopRun.mutate("apply")} disabled={!canExecuteGraphLoop || !activeGraphRunId} loading={replayGraphLoopRun.isPending}>
+                      Replay Apply
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {productizationCommands.slice(0, 10).map((item: any, index: number) => (
+                      <Tooltip key={`${item.id}-${index}`} title={item.command}>
+                        <button
+                          type="button"
+                          className="block w-full cursor-pointer truncate rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left font-mono text-xs text-[var(--text)] transition-colors duration-200 hover:border-[var(--brand)]"
+                          onClick={() => copyCli(String(item.command || ""))}
+                        >
+                          {item.command}
+                        </button>
+                      </Tooltip>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Metric label={t("page.systemMap.auditTrace", { defaultValue: "Trace" })} value={String(graphLoopDetailQ.data?.trace_id || graphLoopQ.data?.trace_id || "-").slice(0, 8)} />
+                    <Metric label={t("page.systemMap.policyMode", { defaultValue: "权限模式" })} value={canExecuteGraphLoop ? "ABAC" : "read-only"} />
+                  </div>
+                  {graphLoopActionResult ? (
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-xs text-[var(--muted-strong)]">
+                      <p className="font-semibold text-[var(--text)]">{graphLoopActionResult.summary?.status || graphLoopActionResult.summary?.mode || "ok"}</p>
+                      <p className="mt-1 font-mono">{String(graphLoopActionResult.trace_id || "").slice(0, 24)}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {(devFlowLifecycleQ.data?.items ?? []).slice(0, 6).map((item: any) => (
+                  <article key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text)]">{item.label}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{(item.outputs ?? []).join(" / ")}</p>
+                      </div>
+                      <StatusBadge status={String(item.status || "-")} />
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-3 max-w-full cursor-pointer truncate font-mono text-xs text-[var(--brand)] hover:underline"
+                      onClick={() => copyCli(String(item.cli || ""))}
+                    >
+                      {item.cli}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+            {showProductization ? (
+              <Table
+                rowKey="id"
+                size="small"
+                dataSource={productizationRows.slice(0, 12)}
+                loading={productizationQ.isLoading || productizationQ.isFetching}
+                pagination={false}
+                scroll={{ x: 900 }}
+                columns={[
+                  { title: t("page.systemMap.module"), dataIndex: "label", render: (_value, row: any) => <a href={row.path}>{row.label}</a> },
+                  { title: t("page.systemMap.domain"), dataIndex: "domain", width: 120 },
+                  { title: t("page.systemMap.capability"), dataIndex: "capability", width: 260 },
+                  { title: "CLI", dataIndex: "cli", render: (value) => <button type="button" className="cursor-pointer font-mono text-xs text-[var(--brand)] hover:underline" onClick={() => copyCli(String(value || ""))}>{value}</button> },
+                ]}
+              />
+            ) : null}
+          </div>
+      </Card>
       ) : null}
 
       {showRegistry ? (

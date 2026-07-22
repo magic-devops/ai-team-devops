@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Alert, Button, Checkbox, Input, InputNumber, Popconfirm, Select, Space, Table, Tag as AntTag } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
@@ -8,8 +10,17 @@ import { NeedLogin, RefreshButton } from "@/components/PageStates";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
-type Tab = "catalog" | "rules" | "ontology" | "profiles";
-const TAB_KEYS: Tab[] = ["catalog", "rules", "ontology", "profiles"];
+type Tab = "catalog" | "rules" | "ontology" | "profiles" | "governance" | "approvals";
+
+const TAB_KEYS: Tab[] = ["catalog", "rules", "ontology", "profiles", "governance", "approvals"];
+const TAB_HREF: Record<Tab, string> = {
+  catalog: "#/data/tags/catalog",
+  rules: "#/data/tags/rules",
+  ontology: "#/data/tags/ontology",
+  profiles: "#/data/tags/api",
+  governance: "#/data/tags/governance",
+  approvals: "#/data/tags/approvals",
+};
 const TAB_META: Record<Tab, { labelKey: string; titleKey: string; descriptionKey: string; focusKey: string }> = {
   catalog: {
     labelKey: "page.tagService.tabs.catalog",
@@ -35,6 +46,18 @@ const TAB_META: Record<Tab, { labelKey: string; titleKey: string; descriptionKey
     descriptionKey: "page.tagService.modules.profiles.description",
     focusKey: "page.tagService.modules.profiles.focus",
   },
+  governance: {
+    labelKey: "page.tagService.tabs.governance",
+    titleKey: "page.tagService.modules.governance.title",
+    descriptionKey: "page.tagService.modules.governance.description",
+    focusKey: "page.tagService.modules.governance.focus",
+  },
+  approvals: {
+    labelKey: "page.tagService.tabs.approvals",
+    titleKey: "page.tagService.modules.approvals.title",
+    descriptionKey: "page.tagService.modules.approvals.description",
+    focusKey: "page.tagService.modules.approvals.focus",
+  },
 };
 
 const DEFAULT_PROFILE_RECORDS = `[
@@ -43,7 +66,15 @@ const DEFAULT_PROFILE_RECORDS = `[
 ]`;
 
 function splitList(value: string) {
-  return value.split(",").map(item => item.trim()).filter(Boolean);
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function stringifyJson(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {}, null, 0);
+  } catch {
+    return "{}";
+  }
 }
 
 export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focused?: boolean; initialTab?: Tab }) {
@@ -62,26 +93,41 @@ export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focu
   const [evaluateResult, setEvaluateResult] = useState<any>(null);
   const [buildResult, setBuildResult] = useState<any>(null);
   const [contractResult, setContractResult] = useState<any>(null);
+  const [governancePayload, setGovernancePayload] = useState<any>(null);
+  const [governanceAction, setGovernanceAction] = useState<"preview" | "create" | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState("pending");
+  const [approvalEntityId, setApprovalEntityId] = useState("");
+  const [approvalReason, setApprovalReason] = useState("");
+
+  useEffect(() => {
+    setTab(initialTab);
+    setShowForm(false);
+  }, [initialTab]);
 
   const tagsQ = useQuery({ queryKey: ["tagCatalog"], queryFn: () => api.tagCatalog(), enabled: authed });
-  const rulesQ = useQuery({ queryKey: ["tagRules"], queryFn: () => api.tagRules(), enabled: authed && tab === "rules" });
-  const ontologyQ = useQuery({ queryKey: ["tagOntology"], queryFn: () => api.tagOntology(), enabled: authed && tab === "ontology" });
-  const profileBuildsQ = useQuery({ queryKey: ["tagProfileBuilds", profileForm.entity_type], queryFn: () => api.tagProfileBuilds(profileForm.entity_type), enabled: authed && tab === "profiles" });
+  const profileBuildsEntityType = tab === "governance" ? "" : profileForm.entity_type;
+  const rulesQ = useQuery({ queryKey: ["tagRules"], queryFn: () => api.tagRules(), enabled: authed && (tab === "rules" || tab === "governance" || tab === "approvals") });
+  const ontologyQ = useQuery({ queryKey: ["tagOntology"], queryFn: () => api.tagOntology(), enabled: authed && (tab === "ontology" || tab === "governance" || tab === "approvals") });
+  const profileBuildsQ = useQuery({ queryKey: ["tagProfileBuilds", profileBuildsEntityType], queryFn: () => api.tagProfileBuilds(profileBuildsEntityType), enabled: authed && (tab === "profiles" || tab === "governance") });
+  const approvalsQ = useQuery({ queryKey: ["tagApprovals", approvalStatus], queryFn: () => api.tagApprovals(approvalStatus), enabled: authed && tab === "approvals" });
 
   function parseJson(value: string, fallback: any) {
     try {
       setJsonError("");
       return JSON.parse(value);
     } catch (err: any) {
-      const message = err?.message || "JSON 格式不正确";
-      setJsonError(message);
+      setJsonError(err?.message || t("page.tagService.messages.invalidJson"));
       return fallback;
     }
   }
 
   const createTag = useMutation({
     mutationFn: () => api.tagCreate({ ...tagForm, applies_to: splitList(tagForm.applies_to) }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["tagCatalog"] }); setShowForm(false); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tagCatalog"] });
+      setShowForm(false);
+      setTagForm({ name: "", category: "general", description: "", value_type: "string", owner: "", applies_to: "" });
+    },
   });
   const deleteTag = useMutation({
     mutationFn: (id: string) => api.tagDelete(id),
@@ -95,11 +141,18 @@ export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focu
       output_value: ruleForm.output_value === "true" ? true : ruleForm.output_value === "false" ? false : ruleForm.output_value,
       priority: ruleForm.priority,
     }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["tagRules"] }); setShowForm(false); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tagRules"] });
+      setShowForm(false);
+    },
   });
   const createEntity = useMutation({
     mutationFn: () => api.tagEntityCreate(entityForm),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["tagOntology"] }); setShowForm(false); },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tagOntology"] });
+      setShowForm(false);
+      setEntityForm({ entity_type: "", name: "" });
+    },
   });
   const deleteRule = useMutation({
     mutationFn: (id: string) => api.tagRuleDelete(id),
@@ -129,239 +182,527 @@ export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focu
     mutationFn: (id: string) => api.tagPublishContract(id),
     onSuccess: (data) => setContractResult(data),
   });
+  const governanceTasks = useMutation({
+    mutationFn: (dryRun: boolean) => api.tagGovernanceTasks({
+      ids: governanceCandidateIds,
+      dry_run: dryRun,
+      priority: "P1",
+      assigned_to: "TagOps Agent",
+      dev_tool: "codex",
+      min_coverage: 0.8,
+    }),
+    onSuccess: (data) => setGovernancePayload(data),
+    onSettled: () => setGovernanceAction(null),
+  });
+  const createApproval = useMutation({
+    mutationFn: (entityId: string) => api.tagApprovalCreate({
+      target_type: "entity",
+      target_id: entityId,
+      action: "publish_contract",
+      reason: approvalReason,
+      requested_by: "TagOps Agent",
+      reviewers: ["Data Governance"],
+      payload: {},
+      auto_apply_on_approval: true,
+    }),
+    onSuccess: () => {
+      setApprovalReason("");
+      void qc.invalidateQueries({ queryKey: ["tagApprovals"] });
+    },
+  });
+  const reviewApproval = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "approved" | "rejected" }) => api.tagApprovalReview(id, {
+      status,
+      reviewer: "Data Governance",
+      note: status === "approved" ? t("page.tagService.approvals.approveNote") : t("page.tagService.approvals.rejectNote"),
+    }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tagApprovals"] });
+      void qc.invalidateQueries({ queryKey: ["tagOntology"] });
+      void qc.invalidateQueries({ queryKey: ["tagCatalog"] });
+      void qc.invalidateQueries({ queryKey: ["tagRules"] });
+    },
+  });
 
-  if (!authed) return <NeedLogin />;
   const tags = tagsQ.data?.items ?? [];
   const rules = rulesQ.data?.items ?? [];
   const entities = ontologyQ.data?.entities ?? [];
   const builds = profileBuildsQ.data?.items ?? [];
+  const approvals = approvalsQ.data?.items ?? [];
+  const approvalCounts = approvalsQ.data?.counts ?? {};
+  const activeApprovalEntity = entities.find((item: any) => item.id === approvalEntityId) ?? entities[0];
+  const rulesByTag = useMemo<Map<string, any[]>>(() => new Map(tags.map((tag: any) => [tag.id, rules.filter((rule: any) => rule.tag_id === tag.id)])), [tags, rules]);
+  const entityTypesWithRules = useMemo(() => new Set(rules.map((rule: any) => rule.entity_type).filter(Boolean)), [rules]);
+  const entityTypesWithBuilds = useMemo(() => new Set(builds.map((build: any) => build.entity_type).filter(Boolean)), [builds]);
+  const governanceCandidates = useMemo(() => {
+    const tagCandidates = tags.filter((tag: any) => !tag.owner || !(tag.applies_to ?? []).length || !(rulesByTag.get(tag.id) ?? []).length);
+    const ruleCandidates = rules.filter((rule: any) => !rule.condition?.field);
+    const entityCandidates = entities.filter((entity: any) => !entityTypesWithRules.has(entity.entity_type) || !entityTypesWithBuilds.has(entity.entity_type));
+    const buildCandidates = builds.filter((build: any) => Number(build.coverage || 0) < 0.8);
+    return [...tagCandidates, ...ruleCandidates, ...entityCandidates, ...buildCandidates];
+  }, [tags, rules, entities, builds, rulesByTag, entityTypesWithRules, entityTypesWithBuilds]);
+  const governanceCandidateIds = useMemo(() => governanceCandidates.map((item: any) => item.id).filter(Boolean), [governanceCandidates]);
+  const tagNameById = useMemo(() => new Map(tags.map((item: any) => [item.id, item.name])), [tags]);
   const activeMetaDef = TAB_META[tab];
   const activeMeta = {
     title: t(activeMetaDef.titleKey),
     description: t(activeMetaDef.descriptionKey),
     focus: t(activeMetaDef.focusKey),
   };
-  const tabLabel = (tabId: Tab) => tabId === "catalog" ? `${t(TAB_META[tabId].labelKey)} (${tags.length})` : t(TAB_META[tabId].labelKey);
+  const tabLabel = (tabId: Tab) => {
+    if (tabId === "catalog") return `${t(TAB_META[tabId].labelKey)} (${tags.length})`;
+    if (tabId === "rules") return `${t(TAB_META[tabId].labelKey)} (${rules.length})`;
+    if (tabId === "governance") return `${t(TAB_META[tabId].labelKey)} (${governanceCandidates.length})`;
+    if (tabId === "approvals") return `${t(TAB_META[tabId].labelKey)} (${approvalCounts.pending ?? 0})`;
+    return t(TAB_META[tabId].labelKey);
+  };
+
+  const catalogColumns: ColumnsType<any> = [
+    {
+      title: t("page.tagService.catalog.name"),
+      dataIndex: "name",
+      render: (_value, row) => (
+        <div className="min-w-[180px]">
+          <p className="font-semibold text-[var(--text)]">{row.name}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{row.description || t("page.tagService.catalog.noDescription")}</p>
+        </div>
+      ),
+    },
+    { title: t("page.tagService.catalog.category"), dataIndex: "category", width: 130, render: (value) => <AntTag>{value || "-"}</AntTag> },
+    { title: t("page.tagService.catalog.valueType"), dataIndex: "value_type", width: 120, render: (value) => <AntTag color="blue">{value || "-"}</AntTag> },
+    { title: t("page.tagService.catalog.owner"), dataIndex: "owner", width: 130, render: (value) => value || <span className="text-amber-600">{t("page.tagService.catalog.unassigned")}</span> },
+    {
+      title: t("page.tagService.catalog.appliesTo"),
+      dataIndex: "applies_to",
+      render: (items: string[] = []) => <Space wrap>{items.map((item) => <AntTag key={item} color="geekblue">{item}</AntTag>)}</Space>,
+    },
+    { title: t("page.tagService.catalog.status"), dataIndex: "status", width: 100, render: (value) => <AntTag color={value === "active" ? "green" : "default"}>{value || "-"}</AntTag> },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 100,
+      render: (_value, row) => (
+        <Popconfirm title={t("page.tagService.catalog.confirmDelete")} onConfirm={() => deleteTag.mutate(row.id)}>
+          <Button size="small" danger loading={deleteTag.isPending}>{t("common.delete")}</Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const ruleColumns: ColumnsType<any> = [
+    { title: t("page.tagService.rules.tag"), dataIndex: "tag_id", width: 180, render: (value) => tagNameById.get(value) || <span className="font-mono text-xs">{String(value || "").slice(0, 10) || "-"}</span> },
+    { title: t("page.tagService.rules.entity"), dataIndex: "entity_type", width: 140, render: (value) => value || t("common.all") },
+    { title: t("page.tagService.rules.condition"), dataIndex: "condition", render: (value) => <span className="font-mono text-xs text-[var(--muted)]">{stringifyJson(value)}</span> },
+    { title: t("page.tagService.rules.output"), dataIndex: "output_value", width: 120, render: (value) => String(value) },
+    { title: t("page.tagService.rules.priority"), dataIndex: "priority", width: 100 },
+    { title: t("page.tagService.rules.status"), dataIndex: "status", width: 100, render: (value) => <AntTag>{value || "-"}</AntTag> },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 100,
+      render: (_value, row) => (
+        <Popconfirm title={t("page.tagService.rules.confirmDelete")} onConfirm={() => deleteRule.mutate(row.id)}>
+          <Button size="small" danger loading={deleteRule.isPending}>{t("common.delete")}</Button>
+        </Popconfirm>
+      ),
+    },
+  ];
+
+  const ontologyColumns: ColumnsType<any> = [
+    {
+      title: t("page.tagService.ontology.entity"),
+      dataIndex: "name",
+      render: (_value, row) => (
+        <div>
+          <p className="font-semibold text-[var(--text)]">{row.name}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{row.entity_type}</p>
+        </div>
+      ),
+    },
+    { title: t("page.tagService.ontology.type"), dataIndex: "entity_type", width: 160, render: (value) => <AntTag color="purple">{value || "-"}</AntTag> },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 220,
+      render: (_value, row) => (
+        <Space wrap>
+          <Button size="small" type="link" loading={publishContract.isPending} onClick={() => publishContract.mutate(row.id)}>{t("page.tagService.ontology.publishContract")}</Button>
+          <Popconfirm title={t("page.tagService.ontology.confirmDelete")} onConfirm={() => deleteEntity.mutate(row.id)}>
+            <Button size="small" danger>{t("common.delete")}</Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const buildColumns: ColumnsType<any> = [
+    { title: t("page.tagService.profiles.profileName"), dataIndex: "profile_name" },
+    { title: t("page.tagService.profiles.status"), dataIndex: "status", width: 120, render: (value) => <AntTag>{value || "-"}</AntTag> },
+    { title: t("page.tagService.profiles.records"), dataIndex: "records_total", width: 110 },
+    { title: t("page.tagService.profiles.tagged"), dataIndex: "tagged_records", width: 110 },
+    { title: t("page.tagService.profiles.coverage"), dataIndex: "coverage", width: 120, render: (value) => `${(Number(value || 0) * 100).toFixed(1)}%` },
+  ];
+  const governanceColumns: ColumnsType<any> = [
+    {
+      title: t("page.tagService.governance.asset"),
+      dataIndex: "name",
+      render: (_value, row) => (
+        <div className="min-w-[180px]">
+          <p className="font-medium text-[var(--text)]">{row.name || row.profile_name || row.entity_type || row.id}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{row.category || row.entity_type || row.status || "-"}</p>
+        </div>
+      ),
+    },
+    {
+      title: t("page.tagService.governance.issue"),
+      key: "issue",
+      render: (_value, row) => {
+        const issues = [
+          !row.owner && row.name ? t("page.tagService.governance.missingOwner") : "",
+          row.name && !(row.applies_to ?? []).length ? t("page.tagService.governance.missingScope") : "",
+          row.name && !(rulesByTag.get(row.id) ?? []).length ? t("page.tagService.governance.missingRule") : "",
+          row.condition && !row.condition?.field ? t("page.tagService.governance.invalidCondition") : "",
+          row.entity_type && !entityTypesWithRules.has(row.entity_type) ? t("page.tagService.governance.entityWithoutRules") : "",
+          row.entity_type && !entityTypesWithBuilds.has(row.entity_type) ? t("page.tagService.governance.missingBuild") : "",
+          row.profile_name && Number(row.coverage || 0) < 0.8 ? t("page.tagService.governance.lowCoverage") : "",
+        ].filter(Boolean);
+        return <Space wrap>{issues.slice(0, 3).map((issue) => <AntTag key={issue} color="orange">{issue}</AntTag>)}</Space>;
+      },
+    },
+  ];
+  const taskColumns: ColumnsType<any> = [
+    {
+      title: t("page.tagService.tasks.title"),
+      dataIndex: "title",
+      render: (value, row) => (
+        <div className="min-w-[220px]">
+          <p className="font-medium text-[var(--text)]">{value}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{row.description}</p>
+        </div>
+      ),
+    },
+    { title: t("page.tagService.tasks.priority"), dataIndex: "priority", width: 90, render: (value) => <AntTag color={value === "P0" ? "red" : "orange"}>{value || "P1"}</AntTag> },
+    { title: t("page.tagService.tasks.labels"), dataIndex: "labels", width: 260, render: (labels) => <Space size={[4, 4]} wrap>{(labels ?? []).slice(0, 4).map((label: string) => <AntTag key={label}>{label}</AntTag>)}</Space> },
+  ];
+  const approvalColumns: ColumnsType<any> = [
+    {
+      title: t("page.tagService.approvals.target"),
+      dataIndex: "target_name",
+      render: (value, row) => (
+        <div className="min-w-[220px]">
+          <p className="font-medium text-[var(--text)]">{value || row.target_id}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{row.target_type} · <span className="font-mono">{row.target_id}</span></p>
+        </div>
+      ),
+    },
+    { title: t("page.tagService.approvals.action"), dataIndex: "action", width: 160, render: (value) => <AntTag color="blue">{value}</AntTag> },
+    { title: t("page.tagService.approvals.status"), dataIndex: "status", width: 120, render: (value) => <AntTag color={value === "pending" ? "orange" : value === "approved" ? "green" : "default"}>{value}</AntTag> },
+    { title: t("page.tagService.approvals.risk"), dataIndex: ["risk", "risk_level"], width: 110, render: (value) => <AntTag color={value === "high" ? "red" : "orange"}>{value || "medium"}</AntTag> },
+    { title: t("page.tagService.approvals.requestedBy"), dataIndex: "requested_by", width: 150 },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 190,
+      render: (_value, row) => row.status === "pending" ? (
+        <Space wrap>
+          <Button size="small" type="primary" loading={reviewApproval.isPending} onClick={() => reviewApproval.mutate({ id: row.id, status: "approved" })}>{t("page.tagService.approvals.approve")}</Button>
+          <Button size="small" danger loading={reviewApproval.isPending} onClick={() => reviewApproval.mutate({ id: row.id, status: "rejected" })}>{t("page.tagService.approvals.reject")}</Button>
+        </Space>
+      ) : <span className="text-xs text-[var(--muted)]">{row.review_note || "-"}</span>,
+    },
+  ];
+
+  if (!authed) return <NeedLogin />;
 
   return (
     <div className="w-full space-y-4">
       <WorkbenchShell title={focused ? activeMeta.title : t("page.tagService.workbenchTitle")} description={focused ? activeMeta.description : t("page.tagService.workbenchDesc")}>
         <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
           {focused ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.tagService.focusedTag")}</span>
-                <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
-                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.tagService.focusedHint")}</span>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-1">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.tagService.focusedTag")}</span>
+                  <a href="#/data/tags" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.tagService.backToHub")}</a>
+                  <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.tagService.focusedHint")}</span>
+                </div>
+                <p className="mt-2 text-sm font-semibold text-[var(--text)]">{activeMeta.focus}</p>
               </div>
-              <a href="#/data/tags" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.tagService.backToHub")}</a>
+              <Select
+                className="min-w-48"
+                value={tab}
+                options={TAB_KEYS.map((tabId) => ({ value: tabId, label: t(TAB_META[tabId].labelKey) }))}
+                onChange={(next) => { window.location.hash = TAB_HREF[next as Tab].slice(1); }}
+              />
             </div>
           ) : (
             <div className="flex flex-wrap gap-1">
-              {TAB_KEYS.map(tabId => (
-                <button key={tabId} onClick={() => { setTab(tabId); setShowForm(false); }}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === tabId ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}>
+              {TAB_KEYS.map((tabId) => (
+                <Button key={tabId} type={tab === tabId ? "primary" : "text"} onClick={() => { setTab(tabId); setShowForm(false); }}>
                   {tabLabel(tabId)}
-                </button>
+                </Button>
               ))}
             </div>
           )}
         </div>
 
         {tab === "catalog" && (
-          <WorkbenchPanel title="标签目录" actions={
-            <div className="flex gap-2">
+          <WorkbenchPanel title={t("page.tagService.panels.catalog")} actions={
+            <Space wrap>
               <AiAssistButton onClick={() => setAiOpen(true)} />
               <RefreshButton onClick={() => void tagsQ.refetch()} pending={tagsQ.isFetching} />
-              <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建标签</button>
-            </div>
+              <Button type="primary" onClick={() => setShowForm((value) => !value)}>{t("page.tagService.catalog.create")}</Button>
+            </Space>
           }>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
+            {showForm ? (
+              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="标签名称 *" value={tagForm.name} onChange={e => setTagForm(f => ({ ...f, name: e.target.value }))} />
-                  <input className="input-base" placeholder="分类 (如 user, product)" value={tagForm.category} onChange={e => setTagForm(f => ({ ...f, category: e.target.value }))} />
-                  <select className="input-base" value={tagForm.value_type} onChange={e => setTagForm(f => ({ ...f, value_type: e.target.value }))}>
-                    {["string", "number", "boolean", "enum"].map(t => <option key={t}>{t}</option>)}
-                  </select>
-                  <input className="input-base" placeholder="负责人" value={tagForm.owner} onChange={e => setTagForm(f => ({ ...f, owner: e.target.value }))} />
-                  <input className="input-base" placeholder="适用实体，逗号分隔" value={tagForm.applies_to} onChange={e => setTagForm(f => ({ ...f, applies_to: e.target.value }))} />
-                  <input className="input-base sm:col-span-2" placeholder="描述" value={tagForm.description} onChange={e => setTagForm(f => ({ ...f, description: e.target.value }))} />
+                  <Input placeholder={t("page.tagService.catalog.nameRequired")} value={tagForm.name} onChange={(event) => setTagForm((form) => ({ ...form, name: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.catalog.category")} value={tagForm.category} onChange={(event) => setTagForm((form) => ({ ...form, category: event.target.value }))} />
+                  <Select value={tagForm.value_type} options={["string", "number", "boolean", "enum"].map((value) => ({ value, label: value }))} onChange={(value) => setTagForm((form) => ({ ...form, value_type: value }))} />
+                  <Input placeholder={t("page.tagService.catalog.owner")} value={tagForm.owner} onChange={(event) => setTagForm((form) => ({ ...form, owner: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.catalog.appliesToPlaceholder")} value={tagForm.applies_to} onChange={(event) => setTagForm((form) => ({ ...form, applies_to: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.catalog.description")} value={tagForm.description} onChange={(event) => setTagForm((form) => ({ ...form, description: event.target.value }))} />
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => createTag.mutate()} disabled={!tagForm.name || createTag.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {createTag.isPending ? "创建中..." : "创建"}
-                  </button>
-                  <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
+                <Space className="mt-3">
+                  <Button type="primary" loading={createTag.isPending} disabled={!tagForm.name} onClick={() => createTag.mutate()}>{t("common.create")}</Button>
+                  <Button onClick={() => setShowForm(false)}>{t("common.cancel")}</Button>
+                </Space>
               </div>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {tags.length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无标签</p>}
-              {tags.map((t: any) => (
-                <div key={t.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">{t.name}</p>
-                      <p className="text-xs text-[var(--muted)] mt-0.5">{t.category} · {t.value_type}</p>
-                    </div>
-                    <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-xs text-[var(--brand)]">{t.status}</span>
-                  </div>
-                  {t.description && <p className="mt-2 text-xs text-[var(--muted)] line-clamp-2">{t.description}</p>}
-                  {t.applies_to?.length > 0 && <p className="mt-2 text-xs text-[var(--muted)]">实体：{t.applies_to.join(", ")}</p>}
-                  <button onClick={() => deleteTag.mutate(t.id)} className="mt-3 text-xs text-red-500 hover:underline">删除</button>
-                </div>
-              ))}
-            </div>
+            ) : null}
+            <Table rowKey="id" columns={catalogColumns} dataSource={tags} loading={tagsQ.isFetching} pagination={{ pageSize: 10 }} scroll={{ x: 980 }} locale={{ emptyText: t("page.tagService.catalog.empty") }} />
           </WorkbenchPanel>
         )}
 
         {tab === "rules" && (
-          <WorkbenchPanel title="打标规则" actions={
-            <div className="flex gap-2">
+          <WorkbenchPanel title={t("page.tagService.panels.rules")} actions={
+            <Space wrap>
               <RefreshButton onClick={() => void rulesQ.refetch()} pending={rulesQ.isFetching} />
-              <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建规则</button>
-            </div>
+              <Button type="primary" onClick={() => setShowForm((value) => !value)}>{t("page.tagService.rules.create")}</Button>
+            </Space>
           }>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
+            {showForm ? (
+              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <select className="input-base" value={ruleForm.tag_id} onChange={e => setRuleForm(f => ({ ...f, tag_id: e.target.value }))}>
-                    <option value="">选择标签 *</option>
-                    {tags.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <input className="input-base" placeholder="实体类型，如 agent/customer" value={ruleForm.entity_type} onChange={e => setRuleForm(f => ({ ...f, entity_type: e.target.value }))} />
-                  <input className="input-base" placeholder="字段，如 quality_score" value={ruleForm.field} onChange={e => setRuleForm(f => ({ ...f, field: e.target.value }))} />
-                  <select className="input-base" value={ruleForm.operator} onChange={e => setRuleForm(f => ({ ...f, operator: e.target.value }))}>
-                    {["==", "!=", ">=", ">", "<=", "<", "contains", "in", "exists"].map(op => <option key={op}>{op}</option>)}
-                  </select>
-                  <input className="input-base" placeholder="匹配值" value={ruleForm.value} onChange={e => setRuleForm(f => ({ ...f, value: e.target.value }))} />
-                  <input className="input-base" placeholder="输出值" value={ruleForm.output_value} onChange={e => setRuleForm(f => ({ ...f, output_value: e.target.value }))} />
-                  <input className="input-base" type="number" placeholder="优先级" value={ruleForm.priority} onChange={e => setRuleForm(f => ({ ...f, priority: Number(e.target.value) }))} />
+                  <Select
+                    placeholder={t("page.tagService.rules.selectTag")}
+                    value={ruleForm.tag_id || undefined}
+                    options={tags.map((item: any) => ({ value: item.id, label: item.name }))}
+                    onChange={(value) => setRuleForm((form) => ({ ...form, tag_id: value }))}
+                  />
+                  <Input placeholder={t("page.tagService.rules.entityPlaceholder")} value={ruleForm.entity_type} onChange={(event) => setRuleForm((form) => ({ ...form, entity_type: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.rules.field")} value={ruleForm.field} onChange={(event) => setRuleForm((form) => ({ ...form, field: event.target.value }))} />
+                  <Select value={ruleForm.operator} options={["==", "!=", ">=", ">", "<=", "<", "contains", "in", "exists"].map((value) => ({ value, label: value }))} onChange={(value) => setRuleForm((form) => ({ ...form, operator: value }))} />
+                  <Input placeholder={t("page.tagService.rules.value")} value={ruleForm.value} onChange={(event) => setRuleForm((form) => ({ ...form, value: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.rules.output")} value={ruleForm.output_value} onChange={(event) => setRuleForm((form) => ({ ...form, output_value: event.target.value }))} />
+                  <InputNumber className="w-full" placeholder={t("page.tagService.rules.priority")} value={ruleForm.priority} onChange={(value) => setRuleForm((form) => ({ ...form, priority: Number(value ?? 0) }))} />
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => createRule.mutate()} disabled={!ruleForm.tag_id || createRule.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {createRule.isPending ? "创建中..." : "创建"}
-                  </button>
-                  <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
+                <Space className="mt-3">
+                  <Button type="primary" loading={createRule.isPending} disabled={!ruleForm.tag_id} onClick={() => createRule.mutate()}>{t("common.create")}</Button>
+                  <Button onClick={() => setShowForm(false)}>{t("common.cancel")}</Button>
+                </Space>
               </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-	                  <th className="pb-2 pr-4">标签 ID</th><th className="pb-2 pr-4">实体</th><th className="pb-2 pr-4">条件</th><th className="pb-2 pr-4">优先级</th><th className="pb-2 pr-4">状态</th><th className="pb-2">操作</th>
-                </tr></thead>
-                <tbody>
-	                  {rules.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-[var(--muted)]">暂无规则</td></tr>}
-                  {rules.map((r: any) => (
-                    <tr key={r.id} className="border-b border-[var(--border)]">
-	                      <td className="py-2 pr-4 font-mono text-xs">{r.tag_id?.slice(0, 8)}...</td>
-	                      <td className="py-2 pr-4 text-[var(--muted)]">{r.entity_type || "全部"}</td>
-	                      <td className="py-2 pr-4 max-w-[260px] truncate font-mono text-xs text-[var(--muted)]">{JSON.stringify(r.condition || {})}</td>
-	                      <td className="py-2 pr-4">{r.priority}</td>
-	                      <td className="py-2 text-[var(--muted)]">{r.status}</td>
-	                      <td className="py-2"><button onClick={() => deleteRule.mutate(r.id)} className="text-xs text-red-500 hover:underline">删除</button></td>
-	                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            ) : null}
+            <Table rowKey="id" columns={ruleColumns} dataSource={rules} loading={rulesQ.isFetching} pagination={{ pageSize: 10 }} scroll={{ x: 980 }} locale={{ emptyText: t("page.tagService.rules.empty") }} />
             <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-              <div className="mb-3 text-sm font-semibold">规则测试</div>
+              <p className="mb-3 text-sm font-semibold">{t("page.tagService.rules.testTitle")}</p>
               <div className="grid gap-3 lg:grid-cols-[220px_1fr_auto]">
-                <input className="input-base" placeholder="实体类型" value={evaluateForm.entity_type} onChange={e => setEvaluateForm(f => ({ ...f, entity_type: e.target.value }))} />
-                <textarea className="input-base min-h-[82px] font-mono text-xs" value={evaluateForm.sample} onChange={e => setEvaluateForm(f => ({ ...f, sample: e.target.value }))} />
-                <button onClick={() => evaluateRule.mutate()} disabled={evaluateRule.isPending} className="h-9 rounded-lg border border-[var(--border)] px-3 text-sm disabled:opacity-50">测试</button>
+                <Input placeholder={t("page.tagService.rules.entity")} value={evaluateForm.entity_type} onChange={(event) => setEvaluateForm((form) => ({ ...form, entity_type: event.target.value }))} />
+                <Input.TextArea className="font-mono text-xs" rows={3} value={evaluateForm.sample} onChange={(event) => setEvaluateForm((form) => ({ ...form, sample: event.target.value }))} />
+                <Button loading={evaluateRule.isPending} onClick={() => evaluateRule.mutate()}>{t("page.tagService.rules.test")}</Button>
               </div>
-              {jsonError && <div className="mt-2 text-xs text-red-600">{jsonError}</div>}
-              {evaluateResult && <div className="mt-3 text-sm text-[var(--muted)]">命中 {evaluateResult.matched_count} 个标签：{evaluateResult.matches?.map((m: any) => m.tag_name).join(", ") || "无"}</div>}
+              {jsonError ? <Alert className="mt-3" type="error" showIcon message={jsonError} /> : null}
+              {evaluateResult ? <Alert className="mt-3" type="success" showIcon message={t("page.tagService.rules.testResult", { count: evaluateResult.matched_count, tags: evaluateResult.matches?.map((match: any) => match.tag_name).join(", ") || t("page.tagService.rules.noMatch") })} /> : null}
             </div>
           </WorkbenchPanel>
         )}
 
         {tab === "ontology" && (
-          <WorkbenchPanel title="画像本体" actions={
-            <div className="flex gap-2">
+          <WorkbenchPanel title={t("page.tagService.panels.ontology")} actions={
+            <Space wrap>
               <RefreshButton onClick={() => void ontologyQ.refetch()} pending={ontologyQ.isFetching} />
-              <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 注册实体</button>
-            </div>
+              <Button type="primary" onClick={() => setShowForm((value) => !value)}>{t("page.tagService.ontology.create")}</Button>
+            </Space>
           }>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
+            {showForm ? (
+              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="实体类型 (如 User, Product)" value={entityForm.entity_type} onChange={e => setEntityForm(f => ({ ...f, entity_type: e.target.value }))} />
-                  <input className="input-base" placeholder="实体名称 *" value={entityForm.name} onChange={e => setEntityForm(f => ({ ...f, name: e.target.value }))} />
+                  <Input placeholder={t("page.tagService.ontology.typePlaceholder")} value={entityForm.entity_type} onChange={(event) => setEntityForm((form) => ({ ...form, entity_type: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.ontology.nameRequired")} value={entityForm.name} onChange={(event) => setEntityForm((form) => ({ ...form, name: event.target.value }))} />
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => createEntity.mutate()} disabled={!entityForm.name || createEntity.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {createEntity.isPending ? "注册中..." : "注册"}
-                  </button>
-                  <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
+                <Space className="mt-3">
+                  <Button type="primary" loading={createEntity.isPending} disabled={!entityForm.name} onClick={() => createEntity.mutate()}>{t("common.create")}</Button>
+                  <Button onClick={() => setShowForm(false)}>{t("common.cancel")}</Button>
+                </Space>
               </div>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {entities.length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无本体实体</p>}
-                  {entities.map((e: any) => (
-                <div key={e.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-	                  <p className="font-semibold text-sm">{e.name}</p>
-	                  <p className="text-xs text-[var(--muted)] mt-0.5">{e.entity_type}</p>
-	                  <div className="mt-3 flex gap-2">
-	                    <button onClick={() => publishContract.mutate(e.id)} className="text-xs text-[var(--brand)] hover:underline">发布契约</button>
-	                    <button onClick={() => deleteEntity.mutate(e.id)} className="text-xs text-red-500 hover:underline">删除</button>
-	                  </div>
-	                </div>
-              ))}
-            </div>
-            {contractResult && (
-              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 text-sm">
-                <div className="font-semibold">发布契约：{contractResult.entity_name}</div>
-                <div className="mt-1 font-mono text-xs text-[var(--brand)]">{contractResult.endpoint}</div>
-                <div className="mt-2 text-xs text-[var(--muted)]">标签：{contractResult.tags?.join(", ") || "无"}</div>
-              </div>
-            )}
+            ) : null}
+            <Table rowKey="id" columns={ontologyColumns} dataSource={entities} loading={ontologyQ.isFetching} pagination={{ pageSize: 10 }} scroll={{ x: 760 }} locale={{ emptyText: t("page.tagService.ontology.empty") }} />
+            {contractResult ? (
+              <Alert
+                className="mt-4"
+                type="success"
+                showIcon
+                message={t("page.tagService.ontology.contractPublished", { name: contractResult.entity_name })}
+                description={<span className="font-mono text-xs">{contractResult.endpoint} · {t("page.tagService.ontology.tags")}: {contractResult.tags?.join(", ") || t("page.tagService.rules.noMatch")}</span>}
+              />
+            ) : null}
           </WorkbenchPanel>
         )}
 
         {tab === "profiles" && (
-          <WorkbenchPanel title="画像构建" actions={<RefreshButton onClick={() => void profileBuildsQ.refetch()} pending={profileBuildsQ.isFetching} />}>
-            <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="实体类型" value={profileForm.entity_type} onChange={e => setProfileForm(f => ({ ...f, entity_type: e.target.value }))} />
-                  <input className="input-base" placeholder="画像名称" value={profileForm.profile_name} onChange={e => setProfileForm(f => ({ ...f, profile_name: e.target.value }))} />
-                </div>
-                <textarea className="input-base min-h-[170px] w-full font-mono text-xs" value={profileForm.records} onChange={e => setProfileForm(f => ({ ...f, records: e.target.value }))} />
-                <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <input type="checkbox" checked={profileForm.publish} onChange={e => setProfileForm(f => ({ ...f, publish: e.target.checked }))} />
-                  构建后发布画像
-                </label>
-                <button onClick={() => buildProfile.mutate()} disabled={buildProfile.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">构建画像</button>
-                {buildResult && (
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
-                    <div className="font-semibold">{buildResult.profile_name}</div>
-                    <div className="mt-1 text-xs text-[var(--muted)]">记录 {buildResult.records_total} · 命中 {buildResult.tagged_records} · 覆盖率 {(Number(buildResult.coverage || 0) * 100).toFixed(1)}%</div>
-                  </div>
-                )}
-              </div>
+          <WorkbenchPanel title={t("page.tagService.panels.profiles")} actions={<RefreshButton onClick={() => void profileBuildsQ.refetch()} pending={profileBuildsQ.isFetching} />}>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-                <div className="mb-3 text-sm font-semibold">构建历史</div>
-                <div className="space-y-2">
-                  {builds.length === 0 && <div className="text-sm text-[var(--muted)]">暂无构建记录</div>}
-                  {builds.map((b: any) => (
-                    <div key={b.id} className="rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-xs">
-                      <div className="font-medium text-[var(--text)]">{b.profile_name}</div>
-                      <div className="mt-1 text-[var(--muted)]">{b.status} · {b.tagged_records}/{b.records_total} 命中</div>
-                    </div>
-                  ))}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Input placeholder={t("page.tagService.profiles.entityType")} value={profileForm.entity_type} onChange={(event) => setProfileForm((form) => ({ ...form, entity_type: event.target.value }))} />
+                  <Input placeholder={t("page.tagService.profiles.profileName")} value={profileForm.profile_name} onChange={(event) => setProfileForm((form) => ({ ...form, profile_name: event.target.value }))} />
                 </div>
+                <Input.TextArea className="mt-3 font-mono text-xs" rows={8} value={profileForm.records} onChange={(event) => setProfileForm((form) => ({ ...form, records: event.target.value }))} />
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Checkbox checked={profileForm.publish} onChange={(event) => setProfileForm((form) => ({ ...form, publish: event.target.checked }))}>{t("page.tagService.profiles.publishAfterBuild")}</Checkbox>
+                  <Button type="primary" loading={buildProfile.isPending} onClick={() => buildProfile.mutate()}>{t("page.tagService.profiles.build")}</Button>
+                </div>
+                {buildResult ? (
+                  <Alert
+                    className="mt-3"
+                    type="success"
+                    showIcon
+                    message={buildResult.profile_name}
+                    description={t("page.tagService.profiles.buildResult", { total: buildResult.records_total, tagged: buildResult.tagged_records, coverage: (Number(buildResult.coverage || 0) * 100).toFixed(1) })}
+                  />
+                ) : null}
               </div>
+              <WorkbenchPanel title={t("page.tagService.profiles.history")}>
+                <Table rowKey="id" columns={buildColumns} dataSource={builds} loading={profileBuildsQ.isFetching} pagination={{ pageSize: 6 }} size="small" locale={{ emptyText: t("page.tagService.profiles.emptyBuilds") }} />
+              </WorkbenchPanel>
             </div>
           </WorkbenchPanel>
         )}
-      <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="tag-service" title="AI 智能助手" initialPrompt="分析标签体系，建议优化标签分类和打标规则" />
+
+        {tab === "governance" && (
+          <WorkbenchPanel title={t("page.tagService.panels.governance")} actions={
+            <Space wrap>
+              <Button loading={governanceTasks.isPending && governanceAction === "preview"} onClick={() => { setGovernanceAction("preview"); governanceTasks.mutate(true); }}>
+                {t("page.tagService.tasks.preview")}
+              </Button>
+              <Button type="primary" loading={governanceTasks.isPending && governanceAction === "create"} disabled={!governanceCandidates.length} onClick={() => { setGovernanceAction("create"); governanceTasks.mutate(false); }}>
+                {t("page.tagService.tasks.create")}
+              </Button>
+              <RefreshButton onClick={() => { void tagsQ.refetch(); void rulesQ.refetch(); void ontologyQ.refetch(); void profileBuildsQ.refetch(); }} pending={tagsQ.isFetching || rulesQ.isFetching || ontologyQ.isFetching || profileBuildsQ.isFetching} />
+            </Space>
+          }>
+            <div className="mb-4 grid gap-3 md:grid-cols-4">
+              <GovernanceCard label={t("page.tagService.governance.tags")} value={tags.length} />
+              <GovernanceCard label={t("page.tagService.governance.rules")} value={rules.length} />
+              <GovernanceCard label={t("page.tagService.governance.entities")} value={entities.length} />
+              <GovernanceCard label={t("page.tagService.governance.todos")} value={governanceCandidates.length} tone="warn" />
+            </div>
+            <Table
+              rowKey="id"
+              columns={governanceColumns}
+              dataSource={governanceCandidates}
+              loading={tagsQ.isFetching || rulesQ.isFetching || ontologyQ.isFetching || profileBuildsQ.isFetching}
+              pagination={{ pageSize: 8 }}
+              scroll={{ x: 760 }}
+              locale={{ emptyText: t("page.tagService.governance.empty") }}
+            />
+            {governancePayload ? (
+              <Alert
+                className="mt-4"
+                type={governancePayload.dry_run ? "info" : "success"}
+                showIcon
+                message={governancePayload.dry_run ? t("page.tagService.tasks.previewSummary", { count: governancePayload.planned ?? 0 }) : t("page.tagService.tasks.createdSummary", { count: governancePayload.created_count ?? governancePayload.created?.length ?? 0 })}
+                description={
+                  <Table
+                    className="mt-3"
+                    rowKey={(row) => `${row.source_report_id}-${row.title}`}
+                    columns={taskColumns}
+                    dataSource={governancePayload.items ?? []}
+                    pagination={{ pageSize: 5 }}
+                    scroll={{ x: 760 }}
+                    locale={{ emptyText: t("page.tagService.tasks.empty") }}
+                  />
+                }
+              />
+            ) : null}
+          </WorkbenchPanel>
+        )}
+
+        {tab === "approvals" && (
+          <WorkbenchPanel title={t("page.tagService.panels.approvals")} actions={
+            <Space wrap>
+              <Select
+                className="min-w-36"
+                value={approvalStatus}
+                options={["pending", "approved", "rejected", "cancelled"].map((value) => ({ value, label: t(`page.tagService.approvals.statusOptions.${value}`) }))}
+                onChange={setApprovalStatus}
+              />
+              <RefreshButton onClick={() => void approvalsQ.refetch()} pending={approvalsQ.isFetching} />
+            </Space>
+          }>
+            <div className="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+                <p className="mb-3 text-sm font-semibold text-[var(--text)]">{t("page.tagService.approvals.createTitle")}</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Select
+                    placeholder={t("page.tagService.approvals.selectEntity")}
+                    value={activeApprovalEntity?.id}
+                    options={entities.map((item: any) => ({ value: item.id, label: `${item.name} · ${item.entity_type}` }))}
+                    onChange={setApprovalEntityId}
+                  />
+                  <Input value="publish_contract" disabled />
+                  <Input className="md:col-span-2" value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} placeholder={t("page.tagService.approvals.reason")} />
+                </div>
+                <Button className="mt-3" type="primary" loading={createApproval.isPending} disabled={!activeApprovalEntity?.id} onClick={() => activeApprovalEntity?.id && createApproval.mutate(activeApprovalEntity.id)}>
+                  {t("page.tagService.approvals.create")}
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                <GovernanceCard label={t("page.tagService.approvals.pending")} value={approvalCounts.pending ?? 0} tone="warn" />
+                <GovernanceCard label={t("page.tagService.approvals.approved")} value={approvalCounts.approved ?? 0} />
+                <GovernanceCard label={t("page.tagService.approvals.rejected")} value={approvalCounts.rejected ?? 0} />
+              </div>
+            </div>
+            <Table
+              rowKey="id"
+              columns={approvalColumns}
+              dataSource={approvals}
+              loading={approvalsQ.isFetching}
+              pagination={{ pageSize: 8 }}
+              scroll={{ x: 1080 }}
+              locale={{ emptyText: t("page.tagService.approvals.empty") }}
+              expandable={{
+                expandedRowRender: (row) => (
+                  <div className="grid gap-3 text-xs lg:grid-cols-3">
+                    <div>
+                      <p className="text-[var(--muted)]">{t("page.tagService.approvals.reason")}</p>
+                      <p className="mt-1 text-[var(--text)]">{row.reason || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">{t("page.tagService.approvals.reviewers")}</p>
+                      <p className="mt-1 text-[var(--text)]">{(row.reviewers ?? []).join(", ") || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[var(--muted)]">{t("page.tagService.approvals.applied")}</p>
+                      <p className="mt-1 font-mono text-[var(--brand)]">{row.applied_result?.endpoint || "-"}</p>
+                    </div>
+                  </div>
+                ),
+              }}
+            />
+          </WorkbenchPanel>
+        )}
+        <AiAssistDrawer open={aiOpen} onClose={() => setAiOpen(false)} module="tag-service" title={t("page.tagService.aiTitle")} initialPrompt={t("page.tagService.aiPrompt")} />
       </WorkbenchShell>
+    </div>
+  );
+}
+
+function GovernanceCard({ label, value, tone = "default" }: { label: string; value: string | number; tone?: "default" | "warn" }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold ${tone === "warn" ? "text-orange-600" : "text-[var(--text)]"}`}>{value}</p>
     </div>
   );
 }

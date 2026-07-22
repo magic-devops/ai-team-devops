@@ -33,13 +33,17 @@ from .commands import (
     ops as ops_cmd,
     pages as pages_cmd,
     platforms as platforms_cmd,
+    plugins as plugins_cmd,
     project as project_cmd,
     requirement as requirement_cmd,
     register as register_cmd,
     rule as rule_cmd,
+    graph_loop as graph_loop_cmd,
+    skills as skills_cmd,
     sprint as sprint_cmd,
     status as status_cmd,
     sync as sync_cmd,
+    system as system_cmd,
     task as task_cmd,
     usage as usage_cmd,
     workflow as workflow_cmd,
@@ -72,9 +76,13 @@ app.add_typer(kb_cmd.app,       name="kb",       help="知识库：search / rag 
 app.add_typer(copilot_cmd.app, name="copilot", help="AI Copilot：ask / sessions / show / classify / summarize / suggest")
 app.add_typer(data_cmd.app, name="data", help="数据智能：blueprint / nlq / tasks")
 app.add_typer(dev_flow_cmd.app, name="dev-flow", help="研发全流程：ops-plan/ops-tasks")
+app.add_typer(system_cmd.app, name="system", help="系统全域 readiness")
+app.add_typer(graph_loop_cmd.app, name="graph-loop", help="Graph Loop：runs/detail/events/transition/interrupt/replay/export/doctor/slo")
 app.add_typer(db_config_cmd.app, name="db-config", help="数据库配置：OceanBase/PG/MySQL")
 app.add_typer(ops_cmd.app,      name="ops",      help="运维：health/stack/deploy/snapshot/notify/worker")
 app.add_typer(pages_cmd.app, name="pages", help="页面菜单与能力：list/manifest/capabilities")
+app.add_typer(skills_cmd.app, name="skills", help="技能运行目录：runtime")
+app.add_typer(plugins_cmd.app, name="plugins", help="插件治理：governance")
 app.add_typer(platforms_cmd.app, name="platforms", help="AI 平台：Cursor/Codex/Claude/WorkBuddy/Hermes…")
 app.add_typer(project_cmd.app, name="project", help="项目：list/review/ops-plan/ops-tasks/onboarding")
 app.add_typer(status_cmd.app,  name="status",  help="本地 + Manager 状态概览")

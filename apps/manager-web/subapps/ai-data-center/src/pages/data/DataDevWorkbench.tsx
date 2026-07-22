@@ -1,31 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Alert, Button, Checkbox, Input, InputNumber, Select, Space, Table, Tag as AntTag } from "antd";
+import type { ColumnsType } from "antd/es/table";
 import { Bot, CheckCircle2, Clock, GitBranch, Play, RefreshCw, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { getToken } from "@/lib/authStorage";
-import { NeedLogin, RefreshButton, SearchInput } from "@/components/PageStates";
+import { NeedLogin, RefreshButton } from "@/components/PageStates";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 import { buildSchedulePayload, derivePacketStats, toggleTemplateSelection } from "./dataDevModel";
 
 type Tab = "templates" | "schedules" | "agent_feed" | "evidence" | "runbook";
-
 type LegacyTab = "sql_editor" | "spark_jobs" | "flink_jobs" | "schedules";
 type FocusKey = Tab | LegacyTab;
 
-const TAB_ITEMS: Array<{ id: Tab; labelKey: string }> = [
-  { id: "templates", labelKey: "page.dataDev.tabs.templates" },
-  { id: "schedules", labelKey: "page.dataDev.tabs.schedules" },
-  { id: "agent_feed", labelKey: "page.dataDev.tabs.agent_feed" },
-  { id: "evidence", labelKey: "page.dataDev.tabs.evidence" },
-  { id: "runbook", labelKey: "page.dataDev.tabs.runbook" },
-];
+const TAB_KEYS: Tab[] = ["templates", "schedules", "agent_feed", "evidence", "runbook"];
+const FOCUS_KEYS: FocusKey[] = ["templates", "sql_editor", "spark_jobs", "flink_jobs", "schedules", "agent_feed", "evidence", "runbook"];
+const TAB_HREF: Record<Tab, string> = {
+  templates: "#/data/dev",
+  schedules: "#/data/dev/schedules",
+  agent_feed: "#/data/dev/agent-feed",
+  evidence: "#/data/dev/evidence",
+  runbook: "#/data/dev/runbook",
+};
+const FOCUS_HREF: Record<FocusKey, string> = {
+  ...TAB_HREF,
+  sql_editor: "#/data/dev/sql_editor",
+  spark_jobs: "#/data/dev/spark_jobs",
+  flink_jobs: "#/data/dev/flink_jobs",
+};
 
 const ENGINES = ["SQL", "Spark", "Flink", "Python", "dbt"];
 const POLICIES = ["quality_first", "balanced", "throughput", "cost_saver"];
 const PRIORITIES = ["P0", "P1", "P2", "P3"];
+const DECISIONS = ["pass", "warn", "block"];
 const FOCUS_META: Record<FocusKey, { titleKey: string; descriptionKey: string; focusKey: string; engine?: string }> = {
   templates: {
     titleKey: "page.dataDev.modules.templates.title",
@@ -86,19 +96,17 @@ function shortDate(value?: string) {
   return value ? value.slice(0, 19).replace("T", " ") : "-";
 }
 
-function statusBadgeClass(status?: string) {
-  if (status === "applied" || status === "completed" || status === "pass" || status === "success") return "bg-green-50 text-green-700";
-  if (status === "archived" || status === "blocked" || status === "block" || status === "failed") return "bg-red-50 text-red-700";
-  if (status === "running" || status === "warn" || status === "claimed") return "bg-yellow-50 text-yellow-700";
-  return "bg-[var(--surface-muted)] text-[var(--muted)]";
+function statusColor(status?: string) {
+  if (status === "applied" || status === "completed" || status === "pass" || status === "success" || status === "ready") return "green";
+  if (status === "archived" || status === "blocked" || status === "block" || status === "failed") return "red";
+  if (status === "running" || status === "warn" || status === "claimed") return "gold";
+  return "default";
 }
 
-function EmptyRow({ colSpan, text }: { colSpan: number; text: string }) {
-  return (
-    <tr>
-      <td colSpan={colSpan} className="py-8 text-center text-sm text-[var(--muted)]">{text}</td>
-    </tr>
-  );
+function listTags(items?: string[], color = "geekblue") {
+  const values = Array.isArray(items) ? items : [];
+  if (!values.length) return <span className="text-xs text-[var(--muted)]">-</span>;
+  return <Space size={[0, 4]} wrap>{values.map((item) => <AntTag key={item} color={color}>{item}</AntTag>)}</Space>;
 }
 
 export function DataDevWorkbench({ focused = false, initialTab }: { focused?: boolean; initialTab?: Tab | LegacyTab }) {
@@ -138,9 +146,14 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
   });
   const [reportForm, setReportForm] = useState({
     agent: "Data Platform Agent",
-    summary: "已完成数据开发执行包并回写证据",
+    summary: t("page.dataDev.agentFeed.defaultSummary"),
     artifactUrl: "",
   });
+
+  useEffect(() => {
+    setTab(normalizeTab(initialTab));
+    setShowTemplateForm(false);
+  }, [initialTab]);
 
   const templatesQ = useQuery({ queryKey: ["dataDevTemplates", q], queryFn: () => api.analyticsDevTemplates("", q), enabled: authed });
   const opsQ = useQuery({ queryKey: ["dataDevOpsSummary"], queryFn: api.analyticsDevOpsSummary, enabled: authed });
@@ -170,6 +183,13 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
     ? templates.filter((tpl: any) => String(tpl.engine ?? "").toLowerCase() === activeMetaDef.engine?.toLowerCase())
     : templates;
   const packetStats = useMemo(() => derivePacketStats(packets), [packets]);
+  const tabLabel = (tabId: Tab) => {
+    if (tabId === "templates") return `${t("page.dataDev.tabs.templates")} (${templates.length})`;
+    if (tabId === "schedules") return `${t("page.dataDev.tabs.schedules")} (${schedules.length})`;
+    if (tabId === "agent_feed") return `${t("page.dataDev.tabs.agent_feed")} (${packets.length})`;
+    if (tabId === "evidence") return `${t("page.dataDev.tabs.evidence")} (${evidence.length})`;
+    return t("page.dataDev.tabs.runbook");
+  };
 
   const upsertTemplate = useMutation({
     mutationFn: () => api.analyticsUpsertDevTemplate({
@@ -272,6 +292,121 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
     onSuccess: setRunbookResult,
   });
 
+  const templateColumns: ColumnsType<any> = [
+    {
+      title: t("page.dataDev.templates.choose"),
+      key: "choose",
+      width: 80,
+      render: (_value, row) => <Checkbox checked={selectedIds.includes(row.id)} onChange={() => setSelectedIds((ids) => toggleTemplateSelection(ids, row.id))} />,
+    },
+    {
+      title: t("page.dataDev.templates.template"),
+      dataIndex: "name",
+      render: (_value, row) => (
+        <div className="min-w-[220px]">
+          <p className="font-semibold text-[var(--text)]">{row.name}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{row.description || row.id}</p>
+        </div>
+      ),
+    },
+    { title: t("page.dataDev.templates.engine"), dataIndex: "engine", width: 110, render: (value) => <AntTag color="blue">{value || "-"}</AntTag> },
+    { title: t("page.dataDev.templates.priority"), dataIndex: "priority", width: 100, render: (value) => <AntTag>{value || "-"}</AntTag> },
+    {
+      title: t("page.dataDev.templates.ownerTool"),
+      key: "ownerTool",
+      width: 210,
+      render: (_value, row) => <span className="text-xs text-[var(--muted)]">{row.owner || "-"} / {row.dev_tool || "-"}</span>,
+    },
+    {
+      title: t("page.dataDev.templates.qualityGates"),
+      dataIndex: "quality_gates",
+      render: (items) => listTags(items, "purple"),
+    },
+  ];
+
+  const scheduleColumns: ColumnsType<any> = [
+    { title: t("page.dataDev.schedules.id"), dataIndex: "id", render: (value) => <span className="font-mono text-xs">{value}</span> },
+    { title: t("page.dataDev.schedules.status"), dataIndex: "status", width: 110, render: (value) => <AntTag color={statusColor(value)}>{value || "-"}</AntTag> },
+    { title: t("page.dataDev.schedules.policyColumn"), dataIndex: "policy", width: 140 },
+    {
+      title: t("page.dataDev.schedules.countColumn"),
+      key: "counts",
+      width: 150,
+      render: (_value, row) => <span className="text-xs text-[var(--muted)]">{row.templates ?? 0} / {row.packets ?? 0} / {row.created_tasks ?? 0}</span>,
+    },
+    { title: t("page.dataDev.schedules.createdAt"), dataIndex: "created_at", width: 180, render: (value) => <span className="text-xs text-[var(--muted)]">{shortDate(value)}</span> },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 250,
+      render: (_value, row) => (
+        <Space wrap>
+          <Button size="small" type="link" onClick={() => { setScheduleId(row.id); setTab("agent_feed"); }}>{t("page.dataDev.schedules.agentFeed")}</Button>
+          <Button size="small" type="link" loading={scheduleAction.isPending} onClick={() => scheduleAction.mutate({ id: row.id, action: "rerun", dryRun: true })}>{t("page.dataDev.schedules.previewRerun")}</Button>
+          <Button size="small" type="link" loading={scheduleAction.isPending} onClick={() => scheduleAction.mutate({ id: row.id, action: row.status === "archived" ? "restore" : "archive", dryRun: false })}>
+            {row.status === "archived" ? t("page.dataDev.schedules.restore") : t("page.dataDev.schedules.archive")}
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const packetColumns: ColumnsType<any> = [
+    {
+      title: t("page.dataDev.agentFeed.packet"),
+      key: "packet",
+      render: (_value, row) => (
+        <div className="min-w-[200px]">
+          <p className="font-mono text-xs text-[var(--text)]">{row.packet_id}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{row.title || row.template_id}</p>
+        </div>
+      ),
+    },
+    { title: t("page.dataDev.agentFeed.status"), dataIndex: "ready", width: 100, render: (ready) => <AntTag color={ready ? "green" : "red"}>{ready ? "ready" : "blocked"}</AntTag> },
+    {
+      title: t("page.dataDev.agentFeed.agentLane"),
+      key: "agentLane",
+      width: 210,
+      render: (_value, row) => <span className="text-xs text-[var(--muted)]">{row.assigned_to || "-"} / {row.lane || "-"}</span>,
+    },
+    { title: t("page.dataDev.agentFeed.qualityGates"), dataIndex: "quality_gates", render: (items) => listTags(items, "purple") },
+    {
+      title: t("page.dataDev.agentFeed.report"),
+      key: "report",
+      width: 120,
+      render: (_value, row) => <AntTag color={statusColor(row.report?.status || row.claim?.status)}>{row.report?.status || row.claim?.status || "-"}</AntTag>,
+    },
+    {
+      title: t("common.actions"),
+      key: "actions",
+      width: 220,
+      render: (_value, row) => (
+        <Space wrap>
+          <Button size="small" type="link" disabled={!row.ready} loading={packetAction.isPending} onClick={() => packetAction.mutate({ packet: row, action: "claim" })}>{t("page.dataDev.agentFeed.claim")}</Button>
+          <Button size="small" type="link" loading={packetAction.isPending} onClick={() => packetAction.mutate({ packet: row, action: "heartbeat" })}>{t("page.dataDev.agentFeed.heartbeat")}</Button>
+          <Button size="small" type="link" loading={packetAction.isPending} onClick={() => packetAction.mutate({ packet: row, action: "report" })}>{t("page.dataDev.agentFeed.reportEvidence")}</Button>
+        </Space>
+      ),
+    },
+  ];
+
+  const evidenceColumns: ColumnsType<any> = [
+    {
+      title: t("page.dataDev.evidence.packet"),
+      key: "packet",
+      render: (_value, row) => (
+        <div className="min-w-[220px]">
+          <p className="font-semibold text-[var(--text)]">{row.title || row.packet_id}</p>
+          <p className="mt-0.5 font-mono text-xs text-[var(--muted)]">{row.schedule_id} / {row.packet_id}</p>
+        </div>
+      ),
+    },
+    { title: t("page.dataDev.evidence.decision"), dataIndex: ["quality", "decision"], width: 110, render: (value) => <AntTag color={statusColor(value)}>{value || "-"}</AntTag> },
+    { title: t("page.dataDev.evidence.score"), dataIndex: ["quality", "score"], width: 90, render: (value) => value ?? "-" },
+    { title: t("page.dataDev.evidence.missingGates"), dataIndex: ["quality", "missing_required_gates"], render: (items) => listTags(items, "red") },
+    { title: t("page.dataDev.evidence.artifact"), dataIndex: "artifact_url", render: (value) => value ? <a href={value} target="_blank" rel="noreferrer" className="text-xs text-[var(--brand)]">{value}</a> : <span className="text-xs text-[var(--muted)]">-</span> },
+  ];
+
   if (!authed) return <NeedLogin />;
 
   const summary = opsQ.data?.summary ?? templatesQ.data?.summary ?? {};
@@ -295,26 +430,29 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
 
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-2">
         {focused ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataDev.focusedTag")}</span>
-              <span className="text-xs font-medium text-[var(--text)]">{activeMeta.focus}</span>
-              {activeMetaDef.engine ? <span className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--brand)]">{activeMetaDef.engine}</span> : null}
-              <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataDev.focusedHint")}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-1">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{t("page.dataDev.focusedTag")}</span>
+                {activeMetaDef.engine ? <AntTag color="blue">{activeMetaDef.engine}</AntTag> : null}
+                <a href="#/data/dev" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataDev.backToHub")}</a>
+                <span className="hidden text-xs text-[var(--muted)] sm:inline">{t("page.dataDev.focusedHint")}</span>
+              </div>
+              <p className="mt-2 text-sm font-semibold text-[var(--text)]">{activeMeta.focus}</p>
             </div>
-            <a href="#/data/dev" className="text-xs font-medium text-[var(--brand)] hover:underline">{t("page.dataDev.backToHub")}</a>
+            <Select
+              className="min-w-56"
+              value={focusKey}
+              options={FOCUS_KEYS.map((key) => ({ value: key, label: t(FOCUS_META[key].titleKey) }))}
+              onChange={(next) => { window.location.hash = FOCUS_HREF[next as FocusKey].slice(1); }}
+            />
           </div>
         ) : (
           <div className="flex min-w-0 flex-wrap gap-1">
-            {TAB_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition ${tab === item.id ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"}`}
-              >
-                {t(item.labelKey)}
-              </button>
+            {TAB_KEYS.map((tabId) => (
+              <Button key={tabId} type={tab === tabId ? "primary" : "text"} onClick={() => { setTab(tabId); setShowTemplateForm(false); }}>
+                {tabLabel(tabId)}
+              </Button>
             ))}
           </div>
         )}
@@ -322,262 +460,124 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
 
       {tab === "templates" ? (
         <WorkbenchPanel
-          title="开发模板目录"
+          title={t("page.dataDev.panels.templates")}
           actions={
-            <div className="flex flex-wrap gap-2">
-              <SearchInput value={q} onChange={setQ} placeholder="搜索模板、资产、负责人..." />
+            <Space wrap>
+              <Input.Search className="min-w-72" allowClear value={q} onChange={(event) => setQ(event.target.value)} placeholder={t("page.dataDev.templates.search")} />
               <RefreshButton onClick={() => void templatesQ.refetch()} pending={templatesQ.isFetching} />
-              <button type="button" onClick={() => setShowTemplateForm((value) => !value)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white">
-                + 新建模板
-              </button>
-            </div>
+              <Button type="primary" onClick={() => setShowTemplateForm((value) => !value)}>{t("page.dataDev.templates.create")}</Button>
+            </Space>
           }
         >
           {showTemplateForm ? (
-            <div className="mb-4 space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+            <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
               <div className="grid gap-3 md:grid-cols-3">
-                <input className="input-base" placeholder="模板 ID *" value={templateForm.id} onChange={(e) => setTemplateForm((v) => ({ ...v, id: e.target.value }))} />
-                <input className="input-base" placeholder="模板名称 *" value={templateForm.name} onChange={(e) => setTemplateForm((v) => ({ ...v, name: e.target.value }))} />
-                <select className="input-base" value={templateForm.engine} onChange={(e) => setTemplateForm((v) => ({ ...v, engine: e.target.value }))}>
-                  {ENGINES.map((engine) => <option key={engine}>{engine}</option>)}
-                </select>
-                <select className="input-base" value={templateForm.priority} onChange={(e) => setTemplateForm((v) => ({ ...v, priority: e.target.value }))}>
-                  {PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}
-                </select>
-                <input className="input-base" placeholder="负责 Agent" value={templateForm.owner} onChange={(e) => setTemplateForm((v) => ({ ...v, owner: e.target.value }))} />
-                <input className="input-base" placeholder="开发工具" value={templateForm.dev_tool} onChange={(e) => setTemplateForm((v) => ({ ...v, dev_tool: e.target.value }))} />
-                <input className="input-base md:col-span-3" placeholder="关联资产，逗号分隔" value={templateForm.assets} onChange={(e) => setTemplateForm((v) => ({ ...v, assets: e.target.value }))} />
-                <input className="input-base md:col-span-3" placeholder="质量卡点，逗号分隔" value={templateForm.quality_gates} onChange={(e) => setTemplateForm((v) => ({ ...v, quality_gates: e.target.value }))} />
-                <textarea className="input-base min-h-24 md:col-span-3" placeholder="模板描述、产出物和验收说明" value={templateForm.description} onChange={(e) => setTemplateForm((v) => ({ ...v, description: e.target.value }))} />
+                <Input placeholder={t("page.dataDev.templates.idRequired")} value={templateForm.id} onChange={(event) => setTemplateForm((value) => ({ ...value, id: event.target.value }))} />
+                <Input placeholder={t("page.dataDev.templates.nameRequired")} value={templateForm.name} onChange={(event) => setTemplateForm((value) => ({ ...value, name: event.target.value }))} />
+                <Select value={templateForm.engine} options={ENGINES.map((engine) => ({ value: engine, label: engine }))} onChange={(engine) => setTemplateForm((value) => ({ ...value, engine }))} />
+                <Select value={templateForm.priority} options={PRIORITIES.map((priority) => ({ value: priority, label: priority }))} onChange={(priority) => setTemplateForm((value) => ({ ...value, priority }))} />
+                <Input placeholder={t("page.dataDev.templates.owner")} value={templateForm.owner} onChange={(event) => setTemplateForm((value) => ({ ...value, owner: event.target.value }))} />
+                <Input placeholder={t("page.dataDev.templates.devTool")} value={templateForm.dev_tool} onChange={(event) => setTemplateForm((value) => ({ ...value, dev_tool: event.target.value }))} />
+                <Input className="md:col-span-3" placeholder={t("page.dataDev.templates.assetsPlaceholder")} value={templateForm.assets} onChange={(event) => setTemplateForm((value) => ({ ...value, assets: event.target.value }))} />
+                <Input className="md:col-span-3" placeholder={t("page.dataDev.templates.qualityGatesPlaceholder")} value={templateForm.quality_gates} onChange={(event) => setTemplateForm((value) => ({ ...value, quality_gates: event.target.value }))} />
+                <Input.TextArea className="md:col-span-3" rows={3} placeholder={t("page.dataDev.templates.descriptionPlaceholder")} value={templateForm.description} onChange={(event) => setTemplateForm((value) => ({ ...value, description: event.target.value }))} />
               </div>
-              <div className="flex gap-2">
-                <button type="button" disabled={!templateForm.id.trim() || !templateForm.name.trim() || upsertTemplate.isPending} onClick={() => upsertTemplate.mutate()} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                  {upsertTemplate.isPending ? "保存中..." : "保存模板"}
-                </button>
-                <button type="button" onClick={() => setShowTemplateForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-              </div>
+              <Space className="mt-3" wrap>
+                <Button type="primary" disabled={!templateForm.id.trim() || !templateForm.name.trim()} loading={upsertTemplate.isPending} onClick={() => upsertTemplate.mutate()}>
+                  {t("page.dataDev.templates.save")}
+                </Button>
+                <Button onClick={() => setShowTemplateForm(false)}>{t("common.cancel")}</Button>
+              </Space>
             </div>
           ) : null}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                  <th className="pb-2 pr-4">选择</th>
-                  <th className="pb-2 pr-4">模板</th>
-                  <th className="pb-2 pr-4">引擎</th>
-                  <th className="pb-2 pr-4">优先级</th>
-                  <th className="pb-2 pr-4">Agent / 工具</th>
-                  <th className="pb-2 pr-4">质量卡点</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTemplates.length === 0 ? <EmptyRow colSpan={6} text={activeMetaDef.engine ? t("page.dataDev.emptyEngineTemplates") : "暂无数据开发模板，点击「新建模板」创建第一条。"} /> : null}
-                {visibleTemplates.map((tpl: any) => (
-                  <tr key={tpl.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                    <td className="py-3 pr-4">
-                      <input type="checkbox" checked={selectedIds.includes(tpl.id)} onChange={() => setSelectedIds((ids) => toggleTemplateSelection(ids, tpl.id))} />
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="font-medium">{tpl.name}</div>
-                      <div className="mt-1 max-w-xl text-xs text-[var(--muted)]">{tpl.description || tpl.id}</div>
-                    </td>
-                    <td className="py-3 pr-4"><span className="rounded bg-[var(--brand-soft)] px-2 py-0.5 text-xs text-[var(--brand)]">{tpl.engine}</span></td>
-                    <td className="py-3 pr-4">{tpl.priority}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{tpl.owner || "-"} / {tpl.dev_tool || "-"}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{(tpl.quality_gates ?? []).join(", ") || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table rowKey="id" size="middle" columns={templateColumns} dataSource={visibleTemplates} loading={templatesQ.isFetching} pagination={{ pageSize: 8 }} locale={{ emptyText: activeMetaDef.engine ? t("page.dataDev.emptyEngineTemplates") : t("page.dataDev.templates.empty") }} />
 
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-3">
-            <span className="text-sm text-[var(--muted)]">已选择 {selectedIds.length} 个模板</span>
-            <button type="button" disabled={!selectedIds.length || createTasks.isPending} onClick={() => createTasks.mutate(true)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-50">
-              预览任务
-            </button>
-            <button type="button" disabled={!selectedIds.length || createTasks.isPending} onClick={() => createTasks.mutate(false)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white disabled:opacity-50">
-              生成任务
-            </button>
-            {createTasks.data ? <span className="text-xs text-[var(--muted)]">候选/创建任务：{createTasks.data.items?.length ?? createTasks.data.created ?? 0}</span> : null}
+            <span className="text-sm text-[var(--muted)]">{t("page.dataDev.templates.selectedCount", { count: selectedIds.length })}</span>
+            <Button disabled={!selectedIds.length} loading={createTasks.isPending} onClick={() => createTasks.mutate(true)}>{t("page.dataDev.templates.previewTasks")}</Button>
+            <Button type="primary" disabled={!selectedIds.length} loading={createTasks.isPending} onClick={() => createTasks.mutate(false)}>{t("page.dataDev.templates.createTasks")}</Button>
+            {createTasks.data ? <span className="text-xs text-[var(--muted)]">{t("page.dataDev.templates.taskResult", { count: (createTasks.data as any).items?.length ?? (createTasks.data as any).created ?? 0 })}</span> : null}
           </div>
         </WorkbenchPanel>
       ) : null}
 
       {tab === "schedules" ? (
-        <WorkbenchPanel title="调度运行" actions={<RefreshButton onClick={() => void schedulesQ.refetch()} pending={schedulesQ.isFetching} />}>
+        <WorkbenchPanel title={t("page.dataDev.panels.schedules")} actions={<RefreshButton onClick={() => void schedulesQ.refetch()} pending={schedulesQ.isFetching} />}>
           <div className="mb-4 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 md:grid-cols-6">
-            <select className="input-base" value={scheduleForm.policy} onChange={(e) => setScheduleForm((v) => ({ ...v, policy: e.target.value }))}>
-              {POLICIES.map((policy) => <option key={policy}>{policy}</option>)}
-            </select>
-            <input className="input-base" type="number" min={1} max={20} value={scheduleForm.maxParallel} onChange={(e) => setScheduleForm((v) => ({ ...v, maxParallel: Number(e.target.value) }))} />
-            <select className="input-base" value={scheduleForm.priority} onChange={(e) => setScheduleForm((v) => ({ ...v, priority: e.target.value }))}>
-              {PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}
-            </select>
-            <input className="input-base" value={scheduleForm.assignedTo} onChange={(e) => setScheduleForm((v) => ({ ...v, assignedTo: e.target.value }))} />
-            <input className="input-base" value={scheduleForm.devTool} onChange={(e) => setScheduleForm((v) => ({ ...v, devTool: e.target.value }))} />
-            <div className="flex gap-2">
-              <button type="button" disabled={!canSchedule} onClick={() => scheduleMut.mutate(true)} className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-50">
-                <Sparkles className="h-4 w-4" />预览
-              </button>
-              <button type="button" disabled={!canSchedule} onClick={() => scheduleMut.mutate(false)} className="flex items-center gap-1 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white disabled:opacity-50">
-                <Play className="h-4 w-4" />应用
-              </button>
-            </div>
+            <Select value={scheduleForm.policy} options={POLICIES.map((policy) => ({ value: policy, label: policy }))} onChange={(policy) => setScheduleForm((value) => ({ ...value, policy }))} />
+            <InputNumber min={1} max={20} value={scheduleForm.maxParallel} onChange={(maxParallel) => setScheduleForm((value) => ({ ...value, maxParallel: Number(maxParallel ?? 1) }))} />
+            <Select value={scheduleForm.priority} options={PRIORITIES.map((priority) => ({ value: priority, label: priority }))} onChange={(priority) => setScheduleForm((value) => ({ ...value, priority }))} />
+            <Input value={scheduleForm.assignedTo} placeholder={t("page.dataDev.schedules.assignedTo")} onChange={(event) => setScheduleForm((value) => ({ ...value, assignedTo: event.target.value }))} />
+            <Input value={scheduleForm.devTool} placeholder={t("page.dataDev.schedules.devTool")} onChange={(event) => setScheduleForm((value) => ({ ...value, devTool: event.target.value }))} />
+            <Space wrap>
+              <Button disabled={!canSchedule} icon={<Sparkles className="h-4 w-4" />} loading={scheduleMut.isPending} onClick={() => scheduleMut.mutate(true)}>{t("page.dataDev.schedules.preview")}</Button>
+              <Button type="primary" disabled={!canSchedule} icon={<Play className="h-4 w-4" />} loading={scheduleMut.isPending} onClick={() => scheduleMut.mutate(false)}>{t("page.dataDev.schedules.apply")}</Button>
+            </Space>
           </div>
 
           {scheduleResult ? (
-            <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
-              <div className="font-medium">最近调度结果：{scheduleResult.schedule_id || scheduleResult.item?.id || "-"}</div>
-              <div className="mt-1 text-xs text-[var(--muted)]">dry_run={String(scheduleResult.dry_run ?? false)}，Agent 包 {scheduleResult.agent_packets?.length ?? scheduleResult.summary?.packets ?? 0}，任务 {scheduleResult.created ?? scheduleResult.summary?.created_tasks ?? 0}</div>
-            </div>
+            <Alert
+              className="mb-4"
+              type="info"
+              showIcon
+              message={t("page.dataDev.schedules.result", { id: scheduleResult.schedule_id || scheduleResult.item?.id || "-" })}
+              description={t("page.dataDev.schedules.resultDesc", {
+                dryRun: String(scheduleResult.dry_run ?? false),
+                packets: scheduleResult.agent_packets?.length ?? scheduleResult.summary?.packets ?? 0,
+                tasks: scheduleResult.created ?? scheduleResult.summary?.created_tasks ?? 0,
+              })}
+            />
           ) : null}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                  <th className="pb-2 pr-4">调度 ID</th>
-                  <th className="pb-2 pr-4">状态</th>
-                  <th className="pb-2 pr-4">策略</th>
-                  <th className="pb-2 pr-4">模板/包/任务</th>
-                  <th className="pb-2 pr-4">创建时间</th>
-                  <th className="pb-2">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {schedules.length === 0 ? <EmptyRow colSpan={6} text="暂无调度运行记录，先选择模板并应用调度。" /> : null}
-                {schedules.map((item: any) => (
-                  <tr key={item.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                    <td className="py-3 pr-4 font-mono text-xs">{item.id}</td>
-                    <td className="py-3 pr-4"><span className={`rounded px-2 py-0.5 text-xs ${statusBadgeClass(item.status)}`}>{item.status}</span></td>
-                    <td className="py-3 pr-4">{item.policy}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{item.templates ?? 0} / {item.packets ?? 0} / {item.created_tasks ?? 0}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{shortDate(item.created_at)}</td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => { setScheduleId(item.id); setTab("agent_feed"); }} className="text-xs text-[var(--brand)] hover:underline">执行包</button>
-                        <button type="button" onClick={() => scheduleAction.mutate({ id: item.id, action: "rerun", dryRun: true })} className="text-xs text-[var(--brand)] hover:underline">预览重放</button>
-                        <button type="button" onClick={() => scheduleAction.mutate({ id: item.id, action: item.status === "archived" ? "restore" : "archive", dryRun: false })} className="text-xs text-[var(--brand)] hover:underline">{item.status === "archived" ? "恢复" : "归档"}</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table rowKey="id" size="middle" columns={scheduleColumns} dataSource={schedules} loading={schedulesQ.isFetching} pagination={{ pageSize: 8 }} locale={{ emptyText: t("page.dataDev.schedules.empty") }} />
         </WorkbenchPanel>
       ) : null}
 
       {tab === "agent_feed" ? (
-        <WorkbenchPanel
-          title="Agent 执行包"
-          actions={<RefreshButton onClick={() => void agentFeedQ.refetch()} pending={agentFeedQ.isFetching} />}
-        >
+        <WorkbenchPanel title={t("page.dataDev.panels.agentFeed")} actions={<RefreshButton onClick={() => void agentFeedQ.refetch()} pending={agentFeedQ.isFetching} />}>
           <div className="mb-4 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 lg:grid-cols-5">
-            <input className="input-base" placeholder="schedule_id" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
-            <input className="input-base" placeholder="Agent 或 packet_id" value={packetFilter} onChange={(e) => setPacketFilter(e.target.value)} />
-            <input className="input-base" placeholder="回写 Agent" value={reportForm.agent} onChange={(e) => setReportForm((v) => ({ ...v, agent: e.target.value }))} />
-            <input className="input-base" placeholder="产物 URL" value={reportForm.artifactUrl} onChange={(e) => setReportForm((v) => ({ ...v, artifactUrl: e.target.value }))} />
-            <input className="input-base" placeholder="报告摘要" value={reportForm.summary} onChange={(e) => setReportForm((v) => ({ ...v, summary: e.target.value }))} />
+            <Input placeholder={t("page.dataDev.agentFeed.scheduleId")} value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} />
+            <Input placeholder={t("page.dataDev.agentFeed.filter")} value={packetFilter} onChange={(event) => setPacketFilter(event.target.value)} />
+            <Input placeholder={t("page.dataDev.agentFeed.agent")} value={reportForm.agent} onChange={(event) => setReportForm((value) => ({ ...value, agent: event.target.value }))} />
+            <Input placeholder={t("page.dataDev.agentFeed.artifactUrl")} value={reportForm.artifactUrl} onChange={(event) => setReportForm((value) => ({ ...value, artifactUrl: event.target.value }))} />
+            <Input placeholder={t("page.dataDev.agentFeed.summary")} value={reportForm.summary} onChange={(event) => setReportForm((value) => ({ ...value, summary: event.target.value }))} />
           </div>
           <WorkbenchStats items={[
-            { label: "Ready", value: packetStats.ready },
-            { label: "Blocked", value: packetStats.blocked, trend: packetStats.blocked > 0 ? "down" : "neutral" },
-            { label: "Claimed", value: packetStats.claimed },
-            { label: "Reported", value: packetStats.reported },
+            { label: t("page.dataDev.agentFeed.ready"), value: packetStats.ready },
+            { label: t("page.dataDev.agentFeed.blocked"), value: packetStats.blocked, trend: packetStats.blocked > 0 ? "down" : "neutral" },
+            { label: t("page.dataDev.agentFeed.claimed"), value: packetStats.claimed },
+            { label: t("page.dataDev.agentFeed.reported"), value: packetStats.reported },
           ]} />
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-left text-xs text-[var(--muted)]">
-                  <th className="pb-2 pr-4">执行包</th>
-                  <th className="pb-2 pr-4">状态</th>
-                  <th className="pb-2 pr-4">Agent / 车道</th>
-                  <th className="pb-2 pr-4">质量门</th>
-                  <th className="pb-2 pr-4">报告</th>
-                  <th className="pb-2">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {packets.length === 0 ? <EmptyRow colSpan={6} text="暂无执行包；应用调度后会生成 Agent 可消费任务包。" /> : null}
-                {packets.map((packet: any) => (
-                  <tr key={`${packet.schedule_id}:${packet.packet_id}`} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
-                    <td className="py-3 pr-4">
-                      <div className="font-mono text-xs">{packet.packet_id}</div>
-                      <div className="mt-1 text-xs text-[var(--muted)]">{packet.title || packet.template_id}</div>
-                    </td>
-                    <td className="py-3 pr-4"><span className={`rounded px-2 py-0.5 text-xs ${packet.ready ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{packet.ready ? "ready" : "blocked"}</span></td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{packet.assigned_to || "-"} / {packet.lane || "-"}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{(packet.quality_gates ?? []).join(", ") || "-"}</td>
-                    <td className="py-3 pr-4 text-xs text-[var(--muted)]">{packet.report?.status || packet.claim?.status || "-"}</td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" disabled={!packet.ready || packetAction.isPending} onClick={() => packetAction.mutate({ packet, action: "claim" })} className="text-xs text-[var(--brand)] hover:underline disabled:text-[var(--muted)]">领取</button>
-                        <button type="button" disabled={packetAction.isPending} onClick={() => packetAction.mutate({ packet, action: "heartbeat" })} className="text-xs text-[var(--brand)] hover:underline">心跳</button>
-                        <button type="button" disabled={packetAction.isPending} onClick={() => packetAction.mutate({ packet, action: "report" })} className="text-xs text-[var(--brand)] hover:underline">回写证据</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4">
+            <Table rowKey={(row) => `${row.schedule_id}:${row.packet_id}`} size="middle" columns={packetColumns} dataSource={packets} loading={agentFeedQ.isFetching} pagination={{ pageSize: 8 }} locale={{ emptyText: t("page.dataDev.agentFeed.empty") }} />
           </div>
         </WorkbenchPanel>
       ) : null}
 
       {tab === "evidence" ? (
-        <WorkbenchPanel
-          title="质量证据"
-          actions={<RefreshButton onClick={() => void evidenceQ.refetch()} pending={evidenceQ.isFetching} />}
-        >
+        <WorkbenchPanel title={t("page.dataDev.panels.evidence")} actions={<RefreshButton onClick={() => void evidenceQ.refetch()} pending={evidenceQ.isFetching} />}>
           <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-            <input className="input-base max-w-72" placeholder="schedule_id" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)} />
-            <input className="input-base max-w-72" placeholder="packet_id" value={packetFilter} onChange={(e) => setPacketFilter(e.target.value)} />
-            <select className="input-base max-w-40" value={decision} onChange={(e) => setDecision(e.target.value)}>
-              <option value="">全部决策</option>
-              <option value="pass">pass</option>
-              <option value="warn">warn</option>
-              <option value="block">block</option>
-            </select>
-            <button type="button" onClick={() => evidenceTasks.mutate(true)} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm">预览治理任务</button>
-            <button type="button" onClick={() => evidenceTasks.mutate(false)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white">生成治理任务</button>
+            <Input className="max-w-72" placeholder={t("page.dataDev.evidence.scheduleId")} value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} />
+            <Input className="max-w-72" placeholder={t("page.dataDev.evidence.packetId")} value={packetFilter} onChange={(event) => setPacketFilter(event.target.value)} />
+            <Select className="min-w-40" value={decision} options={[{ value: "", label: t("page.dataDev.evidence.allDecisions") }, ...DECISIONS.map((value) => ({ value, label: value }))]} onChange={setDecision} />
+            <Button onClick={() => evidenceTasks.mutate(true)} loading={evidenceTasks.isPending}>{t("page.dataDev.evidence.previewTasks")}</Button>
+            <Button type="primary" onClick={() => evidenceTasks.mutate(false)} loading={evidenceTasks.isPending}>{t("page.dataDev.evidence.createTasks")}</Button>
           </div>
-          {evidenceTasks.data ? <div className="mb-4 text-sm text-[var(--muted)]">证据治理任务：{evidenceTasks.data.items?.length ?? evidenceTasks.data.created ?? 0}</div> : null}
-          <div className="grid gap-3 lg:grid-cols-2">
-            {evidence.length === 0 ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">暂无质量证据；Agent 回写报告后会在这里沉淀。</div> : null}
-            {evidence.map((item: any) => (
-              <div key={`${item.schedule_id}:${item.packet_id}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{item.title || item.packet_id}</div>
-                    <div className="mt-1 font-mono text-xs text-[var(--muted)]">{item.schedule_id} / {item.packet_id}</div>
-                  </div>
-                  <span className={`rounded px-2 py-0.5 text-xs ${statusBadgeClass(item.quality?.decision)}`}>{item.quality?.decision || "-"}</span>
-                </div>
-                <div className="mt-3 text-sm">Score: {item.quality?.score ?? "-"}</div>
-                <div className="mt-2 text-xs text-[var(--muted)]">缺失门禁：{(item.quality?.missing_required_gates ?? []).join(", ") || "-"}</div>
-                <div className="mt-2 text-xs text-[var(--muted)]">产物：{item.artifact_url || "-"}</div>
-              </div>
-            ))}
-          </div>
+          {evidenceTasks.data ? <Alert className="mb-4" type="info" showIcon message={t("page.dataDev.evidence.result", { count: (evidenceTasks.data as any).items?.length ?? (evidenceTasks.data as any).created ?? 0 })} /> : null}
+          <Table rowKey={(row) => `${row.schedule_id}:${row.packet_id}`} size="middle" columns={evidenceColumns} dataSource={evidence} loading={evidenceQ.isFetching} pagination={{ pageSize: 8 }} locale={{ emptyText: t("page.dataDev.evidence.empty") }} />
         </WorkbenchPanel>
       ) : null}
 
       {tab === "runbook" ? (
-        <WorkbenchPanel title="自动化 Runbook">
-          <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
-            <button type="button" disabled={runbook.isPending} onClick={() => runbook.mutate(true)} className="flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-50">
-              <RefreshCw className="h-4 w-4" />预览 Runbook
-            </button>
-            <button type="button" disabled={runbook.isPending} onClick={() => runbook.mutate(false)} className="flex items-center gap-1 rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white disabled:opacity-50">
-              <GitBranch className="h-4 w-4" />生成任务
-            </button>
-            <span className="text-sm text-[var(--muted)]">按未领取包、质量阻断和缺证据自动生成处置步骤。</span>
+        <WorkbenchPanel title={t("page.dataDev.panels.runbook")}>
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4">
+            <Button disabled={runbook.isPending} icon={<RefreshCw className="h-4 w-4" />} loading={runbook.isPending} onClick={() => runbook.mutate(true)}>{t("page.dataDev.runbook.preview")}</Button>
+            <Button type="primary" disabled={runbook.isPending} icon={<GitBranch className="h-4 w-4" />} loading={runbook.isPending} onClick={() => runbook.mutate(false)}>{t("page.dataDev.runbook.create")}</Button>
+            <span className="text-sm text-[var(--muted)]">{t("page.dataDev.runbook.description")}</span>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
-            {(runbookResult?.steps ?? []).length === 0 ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">点击预览 Runbook 查看自动化处置步骤。</div> : null}
+            {(runbookResult?.steps ?? []).length === 0 ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">{t("page.dataDev.runbook.empty")}</div> : null}
             {(runbookResult?.steps ?? []).map((step: any) => (
               <div key={step.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                 <div className="flex items-start gap-3">
@@ -585,7 +585,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
                   <div>
                     <div className="font-medium">{step.title}</div>
                     <div className="mt-1 text-xs text-[var(--muted)]">{step.reason}</div>
-                    <div className="mt-2 text-xs text-[var(--muted)]">Agent: {step.agent} / Tool: {step.dev_tool}</div>
+                    <div className="mt-2 text-xs text-[var(--muted)]">{t("page.dataDev.runbook.agentTool", { agent: step.agent, tool: step.dev_tool })}</div>
                   </div>
                 </div>
               </div>
@@ -598,9 +598,9 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
         open={aiOpen}
         onClose={() => setAiOpen(false)}
         module="data-dev"
-        title="AI 数据开发助手"
+        title={t("page.dataDev.aiTitle")}
         context={{ tab, selectedIds, scheduleId, packetFilter }}
-        initialPrompt="分析当前数据开发模板、调度运行、Agent 执行包和质量证据，给出下一步治理建议。"
+        initialPrompt={t("page.dataDev.aiPrompt")}
       />
     </div>
   );

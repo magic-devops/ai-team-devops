@@ -1,5 +1,5 @@
 # 平台仓顶层 Makefile（常用开发入口）
-.PHONY: help build-sop install-sop wheel-sop build-agentd build-all verify-sop \
+.PHONY: help build-sop install-sop wheel-sop build-agentd build-all verify-sop full-readiness \
         doctor integration-check install-completion start-agentd stop-agentd dev-env bootstrap-dev \
         deploy-up deploy-down stack-start stack-stop stack-health health-check
 
@@ -18,6 +18,7 @@ help:
 	@echo "  make start-agentd    # 启动 sop-agentd"
 	@echo "  make stop-agentd     # 停止 sop-agentd"
 	@echo "  make verify-sop      # 检查 sop 是否在 PATH"
+	@echo "  make full-readiness  # 全域 readiness：backend/frontend/CLI/SDK/权限/scope/脚本"
 	@echo "  make deploy-up       # Docker 单机 up（scripts/deploy.sh）"
 	@echo "  make deploy-down     # Docker 单机 down"
 	@echo "  make stack-start     # 本地 Manager 后台 + wait-health"
@@ -66,6 +67,10 @@ stop-agentd:
 
 verify-sop:
 	@command -v sop >/dev/null && sop --version || (echo "sop 未在 PATH；运行: make build-sop" && exit 1)
+
+full-readiness:
+	@command -v sop >/dev/null && sop system readiness --full --json || \
+	  (PYTHONPATH=packages/sop-cli:packages/sop-sdk-python python3 -m sop_cli system readiness --full --json)
 
 deploy-up:
 	PROJECT_PATH="$(CURDIR)" bash scripts/deploy.sh up single

@@ -86,6 +86,18 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "dev-evidence-notify": "数据开发质量证据通知",
         },
     },
+    "dev-flow": {
+        "help": "研发全流程",
+        "subs": {"ops-plan": "研发流程治理计划", "ops-tasks": "治理任务化", "lifecycle": "需求、TDD、Agent、Graph Loop、质量和记忆闭环"},
+    },
+    "system": {
+        "help": "系统全域 readiness",
+        "subs": {"readiness": "后端、前端、CLI、SDK、权限、页面、scope、脚本与部署包检查"},
+    },
+    "graph-loop": {
+        "help": "Graph Loop 控制面",
+        "subs": {"summary": "图与运行摘要", "runs": "运行台账", "plan": "生成计划", "run": "创建运行", "action": "运行状态切换"},
+    },
     "db-config": {
         "help": "远端数据库配置",
         "subs": {"drivers": "驱动/能力模板", "list": "列表", "add": "新增/更新", "test": "测试连接", "delete": "删除", "export": "导出无密钥配置"},
@@ -113,6 +125,7 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "manifest": "模块 Manifest",
             "capabilities": "页面能力码与 AI surfaces",
             "health": "菜单健康分",
+            "productize": "页面产品化矩阵",
             "isolation": "三码隔离审计",
             "isolation-scan": "源码隔离扫描",
             "isolation-scan-compare": "源码隔离智能基线对比",
@@ -132,6 +145,8 @@ COMMAND_TREE: dict[str, CmdEntry] = {
         "help": "AI 平台接入",
         "subs": {"list": "列表", "init": "按 registry 初始化", "doctor": "自检", "install-shims": "安装 shim"},
     },
+    "skills": {"help": "技能运行目录", "subs": {"runtime": "技能安装、版本、输入输出、权限与执行适配"}},
+    "plugins": {"help": "插件治理", "subs": {"governance": "插件/MCP 可见性、工具白名单、审批、审计与失败恢复"}},
     "status": {"help": "本地 + Manager 状态概览", "subs": {"--json": "机器可读状态快照", "--out": "写入 JSON 文件"}},
     "agentd": {
         "help": "sop-agentd 守护进程",

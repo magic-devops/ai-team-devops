@@ -104,3 +104,5 @@ node_modules/
 
 # AI 记忆系统（若未使用符号链接可忽略）
 .ai-memory/lancedb/
+
+.*/skills/

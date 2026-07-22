@@ -61,6 +61,42 @@ def list_pages(
     console.print(tbl)
 
 
+@app.command("productize")
+def productize(
+    module: str = typer.Option("", "--module", help="按模块 ID/名称过滤"),
+    domain: str = typer.Option("all", "--domain", help="能力域过滤"),
+    q: str = typer.Option("", "--q", help="关键词"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="仅输出产品化矩阵，不创建任务"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    keyword = module or q
+    try:
+        out = get_client().pages_productization(domain=domain, q=keyword)
+    except Exception as e:
+        warn(f"Manager pages productization 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("score", summary.get("score", 0))
+    kv("modules", summary.get("total", len(out.get("items") or [])))
+    kv("surfaces", summary.get("surfaces", 0))
+    kv("mode", "dry-run" if dry_run else "read")
+    tbl = Table(title="pages productization", show_header=True, header_style="bold")
+    for col in ("id", "domain", "capability", "submodules", "cli"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("id", ""))[:34],
+            str(item.get("domain", "")),
+            str(item.get("capability", ""))[:42],
+            str(item.get("submodules", 0)),
+            str(item.get("cli", ""))[:60],
+        )
+    console.print(tbl)
+
+
 def _write_runtime_json(default_name: str, payload: Any, out: str = "") -> Path:
     target = Path(out).expanduser() if out else get_config().project_path / ".sop-runtime" / default_name
     if not target.is_absolute():

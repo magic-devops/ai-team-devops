@@ -34,6 +34,14 @@ class MetadataAssetClassifyIn(BaseModel):
     note: str = Field(default="", max_length=500)
 
 
+class MetadataGovernanceTasksIn(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+    dry_run: bool = True
+    priority: str = Field(default="P1", pattern="^P[0-3]$")
+    assigned_to: str = Field(default="Data Governance Agent", max_length=120)
+    dev_tool: str = Field(default="codex", max_length=80)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -175,6 +183,85 @@ def _normalized_catalog() -> tuple[list[dict[str, Any]], list[dict[str, Any]], d
     return assets, fields, data
 
 
+def _metadata_governance_task_items(body: MetadataGovernanceTasksIn) -> list[dict[str, Any]]:
+    assets, fields, _data = _normalized_catalog()
+    selected = {str(item).strip() for item in body.ids if str(item).strip()}
+    fields_by_asset: dict[str, list[dict[str, Any]]] = {}
+    for field in fields:
+        fields_by_asset.setdefault(str(field.get("asset_id") or ""), []).append(field)
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_task(asset: dict[str, Any], category: str, title: str, description: str, priority: str, labels: list[str]) -> None:
+        key = f"{category}:{asset.get('id')}"
+        if key in seen:
+            return
+        seen.add(key)
+        items.append(
+            {
+                "source": "metadata_governance",
+                "source_report_id": str(asset.get("id") or ""),
+                "source_report_title": str(asset.get("name") or asset.get("id") or "metadata asset"),
+                "title": title,
+                "description": description,
+                "priority": priority,
+                "assigned_to": body.assigned_to,
+                "dev_tool": body.dev_tool,
+                "labels": ["metadata", category, str(asset.get("domain") or "unknown"), *labels[:3]],
+            }
+        )
+
+    for asset in assets:
+        asset_id = str(asset.get("id") or "")
+        if selected and asset_id not in selected:
+            continue
+        asset_name = str(asset.get("name") or asset_id)
+        domain = str(asset.get("domain") or "unknown")
+        if not str(asset.get("owner") or "").strip():
+            add_task(
+                asset,
+                "missing-owner",
+                f"[元数据] 补齐资产负责人：{asset_name}",
+                f"资产 {asset_name}（{asset_id}）所属领域 {domain} 缺少负责人。请确认业务 Owner、Data Owner 和维护责任边界，并回写元数据资产目录。",
+                "P1",
+                [asset_name],
+            )
+        if not int(asset.get("lineage_count") or 0):
+            add_task(
+                asset,
+                "missing-lineage",
+                f"[元数据] 声明资产血缘：{asset_name}",
+                f"资产 {asset_name}（{asset_id}）缺少上游或下游血缘声明。请补齐来源、消费方、变更影响范围和回滚检查点。",
+                body.priority,
+                [asset_name],
+            )
+        if str(asset.get("quality_decision") or "warn") != "pass":
+            add_task(
+                asset,
+                "quality-watch",
+                f"[元数据] 处理质量观察资产：{asset_name}",
+                f"资产 {asset_name}（{asset_id}）质量分 {asset.get('quality_score', 0)}，决策为 {asset.get('quality_decision') or 'warn'}。请绑定必要质量规则并补齐质量门禁证据。",
+                body.priority,
+                [asset_name],
+            )
+        sensitive_without_policy = [
+            field for field in fields_by_asset.get(asset_id, [])
+            if field.get("sensitivity") == "sensitive" and "pii_redaction" not in (asset.get("quality_rules") or [])
+        ]
+        if sensitive_without_policy:
+            sample = ", ".join(str(field.get("name") or "") for field in sensitive_without_policy[:5])
+            add_task(
+                asset,
+                "sensitive-policy",
+                f"[元数据] 补齐敏感字段策略：{asset_name}",
+                f"资产 {asset_name}（{asset_id}）存在敏感字段候选：{sample}。请确认分类、脱敏策略、访问边界和审计要求，并将 pii_redaction 等规则写回资产治理配置。",
+                "P0",
+                [asset_name, "pii"],
+            )
+    return items
+
+
 @router.get("/summary")
 def metadata_summary() -> dict[str, Any]:
     assets, fields, data = _normalized_catalog()
@@ -207,8 +294,8 @@ def metadata_summary() -> dict[str, Any]:
         "agent_consumption": {
             "module": "metadata-management",
             "read_apis": ["/api/v1/metadata/assets", "/api/v1/metadata/fields", "/api/v1/metadata/lineage/impact"],
-            "write_apis": ["/api/v1/metadata/assets/{asset_id}/classify"],
-            "recommended_actions": ["complete_owner", "classify_sensitive_fields", "declare_lineage"],
+            "write_apis": ["/api/v1/metadata/assets/{asset_id}/classify", "/api/v1/metadata/governance/tasks"],
+            "recommended_actions": ["complete_owner", "classify_sensitive_fields", "declare_lineage", "create_governance_tasks"],
         },
         "updated_at": data.get("updated_at") or _now(),
     }
@@ -281,6 +368,17 @@ def metadata_lineage_impact(asset_id: str = Query("", max_length=160)) -> dict[s
 def metadata_lineage() -> dict[str, Any]:
     payload = analytics_lineage()
     return {"ok": True, "scope": _scope(), "nodes": payload.get("nodes") or [], "edges": payload.get("edges") or [], "summary": payload.get("summary") or {}}
+
+
+@router.post("/governance/tasks")
+def metadata_governance_tasks(body: MetadataGovernanceTasksIn) -> dict[str, Any]:
+    items = _metadata_governance_task_items(body)
+    if body.dry_run:
+        return {"ok": True, "scope": _scope(), "dry_run": True, "items": items, "created": [], "planned": len(items)}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+
+    created = [create_task(TaskCreate(**item)) for item in items]
+    return {"ok": True, "scope": _scope(), "dry_run": False, "items": items, "created": created, "planned": len(items), "created_count": len(created)}
 
 
 @router.post("/assets/{asset_id}/classify")

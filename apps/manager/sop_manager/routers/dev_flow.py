@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root, resolved_business_code, resolved_project_id, resolved_project_path, resolved_tenant_id
+from sop_manager.routers.productization_contract import summarize_items, unified_payload
 from .db_sql_compat import rows
 
 router = APIRouter(prefix="/api/v1/dev-flow", tags=["dev-flow"])
@@ -393,6 +394,99 @@ def _dev_flow_ops_plan() -> Dict[str, Any]:
 @router.get("/ops-plan")
 def dev_flow_ops_plan() -> Dict[str, Any]:
     return _dev_flow_ops_plan()
+
+
+@router.get("/lifecycle")
+def dev_flow_lifecycle() -> Dict[str, Any]:
+    plan = _dev_flow_ops_plan()
+    summary = plan.get("summary") or {}
+    stage_defs = [
+        {
+            "id": "requirement_decomposition",
+            "label": "需求拆解",
+            "status": "ready" if summary.get("requirements", 0) else "watch",
+            "inputs": ["requirement pool", "business context", "acceptance criteria"],
+            "outputs": ["task candidates", "scope packet", "review checklist"],
+            "cli": "sop requirement list --json",
+        },
+        {
+            "id": "tdd_first",
+            "label": "TDD 测试先行",
+            "status": "ready",
+            "inputs": ["acceptance criteria", "risk areas"],
+            "outputs": ["red tests", "test command", "quality bar"],
+            "cli": "sop dev-flow lifecycle --json",
+        },
+        {
+            "id": "agent_claim",
+            "label": "Agent 领取与执行包",
+            "status": "watch" if summary.get("blocked_tasks", 0) else "ready",
+            "inputs": ["task queue", "skills runtime", "tools", "permissions"],
+            "outputs": ["claim", "heartbeat", "evidence packet"],
+            "cli": "sop task schedule-insights --include-blocked --json",
+        },
+        {
+            "id": "graph_loop_dispatch",
+            "label": "Graph Loop 调度",
+            "status": "ready",
+            "inputs": ["DAG nodes", "human interrupt", "events"],
+            "outputs": ["graph run", "resume signal", "rollback plan"],
+            "cli": "sop graph-loop summary --json",
+        },
+        {
+            "id": "quality_evaluation",
+            "label": "质量评估",
+            "status": "risk" if summary.get("critical_issues", 0) else "ready",
+            "inputs": ["pytest", "vitest", "typecheck", "scope scan"],
+            "outputs": ["quality report", "release decision"],
+            "cli": "sop system readiness --full --json",
+        },
+        {
+            "id": "retrospective_distill",
+            "label": "复盘蒸馏",
+            "status": "ready",
+            "inputs": ["audit", "trace", "agent evidence", "operator notes"],
+            "outputs": ["memory facts", "kb snippets", "runbook"],
+            "cli": "sop memory recent --json",
+        },
+    ]
+    item_summary = summarize_items(stage_defs)
+    return unified_payload(
+        summary={
+            "ok": item_summary["risk"] == 0,
+            **item_summary,
+            "requirements": summary.get("requirements", 0),
+            "tasks": summary.get("tasks", 0),
+            "open_issues": summary.get("open_issues", 0),
+            "blocked_tasks": summary.get("blocked_tasks", 0),
+            "lifecycle": "requirement -> TDD -> agent claim -> graph loop -> quality -> memory",
+        },
+        items=stage_defs,
+        actions=[
+            {"id": "ops-plan", "label": "读取研发治理计划", "method": "GET", "path": "/api/v1/dev-flow/ops-plan", "risk": "low"},
+            {"id": "ops-tasks", "label": "治理风险任务化", "method": "POST", "path": "/api/v1/dev-flow/ops-tasks", "risk": "medium"},
+            {"id": "graph-loop", "label": "创建 Graph Loop", "method": "POST", "path": "/api/v1/graph-loop/runs", "risk": "medium"},
+        ],
+        cli=[
+            {"id": "read", "command": "sop dev-flow lifecycle --json"},
+            {"id": "dry-run", "command": "sop dev-flow ops-tasks --json"},
+            {"id": "apply", "command": "sop dev-flow ops-tasks --apply --json"},
+            {"id": "graph-loop", "command": "sop graph-loop plan --json"},
+            {"id": "doctor", "command": "sop system readiness --full --json"},
+        ],
+        permissions=[
+            {"capability": "delivery.dev-flow", "actions": ["read", "write", "execute", "export"]},
+            {"capability": "delivery.tasks", "actions": ["read", "write", "execute"]},
+            {"capability": "governance.graph-loop", "actions": ["read", "execute", "approve"]},
+        ],
+        audit={"event": "dev_flow_lifecycle"},
+        agent_consumption={
+            "purpose": "Full development lifecycle packet for requirement decomposition, TDD, agent claim, graph-loop dispatch, quality evaluation and retrospective memory.",
+            "ops_plan": plan,
+            "task_api": "/api/v1/dev-flow/ops-tasks",
+            "graph_api": "/api/v1/graph-loop/runs",
+        },
+    )
 
 
 @router.post("/ops-tasks")

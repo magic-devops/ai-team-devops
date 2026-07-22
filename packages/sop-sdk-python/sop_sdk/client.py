@@ -198,6 +198,56 @@ class ManagerClient:
     def system_pages_manifest(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/manifest")
 
+    def system_readiness_full(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/system/readiness/full")
+
+    def pages_productization(self, *, domain: str = "all", q: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/pages/productization", params={"domain": domain, "q": q})
+
+    def skills_runtime(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/skills/runtime")
+
+    def plugins_governance(self, *, q: str = "") -> dict[str, Any]:
+        return self._request("GET", "/api/v1/plugins/governance", params={"q": q})
+
+    def graph_loop_summary(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/graph-loop/summary")
+
+    def graph_loop_runs(self, *, limit: int = 50) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/graph-loop/runs", params={"limit": limit})
+
+    def graph_loop_slo(self, *, run_id: str = "") -> dict[str, Any]:
+        if run_id:
+            return self._request("GET", f"/api/v1/graph-loop/runs/{run_id}/slo")
+        return self._request("GET", "/api/v1/graph-loop/slo")
+
+    def graph_loop_plan(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/graph-loop/plan", json_body=dict(body))
+
+    def graph_loop_run(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/graph-loop/runs", json_body=dict(body))
+
+    def graph_loop_detail(self, run_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/graph-loop/runs/{run_id}")
+
+    def graph_loop_events(self, run_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/graph-loop/runs/{run_id}/events")
+
+    def graph_loop_action(self, run_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/graph-loop/runs/{run_id}/action", json_body=dict(body))
+
+    def graph_loop_transition(self, run_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/graph-loop/runs/{run_id}/transition", json_body=dict(body))
+
+    def graph_loop_interrupt_decision(self, run_id: str, interrupt_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/graph-loop/runs/{run_id}/interrupts/{interrupt_id}/decision", json_body=dict(body))
+
+    def graph_loop_replay(self, run_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/graph-loop/runs/{run_id}/replay", json_body=dict(body))
+
+    def graph_loop_export(self, run_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/graph-loop/runs/{run_id}/export", json_body=dict(body))
+
     def system_pages_manifest_me(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/system/pages/manifest/me")
 
@@ -331,6 +381,9 @@ class ManagerClient:
 
     def dev_flow_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/dev-flow/ops-tasks", json_body=dict(body))
+
+    def dev_flow_lifecycle(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/dev-flow/lifecycle")
 
     # workflows
     def workflow_instances(self, *, limit: int = 100, status: str = "", type: str = "", q: str = "") -> dict[str, Any]:

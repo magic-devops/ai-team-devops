@@ -14,6 +14,7 @@ from sop_manager.path_config import (
     resolved_runtime_dir,
     sop_ops_dir,
 )
+from sop_manager.routers.productization_contract import probe_call, probe_file, summarize_items, unified_payload
 
 router = APIRouter(prefix="/api/v1/system", tags=["system"])
 
@@ -48,6 +49,82 @@ def _init_script() -> Path:
 
 def _workspace_artifacts_path() -> Path:
     return resolved_ai_memory_root() / "workspace_artifacts.json"
+
+
+@router.get("/readiness/full")
+def system_readiness_full() -> dict[str, Any]:
+    project = resolved_project_path()
+    items = [
+        probe_file("apps/manager/sop_manager/main.py", "Manager FastAPI entry"),
+        probe_file("apps/manager-web/src/navigation.tsx", "manager-web navigation"),
+        probe_file("apps/manager-web/src/lib/api.ts", "manager-web SDK facade"),
+        probe_file("packages/sop-sdk-python/sop_sdk/client.py", "Python SDK client"),
+        probe_file("packages/sop-cli/sop_cli/__main__.py", "sop CLI root"),
+        probe_file("packages/sop-cli/sop_cli/commands/pages.py", "pages CLI control"),
+        probe_file("packages/sop-cli/sop_cli/commands/graph_loop.py", "graph-loop CLI control"),
+        probe_file("packages/sop-cli/sop_cli/commands/dev_flow.py", "dev-flow CLI control"),
+        probe_file("apps/manager/sop_manager/routers/scope_guard.py", "scope guard"),
+        probe_file("apps/manager/sop_manager/routers/graph_loop.py", "Graph Loop typed control plane"),
+        probe_file("apps/manager/sop_manager/routers/system_pages.py", "page registry and capability governance"),
+        probe_file("Makefile", "operator readiness entry"),
+        probe_file("scripts", "scripts directory"),
+        probe_file("ai-sop-ops", "SOP ops scripts", required=False),
+        probe_file(".ai-memory/ai_capabilities.json", "AI capability registry", required=False),
+        probe_call("system_pages", "system pages API", lambda: __import__("sop_manager.routers.system_pages", fromlist=["system_pages"]).system_pages(view="react")),
+        probe_call("graph_loop_store", "Graph Loop store/schema", lambda: __import__("sop_manager.routers.graph_loop", fromlist=["get_graph_loop_store"]).get_graph_loop_store().diagnostics()),
+        probe_call("graph_loop_slo", "Graph Loop SLO", lambda: __import__("sop_manager.routers.graph_loop", fromlist=["graph_loop_slo"]).graph_loop_slo()),
+        probe_call("dev_flow", "dev-flow ops plan", lambda: __import__("sop_manager.routers.dev_flow", fromlist=["dev_flow_ops_plan"]).dev_flow_ops_plan()),
+        probe_call("skills", "skills catalog", lambda: __import__("sop_manager.routers.skills", fromlist=["list_skills"]).list_skills()),
+    ]
+    summary = summarize_items(items)
+    summary.update(
+        {
+            "ok": summary["risk"] == 0,
+            "project_path": str(project),
+            "coverage": ["backend", "frontend", "cli", "sdk", "permissions", "pages", "scope", "scripts", "deployment"],
+            "readiness_command": "sop system readiness --full --json",
+        }
+    )
+    return unified_payload(
+        ok=summary["ok"],
+        summary=summary,
+        items=items,
+        actions=[
+            {"id": "read", "label": "读取全域 readiness", "method": "GET", "path": "/api/v1/system/readiness/full", "risk": "low"},
+            {"id": "pages", "label": "页面产品化治理", "method": "GET", "path": "/api/v1/pages/productization", "risk": "low"},
+            {"id": "graph-loop", "label": "Graph Loop 控制面", "method": "GET", "path": "/api/v1/graph-loop/summary", "risk": "medium"},
+            {"id": "dev-flow", "label": "研发生命周期", "method": "GET", "path": "/api/v1/dev-flow/lifecycle", "risk": "low"},
+        ],
+        cli=[
+            {"id": "read", "command": "sop system readiness --full --json"},
+            {"id": "doctor", "command": "sop doctor --json"},
+            {"id": "pages", "command": "sop pages health --json"},
+            {"id": "graph-loop", "command": "sop graph-loop summary --json"},
+            {"id": "make", "command": "make full-readiness"},
+        ],
+        permissions=[
+            {"capability": "system.readiness", "actions": ["read", "export"]},
+            {"capability": "governance.system-map", "actions": ["read", "write", "execute", "approve"]},
+            {"capability": "delivery.dev-flow", "actions": ["read", "write", "execute"]},
+        ],
+        audit={"event": "system_readiness_full", "project_path": str(project)},
+        agent_consumption={
+            "purpose": "One-shot release-readiness packet for backend, frontend, CLI, SDK, permission, scope, scripts and deployment checks.",
+            "followups": [
+                "/api/v1/pages/productization",
+                "/api/v1/graph-loop/summary",
+                "/api/v1/graph-loop/slo",
+                "/api/v1/graph-loop/runs/{run_id}",
+                "/api/v1/graph-loop/runs/{run_id}/events",
+                "/api/v1/graph-loop/runs/{run_id}/transition",
+                "/api/v1/graph-loop/runs/{run_id}/replay",
+                "/api/v1/graph-loop/runs/{run_id}/export",
+                "/api/v1/skills/runtime",
+                "/api/v1/plugins/governance",
+                "/api/v1/dev-flow/lifecycle",
+            ],
+        },
+    )
 @router.get("/scripts")
 def list_scripts():
     tools_dir = _try_sop_ops()

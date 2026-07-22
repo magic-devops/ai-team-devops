@@ -134,6 +134,157 @@ class MetricPublishIn(BaseModel):
     version_note: str = "publish semantic metric contract"
     sla: str = "99.5%"
 
+
+class MetricsGovernanceTasksIn(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+    dry_run: bool = True
+    priority: str = Field(default="P1", pattern="^P[0-3]$")
+    assigned_to: str = Field(default="Metrics Agent", max_length=120)
+    dev_tool: str = Field(default="codex", max_length=80)
+
+
+class MetricApprovalCreateIn(BaseModel):
+    metric_id: str
+    action: str = Field(default="publish_metric", pattern="^(publish_metric|update_formula|deprecate_metric)$")
+    reason: str = Field(default="", max_length=800)
+    requested_by: str = Field(default="Metrics Agent", max_length=120)
+    reviewers: list[str] = Field(default_factory=lambda: ["Data Governance"], max_length=20)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    auto_apply_on_approval: bool = True
+
+
+class MetricApprovalReviewIn(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected|cancelled)$")
+    reviewer: str = Field(default="Data Governance", max_length=120)
+    note: str = Field(default="", max_length=800)
+
+
+def _formula_warnings(metric: dict) -> list[str]:
+    validation = metric.get("formula_validation") or {}
+    warnings = validation.get("warnings") or []
+    return [str(item) for item in warnings if str(item)]
+
+
+def _approval_counts(items: list[dict]) -> dict[str, int]:
+    counts = {"pending": 0, "approved": 0, "rejected": 0, "cancelled": 0}
+    for item in items:
+        status = str(item.get("status") or "pending")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _metric_approval_risk(metric: dict) -> dict[str, Any]:
+    impact = metric_impact(str(metric.get("id") or ""))
+    return {
+        "risk_level": impact.get("risk_level", "low"),
+        "downstream_metrics": impact.get("downstream_metrics", []),
+        "affected_services": impact.get("affected_services", []),
+        "recommended_actions": impact.get("recommended_actions", []),
+    }
+
+
+def _metrics_governance_task_items(body: MetricsGovernanceTasksIn) -> list[dict[str, Any]]:
+    catalog = _load_all("catalog")
+    published = _load_all("published")
+    selected = {str(item).strip() for item in body.ids if str(item).strip()}
+    published_metric_ids = {str(item.get("metric_id") or "") for item in published}
+    aliases = {str(item.get("id") or "") for item in catalog}
+    aliases.update(str(item.get("name") or "").lower() for item in catalog if item.get("name"))
+
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_task(metric: dict, category: str, title: str, description: str, priority: str, labels: list[str]) -> None:
+        key = f"{category}:{metric.get('id')}"
+        if key in seen:
+            return
+        seen.add(key)
+        items.append(
+            {
+                "source": "metrics_governance",
+                "source_report_id": str(metric.get("id") or ""),
+                "source_report_title": str(metric.get("name") or metric.get("id") or "metric"),
+                "title": title,
+                "description": description,
+                "priority": priority,
+                "assigned_to": body.assigned_to,
+                "dev_tool": body.dev_tool,
+                "labels": ["metrics", category, str(metric.get("domain") or "general"), *labels[:3]],
+            }
+        )
+
+    for metric in catalog:
+        metric_id = str(metric.get("id") or "")
+        if selected and metric_id not in selected:
+            continue
+        metric_name = str(metric.get("name") or metric_id)
+        domain = str(metric.get("domain") or "general")
+        validation = metric.get("formula_validation") or {}
+        warnings = _formula_warnings(metric)
+
+        if not str(metric.get("owner") or "").strip():
+            add_task(
+                metric,
+                "missing-owner",
+                f"[指标] 补齐指标负责人：{metric_name}",
+                f"指标 {metric_name} 缺少 owner，无法形成口径评审、版本发布和异常响应责任闭环。请补齐 owner、业务域 {domain} 的责任说明，并同步到指标目录。",
+                "P1",
+                ["owner"],
+            )
+        if not str(metric.get("formula") or "").strip() or "formula_empty" in warnings:
+            add_task(
+                metric,
+                "missing-formula",
+                f"[指标] 补齐指标公式：{metric_name}",
+                f"指标 {metric_name} 尚未配置可解释公式，语义层、样本查询和 API 消费会缺少统一口径。请补齐公式、字段来源和验证样例。",
+                body.priority,
+                ["formula"],
+            )
+        if validation and validation.get("valid") is False:
+            add_task(
+                metric,
+                "formula-risk",
+                f"[指标] 修复指标公式风险：{metric_name}",
+                f"指标 {metric_name} 的公式校验未通过，需修复函数、字段引用和安全表达式后再发布版本。",
+                "P0",
+                ["formula", "risk"],
+            )
+        if not metric.get("api_endpoint") and metric_id not in published_metric_ids:
+            add_task(
+                metric,
+                "unpublished-api",
+                f"[指标] 发布指标查询 API：{metric_name}",
+                f"指标 {metric_name} 尚未发布 API，业务系统和 AI 问数无法通过稳定查询契约消费。请完成语义版本发布并确认 SLA。",
+                body.priority,
+                ["api", "publish"],
+            )
+        if not metric.get("semantic_version") or metric.get("semantic_version") == "v0":
+            add_task(
+                metric,
+                "missing-version",
+                f"[指标] 发布指标语义版本：{metric_name}",
+                f"指标 {metric_name} 仍处于 v0，缺少版本化查询契约。请完成口径评审、版本说明和契约发布。",
+                body.priority,
+                ["semantic", "version"],
+            )
+
+        missing_dependencies = []
+        for dep in metric.get("depends_on") or []:
+            dep_key = str(dep or "").strip()
+            if dep_key and dep_key not in aliases and dep_key.lower() not in aliases:
+                missing_dependencies.append(dep_key)
+        if missing_dependencies:
+            add_task(
+                metric,
+                "broken-dependency",
+                f"[指标] 修复指标依赖断链：{metric_name}",
+                f"指标 {metric_name} 依赖 {', '.join(missing_dependencies[:5])}，但当前目录无法匹配到对应指标。请补齐依赖指标或修正依赖引用。",
+                "P1",
+                ["dependency", "lineage"],
+            )
+    return items
+
+
 @router.get("/catalog")
 def list_catalog(domain: str = "", metric_type: str = ""):
     items = _load_all("catalog")
@@ -256,6 +407,95 @@ def list_published():
     items = _load_all("published")
     return {**_scope(), "items": items, "total": len(items)}
 
+
+@router.post("/governance/tasks")
+def metrics_governance_tasks(body: MetricsGovernanceTasksIn) -> dict[str, Any]:
+    items = _metrics_governance_task_items(body)
+    if body.dry_run:
+        return {"ok": True, "scope": _scope(), "dry_run": True, "items": items, "created": [], "planned": len(items)}
+    from sop_manager.routers.tasks import TaskCreate, create_task
+
+    created = [create_task(TaskCreate(**item)) for item in items]
+    return {"ok": True, "scope": _scope(), "dry_run": False, "items": items, "created": created, "planned": len(items), "created_count": len(created)}
+
+
+@router.get("/approvals")
+def list_metric_approvals(status: str = "", metric_id: str = ""):
+    items = _load_all("approvals")
+    if status:
+        items = [item for item in items if item.get("status") == status]
+    if metric_id:
+        items = [item for item in items if item.get("metric_id") == metric_id]
+    return {**_scope(), "items": items, "total": len(items), "counts": _approval_counts(_load_all("approvals"))}
+
+
+@router.post("/approvals")
+def create_metric_approval(body: MetricApprovalCreateIn):
+    metric = _load_item("catalog", body.metric_id, "metric")
+    payload = dict(body.payload or {})
+    if body.action == "publish_metric":
+        payload.setdefault("version_note", f"approve publish for {metric.get('name') or body.metric_id}")
+        payload.setdefault("sla", str(metric.get("query_contract", {}).get("sla") or "99.5%"))
+    approval = {
+        **_scope(),
+        "id": str(uuid4()),
+        "kind": "metric",
+        "metric_id": body.metric_id,
+        "target_id": body.metric_id,
+        "target_name": metric.get("name", ""),
+        "action": body.action,
+        "status": "pending",
+        "reason": body.reason,
+        "requested_by": body.requested_by,
+        "reviewers": body.reviewers,
+        "payload": payload,
+        "auto_apply_on_approval": body.auto_apply_on_approval,
+        "risk": _metric_approval_risk(metric),
+        "review_events": [],
+        "created_at": _now(),
+    }
+    _save("approvals", approval)
+    return approval
+
+
+@router.post("/approvals/{approval_id}/review")
+def review_metric_approval(approval_id: str, body: MetricApprovalReviewIn):
+    approval = _load_item("approvals", approval_id, "approval")
+    if approval.get("status") != "pending":
+        raise HTTPException(409, "approval is already reviewed")
+    approval["status"] = body.status
+    approval["reviewer"] = body.reviewer
+    approval["review_note"] = body.note
+    approval["reviewed_at"] = _now()
+    approval.setdefault("review_events", []).append({
+        "status": body.status,
+        "reviewer": body.reviewer,
+        "note": body.note,
+        "created_at": approval["reviewed_at"],
+    })
+    if body.status == "approved" and approval.get("auto_apply_on_approval"):
+        action = str(approval.get("action") or "")
+        if action == "publish_metric":
+            payload = approval.get("payload") if isinstance(approval.get("payload"), dict) else {}
+            result = publish_metric_version(
+                str(approval.get("metric_id") or approval.get("target_id") or ""),
+                MetricPublishIn(
+                    version_note=str(payload.get("version_note") or "approved metric contract"),
+                    sla=str(payload.get("sla") or "99.5%"),
+                ),
+            )
+            approval["applied_result"] = result
+            approval["applied_at"] = _now()
+        elif action == "deprecate_metric":
+            metric = _load_item("catalog", str(approval.get("metric_id") or ""), "metric")
+            metric["status"] = "deprecated"
+            metric["updated_at"] = _now()
+            _save("catalog", metric)
+            approval["applied_result"] = {"metric_id": metric.get("id"), "status": metric.get("status")}
+            approval["applied_at"] = _now()
+    _save("approvals", approval)
+    return approval
+
 @router.get("/catalog/{metric_id}/impact")
 def metric_impact(metric_id: str):
     metric = _load_item("catalog", metric_id, "metric")
@@ -307,6 +547,30 @@ def summary():
     catalog = _load_all("catalog")
     published = _load_all("published")
     domains = list({i.get("domain") for i in catalog if i.get("domain")})
+    published_metric_ids = {str(item.get("metric_id") or "") for item in published}
+    approvals = _load_all("approvals")
+    approval_counts = _approval_counts(approvals)
+    formula_issues = sum(1 for item in catalog if (item.get("formula_validation") or {}).get("valid") is False)
+    missing_formula = sum(1 for item in catalog if not str(item.get("formula") or "").strip() or "formula_empty" in _formula_warnings(item))
+    missing_owner = sum(1 for item in catalog if not str(item.get("owner") or "").strip())
+    unpublished = sum(1 for item in catalog if not item.get("api_endpoint") and str(item.get("id") or "") not in published_metric_ids)
+    missing_version = sum(1 for item in catalog if not item.get("semantic_version") or item.get("semantic_version") == "v0")
+    governance_ids = {
+        str(item.get("id") or "")
+        for item in catalog
+        if not str(item.get("owner") or "").strip()
+        or not str(item.get("formula") or "").strip()
+        or "formula_empty" in _formula_warnings(item)
+        or (item.get("formula_validation") or {}).get("valid") is False
+        or (not item.get("api_endpoint") and str(item.get("id") or "") not in published_metric_ids)
+        or not item.get("semantic_version")
+        or item.get("semantic_version") == "v0"
+    }
     return {**_scope(), "summary": {"total": len(catalog), "published": len(published),
             "domains": domains, "api_calls_today": 0,
-            "versioned": sum(1 for i in catalog if i.get("semantic_version") and i.get("semantic_version") != "v0")}}
+            "versioned": sum(1 for i in catalog if i.get("semantic_version") and i.get("semantic_version") != "v0"),
+            "formula_issues": formula_issues, "missing_formula": missing_formula,
+            "missing_owner": missing_owner, "unpublished": unpublished,
+            "missing_version": missing_version, "governance_todos": len(governance_ids),
+            "pending_approvals": approval_counts.get("pending", 0),
+            "approved_approvals": approval_counts.get("approved", 0)}}

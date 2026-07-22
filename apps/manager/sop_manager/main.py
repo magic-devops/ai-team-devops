@@ -92,6 +92,7 @@ app.middleware("http")(legacy_unversioned_api_redirect_middleware)
 
 # ── 按需注册路由模块（业务 REST 挂载在 /api/v1/*；未版本化 /api/* 由上方中间件重定向）────────
 from sop_manager.routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
+from sop_manager.routers import graph_loop, pages_productization, plugins_governance
 from sop_manager.routers import models, orchestration, docker_env, skill_repo, vibe, design_docs, workspace
 from sop_manager.routers import notify, cli_wrapper
 
@@ -272,6 +273,9 @@ app.include_router(agents.router)
 app.include_router(skills.router)
 app.include_router(mcp_mgr.router)
 app.include_router(system.router)
+app.include_router(graph_loop.router)
+app.include_router(pages_productization.router)
+app.include_router(plugins_governance.router)
 app.include_router(models.router)
 app.include_router(orchestration.router)
 app.include_router(docker_env.router)
@@ -342,8 +346,9 @@ except Exception as _e:
 
 # 启动 WORM 后台归档线程（幂等）
 try:
-    if globals().get("_audit_worm") is not None:
-        _audit_worm.start_background()  # type: ignore[name-defined]
+    _audit_worm_mod = globals().get("_audit_worm")
+    if _audit_worm_mod is not None:
+        _audit_worm_mod.start_background()
 except Exception as _e:
     app_logger.warning("audit worm start: %s", _e)
 

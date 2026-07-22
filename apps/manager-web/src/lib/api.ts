@@ -898,6 +898,47 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  systemReadinessFull: () => request<any>("/api/v1/system/readiness/full"),
+  pagesProductization: (params: { domain?: string; q?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.domain && params.domain !== "all") qs.set("domain", params.domain);
+    if (params.q) qs.set("q", params.q);
+    return request<any>(`/api/v1/pages/productization${qs.toString() ? `?${qs}` : ""}`);
+  },
+  graphLoopSummary: () => request<any>("/api/v1/graph-loop/summary"),
+  graphLoopSlo: (runId?: string) => request<any>(runId ? `/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/slo` : "/api/v1/graph-loop/slo"),
+  graphLoopRuns: (limit = 20) => request<any>(`/api/v1/graph-loop/runs?limit=${encodeURIComponent(String(limit))}`),
+  graphLoopDetail: (runId: string) => request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}`),
+  graphLoopEvents: (runId: string) => request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/events`),
+  graphLoopRun: (body: { goal?: string; mode?: string; owner?: string; quality_bar?: string }) =>
+    request<any>("/api/v1/graph-loop/runs", { method: "POST", body: JSON.stringify(body) }),
+  graphLoopTransition: (runId: string, body: { action: string; node_id?: string; note?: string; actor?: string; idempotency_key?: string }) =>
+    request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/transition`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  graphLoopInterruptDecision: (
+    runId: string,
+    interruptId: string,
+    body: { decision: string; actor?: string; note?: string; edited_payload?: Record<string, unknown>; idempotency_key?: string },
+  ) =>
+    request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/interrupts/${encodeURIComponent(interruptId)}/decision`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  graphLoopReplay: (runId: string, body: { mode?: string; actor?: string; note?: string; idempotency_key?: string }) =>
+    request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/replay`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  graphLoopExport: (runId: string, body: { format?: string; include_events?: boolean; actor?: string }) =>
+    request<any>(`/api/v1/graph-loop/runs/${encodeURIComponent(runId)}/export`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  skillsRuntime: () => request<any>("/api/v1/skills/runtime"),
+  pluginsGovernance: () => request<any>("/api/v1/plugins/governance"),
+  devFlowLifecycle: () => request<any>("/api/v1/dev-flow/lifecycle"),
   businesses: () => request<any[]>("/api/v1/businesses"),
   createBusiness: (body: { name: string; description?: string }) =>
     request<any>("/api/v1/businesses", { method: "POST", body: JSON.stringify(body) }),
@@ -1263,6 +1304,8 @@ export const api = {
   metadataLineage: () => request<any>("/api/v1/metadata/lineage"),
   metadataLineageImpact: (assetId: string) =>
     request<any>(`/api/v1/metadata/lineage/impact?asset_id=${encodeURIComponent(assetId)}`),
+  metadataGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/metadata/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
   metadataClassifyAsset: (assetId: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/metadata/assets/${encodeURIComponent(assetId)}/classify`, {
       method: "POST",
@@ -2075,6 +2118,37 @@ export const api = {
     request<any>(`/api/v1/data-quality/alerts/${encodeURIComponent(id)}/resolve`, { method: "POST" }),
   dataQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
     request<any>("/api/v1/data-quality/alerts/tasks", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityImpact: (alertIds: string[] = []) =>
+    request<any>(`/api/v1/data-quality/impact${alertIds.length ? `?alert_ids=${encodeURIComponent(alertIds.join(","))}` : ""}`),
+  dataQualityImpactTasks: (body: { alert_ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/data-quality/impact/tasks", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityRca: (alertIds: string[] = []) =>
+    request<any>(`/api/v1/data-quality/rca${alertIds.length ? `?alert_ids=${encodeURIComponent(alertIds.join(","))}` : ""}`),
+  dataQualityRcaCreate: (body: { alert_ids?: string[]; persist?: boolean; include_impact?: boolean }) =>
+    request<any>("/api/v1/data-quality/rca", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityRcaHistory: (limit = 50) =>
+    request<any>(`/api/v1/data-quality/rca/history?limit=${limit}`),
+  dataQualityRcaTasks: (body: { rca_id?: string; alert_ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/data-quality/rca/tasks", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityForecast: (windowDays = 30, horizonDays = 7) =>
+    request<any>(`/api/v1/data-quality/forecast?window_days=${windowDays}&horizon_days=${horizonDays}`),
+  dataQualityForecastCreate: (body: { window_days?: number; horizon_days?: number; persist?: boolean; include_rca?: boolean; include_impact?: boolean }) =>
+    request<any>("/api/v1/data-quality/forecast", { method: "POST", body: JSON.stringify(body) }),
+  dataQualityForecastHistory: (limit = 50) =>
+    request<any>(`/api/v1/data-quality/forecast/history?limit=${limit}`),
+  dataQualityForecastTasks: (body: { forecast_id?: string; window_days?: number; horizon_days?: number; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/data-quality/forecast/tasks", { method: "POST", body: JSON.stringify(body) }),
+  dataQualitySubscriptions: () => request<any>("/api/v1/data-quality/subscriptions"),
+  dataQualitySubscriptionCreate: (body: { name?: string; channel: string; enabled?: boolean; schedule?: string; severity_min?: string; min_impact_score?: number; include_impact?: boolean; owner?: string; event_types?: string[] }) =>
+    request<any>("/api/v1/data-quality/subscriptions", { method: "POST", body: JSON.stringify(body) }),
+  dataQualitySubscriptionUpdate: (id: string, body: Record<string, unknown>) =>
+    request<any>(`/api/v1/data-quality/subscriptions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  dataQualitySubscriptionDelete: (id: string) =>
+    request<any>(`/api/v1/data-quality/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  dataQualitySubscriptionRuns: (limit = 50) =>
+    request<any>(`/api/v1/data-quality/subscriptions/runs?limit=${limit}`),
+  dataQualitySubscriptionRun: (body: { subscription_ids?: string[]; channels?: string[]; dry_run?: boolean; force?: boolean; note?: string }) =>
+    request<any>("/api/v1/data-quality/subscriptions/run", { method: "POST", body: JSON.stringify(body) }),
   dataQualitySummary: () => request<any>("/api/v1/data-quality/summary"),
 
   // ── Metrics Service ─────────────────────────────────────────────────────
@@ -2105,6 +2179,14 @@ export const api = {
   metricValues: (metricId: string, grain = "day") =>
     request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/values?grain=${encodeURIComponent(grain)}`),
   metricsSummary: () => request<any>("/api/v1/metrics-service/summary"),
+  metricsGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+    request<any>("/api/v1/metrics-service/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
+  metricApprovals: (status = "", metricId = "") =>
+    request<any>(`/api/v1/metrics-service/approvals?status=${encodeURIComponent(status)}&metric_id=${encodeURIComponent(metricId)}`),
+  metricApprovalCreate: (body: { metric_id: string; action?: string; reason?: string; requested_by?: string; reviewers?: string[]; payload?: Record<string, unknown>; auto_apply_on_approval?: boolean }) =>
+    request<any>("/api/v1/metrics-service/approvals", { method: "POST", body: JSON.stringify(body) }),
+  metricApprovalReview: (approvalId: string, body: { status: "approved" | "rejected" | "cancelled"; reviewer?: string; note?: string }) =>
+    request<any>(`/api/v1/metrics-service/approvals/${encodeURIComponent(approvalId)}/review`, { method: "POST", body: JSON.stringify(body) }),
 
   // ── Tag Service ─────────────────────────────────────────────────────────
   tagCatalog: (category = "") => request<any>(`/api/v1/tag-service/catalog?category=${category}`),
@@ -2133,6 +2215,14 @@ export const api = {
   tagPublishContract: (entityId: string) =>
     request<any>(`/api/v1/tag-service/ontology/entities/${encodeURIComponent(entityId)}/publish`, { method: "POST" }),
   tagSummary: () => request<any>("/api/v1/tag-service/summary"),
+  tagGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; min_coverage?: number }) =>
+    request<any>("/api/v1/tag-service/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
+  tagApprovals: (status = "", targetId = "") =>
+    request<any>(`/api/v1/tag-service/approvals?status=${encodeURIComponent(status)}&target_id=${encodeURIComponent(targetId)}`),
+  tagApprovalCreate: (body: { target_type: "tag" | "rule" | "entity" | "profile"; target_id: string; action?: string; reason?: string; requested_by?: string; reviewers?: string[]; payload?: Record<string, unknown>; auto_apply_on_approval?: boolean }) =>
+    request<any>("/api/v1/tag-service/approvals", { method: "POST", body: JSON.stringify(body) }),
+  tagApprovalReview: (approvalId: string, body: { status: "approved" | "rejected" | "cancelled"; reviewer?: string; note?: string }) =>
+    request<any>(`/api/v1/tag-service/approvals/${encodeURIComponent(approvalId)}/review`, { method: "POST", body: JSON.stringify(body) }),
 
   // ── Data Ingest ─────────────────────────────────────────────────────────
   dataIngestConnectors: (connectorType = "") =>

@@ -1,8 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { App, Button, Form, Input, Modal, Select, Space, Table, Tag as AntTag } from "antd";
+import { Alert, App, Button, Form, Input, Modal, Select, Space, Table, Tag as AntTag } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { Database, FileSearch, Network, RefreshCcw, ShieldCheck, Tags } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { LoadingBlock, NeedLogin } from "@/components/PageStates";
@@ -53,6 +53,15 @@ type ClassifyForm = {
   note?: string;
 };
 
+type GovernanceTaskRow = {
+  title: string;
+  description?: string;
+  priority?: string;
+  source?: string;
+  source_report_id?: string;
+  labels?: string[];
+};
+
 const VIEW_HREF: Record<MetadataView, string> = {
   overview: "#/data/metadata/overview",
   assets: "#/data/metadata/assets",
@@ -100,6 +109,7 @@ export function MetadataManagementWorkbench({
   const [fieldQ, setFieldQ] = useState("");
   const [sensitiveOnly, setSensitiveOnly] = useState<string>("all");
   const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [governancePayload, setGovernancePayload] = useState<any>(null);
   const [classifyOpen, setClassifyOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<AssetRow | null>(null);
   const [form] = Form.useForm<ClassifyForm>();
@@ -127,6 +137,12 @@ export function MetadataManagementWorkbench({
   const summary = summaryQ.data?.summary ?? {};
   const domains = summaryQ.data?.domains ?? [];
   const defaultLineageAsset = selectedAssetId || assets[0]?.id || "";
+
+  useEffect(() => {
+    if (view === "lineage" && !selectedAssetId && assets[0]?.id) {
+      setSelectedAssetId(assets[0].id);
+    }
+  }, [assets, selectedAssetId, view]);
 
   const refreshAll = () => {
     void summaryQ.refetch();
@@ -163,6 +179,19 @@ export function MetadataManagementWorkbench({
       setEditingAsset(null);
       refreshAll();
       message.success(t("page.metadataManagement.updated"));
+    },
+    onError: (err) => message.error((err as Error).message),
+  });
+
+  const governanceTasksMut = useMutation({
+    mutationFn: (dryRun: boolean) => api.metadataGovernanceTasks({ dry_run: dryRun, priority: "P1", assigned_to: "Metadata Agent", dev_tool: "codex" }),
+    onSuccess: (payload) => {
+      setGovernancePayload(payload);
+      message.success(
+        payload?.dry_run
+          ? t("page.metadataManagement.tasks.previewReady", { count: payload?.planned ?? payload?.items?.length ?? 0 })
+          : t("page.metadataManagement.tasks.created", { count: payload?.created_count ?? payload?.created?.length ?? 0 }),
+      );
     },
     onError: (err) => message.error((err as Error).message),
   });
@@ -219,7 +248,17 @@ export function MetadataManagementWorkbench({
         </div>
       ) : null}
 
-      {view === "overview" ? <Overview summary={summary} domains={domains} t={t} /> : null}
+      {view === "overview" ? (
+        <Overview
+          summary={summary}
+          domains={domains}
+          governancePayload={governancePayload}
+          governanceLoading={governanceTasksMut.isPending}
+          onPreviewGovernance={() => governanceTasksMut.mutate(true)}
+          onCreateGovernance={() => governanceTasksMut.mutate(false)}
+          t={t}
+        />
+      ) : null}
       {view === "assets" ? (
         <AssetsPanel
           t={t}
@@ -233,6 +272,15 @@ export function MetadataManagementWorkbench({
           onStatus={setStatus}
           onSearch={setAssetQ}
           onClassify={openClassify}
+          onLineage={(assetId) => {
+            setSelectedAssetId(assetId);
+            window.location.hash = VIEW_HREF.lineage.slice(1);
+          }}
+          onReset={() => {
+            setDomain("");
+            setStatus("");
+            setAssetQ("");
+          }}
         />
       ) : null}
       {view === "fields" ? (
@@ -247,6 +295,11 @@ export function MetadataManagementWorkbench({
           onAsset={setFieldAssetId}
           onQuery={setFieldQ}
           onSensitive={setSensitiveOnly}
+          onReset={() => {
+            setFieldAssetId("");
+            setFieldQ("");
+            setSensitiveOnly("all");
+          }}
         />
       ) : null}
       {view === "lineage" ? (
@@ -274,11 +327,33 @@ export function MetadataManagementWorkbench({
   );
 }
 
-function Overview({ summary, domains, t }: { summary: any; domains: Array<{ name: string; count: number }>; t: (key: string) => string }) {
+function Overview({
+  summary,
+  domains,
+  governancePayload,
+  governanceLoading,
+  onPreviewGovernance,
+  onCreateGovernance,
+  t,
+}: {
+  summary: any;
+  domains: Array<{ name: string; count: number }>;
+  governancePayload: any;
+  governanceLoading: boolean;
+  onPreviewGovernance: () => void;
+  onCreateGovernance: () => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
   const modules = [
     { key: "assets", href: "#/data/metadata/assets", icon: Database },
     { key: "fields", href: "#/data/metadata/fields", icon: FileSearch },
     { key: "lineage", href: "#/data/metadata/lineage", icon: Network },
+  ];
+  const taskRows: GovernanceTaskRow[] = governancePayload?.items ?? [];
+  const taskColumns: ColumnsType<GovernanceTaskRow> = [
+    { title: t("page.metadataManagement.tasks.title"), dataIndex: "title", render: (value, row) => <div><p className="font-semibold">{value}</p><p className="text-xs text-[var(--muted)]">{row.source_report_id}</p></div> },
+    { title: t("page.metadataManagement.tasks.priority"), dataIndex: "priority", width: 90, render: (value) => <AntTag color={value === "P0" ? "red" : value === "P1" ? "orange" : "blue"}>{value}</AntTag> },
+    { title: t("page.metadataManagement.tasks.labels"), dataIndex: "labels", render: (items: string[] = []) => <Space wrap>{items.slice(0, 5).map((item) => <AntTag key={item}>{item}</AntTag>)}</Space> },
   ];
   return (
     <div className="space-y-4">
@@ -299,11 +374,37 @@ function Overview({ summary, domains, t }: { summary: any; domains: Array<{ name
         })}
       </div>
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-        <WorkbenchPanel title={t("page.metadataManagement.panels.gaps")}>
+        <WorkbenchPanel
+          title={t("page.metadataManagement.panels.gaps")}
+          actions={
+            <Space wrap>
+              <Button size="small" loading={governanceLoading} onClick={onPreviewGovernance}>{t("page.metadataManagement.tasks.preview")}</Button>
+              <Button size="small" type="primary" loading={governanceLoading} onClick={onCreateGovernance}>{t("page.metadataManagement.tasks.create")}</Button>
+            </Space>
+          }
+        >
           <div className="grid gap-3 sm:grid-cols-3">
             <RiskTile label={t("page.metadataManagement.gaps.missingOwner")} value={summary.missing_owner ?? 0} tone="red" />
             <RiskTile label={t("page.metadataManagement.gaps.missingLineage")} value={summary.missing_lineage ?? 0} tone="gold" />
             <RiskTile label={t("page.metadataManagement.gaps.qualityWatch")} value={summary.quality_watch ?? 0} tone="blue" />
+          </div>
+          <div className="mt-4">
+            {!governancePayload ? (
+              <Alert type="info" showIcon message={t("page.metadataManagement.tasks.empty")} />
+            ) : (
+              <div className="space-y-3">
+                <Alert
+                  type={governancePayload.dry_run ? "warning" : "success"}
+                  showIcon
+                  message={
+                    governancePayload.dry_run
+                      ? t("page.metadataManagement.tasks.previewSummary", { count: governancePayload.planned ?? taskRows.length })
+                      : t("page.metadataManagement.tasks.createdSummary", { count: governancePayload.created_count ?? governancePayload.created?.length ?? 0 })
+                  }
+                />
+                <Table rowKey={(row) => `${row.source_report_id || row.title}:${row.priority || ""}`} size="small" columns={taskColumns} dataSource={taskRows} pagination={{ pageSize: 5 }} />
+              </div>
+            )}
           </div>
         </WorkbenchPanel>
         <WorkbenchPanel title={t("page.metadataManagement.panels.domainDistribution")}>
@@ -344,6 +445,8 @@ function AssetsPanel({
   onStatus,
   onSearch,
   onClassify,
+  onLineage,
+  onReset,
 }: {
   t: (key: string) => string;
   assets: AssetRow[];
@@ -356,6 +459,8 @@ function AssetsPanel({
   onStatus: (value: string) => void;
   onSearch: (value: string) => void;
   onClassify: (asset: AssetRow) => void;
+  onLineage: (assetId: string) => void;
+  onReset: () => void;
 }) {
   const columns: ColumnsType<AssetRow> = [
     {
@@ -377,12 +482,17 @@ function AssetsPanel({
     {
       title: t("page.metadataManagement.assets.actions"),
       key: "actions",
-      width: 120,
-      render: (_, row) => <Button size="small" icon={<ShieldCheck className="h-4 w-4" />} onClick={() => onClassify(row)}>{t("page.metadataManagement.assets.classify")}</Button>,
+      width: 220,
+      render: (_, row) => (
+        <Space wrap>
+          <Button size="small" icon={<ShieldCheck className="h-4 w-4" />} onClick={() => onClassify(row)}>{t("page.metadataManagement.assets.classify")}</Button>
+          <Button size="small" icon={<Network className="h-4 w-4" />} onClick={() => onLineage(row.id)}>{t("page.metadataManagement.assets.lineageAction")}</Button>
+        </Space>
+      ),
     },
   ];
   return (
-    <WorkbenchPanel title={t("page.metadataManagement.modules.assets.title")}>
+    <WorkbenchPanel title={t("page.metadataManagement.modules.assets.title")} actions={<Button size="small" onClick={onReset}>{t("page.metadataManagement.filters.reset")}</Button>}>
       <div className="mb-4 grid gap-3 lg:grid-cols-[180px_180px_1fr]">
         <Select allowClear placeholder={t("page.metadataManagement.assets.domain")} value={domain || undefined} options={domainOptions} onChange={(value) => onDomain(value || "")} />
         <Select allowClear placeholder={t("page.metadataManagement.assets.status")} value={status || undefined} options={STATUSES.map((value) => ({ label: value, value }))} onChange={(value) => onStatus(value || "")} />
@@ -404,6 +514,7 @@ function FieldsPanel({
   onAsset,
   onQuery,
   onSensitive,
+  onReset,
 }: {
   t: (key: string) => string;
   assets: Array<{ label: string; value: string }>;
@@ -415,6 +526,7 @@ function FieldsPanel({
   onAsset: (value: string) => void;
   onQuery: (value: string) => void;
   onSensitive: (value: string) => void;
+  onReset: () => void;
 }) {
   const columns: ColumnsType<FieldRow> = [
     {
@@ -434,7 +546,7 @@ function FieldsPanel({
     { title: t("page.metadataManagement.fields.qualityFlags"), dataIndex: "quality_flags", render: (value) => asList(value).map((flag) => <AntTag key={flag} color="gold">{flag}</AntTag>) },
   ];
   return (
-    <WorkbenchPanel title={t("page.metadataManagement.modules.fields.title")}>
+    <WorkbenchPanel title={t("page.metadataManagement.modules.fields.title")} actions={<Button size="small" onClick={onReset}>{t("page.metadataManagement.filters.reset")}</Button>}>
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(240px,360px)_180px_1fr]">
         <Select allowClear showSearch placeholder={t("page.metadataManagement.fields.selectAsset")} value={assetId || undefined} options={assets} onChange={(value) => onAsset(value || "")} optionFilterProp="label" />
         <Select value={sensitive} options={[{ label: t("page.metadataManagement.fields.allFields"), value: "all" }, { label: t("page.metadataManagement.fields.sensitiveOnly"), value: "sensitive" }, { label: t("page.metadataManagement.fields.normalOnly"), value: "normal" }]} onChange={onSensitive} />
@@ -513,7 +625,7 @@ function ClassifyModal({
     <Modal title={asset ? t("page.metadataManagement.classify.titleWithAsset", { name: asset.name }) : t("page.metadataManagement.classify.title")} open={open} onCancel={onCancel} onOk={() => form.submit()} confirmLoading={saving} destroyOnClose>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item name="owner" label={t("page.metadataManagement.assets.owner")} rules={[{ required: true, message: t("page.metadataManagement.classify.ownerRequired") }]}>
-          <Input placeholder="DataOps" />
+          <Input placeholder={t("page.metadataManagement.classify.ownerPlaceholder")} />
         </Form.Item>
         <div className="grid gap-3 sm:grid-cols-2">
           <Form.Item name="security_level" label={t("page.metadataManagement.assets.securityLevel")}>
@@ -531,10 +643,10 @@ function ClassifyModal({
         </Form.Item>
         <div className="grid gap-3 sm:grid-cols-2">
           <Form.Item name="lineage_upstream" label={t("page.metadataManagement.lineage.upstream")}>
-            <Select mode="tags" tokenSeparators={[","]} placeholder="requirements" />
+            <Select mode="tags" tokenSeparators={[","]} placeholder={t("page.metadataManagement.classify.upstreamPlaceholder")} />
           </Form.Item>
           <Form.Item name="lineage_downstream" label={t("page.metadataManagement.lineage.downstream")}>
-            <Select mode="tags" tokenSeparators={[","]} placeholder="analytics_reports" />
+            <Select mode="tags" tokenSeparators={[","]} placeholder={t("page.metadataManagement.classify.downstreamPlaceholder")} />
           </Form.Item>
         </div>
         <Form.Item name="note" label={t("page.metadataManagement.classify.note")}>

@@ -1126,9 +1126,55 @@ def test_system_pages_data_quality_contract_exposes_executable_runtime():
     assert "/api/v1/data-quality/runs" in apis
     assert "/api/v1/data-quality/alerts" in apis
     assert "/api/v1/data-quality/alerts/tasks" in apis
+    assert "/api/v1/data-quality/impact" in apis
+    assert "/api/v1/data-quality/impact/tasks" in apis
+    assert "/api/v1/data-quality/rca" in apis
+    assert "/api/v1/data-quality/rca/history" in apis
+    assert "/api/v1/data-quality/rca/tasks" in apis
+    assert "/api/v1/data-quality/forecast" in apis
+    assert "/api/v1/data-quality/forecast/history" in apis
+    assert "/api/v1/data-quality/forecast/tasks" in apis
+    assert "/api/v1/data-quality/subscriptions" in apis
+    assert "/api/v1/data-quality/subscriptions/run" in apis
+    assert "/api/v1/data-quality/subscriptions/runs" in apis
     assert "规则执行" in quality["capabilities"]
     assert "告警归因" in quality["capabilities"]
     assert "运行任务化" in quality["capabilities"]
+    assert "指标标签影响分析" in quality["capabilities"]
+    assert "元数据资产影响分析" in quality["capabilities"]
+    assert "影响修复任务化" in quality["capabilities"]
+    assert "质量 RCA" in quality["capabilities"]
+    assert "RCA 任务化" in quality["capabilities"]
+    assert "质量趋势预测" in quality["capabilities"]
+    assert "预测任务化" in quality["capabilities"]
+    assert "质量订阅" in quality["capabilities"]
+    assert "通知发送历史" in quality["capabilities"]
+
+
+def test_system_pages_data_quality_center_registers_modular_routes():
+    payload = system_pages_readiness(q="数据质量中心")
+
+    center = next(item for item in payload["items"] if item["id"] == "dataQualityCenter")
+    apis = set(center["implementation_contract"]["apis"])
+    assert center["path"] == "#/data/quality"
+    assert "/api/v1/data-quality/impact" in apis
+    assert "/api/v1/data-quality/impact/tasks" in apis
+    assert "/api/v1/data-quality/rca" in apis
+    assert "/api/v1/data-quality/rca/history" in apis
+    assert "/api/v1/data-quality/rca/tasks" in apis
+    assert "/api/v1/data-quality/forecast" in apis
+    assert "/api/v1/data-quality/forecast/history" in apis
+    assert "/api/v1/data-quality/forecast/tasks" in apis
+    assert "/api/v1/data-quality/subscriptions" in apis
+    assert "/api/v1/data-quality/subscriptions/run" in apis
+    assert "指标标签影响分析" in center["capabilities"]
+    assert "影响修复任务化" in center["capabilities"]
+    assert "质量 RCA" in center["capabilities"]
+    assert "RCA 任务化" in center["capabilities"]
+    assert "质量趋势预测" in center["capabilities"]
+    assert "预测任务化" in center["capabilities"]
+    assert "质量订阅" in center["capabilities"]
+    assert "通知发送历史" in center["capabilities"]
 
 
 def test_system_pages_metrics_contract_exposes_semantic_layer_runtime():
@@ -1140,9 +1186,14 @@ def test_system_pages_metrics_contract_exposes_semantic_layer_runtime():
     assert "/api/v1/metrics-service/catalog/{id}/versions" in apis
     assert "/api/v1/metrics-service/catalog/{id}/impact" in apis
     assert "/api/v1/metrics-service/query/{id}" in apis
+    assert "/api/v1/metrics-service/governance/tasks" in apis
+    assert "/api/v1/metrics-service/approvals" in apis
+    assert "/api/v1/metrics-service/approvals/{id}/review" in apis
     assert "指标版本发布" in metrics["capabilities"]
     assert "查询契约" in metrics["capabilities"]
     assert "血缘影响分析" in metrics["capabilities"]
+    assert "指标治理任务化" in metrics["capabilities"]
+    assert "指标审批" in metrics["capabilities"]
 
 
 def test_system_pages_tag_contract_exposes_profile_build_runtime():
@@ -1154,9 +1205,14 @@ def test_system_pages_tag_contract_exposes_profile_build_runtime():
     assert "/api/v1/tag-service/profiles/build" in apis
     assert "/api/v1/tag-service/profiles/builds" in apis
     assert "/api/v1/tag-service/ontology/entities/{id}/publish" in apis
+    assert "/api/v1/tag-service/governance/tasks" in apis
+    assert "/api/v1/tag-service/approvals" in apis
+    assert "/api/v1/tag-service/approvals/{id}/review" in apis
     assert "规则试算" in tags["capabilities"]
     assert "画像构建" in tags["capabilities"]
     assert "画像发布契约" in tags["capabilities"]
+    assert "标签治理任务化" in tags["capabilities"]
+    assert "标签审批" in tags["capabilities"]
 
 
 def test_system_pages_data_ingest_contract_exposes_runtime_control_plane():

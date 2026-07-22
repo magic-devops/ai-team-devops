@@ -5,6 +5,7 @@ import pytest
 from sop_manager.path_config import reset_request_scope, set_request_scope
 from sop_manager.routers import data_ingest, metadata_management
 from sop_manager.routers.data_analytics import _load_governance, _save_governance
+from sop_manager.routers.sql_models import Business, Project, SessionLocal, Tenant
 
 
 @contextmanager
@@ -42,6 +43,20 @@ def seed_schema_registry() -> str:
     )
     data_ingest.connector_dry_run(connector["id"], data_ingest.ConnectorDryRunIn(sample_limit=5))
     return connector["id"]
+
+
+def ensure_sql_scope(tenant="tenant-a", business="biz-a", project="project-a"):
+    db = SessionLocal()
+    try:
+        if not db.get(Tenant, tenant):
+            db.add(Tenant(id=tenant, name=tenant, slug=tenant, plan="free", status="active"))
+        if not db.get(Business, business):
+            db.add(Business(id=business, tenant_id=tenant, name=business, description="test business"))
+        if not db.get(Project, project):
+            db.add(Project(id=project, tenant_id=tenant, business_id=business, name=project, project_path="", status="active"))
+        db.commit()
+    finally:
+        db.close()
 
 
 def test_metadata_summary_assets_fields_and_classification(tmp_path):
@@ -108,3 +123,28 @@ def test_metadata_lineage_impact_requires_known_asset(tmp_path):
     with scoped_project(tmp_path):
         with pytest.raises(Exception):
             metadata_management.metadata_lineage_impact(asset_id="missing")
+
+
+def test_metadata_governance_tasks_preview_and_create(tmp_path):
+    with scoped_project(tmp_path):
+        ensure_sql_scope()
+        seed_schema_registry()
+
+        preview = metadata_management.metadata_governance_tasks(
+            metadata_management.MetadataGovernanceTasksIn(dry_run=True, priority="P2", assigned_to="Metadata Agent", dev_tool="codex")
+        )
+        created = metadata_management.metadata_governance_tasks(
+            metadata_management.MetadataGovernanceTasksIn(ids=["asset-tasks"], dry_run=False, priority="P2", assigned_to="Metadata Agent", dev_tool="codex")
+        )
+
+    assert preview["dry_run"] is True
+    assert preview["planned"] >= 1
+    assert preview["created"] == []
+    assert any(item["source"] == "metadata_governance" for item in preview["items"])
+    expected_labels = {"missing-owner", "missing-lineage", "quality-watch", "sensitive-policy"}
+    assert any(expected_labels.intersection(set(item["labels"])) for item in preview["items"])
+    assert created["dry_run"] is False
+    assert created["planned"] >= 1
+    assert created["created_count"] == len(created["created"])
+    assert all(item["source"] == "metadata_governance" for item in created["items"])
+    assert all(item.get("id") for item in created["created"])

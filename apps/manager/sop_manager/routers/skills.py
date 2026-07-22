@@ -5,6 +5,7 @@ from typing import Any, Optional, List
 from pathlib import Path
 import json, os
 from sop_manager.path_config import resolved_ai_memory_root
+from sop_manager.routers.productization_contract import summarize_items, unified_payload
 
 router = APIRouter(prefix="/api/v1/skills", tags=["skills"])
 
@@ -65,6 +66,65 @@ def skills_hub() -> dict[str, Any]:
             {"id": "installed", "path": "#/skills-hub/installed", "capability": "ecosystem.skills-hub.installed"},
         ],
     }
+
+
+@router.get("/runtime")
+def skills_runtime() -> dict[str, Any]:
+    skills = list_skills()
+    rows = []
+    for skill in skills:
+        sid = str(skill.get("skill_id") or skill.get("id") or skill.get("name") or "")
+        permissions = ["read"]
+        if skill.get("mcp_tool") or skill.get("a2a_exposed"):
+            permissions.append("execute")
+        rows.append(
+            {
+                "id": sid,
+                "name": skill.get("name") or sid,
+                "version": skill.get("version") or "builtin" if skill.get("builtin") else "custom",
+                "agent_role": skill.get("agent_role") or "All",
+                "builtin": bool(skill.get("builtin")),
+                "a2a_exposed": bool(skill.get("a2a_exposed")),
+                "mcp_tool": bool(skill.get("mcp_tool")),
+                "input": skill.get("trigger") or "current page context, memory/kb context, task packet",
+                "output": skill.get("execution") or "task plan, execution evidence, diagnostic report",
+                "permissions": permissions,
+                "status": "ready",
+                "ok": True,
+                "cli": f"sop skills runtime --skill {sid} --json",
+            }
+        )
+    summary = summarize_items(rows)
+    return unified_payload(
+        summary={
+            "ok": True,
+            **summary,
+            "skills": len(rows),
+            "builtin": sum(1 for row in rows if row.get("builtin")),
+            "custom": sum(1 for row in rows if not row.get("builtin")),
+            "executable": sum(1 for row in rows if "execute" in row.get("permissions", [])),
+        },
+        items=rows,
+        actions=[
+            {"id": "read", "label": "读取技能运行目录", "method": "GET", "path": "/api/v1/skills/runtime", "risk": "low"},
+            {"id": "install", "label": "安装或同步技能", "method": "POST", "path": "/api/v1/skill-repo/install", "risk": "medium"},
+            {"id": "taskize", "label": "失败诊断任务化", "method": "POST", "path": "/api/v1/tasks", "risk": "medium"},
+        ],
+        cli=[
+            {"id": "read", "command": "sop skills runtime --json"},
+            {"id": "catalog", "command": "sop pages capabilities --json"},
+            {"id": "doctor", "command": "sop system readiness --full --json"},
+        ],
+        permissions=[
+            {"capability": "ecosystem.skills-hub", "actions": ["read", "write", "execute", "export"]},
+            {"capability": "ai.agent-runtime", "actions": ["read", "execute", "approve"]},
+        ],
+        audit={"event": "skills_runtime"},
+        agent_consumption={
+            "purpose": "Executable skill catalog with role, input, output, permissions, CLI mapping and failure-diagnosis entry.",
+            "selection_fields": ["agent_role", "a2a_exposed", "mcp_tool", "permissions", "input", "output"],
+        },
+    )
 
 
 @router.post("")

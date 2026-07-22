@@ -126,7 +126,7 @@ export function DataSourcesWorkbench({
       setEditingName(null);
       form.resetFields();
       refreshAll();
-      message.success("数据源已保存");
+      message.success(t("page.dataSources.messages.saved"));
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -135,14 +135,14 @@ export function DataSourcesWorkbench({
     mutationFn: (name: string) => api.dbDeleteConnection(name),
     onSuccess: () => {
       refreshAll();
-      message.success("数据源已删除");
+      message.success(t("page.dataSources.messages.deleted"));
     },
     onError: (e) => message.error((e as Error).message),
   });
 
   const testMut = useMutation({
     mutationFn: (name: string) => api.dbTestConnection(name),
-    onSuccess: (data) => message.success(data?.message || "连接测试通过"),
+    onSuccess: (data) => message.success(data?.message || t("page.dataSources.messages.testOk")),
     onError: (e) => message.error((e as Error).message),
   });
 
@@ -152,7 +152,7 @@ export function DataSourcesWorkbench({
       setSelectedName(name);
       setPreviewPayload(payload);
       setSyncPayload(null);
-      message.success("元数据预览已生成");
+      message.success(t("page.dataSources.messages.previewReady"));
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -162,7 +162,7 @@ export function DataSourcesWorkbench({
     onSuccess: (payload, name) => {
       setSelectedName(name);
       setSyncPayload(payload);
-      message.success("已同步到 Schema Registry");
+      message.success(t("page.dataSources.messages.syncReady"));
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -172,7 +172,7 @@ export function DataSourcesWorkbench({
     onSuccess: (payload, name) => {
       setSelectedName(name);
       setSecurityPayload(payload);
-      message.success("安全扫描已完成");
+      message.success(t("page.dataSources.messages.securityReady"));
     },
     onError: (e) => message.error((e as Error).message),
   });
@@ -290,16 +290,17 @@ export function DataSourcesWorkbench({
 }
 
 function Overview({ summary }: { summary: any }) {
+  const { t } = useTranslation();
   const modules = [
-    { href: "#/data/sources/connections", icon: Database, title: "连接目录", desc: "维护数据源、SecretRef 和能力声明" },
-    { href: "#/data/sources/metadata", icon: FileSearch, title: "元数据同步", desc: "发现表字段并注册到 Schema Registry" },
-    { href: "#/data/ingest/schema", icon: Link2, title: "Schema Registry", desc: "查看已同步的数据接入结构" },
-    { href: "#/data/sources/security", icon: ShieldCheck, title: "安全治理", desc: "扫描 SecretRef、敏感字段和隔离字段" },
+    { href: "#/data/sources/connections", icon: Database, title: t("page.dataSources.overview.connectionsTitle"), desc: t("page.dataSources.overview.connectionsDesc") },
+    { href: "#/data/sources/metadata", icon: FileSearch, title: t("page.dataSources.overview.metadataTitle"), desc: t("page.dataSources.overview.metadataDesc") },
+    { href: "#/data/ingest/schema", icon: Link2, title: t("page.dataSources.overview.schemaTitle"), desc: t("page.dataSources.overview.schemaDesc") },
+    { href: "#/data/sources/security", icon: ShieldCheck, title: t("page.dataSources.overview.securityTitle"), desc: t("page.dataSources.overview.securityDesc") },
   ];
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <WorkbenchPanel title="核心入口">
+      <WorkbenchPanel title={t("page.dataSources.overview.coreEntries")}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {modules.map(({ href, icon: Icon, title, desc }) => (
             <a key={href} href={href} className="group rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 transition hover:border-[var(--brand)] hover:bg-[var(--brand-soft)]">
@@ -310,10 +311,10 @@ function Overview({ summary }: { summary: any }) {
           ))}
         </div>
       </WorkbenchPanel>
-      <WorkbenchPanel title="覆盖概况">
-        <CompactKV title="按角色" value={summary.by_role ?? {}} />
-        <CompactKV title="按类型" value={summary.by_type ?? {}} />
-        <CompactKV title="能力" value={summary.capabilities ?? {}} />
+      <WorkbenchPanel title={t("page.dataSources.overview.coverage")}>
+        <CompactKV title={t("page.dataSources.overview.byRole")} value={summary.by_role ?? {}} />
+        <CompactKV title={t("page.dataSources.overview.byType")} value={summary.by_type ?? {}} />
+        <CompactKV title={t("page.dataSources.overview.capabilities")} value={summary.capabilities ?? {}} />
       </WorkbenchPanel>
     </div>
   );
@@ -334,36 +335,37 @@ function SecurityPanel({
   onSelect: (name: string) => void;
   onScan: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const findings = scanPayload?.findings ?? [];
   return (
     <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
-      <WorkbenchPanel title="扫描范围">
+      <WorkbenchPanel title={t("page.dataSources.security.scope")}>
         <Space direction="vertical" className="w-full">
           <Select
             className="w-full"
             value={selectedName || undefined}
-            placeholder="选择数据源"
+            placeholder={t("page.dataSources.security.selectSource")}
             options={sources.map((item) => ({ value: item.name, label: `${item.name} · ${item.type}` }))}
             onChange={onSelect}
           />
           <Button className="w-full" type="primary" disabled={!selectedName} loading={scanning} onClick={() => onScan(selectedName)}>
-            运行安全扫描
+            {t("page.dataSources.security.runScan")}
           </Button>
           <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs leading-5 text-[var(--muted)]">
-            扫描覆盖 SecretRef、只读策略、敏感字段候选、tenant_code/business_code/project_id 隔离字段，并输出 Agent 可消费治理任务候选。
+            {t("page.dataSources.security.description")}
           </div>
         </Space>
       </WorkbenchPanel>
-      <WorkbenchPanel title="安全结果">
+      <WorkbenchPanel title={t("page.dataSources.security.result")}>
         {!scanPayload ? (
           <EmptyHint />
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-4">
-              <Metric label="安全分" value={scanPayload.score ?? 0} />
-              <Metric label="状态" value={scanPayload.status ?? "-"} />
-              <Metric label="问题" value={findings.length} />
-              <Metric label="任务候选" value={scanPayload.candidate_tasks?.length ?? 0} />
+              <Metric label={t("page.dataSources.security.score")} value={scanPayload.score ?? 0} />
+              <Metric label={t("page.dataSources.security.status")} value={scanPayload.status ?? "-"} />
+              <Metric label={t("page.dataSources.security.findings")} value={findings.length} />
+              <Metric label={t("page.dataSources.security.candidateTasks")} value={scanPayload.candidate_tasks?.length ?? 0} />
             </div>
             <Table
               rowKey="id"
@@ -371,15 +373,15 @@ function SecurityPanel({
               pagination={{ pageSize: 8 }}
               dataSource={findings}
               columns={[
-                { title: "风险", dataIndex: "severity", width: 100, render: (v) => <Tag color={v === "high" ? "red" : "orange"}>{v}</Tag> },
-                { title: "问题", dataIndex: "title", width: 180 },
-                { title: "说明", dataIndex: "detail" },
-                { title: "建议", dataIndex: "recommendation" },
+                { title: t("page.dataSources.security.severity"), dataIndex: "severity", width: 100, render: (v) => <Tag color={v === "high" ? "red" : "orange"}>{v}</Tag> },
+                { title: t("page.dataSources.security.issue"), dataIndex: "title", width: 180 },
+                { title: t("page.dataSources.security.detail"), dataIndex: "detail" },
+                { title: t("page.dataSources.security.recommendation"), dataIndex: "recommendation" },
               ]}
               scroll={{ x: 900 }}
             />
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-              <p className="text-sm font-semibold text-[var(--text)]">治理控制点</p>
+              <p className="text-sm font-semibold text-[var(--text)]">{t("page.dataSources.security.controls")}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {Object.entries(scanPayload.controls ?? {}).map(([key, value]) => (
                   <div key={key} className="flex items-center justify-between gap-3 rounded-md bg-[var(--surface-muted)] px-3 py-2 text-xs">
@@ -417,32 +419,33 @@ function ConnectionsPanel({
   onDelete: (name: string) => void;
   onTest: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   const columns: ColumnsType<SourceRow> = [
     {
-      title: "数据源",
+      title: t("page.dataSources.connections.source"),
       dataIndex: "name",
       render: (_, row) => (
         <div>
           <div className="font-semibold text-[var(--text)]">{row.name}</div>
-          <div className="text-xs text-[var(--muted)]">{row.host || "local"}{row.port ? `:${row.port}` : ""} / {row.database || "default"}</div>
+          <div className="text-xs text-[var(--muted)]">{row.host || t("page.dataSources.connections.local")}{row.port ? `:${row.port}` : ""} / {row.database || t("page.dataSources.connections.defaultDb")}</div>
         </div>
       ),
     },
-    { title: "类型", dataIndex: "type", width: 120, render: (value) => <Tag>{value}</Tag> },
-    { title: "角色", dataIndex: "role", width: 130 },
+    { title: t("page.dataSources.connections.type"), dataIndex: "type", width: 120, render: (value) => <Tag>{value}</Tag> },
+    { title: t("page.dataSources.connections.role"), dataIndex: "role", width: 130 },
     {
-      title: "能力",
+      title: t("page.dataSources.connections.capabilities"),
       dataIndex: "capabilities",
       render: (items: string[] = []) => <Space wrap>{items.map((item) => <Tag key={item} color="blue">{item}</Tag>)}</Space>,
     },
     {
-      title: "密钥引用",
+      title: t("page.dataSources.connections.secretRef"),
       key: "secret",
       ellipsis: true,
-      render: (_, row) => row.secret_ref || row.url_env || <span className="text-xs text-amber-600">待配置</span>,
+      render: (_, row) => row.secret_ref || row.url_env || <span className="text-xs text-amber-600">{t("page.dataSources.connections.unconfigured")}</span>,
     },
     {
-      title: "健康",
+      title: t("page.dataSources.connections.readiness"),
       key: "readiness",
       width: 100,
       render: (_, row) => {
@@ -452,16 +455,16 @@ function ConnectionsPanel({
       },
     },
     {
-      title: "操作",
+      title: t("common.actions"),
       key: "actions",
       width: 260,
       render: (_, row) => (
         <Space wrap>
-          <Button size="small" onClick={() => onEdit(row)}>编辑</Button>
-          <Button size="small" loading={testing} onClick={() => onTest(row.name)}>测试</Button>
-          <Button size="small" href="#/data/sources/metadata">元数据</Button>
-          <Popconfirm title="确认删除该数据源？" onConfirm={() => onDelete(row.name)}>
-            <Button size="small" danger>删除</Button>
+          <Button size="small" onClick={() => onEdit(row)}>{t("page.dataSources.connections.edit")}</Button>
+          <Button size="small" loading={testing} onClick={() => onTest(row.name)}>{t("page.dataSources.connections.test")}</Button>
+          <Button size="small" href="#/data/sources/metadata">{t("page.dataSources.connections.metadata")}</Button>
+          <Popconfirm title={t("page.dataSources.connections.confirmDelete")} onConfirm={() => onDelete(row.name)}>
+            <Button size="small" danger>{t("common.delete")}</Button>
           </Popconfirm>
         </Space>
       ),
@@ -469,7 +472,7 @@ function ConnectionsPanel({
   ];
 
   return (
-    <WorkbenchPanel title="连接目录" actions={<Space><RefreshButton onClick={onRefresh} pending={refreshing} /><Button type="primary" onClick={onCreate}>新建数据源</Button></Space>}>
+    <WorkbenchPanel title={t("page.dataSources.connections.panel")} actions={<Space><RefreshButton onClick={onRefresh} pending={refreshing} /><Button type="primary" onClick={onCreate}>{t("page.dataSources.connections.create")}</Button></Space>}>
       <Table rowKey="name" columns={columns} dataSource={sources} pagination={{ pageSize: 10 }} scroll={{ x: 1080 }} />
     </WorkbenchPanel>
   );
@@ -496,31 +499,32 @@ function MetadataPanel({
   onPreview: (name: string) => void;
   onSync: (name: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
-      <WorkbenchPanel title="选择数据源">
+      <WorkbenchPanel title={t("page.dataSources.metadata.scope")}>
         <Space direction="vertical" className="w-full">
           <Select
             className="w-full"
             value={selectedName || undefined}
-            placeholder="选择数据源"
+            placeholder={t("page.dataSources.metadata.selectSource")}
             options={sources.map((item) => ({ value: item.name, label: `${item.name} · ${item.type}` }))}
             onChange={onSelect}
           />
-          <Button className="w-full" type="primary" disabled={!selectedName} loading={previewing} onClick={() => onPreview(selectedName)}>预览元数据</Button>
-          <Button className="w-full" disabled={!selectedName} loading={syncing} onClick={() => onSync(selectedName)}>同步到 Schema Registry</Button>
+          <Button className="w-full" type="primary" disabled={!selectedName} loading={previewing} onClick={() => onPreview(selectedName)}>{t("page.dataSources.metadata.preview")}</Button>
+          <Button className="w-full" disabled={!selectedName} loading={syncing} onClick={() => onSync(selectedName)}>{t("page.dataSources.metadata.sync")}</Button>
         </Space>
       </WorkbenchPanel>
-      <WorkbenchPanel title="预览与同步结果">
+      <WorkbenchPanel title={t("page.dataSources.metadata.result")}>
         {!previewPayload ? (
           <EmptyHint />
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-4">
-              <Metric label="表" value={previewPayload.metadata?.tables ?? 0} />
-              <Metric label="字段" value={previewPayload.metadata?.columns ?? 0} />
-              <Metric label="敏感候选" value={previewPayload.metadata?.pii_candidates ?? 0} />
-              <Metric label="只读" value={previewPayload.metadata?.readonly ? "是" : "否"} />
+              <Metric label={t("page.dataSources.metadata.tables")} value={previewPayload.metadata?.tables ?? 0} />
+              <Metric label={t("page.dataSources.metadata.columns")} value={previewPayload.metadata?.columns ?? 0} />
+              <Metric label={t("page.dataSources.metadata.piiCandidates")} value={previewPayload.metadata?.pii_candidates ?? 0} />
+              <Metric label={t("page.dataSources.metadata.readonly")} value={previewPayload.metadata?.readonly ? t("common.yes") : t("common.no")} />
             </div>
             <Table
               rowKey="name"
@@ -528,16 +532,16 @@ function MetadataPanel({
               pagination={{ pageSize: 8 }}
               dataSource={previewPayload.tables ?? []}
               columns={[
-                { title: "表名", dataIndex: "name", width: 220 },
-                { title: "Schema", dataIndex: "schema_name", width: 120 },
-                { title: "字段", render: (_, row: any) => (row.columns ?? []).map((col: any) => `${col.name}:${col.type}`).join(", ") },
+                { title: t("page.dataSources.metadata.tableName"), dataIndex: "name", width: 220 },
+                { title: t("page.dataSources.metadata.schema"), dataIndex: "schema_name", width: 120 },
+                { title: t("page.dataSources.metadata.columns"), render: (_, row: any) => (row.columns ?? []).map((col: any) => `${col.name}:${col.type}`).join(", ") },
               ]}
             />
             {syncPayload ? (
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>已同步 {syncPayload.schema_registry?.total ?? 0} 张表</span>
-                  <Button size="small" href="#/data/ingest/schema">查看 Schema Registry</Button>
+                  <span>{t("page.dataSources.metadata.syncResult", { count: syncPayload.schema_registry?.total ?? 0 })}</span>
+                  <Button size="small" href="#/data/ingest/schema">{t("page.dataSources.metadata.openSchemaRegistry")}</Button>
                 </div>
               </div>
             ) : null}
@@ -569,9 +573,10 @@ function SourceEditor({
   onCancel: () => void;
   onSubmit: (values: SourceForm) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <Modal
-      title={editingName ? "编辑数据源" : "新建数据源"}
+      title={editingName ? t("page.dataSources.editor.editTitle") : t("page.dataSources.editor.createTitle")}
       open={open}
       onCancel={onCancel}
       onOk={() => form.submit()}
@@ -581,38 +586,39 @@ function SourceEditor({
     >
       <Form form={form} layout="vertical" onFinish={onSubmit} initialValues={DEFAULT_SOURCE}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Form.Item name="name" label="数据源名称" rules={[{ required: true, message: "请输入数据源名称" }]}>
-            <Input disabled={Boolean(editingName)} placeholder="billing-ob" />
+          <Form.Item name="name" label={t("page.dataSources.editor.name")} rules={[{ required: true, message: t("page.dataSources.messages.nameRequired") }]}>
+            <Input disabled={Boolean(editingName)} placeholder={t("page.dataSources.editor.namePlaceholder")} />
           </Form.Item>
-          <Form.Item name="type" label="数据库类型" rules={[{ required: true }]}>
+          <Form.Item name="type" label={t("page.dataSources.editor.type")} rules={[{ required: true }]}>
             <Select options={sourceTypes.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
-          <Form.Item name="role" label="数据源角色" rules={[{ required: true }]}>
+          <Form.Item name="role" label={t("page.dataSources.editor.role")} rules={[{ required: true }]}>
             <Select options={roles.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
-          <Form.Item name="capabilities" label="能力声明" rules={[{ required: true }]}>
+          <Form.Item name="capabilities" label={t("page.dataSources.editor.capabilities")} rules={[{ required: true }]}>
             <Select mode="multiple" options={capabilities.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
-          <Form.Item name="host" label="主机"><Input placeholder="db.example.internal" /></Form.Item>
-          <Form.Item name="port" label="端口"><InputNumber className="w-full" min={0} max={65535} /></Form.Item>
-          <Form.Item name="database" label="数据库"><Input placeholder="billing" /></Form.Item>
-          <Form.Item name="schema_name" label="Schema"><Input placeholder="public / dwd" /></Form.Item>
-          <Form.Item name="username" label="用户名"><Input placeholder="只保存用户名，不保存密码" /></Form.Item>
-          <Form.Item name="pool_size" label="连接池大小"><InputNumber className="w-full" min={1} max={200} /></Form.Item>
-          <Form.Item name="url_env" label="连接串环境变量"><Input placeholder="APP_DB_URL" /></Form.Item>
-          <Form.Item name="secret_ref" label="SecretRef"><Input placeholder="env://APP_DB_URL 或 vault://secret/data/app-db" /></Form.Item>
-          <Form.Item name="ssl_mode" label="SSL 模式"><Input placeholder="require / verify-full" /></Form.Item>
-          <Form.Item name="readonly" label="安全策略" valuePropName="checked">
-            <Switch checkedChildren="只读" unCheckedChildren="读写" />
+          <Form.Item name="host" label={t("page.dataSources.editor.host")}><Input placeholder={t("page.dataSources.editor.hostPlaceholder")} /></Form.Item>
+          <Form.Item name="port" label={t("page.dataSources.editor.port")}><InputNumber className="w-full" min={0} max={65535} /></Form.Item>
+          <Form.Item name="database" label={t("page.dataSources.editor.database")}><Input placeholder={t("page.dataSources.editor.databasePlaceholder")} /></Form.Item>
+          <Form.Item name="schema_name" label={t("page.dataSources.editor.schema")}><Input placeholder={t("page.dataSources.editor.schemaPlaceholder")} /></Form.Item>
+          <Form.Item name="username" label={t("page.dataSources.editor.username")}><Input placeholder={t("page.dataSources.editor.usernamePlaceholder")} /></Form.Item>
+          <Form.Item name="pool_size" label={t("page.dataSources.editor.poolSize")}><InputNumber className="w-full" min={1} max={200} /></Form.Item>
+          <Form.Item name="url_env" label={t("page.dataSources.editor.urlEnv")}><Input placeholder={t("page.dataSources.editor.urlEnvPlaceholder")} /></Form.Item>
+          <Form.Item name="secret_ref" label={t("page.dataSources.editor.secretRef")}><Input placeholder={t("page.dataSources.editor.secretRefPlaceholder")} /></Form.Item>
+          <Form.Item name="ssl_mode" label={t("page.dataSources.editor.sslMode")}><Input placeholder={t("page.dataSources.editor.sslModePlaceholder")} /></Form.Item>
+          <Form.Item name="readonly" label={t("page.dataSources.editor.securityPolicy")} valuePropName="checked">
+            <Switch checkedChildren={t("page.dataSources.editor.readonly")} unCheckedChildren={t("page.dataSources.editor.readwrite")} />
           </Form.Item>
         </div>
-        <Checkbox checked disabled>不保存明文密码或连接串</Checkbox>
+        <Checkbox checked disabled>{t("page.dataSources.editor.noPlainSecret")}</Checkbox>
       </Form>
     </Modal>
   );
 }
 
 function CompactKV({ title, value }: { title: string; value: Record<string, unknown> }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-3 last:mb-0">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
@@ -620,7 +626,7 @@ function CompactKV({ title, value }: { title: string; value: Record<string, unkn
         {title}
       </div>
       <div className="space-y-1">
-        {Object.entries(value).length === 0 ? <p className="text-xs text-[var(--muted)]">暂无数据</p> : null}
+        {Object.entries(value).length === 0 ? <p className="text-xs text-[var(--muted)]">{t("page.dataSources.overview.empty")}</p> : null}
         {Object.entries(value).map(([key, count]) => (
           <div key={key} className="flex justify-between text-xs">
             <span className="text-[var(--muted)]">{key}</span>
@@ -642,10 +648,11 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 }
 
 function EmptyHint() {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-60 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] text-center">
       <FileSearch className="mb-3 h-8 w-8 text-[var(--muted)]" />
-      <p className="text-sm font-medium">请选择数据源并预览元数据</p>
+      <p className="text-sm font-medium">{t("page.dataSources.metadata.emptyHint")}</p>
     </div>
   );
 }

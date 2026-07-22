@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from sop_manager.path_config import reset_request_scope, set_request_scope
 from sop_manager.routers import metrics_service
+from sop_manager.routers.sql_models import Business, Project, SessionLocal, Tenant
 
 
 @contextmanager
@@ -21,6 +22,20 @@ def scoped_project(root, *, tenant="tenant-a", business="biz-a", project="projec
         yield
     finally:
         reset_request_scope(tokens)
+
+
+def ensure_sql_scope(tenant="tenant-a", business="biz-a", project="project-a"):
+    db = SessionLocal()
+    try:
+        if not db.get(Tenant, tenant):
+            db.add(Tenant(id=tenant, name=tenant, slug=tenant, plan="free", status="active"))
+        if not db.get(Business, business):
+            db.add(Business(id=business, tenant_id=tenant, name=business, description="test business"))
+        if not db.get(Project, project):
+            db.add(Project(id=project, tenant_id=tenant, business_id=business, name=project, project_path="", status="active"))
+        db.commit()
+    finally:
+        db.close()
 
 
 def test_metric_semantic_layer_validates_formula_and_blocks_unsafe_expression(tmp_path):
@@ -141,3 +156,73 @@ def test_metrics_semantic_layer_is_scoped_by_project(tmp_path):
             metrics_service.query_metric(metric["id"])
 
     assert exc.value.status_code == 404
+
+
+def test_metrics_governance_tasks_preview_and_create(tmp_path):
+    with scoped_project(tmp_path):
+        ensure_sql_scope()
+        metric = metrics_service.create_metric(
+            metrics_service.MetricCreate(
+                name="Unowned Draft Metric",
+                domain="growth",
+                metric_type="derived",
+                formula="",
+                source_assets=["traffic"],
+                depends_on=["missing_metric"],
+            )
+        )
+
+        preview = metrics_service.metrics_governance_tasks(
+            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=True, assigned_to="MetricsOps")
+        )
+        created = metrics_service.metrics_governance_tasks(
+            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=False, assigned_to="MetricsOps")
+        )
+
+    assert preview["dry_run"] is True
+    assert preview["planned"] >= 4
+    assert preview["created"] == []
+    assert {item["source"] for item in preview["items"]} == {"metrics_governance"}
+    labels = {label for item in preview["items"] for label in item.get("labels", [])}
+    assert {"missing-owner", "missing-formula", "unpublished-api", "missing-version", "broken-dependency"} & labels
+    assert created["dry_run"] is False
+    assert created["created_count"] == created["planned"]
+    assert created["created_count"] >= 4
+    assert all(item.get("source") == "metrics_governance" for item in created["items"])
+
+
+def test_metric_approval_review_can_publish_metric_contract(tmp_path):
+    with scoped_project(tmp_path):
+        metric = metrics_service.create_metric(
+            metrics_service.MetricCreate(
+                name="Approved Revenue",
+                domain="billing",
+                metric_type="atomic",
+                formula="sum(revenue)",
+                dimensions=["day"],
+                source_assets=["orders"],
+                owner="Metrics Agent",
+            )
+        )
+
+        approval = metrics_service.create_metric_approval(
+            metrics_service.MetricApprovalCreateIn(
+                metric_id=metric["id"],
+                reason="publish reviewed contract",
+                payload={"version_note": "approved revenue v1", "sla": "99.95%"},
+            )
+        )
+        pending = metrics_service.list_metric_approvals(status="pending")
+        reviewed = metrics_service.review_metric_approval(
+            approval["id"],
+            metrics_service.MetricApprovalReviewIn(status="approved", reviewer="Data Steward", note="ok"),
+        )
+        published = metrics_service.list_published()
+
+    assert approval["status"] == "pending"
+    assert approval["risk"]["risk_level"] in {"low", "medium", "high"}
+    assert pending["total"] == 1
+    assert reviewed["status"] == "approved"
+    assert reviewed["applied_result"]["semantic_version"] == "v1"
+    assert reviewed["applied_result"]["query_contract"]["sla"] == "99.95%"
+    assert any(item["metric_id"] == metric["id"] for item in published["items"])

@@ -44,6 +44,34 @@ def ops_plan(json_out: bool = typer.Option(False, "--json", help="输出机器�
     console.print(tbl)
 
 
+@app.command("lifecycle")
+def lifecycle(json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON")) -> None:
+    try:
+        out = get_client().dev_flow_lifecycle()
+    except Exception as e:
+        warn(f"Manager dev-flow lifecycle 不可用: {e}")
+        raise typer.Exit(1)
+    if json_out:
+        console.print_json(data=out)
+        return
+    summary = out.get("summary") or {}
+    kv("ok", out.get("ok"))
+    kv("score", summary.get("score", 0))
+    kv("lifecycle", summary.get("lifecycle", ""))
+    kv("trace_id", out.get("trace_id", ""))
+    tbl = Table(title="dev-flow lifecycle", show_header=True, header_style="bold")
+    for col in ("id", "label", "status", "cli"):
+        tbl.add_column(col)
+    for item in out.get("items") or []:
+        tbl.add_row(
+            str(item.get("id", "")),
+            str(item.get("label", ""))[:32],
+            str(item.get("status", "")),
+            str(item.get("cli", ""))[:64],
+        )
+    console.print(tbl)
+
+
 @app.command("ops-tasks")
 def ops_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
