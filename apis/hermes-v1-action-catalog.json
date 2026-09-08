@@ -7,63 +7,232 @@
     "workspace_header": "X-Workspace-Id"
   },
   "envelope": {
-    "required": ["ok", "scope", "summary", "items", "actions", "agent_consumption", "cli", "permissions", "audit", "trace_id"],
+    "required": [
+      "ok",
+      "scope",
+      "summary",
+      "items",
+      "actions",
+      "agent_consumption",
+      "cli",
+      "permissions",
+      "audit",
+      "trace_id"
+    ],
     "items": "array",
     "permissions": "string[]",
-    "health_exception": ["ok", "service", "version"]
+    "health_exception": [
+      "ok",
+      "service",
+      "version"
+    ]
   },
   "resources": {
     "workspaces": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"],
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ],
       "repository": "GET /workspaces/{id}/repository"
     },
     "sessions": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"]
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ]
     },
     "runs": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"],
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ],
       "events": "GET /runs/{id}/events?after=0",
       "changes": "GET /runs/{id}/changes",
-      "actions": ["start", "cancel", "retry", "replay", "export"]
+      "actions": [
+        "start",
+        "cancel",
+        "retry",
+        "replay",
+        "export"
+      ]
     },
     "assets": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH", "DELETE"],
-      "kinds": ["memory", "knowledge", "skill", "plugin", "data-source"]
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH",
+        "DELETE"
+      ],
+      "kinds": [
+        "memory",
+        "knowledge",
+        "skill",
+        "plugin",
+        "data-source"
+      ]
     },
     "devices": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "DELETE"],
-      "execution_pairing": "not_implemented"
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET"
+      ],
+      "pairing": "POST /devices/{id}/pairing",
+      "redeem": "POST /devices/pair",
+      "revoke": "POST /devices/{id}/revoke",
+      "create_permissions": [
+        "config"
+      ],
+      "pairing_permissions": [
+        "config",
+        "execute"
+      ],
+      "revoke_permissions": [
+        "config"
+      ]
+    },
+    "agents": {
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ],
+      "catalog": "GET /agents/catalog",
+      "providers": [
+        "codex",
+        "claude",
+        "opencode"
+      ],
+      "write_permissions": [
+        "config"
+      ]
+    },
+    "squads": {
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ],
+      "routing": "leader-selected members only",
+      "write_permissions": [
+        "config"
+      ]
     },
     "tasks": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"],
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ],
       "delivery": "GET /tasks/{id}/delivery",
       "dispatch": "POST /tasks/{id}/dispatch",
+      "agent_dispatch": "POST /tasks/{id}/agent-dispatch",
       "review": "POST /tasks/{id}/review",
-      "dispatch_permissions": ["write", "execute"],
-      "review_permission": "approve"
+      "dispatch_permissions": [
+        "write",
+        "execute"
+      ],
+      "agent_dispatch_permissions": [
+        "write",
+        "execute"
+      ],
+      "review_permissions": [
+        "approve"
+      ]
     },
     "requirements": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"]
+      "collection": [
+        "GET",
+        "POST"
+      ],
+      "entity": [
+        "GET",
+        "PATCH"
+      ]
     },
     "schedules": {
-      "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH", "DELETE"]
+      "collection": [
+        "GET"
+      ],
+      "entity": [
+        "GET"
+      ],
+      "actions": [
+        "configure",
+        "trigger",
+        "pause",
+        "resume"
+      ],
+      "history": "GET /schedules/{id}/history",
+      "trigger_kind": "interval",
+      "configure_permissions": [
+        "config",
+        "execute"
+      ],
+      "trigger_permissions": [
+        "execute"
+      ],
+      "pause_permissions": [
+        "config"
+      ],
+      "resume_permissions": [
+        "config",
+        "execute"
+      ]
+    },
+    "remote": {
+      "actions": [
+        "claim",
+        "heartbeat",
+        "result"
+      ],
+      "auth": "workspace-scoped device credential and X-Hermes-Device-Id",
+      "supported_nodes": [
+        "command"
+      ]
     },
     "approvals": {
-      "collection": ["GET"],
-      "entity": ["GET"],
+      "collection": [
+        "GET"
+      ],
+      "entity": [
+        "GET"
+      ],
       "decision": "POST /approvals/{id}/decision"
     },
     "artifacts": {
-      "collection": ["GET"],
-      "entity": ["GET"]
+      "collection": [
+        "GET"
+      ],
+      "entity": [
+        "GET"
+      ]
     },
     "sync": {
       "events": "GET /sync?after=0"
@@ -75,49 +244,633 @@
       "actions": "GET /actions"
     }
   },
-  "query": ["q", "status", "kind", "limit", "cursor"],
+  "query": [
+    "q",
+    "status",
+    "kind",
+    "limit",
+    "cursor"
+  ],
   "mutation_body": {
-    "post": ["data", "idempotency_key"],
-    "patch": ["data", "idempotency_key", "expected_version"],
-    "delete": ["idempotency_key", "expected_version", "dry_run"]
+    "post": [
+      "data",
+      "idempotency_key"
+    ],
+    "patch": [
+      "data",
+      "idempotency_key",
+      "expected_version"
+    ],
+    "delete": [
+      "idempotency_key",
+      "expected_version",
+      "dry_run"
+    ]
   },
   "resource_contracts": {
     "tasks": {
       "title_max_length": 120,
       "title_required": true,
-      "statuses": ["active", "in_progress", "blocked", "completed", "archived"],
-      "fields": ["title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"]
+      "statuses": [
+        "active",
+        "in_progress",
+        "blocked",
+        "completed",
+        "archived"
+      ],
+      "fields": [
+        "title",
+        "content",
+        "summary",
+        "description",
+        "priority",
+        "assigned_agent",
+        "dev_tool",
+        "acceptance_criteria",
+        "source",
+        "kind"
+      ]
     },
     "requirements": {
       "title_max_length": 120,
       "title_required": true,
-      "statuses": ["active", "draft", "ready", "completed", "archived"],
-      "fields": ["title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"]
+      "statuses": [
+        "active",
+        "draft",
+        "ready",
+        "completed",
+        "archived"
+      ],
+      "fields": [
+        "title",
+        "content",
+        "summary",
+        "description",
+        "priority",
+        "assigned_agent",
+        "dev_tool",
+        "acceptance_criteria",
+        "source",
+        "kind"
+      ]
     },
     "sessions": {
       "title_max_length": 120,
       "title_required": true,
-      "statuses": ["active", "paused", "completed", "archived"],
-      "fields": ["title", "content", "summary", "description", "assigned_agent", "dev_tool", "source", "kind", "workspace_root"]
+      "statuses": [
+        "active",
+        "paused",
+        "completed",
+        "archived"
+      ],
+      "fields": [
+        "title",
+        "content",
+        "summary",
+        "description",
+        "assigned_agent",
+        "dev_tool",
+        "source",
+        "kind",
+        "workspace_root"
+      ]
     },
     "assets": {
       "title_max_length": 120,
       "title_required": true,
-      "title_aliases": ["name"],
-      "statuses": ["active", "archived"],
-      "fields": ["title", "name", "content", "summary", "description", "source", "kind"]
+      "title_aliases": [
+        "name"
+      ],
+      "statuses": [
+        "active",
+        "archived"
+      ],
+      "fields": [
+        "title",
+        "name",
+        "content",
+        "summary",
+        "description",
+        "source",
+        "kind"
+      ]
     }
   },
-  "run_action_body": ["idempotency_key", "expected_version", "dry_run"],
-  "approval_decision_body": ["decision", "idempotency_key", "expected_version", "dry_run"],
-  "task_dispatch_body": ["nodes", "isolation", "base_commit", "idempotency_key", "expected_version", "dry_run"],
-  "task_review_body": ["run_id", "run_version", "decision", "comment", "idempotency_key", "expected_version", "dry_run"],
+  "run_action_body": [
+    "idempotency_key",
+    "expected_version",
+    "dry_run"
+  ],
+  "approval_decision_body": [
+    "decision",
+    "idempotency_key",
+    "expected_version",
+    "dry_run"
+  ],
+  "task_dispatch_body": [
+    "nodes",
+    "isolation",
+    "base_commit",
+    "target_device_id",
+    "idempotency_key",
+    "expected_version",
+    "dry_run"
+  ],
+  "agent_dispatch_body": [
+    "agent_id",
+    "squad_id",
+    "target_version",
+    "prompt",
+    "isolation",
+    "base_commit",
+    "idempotency_key",
+    "expected_version",
+    "dry_run"
+  ],
+  "task_review_body": [
+    "run_id",
+    "run_version",
+    "decision",
+    "comment",
+    "idempotency_key",
+    "expected_version",
+    "dry_run"
+  ],
   "wire": {
-    "entity": ["id", "kind", "version", "status", "data", "created_at", "updated_at"],
-    "workspace_data": ["name", "root"],
-    "run_data": ["title", "session_id", "nodes"],
-    "run_server_fields": ["workspace_root", "workspace_version", "node_results", "attempt", "active_node", "execution_owner", "lease_expires_at", "code_workspace", "code_evidence"],
-    "run_node": ["id", "title", "kind", "argv", "expected_exit_code", "timeout_seconds"],
-    "asset_data": ["title", "kind", "content"]
+    "entity": [
+      "id",
+      "kind",
+      "version",
+      "status",
+      "data",
+      "created_at",
+      "updated_at"
+    ],
+    "workspace_data": [
+      "name",
+      "root"
+    ],
+    "run_data": [
+      "title",
+      "session_id",
+      "nodes"
+    ],
+    "run_server_fields": [
+      "workspace_root",
+      "workspace_version",
+      "node_results",
+      "attempt",
+      "active_node",
+      "execution_owner",
+      "lease_expires_at",
+      "code_workspace",
+      "code_evidence",
+      "agent_bindings",
+      "agent_source",
+      "schedule",
+      "remote_worker_version",
+      "remote_claim_key"
+    ],
+    "run_node": [
+      "id",
+      "title",
+      "kind",
+      "argv",
+      "expected_exit_code",
+      "timeout_seconds",
+      "agent_id",
+      "prompt"
+    ],
+    "asset_data": [
+      "title",
+      "kind",
+      "content"
+    ]
+  },
+  "action_descriptor": {
+    "id": "string",
+    "permissions": "string[]",
+    "method": "GET|POST|PATCH|DELETE",
+    "path": "string",
+    "resource": "optional string",
+    "permission_contract": "Every action advertises all required permissions in permissions; singular permission is not part of the public contract."
+  },
+  "actions": [
+    {
+      "id": "agent.catalog",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/agents/catalog"
+    },
+    {
+      "id": "task.agent-dispatch",
+      "permissions": [
+        "write",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/tasks/{id}/agent-dispatch",
+      "resource": "tasks"
+    },
+    {
+      "id": "schedule.configure",
+      "permissions": [
+        "config",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/{id}/configure",
+      "resource": "schedules"
+    },
+    {
+      "id": "schedule.trigger",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/{id}/trigger",
+      "resource": "schedules"
+    },
+    {
+      "id": "schedule.pause",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/{id}/pause",
+      "resource": "schedules"
+    },
+    {
+      "id": "schedule.resume",
+      "permissions": [
+        "config",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/{id}/resume",
+      "resource": "schedules"
+    },
+    {
+      "id": "schedule.history",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/schedules/{id}/history",
+      "resource": "schedules"
+    },
+    {
+      "id": "device.pairing",
+      "permissions": [
+        "config",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/devices/{id}/pairing",
+      "resource": "devices"
+    },
+    {
+      "id": "device.revoke",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/devices/{id}/revoke",
+      "resource": "devices"
+    },
+    {
+      "id": "workspace.repository",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/workspaces/{id}/repository",
+      "resource": "workspaces"
+    },
+    {
+      "id": "run.changes",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/runs/{id}/changes",
+      "resource": "runs"
+    },
+    {
+      "id": "task.delivery",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/tasks/{id}/delivery",
+      "resource": "tasks"
+    },
+    {
+      "id": "task.dispatch",
+      "permissions": [
+        "write",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/tasks/{id}/dispatch",
+      "resource": "tasks"
+    },
+    {
+      "id": "task.review",
+      "permissions": [
+        "approve"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/tasks/{id}/review",
+      "resource": "tasks"
+    },
+    {
+      "id": "diagnostics",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/system/diagnostics"
+    },
+    {
+      "id": "read",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/{resource}"
+    },
+    {
+      "id": "workspace.create",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/workspaces",
+      "resource": "workspaces"
+    },
+    {
+      "id": "session.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/sessions",
+      "resource": "sessions"
+    },
+    {
+      "id": "run.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs",
+      "resource": "runs"
+    },
+    {
+      "id": "task.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/tasks",
+      "resource": "tasks"
+    },
+    {
+      "id": "requirement.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/requirements",
+      "resource": "requirements"
+    },
+    {
+      "id": "asset.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/assets",
+      "resource": "assets"
+    },
+    {
+      "id": "device.create",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/devices",
+      "resource": "devices"
+    },
+    {
+      "id": "agent.create",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/agents",
+      "resource": "agents"
+    },
+    {
+      "id": "squad.create",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/squads",
+      "resource": "squads"
+    },
+    {
+      "id": "workspace.update",
+      "permissions": [
+        "config"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/workspaces/{id}",
+      "resource": "workspaces"
+    },
+    {
+      "id": "session.update",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/sessions/{id}",
+      "resource": "sessions"
+    },
+    {
+      "id": "run.update",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/runs/{id}",
+      "resource": "runs"
+    },
+    {
+      "id": "task.update",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/tasks/{id}",
+      "resource": "tasks"
+    },
+    {
+      "id": "requirement.update",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/requirements/{id}",
+      "resource": "requirements"
+    },
+    {
+      "id": "asset.update",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/assets/{id}",
+      "resource": "assets"
+    },
+    {
+      "id": "agent.update",
+      "permissions": [
+        "config"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/agents/{id}",
+      "resource": "agents"
+    },
+    {
+      "id": "squad.update",
+      "permissions": [
+        "config"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/squads/{id}",
+      "resource": "squads"
+    },
+    {
+      "id": "start",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs/{id}/start",
+      "resource": "runs"
+    },
+    {
+      "id": "cancel",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs/{id}/cancel",
+      "resource": "runs"
+    },
+    {
+      "id": "retry",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs/{id}/retry",
+      "resource": "runs"
+    },
+    {
+      "id": "replay",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs/{id}/replay",
+      "resource": "runs"
+    },
+    {
+      "id": "decision",
+      "permissions": [
+        "approve"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/approvals/{id}/decision",
+      "resource": "approvals"
+    },
+    {
+      "id": "export",
+      "permissions": [
+        "export"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/runs/{id}/export",
+      "resource": "runs"
+    }
+  ],
+  "resource_action_permissions": {
+    "create": {
+      "workspaces": [
+        "config"
+      ],
+      "sessions": [
+        "write"
+      ],
+      "runs": [
+        "write"
+      ],
+      "tasks": [
+        "write"
+      ],
+      "requirements": [
+        "write"
+      ],
+      "assets": [
+        "write"
+      ],
+      "devices": [
+        "config"
+      ],
+      "agents": [
+        "config"
+      ],
+      "squads": [
+        "config"
+      ]
+    },
+    "update": {
+      "workspaces": [
+        "config"
+      ],
+      "sessions": [
+        "write"
+      ],
+      "runs": [
+        "write"
+      ],
+      "tasks": [
+        "write"
+      ],
+      "requirements": [
+        "write"
+      ],
+      "assets": [
+        "write"
+      ],
+      "agents": [
+        "config"
+      ],
+      "squads": [
+        "config"
+      ]
+    },
+    "immutable_or_dedicated": {
+      "approvals": "decision only",
+      "artifacts": "read only",
+      "devices": "create/pairing/revoke only",
+      "schedules": "configure/trigger/pause/resume/history only"
+    }
   }
 }

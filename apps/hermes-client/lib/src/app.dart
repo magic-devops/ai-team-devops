@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'pages/assets_page.dart';
+import 'pages/automation_page.dart';
 import 'pages/plan_page.dart';
 import 'pages/runs_page.dart';
 import 'pages/settings_page.dart';
@@ -36,6 +37,8 @@ final _router = GoRouter(
             path: '/workspaces', builder: (_, __) => const WorkspacesPage()),
         GoRoute(path: '/plan', builder: (_, __) => const PlanPage()),
         GoRoute(path: '/runs', builder: (_, __) => const RunsPage()),
+        GoRoute(
+            path: '/automation', builder: (_, __) => const AutomationPage()),
         GoRoute(path: '/assets', builder: (_, __) => const AssetsPage()),
         GoRoute(path: '/settings', builder: (_, __) => const SettingsPage()),
       ],
@@ -58,6 +61,7 @@ class _HermesShellState extends State<HermesShell> {
     '/plan',
     '/assets',
     '/runs',
+    '/automation',
     '/settings'
   ];
 
@@ -124,6 +128,7 @@ const _destinations = [
   _NavItem('项目', Icons.account_tree_rounded),
   _NavItem('资产', Icons.inventory_2_rounded),
   _NavItem('收件箱', Icons.inbox_rounded),
+  _NavItem('自动化', Icons.precision_manufacturing_rounded),
   _NavItem('设置', Icons.tune_rounded),
 ];
 

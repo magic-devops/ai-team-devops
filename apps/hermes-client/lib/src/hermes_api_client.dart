@@ -58,9 +58,14 @@ class HermesApiClient {
     return _request('GET', '/health', authenticated: false);
   }
 
-  Future<List<String>> actions() async {
+  Future<List<Map<String, dynamic>>> actions() async {
     final envelope = await _get('/actions');
-    return envelope.items.map((item) => item.toString()).toList();
+    return _maps(envelope);
+  }
+
+  Future<List<Map<String, dynamic>>> agentCatalog() async {
+    final envelope = await _get('/agents/catalog');
+    return _maps(envelope);
   }
 
   Future<HermesEnvelope> taskDelivery(String taskId,
@@ -85,6 +90,7 @@ class HermesApiClient {
     required String idempotencyKey,
     String isolation = 'workspace',
     String? baseCommit,
+    String? targetDeviceId,
     bool dryRun = true,
   }) {
     if (isolation == 'git_worktree' &&
@@ -104,9 +110,164 @@ class HermesApiClient {
           'isolation': isolation,
           if (baseCommit != null && baseCommit.isNotEmpty)
             'base_commit': baseCommit,
+          if (targetDeviceId != null && targetDeviceId.isNotEmpty)
+            'target_device_id': targetDeviceId,
           'dry_run': dryRun,
         },
         workspaceId: workspaceId);
+  }
+
+  Future<HermesEnvelope> taskAgentDispatch(
+    String taskId, {
+    required String workspaceId,
+    required int expectedVersion,
+    required int targetVersion,
+    required String prompt,
+    required String idempotencyKey,
+    String? agentId,
+    String? squadId,
+    String isolation = 'workspace',
+    String? baseCommit,
+    bool dryRun = true,
+  }) {
+    final hasAgent = agentId != null && agentId.isNotEmpty;
+    final hasSquad = squadId != null && squadId.isNotEmpty;
+    if (taskId.isEmpty) {
+      throw HermesApiException('Task is required for agent dispatch.');
+    }
+    if (hasAgent == hasSquad) {
+      throw HermesApiException('Choose exactly one agent or squad.');
+    }
+    if (targetVersion < 1) {
+      throw HermesApiException('target_version is required.');
+    }
+    if (prompt.trim().isEmpty) {
+      throw HermesApiException('Prompt is required for agent dispatch.');
+    }
+    if (isolation == 'git_worktree' &&
+        (baseCommit == null || baseCommit.isEmpty)) {
+      throw HermesApiException(
+          'base_commit is required for git worktree dispatch.');
+    }
+    if (!{'workspace', 'git_worktree'}.contains(isolation)) {
+      throw HermesApiException('Unsupported dispatch isolation: $isolation');
+    }
+    return _post(
+      '/tasks/${Uri.encodeComponent(taskId)}/agent-dispatch',
+      {
+        'idempotency_key': idempotencyKey,
+        'expected_version': expectedVersion,
+        'target_version': targetVersion,
+        'dry_run': dryRun,
+        if (hasAgent) 'agent_id': agentId,
+        if (hasSquad) 'squad_id': squadId,
+        'prompt': prompt.trim(),
+        'isolation': isolation,
+        if (baseCommit != null && baseCommit.isNotEmpty)
+          'base_commit': baseCommit,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> scheduleConfigure(
+    String scheduleId, {
+    required String workspaceId,
+    required String title,
+    required int intervalSeconds,
+    required String startsAt,
+    required List<Map<String, dynamic>> nodes,
+    required bool enabled,
+    required bool misfireCoalesce,
+    required String idempotencyKey,
+    int? expectedVersion,
+    bool dryRun = true,
+  }) {
+    if (scheduleId.trim().isEmpty) {
+      throw HermesApiException('Schedule ID is required.');
+    }
+    if (intervalSeconds < 10) {
+      throw HermesApiException('interval_seconds must be at least 10.');
+    }
+    return _post(
+      '/schedules/${Uri.encodeComponent(scheduleId.trim())}/configure',
+      {
+        'title': title.trim(),
+        'interval_seconds': intervalSeconds,
+        'starts_at': startsAt.trim(),
+        'nodes': nodes,
+        'enabled': enabled,
+        'misfire_coalesce': misfireCoalesce,
+        'idempotency_key': idempotencyKey,
+        if (expectedVersion != null) 'expected_version': expectedVersion,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> scheduleAction(
+    String scheduleId,
+    String action, {
+    required String workspaceId,
+    required int expectedVersion,
+    bool dryRun = false,
+  }) {
+    if (!{'trigger', 'pause', 'resume'}.contains(action)) {
+      throw HermesApiException('Unsupported schedule action: $action');
+    }
+    return _post(
+      '/schedules/${Uri.encodeComponent(scheduleId)}/$action',
+      {
+        'idempotency_key': _idempotencyKey('schedule-$action-$scheduleId'),
+        'expected_version': expectedVersion,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> scheduleHistory(
+    String scheduleId, {
+    required String workspaceId,
+  }) async {
+    final envelope = await _get(
+      '/schedules/${Uri.encodeComponent(scheduleId)}/history',
+      workspaceId: workspaceId,
+    );
+    return _maps(envelope);
+  }
+
+  Future<HermesEnvelope> devicePairing(
+    HermesEntity device, {
+    required String workspaceId,
+    bool dryRun = false,
+  }) {
+    return _post(
+      '/devices/${Uri.encodeComponent(device.id)}/pairing',
+      {
+        'idempotency_key': _idempotencyKey('device-pairing-${device.id}'),
+        'expected_version': device.version,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> deviceRevoke(
+    HermesEntity device, {
+    required String workspaceId,
+    bool dryRun = false,
+  }) {
+    return _post(
+      '/devices/${Uri.encodeComponent(device.id)}/revoke',
+      {
+        'idempotency_key': _idempotencyKey('device-revoke-${device.id}'),
+        'expected_version': device.version,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
   }
 
   Future<HermesEnvelope> taskReview(
@@ -211,8 +372,7 @@ class HermesApiClient {
     String? workspaceId,
     bool dryRun = false,
   }) async {
-    if (!{Resource.assets, Resource.devices, Resource.schedules}
-        .contains(resource)) {
+    if (resource != Resource.assets) {
       throw HermesApiException('Delete is not supported for ${resource.path}.');
     }
     await _delete(

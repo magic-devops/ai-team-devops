@@ -49,4 +49,21 @@ describe("Hermes Workspace contracts", () => {
     expect(workspaceSource).toContain("requestEntityId === selected?.id");
     expect(workspaceSource).toContain("if (!isCurrentRequest) return;");
   });
+
+  it("selects opened runs immediately and makes table rows selectable", () => {
+    expect(workspaceSource).toContain("onRow={(row) => ({");
+    expect(workspaceSource).toContain("onClick: () => onSelect(row)");
+    expect(workspaceSource).toContain("onOpenRun={(run) => { setSelected(run); setPendingRun(run); setActiveResource(\"runs\"); setActiveWorkspaceTab(\"runs\");");
+    expect(workspaceSource).toContain("loading={listQuery.isLoading}");
+  });
+
+  it("keeps connected workspace chrome compact on mobile", () => {
+    expect(workspaceSource).toContain("connectionSettingsOpen");
+    expect(workspaceSource).toContain("workspace.connectionSettings");
+    expect(workspaceSource).toContain("else if (workspaceReady) setConnectionSettingsOpen(false)");
+    expect(workspaceSource).toContain("{connectionSettingsOpen ? (");
+    expect(workspaceSource).toContain('activeKey={["connection"]}');
+    expect(workspaceSource).toContain('className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b py-2 text-sm"');
+    expect(workspaceSource).not.toContain("<Statistic");
+  });
 });

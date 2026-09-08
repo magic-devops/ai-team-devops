@@ -36,6 +36,69 @@ describe("HermesClient", () => {
     await client.taskReview("task 1", review);
     expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("/review"), expect.objectContaining({ body: JSON.stringify(review) }));
   });
+  it("calls native automation agent, squad, schedule, and dispatch contracts through Hermes v1", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse({ ok: true, items: [] }));
+    const client = createHermesClient({ baseUrl: "https://hermes.example", token: "test", workspaceId: "ws" });
+
+    await client.agentCatalog();
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/agents/catalog", expect.anything());
+
+    const profile = { title: "Codex", provider: "codex" as const, model: "gpt-5.5", instructions: "Work", timeout_seconds: 300 };
+    await client.createAutomationResource("agents", { data: profile, idempotency_key: "agent-create" });
+    expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("/agents"), expect.objectContaining({ method: "POST", body: JSON.stringify({ data: profile, idempotency_key: "agent-create" }) }));
+
+    const squad = { title: "Multica", members: [{ agent_id: "agent-1", role: "leader" as const, instructions: "Route" }] };
+    await client.patchAutomationResource("squads", "squad-1", { data: squad, expected_version: 4, idempotency_key: "squad-patch" });
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/squads/squad-1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ data: squad, expected_version: 4, idempotency_key: "squad-patch" }) }));
+
+    const schedule = {
+      title: "Morning health",
+      interval_seconds: 3600,
+      starts_at: "2026-09-08T09:00:00+08:00",
+      nodes: [{ id: "pwd", title: "PWD", kind: "command" as const, argv: ["pwd"], expected_exit_code: 0, timeout_seconds: 300 }],
+      enabled: true,
+      misfire_coalesce: true,
+      expected_version: 2,
+      dry_run: true,
+      idempotency_key: "schedule-configure",
+    };
+    await client.scheduleConfigure("schedule 1", schedule);
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/schedules/schedule%201/configure", expect.objectContaining({ method: "POST", body: JSON.stringify(schedule) }));
+    await client.scheduleAction("schedule 1", "trigger", { expected_version: 2, dry_run: false, idempotency_key: "trigger" });
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/schedules/schedule%201/trigger", expect.objectContaining({ method: "POST" }));
+    await client.scheduleHistory("schedule 1");
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/schedules/schedule%201/history", expect.anything());
+
+    await client.devicePairing("device 1", { expected_version: 5, dry_run: true, idempotency_key: "pairing" });
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/devices/device%201/pairing", expect.objectContaining({ method: "POST", body: JSON.stringify({ expected_version: 5, dry_run: true, idempotency_key: "pairing" }) }));
+    await client.deviceRevoke("device 1", { expected_version: 5, dry_run: false, idempotency_key: "revoke" });
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/devices/device%201/revoke", expect.objectContaining({ method: "POST", body: JSON.stringify({ expected_version: 5, dry_run: false, idempotency_key: "revoke" }) }));
+
+    const dispatch = {
+      expected_version: 3,
+      target_version: 9,
+      idempotency_key: "agent-dispatch",
+      dry_run: true,
+      agent_id: "agent-1",
+      prompt: "Implement",
+      isolation: "git_worktree" as const,
+      base_commit: "abc",
+    };
+    await client.taskAgentDispatch("task-1", dispatch);
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/tasks/task-1/agent-dispatch", expect.objectContaining({ method: "POST", body: JSON.stringify(dispatch) }));
+
+    const remoteDispatch = {
+      expected_version: 6,
+      idempotency_key: "remote-dispatch",
+      dry_run: false,
+      nodes: [{ id: "remote", title: "Remote", kind: "command" as const, argv: ["pwd"], expected_exit_code: 0, timeout_seconds: 300 }],
+      isolation: "workspace" as const,
+      base_commit: "",
+      target_device_id: "device-1",
+    };
+    await client.taskDispatch("task-1", remoteDispatch);
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/tasks/task-1/dispatch", expect.objectContaining({ method: "POST", body: JSON.stringify(remoteDispatch) }));
+  });
   it.each([{ error: "bad" }, { ok: false }, { ok: "false", items: [] }, "<html>proxy error</html>"])("rejects malformed runtime probe payload %j", async (payload) => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse(payload));
     const client = createHermesClient({ baseUrl: "http://127.0.0.1:8787", token: "secret" });

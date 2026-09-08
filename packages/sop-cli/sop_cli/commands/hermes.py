@@ -16,6 +16,7 @@ from sop_sdk import HermesClient, SopError
 from .._util import console, err, kv
 
 RESOURCE_NAMES = (
+    "agents",
     "sessions",
     "runs",
     "assets",
@@ -23,9 +24,16 @@ RESOURCE_NAMES = (
     "tasks",
     "requirements",
     "schedules",
+    "squads",
 )
-DELETE_NAMES = {"assets", "devices", "schedules"}
+DELETE_NAMES = {"assets"}
+CREATE_DISABLED_NAMES = {"artifacts", "schedules"}
+PATCH_DISABLED_NAMES = {"artifacts", "devices", "schedules"}
 FIELD_OPTION = typer.Option(None, "--field", help="Merge KEY=JSON_VALUE into body.data")
+PLAN_OPTION = typer.Option(..., "--plan", exists=True, dir_okay=False, help="JSON file containing a nodes array")
+CREDENTIAL_FILE_OPTION = typer.Option(..., "--credential-file")
+TARGET_ROOT_OPTION = typer.Option(None, "--target-root", exists=True, file_okay=False)
+WORKSPACE_MAP_OPTION = typer.Option(None, "--workspace-map")
 
 
 class DispatchIsolation(str, Enum):
@@ -39,6 +47,7 @@ DISPATCH_ISOLATION_OPTION = typer.Option(
     help="Dispatch isolation",
 )
 BASE_COMMIT_OPTION = typer.Option("", "--base-commit", help="Pinned base commit SHA for git_worktree dispatch")
+DEVICE_ID_OPTION = typer.Option("", "--device-id", help="Remote execution device id")
 
 
 def get_hermes_client() -> HermesClient:
@@ -130,7 +139,7 @@ def _run_call(call: Callable[[HermesClient], dict[str, Any]], *, as_json: bool) 
         raise typer.Exit(2 if status in {400, 401, 403, 404, 409, 422} else 1) from exc
 
 
-def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> typer.Typer:
+def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> typer.Typer:  # noqa: C901
     app = typer.Typer(help=f"Hermes {resource} /api/hermes/v1 commands", no_args_is_help=True)
     delete_enabled = (resource in DELETE_NAMES) if allow_delete is None else allow_delete
 
@@ -155,39 +164,46 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
     ) -> None:
         _run_call(lambda client: client.get_resource(resource, entity_id), as_json=json_output)
 
-    @app.command("create")
-    def create_item(
-        data: str = typer.Option("{}", "--data", help="JSON object for body.data"),
-        field: list[str] | None = FIELD_OPTION,
-        idempotency_key: str = typer.Option("", "--idempotency-key"),
-        json_output: bool = typer.Option(False, "--json"),
-    ) -> None:
-        parsed = _merge_fields(_load_object(data, label="--data"), field)
-        _run_call(
-            lambda client: client.create_resource(resource, parsed, idempotency_key=idempotency_key or None),
-            as_json=json_output,
-        )
+    if resource not in CREATE_DISABLED_NAMES:
 
-    @app.command("patch")
-    def patch_item(
-        entity_id: str = typer.Argument(..., metavar="ID"),
-        expected_version: int = typer.Option(..., "--expected-version"),
-        data: str = typer.Option("{}", "--data", help="JSON object for body.data"),
-        field: list[str] | None = FIELD_OPTION,
-        idempotency_key: str = typer.Option("", "--idempotency-key"),
-        json_output: bool = typer.Option(False, "--json"),
-    ) -> None:
-        parsed = _merge_fields(_load_object(data, label="--data"), field)
-        _run_call(
-            lambda client: client.patch_resource(
-                resource,
-                entity_id,
-                parsed,
-                expected_version=expected_version,
-                idempotency_key=idempotency_key or None,
-            ),
-            as_json=json_output,
-        )
+        @app.command("create")
+        def create_item(
+            data: str = typer.Option("{}", "--data", help="JSON object for body.data"),
+            field: list[str] | None = FIELD_OPTION,
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            parsed = _merge_fields(_load_object(data, label="--data"), field)
+            def call(client):
+                if resource == "agents":
+                    return client.create_agent_profile(parsed, idempotency_key=idempotency_key or None)
+                if resource == "squads":
+                    return client.create_squad(parsed, idempotency_key=idempotency_key or None)
+                return client.create_resource(resource, parsed, idempotency_key=idempotency_key or None)
+            _run_call(call, as_json=json_output)
+
+    if resource not in PATCH_DISABLED_NAMES:
+
+        @app.command("patch")
+        def patch_item(
+            entity_id: str = typer.Argument(..., metavar="ID"),
+            expected_version: int = typer.Option(..., "--expected-version"),
+            data: str = typer.Option("{}", "--data", help="JSON object for body.data"),
+            field: list[str] | None = FIELD_OPTION,
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            parsed = _merge_fields(_load_object(data, label="--data"), field)
+            _run_call(
+                lambda client: client.patch_resource(
+                    resource,
+                    entity_id,
+                    parsed,
+                    expected_version=expected_version,
+                    idempotency_key=idempotency_key or None,
+                ),
+                as_json=json_output,
+            )
 
     if delete_enabled:
 
@@ -204,6 +220,106 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 dry_run=not apply, idempotency_key=idempotency_key or None,
             ), as_json=json_output)
 
+    if resource in {"agents", "squads"}:
+
+        @app.command("catalog")
+        def catalog(json_output: bool = typer.Option(False, "--json")) -> None:
+            if resource == "agents":
+                _run_call(lambda client: client.agent_catalog(), as_json=json_output)
+                return
+            _run_call(lambda client: client.list_resource("squads", q="", status="", kind="", limit=50, cursor=""),
+                      as_json=json_output)
+
+    if resource == "devices":
+
+        @app.command("pairing")
+        def device_pairing(
+            device_id: str = typer.Argument(..., metavar="ID"),
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.device_pairing(
+                device_id,
+                expected_version=expected_version,
+                dry_run=not apply,
+                idempotency_key=idempotency_key or None,
+            ), as_json=json_output)
+
+        @app.command("pair")
+        def device_pair(
+            device_id: str = typer.Argument(..., metavar="ID"),
+            secret: str = typer.Option(..., "--secret", help="One-use pairing secret"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.device_pair(device_id, secret), as_json=json_output)
+
+        @app.command("revoke")
+        def device_revoke(
+            device_id: str = typer.Argument(..., metavar="ID"),
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.device_revoke(
+                device_id,
+                expected_version=expected_version,
+                dry_run=not apply,
+                idempotency_key=idempotency_key or None,
+            ), as_json=json_output)
+
+    if resource == "schedules":
+
+        @app.command("configure")
+        def schedule_configure(
+            schedule_id: str = typer.Argument(..., metavar="SCHEDULE_ID"),
+            data: str = typer.Option("{}", "--data", help="JSON object for schedule configuration"),
+            field: list[str] | None = FIELD_OPTION,
+            expected_version: int | None = typer.Option(None, "--expected-version", min=1),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            parsed = _merge_fields(_load_object(data, label="--data"), field)
+            _run_call(lambda client: client.schedule_configure(
+                schedule_id,
+                parsed,
+                expected_version=expected_version,
+                dry_run=not apply,
+                idempotency_key=idempotency_key or None,
+            ), as_json=json_output)
+
+        def register_schedule_action(action_name: str) -> None:
+            @app.command(action_name)
+            def named_schedule_action(
+                schedule_id: str = typer.Argument(..., metavar="SCHEDULE_ID"),
+                expected_version: int = typer.Option(..., "--expected-version", min=1),
+                apply: bool = typer.Option(False, "--apply/--dry-run"),
+                idempotency_key: str = typer.Option("", "--idempotency-key"),
+                json_output: bool = typer.Option(False, "--json"),
+            ) -> None:
+                _run_call(lambda client: client.schedule_action(
+                    schedule_id,
+                    action_name,
+                    expected_version=expected_version,
+                    dry_run=not apply,
+                    idempotency_key=idempotency_key or None,
+                ), as_json=json_output)
+
+        for schedule_action_name in ("trigger", "pause", "resume"):
+            register_schedule_action(schedule_action_name)
+
+        @app.command("history")
+        def schedule_history(
+            schedule_id: str = typer.Argument(..., metavar="SCHEDULE_ID"),
+            limit: int = typer.Option(50, "--limit", min=1),
+            cursor: str = typer.Option("", "--cursor"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.schedule_history(schedule_id, limit=limit, cursor=cursor), as_json=json_output)
+
     if resource == "tasks":
 
         @app.command("delivery")
@@ -213,10 +329,11 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
         @app.command("dispatch")
         def task_dispatch(
             task_id: str,
-            plan: Path = typer.Option(..., "--plan", exists=True, dir_okay=False, help="JSON file containing a nodes array"),
+            plan: Path = PLAN_OPTION,
             expected_version: int = typer.Option(..., "--expected-version", min=1),
             isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
             base_commit: str = BASE_COMMIT_OPTION,
+            device_id: str = DEVICE_ID_OPTION,
             apply: bool = typer.Option(False, "--apply/--dry-run"),
             idempotency_key: str = typer.Option("", "--idempotency-key"),
             json_output: bool = typer.Option(False, "--json"),
@@ -227,8 +344,36 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                     raise ValueError("--plan must contain a nodes array")
                 return client.task_dispatch(task_id, nodes, expected_version=expected_version,
                                             dry_run=not apply, idempotency_key=idempotency_key or None,
-                                            isolation=isolation.value, base_commit=base_commit)
+                                            isolation=isolation.value, base_commit=base_commit,
+                                            target_device_id=device_id)
             _run_call(call, as_json=json_output)
+
+        @app.command("agent-dispatch")
+        def task_agent_dispatch(
+            task_id: str,
+            prompt: str = typer.Option(..., "--prompt", help="Instruction prompt for the selected agent or squad leader"),
+            agent_id: str = typer.Option("", "--agent-id", help="Agent profile id to run"),
+            squad_id: str = typer.Option("", "--squad-id", help="Squad id; only the leader wakes and routes members"),
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            target_version: int = typer.Option(..., "--target-version", min=1, help="Selected agent/squad row.version"),
+            isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
+            base_commit: str = BASE_COMMIT_OPTION,
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.task_agent_dispatch(
+                task_id,
+                expected_version=expected_version,
+                target_version=target_version,
+                prompt=prompt,
+                agent_id=agent_id,
+                squad_id=squad_id,
+                dry_run=not apply,
+                idempotency_key=idempotency_key or None,
+                isolation=isolation.value,
+                base_commit=base_commit,
+            ), as_json=json_output)
 
         @app.command("review")
         def task_review(
@@ -385,7 +530,7 @@ def system_readiness(
                    "message": "Full source validation requires HERMES_SOURCE_ROOT"}}
         _print_payload(payload, as_json=json_output)
         raise typer.Exit(1)
-    result = subprocess.run([sys.executable, str(script), "--full", "--json"], check=False)
+    result = subprocess.run([sys.executable, str(script), "--full", "--json"], check=False)  # noqa: S603
     raise typer.Exit(result.returncode)
 
 
@@ -402,3 +547,47 @@ def actions(json_output: bool = typer.Option(False, "--json")) -> None:
 @system_app.command("health")
 def health(json_output: bool = typer.Option(False, "--json")) -> None:
     _run_call(lambda client: client.health(), as_json=json_output)
+
+
+@system_app.command("remote-worker")
+def remote_worker(
+    server: str = typer.Option(..., "--server"),
+    credential_file: Path = CREDENTIAL_FILE_OPTION,
+    device_id: str = typer.Option("", "--device-id"),
+    pair_secret: str = typer.Option("", "--pair-secret"),
+    workspace_id: str = typer.Option("", "--workspace-id"),
+    target_root: Path | None = TARGET_ROOT_OPTION,
+    workspace_map: list[str] | None = WORKSPACE_MAP_OPTION,
+    agentd: str = typer.Option("", "--agentd"),
+    once: bool = typer.Option(False, "--once"),
+    poll_interval: float = typer.Option(5.0, "--poll-interval"),
+) -> None:
+    maps = list(workspace_map or [])
+    if target_root is not None:
+        workspace = workspace_id or os.environ.get("HERMES_WORKSPACE", "").strip()
+        if not workspace:
+            raise typer.BadParameter("--workspace-id or HERMES_WORKSPACE is required with --target-root")
+        maps.append(f"{workspace}={target_root.resolve()}")
+    argv = [
+        sys.executable,
+        "-m",
+        "hermes_core.remote_worker",
+        "--server",
+        server,
+        "--credential-file",
+        str(credential_file),
+        "--poll-interval",
+        str(poll_interval),
+    ]
+    if device_id:
+        argv.extend(["--device-id", device_id])
+    if pair_secret:
+        argv.extend(["--pair-secret", pair_secret])
+    for item in maps:
+        argv.extend(["--workspace-map", item])
+    if agentd:
+        argv.extend(["--agentd", agentd])
+    if once:
+        argv.append("--once")
+    result = subprocess.run(argv, check=False)  # noqa: S603
+    raise typer.Exit(result.returncode)

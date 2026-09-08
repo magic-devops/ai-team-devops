@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import typer
 
-from .hermes import system_readiness
+from .hermes import remote_worker, system_readiness
 
 app = typer.Typer(help="系统全域 readiness：backend/frontend/CLI/SDK/权限/scope/脚本")
+app.command("remote-worker")(remote_worker)
 
 
 @app.command("readiness")

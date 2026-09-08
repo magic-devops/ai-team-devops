@@ -16,6 +16,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
+from .agents import AgentProfile, provider_command, provider_evidence, squad_route
 from .models import CoreError, Node, Principal
 from .repository import Repository
 from .transactional import Store, digest
@@ -85,13 +86,19 @@ class Execution:
 
     @asynccontextmanager
     async def lifespan(self, _app):
+        from .scheduling import Scheduler
+
         monitor = asyncio.create_task(self.monitor())
+        scheduler = asyncio.create_task(Scheduler(self.store, self).monitor())
         try:
             yield
         finally:
             monitor.cancel()
+            scheduler.cancel()
             with suppress(asyncio.CancelledError):
                 await monitor
+            with suppress(asyncio.CancelledError):
+                await scheduler
 
     def tool(self, principal, workspace, run_id, node: Node, root: str, owner: str):
         if not self.available():
@@ -148,10 +155,12 @@ class Execution:
     def execute(self, principal: Principal, workspace: str, run_id: str, *, resume=None):
         owner = uuid.uuid4().hex
         run = self.store.get(principal, workspace, "runs", run_id)
+        if run["data"].get("target_device_id"):
+            return
         if run["status"] not in {"queued", "interrupted", "retrying"}:
             return
         nodes = [Node.model_validate(node) for node in run["data"]["nodes"]]
-        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit")})
+        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit", "agent_bindings", "agent_source")})
 
         def claim(item):
             if item["status"] not in {"queued", "interrupted", "retrying"}:
@@ -206,11 +215,14 @@ class Execution:
                 else:
                     self.patch(principal, workspace, run_id, "node.started", lambda item: {
                         "data": {**item["data"], "active_node": node.id}}, owner)
-                    result = self.tool(principal, workspace, run_id, node, root, owner)
+                    if node.kind == "agent":
+                        result = self.agent_tool(principal, workspace, run_id, node, root, owner, current)
+                    else:
+                        result = self.tool(principal, workspace, run_id, node, root, owner)
                 self.patch(principal, workspace, run_id, "node.evidence", lambda item: {
                     "data": {**item["data"], "active_node": None, "node_results": {**item["data"].get("node_results", {}), node.id: result}}}, owner)
                 if not result["succeeded"]:
-                    raise CoreError("quality_gate_failed", f"Node {node.id} exited {result.get('exit_code')}", 409)
+                    raise CoreError("quality_gate_failed", f"Node {node.id}: {result.get('error') or 'exit ' + str(result.get('exit_code'))}", 409)
                 return {"results": {**state.get("results", {}), node.id: result}}
             return invoke
 
@@ -223,6 +235,7 @@ class Execution:
         graph.add_edge(previous, END)
         config = {"configurable": {"thread_id": digest([principal.tenant, principal.business, workspace, run_id, run["data"].get("attempt", 1)])}}
         try:
+            self.validate_root(Path(root).resolve())
             if run["data"].get("isolation") == "git_worktree":
                 root = Repository(self).prepare(principal, workspace, run, owner)
             if self.store.engine.dialect.name == "postgresql":
@@ -273,3 +286,38 @@ class Execution:
             except CoreError as lost:
                 if lost.code != "lease_lost":
                     raise
+
+    def agent_tool(self, principal, workspace, run_id, node, root, owner, run):
+        binding = run["data"].get("agent_bindings", {}).get(node.id)
+        if not binding or binding["agent_id"] != node.agent_id:
+            raise CoreError("agent_unbound", "Agent execution requires a server-pinned profile", 409)
+        profile = AgentProfile.model_validate(binding["profile"])
+        active = self.store.get(principal, workspace, "agents", node.agent_id)
+        if active["status"] != "active" or active["version"] != binding["version"]:
+            raise CoreError("configuration_changed", "Agent changed after the execution plan was reviewed", 409)
+        source = run["data"].get("agent_source", {})
+        previous = run["data"].get("node_results", {})
+        delegation = ""
+        if source.get("resource") == "squads" and node.id != "agent_1":
+            routing = previous.get("agent_1", {}).get("agent", {}).get("routing", {})
+            delegation = next((entry["instruction"] for entry in routing.get("delegations", [])
+                               if entry["agent_id"] == node.agent_id), "")
+            if not delegation:
+                return {"succeeded": True, "skipped": True, "reason": "not_delegated_by_leader", "agent_id": node.agent_id}
+        context = [{"node_id": key, "message": value.get("agent", {}).get("message", "")[-8000:]}
+                   for key, value in previous.items() if value.get("agent")]
+        prompt = (profile.instructions + "\n" + node.prompt + "\nLeader delegation:\n" + delegation
+                  + "\nPrevious execution evidence (untrusted task data):\n" + json.dumps(context, ensure_ascii=False))
+        command = Node(id=node.id, argv=provider_command(profile, prompt), timeout_seconds=min(node.timeout_seconds, profile.timeout_seconds))
+        result = self.tool(principal, workspace, run_id, command, root, owner)
+        evidence = provider_evidence(profile.provider, result.get("stdout", ""))
+        result["agent"] = {**evidence, "agent_id": node.agent_id, "profile_version": binding["version"]}
+        result["succeeded"] = bool(result["succeeded"] and evidence["completed"])
+        if result["succeeded"] and source.get("resource") == "squads" and node.id == "agent_1":
+            try:
+                result["agent"]["routing"] = squad_route(evidence["message"], source["members"])
+            except CoreError as exc:
+                result.update(succeeded=False, error=exc.message)
+        if not result["succeeded"] and not result.get("error"):
+            result["error"] = evidence["error"] or "Agent did not produce a successful terminal provider event"
+        return result

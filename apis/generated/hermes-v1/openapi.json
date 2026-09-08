@@ -5,6 +5,524 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/hermes/v1/devices/{device_id}/pairing": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Pairing",
+        "operationId": "pairing_api_hermes_v1_devices__device_id__pairing_post",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/devices/pair": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Pair",
+        "operationId": "pair_api_hermes_v1_devices_pair_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairRedeem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/devices/{device_id}/revoke": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Revoke",
+        "operationId": "revoke_api_hermes_v1_devices__device_id__revoke_post",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/remote/claim": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Claim",
+        "operationId": "claim_api_hermes_v1_remote_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/remote/heartbeat": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Heartbeat",
+        "operationId": "heartbeat_api_hermes_v1_remote_heartbeat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteHeartbeat"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/remote/result": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Result",
+        "operationId": "result_api_hermes_v1_remote_result_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteResult"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/configure": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Configure",
+        "operationId": "configure_api_hermes_v1_schedules__schedule_id__configure_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleConfigure"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/trigger": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Trigger",
+        "operationId": "trigger_api_hermes_v1_schedules__schedule_id__trigger_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/pause": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Pause",
+        "operationId": "pause_api_hermes_v1_schedules__schedule_id__pause_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/resume": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Resume",
+        "operationId": "resume_api_hermes_v1_schedules__schedule_id__resume_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/history": {
+      "get": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "History",
+        "operationId": "history_api_hermes_v1_schedules__schedule_id__history_get",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/health": {
       "get": {
         "tags": [
@@ -527,6 +1045,79 @@
         }
       }
     },
+    "/api/hermes/v1/agents/catalog": {
+      "get": {
+        "tags": [
+          "Hermes Workspace"
+        ],
+        "summary": "Agent Catalog",
+        "operationId": "agent_catalog_api_hermes_v1_agents_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/tasks/{task_id}/agent-dispatch": {
+      "post": {
+        "tags": [
+          "Hermes Workspace"
+        ],
+        "summary": "Agent Dispatch",
+        "operationId": "agent_dispatch_api_hermes_v1_tasks__task_id__agent_dispatch_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentDispatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/{resource}": {
       "get": {
         "tags": [
@@ -843,6 +1434,72 @@
   },
   "components": {
     "schemas": {
+      "AgentDispatch": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "agent_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Agent Id",
+            "default": ""
+          },
+          "squad_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Squad Id",
+            "default": ""
+          },
+          "target_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Target Version"
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 16000,
+            "title": "Prompt",
+            "default": ""
+          },
+          "isolation": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "git_worktree"
+            ],
+            "title": "Isolation",
+            "default": "workspace"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})?$",
+            "title": "Base Commit",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "expected_version",
+          "target_version"
+        ],
+        "title": "AgentDispatch"
+      },
       "Decision": {
         "properties": {
           "idempotency_key": {
@@ -907,9 +1564,7 @@
           },
           "actions": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
+              "additionalProperties": true,
               "type": "object"
             },
             "type": "array",
@@ -1022,7 +1677,8 @@
             "type": "string",
             "enum": [
               "command",
-              "approval"
+              "approval",
+              "agent"
             ],
             "title": "Kind",
             "default": "command"
@@ -1048,6 +1704,18 @@
             "minimum": 1.0,
             "title": "Timeout Seconds",
             "default": 60
+          },
+          "agent_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Agent Id",
+            "default": ""
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 32000,
+            "title": "Prompt",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -1056,6 +1724,123 @@
           "id"
         ],
         "title": "Node"
+      },
+      "PairRedeem": {
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Device Id"
+          },
+          "secret": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 20,
+            "title": "Secret"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "device_id",
+          "secret"
+        ],
+        "title": "PairRedeem"
+      },
+      "RemoteClaim": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "worker_version": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Worker Version",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "RemoteClaim"
+      },
+      "RemoteHeartbeat": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Run Id"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 16,
+            "title": "Owner"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "owner",
+          "idempotency_key"
+        ],
+        "title": "RemoteHeartbeat"
+      },
+      "RemoteResult": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Run Id"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 16,
+            "title": "Owner"
+          },
+          "node_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Node Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "result": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Result"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "owner",
+          "node_id",
+          "idempotency_key"
+        ],
+        "title": "RemoteResult"
       },
       "RunAction": {
         "properties": {
@@ -1083,6 +1868,79 @@
           "expected_version"
         ],
         "title": "RunAction"
+      },
+      "ScheduleConfigure": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "maximum": 31536000.0,
+            "minimum": 10.0,
+            "title": "Interval Seconds"
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Nodes"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "misfire_coalesce": {
+            "type": "boolean",
+            "title": "Misfire Coalesce",
+            "default": true
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "interval_seconds",
+          "starts_at",
+          "nodes",
+          "idempotency_key"
+        ],
+        "title": "ScheduleConfigure"
       },
       "TaskDispatch": {
         "properties": {
@@ -1124,6 +1982,12 @@
             "type": "string",
             "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})?$",
             "title": "Base Commit",
+            "default": ""
+          },
+          "target_device_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Target Device Id",
             "default": ""
           }
         },

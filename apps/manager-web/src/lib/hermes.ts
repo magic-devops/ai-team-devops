@@ -9,6 +9,9 @@ export type HermesResource =
 
 export type HermesMutableResource = HermesResource | "workspaces";
 export type HermesDeletableResource = "assets";
+export type HermesAutomationResource = "devices" | "schedules";
+export type HermesAutomationMutableResource = "devices" | "agents" | "squads";
+export type HermesAutomationPatchResource = "agents" | "squads";
 
 export type HermesEntity<TData extends Record<string, unknown> = Record<string, unknown>> = {
   id: string;
@@ -65,6 +68,17 @@ export type HermesRunNode = {
   timeout_seconds: number;
 };
 
+export type HermesScheduleNode =
+  | HermesRunNode
+  | {
+      id: string;
+      title: string;
+      kind: "agent";
+      agent_id: string;
+      prompt: string;
+      timeout_seconds: number;
+    };
+
 export type HermesRunData = {
   title: string;
   session_id?: string;
@@ -108,6 +122,62 @@ export type HermesApprovalDecisionBody = {
   decision: "approve" | "reject";
   idempotency_key: string;
   expected_version: number;
+};
+
+export type HermesAgentProvider = "codex" | "claude" | "opencode";
+
+export type HermesAgentProfileData = {
+  title: string;
+  provider: HermesAgentProvider;
+  model: string;
+  instructions: string;
+  timeout_seconds: number;
+  [key: string]: unknown;
+};
+
+export type HermesAgentCatalogTemplate = {
+  id: string;
+  provider: HermesAgentProvider;
+  available: boolean;
+  executable: boolean;
+  auth: "provider-managed";
+  [key: string]: unknown;
+};
+
+export type HermesSquadMember = {
+  agent_id: string;
+  role: "leader" | "implementer" | "reviewer";
+  instructions: string;
+};
+
+export type HermesSquadData = {
+  title: string;
+  members: HermesSquadMember[];
+  [key: string]: unknown;
+};
+
+export type HermesTaskAgentDispatchBody = {
+  expected_version: number;
+  target_version: number;
+  idempotency_key: string;
+  dry_run: boolean;
+  agent_id?: string;
+  squad_id?: string;
+  prompt: string;
+  isolation: "workspace" | "git_worktree";
+  base_commit: string;
+};
+
+export type HermesScheduleConfigureBody = {
+  title: string;
+  interval_seconds: number;
+  starts_at: string;
+  nodes: HermesScheduleNode[];
+  enabled: boolean;
+  misfire_coalesce: boolean;
+  idempotency_key: string;
+  expected_version?: number;
+  dry_run: boolean;
 };
 
 export class HermesUnavailableError extends Error {
@@ -179,8 +249,12 @@ export class HermesClient {
     return this.request(`/runs/${encodeURIComponent(runId)}/changes`);
   }
 
-  taskDispatch(taskId: string, body: HermesRunActionBody & { nodes: HermesRunNode[]; isolation?: "workspace" | "git_worktree"; base_commit?: string }) {
+  taskDispatch(taskId: string, body: HermesRunActionBody & { nodes: HermesRunNode[]; isolation?: "workspace" | "git_worktree"; base_commit?: string; target_device_id?: string }) {
     return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/dispatch`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  taskAgentDispatch(taskId: string, body: HermesTaskAgentDispatchBody) {
+    return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/agent-dispatch`, { method: "POST", body: JSON.stringify(body) });
   }
 
   taskReview(taskId: string, body: HermesRunActionBody & { run_id: string; run_version: number; decision: "accept" | "request_changes"; comment: string }) {
@@ -279,6 +353,72 @@ export class HermesClient {
 
   list(resource: HermesResource, query: HermesQuery = {}) {
     return this.request<HermesEntity>(`/${resource}${queryString(query)}`);
+  }
+
+  listAutomationResource(resource: HermesAutomationResource, query: HermesQuery = {}) {
+    return this.request<HermesEntity>(`/${resource}${queryString(query)}`);
+  }
+
+  getAutomationResource(resource: HermesAutomationResource, id: string) {
+    return this.request<HermesEntity>(`/${resource}/${encodeURIComponent(id)}`);
+  }
+
+  createAutomationResource<TData extends Record<string, unknown>>(resource: HermesAutomationMutableResource, body: HermesPostBody<TData>) {
+    return this.request<HermesEntity<TData>>(`/${resource}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  patchAutomationResource<TData extends Record<string, unknown>>(resource: HermesAutomationPatchResource, id: string, body: HermesPatchBody<TData>) {
+    return this.request<HermesEntity<TData>>(`/${resource}/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+  }
+
+  deviceRevoke(id: string, body: HermesRunActionBody) {
+    return this.request(`/devices/${encodeURIComponent(id)}/revoke`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  devicePairing(id: string, body: HermesRunActionBody) {
+    return this.request<{ device_id: string; pairing_secret?: string; workspace_id?: string }>(`/devices/${encodeURIComponent(id)}/pairing`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  scheduleConfigure(id: string, body: HermesScheduleConfigureBody) {
+    return this.request<HermesEntity>(`/schedules/${encodeURIComponent(id)}/configure`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  scheduleAction(id: string, action: "trigger" | "pause" | "resume", body: HermesRunActionBody) {
+    return this.request(`/schedules/${encodeURIComponent(id)}/${action}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  scheduleHistory(id: string) {
+    return this.request<HermesEntity>(`/schedules/${encodeURIComponent(id)}/history`);
+  }
+
+  agents(query: HermesQuery = {}) {
+    return this.request<HermesEntity<HermesAgentProfileData>>(`/agents${queryString(query)}`);
+  }
+
+  agentCatalog() {
+    return this.request<HermesAgentCatalogTemplate>("/agents/catalog");
+  }
+
+  squads(query: HermesQuery = {}) {
+    return this.request<HermesEntity<HermesSquadData>>(`/squads${queryString(query)}`);
   }
 
   get(resource: HermesMutableResource, id: string) {

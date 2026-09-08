@@ -16,7 +16,6 @@ import {
   Row,
   Select,
   Space,
-  Statistic,
   Table,
   Tabs,
   Tag,
@@ -25,7 +24,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
-import { Activity, Database, Download, Edit3, KeyRound, Play, Plus, RefreshCw, ShieldCheck, Square, Workflow } from "lucide-react";
+import { Activity, Database, Download, Edit3, KeyRound, Play, Plus, RefreshCw, Settings, ShieldCheck, Square, Workflow } from "lucide-react";
+import { AutomationPanel } from "./AutomationPanel";
 import { TaskDeliveryPanel } from "./TaskDeliveryPanel";
 import {
   DEFAULT_HERMES_BASE_URL,
@@ -63,6 +63,7 @@ type QueryState = {
   limit: number;
 };
 
+type WorkspaceTab = HermesResource | "automation";
 type DrawerMode = "create" | "edit";
 
 type BusinessFormValues = {
@@ -189,6 +190,10 @@ function EntityTable({
       loading={loading}
       columns={columns}
       dataSource={rows}
+      onRow={(row) => ({
+        className: "cursor-pointer",
+        onClick: () => onSelect(row),
+      })}
       pagination={{ pageSize: 10, showSizeChanger: false }}
       scroll={{ x: 760 }}
       locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("workspace.emptyResource")} /> }}
@@ -295,11 +300,13 @@ export function Workspace() {
   const [contextGeneration, setContextGeneration] = useState(0);
   const [query, setQuery] = useState<QueryState>({ q: "", limit: 20 });
   const [activeResource, setActiveResource] = useState<HermesResource>("runs");
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<WorkspaceTab>("runs");
   const [selected, setSelected] = useState<HermesEntity | undefined>();
   const [pendingRun, setPendingRun] = useState<HermesEntity>();
   const [actionResult, setActionResult] = useState<{ title: string; response: HermesApiResponse<unknown>; diagnostics?: boolean } | undefined>();
   const [businessDrawer, setBusinessDrawer] = useState<{ mode: DrawerMode; resource: HermesResource; entity?: HermesEntity } | undefined>();
   const [workspaceDrawer, setWorkspaceDrawer] = useState(false);
+  const [connectionSettingsOpen, setConnectionSettingsOpen] = useState(true);
   const [businessForm] = Form.useForm<BusinessFormValues>();
   const [workspaceForm] = Form.useForm<{ name: string; root: string }>();
   const client = useHermes(connection);
@@ -325,7 +332,7 @@ export function Workspace() {
   const listQuery = useQuery({
     queryKey: ["hermes", connection.baseUrl, tokenGeneration, connection.workspaceId, activeResource, query],
     queryFn: () => client.list(activeResource, query),
-    enabled: workspaceReady,
+    enabled: workspaceReady && activeWorkspaceTab !== "automation",
     refetchInterval: workspaceReady && activeResource === "runs" ? 3000 : false,
     retry: false,
   });
@@ -340,7 +347,7 @@ export function Workspace() {
   const approvalsQuery = useQuery({
     queryKey: ["hermes-approvals", connection.baseUrl, tokenGeneration, connection.workspaceId],
     queryFn: () => client.approvals({ limit: 20 }),
-    enabled: workspaceReady,
+    enabled: workspaceReady && activeWorkspaceTab === "runs",
     refetchInterval: workspaceReady ? 5000 : false,
     retry: false,
   });
@@ -355,7 +362,7 @@ export function Workspace() {
   const selectedQuery = useQuery({
     queryKey: ["hermes-detail", connection.baseUrl, tokenGeneration, connection.workspaceId, activeResource, selected?.id],
     queryFn: () => client.get(activeResource, selected?.id || ""),
-    enabled: workspaceReady && Boolean(selected?.id),
+    enabled: workspaceReady && activeWorkspaceTab !== "automation" && Boolean(selected?.id),
     refetchInterval: workspaceReady && activeResource === "runs" && selected && !["completed", "failed", "cancelled"].includes(selected.status) ? 2000 : false,
     retry: false,
   });
@@ -368,7 +375,7 @@ export function Workspace() {
   const eventsQuery = useQuery({
     queryKey: ["hermes-run-events", connection.baseUrl, tokenGeneration, connection.workspaceId, selected?.id],
     queryFn: () => client.runEvents(selected?.id || "", 0),
-    enabled: workspaceReady && activeResource === "runs" && Boolean(selected?.id),
+    enabled: workspaceReady && activeWorkspaceTab === "runs" && activeResource === "runs" && Boolean(selected?.id),
     refetchInterval: workspaceReady && activeResource === "runs" && selected && !["completed", "failed", "cancelled"].includes(selected.status) ? 2000 : false,
     retry: false,
   });
@@ -508,47 +515,21 @@ export function Workspace() {
   const statusOptions = RESOURCE_STATUSES[activeResource].map((status) => ({ value: status, label: statusLabel(t, status) }));
   const connectionNotice = !connected ? t("workspace.connectHint") : connected && !connection.workspaceId ? t("workspace.workspaceRequired") : "";
 
+  useEffect(() => {
+    if (!connected) setConnectionSettingsOpen(true);
+    else if (workspaceReady) setConnectionSettingsOpen(false);
+  }, [connected, workspaceReady]);
+
   return (
     <section className="space-y-4">
       <Card size="small">
-        <Row gutter={[12, 12]} align="bottom">
-          <Col xs={24} lg={7}>
+        <Row gutter={[12, 8]} align="middle">
+          <Col xs={24} lg={8}>
             <Typography.Title level={3} className="!mb-1">
               {t("workspace.title")}
             </Typography.Title>
           </Col>
-          <Col xs={24} sm={12} lg={5}>
-            <Input
-              aria-label={t("workspace.baseUrl")}
-              prefix={<Database className="h-4 w-4" />}
-              value={connection.baseUrl}
-              onChange={(event) => {
-                setContextGeneration((value) => value + 1);
-                setSelected(undefined);
-                setActionResult(undefined);
-                setWorkspaceDrawer(false);
-                setConnection((prev) => ({ ...prev, baseUrl: event.target.value, workspaceId: "" }));
-              }}
-              placeholder={DEFAULT_HERMES_BASE_URL}
-            />
-          </Col>
-          <Col xs={24} sm={12} lg={5}>
-            <Input.Password
-              aria-label={t("workspace.token")}
-              prefix={<KeyRound className="h-4 w-4" />}
-              value={connection.token}
-              onChange={(event) => {
-                setContextGeneration((value) => value + 1);
-                setTokenGeneration((value) => value + 1);
-                setSelected(undefined);
-                setActionResult(undefined);
-                setWorkspaceDrawer(false);
-                setConnection((prev) => ({ ...prev, token: event.target.value, workspaceId: "" }));
-              }}
-              placeholder={t("workspace.tokenPlaceholder")}
-            />
-          </Col>
-          <Col xs={24} sm={16} lg={5}>
+          <Col xs={24} lg={11}>
             <div className="flex gap-2">
               <Select
                 className="min-w-0 flex-1"
@@ -575,29 +556,91 @@ export function Workspace() {
               />
             </div>
           </Col>
-          <Col xs={24} sm={8} lg={2}>
-            <Button block icon={<RefreshCw className="h-4 w-4" />} onClick={() => queryClient.invalidateQueries({ queryKey: ["hermes"] })}>
+          <Col xs={24} lg={5}>
+            <Space className="w-full justify-end" wrap>
+              <Tooltip title={t("workspace.connectionSettings")}>
+                <Button
+                  aria-label={t("workspace.connectionSettings")}
+                  icon={<Settings className="h-4 w-4" />}
+                  onClick={() => setConnectionSettingsOpen((open) => !open)}
+                />
+              </Tooltip>
+              <Button icon={<RefreshCw className="h-4 w-4" />} onClick={() => queryClient.invalidateQueries({ queryKey: ["hermes"] })}>
               {t("common.refresh")}
-            </Button>
+              </Button>
+            </Space>
           </Col>
         </Row>
+        {connectionSettingsOpen ? (
+          <Collapse
+            className="mt-3"
+            size="small"
+            activeKey={["connection"]}
+            onChange={(keys) => setConnectionSettingsOpen(Array.isArray(keys) ? keys.includes("connection") : keys === "connection")}
+            items={[{
+              key: "connection",
+              label: t("workspace.connectionSettings"),
+              children: (
+                <Row gutter={[12, 8]}>
+                  <Col xs={24} md={12}>
+                    <Input
+                      aria-label={t("workspace.baseUrl")}
+                      prefix={<Database className="h-4 w-4" />}
+                      value={connection.baseUrl}
+                      onChange={(event) => {
+                        setContextGeneration((value) => value + 1);
+                        setSelected(undefined);
+                        setActionResult(undefined);
+                        setWorkspaceDrawer(false);
+                        setConnection((prev) => ({ ...prev, baseUrl: event.target.value, workspaceId: "" }));
+                      }}
+                      placeholder={DEFAULT_HERMES_BASE_URL}
+                    />
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <Input.Password
+                      aria-label={t("workspace.token")}
+                      prefix={<KeyRound className="h-4 w-4" />}
+                      value={connection.token}
+                      onChange={(event) => {
+                        setContextGeneration((value) => value + 1);
+                        setTokenGeneration((value) => value + 1);
+                        setSelected(undefined);
+                        setActionResult(undefined);
+                        setWorkspaceDrawer(false);
+                        setConnection((prev) => ({ ...prev, token: event.target.value, workspaceId: "" }));
+                      }}
+                      placeholder={t("workspace.tokenPlaceholder")}
+                    />
+                  </Col>
+                </Row>
+              ),
+            }]}
+          />
+        ) : null}
       </Card>
 
       <ErrorAlert error={listQuery.error || workspacesQuery.error || readinessQuery.error || approvalsQuery.error || createWorkspace.error || saveBusinessEntity.error || runAction.error || approvalDecision.error || runtimeDiagnostics.error} />
 
-      <div className="grid gap-3 border-b py-3 sm:grid-cols-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b py-2 text-sm">
+        <div className="flex min-w-0 max-w-full items-center gap-2">
           <Typography.Text type="secondary">{t("workspace.summary.scope")}</Typography.Text>
-          <div className="mt-1 flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <Typography.Text ellipsis={{ tooltip: connection.workspaceId }}>
               {String(workspaceRows.find((item) => item.id === connection.workspaceId)?.data.name || t("workspace.noWorkspace"))}
             </Typography.Text>
           </div>
         </div>
-        <Statistic styles={{ content: { fontSize: 16 } }} title={t("workspace.summary.items")} value={rows.length} prefix={<Workflow className="h-4 w-4" />} />
-        <div className="flex items-center justify-between gap-2">
-          <Statistic styles={{ content: { fontSize: 16 } }} title={t("workspace.summary.readiness")} value={readinessQuery.data ? readinessQuery.data.ok ? t("workspace.ready") : t("workspace.diagnostics.degraded") : t("workspace.unknown")} prefix={<Activity className="h-4 w-4" />} />
+        <div className="flex items-center gap-1">
+          <Workflow className="h-4 w-4 shrink-0" />
+          <Typography.Text type="secondary">{t("workspace.summary.items")}</Typography.Text>
+          <Typography.Text strong>{rows.length}</Typography.Text>
+        </div>
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 shrink-0" />
+          <Typography.Text type="secondary">{t("workspace.summary.readiness")}</Typography.Text>
+          <Typography.Text strong>{readinessQuery.data ? readinessQuery.data.ok ? t("workspace.ready") : t("workspace.diagnostics.degraded") : t("workspace.unknown")}</Typography.Text>
           <Tooltip title={t("workspace.diagnostics.title")}>
             <Button aria-label={t("workspace.diagnostics.title")} icon={<Activity className="h-4 w-4" />} disabled={!connected || !permissions.has("read")} loading={runtimeDiagnostics.isPending} onClick={() => runtimeDiagnostics.mutate()} />
           </Tooltip>
@@ -605,8 +648,17 @@ export function Workspace() {
       </div>
 
       <Tabs
-        activeKey={activeResource}
+        activeKey={activeWorkspaceTab}
         onChange={(key) => {
+          const nextTab = key as WorkspaceTab;
+          setActiveWorkspaceTab(nextTab);
+          if (nextTab === "automation") {
+            setSelected(undefined);
+            setActionResult(undefined);
+            setBusinessDrawer(undefined);
+            setWorkspaceDrawer(false);
+            return;
+          }
           const resource = key as HermesResource;
           setContextGeneration((generation) => generation + 1);
           setActiveResource(resource);
@@ -616,9 +668,13 @@ export function Workspace() {
           setWorkspaceDrawer(false);
           setQuery((prev) => ({ ...prev, status: undefined }));
         }}
-        items={RESOURCE_TABS.map((resource) => ({ key: resource, label: t(`workspace.resources.${resource}`) }))}
+        items={[...RESOURCE_TABS.map((resource) => ({ key: resource, label: t(`workspace.resources.${resource}`) })), { key: "automation", label: t("workspace.automation.tab") }]}
       />
 
+      {activeWorkspaceTab === "automation" ? (
+        <AutomationPanel client={client} workspaceReady={workspaceReady} connected={connected} permissions={permissions} scopeKey={currentScopeSignature} onOpenRun={(run) => { setSelected(run); setPendingRun(run); setActiveResource("runs"); setActiveWorkspaceTab("runs"); queryClient.invalidateQueries({ queryKey: ["hermes"] }); }} />
+      ) : (
+      <>
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={15}>
           <Card
@@ -650,7 +706,7 @@ export function Workspace() {
             </div>
             {connectionNotice ? <Alert className="mb-3" type={connected ? "warning" : "info"} showIcon title={connectionNotice} /> : null}
             {workspaceReady && !canWrite ? <Alert className="mb-3" type="warning" showIcon title={t("workspace.permissionReadOnly")} /> : null}
-            <EntityTable rows={rows} loading={listQuery.isFetching} onSelect={setSelected} resource={activeResource} />
+            <EntityTable rows={rows} loading={listQuery.isLoading} onSelect={setSelected} resource={activeResource} />
           </Card>
         </Col>
         <Col xs={24} xl={9}>
@@ -689,7 +745,7 @@ export function Workspace() {
                   {selected.data?.description !== undefined ? <Descriptions.Item label={t("workspace.fields.description")}>{String(selected.data.description || "-")}</Descriptions.Item> : null}
                   {activeResource === "assets" && selected.data?.content !== undefined ? <Descriptions.Item label={t("workspace.assetContent")}>{String(selected.data.content || "-")}</Descriptions.Item> : null}
                 </Descriptions>
-                {activeResource === "tasks" && <TaskDeliveryPanel key={`${currentScopeSignature}:${selected.id}`} scopeKey={currentScopeSignature} client={client} task={selected} permissions={permissions} onOpenRun={(run) => { setPendingRun(run); setActiveResource("runs"); }} />}
+                {activeResource === "tasks" && <TaskDeliveryPanel key={`${currentScopeSignature}:${selected.id}`} scopeKey={currentScopeSignature} client={client} task={selected} permissions={permissions} onOpenRun={(run) => { setSelected(run); setPendingRun(run); setActiveResource("runs"); setActiveWorkspaceTab("runs"); queryClient.invalidateQueries({ queryKey: ["hermes"] }); }} />}
                 {activeResource === "runs" ? (
                   <div className="mt-4">
                     <Typography.Text type="secondary">{t("workspace.recordedOutput")}</Typography.Text>
@@ -741,6 +797,8 @@ export function Workspace() {
           />
         </Card>
       ) : null}
+      </>
+      )}
 
       <Drawer
         title={t(`workspace.drawer.${businessDrawer?.mode || "create"}`, { resource: t(`workspace.resources.${businessDrawer?.resource || activeResource}`) })}

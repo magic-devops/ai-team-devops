@@ -147,6 +147,7 @@ mkdir -p "${CORE_RUNTIME}"
     --hidden-import aiosqlite \
     --hidden-import hermes_core.runtime \
     --hidden-import hermes_core.diagnostics \
+    --hidden-import hermes_core.remote_worker \
     --distpath "${PYI_DIST}" \
     --workpath "${PYI_WORK}" \
     --specpath "${BUILD_ROOT}" \

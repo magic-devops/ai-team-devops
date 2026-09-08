@@ -4,6 +4,8 @@ enum Resource {
   runs('runs'),
   assets('assets'),
   devices('devices'),
+  agents('agents'),
+  squads('squads'),
   tasks('tasks'),
   requirements('requirements'),
   schedules('schedules');

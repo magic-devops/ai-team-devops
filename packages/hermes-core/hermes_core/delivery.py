@@ -4,7 +4,9 @@ import uuid
 
 from sqlalchemy import insert, update
 
+from .agents import Agents
 from .models import CoreError, Principal, TaskDispatch, TaskReview
+from .remote import is_paired_device
 from .transactional import Store, digest, now
 
 
@@ -64,13 +66,14 @@ class Delivery:
             )
         )
 
-    def dispatch(self, principal: Principal, workspace: str, task_id: str, body: TaskDispatch, trace: str):
+    def dispatch(self, principal: Principal, workspace: str, task_id: str, body: TaskDispatch, trace: str, *, agent_source=None):
         if len(body.model_dump_json().encode("utf-8")) > 1_048_576:
             raise CoreError("payload_too_large", "Execution plan must not exceed 1 MiB", 422)
-        request = body.model_dump()
+        request = agent_source["request"] if agent_source else body.model_dump()
+        operation = "task.agent-dispatch:" if agent_source else "task.dispatch:"
         with self.store.transaction() as conn:
             receipt_id, cached = self.store._receipt(
-                conn, principal, workspace, "task.dispatch:" + task_id, body.idempotency_key, request
+                conn, principal, workspace, operation + task_id, body.idempotency_key, request
             )
             if cached is not None and not body.dry_run:
                 return cached
@@ -90,11 +93,26 @@ class Delivery:
             if len({node.id for node in body.nodes}) != len(body.nodes):
                 raise CoreError("invalid_graph", "Node IDs must be unique", 422)
             commands = [node for node in body.nodes if node.kind == "command"]
-            if not commands or any(
+            if not any(node.kind in {"command", "agent"} for node in body.nodes) or any(
                 not node.argv or any("\x00" in arg for arg in node.argv) for node in commands
             ):
                 raise CoreError("invalid_command", "Delivery requires at least one valid command node", 422)
+            bindings = Agents(self.store).bindings(conn, principal, workspace, body.nodes)
+            if bindings and not agent_source:
+                raise CoreError("agent_dispatch_required", "Use version-pinned Agent or Squad dispatch", 422)
+            if agent_source:
+                target = self.store._get(conn, principal, workspace, agent_source["resource"], agent_source["id"])
+                if target["version"] != agent_source["version"] or target["status"] != "active":
+                    raise CoreError("configuration_changed", "Agent configuration changed during dispatch", 409)
+                versions = {member["agent_id"]: member["agent_version"] for member in agent_source["members"]}
+                if any(binding["version"] != versions[binding["agent_id"]] for binding in bindings.values()):
+                    raise CoreError("configuration_changed", "Squad member changed during dispatch", 409)
             current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
+            if body.target_device_id:
+                if not is_paired_device(self.store, principal, workspace, body.target_device_id, conn=conn):
+                    raise CoreError("device_unpaired", "Pair an active device before dispatch", 409)
+                if body.isolation != "workspace" or any(node.kind != "command" for node in body.nodes):
+                    raise CoreError("remote_unsupported", "Remote delivery currently requires workspace command nodes", 422)
             if body.isolation == "git_worktree":
                 self.repository.validate_base(current_workspace["data"]["root"], body.base_commit)
             elif body.base_commit:
@@ -116,6 +134,12 @@ class Delivery:
                 "isolation": body.isolation,
                 "base_commit": body.base_commit,
             }
+            if bindings:
+                run_data["agent_bindings"] = bindings
+            if body.target_device_id:
+                run_data["target_device_id"] = body.target_device_id
+            if agent_source:
+                run_data["agent_source"] = {key: value for key, value in agent_source.items() if key != "request"}
             if body.dry_run:
                 return {"id": task_id, "task": task, "plan": run_data, "dry_run": True}
             run = dict(

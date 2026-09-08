@@ -22,14 +22,14 @@
 | --- | --- | --- |
 | 任务分派与交付审查 | 本轮实现事务派发、版本化验收、退回修改、审计；Web/Flutter/CLI/SDK 同步 | 不等于自然语言自动完成任意任务 |
 | 执行、超时、重试、审批 | 复用 LangGraph 命令节点、审批检查点、Go 执行器结果 | 任意拓扑并行 DAG、补偿动作和外部 Agent 中断未全覆盖 |
-| Agent 目录与运行适配 | 保存负责人标签及派发快照 | 标签不是运行时；CLI/ACP 适配器、认证探测、预算与能力协商未完成 |
-| 人与 Agent Squads | 原生侧未实现执行级团队路由 | 需要成员模型、路由、委派证据和权限验证 |
+| Agent 目录与运行适配 | Codex/Claude/OpenCode 显式 CLI 适配器、版本化配置、任务派发、终止事件与 usage 证据；Codex 已真实调用 | 其余 Multica runtime、ACP、认证探测、预算和能力协商未全覆盖；安装状态不表示认证成功 |
+| 人与 Agent Squads | 固定一个 Leader、版本化成员快照、Leader JSON 委派、未选择成员跳过；真实 Codex Leader/成员调用已验证 | 非任意动态并行团队；人类成员、通知与多轮团队会话未交付；角色不是权限 |
 | 项目与仓库上下文 | 固定提交、每运行独立 detached/locked worktree、代码差异快照、Web/Flutter 审查、CLI/SDK 已贯通 | 仓库缓存、上下文索引、分支合并、托管平台 PR 和工作树清理控制面尚未交付 |
-| Daemon 与远程执行 | 本地 Core/agentd 启停、诊断、受控命令执行已有实现 | 设备登记不是配对；主动连接、远程领取、撤销和跨设备恢复未验收 |
-| Autopilot 与周期调度 | 有调度资源登记 | 原生周期执行、事件唤醒和可靠补偿未完成 |
+| Daemon 与远程执行 | 一次性配对邀请、独立设备凭据、主动轮询、命令领取、心跳、结果回传、撤销和过期租约拒绝；真实进程回归 | 当前 command-only workspace 执行；远程 Agent/worktree/审批、多主机网络、断网结果重传与端侧签名安装未全覆盖 |
+| Autopilot 与周期调度 | 事务化间隔调度、自动到期执行、错过合并、重叠抑制、暂停/恢复、运行历史与固定 Agent 快照 | Cron/时区、多触发器、Webhook、自动创建任务和补偿工作流未交付 |
 | 独立 Agent Chat | 会话资源可管理 | 多提供方流式对话、工具消息、中断未闭环 |
 | 技能共享与安装 | 资产可登记、分类和编辑 | 原生安装、依赖解析、工具授权和卸载影响未全覆盖 |
-| 成本与运行质量 | 真实节点日志和退出码可审计 | Token/费用需要提供方真实 usage，不可估造 |
+| 成本与运行质量 | 真实节点日志、退出码、提供方终止事件及原始 usage 可审计 | 未统一跨提供方计费、预算和费用聚合；缺失费用不得估造 |
 | 收件箱与审查 | 运行审批队列已有实现，本轮增加任务交付审查 | 通知订阅、团队分配、批量收件箱未完成 |
 | Git 托管与消息渠道 | 原生闭环未接入 | GitHub/GitLab/Gitea/Forgejo、Slack/Lark 等需要鉴权、Webhook 幂等和真实环境验收 |
 | 权限与隔离 | read/write/execute/approve/export/config、身份作用域、版本、幂等键 | 团队成员管理与远程设备权限仍需端到端验收 |
@@ -83,8 +83,46 @@ TaskDispatch/TaskReview 契约。readiness 加入三个 task v1 子命令的 hel
 - 失败运行不能提交“验收通过”；错误保留原因，成功刷新版本。
 - 负责人标签、设备登记、资产登记不能分别显示为 Agent 已执行、设备已配对、插件已安装。
 
-完整对齐仍需外部 Agent、Git 托管集成、设备配对/租约、周期调度、Squads/收件箱、
+完整对齐仍需扩展 Agent runtime、Git 托管集成、远程 Agent、Cron/Webhook、团队收件箱、
 技能安装、成本和渠道集成。每项同时交付协议、权限、UI、CLI、失败恢复和真实执行证据。
+
+## 自动化交付边界
+
+本轮行为参考官方 [Squads](https://multica.ai/docs/squads)、
+[Autopilots](https://multica.ai/docs/autopilots)、
+[Daemon runtimes](https://multica.ai/docs/daemon-runtimes)、
+[Security model](https://multica.ai/docs/security-model)。独立实现，不复制源码。
+
+- Agent 配置与 Squad 成员在派发时固定版本；运行前若配置变更则拒绝执行，不悄悄改用新配置。
+- Codex/Claude/OpenCode 使用各自 CLI 的非交互协议与认证；不追加跳过权限的危险参数。
+- `exit_code=0` 不是 Agent 成功的充分条件，还需要提供方的成功终止事件。
+- Squad 只先唤醒 Leader，由其选择已登记成员；没有被选择的成员不执行。
+  所有执行成功后任务仍进入人工审查，不能把运行完成等同交付验收。
+- 周期调度需要 config + execute 授权，保存服务器取得的身份和工作空间配置快照。
+  工作空间变更时要求重新配置。周期运行不绕过审批节点或质量检查。
+- 远程设备凭据不进入资源 JSON 或审计事件；一次性邀请过期、兑换或撤销后不能继续使用。
+  Worker 只接受显式工作空间目录映射，服务端拒绝过期租约、错误设备与旧配对凭据。
+- Worker 使用当前 OS 用户权限运行命令；目录映射、worktree 和 Agent CLI 权限模式不是 OS 沙箱。
+  远程公网入口需要受控 HTTPS 部署，不能直接暴露独立桌面 Core。
+
+```sh
+sop agent catalog --json
+sop squad catalog --json
+sop task v1 agent-dispatch TASK_ID --agent-id AGENT_ID --target-version 1 --expected-version 1 --prompt '核对验收条件并执行测试' --dry-run --json
+sop schedule configure SCHEDULE_ID --data "$(cat schedule.json)" --dry-run --json
+sop schedule history SCHEDULE_ID --json
+sop device pairing DEVICE_ID --expected-version 1 --dry-run --json
+sop system remote-worker --help
+```
+
+真实环境参数使用 `HERMES_URL`、`HERMES_TOKEN_FILE`、`HERMES_WORKSPACE`。
+命令预览、结构测试、真实提供方执行、五平台签名发布是不同证据等级，不混用。
+
+端侧运行包提供 `hermes-core remote-worker`，不要求目标机器预装 Python。
+通过 `--pair-secret-stdin` 兑换短期邀请，凭据仅写入新建的受限文件；
+Worker 将凭据绑定到配对服务地址，不跟随 HTTP 重定向发送凭据。
+执行使用 `--workspace-map WORKSPACE_ID=/absolute/path` 和随包的 `--agentd`。
+`--once` 最多领取一个节点；长期轮询由部署的进程管理器管理，撤销后退出并返回错误。
 
 ## 隔离代码交付
 

@@ -15,6 +15,15 @@ from .api import create_app
 from .runtime import CoreAlreadyRunning, InstanceLock
 
 
+def _configure_server_socket(sock: socket.socket) -> None:
+    if os.name == "nt":
+        exclusive_addr = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+        if exclusive_addr is not None:
+            sock.setsockopt(socket.SOL_SOCKET, exclusive_addr, 1)
+        return
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+
 def ensure_token_file(path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
@@ -41,6 +50,10 @@ def ensure_token_file(path: Path) -> str:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["remote-worker"]:
+        from .remote_worker import main as worker_main
+
+        raise SystemExit(worker_main(sys.argv[2:]))
     parser = argparse.ArgumentParser(prog="hermes-core")
     parser.add_argument("--data-dir", required=True)
     parser.add_argument("--token-file", required=True)
@@ -64,6 +77,7 @@ def main() -> None:
         with InstanceLock(data_dir), socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             token = ensure_token_file(token_file)
             app = create_app(data_dir, token, database_url=os.getenv("HERMES_DATABASE_URL", ""), agentd=args.agentd)
+            _configure_server_socket(sock)
             sock.bind((args.host, args.port))
             sock.listen(128)
             port = sock.getsockname()[1]

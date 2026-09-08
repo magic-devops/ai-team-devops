@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
+from .agents import AgentDispatch, Agents
 from .delivery import Delivery
 from .diagnostics import runtime_checks
 from .execution import Execution
@@ -33,7 +34,9 @@ from .models import (
     TaskReview,
     payload,
 )
+from .remote import _public_device, create_remote_router, is_paired_device
 from .repository import Repository
+from .scheduling import create_scheduling_router
 from .transactional import Store, digest
 
 
@@ -54,7 +57,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
     router = APIRouter(prefix=API_BASE, tags=["Hermes Workspace"])
     repository = Repository(execution)
     delivery = Delivery(store, repository)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence"}
+    agents = Agents(store)
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -72,7 +76,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         return workspace
 
     def response(principal, workspace, items, **extra):
-        return payload(principal, workspace, items, trace=uuid.uuid4().hex, **extra)
+        public = [_public_device(item) if item.get("kind") == "devices" else item for item in items]
+        return payload(principal, workspace, public, trace=uuid.uuid4().hex, **extra)
 
     def clean_title(resource: str, data: dict):
         title = data.get("title")
@@ -211,7 +216,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         def transition(item):
             if item["status"] not in allowed[action]:
                 raise CoreError("invalid_transition", f"Cannot {action} a {item['status']} run", 409)
-            if action in {"start", "retry"} and not execution.available():
+            if action in {"start", "retry"} and not item["data"].get("target_device_id") and not execution.available():
                 raise CoreError("executor_unavailable", "Configure the local execution agent first", 503)
             if action == "retry":
                 return {"status": target, "data": {**item["data"], "attempt": item["data"].get("attempt", 1) + 1}}
@@ -242,7 +247,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         approval = store.get(principal, workspace, "approvals", approval_id)
         run_id = approval["data"]["run_id"]
         run = store.get(principal, workspace, "runs", run_id)
-        definition = {key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit")}
+        definition = {key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit", "agent_bindings", "agent_source")}
         if digest(definition) != approval["data"]["definition_hash"]:
             raise CoreError("approval_stale", "Run definition changed after approval was requested", 409)
         if approval["data"].get("attempt", 1) != run["data"].get("attempt", 1):
@@ -332,6 +337,22 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         result = delivery.review(principal, workspace, task_id, body, trace)
         return payload(principal, workspace, [result], trace=trace, summary={"dry_run": body.dry_run})
 
+    @router.get("/agents/catalog", response_model=Envelope)
+    def agent_catalog(request: Request, principal: Principal = Depends(identity)):
+        require(principal, "read")
+        return response(principal, workspace_id(request, principal), agents.catalog(),
+                        cli={"command": "sop agent catalog --json"})
+
+    @router.post("/tasks/{task_id}/agent-dispatch", response_model=Envelope)
+    def agent_dispatch(task_id: str, body: AgentDispatch, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "write")
+        require(principal, "execute")
+        workspace = workspace_id(request, principal)
+        trace = uuid.uuid4().hex
+        result = agents.dispatch(principal, workspace, task_id, body, trace, delivery)
+        return payload(principal, workspace, [result], trace=trace, summary={"dry_run": body.dry_run},
+                       cli={"command": f"sop task v1 delivery {task_id} --json"})
+
     @router.get("/{resource}", response_model=Envelope)
     def list_resources(resource: str, request: Request, q: str = "", status: str = "", kind: str = "",
                        limit: int = Query(100, ge=1, le=500), cursor: str = "", principal: Principal = Depends(identity)):
@@ -347,6 +368,12 @@ def create_router(store: Store, execution: Execution, identity: Callable):
     def validate(resource, data, principal, workspace):
         if len(json.dumps(data)) > 1024 * 1024:
             raise CoreError("payload_too_large", "Resource exceeds 1 MiB", 413)
+        if resource in {"agents", "squads"}:
+            return agents.validate(principal, workspace, resource, data)
+        if resource == "devices":
+            if set(data) - {"title", "name", "platform"}:
+                raise CoreError("server_owned_fields", "Device credentials and pairing are server-managed", 422)
+            clean_title(resource, data)
         if resource in RESOURCE_STATUS_OPTIONS:
             validate_data_fields(resource, data)
             clean_title(resource, data)
@@ -374,7 +401,14 @@ def create_router(store: Store, execution: Execution, identity: Callable):
             for node in nodes:
                 if node.kind == "command" and (not node.argv or any("\x00" in arg for arg in node.argv)):
                     raise CoreError("invalid_command", "Command nodes require a valid argument list")
+                if node.kind == "agent":
+                    raise CoreError("task_dispatch_required", "Dispatch agents from a task with acceptance criteria", 422)
             data["nodes"] = [node.model_dump() for node in nodes]
+            if data.get("target_device_id"):
+                if not is_paired_device(store, principal, workspace, str(data["target_device_id"])):
+                    raise CoreError("device_unpaired", "Pair an active device before remote execution", 409)
+                if any(node.kind != "command" for node in nodes):
+                    raise CoreError("remote_unsupported", "Remote runs require command nodes", 422)
             current_workspace = store.get(principal, "", "workspaces", workspace)
             data["workspace_root"] = current_workspace["data"]["root"]
             data["workspace_version"] = current_workspace["version"]
@@ -385,8 +419,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
 
     @router.post("/{resource}", status_code=201, response_model=Envelope)
     def create_resource(resource: str, body: Mutation, request: Request, principal: Principal = Depends(identity)):
-        require(principal, "config" if resource in {"devices", "workspaces"} else "write")
-        if resource not in RESOURCES or resource in {"approvals", "artifacts"}:
+        require(principal, "config" if resource in {"devices", "workspaces", "agents", "squads"} else "write")
+        if resource not in RESOURCES or resource in {"approvals", "artifacts", "schedules"}:
             raise CoreError("unknown_resource", "Resource cannot be created directly", 404)
         workspace = "" if resource == "workspaces" else workspace_id(request, principal)
         if resource == "runs" and run_internal_fields.intersection(body.data):
@@ -399,6 +433,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         status = "planned" if resource == "runs" else "active"
         if resource == "devices":
             status = "unpaired"
+        if resource in {"agents", "squads"}:
+            status = data.pop("status", "active")
         original_request = body.model_dump()
         if resource in RESOURCE_STATUS_OPTIONS and "status" in data:
             status = str(data.pop("status"))
@@ -418,8 +454,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
 
     @router.patch("/{resource}/{entity_id}", response_model=Envelope)
     def patch(resource: str, entity_id: str, body: Mutation, request: Request, principal: Principal = Depends(identity)):
-        require(principal, "config" if resource in {"devices", "workspaces"} else "write")
-        if resource not in RESOURCES or resource in {"approvals", "artifacts", "devices"}:
+        require(principal, "config" if resource in {"devices", "workspaces", "agents", "squads"} else "write")
+        if resource not in RESOURCES or resource in {"approvals", "artifacts", "devices", "schedules"}:
             raise CoreError("immutable_resource", "Use the dedicated resource action", 409)
         if body.expected_version is None:
             raise CoreError("version_required", "expected_version is required")
@@ -461,7 +497,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
     @router.delete("/{resource}/{entity_id}", response_model=Envelope)
     def remove(resource: str, entity_id: str, body: RunAction, request: Request, principal: Principal = Depends(identity)):
         require(principal, "config" if resource == "devices" else "write")
-        if resource not in {"assets", "devices", "schedules"}:
+        if resource not in {"assets"}:
             raise CoreError("unsupported_delete", "Resource cannot be deleted", 409)
         workspace = workspace_id(request, principal)
         if body.dry_run:
@@ -474,7 +510,11 @@ def create_router(store: Store, execution: Execution, identity: Callable):
             expected=body.expected_version, transform=lambda item: {"status": "revoked" if resource == "devices" else "archived"})
         return response(principal, workspace, [row])
 
-    return router
+    combined = APIRouter()
+    combined.include_router(create_remote_router(store, identity))
+    combined.include_router(create_scheduling_router(store, execution, identity))
+    combined.include_router(router)
+    return combined
 
 
 def install_errors(app):

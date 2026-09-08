@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+import json
+import shutil
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .models import CoreError, Node, RunAction, TaskDispatch
+from .transactional import digest
+
+
+class AgentProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=120)
+    provider: Literal["codex", "claude", "opencode"]
+    model: str = Field(default="", max_length=200)
+    instructions: str = Field(default="", max_length=16000)
+    timeout_seconds: int = Field(default=300, ge=1, le=3600)
+    status: Literal["active", "archived"] = "active"
+
+
+class SquadMember(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    agent_id: str = Field(min_length=1, max_length=64)
+    role: Literal["leader", "implementer", "reviewer"]
+    instructions: str = Field(default="", max_length=8000)
+    agent_version: int | None = Field(default=None, ge=1)
+
+
+class SquadProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=120)
+    members: list[SquadMember] = Field(min_length=1, max_length=12)
+    status: Literal["active", "archived"] = "active"
+
+    @model_validator(mode="after")
+    def valid_members(self):
+        if sum(member.role == "leader" for member in self.members) != 1:
+            raise ValueError("A squad requires exactly one leader")
+        if len({member.agent_id for member in self.members}) != len(self.members):
+            raise ValueError("Squad agents must be unique")
+        return self
+
+
+class AgentDispatch(RunAction):
+    agent_id: str = Field(default="", max_length=64)
+    squad_id: str = Field(default="", max_length=64)
+    target_version: int = Field(ge=1)
+    prompt: str = Field(default="", max_length=16000)
+    isolation: Literal["workspace", "git_worktree"] = "workspace"
+    base_commit: str = Field(default="", pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})?$")
+
+    @model_validator(mode="after")
+    def target(self):
+        if bool(self.agent_id) == bool(self.squad_id):
+            raise ValueError("Select exactly one agent or squad")
+        return self
+
+
+class Delegation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    agent_id: str
+    instruction: str = Field(min_length=1, max_length=8000)
+
+
+class Routing(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    delegations: list[Delegation] = Field(max_length=11)
+    summary: str = Field(default="", max_length=8000)
+
+
+class Agents:
+    def __init__(self, store):
+        self.store = store
+
+    @staticmethod
+    def catalog():
+        return [{"id": provider, "provider": provider, "available": bool(shutil.which(provider)),
+                 "executable": shutil.which(provider) or "", "auth": "provider-managed"}
+                for provider in ("codex", "claude", "opencode")]
+
+    def validate(self, principal, workspace, resource, data):
+        if resource == "agents":
+            result = AgentProfile.model_validate(data).model_dump()
+        else:
+            result = SquadProfile.model_validate(data).model_dump()
+            for member in result["members"]:
+                agent = self.store.get(principal, workspace, "agents", member["agent_id"])
+                if agent["status"] != "active":
+                    raise CoreError("agent_inactive", "Squad members must be active", 409)
+                member["agent_version"] = agent["version"]
+        if not result["title"].strip():
+            raise CoreError("title_required", "Title must not be blank", 422)
+        return result
+
+    def bindings(self, conn, principal, workspace, nodes):
+        bindings = {}
+        for node in nodes:
+            if node.kind != "agent":
+                continue
+            if not node.agent_id or not node.prompt.strip() or node.argv:
+                raise CoreError("invalid_agent_node", "Agent nodes require an agent and prompt, without argv", 422)
+            agent = self.store._get(conn, principal, workspace, "agents", node.agent_id)
+            if agent["status"] != "active":
+                raise CoreError("agent_inactive", "The selected agent is archived", 409)
+            profile = AgentProfile.model_validate(agent["data"])
+            bindings[node.id] = {"agent_id": agent["id"], "version": agent["version"],
+                                 "profile": profile.model_dump(), "sha256": digest(agent["data"])}
+        return bindings
+
+    def dispatch(self, principal, workspace, task_id, body, trace, delivery):
+        resource, target = ("agents", body.agent_id) if body.agent_id else ("squads", body.squad_id)
+        operation = "task.agent-dispatch:" + task_id
+        if not body.dry_run:
+            cached = self.store.receipt(principal, workspace, operation, body.idempotency_key, body.model_dump())
+            if cached is not None:
+                return cached
+        definition = self.store.get(principal, workspace, resource, target)
+        if definition["version"] != body.target_version or definition["status"] != "active":
+            raise CoreError("configuration_changed", "Agent or squad changed; reload before dispatch", 409)
+        task = self.store.get(principal, workspace, "tasks", task_id)
+        context = json.dumps({"task": task["data"].get("title"),
+                              "description": task["data"].get("description", ""),
+                              "acceptance_criteria": task["data"].get("acceptance_criteria", ""),
+                              "request": body.prompt}, ensure_ascii=False)
+        members = ([{"agent_id": target, "role": "implementer", "instructions": "",
+                     "agent_version": definition["version"]}] if resource == "agents"
+                   else sorted(definition["data"]["members"], key=lambda member: {"leader": 0, "implementer": 1, "reviewer": 2}[member["role"]]))
+        nodes = []
+        for index, member in enumerate(members):
+            agent = self.store.get(principal, workspace, "agents", member["agent_id"])
+            if agent["version"] != member["agent_version"] or agent["status"] != "active":
+                raise CoreError("configuration_changed", "Squad member changed; save the squad again", 409)
+            prompt = f"Role: {member['role']}\n{member['instructions']}\nTask context:\n{context}"
+            if resource == "squads" and member["role"] == "leader":
+                prompt += ("\nRoute this task to zero or more roster members. Do not execute member work yourself. "
+                           "Your final response MUST be a JSON object with keys summary and delegations. "
+                           "Each delegation has agent_id and instruction. Choose only roster IDs, "
+                           "at most once each. Empty delegations means no member work is needed. Roster:\n"
+                           + json.dumps(members[1:], ensure_ascii=False))
+            nodes.append(Node(id=f"agent_{index + 1}", title=f"{member['role']}: {agent['data']['title']}",
+                              kind="agent", agent_id=agent["id"], timeout_seconds=agent["data"]["timeout_seconds"], prompt=prompt))
+        plan = TaskDispatch(**body.model_dump(exclude={"agent_id", "squad_id", "target_version", "prompt"}), nodes=nodes)
+        source = {"resource": resource, "id": target, "version": definition["version"],
+                  "members": members, "request": body.model_dump()}
+        return delivery.dispatch(principal, workspace, task_id, plan, trace, agent_source=source)
+
+
+def provider_command(profile: AgentProfile, prompt: str) -> list[str]:
+    executable = shutil.which(profile.provider)
+    if not executable:
+        raise CoreError("agent_unavailable", f"Install {profile.provider} on the execution host", 503)
+    if profile.provider == "codex":
+        command = [executable, "exec", "--json", "--color", "never", "--sandbox", "workspace-write", "--skip-git-repo-check"]
+        if profile.model:
+            command += ["--model", profile.model]
+        return command + [prompt]
+    if profile.provider == "claude":
+        command = [executable, "--print", "--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"]
+        if profile.model:
+            command += ["--model", profile.model]
+        return command + [prompt]
+    command = [executable, "run", "--format", "json"]
+    if profile.model:
+        command += ["--model", profile.model]
+    return command + [prompt]
+
+
+def provider_evidence(provider: str, stdout: str) -> dict:  # noqa: C901 - three distinct provider wire protocols
+    events, usage, messages = [], {}, []
+    errors = []
+    finished, failed = False, False
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        events.append(event)
+        kind = event.get("type")
+        if kind in {"error", "turn.failed"}:
+            error = event.get("error") or event.get("message") or "Provider execution failed"
+            errors.append(str(error)[:2000])
+        if provider == "codex":
+            if kind == "turn.completed":
+                finished, usage = True, event.get("usage") or {}
+            if kind in {"turn.failed", "error"}:
+                failed = True
+            item = event.get("item") or {}
+            if kind == "item.completed" and item.get("type") == "agent_message":
+                messages.append(str(item.get("text", "")))
+        elif provider == "claude":
+            if kind == "result":
+                finished = True
+                failed = bool(event.get("is_error") or event.get("permission_denials")) or event.get("subtype") != "success"
+                usage = {**(event.get("usage") or {}), "total_cost_usd": event.get("total_cost_usd")}
+                messages.append(str(event.get("result", "")))
+        else:
+            part = event.get("part") or {}
+            if kind == "step_finish" and part.get("reason") == "stop":
+                finished, usage = True, {"tokens": part.get("tokens"), "cost": part.get("cost")}
+            if kind == "text":
+                messages.append(str(part.get("text", "")))
+            if kind == "error":
+                failed = True
+    return {"provider": provider, "completed": finished and not failed, "usage": usage,
+            "message": "\n".join(messages)[-32000:], "events": events[-200:], "error": "\n".join(errors)[-2000:]}
+
+
+def squad_route(message: str, members: list[dict]) -> dict:
+    text = message.strip()
+    if text.startswith("```json\n") and text.endswith("```"):
+        text = text[8:-3].strip()
+    try:
+        routing = Routing.model_validate_json(text)
+    except ValueError as exc:
+        raise CoreError("invalid_routing", "Squad leader did not return a valid delegation plan", 422) from exc
+    allowed = {member["agent_id"] for member in members if member["role"] != "leader"}
+    selected = [delegation.agent_id for delegation in routing.delegations]
+    if not set(selected).issubset(allowed) or len(selected) != len(set(selected)):
+        raise CoreError("invalid_routing", "Leader selected an unknown or duplicate squad member", 422)
+    return routing.model_dump()

@@ -27,7 +27,8 @@ class Check:
 def run_check(name: str, command: list[str], required: bool, cwd: Path, env: dict[str, str], *, evidence="static", timeout=300) -> Check:
     started = time.monotonic()
     try:
-        proc = subprocess.run(command, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        # Commands come from the fixed gate catalog, not an API request.
+        proc = subprocess.run(command, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)  # noqa: S603
     except FileNotFoundError:
         return Check(name, required, "unavailable", f"{command[0]} not found", evidence)
     except subprocess.TimeoutExpired:
@@ -69,10 +70,21 @@ def checks_for(root: Path, full: bool) -> list[Check]:
         run("cli.diagnostics.help", [python, "-m", "sop_cli", "hermes", "diagnostics", "--help"], evidence="execution")
         for command in ("workspace", "device", "session", "run", "approval", "asset", "system"):
             run(f"cli.{command}.help", [python, "-m", "sop_cli", command, "--help"], evidence="execution")
-        for command in ("delivery", "dispatch", "review"):
+        for command in ("delivery", "dispatch", "agent-dispatch", "review"):
             run(f"cli.task.{command}.help", [python, "-m", "sop_cli", "task", "v1", command, "--help"], evidence="execution")
         for group, command in (("workspace", "repository"), ("run", "changes")):
             run(f"cli.{group}.{command}.help", [python, "-m", "sop_cli", group, command, "--help"], evidence="execution")
+        for group, command in (
+            ("agent", "catalog"), ("agent", "create"), ("agent", "patch"),
+            ("squad", "catalog"), ("squad", "create"), ("squad", "patch"),
+            ("schedule", "configure"), ("schedule", "trigger"), ("schedule", "pause"),
+            ("schedule", "resume"), ("schedule", "history"),
+            ("device", "pairing"), ("device", "pair"), ("device", "revoke"),
+            ("system", "remote-worker"),
+        ):
+            run(f"cli.{group}.{command}.help", [python, "-m", "sop_cli", group, command, "--help"], evidence="execution")
+        run("remote-worker.help", [python, "-m", "hermes_core.remote_worker", "--help"], evidence="execution")
+        run("core.remote-worker.help", [python, "-m", "hermes_core", "remote-worker", "--help"], evidence="execution")
         run("scripts.syntax", ["bash", "-n", "scripts/hermes-bootstrap.sh", "scripts/hermes-package.sh", "scripts/hermes-mobile-check.sh"])
         if full:
             web = root / "apps/manager-web"
