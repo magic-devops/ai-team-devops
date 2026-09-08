@@ -34,6 +34,7 @@ PLAN_OPTION = typer.Option(..., "--plan", exists=True, dir_okay=False, help="JSO
 CREDENTIAL_FILE_OPTION = typer.Option(..., "--credential-file")
 TARGET_ROOT_OPTION = typer.Option(None, "--target-root", exists=True, file_okay=False)
 WORKSPACE_MAP_OPTION = typer.Option(None, "--workspace-map")
+OUTBOX_DIR_OPTION = typer.Option(None, "--outbox-dir", help="Private durable result outbox directory")
 
 
 class DispatchIsolation(str, Enum):
@@ -555,12 +556,16 @@ def remote_worker(
     credential_file: Path = CREDENTIAL_FILE_OPTION,
     device_id: str = typer.Option("", "--device-id"),
     pair_secret: str = typer.Option("", "--pair-secret"),
+    pair_secret_stdin: bool = typer.Option(False, "--pair-secret-stdin"),
     workspace_id: str = typer.Option("", "--workspace-id"),
     target_root: Path | None = TARGET_ROOT_OPTION,
     workspace_map: list[str] | None = WORKSPACE_MAP_OPTION,
     agentd: str = typer.Option("", "--agentd"),
     once: bool = typer.Option(False, "--once"),
     poll_interval: float = typer.Option(5.0, "--poll-interval"),
+    outbox_dir: Path | None = OUTBOX_DIR_OPTION,
+    outbox_status: bool = typer.Option(False, "--outbox-status", help="Print local recovery metadata as JSON"),
+    flush_only: bool = typer.Option(False, "--flush-only", help="Retry saved results without claiming tasks"),
 ) -> None:
     maps = list(workspace_map or [])
     if target_root is not None:
@@ -589,5 +594,13 @@ def remote_worker(
         argv.extend(["--agentd", agentd])
     if once:
         argv.append("--once")
+    if outbox_dir is not None:
+        argv.extend(["--outbox-dir", str(outbox_dir)])
+    if outbox_status:
+        argv.append("--outbox-status")
+    if flush_only:
+        argv.append("--flush-only")
+    if pair_secret_stdin:
+        argv.append("--pair-secret-stdin")
     result = subprocess.run(argv, check=False)  # noqa: S603
     raise typer.Exit(result.returncode)

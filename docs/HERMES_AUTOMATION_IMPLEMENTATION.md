@@ -33,3 +33,31 @@ See [acceptance evidence](HERMES_AUTOMATION_QA_20260908.md) and the
 [remaining parity matrix](HERMES_MULTICA_ALIGNMENT.md). The next parity work
 must implement Cron/webhooks, remote Agent execution, additional runtimes,
 chat, skills and team/channel workflows before changing those rows to complete.
+
+## Remote Recovery Stage
+
+Starting from `ffbbf1a6`, close the result-delivery crash gap without changing
+the server's lease or authorization boundary:
+
+1. Journal ownership before command execution and persist the result before
+   transmission in a private, credential-bound outbox.
+2. Retry the same result and idempotency key before accepting another claim.
+   Unknown execution outcomes and permanent rejection block new execution.
+3. Expose local status and result-only recovery through the packaged Worker
+   and `sop system remote-worker`, without requiring an executor for recovery.
+4. Verify real command execution with HTTP failures before and after server
+   commit, plus revoked credentials; then review and commit this stage.
+
+This does not promise exactly-once arbitrary command side effects. A crash
+between command execution and result persistence requires operator diagnosis.
+It does not extend leases, auto-repair credentials, or automatically rerun an
+uncertain command. Unrelated local changes remain outside the stage commit.
+
+The retry contract follows caller-provided intent identifiers, not matching
+payloads alone: [AWS guidance on idempotent APIs](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/).
+
+This bounded recovery stage is implemented and verified through source and
+packaged Workers with real HTTP fault injection. See the
+[acceptance record](HERMES_REMOTE_RECOVERY_QA_20260908.md). The full readiness
+gate still reports the missing macOS Xcode build tool; this does not close the
+remaining Multica parity or signed-distribution requirements.

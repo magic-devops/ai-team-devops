@@ -14,4 +14,6 @@ def test_bundled_core_exposes_remote_worker_without_server_arguments():
     assert "--credential-file" in result.stdout
     assert "--workspace-map" in result.stdout
     assert "--agentd" in result.stdout
+    for flag in ("--outbox-dir", "--outbox-status", "--flush-only", "--pair-secret-stdin"):
+        assert flag in result.stdout
     assert "--data-dir" not in result.stdout

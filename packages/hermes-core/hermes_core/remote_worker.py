@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import signal
@@ -14,6 +15,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .remote_outbox import OutboxError, OutboxLock, RemoteOutbox, default_outbox_dir
+
 WORKER_VERSION = "1.0.0"
 LOG_LIMIT_BYTES = 262144
 CREDENTIAL_LIMIT_BYTES = 4096
@@ -21,6 +24,16 @@ CREDENTIAL_LIMIT_BYTES = 4096
 
 class WorkerError(Exception):
     pass
+
+
+class RemoteRequestError(WorkerError):
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+    @property
+    def retryable(self) -> bool:
+        return self.status_code is None or self.status_code in {408, 429} or self.status_code >= 500
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -66,8 +79,19 @@ def _assert_credential_server(server: str, credential: dict) -> None:
         raise WorkerError("Credential file is bound to a different Hermes server")
 
 
+def _validate_credential_file_stat(path: Path, info: os.stat_result) -> None:
+    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise WorkerError(f"Credential file must be a regular file: {path}")
+    if os.name != "nt" and info.st_uid != os.getuid():
+        raise WorkerError(f"Credential file owner is not the current user: {path}")
+    if info.st_size > CREDENTIAL_LIMIT_BYTES:
+        raise WorkerError(f"Credential file exceeds {CREDENTIAL_LIMIT_BYTES} bytes: {path}")
+    if os.name != "nt" and stat.S_IMODE(info.st_mode) & 0o077:
+        raise WorkerError(f"Credential file must be 0600 or stricter: {path}")
+
+
 def _load_credential(path: Path) -> dict:
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
         fd = os.open(path, flags)
     except FileNotFoundError as exc:
@@ -76,14 +100,7 @@ def _load_credential(path: Path) -> dict:
         raise WorkerError(f"Credential file must be a regular non-symlink file: {path}") from exc
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode):
-            raise WorkerError(f"Credential file must be a regular file: {path}")
-        if info.st_size > CREDENTIAL_LIMIT_BYTES:
-            raise WorkerError(f"Credential file exceeds {CREDENTIAL_LIMIT_BYTES} bytes: {path}")
-        if os.name != "nt":
-            mode = stat.S_IMODE(info.st_mode)
-            if mode & 0o077:
-                raise WorkerError(f"Credential file must be 0600 or stricter: {path}")
+        _validate_credential_file_stat(path, info)
         with os.fdopen(fd, "r", encoding="utf-8") as handle:
             fd = -1
             data = json.loads(handle.read(CREDENTIAL_LIMIT_BYTES + 1))
@@ -92,9 +109,11 @@ def _load_credential(path: Path) -> dict:
     finally:
         if fd >= 0:
             os.close(fd)
+    if not isinstance(data, dict) or any(not isinstance(key, str) for key in data):
+        raise WorkerError(f"Credential file must contain a JSON object with string keys: {path}")
     for key in ("device_id", "credential", "workspace_id", "server"):
-        if not str(data.get(key, "")).strip():
-            raise WorkerError(f"Credential file missing {key}")
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            raise WorkerError(f"Credential file requires a non-empty string for {key}")
     _server_binding(str(data["server"]))
     return data
 
@@ -144,11 +163,11 @@ def _request_json(server: str, path: str, body: dict, credential: dict | None = 
         with opener.open(req, timeout=timeout) as response:  # noqa: S310
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        raise WorkerError(f"HTTP {exc.code} {path}") from exc
+        raise RemoteRequestError(f"HTTP {exc.code} {path}", status_code=exc.code) from exc
     except WorkerError:
         raise
     except (URLError, TimeoutError, ValueError, OSError) as exc:
-        raise WorkerError(f"Request failed for {path}: {exc}") from exc
+        raise RemoteRequestError(f"Request failed for {path}: {exc}") from exc
 
 
 def _validate_node(node: dict) -> tuple[list[str], int]:
@@ -180,6 +199,18 @@ def _terminate(proc: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+
+
+def _bound_result_for_outbox(result: dict) -> dict:
+    bounded: dict = {}
+    for key in ("ok", "exit_code", "duration_ms"):
+        if key in result:
+            bounded[key] = result[key]
+    bounded["stdout"] = str(result.get("stdout", ""))[-LOG_LIMIT_BYTES:]
+    bounded["stderr"] = str(result.get("stderr", ""))[-LOG_LIMIT_BYTES:]
+    if "error" in result:
+        bounded["error"] = str(result.get("error", ""))[:2000]
+    return bounded
 
 
 def _run_agentd(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
@@ -223,9 +254,12 @@ def _run_agentd(agentd: str, root: Path, task: dict, server: str, credential: di
             result = {"ok": False, "exit_code": -1, "stdout": stdout[-LOG_LIMIT_BYTES:],
                       "stderr": (stderr or "agentd returned invalid JSON")[-LOG_LIMIT_BYTES:],
                       "error": "agentd_protocol"}
+        if not isinstance(result, dict):
+            result = {"ok": False, "exit_code": -1, "stdout": "", "stderr": "agentd returned non-object JSON",
+                      "error": "agentd_protocol"}
         result.setdefault("stdout", "")
         result.setdefault("stderr", stderr or "")
-        return result
+        return _bound_result_for_outbox(result)
     except Exception:
         _terminate(proc)
         raise
@@ -251,9 +285,66 @@ def pair_device(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[str, Path], agentd: str) -> bool:
+def _upload_result(args: argparse.Namespace, credential: dict, outbox: RemoteOutbox, record: dict) -> bool:
+    if not outbox.validate_record_binding(record):
+        outbox.quarantine(record, "Outbox record credential binding does not match current credential")
+        raise WorkerError("Outbox record credential binding does not match current credential")
+    try:
+        response = _request_json(args.server, "/api/hermes/v1/remote/result", {
+            "run_id": record["run_id"],
+            "owner": record["owner"],
+            "node_id": record["node_id"],
+            "idempotency_key": record["result_idempotency_key"],
+            "result": record["result"],
+        }, credential, timeout=20)
+    except RemoteRequestError as exc:
+        if exc.retryable:
+            outbox.mark_retryable(record, str(exc), exc.status_code)
+            return False
+        outbox.quarantine(record, str(exc), exc.status_code)
+        raise WorkerError(f"Remote result was permanently rejected: {exc}") from exc
+    items = response.get("items") if isinstance(response, dict) else None
+    summary = response.get("summary") if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("ok") is not True
+            or not isinstance(summary, dict) or summary.get("result_recorded") is not True
+            or not isinstance(items, list) or not items or not isinstance(items[0], dict)
+            or items[0].get("id") != record["run_id"]):
+        outbox.mark_retryable(record, "Malformed remote result acknowledgement", 200)
+        return False
+    outbox.acknowledge(record, response)
+    return True
+
+
+def flush_pending(args: argparse.Namespace, credential: dict, outbox: RemoteOutbox) -> tuple[int, int]:
+    acknowledged = 0
+    retryable = 0
+    for record in outbox.pending_records():
+        if _upload_result(args, credential, outbox, record):
+            acknowledged += 1
+        else:
+            retryable += 1
+    return acknowledged, retryable
+
+
+def _block_unknown_executing(outbox: RemoteOutbox) -> None:
+    executing = outbox.executing_records()
+    if executing:
+        raise WorkerError("Outbox contains executing records with uncertain side effects; manual recovery is required")
+
+
+def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[str, Path],
+             agentd: str, outbox: RemoteOutbox) -> bool:
+    acknowledged, retryable = flush_pending(args, credential, outbox)
+    if retryable:
+        raise RemoteRequestError("Pending remote result upload is retryable")
+    if acknowledged:
+        return True
+    if outbox.has_quarantined():
+        raise WorkerError("Outbox contains quarantined records; refusing new remote claims")
+    _block_unknown_executing(outbox)
+    claim_idempotency_key = f"claim:{credential['device_id']}:{time.time_ns()}"
     claim = _request_json(args.server, "/api/hermes/v1/remote/claim", {
-        "idempotency_key": f"claim:{credential['device_id']}:{time.time_ns()}",
+        "idempotency_key": claim_idempotency_key,
         "worker_version": WORKER_VERSION,
     }, credential)
     if not claim.get("items"):
@@ -263,14 +354,11 @@ def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[s
     root = workspace_roots.get(workspace_id)
     if root is None:
         raise WorkerError(f"No local root mapping for workspace {workspace_id}")
+    record = outbox.journal_claim(task, claim_idempotency_key=claim_idempotency_key)
     result = _run_agentd(agentd, root, task, args.server, credential)
-    _request_json(args.server, "/api/hermes/v1/remote/result", {
-        "run_id": task["run_id"],
-        "owner": task["owner"],
-        "node_id": task["node"]["id"],
-        "idempotency_key": f"result:{task['owner']}:{task['node']['id']}",
-        "result": result,
-    }, credential, timeout=20)
+    record = outbox.save_result(record, result)
+    if not _upload_result(args, credential, outbox, record):
+        raise RemoteRequestError("Pending remote result upload is retryable")
     return True
 
 
@@ -278,15 +366,39 @@ def run_worker(args: argparse.Namespace) -> int:
     _require_tls_or_loopback(args.server)
     credential = _load_credential(Path(args.credential_file))
     _assert_credential_server(args.server, credential)
-    workspace_roots = _workspace_map(args.workspace_map)
-    agentd = args.agentd or shutil.which("sop-agentd") or ""
-    if not agentd or not Path(agentd).is_file():
-        raise WorkerError("sop-agentd binary not found; pass --agentd")
-    while True:
-        claimed = run_once(args, credential, workspace_roots, agentd)
-        if args.once:
-            return 0 if claimed else 2
-        time.sleep(args.poll_interval)
+    outbox = RemoteOutbox(Path(args.outbox_dir) if args.outbox_dir else default_outbox_dir(Path(args.credential_file)),
+                          credential)
+    if args.outbox_status:
+        print(json.dumps(outbox.status(), sort_keys=True))
+        return 0
+    with OutboxLock(outbox.path):
+        if args.flush_only:
+            acknowledged, retryable = flush_pending(args, credential, outbox)
+            _block_unknown_executing(outbox)
+            if outbox.has_quarantined():
+                raise WorkerError("Outbox contains quarantined records")
+            if retryable:
+                raise RemoteRequestError("Pending remote result upload is retryable")
+            return 0
+        workspace_roots = _workspace_map(args.workspace_map)
+        agentd = args.agentd or shutil.which("sop-agentd") or ""
+        if not agentd or not Path(agentd).is_file():
+            raise WorkerError("sop-agentd binary not found; pass --agentd")
+        backoff = args.poll_interval
+        while True:
+            try:
+                claimed = run_once(args, credential, workspace_roots, agentd, outbox)
+                backoff = args.poll_interval
+                if args.once:
+                    return 0 if claimed else 2
+                time.sleep(args.poll_interval)
+            except RemoteRequestError as exc:
+                if not exc.retryable:
+                    raise
+                if args.once:
+                    raise
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60.0)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -304,25 +416,60 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Explicit local mapping WORKSPACE_ID=/absolute/root; may be repeated")
     parser.add_argument("--agentd", default="", help="Path to sop-agentd; defaults to PATH lookup")
     parser.add_argument("--once", action="store_true", help="Claim at most one node then exit")
+    parser.add_argument("--outbox-dir", default="", help="Durable result outbox directory; defaults to CREDENTIAL_FILE.outbox")
+    parser.add_argument("--outbox-status", action="store_true",
+                        help="Print outbox JSON metadata only; never includes credentials or result logs")
+    parser.add_argument("--flush-only", action="store_true",
+                        help="Send pending outbox results only; do not claim or execute nodes")
     parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between claim polls")
     return parser
+
+
+def _load_pair_secret(args: argparse.Namespace) -> None:
+    if args.pair_secret_stdin:
+        if args.pair_secret:
+            raise WorkerError("--pair-secret and --pair-secret-stdin are mutually exclusive")
+        args.pair_secret = sys.stdin.read().strip()
+        if not args.pair_secret:
+            raise WorkerError("--pair-secret-stdin did not provide a pairing secret")
+    elif not args.pair_secret:
+        args.pair_secret = os.environ.get("HERMES_PAIR_SECRET", "").strip()
+
+
+def _validate_modes(args: argparse.Namespace) -> None:
+    if args.pair_secret:
+        if args.once or args.flush_only or args.outbox_status:
+            raise WorkerError("Pairing mode is mutually exclusive with worker run modes")
+        if not args.device_id:
+            raise WorkerError("--device-id is required with --pair-secret")
+    if args.flush_only and args.once:
+        raise WorkerError("--flush-only and --once are mutually exclusive")
+    if args.outbox_status and (args.flush_only or args.once):
+        raise WorkerError("--outbox-status is mutually exclusive with --flush-only and --once")
+    if not math.isfinite(args.poll_interval) or args.poll_interval <= 0:
+        raise WorkerError("--poll-interval must be finite and greater than zero")
+
+
+def _safe_os_error(exc: OSError) -> str:
+    reason = exc.strerror or type(exc).__name__
+    return f"filesystem error: {reason}"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        if args.pair_secret_stdin:
-            if args.pair_secret:
-                raise WorkerError("--pair-secret and --pair-secret-stdin are mutually exclusive")
-            args.pair_secret = sys.stdin.read().strip()
-        elif not args.pair_secret:
-            args.pair_secret = os.environ.get("HERMES_PAIR_SECRET", "").strip()
+        _load_pair_secret(args)
+        _validate_modes(args)
         if args.pair_secret:
-            if not args.device_id:
-                raise WorkerError("--device-id is required with --pair-secret")
             return pair_device(args)
         return run_worker(args)
+    except OutboxError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"error: {_safe_os_error(exc)}", file=sys.stderr)
+        return 1
     except WorkerError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

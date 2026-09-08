@@ -179,6 +179,9 @@ def test_top_level_readiness_commands_are_registered_by_subprocess():
     ):
         result = _run_top_level_help(*command)
         assert result.returncode == 0, result.stdout
+        if command == ("system", "remote-worker"):
+            for flag in ("--outbox-dir", "--outbox-status", "--flush-only", "--pair-secret-stdin"):
+                assert flag in result.stdout
 
     for command in (
         ("squad", "delete"),
@@ -408,6 +411,32 @@ def test_remote_worker_command_invokes_real_worker_module(monkeypatch, tmp_path)
         "/bin/echo",
         "--once",
     ], {"check": False})]
+
+
+def test_remote_worker_forwards_recovery_modes_and_exit_code(monkeypatch, tmp_path):
+    calls = []
+
+    class Result:
+        returncode = 1
+
+    def fake_run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return Result()
+
+    monkeypatch.setattr(hermes.subprocess, "run", fake_run)
+    for mode in ("--outbox-status", "--flush-only", "--pair-secret-stdin"):
+        result = CliRunner().invoke(hermes.system_app, [
+            "remote-worker", "--server", "https://hermes.example",
+            "--credential-file", str(tmp_path / "credential.json"),
+            "--outbox-dir", str(tmp_path / "outbox"), mode,
+        ])
+        assert result.exit_code == 1, result.output
+        argv, kwargs = calls[-1]
+        assert argv[argv.index("--outbox-dir") + 1] == str(tmp_path / "outbox")
+        assert mode in argv
+        assert "--once" not in argv
+        assert kwargs == {"check": False}
+    assert len(calls) == 3
 
 
 def test_named_run_commands_send_dry_run_and_explicit_apply(monkeypatch):

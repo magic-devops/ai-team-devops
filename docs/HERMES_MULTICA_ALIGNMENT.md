@@ -25,7 +25,7 @@
 | Agent 目录与运行适配 | Codex/Claude/OpenCode 显式 CLI 适配器、版本化配置、任务派发、终止事件与 usage 证据；Codex 已真实调用 | 其余 Multica runtime、ACP、认证探测、预算和能力协商未全覆盖；安装状态不表示认证成功 |
 | 人与 Agent Squads | 固定一个 Leader、版本化成员快照、Leader JSON 委派、未选择成员跳过；真实 Codex Leader/成员调用已验证 | 非任意动态并行团队；人类成员、通知与多轮团队会话未交付；角色不是权限 |
 | 项目与仓库上下文 | 固定提交、每运行独立 detached/locked worktree、代码差异快照、Web/Flutter 审查、CLI/SDK 已贯通 | 仓库缓存、上下文索引、分支合并、托管平台 PR 和工作树清理控制面尚未交付 |
-| Daemon 与远程执行 | 一次性配对邀请、独立设备凭据、主动轮询、命令领取、心跳、结果回传、撤销和过期租约拒绝；真实进程回归 | 当前 command-only workspace 执行；远程 Agent/worktree/审批、多主机网络、断网结果重传与端侧签名安装未全覆盖 |
+| Daemon 与远程执行 | 一次性配对邀请、独立设备凭据、主动轮询、命令领取、心跳、持久化结果重传、撤销和过期租约拒绝；真实进程与断连回归 | 当前 command-only workspace 执行；远程 Agent/worktree/审批、多主机网络与端侧签名安装未全覆盖；未知执行结果需人工核对 |
 | Autopilot 与周期调度 | 事务化间隔调度、自动到期执行、错过合并、重叠抑制、暂停/恢复、运行历史与固定 Agent 快照 | Cron/时区、多触发器、Webhook、自动创建任务和补偿工作流未交付 |
 | 独立 Agent Chat | 会话资源可管理 | 多提供方流式对话、工具消息、中断未闭环 |
 | 技能共享与安装 | 资产可登记、分类和编辑 | 原生安装、依赖解析、工具授权和卸载影响未全覆盖 |
@@ -123,6 +123,10 @@ sop system remote-worker --help
 Worker 将凭据绑定到配对服务地址，不跟随 HTTP 重定向发送凭据。
 执行使用 `--workspace-map WORKSPACE_ID=/absolute/path` 和随包的 `--agentd`。
 `--once` 最多领取一个节点；长期轮询由部署的进程管理器管理，撤销后退出并返回错误。
+端侧 outbox 在执行前登记领取、回传前保存结果；重启优先重传同一结果，不重复执行命令。
+`--outbox-status` 输出本地元数据，`--flush-only` 不领取任务，也不依赖 agentd。
+过期租约或撤销凭据不能通过重传绕过；未知执行、损坏文件和隔离记录阻止继续领取。
+详见 [远程恢复规约](HERMES_REMOTE_RECOVERY.md)。这不是任意命令副作用的 exactly-once 保证。
 
 ## 隔离代码交付
 
