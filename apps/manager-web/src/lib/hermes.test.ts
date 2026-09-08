@@ -13,6 +13,18 @@ function mockJsonResponse(body: unknown, init: ResponseInit = {}) {
 }
 
 describe("HermesClient", () => {
+  it("binds task delivery requests to scope, versions, decisions and dry-run", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse({ ok: true, items: [] }));
+    const client = createHermesClient({ baseUrl: "https://hermes.example", token: "test", workspaceId: "ws" });
+    await client.taskDelivery("task 1");
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/tasks/task%201/delivery", expect.objectContaining({ headers: expect.objectContaining({ "X-Workspace-Id": "ws" }) }));
+    const plan = { expected_version: 2, nodes: [], idempotency_key: "same-key", dry_run: true };
+    await client.taskDispatch("task 1", plan);
+    expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("/dispatch"), expect.objectContaining({ method: "POST", body: JSON.stringify(plan) }));
+    const review = { expected_version: 3, run_id: "run", run_version: 9, decision: "accept" as const, comment: "Reviewed", idempotency_key: "review", dry_run: false };
+    await client.taskReview("task 1", review);
+    expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("/review"), expect.objectContaining({ body: JSON.stringify(review) }));
+  });
   it.each([{ error: "bad" }, { ok: false }, { ok: "false", items: [] }, "<html>proxy error</html>"])("rejects malformed runtime probe payload %j", async (payload) => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse(payload));
     const client = createHermesClient({ baseUrl: "http://127.0.0.1:8787", token: "secret" });

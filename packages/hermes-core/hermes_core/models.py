@@ -21,6 +21,9 @@ RESOURCE_DATA_FIELDS = {
     "assets": ("title", "name", "content", "summary", "description", "source", "kind"),
 }
 ACTIONS = [
+    {"id": "task.delivery", "permission": "read", "method": "GET", "path": f"{API_BASE}/tasks/{{id}}/delivery"},
+    {"id": "task.dispatch", "permission": "execute", "method": "POST", "path": f"{API_BASE}/tasks/{{id}}/dispatch"},
+    {"id": "task.review", "permission": "approve", "method": "POST", "path": f"{API_BASE}/tasks/{{id}}/review"},
     {"id": "diagnostics", "permission": "read", "method": "GET", "path": f"{API_BASE}/system/diagnostics"},
     {"id": "read", "permission": "read", "method": "GET", "path": f"{API_BASE}/{{resource}}"},
     {"id": "create", "permission": "write", "method": "POST", "path": f"{API_BASE}/{{resource}}"},
@@ -76,6 +79,17 @@ class Node(BaseModel):
     argv: list[str] = Field(default_factory=list, max_length=128)
     expected_exit_code: int = Field(default=0, ge=0, le=255)
     timeout_seconds: int = Field(default=60, ge=1, le=3600)
+
+
+class TaskDispatch(RunAction):
+    nodes: list[Node] = Field(min_length=1, max_length=64)
+
+
+class TaskReview(RunAction):
+    run_id: str = Field(min_length=1, max_length=64)
+    run_version: int = Field(ge=1)
+    decision: Literal["accept", "request_changes"]
+    comment: str = Field(min_length=1, max_length=4000)
 
 
 class Envelope(BaseModel):

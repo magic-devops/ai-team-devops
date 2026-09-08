@@ -26,6 +26,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
 import { Activity, Database, Download, Edit3, KeyRound, Play, Plus, RefreshCw, ShieldCheck, Square, Workflow } from "lucide-react";
+import { TaskDeliveryPanel } from "./TaskDeliveryPanel";
 import {
   DEFAULT_HERMES_BASE_URL,
   HermesUnavailableError,
@@ -73,6 +74,8 @@ type BusinessFormValues = {
   content?: string;
   session_id?: string;
   nodesJson?: string;
+  acceptance_criteria?: string;
+  assigned_agent?: string;
 };
 
 function entityTitle(entity: HermesEntity) {
@@ -245,6 +248,8 @@ function buildInitialValues(resource: HermesResource, selected?: HermesEntity): 
     kind: typeof data.kind === "string" ? data.kind : "",
     description: typeof data.description === "string" ? data.description : "",
     content: typeof data.content === "string" ? data.content : "",
+    acceptance_criteria: typeof data.acceptance_criteria === "string" ? data.acceptance_criteria : "",
+    assigned_agent: typeof data.assigned_agent === "string" ? data.assigned_agent : "",
   };
 }
 
@@ -274,6 +279,10 @@ function buildBusinessData(resource: HermesResource, values: BusinessFormValues,
   if (mode === "edit" || values.description?.trim()) data.description = String(values.description || "").trim();
   if (resource === "assets" && (mode === "edit" || values.content?.trim())) data.content = String(values.content || "").trim();
   if (status) data.status = status;
+  if (resource === "tasks" || resource === "requirements") {
+    data.acceptance_criteria = values.acceptance_criteria?.trim() || "";
+    data.assigned_agent = values.assigned_agent?.trim() || "";
+  }
   return data;
 }
 
@@ -287,6 +296,7 @@ export function Workspace() {
   const [query, setQuery] = useState<QueryState>({ q: "", limit: 20 });
   const [activeResource, setActiveResource] = useState<HermesResource>("runs");
   const [selected, setSelected] = useState<HermesEntity | undefined>();
+  const [pendingRun, setPendingRun] = useState<HermesEntity>();
   const [actionResult, setActionResult] = useState<{ title: string; response: HermesApiResponse<unknown>; diagnostics?: boolean } | undefined>();
   const [businessDrawer, setBusinessDrawer] = useState<{ mode: DrawerMode; resource: HermesResource; entity?: HermesEntity } | undefined>();
   const [workspaceDrawer, setWorkspaceDrawer] = useState(false);
@@ -296,11 +306,13 @@ export function Workspace() {
   const connected = Boolean(connection.baseUrl && connection.token);
   const workspaceReady = connected && Boolean(connection.workspaceId);
   const canCreateResource = MUTABLE_RESOURCES.has(activeResource);
-  const canEditResource = EDITABLE_RESOURCES.has(activeResource);
+  const deliveryPhase = (selected?.data.delivery as { phase?: string } | undefined)?.phase;
+  const canEditResource = EDITABLE_RESOURCES.has(activeResource) && !(activeResource === "tasks" && ["executing", "accepted"].includes(deliveryPhase || ""));
   const currentScopeSignature = scopeSignature(connection, activeResource, contextGeneration, tokenGeneration);
 
   useEffect(() => {
-    setSelected(undefined);
+    setSelected(activeResource === "runs" ? pendingRun : undefined);
+    setPendingRun(undefined);
     setActionResult(undefined);
     setBusinessDrawer(undefined);
     setWorkspaceDrawer(false);
@@ -612,7 +624,7 @@ export function Workspace() {
           <Card
             size="small"
             title={t("workspace.resourceList")}
-            extra={<Typography.Text type="secondary">{responseSummary(listQuery.data)}</Typography.Text>}
+            extra={<Typography.Text type="secondary" style={{ maxWidth: 160 }} ellipsis={{ tooltip: responseSummary(listQuery.data) }}>{responseSummary(listQuery.data)}</Typography.Text>}
           >
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Input.Search className="w-60" allowClear placeholder={t("workspace.query")} value={query.q} onChange={(e) => setQuery((prev) => ({ ...prev, q: e.target.value }))} />
@@ -677,6 +689,7 @@ export function Workspace() {
                   {selected.data?.description !== undefined ? <Descriptions.Item label={t("workspace.fields.description")}>{String(selected.data.description || "-")}</Descriptions.Item> : null}
                   {activeResource === "assets" && selected.data?.content !== undefined ? <Descriptions.Item label={t("workspace.assetContent")}>{String(selected.data.content || "-")}</Descriptions.Item> : null}
                 </Descriptions>
+                {activeResource === "tasks" && <TaskDeliveryPanel key={`${currentScopeSignature}:${selected.id}`} scopeKey={currentScopeSignature} client={client} task={selected} permissions={permissions} onOpenRun={(run) => { setPendingRun(run); setActiveResource("runs"); }} />}
                 {activeResource === "runs" ? (
                   <div className="mt-4">
                     <Typography.Text type="secondary">{t("workspace.recordedOutput")}</Typography.Text>
@@ -759,6 +772,10 @@ export function Workspace() {
                 <Form.Item name="description" label={t("workspace.fields.description")}>
                   <Input.TextArea rows={3} maxLength={500} showCount />
                 </Form.Item>
+                {["tasks", "requirements"].includes(businessDrawer.resource) && <>
+                  <Form.Item name="acceptance_criteria" label={t("workspace.delivery.criteria")}><Input.TextArea rows={3} maxLength={4000} /></Form.Item>
+                  <Form.Item name="assigned_agent" label={t("workspace.delivery.assignee")}><Input maxLength={120} /></Form.Item>
+                </>}
               </>
             ) : (
               <>

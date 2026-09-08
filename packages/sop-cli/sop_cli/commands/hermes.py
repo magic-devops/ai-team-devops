@@ -190,6 +190,45 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 dry_run=not apply, idempotency_key=idempotency_key or None,
             ), as_json=json_output)
 
+    if resource == "tasks":
+
+        @app.command("delivery")
+        def task_delivery(task_id: str, json_output: bool = typer.Option(False, "--json")) -> None:
+            _run_call(lambda client: client.task_delivery(task_id), as_json=json_output)
+
+        @app.command("dispatch")
+        def task_dispatch(
+            task_id: str,
+            plan: Path = typer.Option(..., "--plan", exists=True, dir_okay=False, help="JSON file containing a nodes array"),
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            def call(client):
+                nodes = _load_object(plan.read_text(encoding="utf-8"), label="--plan").get("nodes")
+                if not isinstance(nodes, list):
+                    raise ValueError("--plan must contain a nodes array")
+                return client.task_dispatch(task_id, nodes, expected_version=expected_version,
+                                            dry_run=not apply, idempotency_key=idempotency_key or None)
+            _run_call(call, as_json=json_output)
+
+        @app.command("review")
+        def task_review(
+            task_id: str,
+            run_id: str = typer.Option(..., "--run-id"),
+            run_version: int = typer.Option(..., "--run-version", min=1),
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            decision: str = typer.Option(..., "--decision"),
+            comment: str = typer.Option(..., "--comment"),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.task_review(task_id, run_id=run_id, run_version=run_version,
+                expected_version=expected_version, decision=decision, comment=comment,
+                dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
+
     if resource == "runs":
 
         @app.command("events")

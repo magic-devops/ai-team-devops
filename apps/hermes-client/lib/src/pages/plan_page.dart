@@ -6,6 +6,7 @@ import '../models.dart';
 import '../ui/common.dart';
 import '../ui/entity_forms.dart';
 import '../ui/labels.dart';
+import '../ui/task_delivery_dialog.dart';
 
 class PlanPage extends ConsumerWidget {
   const PlanPage({super.key});
@@ -142,29 +143,53 @@ class PlanPage extends ConsumerWidget {
   ) {
     return EntityTile(
       entity: entity,
+      onTap: resource == Resource.tasks
+          ? () => showDialog<void>(
+              context: context,
+              builder: (_) => TaskDeliveryDialog(
+                    taskId: entity.id,
+                    workspaceId: ref.read(workspaceSelectionProvider)!,
+                    client: ref.read(apiProvider),
+                  ))
+          : null,
       details: [
         detailChip('优先级', hermesPriorityLabel(entity.data['priority'])),
         detailChip('负责人', entity.data['assigned_agent']),
         detailChip('工具', entity.data['dev_tool']),
         detailChip('验收', entity.data['acceptance_criteria']),
       ],
-      trailing: IconButton(
-        tooltip: '编辑',
-        icon: const Icon(Icons.edit_rounded),
-        onPressed: canWrite
-            ? () async {
-                final updated = await showEntityForm(context, ref, resource,
-                    entity: entity);
-                if (updated) {
-                  if (resource == Resource.tasks) {
-                    ref.invalidate(tasksProvider);
-                  } else {
-                    ref.invalidate(requirementsProvider);
+      trailing: Wrap(children: [
+        if (resource == Resource.tasks)
+          IconButton(
+              tooltip: '任务交付',
+              icon: const Icon(Icons.fact_check_outlined),
+              onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => TaskDeliveryDialog(
+                        taskId: entity.id,
+                        workspaceId: ref.read(workspaceSelectionProvider)!,
+                        client: ref.read(apiProvider),
+                      ))),
+        IconButton(
+          tooltip: '编辑',
+          icon: const Icon(Icons.edit_rounded),
+          onPressed: canWrite &&
+                  !['executing', 'accepted']
+                      .contains((entity.data['delivery'] as Map?)?['phase'])
+              ? () async {
+                  final updated = await showEntityForm(context, ref, resource,
+                      entity: entity);
+                  if (updated) {
+                    if (resource == Resource.tasks) {
+                      ref.invalidate(tasksProvider);
+                    } else {
+                      ref.invalidate(requirementsProvider);
+                    }
                   }
                 }
-              }
-            : null,
-      ),
+              : null,
+        )
+      ]),
     );
   }
 

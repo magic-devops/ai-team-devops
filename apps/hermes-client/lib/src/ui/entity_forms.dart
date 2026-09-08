@@ -75,6 +75,7 @@ Future<bool> _showTaskForm(
   final data = entity?.data ?? const <String, dynamic>{};
   final title = TextEditingController(text: _text(data['title']));
   final owner = TextEditingController(text: _text(data['assigned_agent']));
+  var acceptance = _text(data['acceptance_criteria']);
   final devTool = TextEditingController(text: _text(data['dev_tool']));
   final content = CodeLineEditingController.fromText(_text(data['content']));
   var status = _allowedStatus(entity?.status ?? data['status'], taskStatuses);
@@ -108,6 +109,14 @@ Future<bool> _showTaskForm(
             controller: devTool,
             decoration: const InputDecoration(labelText: '开发工具（可选）'),
           ),
+          TextFormField(
+            initialValue: acceptance,
+            onChanged: (value) => acceptance = value,
+            decoration: const InputDecoration(labelText: '验收条件'),
+            minLines: 2,
+            maxLines: 4,
+            maxLength: 4000,
+          ),
           SourceEditor(controller: content),
         ],
         onSubmit: () => _save(saveContext, Resource.tasks, entity, {
@@ -115,6 +124,7 @@ Future<bool> _showTaskForm(
           'status': status,
           'priority': priority,
           'assigned_agent': owner.text.trim(),
+          'acceptance_criteria': acceptance.trim(),
           'dev_tool': devTool.text.trim(),
           'content': content.text,
         }),

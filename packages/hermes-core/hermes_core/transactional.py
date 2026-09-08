@@ -122,11 +122,14 @@ class Store:
             return item
 
     def mutate(self, principal: Principal, workspace: str, kind: str, entity_id: str, *, operation: str, key: str,
-               request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict]):
+               request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict],
+               precondition: Callable | None = None):
         with self.transaction() as conn:
             receipt_id, cached = self._receipt(conn, principal, workspace, operation + ":" + entity_id, key, request)
             if cached is not None:
                 return cached
+            if precondition is not None:
+                precondition(conn)
             item = self._get(conn, principal, workspace, kind, entity_id)
             if expected is not None and item["version"] != expected:
                 raise CoreError("version_conflict", "Resource changed; reload before applying this action", 409)

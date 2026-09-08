@@ -16,6 +16,32 @@ from typer.testing import CliRunner
 AUTH_TOKEN = "tok" + "en"
 
 
+def test_task_delivery_cli_sdk_round_trip(live_core, runner, tmp_path):
+    sdk = live_core["sdk"]
+    task = sdk.create_resource("tasks", {"title": "CLI delivery", "acceptance_criteria": "Check evidence"})["items"][0]
+    assert sdk.task_delivery(task["id"])["items"][0]["phase"] == "unplanned"
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"nodes": [{"id": "test", "argv": ["echo", "test"]}]}))
+    command = ["task", "v1", "dispatch", task["id"], "--plan", str(plan), "--expected-version", "1", "--json"]
+    preview = runner.invoke(sop_app, command)
+    assert preview.exit_code == 0, preview.output
+    assert json.loads(preview.output)["summary"]["dry_run"]
+    applied = runner.invoke(sop_app, [*command, "--apply"])
+    assert applied.exit_code == 0, applied.output
+    run = json.loads(applied.output)["items"][0]["run"]
+    sdk.run_action(run["id"], "cancel", expected_version=1, dry_run=False)
+    review = runner.invoke(sop_app, ["task", "v1", "review", task["id"], "--run-id", run["id"],
+        "--run-version", "2", "--expected-version", "2", "--decision", "request_changes",
+        "--comment", "Revise the test", "--apply", "--json"])
+    assert review.exit_code == 0, review.output
+    assert json.loads(review.output)["items"][0]["phase"] == "changes_requested"
+    exported = sdk.run_action(run["id"], "export", expected_version=2)["items"][0]
+    assert exported["task"]["id"] == task["id"]
+    assert any(event["action"] == "task.review_evidence" for event in exported["task_events"])
+    for subcommand in ("delivery", "dispatch", "review"):
+        assert runner.invoke(sop_app, ["task", "v1", subcommand, "--help"]).exit_code == 0
+
+
 class LiveCoreTransport(httpx.BaseTransport):
     def __init__(self, client: TestClient) -> None:
         self.client = client

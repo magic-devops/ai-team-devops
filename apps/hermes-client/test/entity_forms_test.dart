@@ -75,6 +75,39 @@ class MutableSettings extends SettingsController {
 }
 
 void main() {
+  testWidgets('task acceptance criteria are editable and submitted',
+      (tester) async {
+    final api = CapturingApiClient();
+    await tester.pumpWidget(_Harness(
+      api: api,
+      child: Consumer(
+        builder: (context, ref, _) => FilledButton(
+          onPressed: () => showEntityForm(context, ref, Resource.tasks,
+              entity: HermesEntity.fromJson({
+                'id': 'task-1',
+                'kind': 'tasks',
+                'version': 1,
+                'status': 'active',
+                'data': {'title': '交付任务', 'acceptance_criteria': '旧条件'},
+              })),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final field = find.widgetWithText(TextFormField, '验收条件');
+    expect(find.text('旧条件'), findsOneWidget);
+    await tester.ensureVisible(field);
+    await tester.enterText(field, '真实测试退出码为 0');
+    await tester.ensureVisible(find.text('提交'));
+    await tester.tap(find.text('提交'));
+    await tester.pumpAndSettle();
+    expect(api.patchedData?['acceptance_criteria'], '真实测试退出码为 0');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('asset edit sends empty strings to clear optional fields',
       (tester) async {
     final api = CapturingApiClient();

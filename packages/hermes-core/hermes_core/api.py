@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
-from .models import API_BASE, ACTIONS, RESOURCES, RESOURCE_DATA_FIELDS, RESOURCE_STATUS_OPTIONS, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, payload
+from .models import API_BASE, ACTIONS, RESOURCES, RESOURCE_DATA_FIELDS, RESOURCE_STATUS_OPTIONS, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, TaskDispatch, TaskReview, payload
+from .delivery import Delivery
 from .execution import Execution
 from .transactional import Store, digest
 from .diagnostics import runtime_checks
@@ -34,6 +35,7 @@ def resource_contracts() -> dict[str, dict[str, object]]:
 
 def create_router(store: Store, execution: Execution, identity: Callable):
     router = APIRouter(prefix=API_BASE, tags=["Hermes Workspace"])
+    delivery = Delivery(store)
     run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of"}
 
     def require(principal: Principal, action: str):
@@ -140,6 +142,12 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         if run["version"] != body.expected_version:
             raise CoreError("version_conflict", "Run changed; reload before applying this action", 409)
         if action in {"start", "retry"}:
+            source = run["data"].get("task_source")
+            if source:
+                task = store.get(principal, workspace, "tasks", source["task_id"])
+                link = task["data"].get("delivery", {})
+                if link.get("run_id") != run_id or link.get("phase") != "executing":
+                    raise CoreError("delivery_closed", "Dispatch a new plan from the task before executing", 409)
             current_workspace = store.get(principal, "", "workspaces", workspace)
             if run["data"].get("workspace_version") != current_workspace["version"]:
                 raise CoreError("workspace_changed", "Workspace configuration changed; create a newly reviewed run", 409)
@@ -151,6 +159,16 @@ def create_router(store: Store, execution: Execution, identity: Callable):
                 if len(batch) < 1000:
                     break
             package = {"kind": "hermes.audit-package", "run": run, "events": evidence, "sha256": digest([run, evidence])}
+            source = run["data"].get("task_source")
+            if source:
+                task = store.get(principal, workspace, "tasks", source["task_id"])
+                task_events = []
+                while True:
+                    batch = store.stream(principal, workspace, entity_id=task["id"], after=task_events[-1]["seq"] if task_events else 0, limit=1000)
+                    task_events.extend(batch)
+                    if len(batch) < 1000:
+                        break
+                package.update(task=task, task_events=task_events, sha256=digest([run, evidence, task, task_events]))
             if body.dry_run:
                 return response(principal, workspace, [package], summary={"dry_run": True})
             artifact = store.create(principal, workspace, "artifacts", package, body.idempotency_key, uuid.uuid4().hex,
@@ -164,6 +182,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         if body.dry_run:
             return response(principal, workspace, [run], summary={"dry_run": True, "action": action, "would_execute": action in {"start", "retry"}, "executor_available": execution.available()})
         if action == "replay":
+            if run["data"].get("task_source"):
+                raise CoreError("task_dispatch_required", "Create the next delivery from its task to retain review history", 409)
             data = {key: value for key, value in run["data"].items() if key not in run_internal_fields}
             result = store.create(principal, workspace, "runs", {**data, "replay_of": run_id}, body.idempotency_key, uuid.uuid4().hex,
                                   status="planned", operation=operation, request=body.model_dump())
@@ -181,9 +201,17 @@ def create_router(store: Store, execution: Execution, identity: Callable):
                 return {"status": target, "data": {**item["data"], "execution_owner": None, "lease_expires_at": None}}
             return {"status": target}
 
+        def guard_delivery(conn):
+            source = run["data"].get("task_source")
+            if source and action in {"start", "retry"}:
+                task = store._get(conn, principal, workspace, "tasks", source["task_id"])
+                link = task["data"].get("delivery", {})
+                if link.get("run_id") != run_id or link.get("phase") != "executing":
+                    raise CoreError("delivery_closed", "The task delivery is no longer executable", 409)
+
         result = store.mutate(principal, workspace, "runs", run_id, operation="run." + action,
             key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
-            expected=body.expected_version, transform=transition)
+            expected=body.expected_version, transform=transition, precondition=guard_delivery)
         if action in {"start", "retry"}:
             background.add_task(execution.execute, principal, workspace, run_id)
         return response(principal, workspace, [result])
@@ -238,6 +266,32 @@ def create_router(store: Store, execution: Execution, identity: Callable):
                         "error": "Execution approval was rejected", "execution_owner": None,
                         "lease_expires_at": None, "recovery_requires_review": False}})
         return response(principal, workspace, [result])
+
+    @router.get("/tasks/{task_id}/delivery", response_model=Envelope)
+    def task_delivery(task_id: str, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "read")
+        workspace = workspace_id(request, principal)
+        return response(principal, workspace, [delivery.detail(principal, workspace, task_id)],
+                        cli={"command": f"sop task v1 delivery {task_id} --json"})
+
+    @router.post("/tasks/{task_id}/dispatch", response_model=Envelope)
+    def task_dispatch(task_id: str, body: TaskDispatch, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "write")
+        require(principal, "execute")
+        workspace = workspace_id(request, principal)
+        trace = uuid.uuid4().hex
+        result = delivery.dispatch(principal, workspace, task_id, body, trace)
+        return payload(principal, workspace, [result], trace=trace,
+                       summary={"dry_run": body.dry_run, "would_execute": False},
+                       cli={"command": f"sop task v1 dispatch {task_id} --plan plan.json --expected-version {body.expected_version} --dry-run --json"})
+
+    @router.post("/tasks/{task_id}/review", response_model=Envelope)
+    def task_review(task_id: str, body: TaskReview, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "approve")
+        workspace = workspace_id(request, principal)
+        trace = uuid.uuid4().hex
+        result = delivery.review(principal, workspace, task_id, body, trace)
+        return payload(principal, workspace, [result], trace=trace, summary={"dry_run": body.dry_run})
 
     @router.get("/{resource}", response_model=Envelope)
     def list_resources(resource: str, request: Request, q: str = "", status: str = "", kind: str = "",
@@ -296,6 +350,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         workspace = "" if resource == "workspaces" else workspace_id(request, principal)
         if resource == "runs" and run_internal_fields.intersection(body.data):
             raise CoreError("server_owned_fields", "Run execution evidence and ownership are server-managed", 422)
+        if resource == "runs" and "task_source" in body.data:
+            raise CoreError("server_owned_fields", "Task provenance is managed by task dispatch", 422)
         data = validate(resource, dict(body.data), principal, workspace)
         if resource == "workspaces":
             data["owner"] = principal.actor
@@ -330,15 +386,27 @@ def create_router(store: Store, execution: Execution, identity: Callable):
 
         if resource == "runs" and run_internal_fields.intersection(body.data):
             raise CoreError("server_owned_fields", "Run execution evidence and ownership are server-managed", 422)
+        if (resource == "runs" and "task_source" in body.data) or (resource == "tasks" and "delivery" in body.data):
+            raise CoreError("server_owned_fields", "Task delivery evidence is server-managed", 422)
 
         def transform(item):
+            if resource == "tasks" and item["data"].get("delivery", {}).get("phase") in {"executing", "accepted"}:
+                raise CoreError("delivery_active", "Dispatched and accepted tasks are immutable; request changes on an open delivery or create a follow-up task", 409)
+            if resource == "tasks" and item["data"].get("delivery") and body.data.get("status") == "completed":
+                raise CoreError("review_required", "Delivered tasks must be completed through evidence review", 409)
+            if resource == "runs" and item["data"].get("task_source"):
+                raise CoreError("immutable_run", "Task execution plans cannot be edited after dispatch", 409)
             if resource == "workspaces" and principal.workspace_ids is not None and entity_id not in principal.workspace_ids:
                 raise CoreError("forbidden", "Workspace access denied", 403)
             if resource == "runs" and item["status"] != "planned":
                 raise CoreError("immutable_run", "Running definitions cannot be edited", 409)
             if resource == "workspaces" and "owner" in body.data and body.data["owner"] != item["data"].get("owner"):
                 raise CoreError("owner_immutable", "Ownership cannot be transferred through a generic update", 403)
-            data = validate(resource, {**item["data"], **body.data}, principal, workspace)
+            merged = {**item["data"], **body.data}
+            link = merged.pop("delivery", None) if resource == "tasks" else None
+            data = validate(resource, merged, principal, workspace)
+            if link:
+                data["delivery"] = link
             changes = {"data": data}
             if resource not in {"runs", "workspaces"} and "status" in body.data:
                 changes["status"] = str(body.data["status"])

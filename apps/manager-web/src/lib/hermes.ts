@@ -94,6 +94,16 @@ export type HermesRunActionBody = {
   dry_run: boolean;
 };
 
+export type HermesDelivery = {
+  id: string;
+  task: HermesEntity;
+  run?: HermesEntity;
+  plan?: HermesRunData;
+  phase?: string;
+  review?: { decision: string; comment: string; actor: string; evidence_sha256: string; trace_id: string };
+  acceptance_criteria?: string;
+};
+
 export type HermesApprovalDecisionBody = {
   decision: "approve" | "reject";
   idempotency_key: string;
@@ -155,6 +165,18 @@ export class HermesClient {
 
   constructor(connection: HermesConnection) {
     this.connection = { ...connection, baseUrl: normalizeBaseUrl(connection.baseUrl) };
+  }
+
+  taskDelivery(taskId: string) {
+    return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/delivery`);
+  }
+
+  taskDispatch(taskId: string, body: HermesRunActionBody & { nodes: HermesRunNode[] }) {
+    return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/dispatch`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  taskReview(taskId: string, body: HermesRunActionBody & { run_id: string; run_version: number; decision: "accept" | "request_changes"; comment: string }) {
+    return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/review`, { method: "POST", body: JSON.stringify(body) });
   }
 
   private headers(): HeadersInit {

@@ -28,9 +28,35 @@ export interface Mutation {
   expected_version?: number | null;
 }
 
+export interface Node {
+  id: string;
+  argv?: Array<string>;
+  expected_exit_code?: number;
+  kind?: "command" | "approval";
+  timeout_seconds?: number;
+  title?: string;
+}
+
 export interface RunAction {
   expected_version: number;
   idempotency_key: string;
+  dry_run?: boolean;
+}
+
+export interface TaskDispatch {
+  expected_version: number;
+  idempotency_key: string;
+  nodes: Array<Node>;
+  dry_run?: boolean;
+}
+
+export interface TaskReview {
+  comment: string;
+  decision: "accept" | "request_changes";
+  expected_version: number;
+  idempotency_key: string;
+  run_id: string;
+  run_version: number;
   dry_run?: boolean;
 }
 

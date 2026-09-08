@@ -39,7 +39,12 @@
     },
     "tasks": {
       "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"]
+      "entity": ["GET", "PATCH"],
+      "delivery": "GET /tasks/{id}/delivery",
+      "dispatch": "POST /tasks/{id}/dispatch",
+      "review": "POST /tasks/{id}/review",
+      "dispatch_permissions": ["write", "execute"],
+      "review_permission": "approve"
     },
     "requirements": {
       "collection": ["GET", "POST"],
@@ -103,6 +108,8 @@
   },
   "run_action_body": ["idempotency_key", "expected_version", "dry_run"],
   "approval_decision_body": ["decision", "idempotency_key", "expected_version", "dry_run"],
+  "task_dispatch_body": ["nodes", "idempotency_key", "expected_version", "dry_run"],
+  "task_review_body": ["run_id", "run_version", "decision", "comment", "idempotency_key", "expected_version", "dry_run"],
   "wire": {
     "entity": ["id", "kind", "version", "status", "data", "created_at", "updated_at"],
     "workspace_data": ["name", "root"],

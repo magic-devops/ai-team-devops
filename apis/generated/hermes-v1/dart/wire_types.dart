@@ -54,6 +54,23 @@ class Mutation {
   });
 }
 
+class Node {
+  final String id;
+  final List<String>? argv;
+  final int? expected_exit_code;
+  final String? kind;
+  final int? timeout_seconds;
+  final String? title;
+  const Node({
+    required this.id,
+    this.argv,
+    this.expected_exit_code,
+    this.kind,
+    this.timeout_seconds,
+    this.title,
+  });
+}
+
 class RunAction {
   final int expected_version;
   final String idempotency_key;
@@ -61,6 +78,38 @@ class RunAction {
   const RunAction({
     required this.expected_version,
     required this.idempotency_key,
+    this.dry_run,
+  });
+}
+
+class TaskDispatch {
+  final int expected_version;
+  final String idempotency_key;
+  final List<Node> nodes;
+  final bool? dry_run;
+  const TaskDispatch({
+    required this.expected_version,
+    required this.idempotency_key,
+    required this.nodes,
+    this.dry_run,
+  });
+}
+
+class TaskReview {
+  final String comment;
+  final String decision;
+  final int expected_version;
+  final String idempotency_key;
+  final String run_id;
+  final int run_version;
+  final bool? dry_run;
+  const TaskReview({
+    required this.comment,
+    required this.decision,
+    required this.expected_version,
+    required this.idempotency_key,
+    required this.run_id,
+    required this.run_version,
     this.dry_run,
   });
 }

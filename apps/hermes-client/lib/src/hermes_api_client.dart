@@ -63,6 +63,53 @@ class HermesApiClient {
     return envelope.items.map((item) => item.toString()).toList();
   }
 
+  Future<HermesEnvelope> taskDelivery(String taskId,
+          {required String workspaceId}) =>
+      _get('/tasks/${Uri.encodeComponent(taskId)}/delivery',
+          workspaceId: workspaceId);
+
+  Future<HermesEnvelope> taskDispatch(
+    String taskId, {
+    required String workspaceId,
+    required int expectedVersion,
+    required List<Map<String, dynamic>> nodes,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) =>
+      _post(
+          '/tasks/${Uri.encodeComponent(taskId)}/dispatch',
+          {
+            'expected_version': expectedVersion,
+            'nodes': nodes,
+            'idempotency_key': idempotencyKey,
+            'dry_run': dryRun,
+          },
+          workspaceId: workspaceId);
+
+  Future<HermesEnvelope> taskReview(
+    String taskId, {
+    required String workspaceId,
+    required int expectedVersion,
+    required String runId,
+    required int runVersion,
+    required String decision,
+    required String comment,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) =>
+      _post(
+          '/tasks/${Uri.encodeComponent(taskId)}/review',
+          {
+            'expected_version': expectedVersion,
+            'run_id': runId,
+            'run_version': runVersion,
+            'decision': decision,
+            'comment': comment,
+            'idempotency_key': idempotencyKey,
+            'dry_run': dryRun,
+          },
+          workspaceId: workspaceId);
+
   Future<List<HermesEntity>> list(
     Resource resource, {
     String? workspaceId,

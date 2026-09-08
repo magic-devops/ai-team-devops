@@ -307,6 +307,27 @@ class HermesClient:
     def run_events(self, run_id: str, *, after: int = 0) -> dict[str, Any]:
         return self._request("GET", f"/runs/{run_id}/events", params={"after": after})
 
+    def task_delivery(self, task_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/tasks/{task_id}/delivery")
+
+    def task_dispatch(self, task_id: str, nodes: list[dict[str, Any]], *, expected_version: int,
+                      dry_run: bool = True, idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("POST", f"/tasks/{task_id}/dispatch", body={
+            "nodes": nodes, "expected_version": expected_version, "dry_run": dry_run,
+            "idempotency_key": idempotency_key or self.new_idempotency_key("task-dispatch"),
+        })
+
+    def task_review(self, task_id: str, *, run_id: str, run_version: int, expected_version: int,
+                    decision: str, comment: str, dry_run: bool = True,
+                    idempotency_key: str | None = None) -> dict[str, Any]:
+        if decision not in {"accept", "request_changes"}:
+            raise ValueError("decision must be accept or request_changes")
+        return self._request("POST", f"/tasks/{task_id}/review", body={
+            "run_id": run_id, "run_version": run_version, "expected_version": expected_version,
+            "decision": decision, "comment": comment, "dry_run": dry_run,
+            "idempotency_key": idempotency_key or self.new_idempotency_key("task-review"),
+        })
+
     def run_action(
         self,
         run_id: str,

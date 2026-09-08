@@ -35,9 +35,35 @@ class Mutation:
     expected_version: int | None = None
 
 @dataclass
+class Node:
+    id: str
+    argv: list[str] | None = None
+    expected_exit_code: int | None = None
+    kind: Literal["command", "approval"] | None = None
+    timeout_seconds: int | None = None
+    title: str | None = None
+
+@dataclass
 class RunAction:
     expected_version: int
     idempotency_key: str
+    dry_run: bool | None = None
+
+@dataclass
+class TaskDispatch:
+    expected_version: int
+    idempotency_key: str
+    nodes: list[Node]
+    dry_run: bool | None = None
+
+@dataclass
+class TaskReview:
+    comment: str
+    decision: Literal["accept", "request_changes"]
+    expected_version: int
+    idempotency_key: str
+    run_id: str
+    run_version: int
     dry_run: bool | None = None
 
 @dataclass
