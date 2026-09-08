@@ -1,13 +1,13 @@
 [project]
 name = "sop-manager"
-version = "2.0.0-dev"
+version = "1.0.0"
 description = "ai-team-devops Manager — SaaS-ready FastAPI 多租户管理后台"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 
 dependencies = [
-  "hermes-core>=5.0.0,<6",
+  "hermes-core>=1.0.0,<2",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
   "sqlalchemy>=2.0.25",

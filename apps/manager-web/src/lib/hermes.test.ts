@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHermesClient } from "./hermesV2";
+import { createHermesClient } from "./hermes";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,20 +12,20 @@ function mockJsonResponse(body: unknown, init: ResponseInit = {}) {
   });
 }
 
-describe("HermesV2Client", () => {
+describe("HermesClient", () => {
   it("preserves audit and agent context and refuses unsafe remote endpoints", async () => {
     const payload = { ok: true, items: [], audit: { actor: "owner", trace_id: "trace" }, agent_consumption: { workspace_id: "ws" }, cli: { command: "sop run list" } };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(mockJsonResponse(payload));
-    const client = createHermesClient({ baseUrl: "https://hermes.example/api/v2", token: "secret" });
+    const client = createHermesClient({ baseUrl: "https://hermes.example/api/hermes/v1", token: "secret" });
     expect(await client.actions()).toMatchObject(payload);
-    expect(fetchMock).toHaveBeenCalledWith("https://hermes.example/api/v2/actions", expect.objectContaining({ redirect: "error", signal: expect.any(AbortSignal) }));
+    expect(fetchMock).toHaveBeenCalledWith("https://hermes.example/api/hermes/v1/actions", expect.objectContaining({ redirect: "error", signal: expect.any(AbortSignal) }));
     fetchMock.mockClear();
     for (const baseUrl of ["http://hermes.example", "https://user:pass@hermes.example", "https://hermes.example?token=secret"]) {
       await expect(createHermesClient({ baseUrl, token: "secret" }).actions()).rejects.toThrow("HTTPS");
     }
     expect(fetchMock).not.toHaveBeenCalled();
   });
-  it("calls Hermes v5 resources with api v2 base, bearer token, workspace scope, and query filters", async () => {
+  it("calls Hermes resources with canonical api v1 base, bearer token, workspace scope, and query filters", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       mockJsonResponse({
         ok: true,
@@ -39,7 +39,7 @@ describe("HermesV2Client", () => {
 
     expect(response.items).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8787/api/v2/runs?q=build&status=ready&kind=command&limit=10&cursor=next",
+      "http://127.0.0.1:8787/api/hermes/v1/runs?q=build&status=ready&kind=command&limit=10&cursor=next",
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer secret",
@@ -69,7 +69,7 @@ describe("HermesV2Client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8787/api/v2/runs/run%2Funsafe%20id/replay",
+      "http://127.0.0.1:8787/api/hermes/v1/runs/run%2Funsafe%20id/replay",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ idempotency_key: "idem-1", expected_version: 7, dry_run: true }),
@@ -88,7 +88,7 @@ describe("HermesV2Client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8787/api/v2/runs/run-1/export",
+      "http://127.0.0.1:8787/api/hermes/v1/runs/run-1/export",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
@@ -113,7 +113,7 @@ describe("HermesV2Client", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8787/api/v2/runs",
+      "http://127.0.0.1:8787/api/hermes/v1/runs",
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
@@ -122,6 +122,29 @@ describe("HermesV2Client", () => {
             nodes: [{ id: "typecheck", title: "Typecheck", kind: "command", argv: ["pnpm", "typecheck"], expected_exit_code: 0, timeout_seconds: 60 }],
           },
           idempotency_key: "run-1",
+        }),
+      }),
+    );
+  });
+
+  it("sends CAS patch payloads without dropping empty strings", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(mockJsonResponse({ ok: true, items: [] }));
+    const client = createHermesClient({ baseUrl: "http://127.0.0.1:8787", token: "secret", workspaceId: "ws-2" });
+
+    await client.patch("tasks", "task-1", {
+      data: { title: "Bounded task", description: "", kind: "", status: "blocked" },
+      expected_version: 4,
+      idempotency_key: "task-edit-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8787/api/hermes/v1/tasks/task-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          data: { title: "Bounded task", description: "", kind: "", status: "blocked" },
+          expected_version: 4,
+          idempotency_key: "task-edit-1",
         }),
       }),
     );

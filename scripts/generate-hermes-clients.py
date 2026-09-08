@@ -249,7 +249,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("openapi", type=Path, nargs="?")
     parser.add_argument("--from-hermes-core", action="store_true")
-    parser.add_argument("--out-dir", type=Path, default=Path("apis/generated/hermes-v2"))
+    parser.add_argument("--out-dir", type=Path, default=Path("apis/generated/hermes-v1"))
     args = parser.parse_args()
     if args.from_hermes_core:
         doc = _load_hermes_core_openapi()

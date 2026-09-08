@@ -148,10 +148,20 @@ class Execution:
         run = self.store.get(principal, workspace, "runs", run_id)
         if run["status"] not in {"queued", "interrupted", "retrying"}:
             return
+        nodes = [Node.model_validate(node) for node in run["data"]["nodes"]]
+        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version")})
 
         def claim(item):
             if item["status"] not in {"queued", "interrupted", "retrying"}:
                 raise CoreError("already_claimed", "Run already has an execution owner", 409)
+            if resume is not None:
+                approval_id = resume.get("approval_id") if isinstance(resume, dict) else None
+                active_node = item["data"].get("active_node")
+                if not active_node:
+                    raise CoreError("stale_resume", "Run is not waiting on an approval gate", 409)
+                expected_approval = digest([run_id, active_node, definition_hash, item["data"].get("attempt", 1)])[:32]
+                if approval_id != expected_approval:
+                    raise CoreError("stale_resume", "Resume approval does not match the current gate", 409)
             return {"status": "running", "data": {**item["data"], "execution_owner": owner,
                 "recovery_requires_review": False, "lease_expires_at": time.time() + self.lease_seconds}}
 
@@ -160,8 +170,6 @@ class Execution:
                 request={}, trace=owner, expected=run["version"], transform=claim)
         except CoreError:
             return
-        nodes = [Node.model_validate(node) for node in run["data"]["nodes"]]
-        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version")})
         root = run["data"]["workspace_root"]
 
         def node_runner(node):
@@ -173,6 +181,8 @@ class Execution:
                 if recorded and recorded.get("succeeded"):
                     return {"results": {**state.get("results", {}), node.id: recorded}}
                 if node.kind == "approval":
+                    self.patch(principal, workspace, run_id, "approval.waiting", lambda item: {
+                        "data": {**item["data"], "active_node": node.id}}, owner)
                     approval_id = digest([run_id, node.id, definition_hash, run["data"].get("attempt", 1)])[:32]
                     try:
                         approval = self.store.get(principal, workspace, "approvals", approval_id)
@@ -221,6 +231,20 @@ class Execution:
                 saver.setup()
                 compiled = graph.compile(checkpointer=saver)
                 snapshot = compiled.get_state(config)
+                if resume is not None:
+                    approval_id = resume.get("approval_id") if isinstance(resume, dict) else None
+                    interrupts = getattr(snapshot, "interrupts", ()) or ()
+                    active_approval = ""
+                    for item in interrupts:
+                        value = getattr(item, "value", item)
+                        if isinstance(value, dict) and value.get("approval_id"):
+                            active_approval = str(value["approval_id"])
+                            break
+                    if active_approval and approval_id != active_approval:
+                        self.patch(principal, workspace, run_id, "run.stale_resume_ignored", lambda item: {
+                            "status": "interrupted",
+                            "data": {**item["data"], "execution_owner": None, "lease_expires_at": None}}, owner)
+                        return
                 input_value = Command(resume=resume) if resume is not None else (None if snapshot.values else {"results": {}})
                 result = compiled.invoke(input_value, config)
                 status = "interrupted" if result.get("__interrupt__") else "completed"

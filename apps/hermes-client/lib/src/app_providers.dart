@@ -26,12 +26,16 @@ final apiProvider = Provider<HermesApiClient>((ref) {
 });
 
 final workspacesProvider = FutureProvider<List<HermesEntity>>((ref) async {
+  final settings = ref.watch(settingsProvider).asData?.value;
+  if (settings?.isConfigured != true) return [];
   return ref.watch(apiProvider).list(Resource.workspaces);
 });
 
 FutureProvider<List<HermesEntity>> resourceProvider(Resource resource) {
   return FutureProvider<List<HermesEntity>>((ref) async {
     final workspaceId = ref.watch(workspaceSelectionProvider);
+    final settings = ref.watch(settingsProvider).asData?.value;
+    if (settings?.isConfigured != true) return [];
     if (resource.scoped && workspaceId == null) return [];
     return ref.watch(apiProvider).list(resource, workspaceId: workspaceId);
   });
@@ -47,6 +51,8 @@ final schedulesProvider = resourceProvider(Resource.schedules);
 
 final approvalsProvider = FutureProvider<List<HermesEntity>>((ref) async {
   final workspaceId = ref.watch(workspaceSelectionProvider);
+  final settings = ref.watch(settingsProvider).asData?.value;
+  if (settings?.isConfigured != true) return [];
   if (workspaceId == null) return [];
   return ref.watch(apiProvider).approvals(workspaceId: workspaceId);
 });
@@ -60,6 +66,8 @@ final readinessProvider = FutureProvider<HermesEnvelope>((ref) async {
 });
 
 final syncProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final settings = ref.watch(settingsProvider).asData?.value;
+  if (settings?.isConfigured != true) return [];
   final workspaceId = ref.watch(workspaceSelectionProvider);
   return ref.watch(apiProvider).sync(workspaceId: workspaceId);
 });

@@ -2,7 +2,8 @@
 
 BINARY := bin/sop-agentd
 GOFLAGS ?= -trimpath
-LDFLAGS ?= -s -w -X 'main.Version=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)'
+VERSION ?= 1.0.0
+LDFLAGS ?= -s -w -X 'main.Version=$(VERSION)'
 
 .PHONY: build cross test lint clean install
 

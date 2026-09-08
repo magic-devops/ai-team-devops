@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 
 from typer.testing import CliRunner
+from sop_cli.__main__ import app as sop_app
 from sop_cli.commands import hermes
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -18,14 +19,20 @@ def test_root_cli_registers_non_colliding_hermes_commands():
     assert 'build_resource_app("assets")' in source
 
 
-def test_existing_singular_task_requirement_are_preserved_with_v2_subcommands():
+def test_root_version_flag_is_eager_and_usable_without_command():
+    result = CliRunner().invoke(sop_app, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert "sop 1.0.0" in result.output
+
+
+def test_existing_singular_task_requirement_are_preserved_with_v1_subcommands():
     task_source = (ROOT / "packages/sop-cli/sop_cli/commands/task.py").read_text(encoding="utf-8")
     requirement_source = (ROOT / "packages/sop-cli/sop_cli/commands/requirement.py").read_text(encoding="utf-8")
 
     assert '@app.command(name="list")' in task_source
-    assert 'app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v2"' in task_source
+    assert 'app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v1"' in task_source
     assert '@app.command(name="list")' in requirement_source
-    assert 'app.add_typer(hermes_cmd.build_resource_app("requirements"), name="v2"' in requirement_source
+    assert 'app.add_typer(hermes_cmd.build_resource_app("requirements"), name="v1"' in requirement_source
 
 
 def test_hermes_cli_defaults_actions_to_dry_run_until_apply():

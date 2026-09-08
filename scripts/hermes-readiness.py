@@ -47,13 +47,13 @@ def checks_for(root: Path, full: bool) -> list[Check]:
     with tempfile.TemporaryDirectory(prefix="hermes-readiness-") as temporary:
         temp = Path(temporary)
         env = {**os.environ, "PROJECT_PATH": str(temp / "project"), "SOP_RUNTIME_DIR": str(temp / "runtime"),
-               "HERMES_DATA_DIR": str(temp / "v5"), "AI_MEMORY_ROOT": str(temp / "ai-memory")}
+               "HERMES_DATA_DIR": str(temp / "hermes"), "AI_MEMORY_ROOT": str(temp / "ai-memory")}
         env["PYTHONPATH"] = os.pathsep.join(str(root / path) for path in ("packages/hermes-core", "apps/manager", "packages/sop-cli", "packages/sop-sdk-python"))
         def run(name, command, *, directory=root, evidence="static", timeout=300):
             result = run_check(name, command, True, directory, env, evidence=evidence, timeout=timeout)
             checks.append(result)
             return result
-        run("python.compile", [python, "-m", "compileall", "-q", "packages/hermes-core", "packages/sop-cli", "packages/sop-sdk-python", "apps/manager/sop_manager/routers/hermes_v5.py"])
+        run("python.compile", [python, "-m", "compileall", "-q", "packages/hermes-core", "packages/sop-cli", "packages/sop-sdk-python", "apps/manager/sop_manager/routers/hermes_workspace.py"])
         runtime = root / "apps/agent-runtime"
         binary = temp / ("sop-agentd.exe" if os.name == "nt" else "sop-agentd")
         built = run("agentd.build", ["go", "build", "-o", str(binary), "./cmd/sop-agentd"], directory=runtime)
@@ -61,9 +61,9 @@ def checks_for(root: Path, full: bool) -> list[Check]:
         if built.status == "passed":
             env["HERMES_TEST_AGENTD"] = str(binary)
         run("core.tests", [python, "-m", "pytest", "packages/hermes-core/tests", "-q"], evidence="execution" if built.status == "passed" else "static")
-        run("manager.scope-permissions-pages", [python, "-m", "pytest", "apps/manager/sop_manager/routers/test_hermes_v5.py", "-q"], evidence="execution")
+        run("manager.scope-permissions-pages", [python, "-m", "pytest", "apps/manager/sop_manager/routers/test_hermes_workspace.py", "-q"], evidence="execution")
         run("sdk-cli.contracts", [python, "-m", "pytest", "packages/sop-sdk-python/tests/test_hermes_client.py", "packages/sop-cli/tests/test_hermes_cli_contract.py", "-q"], evidence="execution")
-        run("sdk.generator", [python, "-m", "pytest", "apis/generated/hermes-v2/generator_regression_test.py", "-q"])
+        run("sdk.generator", [python, "-m", "pytest", "apis/generated/hermes-v1/generator_regression_test.py", "-q"])
         for command in ("workspace", "device", "session", "run", "approval", "asset", "system"):
             run(f"cli.{command}.help", [python, "-m", "sop_cli", command, "--help"], evidence="execution")
         run("scripts.syntax", ["bash", "-n", "scripts/hermes-bootstrap.sh", "scripts/hermes-package.sh", "scripts/hermes-mobile-check.sh"])

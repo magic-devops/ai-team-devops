@@ -35,7 +35,7 @@
     "microAppView": "App view",
     "microAppMode": "Portal",
     "hermesPortal": "Portal Management",
-    "workspaceV5": "Hermes v5 Workspace",
+    "workspace": "Hermes Workspace",
     "microAppMainAdmin": "Admin Center",
     "microAppAiFoundation": "AI Foundation",
     "microAppAiRdCenter": "AI R&D Center",
@@ -348,7 +348,7 @@
       "policies": "Policy catalog",
       "evaluation": "Evaluation",
       "guardrail_actions": "Guardrail actions",
-      "rollback": "Rollback evidence",
+      "rollback": "Rollback drill",
       "agent_directory": "Agent directory",
       "credential_rotation": "Credential rotation",
       "heartbeat": "Heartbeat",
@@ -407,7 +407,6 @@
       "packages": "Deployment packages",
       "canary": "Canary policy",
       "pipelines": "Deployment pipelines",
-      "rollback": "Rollback drill",
       "targets": "Execution targets",
       "routing": "Model routing",
       "cost": "Cost control",
@@ -488,10 +487,6 @@
     "dataQualityRules": "Quality rules",
     "dataQualityRuns": "Quality runs",
     "dataQualityAlerts": "Quality alerts",
-    "dataQualityImpact": "Quality impact",
-    "dataQualityRca": "Quality RCA",
-    "dataQualityForecast": "Quality forecast",
-    "dataQualitySubscriptions": "Quality subscriptions",
     "dataQualityReports": "Quality reports",
     "metricsCenter": "Metrics Center",
     "metricsWorkbench": "Metrics workbench",
@@ -621,8 +616,8 @@
     "linkSearch": "Cross-module keyword & semantic search",
     "linkSettings": "Login & theme"
   },
-  "workspaceV5": {
-    "title": "Hermes v5 Workspace",
+  "workspace": {
+    "title": "Hermes Workspace",
     "subtitle": "Workspace-scoped Hermes core console.",
     "baseUrl": "Core URL",
     "token": "Bearer Token",
@@ -631,17 +626,15 @@
     "standaloneAuthHint": "Standalone mode.",
     "memoryOnly": "Token is held in page memory only.",
     "connectHint": "Enter Core URL and Bearer token.",
+    "coreAuthIndependent": "This page connects directly to Hermes Core and does not require Manager sign-in.",
     "workspaceRequired": "Select a Workspace before loading scoped resources.",
     "authError": "Hermes unauthorized or forbidden",
     "offlineError": "Hermes core unavailable",
     "created": "Create request submitted",
+    "saved": "Saved",
     "actionSent": "Action submitted",
+    "save": "Save",
     "create": "Create",
-    "summary": {
-      "scope": "Current Workspace",
-      "items": "Current items",
-      "readiness": "Core readiness"
-    },
     "ready": "Ready",
     "unknown": "Unknown",
     "noWorkspace": "Not selected",
@@ -650,29 +643,30 @@
     "status": "Status",
     "kind": "Kind",
     "detail": "Detail and evidence",
-    "recordedOutput": "Recorded stdout / output",
-    "noRecordedOutput": "No recorded stdout yet. Before terminal streaming is available, this panel only shows backend-recorded output.",
+    "recordedOutput": "Run output",
+    "noRecordedOutput": "No run output yet",
     "selectEntity": "Select an entity to inspect version, evidence, and executable actions.",
+    "emptyResource": "No resources yet",
+    "permissionReadOnly": "Current Hermes permissions are read-only; create and edit are disabled.",
     "createWorkspace": "Create Workspace",
     "workspaceName": "Workspace name",
     "workspaceRoot": "Workspace root",
-    "createRun": "Create run",
-    "runTitle": "Run title",
     "sessionId": "Session ID",
     "nodesJson": "Sequential nodes JSON",
-    "createAsset": "Create asset",
-    "assetTitle": "Asset title",
-    "assetKind": "Asset kind",
     "assetContent": "Asset content",
     "approvals": "Approval queue",
+    "casHint": "This update will use current version v{{version}} for CAS.",
+    "summary": {
+      "scope": "Current Workspace",
+      "items": "Current items",
+      "readiness": "Core readiness"
+    },
     "resources": {
       "sessions": "Sessions",
       "runs": "Runs",
       "assets": "Assets",
-      "devices": "Devices",
       "tasks": "Tasks",
-      "requirements": "Requirements",
-      "schedules": "Schedules"
+      "requirements": "Requirements"
     },
     "columns": {
       "title": "Title",
@@ -680,9 +674,50 @@
       "kind": "Kind",
       "version": "Version",
       "updated": "Updated",
-      "actions": "Actions"
+      "created": "Created",
+      "actions": "Actions",
+      "resourceVersion": "Resource version"
+    },
+    "fields": {
+      "title": "Title",
+      "name": "Name",
+      "description": "Description"
+    },
+    "drawer": {
+      "create": "Create {{resource}}",
+      "edit": "Edit {{resource}}"
+    },
+    "advanced": {
+      "data": "Advanced data",
+      "evidence": "Evidence JSON"
+    },
+    "validation": {
+      "titleRequired": "Title or name is required",
+      "titleMax": "Use 120 characters or fewer"
+    },
+    "statuses": {
+      "active": "Active",
+      "in_progress": "In progress",
+      "blocked": "Blocked",
+      "completed": "Completed",
+      "archived": "Archived",
+      "draft": "Draft",
+      "ready": "Ready",
+      "paused": "Paused",
+      "planned": "Planned",
+      "queued": "Queued",
+      "running": "Running",
+      "interrupted": "Interrupted",
+      "retrying": "Retrying",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "pending": "Pending approval",
+      "approved": "Approved",
+      "rejected": "Rejected"
     },
     "actions": {
+      "create": "Create",
+      "edit": "Edit",
       "start": "Start",
       "cancel": "Cancel",
       "retry": "Retry",

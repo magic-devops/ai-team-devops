@@ -5,11 +5,11 @@
 **AI 多 Agent 开发规约体系** — 让 AI 像资深工程师团队一样协作开发，持续自我进化
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0--dev-green.svg)](ROADMAP.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](ROADMAP.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Tools](https://img.shields.io/badge/tools-Codex%20CLI%20%7C%20Claude%20Code%20%7C%20opencode%20%7C%20Cursor-orange.svg)](ai-sop-ops/TOOL_INTEGRATION.md)
 
-[快速开始](#快速开始) · [v2 架构](docs/architecture/OVERVIEW.md) · [多仓库与 Manager 拆分](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [平台架构](docs/architecture/OVERVIEW.md) · [多仓库与 Manager 拆分](docs/architecture/PLATFORM_REPOS_AND_MANAGER_SPLIT.md) · [功能全景](#功能全景) · [使用手册](docs/USER_MANUAL.md) · [文档索引](docs/README.md) · [教程](TUTORIAL.md) · [架构](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [参与贡献](CONTRIBUTING.md)
 
 </div>
 
@@ -111,7 +111,7 @@ bash ai-sop-ops/start-manager.sh
 bash ai-sop-ops/health-check.sh
 ```
 
-### 🚀 推荐：v2 方式（统一 CLI + sop-agentd）
+### 统一 CLI + sop-agentd
 
 ```bash
 # 一键开发环境（CLI + agentd + Manager 依赖 + doctor）
@@ -164,7 +164,7 @@ opencode  # 自动读取 opencode.json
 
 ---
 
-## 项目结构（v2 monorepo）
+## 项目结构（monorepo）
 
 ```
 ai-team-devops/

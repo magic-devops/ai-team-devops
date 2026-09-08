@@ -55,7 +55,7 @@ if [[ "${HOST_OS}" == "windows" ]]; then
   EXE_EXT=".exe"
 fi
 
-DIST_ROOT="${ROOT}/dist/hermes-v5"
+DIST_ROOT="${ROOT}/dist/hermes-1.0.0"
 BUILD_ROOT="${DIST_ROOT}/.build/${HOST_NAME}"
 PYI_DIST="${BUILD_ROOT}/pyinstaller-dist"
 PYI_WORK="${BUILD_ROOT}/pyinstaller-work"
@@ -113,11 +113,11 @@ fi
 
 mkdir -p "${DIST_ROOT}" "${BUILD_ROOT}"
 DIST="$(mktemp -d "${DIST_ROOT}/${HOST_NAME}-${PACKAGE_MODE}.XXXXXX")"
-BUNDLE_ROOT="${DIST}/HermesV5"
+BUNDLE_ROOT="${DIST}/Hermes"
 if [[ "${PACKAGE_MODE}" == "full" ]]; then
   if [[ "${HOST_OS}" == "macos" ]]; then
-    cp -R "${FLUTTER_BUNDLE}" "${DIST}/HermesV5.app"
-    BUNDLE_ROOT="${DIST}/HermesV5.app/Contents/Resources"
+    cp -R "${FLUTTER_BUNDLE}" "${DIST}/Hermes.app"
+    BUNDLE_ROOT="${DIST}/Hermes.app/Contents/Resources"
   else
     mkdir -p "${BUNDLE_ROOT}"
     cp -R "${FLUTTER_BUNDLE}/." "${BUNDLE_ROOT}/"
@@ -169,8 +169,8 @@ fi
 
 echo "${PACKAGE_MODE} development bundle staged" >&2
 if [[ "${PACKAGE_MODE}" == "full" && "${HOST_OS}" == "macos" ]]; then
-  codesign --force --deep --sign - "${DIST}/HermesV5.app"
-  codesign --verify --deep --strict "${DIST}/HermesV5.app"
+  codesign --force --deep --sign - "${DIST}/Hermes.app"
+  codesign --verify --deep --strict "${DIST}/Hermes.app"
 fi
 
 QA_TMP="$(mktemp -d "${TMPDIR:-/tmp}/hermes-package-qa.XXXXXX")"
@@ -242,7 +242,7 @@ def request(method: str, path: str, body: dict | None = None, workspace_id: str 
 
 while True:
     try:
-        health = json.loads(urllib.request.urlopen(base + "/api/v2/health", timeout=2).read())
+        health = json.loads(urllib.request.urlopen(base + "/api/hermes/v1/health", timeout=2).read())
         break
     except (OSError, urllib.error.URLError):
         if time.time() >= deadline:
@@ -251,27 +251,27 @@ while True:
 if health.get("ok") is not True or health.get("service") != "hermes-core":
     raise SystemExit(f"unexpected health response: {health}")
 
-workspace = request("POST", "/api/v2/workspaces", {
+workspace = request("POST", "/api/hermes/v1/workspaces", {
     "data": {"name": "Package QA", "root": str(workspace_root)},
     "idempotency_key": "package-qa-workspace",
 })
 workspace_id = workspace["items"][0]["id"]
-runs = request("GET", "/api/v2/runs", workspace_id=workspace_id)
+runs = request("GET", "/api/hermes/v1/runs", workspace_id=workspace_id)
 required = {"ok", "scope", "summary", "items", "actions", "permissions", "audit", "trace_id", "agent_consumption", "cli"}
 missing = required.difference(runs)
 if missing:
     raise SystemExit(f"workspace API response missing keys: {sorted(missing)}")
 
-run = request("POST", "/api/v2/runs", {
+run = request("POST", "/api/hermes/v1/runs", {
     "data": {"title": "Frozen execution QA", "nodes": [{"id": "list", "title": "List files", "kind": "command", "argv": ["workspace-file-list"], "timeout_seconds": 10}]},
     "idempotency_key": "package-run",
 }, workspace_id)["items"][0]
-request("POST", f"/api/v2/runs/{run['id']}/start", {
+request("POST", f"/api/hermes/v1/runs/{run['id']}/start", {
     "idempotency_key": "package-start", "expected_version": run["version"], "dry_run": False,
 }, workspace_id)
 deadline = time.time() + 20
 while time.time() < deadline:
-    run = request("GET", f"/api/v2/runs/{run['id']}", workspace_id=workspace_id)["items"][0]
+    run = request("GET", f"/api/hermes/v1/runs/{run['id']}", workspace_id=workspace_id)["items"][0]
     if run["status"] in {"completed", "failed"}:
         break
     time.sleep(0.1)
@@ -287,7 +287,7 @@ print(json.dumps({
 PY
 
 mkdir -p "${ROOT}/dist"
-ARCHIVE="${ROOT}/dist/hermes-v5-${HOST_NAME}-${PACKAGE_MODE}.tar.gz"
+ARCHIVE="${ROOT}/dist/hermes-1.0.0-${HOST_NAME}-${PACKAGE_MODE}.tar.gz"
 tar -C "${DIST}" -czf "${ARCHIVE}.tmp" .
 mv "${ARCHIVE}.tmp" "${ARCHIVE}"
 

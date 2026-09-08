@@ -1,6 +1,6 @@
 {
-  "version": "5.0",
-  "base_path": "/api/v2",
+  "version": "1.0.0",
+  "base_path": "/api/hermes/v1",
   "auth": {
     "type": "bearer",
     "header": "Authorization",
@@ -72,6 +72,33 @@
     "post": ["data", "idempotency_key"],
     "patch": ["data", "idempotency_key", "expected_version"],
     "delete": ["idempotency_key", "expected_version", "dry_run"]
+  },
+  "resource_contracts": {
+    "tasks": {
+      "title_max_length": 120,
+      "title_required": true,
+      "statuses": ["active", "in_progress", "blocked", "completed", "archived"],
+      "fields": ["title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"]
+    },
+    "requirements": {
+      "title_max_length": 120,
+      "title_required": true,
+      "statuses": ["active", "draft", "ready", "completed", "archived"],
+      "fields": ["title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"]
+    },
+    "sessions": {
+      "title_max_length": 120,
+      "title_required": true,
+      "statuses": ["active", "paused", "completed", "archived"],
+      "fields": ["title", "content", "summary", "description", "assigned_agent", "dev_tool", "source", "kind", "workspace_root"]
+    },
+    "assets": {
+      "title_max_length": 120,
+      "title_required": true,
+      "title_aliases": ["name"],
+      "statuses": ["active", "archived"],
+      "fields": ["title", "name", "content", "summary", "description", "source", "kind"]
+    }
   },
   "run_action_body": ["idempotency_key", "expected_version", "dry_run"],
   "approval_decision_body": ["decision", "idempotency_key", "expected_version", "dry_run"],

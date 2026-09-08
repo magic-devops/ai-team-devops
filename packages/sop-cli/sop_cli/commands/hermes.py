@@ -115,7 +115,7 @@ def _run_call(call: Callable[[HermesClient], dict[str, Any]], *, as_json: bool) 
 
 
 def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> typer.Typer:
-    app = typer.Typer(help=f"Hermes v5 {resource} /api/v2 commands", no_args_is_help=True)
+    app = typer.Typer(help=f"Hermes {resource} /api/hermes/v1 commands", no_args_is_help=True)
     delete_enabled = (resource in DELETE_NAMES) if allow_delete is None else allow_delete
 
     @app.command("list")
@@ -238,8 +238,8 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
     return app
 
 
-workspace_app = typer.Typer(help="Hermes v5 workspaces /api/v2 commands", no_args_is_help=True)
-approval_app = typer.Typer(help="Hermes v5 approvals /api/v2 commands", no_args_is_help=True)
+workspace_app = typer.Typer(help="Hermes workspaces /api/hermes/v1 commands", no_args_is_help=True)
+approval_app = typer.Typer(help="Hermes approvals /api/hermes/v1 commands", no_args_is_help=True)
 
 
 @workspace_app.command("list")
@@ -284,7 +284,7 @@ def approval_decision(
     )
 
 
-system_app = typer.Typer(help="Hermes v5 system/readiness and sync commands", no_args_is_help=True)
+system_app = typer.Typer(help="Hermes system/readiness and sync commands", no_args_is_help=True)
 
 
 @system_app.command("readiness")

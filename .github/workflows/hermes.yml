@@ -1,4 +1,4 @@
-name: hermes-v5
+name: hermes
 
 on:
   push:
@@ -12,10 +12,11 @@ on:
       - "packages/sop-sdk-python/**"
       - "apis/**"
       - "scripts/hermes-*"
-      - "docs/architecture/HERMES_V5.md"
-      - "docs/HERMES_V5_ACCEPTANCE.md"
+      - "docs/architecture/HERMES_WORKSPACE.md"
+      - "docs/HERMES_ACCEPTANCE.md"
+      - "docs/HERMES_1_0_0_QA.md"
       - "ai-sop/custom/design/README.md"
-      - ".github/workflows/hermes-v5.yml"
+      - ".github/workflows/hermes.yml"
   pull_request:
     paths:
       - "packages/hermes-core/**"
@@ -27,10 +28,11 @@ on:
       - "packages/sop-sdk-python/**"
       - "apis/**"
       - "scripts/hermes-*"
-      - "docs/architecture/HERMES_V5.md"
-      - "docs/HERMES_V5_ACCEPTANCE.md"
+      - "docs/architecture/HERMES_WORKSPACE.md"
+      - "docs/HERMES_ACCEPTANCE.md"
+      - "docs/HERMES_1_0_0_QA.md"
       - "ai-sop/custom/design/README.md"
-      - ".github/workflows/hermes-v5.yml"
+      - ".github/workflows/hermes.yml"
 
 jobs:
   core:

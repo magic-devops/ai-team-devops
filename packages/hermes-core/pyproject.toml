@@ -1,6 +1,6 @@
 [project]
 name = "hermes-core"
-version = "5.0.0"
+version = "1.0.0"
 description = "Hermes transactional workspace and durable execution core"
 requires-python = ">=3.11"
 dependencies = [

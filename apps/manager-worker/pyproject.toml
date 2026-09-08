@@ -1,6 +1,6 @@
 [project]
 name = "sop-manager-worker"
-version = "0.1.0-dev"
+version = "1.0.0"
 description = "Manager 异步任务进程：HTTP 健康探活与可选 Redis Streams 消费骨架"
 readme = "README.md"
 requires-python = ">=3.10"

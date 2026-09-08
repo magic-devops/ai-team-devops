@@ -45,7 +45,7 @@ def test_list_resource_uses_v2_bearer_workspace_and_query():
 
     assert payload["ok"] is True
     assert seen == {
-        "url": "https://hermes.example/api/v2/runs?q=build&status=ready&kind=command&limit=7&cursor=abc",
+        "url": "https://hermes.example/api/hermes/v1/runs?q=build&status=ready&kind=command&limit=7&cursor=abc",
         "authorization": "Bearer token-1",
         "workspace": "ws-1",
     }
@@ -56,9 +56,9 @@ def test_health_is_unauthenticated():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["authorization"] = request.headers.get("Authorization")
-        return httpx.Response(200, json={"ok": True, "service": "hermes-core", "version": "5.0.0"})
+        return httpx.Response(200, json={"ok": True, "service": "hermes-core", "version": "1.0.0"})
 
-    client = HermesClient("https://hermes.example/api/v2", token=_token(), transport=httpx.MockTransport(handler))
+    client = HermesClient("https://hermes.example/api/hermes/v1", token=_token(), transport=httpx.MockTransport(handler))
 
     client.health()
 
@@ -79,15 +79,15 @@ def test_create_patch_and_run_action_bodies_match_contract():
     client.run_action("run-1", "start", expected_version=5, idempotency_key="idem-run")
 
     assert requests == [
-        ("POST", "/api/v2/assets", {"data": {"title": "KB", "kind": "knowledge"}, "idempotency_key": "idem-create"}),
+        ("POST", "/api/hermes/v1/assets", {"data": {"title": "KB", "kind": "knowledge"}, "idempotency_key": "idem-create"}),
         (
             "PATCH",
-            "/api/v2/assets/asset-1",
+            "/api/hermes/v1/assets/asset-1",
             {"data": {"title": "KB2"}, "idempotency_key": "idem-patch", "expected_version": 3},
         ),
         (
             "POST",
-            "/api/v2/runs/run-1/start",
+            "/api/hermes/v1/runs/run-1/start",
             {"idempotency_key": "idem-run", "expected_version": 5, "dry_run": True},
         ),
     ]
@@ -142,10 +142,10 @@ def test_delete_approval_and_export_are_versioned_dry_runs():
         client.approval_decision("p", decision="approve", expected_version=3, idempotency_key="approval-key")
         client.run_action("r", "export", expected_version=4, idempotency_key="export-key")
     assert requests == [
-        ("DELETE", "/api/v2/assets/a", {"expected_version": 2, "dry_run": True, "idempotency_key": "delete-key"}),
-        ("POST", "/api/v2/approvals/p/decision", {"decision": "approve", "expected_version": 3,
+        ("DELETE", "/api/hermes/v1/assets/a", {"expected_version": 2, "dry_run": True, "idempotency_key": "delete-key"}),
+        ("POST", "/api/hermes/v1/approvals/p/decision", {"decision": "approve", "expected_version": 3,
                                                "dry_run": True, "idempotency_key": "approval-key"}),
-        ("POST", "/api/v2/runs/r/export", {"expected_version": 4, "dry_run": True, "idempotency_key": "export-key"}),
+        ("POST", "/api/hermes/v1/runs/r/export", {"expected_version": 4, "dry_run": True, "idempotency_key": "export-key"}),
     ]
 
 

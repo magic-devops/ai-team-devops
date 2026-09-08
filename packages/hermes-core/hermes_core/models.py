@@ -5,15 +5,28 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+API_BASE = "/api/hermes/v1"
 RESOURCES = frozenset({"workspaces", "sessions", "runs", "tasks", "requirements", "assets", "devices", "schedules", "approvals", "artifacts"})
 PERMISSIONS = frozenset({"read", "write", "execute", "approve", "export", "config"})
+RESOURCE_STATUS_OPTIONS = {
+    "tasks": ("active", "in_progress", "blocked", "completed", "archived"),
+    "requirements": ("active", "draft", "ready", "completed", "archived"),
+    "sessions": ("active", "paused", "completed", "archived"),
+    "assets": ("active", "archived"),
+}
+RESOURCE_DATA_FIELDS = {
+    "tasks": ("title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"),
+    "requirements": ("title", "content", "summary", "description", "priority", "assigned_agent", "dev_tool", "acceptance_criteria", "source", "kind"),
+    "sessions": ("title", "content", "summary", "description", "assigned_agent", "dev_tool", "source", "kind", "workspace_root"),
+    "assets": ("title", "name", "content", "summary", "description", "source", "kind"),
+}
 ACTIONS = [
-    {"id": "read", "permission": "read", "method": "GET", "path": "/api/v2/{resource}"},
-    {"id": "create", "permission": "write", "method": "POST", "path": "/api/v2/{resource}"},
-    {"id": "update", "permission": "write", "method": "PATCH", "path": "/api/v2/{resource}/{id}"},
-    *[{"id": action, "permission": "execute", "method": "POST", "path": "/api/v2/runs/{id}/" + action} for action in ("start", "cancel", "retry", "replay")],
-    {"id": "decision", "permission": "approve", "method": "POST", "path": "/api/v2/approvals/{id}/decision"},
-    {"id": "export", "permission": "export", "method": "POST", "path": "/api/v2/runs/{id}/export"},
+    {"id": "read", "permission": "read", "method": "GET", "path": f"{API_BASE}/{{resource}}"},
+    {"id": "create", "permission": "write", "method": "POST", "path": f"{API_BASE}/{{resource}}"},
+    {"id": "update", "permission": "write", "method": "PATCH", "path": f"{API_BASE}/{{resource}}/{{id}}"},
+    *[{"id": action, "permission": "execute", "method": "POST", "path": f"{API_BASE}/runs/{{id}}/" + action} for action in ("start", "cancel", "retry", "replay")],
+    {"id": "decision", "permission": "approve", "method": "POST", "path": f"{API_BASE}/approvals/{{id}}/decision"},
+    {"id": "export", "permission": "export", "method": "POST", "path": f"{API_BASE}/runs/{{id}}/export"},
 ]
 
 

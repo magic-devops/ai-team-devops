@@ -1,14 +1,14 @@
-# Hermes v5 Architecture
+# Hermes Architecture
 
-Status: ADR accepted for the authorized v5 contract. This is a buildable local
+Status: ADR accepted for the authorized v1 contract. This is a buildable local
 core slice, not a claim of full production readiness.
 
 ## Contract
 
-- Base path: `/api/v2`
+- Base path: `/api/hermes/v1`
 - Authentication: `Authorization: Bearer <token>`
 - Scope selector: `X-Workspace-Id`
-- Unauthenticated endpoint: `GET /api/v2/health`
+- Unauthenticated endpoint: `GET /api/hermes/v1/health`
 - Health response is intentionally short: `{ok,version,service}`.
 - Other API responses use the uniform envelope:
   `{ok,scope,summary,items,actions,permissions,audit,trace_id,agent_consumption,cli,error?}`.
@@ -17,7 +17,7 @@ core slice, not a claim of full production readiness.
 ## Chosen Decisions
 
 - ADR-001: Flutter is the first desktop/mobile host choice because one UI codebase can target macOS, Windows, Linux, iOS, and Android. It is not the only possible option; native Swift/Kotlin/Electron remain valid future alternatives when platform-specific UX or enterprise controls justify the cost.
-- ADR-002: Domain extraction is FastAPI plus a small Python core package. The existing Manager v1 Hermes blueprint remains separate; v5 owns an authorized local control plane with SQLite storage and a frozen wire contract.
+- ADR-002: Domain extraction is FastAPI plus a small Python core package. The existing Manager v1 Hermes blueprint remains separate; Hermes Workspace owns an authorized local control plane with SQLite storage and a frozen wire contract.
 - ADR-003: Go remains the `agentd` runtime lane for local IPC/process integration. Python core exposes HTTP and storage; Go agentd owns daemon-grade local execution and IPC.
 - ADR-004: Storage starts with SQLite for desktop/local bootstrap and keeps PostgreSQL as the remote/team persistence target. No automatic legacy data migration is performed; migration requires an explicit reviewed plan.
 
@@ -26,13 +26,13 @@ core slice, not a claim of full production readiness.
 Desktop local bootstrap:
 
 ```bash
-PYTHONPATH=packages/hermes-core PYTHON_BIN=/path/to/python-with-deps bash scripts/hermes-bootstrap.sh /tmp/hermes-v5
+PYTHONPATH=packages/hermes-core PYTHON_BIN=/path/to/python-with-deps bash scripts/hermes-bootstrap.sh /tmp/hermes
 ```
 
 The process generates a 0600 token file when absent and writes:
 
 ```json
-{"url":"http://127.0.0.1:PORT","token_file":"/tmp/hermes-v5/token","pid":12345}
+{"url":"http://127.0.0.1:PORT","token_file":"/tmp/hermes/token","pid":12345}
 ```
 
 Mobile remote mode uses a configured base URL and token. Clients fail closed
@@ -79,8 +79,8 @@ version checks, idempotency, audit events, and run actions are stable.
   installer signing, notarization or update publication.
 - External publish is out of scope for this slice.
 - Core-only package layout is host-neutral inside the tar bundle:
-  `HermesV5/runtime/hermes-core/hermes-core(.exe)` and
-  `HermesV5/runtime/agentd/sop-agentd(.exe)`. The script does not fabricate a
+  `Hermes/runtime/hermes-core/hermes-core(.exe)` and
+  `Hermes/runtime/agentd/sop-agentd(.exe)`. The script does not fabricate a
   `.app`, DMG, MSI, MSIX, deb, or full installer.
 - `bash scripts/hermes-package.sh --core-only` builds the frozen core and
   agentd. `bash scripts/hermes-package.sh` is the full package lane; it fails

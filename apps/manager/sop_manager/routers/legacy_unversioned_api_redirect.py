@@ -2,6 +2,8 @@
 
 排除：
 - 已是 `/api/v1/*`
+- 明确版本化但不再兼容的 `/api/v2/*`
+- Hermes 工作空间规范路由 `/api/hermes/v1/*`
 - Docker 遗留面 `/api/env/*`（见 ``docker_env`` 中 ``/api/env/security`` 路由）
 
 使用 308，保留方法与 body（客户端跟随重定向时行为正确）。
@@ -24,6 +26,8 @@ async def legacy_unversioned_api_redirect_middleware(
         path.startswith("/api/")
         and not path.startswith("/api/v1/")
         and not path.startswith("/api/v2/")
+        and path != "/api/hermes/v1"
+        and not path.startswith("/api/hermes/v1/")
         and not path.startswith("/api/env/")
     ):
         tail = path[len("/api/") :]

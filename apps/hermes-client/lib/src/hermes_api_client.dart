@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 
-const _apiBasePath = '/api/v2';
+const hermesApiBasePath = '/api/hermes/v1';
 
 class HermesApiClient {
   HermesApiClient({
@@ -287,8 +287,9 @@ class HermesApiClient {
           'Remote connections require HTTPS. Only loopback HTTP is allowed.');
     }
     final normalizedPath = [
-      if (!_cleanPath(base.path).endsWith('api/v2')) _cleanPath(base.path),
-      _cleanPath(_apiBasePath),
+      if (!_cleanPath(base.path).endsWith(_cleanPath(hermesApiBasePath)))
+        _cleanPath(base.path),
+      _cleanPath(hermesApiBasePath),
       _cleanPath(path),
     ].where((part) => part.isNotEmpty).join('/');
     return base.replace(

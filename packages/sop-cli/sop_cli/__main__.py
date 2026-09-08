@@ -63,6 +63,7 @@ app = typer.Typer(
     name="sop",
     help="ai-team-devops 统一命令行（项目初始化 / 接入 / 同步 / 自检 / LLM）",
     add_completion=True,
+    invoke_without_command=True,
     no_args_is_help=True,
     rich_markup_mode="rich",
     epilog=SHORT_HELP_EPILOG.strip(),
@@ -93,13 +94,13 @@ app.add_typer(issue_cmd.app, name="issue", help="问题：list/create/update/res
 app.add_typer(task_cmd.app,    name="task",    help="任务：list/schedule/feed/report/create/update/pull/done/fail/delete/issue")
 app.add_typer(sprint_cmd.app, name="sprint", help="迭代：list/create/update/complete/progress/delete")
 app.add_typer(workflow_cmd.app, name="workflow", help="工作流：instances/events/ops-plan/ops-tasks")
-app.add_typer(hermes_cmd.workspace_app, name="workspace", help="Hermes v5 工作空间：list/create")
-app.add_typer(hermes_cmd.build_resource_app("devices"), name="device", help="Hermes v5 设备：list/get/create/patch/delete")
-app.add_typer(hermes_cmd.build_resource_app("sessions"), name="session", help="Hermes v5 会话：list/get/create/patch")
-app.add_typer(hermes_cmd.build_resource_app("runs"), name="run", help="Hermes v5 运行：list/get/create/patch/events/action")
-app.add_typer(hermes_cmd.approval_app, name="approval", help="Hermes v5 审批：list/decision")
-app.add_typer(hermes_cmd.build_resource_app("assets"), name="asset", help="Hermes v5 资产：list/get/create/patch/delete")
-app.add_typer(hermes_cmd.system_app, name="hermes", help="Hermes v5 系统：health/actions/readiness/sync")
+app.add_typer(hermes_cmd.workspace_app, name="workspace", help="Hermes 工作空间：list/create")
+app.add_typer(hermes_cmd.build_resource_app("devices"), name="device", help="Hermes 设备：list/get/create/patch/delete")
+app.add_typer(hermes_cmd.build_resource_app("sessions"), name="session", help="Hermes 会话：list/get/create/patch")
+app.add_typer(hermes_cmd.build_resource_app("runs"), name="run", help="Hermes 运行：list/get/create/patch/events/action")
+app.add_typer(hermes_cmd.approval_app, name="approval", help="Hermes 审批：list/decision")
+app.add_typer(hermes_cmd.build_resource_app("assets"), name="asset", help="Hermes 资产：list/get/create/patch/delete")
+app.add_typer(hermes_cmd.system_app, name="hermes", help="Hermes 系统：health/actions/readiness/sync")
 app.add_typer(work_cmd.app, name="work", help="工作台：summary/list/next/export")
 app.add_typer(event_cmd.app, name="event", help="事件：emit/flush/list")
 app.add_typer(usage_cmd.app, name="usage", help="用量：record/flush/summary/quota")
@@ -152,12 +153,16 @@ def help_command(
             console.print(panel)
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def _root(
-    version: bool = typer.Option(False, "--version", "-V", help="显示版本"),
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V", help="显示版本", is_eager=True),
 ) -> None:
     if version:
         Console().print(f"sop {__version__}")
+        raise typer.Exit(0)
+    if ctx.invoked_subcommand is None:
+        Console().print(ctx.get_help())
         raise typer.Exit(0)
 
 

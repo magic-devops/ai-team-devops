@@ -35,7 +35,7 @@
     "microAppView": "アプリビュー",
     "microAppMode": "Portal",
     "hermesPortal": "ポータル管理",
-    "workspaceV5": "Hermes v5 ワークスペース",
+    "workspace": "Hermes ワークスペース",
     "microAppMainAdmin": "基盤管理センター",
     "microAppAiFoundation": "AI 基盤サービス",
     "microAppAiRdCenter": "AI 研究開発センター",
@@ -310,10 +310,6 @@
     "dataQualityRules": "品質ルール",
     "dataQualityRuns": "品質実行",
     "dataQualityAlerts": "品質アラート",
-    "dataQualityImpact": "品質影響分析",
-    "dataQualityRca": "品質 RCA",
-    "dataQualityForecast": "品質予測",
-    "dataQualitySubscriptions": "品質サブスクリプション",
     "dataQualityReports": "品質レポート",
     "metricsCenter": "メトリクスセンター",
     "metricsWorkbench": "メトリクスワークベンチ",
@@ -437,7 +433,7 @@
       "policies": "策略カタログ",
       "evaluation": "策略評価",
       "guardrail_actions": "ガードレール操作",
-      "rollback": "ロールバック証跡",
+      "rollback": "ロールバック訓練",
       "agent_directory": "Agent ディレクトリ",
       "credential_rotation": "認証情報ローテーション",
       "heartbeat": "ハートビート",
@@ -496,7 +492,6 @@
       "packages": "デプロイパッケージ",
       "canary": "カナリアポリシー",
       "pipelines": "デプロイパイプライン",
-      "rollback": "ロールバック訓練",
       "targets": "実行ターゲット",
       "routing": "モデルルーティング",
       "cost": "コスト制御",
@@ -593,8 +588,8 @@
     "linkWorkflows": "オーケストレーション起動",
     "linkSettings": "ログインとテーマ"
   },
-  "workspaceV5": {
-    "title": "Hermes v5 ワークスペース",
+  "workspace": {
+    "title": "Hermes ワークスペース",
     "subtitle": "Workspace スコープの Hermes core コンソール。",
     "baseUrl": "Core URL",
     "token": "Bearer Token",
@@ -603,17 +598,15 @@
     "standaloneAuthHint": "スタンドアロンモード。",
     "memoryOnly": "Token はページメモリのみに保持されます。",
     "connectHint": "Core URL と Bearer Token を入力してください。",
+    "coreAuthIndependent": "このページは Hermes Core に直接接続し、Manager ログインは不要です。",
     "workspaceRequired": "Workspace を選択してからスコープ付きリソースを読み込みます。",
     "authError": "Hermes は未認証または権限不足です",
     "offlineError": "Hermes core は利用できません",
     "created": "作成リクエストを送信しました",
+    "saved": "保存しました",
     "actionSent": "アクションを送信しました",
+    "save": "保存",
     "create": "作成",
-    "summary": {
-      "scope": "現在の Workspace",
-      "items": "現在の項目",
-      "readiness": "Core readiness"
-    },
     "ready": "Ready",
     "unknown": "不明",
     "noWorkspace": "未選択",
@@ -622,29 +615,30 @@
     "status": "ステータス",
     "kind": "種類",
     "detail": "詳細と証拠",
-    "recordedOutput": "Recorded stdout / output",
-    "noRecordedOutput": "記録済み stdout はまだありません。ターミナルストリーミング前はバックエンド記録の出力のみ表示します。",
+    "recordedOutput": "実行出力",
+    "noRecordedOutput": "実行出力はまだありません",
     "selectEntity": "エンティティを選択して、バージョン、証拠、実行可能アクションを確認します。",
+    "emptyResource": "リソースはありません",
+    "permissionReadOnly": "現在の Hermes 権限は読み取り専用です。作成と編集は無効です。",
     "createWorkspace": "Workspace 作成",
     "workspaceName": "Workspace 名称",
     "workspaceRoot": "Workspace ルート",
-    "createRun": "実行を作成",
-    "runTitle": "実行タイトル",
     "sessionId": "Session ID",
     "nodesJson": "順次ノード JSON",
-    "createAsset": "資産を作成",
-    "assetTitle": "資産タイトル",
-    "assetKind": "資産種類",
     "assetContent": "資産内容",
     "approvals": "承認キュー",
+    "casHint": "現在のバージョン v{{version}} で CAS 更新します。",
+    "summary": {
+      "scope": "現在の Workspace",
+      "items": "現在の項目",
+      "readiness": "Core readiness"
+    },
     "resources": {
       "sessions": "セッション",
       "runs": "実行",
       "assets": "資産",
-      "devices": "デバイス",
       "tasks": "タスク",
-      "requirements": "要件",
-      "schedules": "スケジュール"
+      "requirements": "要件"
     },
     "columns": {
       "title": "タイトル",
@@ -652,9 +646,50 @@
       "kind": "種類",
       "version": "バージョン",
       "updated": "更新日時",
-      "actions": "アクション"
+      "created": "作成日時",
+      "actions": "アクション",
+      "resourceVersion": "リソース版"
+    },
+    "fields": {
+      "title": "タイトル",
+      "name": "名称",
+      "description": "説明"
+    },
+    "drawer": {
+      "create": "{{resource}} を作成",
+      "edit": "{{resource}} を編集"
+    },
+    "advanced": {
+      "data": "詳細データ",
+      "evidence": "証拠 JSON"
+    },
+    "validation": {
+      "titleRequired": "タイトルまたは名称は必須です",
+      "titleMax": "120 文字以内で入力してください"
+    },
+    "statuses": {
+      "active": "有効",
+      "in_progress": "進行中",
+      "blocked": "ブロック",
+      "completed": "完了",
+      "archived": "アーカイブ済み",
+      "draft": "下書き",
+      "ready": "準備完了",
+      "paused": "一時停止",
+      "planned": "計画済み",
+      "queued": "キュー済み",
+      "running": "実行中",
+      "interrupted": "中断",
+      "retrying": "再試行中",
+      "failed": "失敗",
+      "cancelled": "キャンセル済み",
+      "pending": "承認待ち",
+      "approved": "承認済み",
+      "rejected": "拒否済み"
     },
     "actions": {
+      "create": "作成",
+      "edit": "編集",
       "start": "開始",
       "cancel": "キャンセル",
       "retry": "再試行",

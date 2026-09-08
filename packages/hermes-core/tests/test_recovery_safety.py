@@ -37,7 +37,7 @@ def test_token_symlink_is_not_followed(tmp_path):
 
 
 def test_auth_error_envelope_is_complete(tmp_path):
-    response = TestClient(create_app(tmp_path, "token")).get("/api/v2/workspaces")
+    response = TestClient(create_app(tmp_path, "token")).get("/api/hermes/v1/workspaces")
     assert response.status_code == 401
     assert {"ok", "scope", "summary", "items", "actions", "permissions", "audit", "trace_id", "cli", "agent_consumption"} <= response.json().keys()
     assert response.json()["permissions"] == []

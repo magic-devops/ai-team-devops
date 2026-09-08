@@ -16,8 +16,8 @@ from sop_manager.routers.sql_models import User
 from sop_manager.path_config import resolved_runtime_dir
 
 
-def mount_hermes_v5(app):
-    data_dir = Path(os.getenv("HERMES_DATA_DIR", str(resolved_runtime_dir() / "hermes-v5"))).expanduser()
+def mount_hermes_workspace(app):
+    data_dir = Path(os.getenv("HERMES_DATA_DIR", str(resolved_runtime_dir() / "hermes"))).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
     store = Store(os.getenv("HERMES_DATABASE_URL", "sqlite:///" + str((data_dir / "workspace.sqlite").resolve())))
     execution = Execution(store, data_dir)

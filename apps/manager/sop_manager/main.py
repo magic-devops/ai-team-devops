@@ -38,7 +38,7 @@ def _manager_web_dist_dir() -> Path | None:
 
 _MANAGER_WEB_DIST = _manager_web_dist_dir()
 
-app = FastAPI(title="ai-team-devops Manager", version="2.0", redoc_url=None)
+app = FastAPI(title="ai-team-devops Manager", version="1.0.0", redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # OTel instrument FastAPI（在路由注册前调用）
@@ -93,9 +93,9 @@ app.middleware("http")(legacy_unversioned_api_redirect_middleware)
 # ── 按需注册路由模块（业务 REST 挂载在 /api/v1/*；未版本化 /api/* 由上方中间件重定向）────────
 from sop_manager.routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
 from sop_manager.routers import graph_loop, pages_productization, plugins_governance
-from sop_manager.routers.hermes_v5 import mount_hermes_v5
+from sop_manager.routers.hermes_workspace import mount_hermes_workspace
 
-mount_hermes_v5(app)
+mount_hermes_workspace(app)
 from sop_manager.routers import models, orchestration, docker_env, skill_repo, vibe, design_docs, workspace
 from sop_manager.routers import notify, cli_wrapper
 

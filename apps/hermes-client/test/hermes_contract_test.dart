@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  test('entity parser keeps Hermes v5 wire contract fields', () {
+  test('entity parser keeps Hermes wire contract fields', () {
     final entity = HermesEntity.fromJson({
       'id': 'run-1',
       'kind': 'run',
@@ -49,11 +49,12 @@ void main() {
     );
   });
 
-  test('real-shaped envelopes and versioned delete use v2 contract', () async {
+  test('real-shaped envelopes and versioned delete use Hermes v1 contract',
+      () async {
     final requests = <http.Request>[];
     final client = HermesApiClient(
       settings: const ConnectionSettings(
-          baseUrl: 'https://example.org/api/v2', token: 'test'),
+          baseUrl: 'https://example.org/api/hermes/v1', token: 'test'),
       httpClient: MockClient((request) async {
         requests.add(request);
         return http.Response(
@@ -77,7 +78,7 @@ void main() {
         }),
         workspaceId: 'workspace',
         dryRun: true);
-    expect(requests.single.url.path, '/api/v2/assets/asset');
+    expect(requests.single.url.path, '/api/hermes/v1/assets/asset');
     expect(requests.single.followRedirects, isFalse);
     expect(requests.single.headers['X-Workspace-Id'], 'workspace');
     expect(jsonDecode(requests.single.body)['expected_version'], 2);

@@ -73,7 +73,7 @@ full-readiness:
 
 HERMES_PYTHON ?= .venv/bin/python
 
-HERMES_AGENTD ?= $(CURDIR)/.sop-runtime/hermes-v5/sop-agentd
+HERMES_AGENTD ?= $(CURDIR)/.sop-runtime/hermes/sop-agentd
 
 .PHONY: hermes-core hermes-agentd hermes-test hermes-package
 hermes-agentd:
@@ -81,7 +81,7 @@ hermes-agentd:
 	go -C apps/agent-runtime build -o "$(HERMES_AGENTD)" ./cmd/sop-agentd
 
 hermes-core: hermes-agentd
-	$(HERMES_PYTHON) -m hermes_core --data-dir "$(HOME)/.hermes/v5" --token-file "$(HOME)/.hermes/v5/access-token" --port 8787 --agentd "$(HERMES_AGENTD)"
+	$(HERMES_PYTHON) -m hermes_core --data-dir "$(HOME)/.hermes/v1" --token-file "$(HOME)/.hermes/v1/access-token" --port 8787 --agentd "$(HERMES_AGENTD)"
 
 hermes-test:
 	$(HERMES_PYTHON) -m pytest packages/hermes-core/tests packages/sop-sdk-python/tests/test_hermes_client.py packages/sop-cli/tests/test_hermes_cli_contract.py -q

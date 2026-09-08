@@ -28,7 +28,7 @@ from .hermes import HermesClient
 from .ipc import AgentdIpcClient
 from .security import Auth, BearerAuth, HmacAuth, NoAuth
 
-__version__ = "2.0.0-dev"
+__version__ = "1.0.0"
 
 __all__ = [
     "__version__",

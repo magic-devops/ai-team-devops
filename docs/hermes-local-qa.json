@@ -1,5 +1,7 @@
 {
   "date": "2026-09-08",
+  "historical": true,
+  "historical_note": "Captured before Hermes 1.0.0 normalization; retained as prior QA history, not current acceptance evidence.",
   "release_ready": false,
   "surface": "React Web -> Python Core -> Go agentd -> LangGraph checkpoint",
   "browser_url": "http://127.0.0.1:5198/#/workspace-v5",

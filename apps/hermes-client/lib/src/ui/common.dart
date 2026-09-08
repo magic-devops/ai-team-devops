@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_providers.dart';
 import '../models.dart';
+import 'labels.dart';
 
 class WorkbenchPage extends StatelessWidget {
   const WorkbenchPage({
@@ -146,6 +147,7 @@ class AsyncEntityList extends StatelessWidget {
 class EntityTile extends StatelessWidget {
   const EntityTile({
     required this.entity,
+    this.details = const [],
     this.trailing,
     this.selected = false,
     this.onTap,
@@ -153,6 +155,7 @@ class EntityTile extends StatelessWidget {
   });
 
   final HermesEntity entity;
+  final List<Widget> details;
   final Widget? trailing;
   final bool selected;
   final VoidCallback? onTap;
@@ -177,9 +180,14 @@ class EntityTile extends StatelessWidget {
                       maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
                   Text(
-                    '${entity.kind} · ${entity.status} · v${entity.version}',
+                    '${entity.kind} · ${hermesStatusLabel(entity.status)} · v${entity.version}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 6, runSpacing: 6, children: details),
+                  ],
+                  _EntityRawData(entity: entity),
                 ],
               );
               if (trailing == null) return body;
@@ -351,13 +359,35 @@ class EnvelopePanel extends StatelessWidget {
       child: envelope.when(
         loading: () => const LinearProgressIndicator(),
         error: (error, _) => ErrorState(message: error.toString()),
-        data: (data) => SelectableText(
-          const JsonEncoder.withIndent('  ').convert({
-            'summary': data.summary,
-            'scope': data.scope,
-            'permissions': data.permissions,
-            'trace_id': data.traceId,
-          }),
+        data: (data) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(label: Text(data.ok ? 'healthy' : 'unhealthy')),
+                if (data.summary['version'] != null)
+                  Chip(label: Text('v${data.summary['version']}')),
+                if (data.traceId != null)
+                  Chip(label: Text('trace ${data.traceId}')),
+              ],
+            ),
+            if (data.permissions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('权限：${data.permissions.join(', ')}'),
+            ],
+            if (data.scope.isNotEmpty) Text('作用域：${data.scope}'),
+            _RawExpansion(
+              title: '技术详情',
+              value: {
+                'summary': data.summary,
+                'scope': data.scope,
+                'permissions': data.permissions,
+                'trace_id': data.traceId,
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -377,9 +407,8 @@ class AsyncJsonList extends StatelessWidget {
       child: value.when(
         loading: () => const LinearProgressIndicator(),
         error: (error, _) => ErrorState(message: error.toString()),
-        data: (items) => SelectableText(
-          const JsonEncoder.withIndent('  ').convert(items),
-        ),
+        data: (items) =>
+            _RawExpansion(title: '$title ${items.length}', value: items),
       ),
     );
   }
@@ -392,61 +421,97 @@ Future<void> createScoped(
 ) async {
   final workspaceId = ref.read(workspaceSelectionProvider);
   if (workspaceId == null || workspaceId.isEmpty) {
-    throw const HermesUnavailableException(
-      '请先选择工作区。',
-    );
+    throw const HermesUnavailableException('请先选择工作区。');
   }
   await ref.read(apiProvider).create(resource, data, workspaceId: workspaceId);
 }
 
-Future<bool> showPatchDialog(
-  BuildContext context,
-  WidgetRef ref,
-  Resource resource,
-  HermesEntity entity,
-) async {
-  final raw = TextEditingController(
-    text: const JsonEncoder.withIndent('  ').convert(entity.data),
-  );
-  final updated = await showDialog<bool>(
-    context: context,
-    builder: (context) => SimpleFormDialog(
-      title: 'Patch ${entity.title}',
-      fields: [
-        TextFormField(
-          controller: raw,
-          decoration: const InputDecoration(labelText: '数据 JSON'),
-          minLines: 8,
-          maxLines: 12,
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) return '必填';
-            try {
-              jsonDecode(value);
-              return null;
-            } catch (error) {
-              return error.toString();
-            }
-          },
-        ),
-      ],
-      onSubmit: () async {
-        final workspaceId = ref.read(workspaceSelectionProvider);
-        if (resource.scoped && workspaceId == null) {
-          throw const HermesUnavailableException('请先选择工作区。');
-        }
-        await ref.read(apiProvider).patch(
-              resource,
-              entity,
-              Map<String, dynamic>.from(jsonDecode(raw.text) as Map),
-              workspaceId: resource.scoped ? workspaceId : null,
-            );
-      },
-    ),
-  );
-  return updated == true;
+class GuardedAction extends StatelessWidget {
+  const GuardedAction({
+    required this.enabled,
+    required this.reason,
+    required this.child,
+    super.key,
+  });
+
+  final bool enabled;
+  final String reason;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: enabled ? '' : reason,
+      child: child,
+    );
+  }
+}
+
+String? writeDisabledReason({
+  required ConnectionSettings? settings,
+  required String? workspaceId,
+  required List<String> permissions,
+  bool scoped = true,
+}) {
+  if (settings?.isConfigured != true) return '请先连接 Hermes Core。';
+  if (scoped && (workspaceId == null || workspaceId.isEmpty)) {
+    return '请先选择工作区。';
+  }
+  if (!permissions.contains('write')) return '当前令牌缺少 write 权限。';
+  return null;
 }
 
 String? requiredField(String? value) {
   if (value == null || value.trim().isEmpty) return '必填';
   return null;
+}
+
+String? boundedRequiredField(String? value) {
+  final required = requiredField(value);
+  if (required != null) return required;
+  if (value!.trim().length > 120) return '不能超过 120 字';
+  return null;
+}
+
+Widget detailChip(String label, Object? value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) return const SizedBox.shrink();
+  return Chip(
+    visualDensity: VisualDensity.compact,
+    label: Text('$label $text'),
+  );
+}
+
+class _EntityRawData extends StatelessWidget {
+  const _EntityRawData({required this.entity});
+
+  final HermesEntity entity;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RawExpansion(title: '原始数据', value: entity.data);
+  }
+}
+
+class _RawExpansion extends StatelessWidget {
+  const _RawExpansion({required this.title, required this.value});
+
+  final String title;
+  final Object value;
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(title, style: Theme.of(context).textTheme.labelMedium),
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child:
+              SelectableText(const JsonEncoder.withIndent('  ').convert(value)),
+        ),
+      ],
+    );
+  }
 }

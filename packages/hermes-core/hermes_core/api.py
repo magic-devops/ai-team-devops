@@ -13,13 +13,26 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
-from .models import ACTIONS, RESOURCES, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, payload
+from .models import API_BASE, ACTIONS, RESOURCES, RESOURCE_DATA_FIELDS, RESOURCE_STATUS_OPTIONS, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, payload
 from .execution import Execution
 from .transactional import Store, digest
 
 
+def resource_contracts() -> dict[str, dict[str, object]]:
+    return {
+        resource: {
+            "title_max_length": 120,
+            "title_required": True,
+            "title_aliases": ["name"] if "name" in RESOURCE_DATA_FIELDS.get(resource, ()) else [],
+            "statuses": list(statuses),
+            "fields": list(RESOURCE_DATA_FIELDS.get(resource, ())),
+        }
+        for resource, statuses in RESOURCE_STATUS_OPTIONS.items()
+    }
+
+
 def create_router(store: Store, execution: Execution, identity: Callable):
-    router = APIRouter(prefix="/api/v2", tags=["Hermes Workspace"])
+    router = APIRouter(prefix=API_BASE, tags=["Hermes Workspace"])
     run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of"}
 
     def require(principal: Principal, action: str):
@@ -40,6 +53,30 @@ def create_router(store: Store, execution: Execution, identity: Callable):
     def response(principal, workspace, items, **extra):
         return payload(principal, workspace, items, trace=uuid.uuid4().hex, **extra)
 
+    def clean_title(resource: str, data: dict):
+        title = data.get("title")
+        if title is None and "name" in data:
+            title = data["name"]
+            data["title"] = title
+        if not isinstance(title, str) or not title.strip():
+            raise CoreError("title_required", f"{resource} title is required", 422)
+        data["title"] = title.strip()
+        if len(data["title"]) > 120:
+            raise CoreError("title_too_long", f"{resource} title must be 120 characters or fewer", 422)
+
+    def validate_status(resource: str, status: str):
+        allowed = RESOURCE_STATUS_OPTIONS.get(resource)
+        if allowed is not None and status not in allowed:
+            raise CoreError("invalid_status", f"{resource} status must be one of {', '.join(allowed)}", 422)
+
+    def validate_data_fields(resource: str, data: dict):
+        allowed = RESOURCE_DATA_FIELDS.get(resource)
+        if allowed is None:
+            return
+        extras = sorted(set(data) - set(allowed) - {"status"})
+        if extras:
+            raise CoreError("unknown_field", f"{resource} does not accept fields: {', '.join(extras)}", 422)
+
     @router.get("/health")
     def health():
         return {"ok": True, "version": __version__, "service": "hermes-core"}
@@ -54,7 +91,9 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         checks = [{"id": "store", "status": "passed", "backend": store.engine.dialect.name},
                   {"id": "langgraph", "status": "passed"},
                   {"id": "executor", "status": "passed" if execution.available() else "unavailable"}]
-        return response(principal, "", checks, summary={"ready": all(c["status"] == "passed" for c in checks)},
+        return response(principal, "", checks,
+                        summary={"ready": all(c["status"] == "passed" for c in checks),
+                                 "resource_contracts": resource_contracts()},
                         ok=all(c["status"] == "passed" for c in checks))
 
     @router.get("/sync", response_model=Envelope)
@@ -160,6 +199,13 @@ def create_router(store: Store, execution: Execution, identity: Callable):
                 raise CoreError("approval_closed", "Approval changed or is no longer pending", 409)
             return response(principal, workspace, [approval], summary={"dry_run": True})
 
+        def should_resume(approved):
+            current = store.get(principal, workspace, "runs", run_id)
+            return (current["status"] == "interrupted"
+                    and current["data"].get("active_node") == approved["data"].get("node_id")
+                    and approved["status"] == "approved"
+                    and approved["data"].get("decision") == "approve")
+
         def decide(item):
             if item["status"] != "pending" or run["status"] != "interrupted":
                 raise CoreError("approval_closed", "Approval is no longer pending", 409)
@@ -169,9 +215,17 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         result = store.mutate(principal, workspace, "approvals", approval_id, operation="approval.decision",
             key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
             expected=body.expected_version, transform=decide)
-        if run["status"] == "interrupted":
+        if should_resume(result):
             background.add_task(execution.execute, principal, workspace, run_id,
                                 resume={"approval_id": approval_id, "approval_version": result["version"]})
+        elif result["status"] == "rejected":
+            current = store.get(principal, workspace, "runs", run_id)
+            if current["status"] == "interrupted" and current["data"].get("active_node") == result["data"].get("node_id"):
+                store.mutate(principal, workspace, "runs", run_id, operation="approval.rejected",
+                    key=uuid.uuid4().hex, request={}, trace=uuid.uuid4().hex, expected=current["version"],
+                    transform=lambda item: {"status": "failed", "data": {**item["data"],
+                        "error": "Execution approval was rejected", "execution_owner": None,
+                        "lease_expires_at": None, "recovery_requires_review": False}})
         return response(principal, workspace, [result])
 
     @router.get("/{resource}", response_model=Envelope)
@@ -181,16 +235,19 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         if resource not in RESOURCES:
             raise CoreError("unknown_resource", "Unknown resource", 404)
         workspace = "" if resource == "workspaces" else workspace_id(request, principal)
-        rows = store.list(principal, workspace, resource, q=q, status=status, limit=limit, cursor=cursor)
+        rows = store.list(principal, workspace, resource, q=q, status=status, kind_filter=kind, limit=limit, cursor=cursor)
         if resource == "workspaces" and principal.workspace_ids is not None:
             rows = [row for row in rows if row["id"] in principal.workspace_ids]
-        if kind:
-            rows = [row for row in rows if row["data"].get("kind") == kind]
         return response(principal, workspace, rows, summary={"total": len(rows), "cursor": rows[-1]["id"] if len(rows) == limit else ""})
 
     def validate(resource, data, principal, workspace):
         if len(json.dumps(data)) > 1024 * 1024:
             raise CoreError("payload_too_large", "Resource exceeds 1 MiB", 413)
+        if resource in RESOURCE_STATUS_OPTIONS:
+            validate_data_fields(resource, data)
+            clean_title(resource, data)
+            if "status" in data:
+                validate_status(resource, str(data["status"]))
         if resource == "workspaces":
             if not str(data.get("name", "")).strip():
                 raise CoreError("name_required", "Workspace name is required")
@@ -234,7 +291,11 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         status = "planned" if resource == "runs" else "active"
         if resource == "devices":
             status = "unpaired"
-        row = store.create(principal, workspace, resource, data, body.idempotency_key, uuid.uuid4().hex, status=status)
+        original_request = body.model_dump()
+        if resource in RESOURCE_STATUS_OPTIONS and "status" in data:
+            status = str(data.pop("status"))
+        row = store.create(principal, workspace, resource, data, body.idempotency_key, uuid.uuid4().hex,
+                           status=status, request=original_request)
         return response(principal, workspace, [row])
 
     @router.get("/{resource}/{entity_id}", response_model=Envelope)
@@ -269,7 +330,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
             data = validate(resource, {**item["data"], **body.data}, principal, workspace)
             changes = {"data": data}
             if resource not in {"runs", "workspaces"} and "status" in body.data:
-                changes["status"] = str(body.data["status"])[:40]
+                changes["status"] = str(body.data["status"])
             return changes
 
         row = store.mutate(principal, workspace, resource, entity_id, operation=resource + ".updated",

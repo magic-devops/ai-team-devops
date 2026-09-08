@@ -1,6 +1,6 @@
 {
   "name": "@sop/manager-web",
-  "version": "2.0.0-dev",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "SOP Manager 浏览器端 — Vite + React + TS（与 apps/manager API 分离）",

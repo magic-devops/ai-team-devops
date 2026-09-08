@@ -4,13 +4,11 @@ export type HermesResource =
   | "sessions"
   | "runs"
   | "assets"
-  | "devices"
   | "tasks"
-  | "requirements"
-  | "schedules";
+  | "requirements";
 
 export type HermesMutableResource = HermesResource | "workspaces";
-export type HermesDeletableResource = "assets" | "devices" | "schedules";
+export type HermesDeletableResource = "assets";
 
 export type HermesEntity<TData extends Record<string, unknown> = Record<string, unknown>> = {
   id: string;
@@ -152,7 +150,7 @@ function errorMessage(body: HermesApiResponse<unknown> | string, fallback: strin
   return fallback;
 }
 
-export class HermesV2Client {
+export class HermesClient {
   private connection: HermesConnection;
 
   constructor(connection: HermesConnection) {
@@ -180,10 +178,10 @@ export class HermesV2Client {
       (base.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(base.hostname))) {
       throw new HermesUnavailableError("Remote connections require HTTPS. Only loopback HTTP is allowed.");
     }
-    const endpoint = this.connection.baseUrl.replace(/\/api\/v2$/, "");
+    const endpoint = this.connection.baseUrl.replace(/\/api\/hermes\/v1$/, "");
     let response: Response;
     try {
-      response = await fetch(`${endpoint}/api/v2${path}`, {
+      response = await fetch(`${endpoint}/api/hermes/v1${path}`, {
         ...init,
         redirect: "error",
         signal: AbortSignal.timeout(30000),
@@ -289,5 +287,5 @@ export class HermesV2Client {
 }
 
 export function createHermesClient(connection: HermesConnection) {
-  return new HermesV2Client(connection);
+  return new HermesClient(connection);
 }

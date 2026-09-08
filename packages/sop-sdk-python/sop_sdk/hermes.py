@@ -1,7 +1,7 @@
 """
 @module: sop_sdk.hermes
-@purpose: Hermes v5 /api/v2 HTTP client with explicit auth, workspace scope, and wire-contract checks.
-@stable: HermesClient public methods mirror the frozen v5 contract.
+@purpose: Hermes /api/hermes/v1 HTTP client with explicit auth, workspace scope, and wire-contract checks.
+@stable: HermesClient public methods mirror the frozen v1 contract.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from .errors import (
     SopTransportError,
 )
 
-_DEFAULT_HEADERS = {"Accept": "application/json", "User-Agent": "sop-sdk-hermes/5.0"}
+_DEFAULT_HEADERS = {"Accept": "application/json", "User-Agent": "sop-sdk-hermes/1.0"}
 _LIST_RESOURCES = {
     "sessions",
     "runs",
@@ -41,9 +41,9 @@ _RUN_ACTIONS = {"start", "cancel", "retry", "replay", "export"}
 
 
 class HermesClient:
-    """Synchronous authorized Hermes v5 client.
+    """Synchronous authorized Hermes client.
 
-    `base_url` may point either at the server root or directly at `/api/v2`.
+    `base_url` may point either at the server root or directly at `/api/hermes/v1`.
     Non-health calls require a Bearer token and send `X-Workspace-Id` when set.
     """
 
@@ -66,7 +66,7 @@ class HermesClient:
             raise ValueError("HermesClient: URL must be an HTTP(S) origin without credentials, query or fragment")
         if url.scheme == "http" and url.hostname not in {"localhost", "127.0.0.1", "::1"}:
             raise ValueError("HermesClient: remote connections require HTTPS")
-        self.base_url = clean_base if clean_base.endswith("/api/v2") else f"{clean_base}/api/v2"
+        self.base_url = clean_base if clean_base.endswith("/api/hermes/v1") else f"{clean_base}/api/hermes/v1"
         self.token = (token or "").strip()
         self.workspace_id = (workspace_id or "").strip()
         self._client = httpx.Client(

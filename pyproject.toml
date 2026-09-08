@@ -1,6 +1,6 @@
 [project]
 name = "ai-team-devops"
-version = "2.0.0-dev"
+version = "1.0.0"
 description = "AI 多 Agent 开发规约体系（Manager + Agent Runtime + 规约库 + SDK + CLI）"
 readme = "README.md"
 requires-python = ">=3.11"

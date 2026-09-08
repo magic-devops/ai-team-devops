@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_DIR="${HERMES_DATA_DIR:-${1:-/tmp/hermes-v5}}"
+DATA_DIR="${HERMES_DATA_DIR:-${1:-/tmp/hermes-v1}}"
 TOKEN_FILE="${HERMES_TOKEN_FILE:-${DATA_DIR}/token}"
 PORT="${HERMES_PORT:-0}"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"

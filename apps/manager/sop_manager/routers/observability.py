@@ -63,7 +63,7 @@ def setup_otel(app: Any | None = None) -> bool:
 
     resource = Resource.create({
         "service.name": os.getenv("OTEL_SERVICE_NAME", "sop-manager"),
-        "service.version": os.getenv("SOP_VERSION", "2.0.0-dev"),
+        "service.version": os.getenv("SOP_VERSION", "1.0.0"),
         "deployment.environment": os.getenv("DEPLOY_ENV", "dev"),
         "host.name": socket.gethostname(),
     })

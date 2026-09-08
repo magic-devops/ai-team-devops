@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:re_editor/re_editor.dart';
 
 import '../app_providers.dart';
 import '../models.dart';
 import '../ui/common.dart';
-import '../ui/source_editor.dart';
+import '../ui/entity_forms.dart';
+import '../ui/labels.dart';
 
 class PlanPage extends ConsumerWidget {
   const PlanPage({super.key});
@@ -15,24 +15,50 @@ class PlanPage extends ConsumerWidget {
     final sessions = ref.watch(sessionsProvider);
     final tasks = ref.watch(tasksProvider);
     final requirements = ref.watch(requirementsProvider);
+    final settings = ref.watch(settingsProvider).asData?.value;
+    final workspaceId = ref.watch(workspaceSelectionProvider);
+    final permissions =
+        ref.watch(readinessProvider).asData?.value.permissions ?? const [];
+    final writeReason = writeDisabledReason(
+      settings: settings,
+      workspaceId: workspaceId,
+      permissions: permissions,
+    );
+    final canWrite = writeReason == null;
     return WorkbenchPage(
       title: '项目',
       subtitle: '会话、任务与需求',
       actions: [
-        FilledButton.icon(
-          onPressed: () => _showSessionDialog(context, ref),
-          icon: const Icon(Icons.note_add_rounded),
-          label: const Text('会话'),
+        GuardedAction(
+          enabled: canWrite,
+          reason: writeReason ?? '',
+          child: FilledButton.icon(
+            onPressed: canWrite ? () => _showSessionDialog(context, ref) : null,
+            icon: const Icon(Icons.note_add_rounded),
+            label: const Text('会话'),
+          ),
         ),
-        FilledButton.tonalIcon(
-          onPressed: () => _showTaskDialog(context, ref, Resource.tasks),
-          icon: const Icon(Icons.add_task_rounded),
-          label: const Text('任务'),
+        GuardedAction(
+          enabled: canWrite,
+          reason: writeReason ?? '',
+          child: FilledButton.tonalIcon(
+            onPressed: canWrite
+                ? () => _showTaskDialog(context, ref, Resource.tasks)
+                : null,
+            icon: const Icon(Icons.add_task_rounded),
+            label: const Text('任务'),
+          ),
         ),
-        OutlinedButton.icon(
-          onPressed: () => _showTaskDialog(context, ref, Resource.requirements),
-          icon: const Icon(Icons.fact_check_rounded),
-          label: const Text('需求'),
+        GuardedAction(
+          enabled: canWrite,
+          reason: writeReason ?? '',
+          child: OutlinedButton.icon(
+            onPressed: canWrite
+                ? () => _showTaskDialog(context, ref, Resource.requirements)
+                : null,
+            icon: const Icon(Icons.fact_check_rounded),
+            label: const Text('需求'),
+          ),
         ),
       ],
       child: SplitPane(
@@ -41,18 +67,24 @@ class PlanPage extends ConsumerWidget {
           empty: '暂无会话',
           itemBuilder: (entity) => EntityTile(
             entity: entity,
+            details: [
+              detailChip('目标', entity.data['target']),
+              detailChip('摘要', entity.data['summary']),
+            ],
             trailing: IconButton(
               tooltip: '编辑会话',
               icon: const Icon(Icons.edit_rounded),
-              onPressed: () async {
-                final updated = await showPatchDialog(
-                  context,
-                  ref,
-                  Resource.sessions,
-                  entity,
-                );
-                if (updated) ref.invalidate(sessionsProvider);
-              },
+              onPressed: canWrite
+                  ? () async {
+                      final updated = await showEntityForm(
+                        context,
+                        ref,
+                        Resource.sessions,
+                        entity: entity,
+                      );
+                      if (updated) ref.invalidate(sessionsProvider);
+                    }
+                  : null,
             ),
           ),
         ),
@@ -77,6 +109,7 @@ class PlanPage extends ConsumerWidget {
                         ref,
                         Resource.tasks,
                         entity,
+                        canWrite,
                       ),
                     ),
                     AsyncEntityList(
@@ -87,6 +120,7 @@ class PlanPage extends ConsumerWidget {
                         ref,
                         Resource.requirements,
                         entity,
+                        canWrite,
                       ),
                     ),
                   ],
@@ -104,51 +138,38 @@ class PlanPage extends ConsumerWidget {
     WidgetRef ref,
     Resource resource,
     HermesEntity entity,
+    bool canWrite,
   ) {
     return EntityTile(
       entity: entity,
+      details: [
+        detailChip('优先级', hermesPriorityLabel(entity.data['priority'])),
+        detailChip('负责人', entity.data['assigned_agent']),
+        detailChip('工具', entity.data['dev_tool']),
+        detailChip('验收', entity.data['acceptance_criteria']),
+      ],
       trailing: IconButton(
         tooltip: '编辑',
         icon: const Icon(Icons.edit_rounded),
-        onPressed: () async {
-          final updated = await showPatchDialog(context, ref, resource, entity);
-          if (updated) {
-            if (resource == Resource.tasks) {
-              ref.invalidate(tasksProvider);
-            } else {
-              ref.invalidate(requirementsProvider);
-            }
-          }
-        },
+        onPressed: canWrite
+            ? () async {
+                final updated = await showEntityForm(context, ref, resource,
+                    entity: entity);
+                if (updated) {
+                  if (resource == Resource.tasks) {
+                    ref.invalidate(tasksProvider);
+                  } else {
+                    ref.invalidate(requirementsProvider);
+                  }
+                }
+              }
+            : null,
       ),
     );
   }
 
   Future<void> _showSessionDialog(BuildContext context, WidgetRef ref) async {
-    final title = TextEditingController();
-    final root = TextEditingController();
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (context) => SimpleFormDialog(
-        title: '新建会话',
-        fields: [
-          TextFormField(
-            controller: title,
-            decoration: const InputDecoration(labelText: '标题'),
-            validator: requiredField,
-          ),
-          TextFormField(
-            controller: root,
-            decoration: const InputDecoration(labelText: '工作目录'),
-            validator: requiredField,
-          ),
-        ],
-        onSubmit: () => createScoped(ref, Resource.sessions, {
-          'title': title.text.trim(),
-          'workspace_root': root.text.trim(),
-        }),
-      ),
-    );
+    final created = await showEntityForm(context, ref, Resource.sessions);
     if (created == true) ref.invalidate(sessionsProvider);
   }
 
@@ -157,33 +178,7 @@ class PlanPage extends ConsumerWidget {
     WidgetRef ref,
     Resource resource,
   ) async {
-    final title = TextEditingController();
-    final status = TextEditingController(text: 'open');
-    final source = CodeLineEditingController.fromText('');
-    final created = await showDialog<bool>(
-      context: context,
-      builder: (context) => SimpleFormDialog(
-        title: resource == Resource.tasks ? '新建任务' : '新建需求',
-        fields: [
-          TextFormField(
-            controller: title,
-            decoration: const InputDecoration(labelText: '标题'),
-            validator: requiredField,
-          ),
-          TextFormField(
-            controller: status,
-            decoration: const InputDecoration(labelText: '状态'),
-            validator: requiredField,
-          ),
-          SourceEditor(controller: source),
-        ],
-        onSubmit: () => createScoped(ref, resource, {
-          'title': title.text.trim(),
-          'status': status.text.trim(),
-          'content': source.text,
-        }),
-      ),
-    );
+    final created = await showEntityForm(context, ref, resource);
     if (created == true) {
       ref.invalidate(
           resource == Resource.tasks ? tasksProvider : requirementsProvider);

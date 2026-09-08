@@ -2,16 +2,16 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Hermes Workspace",
-    "version": "5.0.0"
+    "version": "1.0.0"
   },
   "paths": {
-    "/api/v2/health": {
+    "/api/hermes/v1/health": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Health",
-        "operationId": "health_api_v2_health_get",
+        "operationId": "health_api_hermes_v1_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -24,13 +24,13 @@
         }
       }
     },
-    "/api/v2/actions": {
+    "/api/hermes/v1/actions": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Actions",
-        "operationId": "actions_api_v2_actions_get",
+        "operationId": "actions_api_hermes_v1_actions_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -45,13 +45,13 @@
         }
       }
     },
-    "/api/v2/system/readiness": {
+    "/api/hermes/v1/system/readiness": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Readiness",
-        "operationId": "readiness_api_v2_system_readiness_get",
+        "operationId": "readiness_api_hermes_v1_system_readiness_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -66,13 +66,13 @@
         }
       }
     },
-    "/api/v2/sync": {
+    "/api/hermes/v1/sync": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Sync",
-        "operationId": "sync_api_v2_sync_get",
+        "operationId": "sync_api_hermes_v1_sync_get",
         "parameters": [
           {
             "name": "after",
@@ -110,13 +110,13 @@
         }
       }
     },
-    "/api/v2/runs/{run_id}/events": {
+    "/api/hermes/v1/runs/{run_id}/events": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Events",
-        "operationId": "events_api_v2_runs__run_id__events_get",
+        "operationId": "events_api_hermes_v1_runs__run_id__events_get",
         "parameters": [
           {
             "name": "run_id",
@@ -163,13 +163,13 @@
         }
       }
     },
-    "/api/v2/runs/{run_id}/{action}": {
+    "/api/hermes/v1/runs/{run_id}/{action}": {
       "post": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Run Action",
-        "operationId": "run_action_api_v2_runs__run_id___action__post",
+        "operationId": "run_action_api_hermes_v1_runs__run_id___action__post",
         "parameters": [
           {
             "name": "run_id",
@@ -224,13 +224,13 @@
         }
       }
     },
-    "/api/v2/approvals/{approval_id}/decision": {
+    "/api/hermes/v1/approvals/{approval_id}/decision": {
       "post": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Decision",
-        "operationId": "decision_api_v2_approvals__approval_id__decision_post",
+        "operationId": "decision_api_hermes_v1_approvals__approval_id__decision_post",
         "parameters": [
           {
             "name": "approval_id",
@@ -276,13 +276,13 @@
         }
       }
     },
-    "/api/v2/{resource}": {
+    "/api/hermes/v1/{resource}": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "List Resources",
-        "operationId": "list_resources_api_v2__resource__get",
+        "operationId": "list_resources_api_hermes_v1__resource__get",
         "parameters": [
           {
             "name": "resource",
@@ -374,7 +374,7 @@
           "Hermes Workspace"
         ],
         "summary": "Create Resource",
-        "operationId": "create_resource_api_v2__resource__post",
+        "operationId": "create_resource_api_hermes_v1__resource__post",
         "parameters": [
           {
             "name": "resource",
@@ -420,13 +420,13 @@
         }
       }
     },
-    "/api/v2/{resource}/{entity_id}": {
+    "/api/hermes/v1/{resource}/{entity_id}": {
       "get": {
         "tags": [
           "Hermes Workspace"
         ],
         "summary": "Detail",
-        "operationId": "detail_api_v2__resource___entity_id__get",
+        "operationId": "detail_api_hermes_v1__resource___entity_id__get",
         "parameters": [
           {
             "name": "resource",
@@ -475,7 +475,7 @@
           "Hermes Workspace"
         ],
         "summary": "Patch",
-        "operationId": "patch_api_v2__resource___entity_id__patch",
+        "operationId": "patch_api_hermes_v1__resource___entity_id__patch",
         "parameters": [
           {
             "name": "resource",
@@ -534,7 +534,7 @@
           "Hermes Workspace"
         ],
         "summary": "Remove",
-        "operationId": "remove_api_v2__resource___entity_id__delete",
+        "operationId": "remove_api_hermes_v1__resource___entity_id__delete",
         "parameters": [
           {
             "name": "resource",

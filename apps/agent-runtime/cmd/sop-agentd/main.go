@@ -21,7 +21,7 @@ import (
 )
 
 // Version 由 -ldflags 注入
-var Version = "dev"
+var Version = "1.0.0"
 
 func main() {
 	root := &cobra.Command{

@@ -968,7 +968,7 @@ class MenuPreferencesIn(BaseModel):
 
 
 NAV_CONTRACT: list[dict[str, Any]] = [
-    {"id": "workspaceV5", "path": "#/workspace-v5", "domain": "overview", "capability": "overview.hermes.workspace-v5"},
+    {"id": "workspace", "path": "#/workspace", "domain": "overview", "capability": "overview.hermes.workspace"},
     {"id": "microAppMainAdmin", "path": "#/apps/main-admin", "domain": "overview", "capability": "overview.micro-apps.main-admin", "entry_type": "micro_app_shell"},
     {"id": "microAppAiFoundation", "path": "#/apps/ai-foundation", "domain": "ai", "capability": "ai.micro-apps.foundation", "entry_type": "micro_app_shell"},
     {"id": "microAppAiRdCenter", "path": "#/apps/ai-rd-center", "domain": "delivery", "capability": "delivery.micro-apps.rd-center", "entry_type": "micro_app_shell"},
@@ -1176,7 +1176,7 @@ SETTINGS_REACT_PAGES: list[dict[str, Any]] = [
 
 
 REACT_PAGES: list[dict[str, Any]] = [
-    {"id": "workspaceV5", "name": "Hermes 工作空间", "domain": "overview", "path": "#/workspace-v5", "status": "active", "capability": "overview.hermes.workspace-v5", "apis": ["/api/v2/workspaces", "/api/v2/sessions", "/api/v2/runs", "/api/v2/approvals", "/api/v2/assets", "/api/v2/sync"], "capabilities": ["工作空间隔离", "事务化运行记录", "TDD 执行证据", "审批恢复", "CLI 动作"], "next": ["远程设备配对验收", "五平台安装验收"]},
+    {"id": "workspace", "name": "Hermes 工作空间", "domain": "overview", "path": "#/workspace", "status": "active", "capability": "overview.hermes.workspace", "apis": ["/api/hermes/v1/workspaces", "/api/hermes/v1/sessions", "/api/hermes/v1/runs", "/api/hermes/v1/approvals", "/api/hermes/v1/assets", "/api/hermes/v1/sync"], "capabilities": ["工作空间隔离", "事务化运行记录", "TDD 执行证据", "审批恢复", "CLI 动作"], "next": ["远程设备配对验收", "五平台安装验收"]},
     {"id": "microAppMainAdmin", "name": "主应用 · 基础管理", "domain": "overview", "path": "#/apps/main-admin", "status": "active", "maturity": 86, "apis": ["/api/v1/auth/me", "/api/v1/system/pages/manifest", "/api/v1/system/pages/capabilities/me"], "capabilities": ["基础管理", "账号权限", "组织项目", "服务治理", "门户控制面"], "next": ["服务目录独立页", "跨子应用权限审计"]},
     {"id": "microAppAiFoundation", "name": "智能基础服务", "domain": "ai", "path": "#/apps/ai-foundation", "status": "active", "maturity": 82, "apis": ["/api/v1/intelligence/hub", "/api/v1/platforms/hub", "/api/v1/skills/hub", "/api/v1/marketplace/summary"], "capabilities": ["开发环境", "CLI 工具", "知识记忆", "技能插件", "Agent/MCP/A2A"], "next": ["拆分 ai-foundation-web 独立仓", "沉淀独立应用 SDK"]},
     {"id": "microAppAiRdCenter", "name": "智能研发中心", "domain": "delivery", "path": "#/apps/ai-rd-center", "status": "active", "maturity": 84, "apis": ["/api/v1/requirements/summary", "/api/v1/tasks/summary", "/api/v1/tasks/scheduler/ops-summary", "/api/v1/workflows/ops-plan"], "capabilities": ["需求到任务", "AI 开发", "任务下发", "DAG 调度", "质量评审", "交付审计"], "next": ["拆分 ai-rd-center-web 独立仓", "研发流可视化设计器"]},

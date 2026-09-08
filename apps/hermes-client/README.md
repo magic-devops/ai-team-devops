@@ -1,10 +1,10 @@
 # Hermes Client
 
-Flutter desktop/mobile client for the authorized Hermes v5 contract.
+Flutter desktop/mobile client for the authorized Hermes contract.
 
 ## Contract
 
-- API base: `/api/v2`
+- API base: `/api/hermes/v1`
 - Auth: `Authorization: Bearer <token>`
 - Workspace scope: `X-Workspace-Id`
 - Response envelope: `{ok,scope,summary,items,actions,permissions,audit,trace_id,agent_consumption,cli,error?}`; permissions is a string array and audit is an object.
@@ -44,7 +44,7 @@ flutter build macos
 The current macOS verification host lacks full Xcode and CocoaPods; Android
 command-line build tools are also absent. Analyze and widget/contract tests
 are not native installation or real-device evidence. See
-`docs/HERMES_V5_ACCEPTANCE.md` at repository root for the release matrix.
+the repository release matrix for native packaging acceptance.
 
 macOS uses a non-App-Store desktop entitlement configuration so the packaged
 core and executor can launch project tools. This is not an OS sandbox. Mobile

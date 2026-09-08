@@ -1,6 +1,6 @@
 [project]
 name = "sop-sdk"
-version = "2.0.0-dev"
+version = "1.0.0"
 description = "ai-team-devops 项目侧 Python SDK（Manager 客户端 + 本地 agentd IPC）"
 readme = "README.md"
 requires-python = ">=3.10"

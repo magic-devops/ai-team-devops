@@ -12,21 +12,28 @@ class WorkspacesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final workspaces = ref.watch(workspacesProvider);
     final settings = ref.watch(settingsProvider).asData?.value;
-    final canWrite = ref
-            .watch(readinessProvider)
-            .asData
-            ?.value
-            .permissions
-            .contains('write') ??
-        false;
+    final permissions =
+        ref.watch(readinessProvider).asData?.value.permissions ?? const [];
+    final writeReason = writeDisabledReason(
+      settings: settings,
+      workspaceId: null,
+      permissions: permissions,
+      scoped: false,
+    );
+    final canWrite = writeReason == null;
     return WorkbenchPage(
       title: '工作台',
       subtitle: '工作区与连接状态',
       actions: [
-        FilledButton.icon(
-          onPressed: canWrite ? () => _showWorkspaceDialog(context, ref) : null,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('新建工作区'),
+        GuardedAction(
+          enabled: canWrite,
+          reason: writeReason ?? '',
+          child: FilledButton.icon(
+            onPressed:
+                canWrite ? () => _showWorkspaceDialog(context, ref) : null,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('新建工作区'),
+          ),
         ),
       ],
       child: Column(
@@ -51,21 +58,6 @@ class WorkspacesPage extends ConsumerWidget {
                         ref.invalidate(workspacesProvider);
                       },
                       child: const Text('选择'),
-                    ),
-                    IconButton(
-                      tooltip: '编辑工作区',
-                      icon: const Icon(Icons.admin_panel_settings_rounded),
-                      onPressed: canWrite
-                          ? () async {
-                              final updated = await showPatchDialog(
-                                context,
-                                ref,
-                                Resource.workspaces,
-                                workspace,
-                              );
-                              if (updated) ref.invalidate(workspacesProvider);
-                            }
-                          : null,
                     ),
                   ],
                 ),

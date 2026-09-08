@@ -49,7 +49,7 @@ export type MicroAppDefinition = {
 const MAIN_ADMIN_KEYS = [
   "dashboard",
   "dashboardCockpit",
-  "workspaceV5",
+  "workspace",
   "projects",
   "projectPortfolio",
   "projectBusinesses",

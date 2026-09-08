@@ -74,10 +74,12 @@ class Store:
         with self.engine.connect() as conn:
             return self._get(conn, principal, workspace, kind, entity_id)
 
-    def list(self, principal: Principal, workspace: str, kind: str, *, status: str = "", q: str = "", limit: int = 100, cursor: str = ""):
+    def list(self, principal: Principal, workspace: str, kind: str, *, status: str = "", q: str = "", kind_filter: str = "", limit: int = 100, cursor: str = ""):
         query = select(self.entities).where(self._scope(self.entities, principal, workspace), self.entities.c.kind == kind)
         if status:
             query = query.where(self.entities.c.status == status)
+        if kind_filter:
+            query = query.where(self.entities.c.data["kind"].as_string() == kind_filter)
         if cursor:
             query = query.where(self.entities.c.id > cursor)
         if q:
