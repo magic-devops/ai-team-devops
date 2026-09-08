@@ -23,6 +23,7 @@ async def legacy_unversioned_api_redirect_middleware(
     if (
         path.startswith("/api/")
         and not path.startswith("/api/v1/")
+        and not path.startswith("/api/v2/")
         and not path.startswith("/api/env/")
     ):
         tail = path[len("/api/") :]

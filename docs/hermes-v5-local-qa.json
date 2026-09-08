@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-08",
+  "release_ready": false,
+  "surface": "React Web -> Python Core -> Go agentd -> LangGraph checkpoint",
+  "browser_url": "http://127.0.0.1:5198/#/workspace-v5",
+  "workspace_id": "007cda4cd5404a6bb05bdaf0236da774",
+  "run_id": "5b0f2d526b95495bb1967d2473fcbfa6",
+  "approval_id": "5e8968eee2a7b03f714a60681208c820",
+  "observed": [
+    "Created workspace and sequential run from the Web form",
+    "Started run from the Web action panel",
+    "Red command returned expected exit code 1 and recorded stdout",
+    "Run interrupted at approval node; pending approval appeared in the Web queue",
+    "Approved from the Web queue; run resumed and completed at resource version 11",
+    "Green command returned exit code 0 and stdout GREEN: delivery verified",
+    "Read generated hermes-ui-qa.txt from disk: verified",
+    "Completed approval controls were disabled",
+    "Dry-run replay kept the original run completed at version 11",
+    "Fresh Web connection preserved audit.actor, trace_id, agent_consumption and cli in replay preview",
+    "Export preview contained hermes.audit-package with run, events and SHA-256",
+    "Completed run start, cancel and retry controls were disabled"
+  ],
+  "flutter_widget_viewports": ["1440x900", "390x844"],
+  "flutter_navigation_test": "Visited all five primary destinations without a Flutter layout exception",
+  "not_verified": [
+    "Native Flutter installation and execution",
+    "Windows/Linux/iOS/Android real devices",
+    "Device pairing and remote execution ownership",
+    "PostgreSQL live execution",
+    "Signing, notarization, app-store submission, upgrade rollback",
+    "Production performance targets and Chinese IME behavior"
+  ]
+}

@@ -3,7 +3,7 @@ name = "ai-team-devops"
 version = "2.0.0-dev"
 description = "AI 多 Agent 开发规约体系（Manager + Agent Runtime + 规约库 + SDK + CLI）"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "superhero", email = "zyc2012518@gmail.com" }]
 
@@ -24,6 +24,7 @@ members = [
   "apps/manager-worker",
   "packages/sop-cli",
   "packages/sop-sdk-python",
+  "packages/hermes-core",
 ]
 
 [tool.uv.sources]
@@ -31,6 +32,7 @@ sop-manager = { workspace = true }
 sop-manager-worker = { workspace = true }
 sop-cli = { workspace = true }
 sop-sdk = { workspace = true }
+hermes-core = { workspace = true }
 
 [dependency-groups]
 dev = [

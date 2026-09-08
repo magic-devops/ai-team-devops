@@ -39,3 +39,11 @@ class SopConflictError(SopError):
 
 class SopServerError(SopError):
     """5xx 服务端错误（外层会重试）。"""
+
+
+class HermesUnavailableError(SopTransportError):
+    pass
+
+
+class HermesContractError(SopTransportError):
+    pass

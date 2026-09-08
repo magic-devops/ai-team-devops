@@ -1,3 +1,5 @@
+//go:build cgo
+
 // Package outbox 实现"幂等 + 持久化 + DLQ"事件投递。
 // 存储用 SQLite WAL；事件用 ULID 做幂等键；失败入 DLQ。
 package outbox
@@ -17,11 +19,11 @@ import (
 
 // Event 是 outbox 中的最小信息单元（CloudEvents 子集）。
 type Event struct {
-	ID        string         `json:"id"`
-	Type      string         `json:"type"`
-	Subject   string         `json:"subject,omitempty"`
-	Time      time.Time      `json:"time"`
-	Data      map[string]any `json:"data,omitempty"`
+	ID      string         `json:"id"`
+	Type    string         `json:"type"`
+	Subject string         `json:"subject,omitempty"`
+	Time    time.Time      `json:"time"`
+	Data    map[string]any `json:"data,omitempty"`
 }
 
 type Outbox struct {

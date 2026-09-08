@@ -1,0 +1,94 @@
+name: hermes-v5
+
+on:
+  push:
+    paths:
+      - "packages/hermes-core/**"
+      - "apps/agent-runtime/**"
+      - "apps/hermes-client/**"
+      - "apps/manager/**"
+      - "apps/manager-web/**"
+      - "packages/sop-cli/**"
+      - "packages/sop-sdk-python/**"
+      - "apis/**"
+      - "scripts/hermes-*"
+      - "docs/architecture/HERMES_V5.md"
+      - "docs/HERMES_V5_ACCEPTANCE.md"
+      - "ai-sop/custom/design/README.md"
+      - ".github/workflows/hermes-v5.yml"
+  pull_request:
+    paths:
+      - "packages/hermes-core/**"
+      - "apps/agent-runtime/**"
+      - "apps/hermes-client/**"
+      - "apps/manager/**"
+      - "apps/manager-web/**"
+      - "packages/sop-cli/**"
+      - "packages/sop-sdk-python/**"
+      - "apis/**"
+      - "scripts/hermes-*"
+      - "docs/architecture/HERMES_V5.md"
+      - "docs/HERMES_V5_ACCEPTANCE.md"
+      - "ai-sop/custom/design/README.md"
+      - ".github/workflows/hermes-v5.yml"
+
+jobs:
+  core:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/agent-runtime/go.mod"
+      - run: python -m pip install -e "packages/hermes-core[test,build]" -e apps/manager -e packages/sop-sdk-python -e packages/sop-cli
+      - run: PYTHONPATH=packages/hermes-core python -m compileall -q packages/hermes-core/hermes_core
+      - run: PYTHONPATH=packages/hermes-core pytest -q packages/hermes-core/tests
+      - run: go test ./...
+        working-directory: apps/agent-runtime
+      - run: PYTHONPATH=packages/hermes-core python scripts/hermes-readiness.py --json
+
+  mobile:
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.2"
+          channel: stable
+      - run: bash scripts/hermes-mobile-check.sh
+
+  package:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/agent-runtime/go.mod"
+      - run: python -m pip install -e "packages/hermes-core[build]"
+      - name: Package core runtime
+        env:
+          PYTHON_BIN: python
+        run: bash scripts/hermes-package.sh --core-only

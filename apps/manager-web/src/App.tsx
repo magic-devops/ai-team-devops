@@ -107,6 +107,7 @@ const SIDEBAR_WIDTH_STORAGE_KEY = "sop-sidebar-width-v1";
 const ROLE_DEFAULT_STORAGE_KEY = "sop-menu-role-default-v1";
 const MICRO_APP_STORAGE_KEY = "sop-active-micro-app-v1";
 const MICRO_APP_EXPANDED_STORAGE_KEY = "sop-expanded-micro-apps-v1";
+const MANAGER_AUTH_OPTIONAL_HASHES = new Set(["#/workspace-v5"]);
 const SIDEBAR_DEFAULT_WIDTH = 320;
 const SIDEBAR_MIN_WIDTH = 280;
 const SIDEBAR_MAX_WIDTH = 520;
@@ -705,12 +706,14 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  const managerAuthOptional = MANAGER_AUTH_OPTIONAL_HASHES.has(hash);
+
   useEffect(() => {
-    if (!authed) {
+    if (!authed && !managerAuthOptional) {
       const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
     }
-  }, [authed]);
+  }, [authed, managerAuthOptional]);
 
   useEffect(() => {
     if (me.data) setUserSession(me.data);
@@ -957,6 +960,32 @@ export function App() {
     window.addEventListener("mouseup", onUp);
   };
 
+  if (!authed && managerAuthOptional) {
+    const standaloneCurrent = findActiveNavItem(hash, NAV);
+    return (
+      <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text)]">
+        <main className="mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-6 lg:px-8">
+          <header className="mb-4 flex flex-wrap items-center justify-end gap-3 border-b border-[var(--border)] pb-4">
+            <div className="ml-auto flex items-center gap-2 sm:gap-3">
+              <ThemeMenu />
+              <select
+                className="rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-2.5 py-1.5 text-sm text-[var(--text)] shadow-sm"
+                value={i18n.language}
+                onChange={(e) => i18n.changeLanguage(e.target.value)}
+                aria-label="language"
+              >
+                <option value="zh-CN">中文</option>
+                <option value="en-US">English</option>
+                <option value="ja-JP">日本語</option>
+              </select>
+              <UserMenu authed={false} />
+            </div>
+          </header>
+          <div className="hermes-mobile-compact w-full" data-mobile-compact="true">{standaloneCurrent.el}</div>
+        </main>
+      </div>
+    );
+  }
   if (!authed) return null;
   const sidebarStyle = {
     "--sidebar-width": `${sidebarWidth}px`,

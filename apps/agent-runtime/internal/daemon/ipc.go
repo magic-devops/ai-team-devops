@@ -27,19 +27,18 @@ type IPCRequest struct {
 }
 
 type IPCResponse struct {
-	OK      bool           `json:"ok"`
-	Op      string         `json:"op,omitempty"`
-	ID      string         `json:"id,omitempty"`
-	Error   string         `json:"error,omitempty"`
-	Result  map[string]any `json:"result,omitempty"`
+	OK     bool           `json:"ok"`
+	Op     string         `json:"op,omitempty"`
+	ID     string         `json:"id,omitempty"`
+	Error  string         `json:"error,omitempty"`
+	Result map[string]any `json:"result,omitempty"`
 }
 
 func (d *Daemon) serveIPC(ctx context.Context) error {
 	if err := os.MkdirAll(filepath.Dir(d.cfg.SocketPath), 0o755); err != nil {
 		return err
 	}
-	_ = os.Remove(d.cfg.SocketPath)
-	ln, err := net.Listen("unix", d.cfg.SocketPath)
+	ln, err := listenIPC(d.cfg.SocketPath)
 	if err != nil {
 		return err
 	}
@@ -92,13 +91,13 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 		hasBearer := d.cfg.Auth.Bearer != ""
 		hasKey := d.cfg.Auth.APIKey != ""
 		return IPCResponse{OK: true, Result: map[string]any{
-			"agent_id":      d.agentID,
-			"version":       d.version,
-			"outbox_depth":  depth,
-			"project_id":    d.cfg.Manager.ProjectID,
-			"has_bearer":    hasBearer,
-			"has_api_key":   hasKey,
-			"manager_url":   d.cfg.Manager.URL,
+			"agent_id":     d.agentID,
+			"version":      d.version,
+			"outbox_depth": depth,
+			"project_id":   d.cfg.Manager.ProjectID,
+			"has_bearer":   hasBearer,
+			"has_api_key":  hasKey,
+			"manager_url":  d.cfg.Manager.URL,
 		}}
 	case "event":
 		e := outbox.NewEvent("sop."+req.Name, stringOr(req.Data, "subject", ""), req.Data)
@@ -182,7 +181,9 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 			e := outbox.NewEvent("sop.sync.push", stringOr(record, "id", ""), map[string]any{
 				"module": module, "action": action, "record": record,
 			})
-			_ = d.outbox.Append(ctx, e)
+			if err := d.outbox.Append(ctx, e); err != nil {
+				return IPCResponse{OK: false, Error: err.Error()}
+			}
 			return IPCResponse{OK: true, ID: e.ID, Result: map[string]any{"queued": true}}
 		}
 		return IPCResponse{OK: true, Result: map[string]any{"sent": true}}

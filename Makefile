@@ -69,8 +69,25 @@ verify-sop:
 	@command -v sop >/dev/null && sop --version || (echo "sop 未在 PATH；运行: make build-sop" && exit 1)
 
 full-readiness:
-	@command -v sop >/dev/null && sop system readiness --full --json || \
-	  (PYTHONPATH=packages/sop-cli:packages/sop-sdk-python python3 -m sop_cli system readiness --full --json)
+	$(HERMES_PYTHON) scripts/hermes-readiness.py --full --json
+
+HERMES_PYTHON ?= .venv/bin/python
+
+HERMES_AGENTD ?= $(CURDIR)/.sop-runtime/hermes-v5/sop-agentd
+
+.PHONY: hermes-core hermes-agentd hermes-test hermes-package
+hermes-agentd:
+	mkdir -p "$(dir $(HERMES_AGENTD))"
+	go -C apps/agent-runtime build -o "$(HERMES_AGENTD)" ./cmd/sop-agentd
+
+hermes-core: hermes-agentd
+	$(HERMES_PYTHON) -m hermes_core --data-dir "$(HOME)/.hermes/v5" --token-file "$(HOME)/.hermes/v5/access-token" --port 8787 --agentd "$(HERMES_AGENTD)"
+
+hermes-test:
+	$(HERMES_PYTHON) -m pytest packages/hermes-core/tests packages/sop-sdk-python/tests/test_hermes_client.py packages/sop-cli/tests/test_hermes_cli_contract.py -q
+
+hermes-package:
+	bash scripts/hermes-package.sh
 
 deploy-up:
 	PROJECT_PATH="$(CURDIR)" bash scripts/deploy.sh up single

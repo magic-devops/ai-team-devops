@@ -24,6 +24,8 @@ from .commands import (
     dev_flow as dev_flow_cmd,
     doctor as doctor_cmd,
     event as event_cmd,
+    graph_loop as graph_loop_cmd,
+    hermes as hermes_cmd,
     init as init_cmd,
     issue as issue_cmd,
     kb as kb_cmd,
@@ -35,10 +37,9 @@ from .commands import (
     platforms as platforms_cmd,
     plugins as plugins_cmd,
     project as project_cmd,
-    requirement as requirement_cmd,
     register as register_cmd,
+    requirement as requirement_cmd,
     rule as rule_cmd,
-    graph_loop as graph_loop_cmd,
     skills as skills_cmd,
     sprint as sprint_cmd,
     status as status_cmd,
@@ -46,8 +47,8 @@ from .commands import (
     system as system_cmd,
     task as task_cmd,
     usage as usage_cmd,
-    workflow as workflow_cmd,
     work as work_cmd,
+    workflow as workflow_cmd,
 )
 from .commands_info import (
     COMMAND_TREE,
@@ -92,6 +93,13 @@ app.add_typer(issue_cmd.app, name="issue", help="问题：list/create/update/res
 app.add_typer(task_cmd.app,    name="task",    help="任务：list/schedule/feed/report/create/update/pull/done/fail/delete/issue")
 app.add_typer(sprint_cmd.app, name="sprint", help="迭代：list/create/update/complete/progress/delete")
 app.add_typer(workflow_cmd.app, name="workflow", help="工作流：instances/events/ops-plan/ops-tasks")
+app.add_typer(hermes_cmd.workspace_app, name="workspace", help="Hermes v5 工作空间：list/create")
+app.add_typer(hermes_cmd.build_resource_app("devices"), name="device", help="Hermes v5 设备：list/get/create/patch/delete")
+app.add_typer(hermes_cmd.build_resource_app("sessions"), name="session", help="Hermes v5 会话：list/get/create/patch")
+app.add_typer(hermes_cmd.build_resource_app("runs"), name="run", help="Hermes v5 运行：list/get/create/patch/events/action")
+app.add_typer(hermes_cmd.approval_app, name="approval", help="Hermes v5 审批：list/decision")
+app.add_typer(hermes_cmd.build_resource_app("assets"), name="asset", help="Hermes v5 资产：list/get/create/patch/delete")
+app.add_typer(hermes_cmd.system_app, name="hermes", help="Hermes v5 系统：health/actions/readiness/sync")
 app.add_typer(work_cmd.app, name="work", help="工作台：summary/list/next/export")
 app.add_typer(event_cmd.app, name="event", help="事件：emit/flush/list")
 app.add_typer(usage_cmd.app, name="usage", help="用量：record/flush/summary/quota")

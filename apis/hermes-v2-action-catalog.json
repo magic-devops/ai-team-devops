@@ -1,0 +1,86 @@
+{
+  "version": "5.0",
+  "base_path": "/api/v2",
+  "auth": {
+    "type": "bearer",
+    "header": "Authorization",
+    "workspace_header": "X-Workspace-Id"
+  },
+  "envelope": {
+    "required": ["ok", "scope", "summary", "items", "actions", "agent_consumption", "cli", "permissions", "audit", "trace_id"],
+    "items": "array",
+    "permissions": "string[]",
+    "health_exception": ["ok", "service", "version"]
+  },
+  "resources": {
+    "workspaces": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH"]
+    },
+    "sessions": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH"]
+    },
+    "runs": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH"],
+      "events": "GET /runs/{id}/events?after=0",
+      "actions": ["start", "cancel", "retry", "replay", "export"]
+    },
+    "assets": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH", "DELETE"],
+      "kinds": ["memory", "knowledge", "skill", "plugin", "data-source"]
+    },
+    "devices": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "DELETE"],
+      "execution_pairing": "not_implemented"
+    },
+    "tasks": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH"]
+    },
+    "requirements": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH"]
+    },
+    "schedules": {
+      "collection": ["GET", "POST"],
+      "entity": ["GET", "PATCH", "DELETE"]
+    },
+    "approvals": {
+      "collection": ["GET"],
+      "entity": ["GET"],
+      "decision": "POST /approvals/{id}/decision"
+    },
+    "artifacts": {
+      "collection": ["GET"],
+      "entity": ["GET"]
+    },
+    "sync": {
+      "events": "GET /sync?after=0"
+    },
+    "system": {
+      "readiness": "GET /system/readiness",
+      "health": "GET /health",
+      "actions": "GET /actions"
+    }
+  },
+  "query": ["q", "status", "kind", "limit", "cursor"],
+  "mutation_body": {
+    "post": ["data", "idempotency_key"],
+    "patch": ["data", "idempotency_key", "expected_version"],
+    "delete": ["idempotency_key", "expected_version", "dry_run"]
+  },
+  "run_action_body": ["idempotency_key", "expected_version", "dry_run"],
+  "approval_decision_body": ["decision", "idempotency_key", "expected_version", "dry_run"],
+  "wire": {
+    "entity": ["id", "kind", "version", "status", "data", "created_at", "updated_at"],
+    "workspace_data": ["name", "root"],
+    "run_data": ["title", "session_id", "nodes"],
+    "run_server_fields": ["workspace_root", "workspace_version", "node_results", "attempt", "active_node", "execution_owner", "lease_expires_at"],
+    "run_node": ["id", "title", "kind", "argv", "expected_exit_code", "timeout_seconds"],
+    "asset_data": ["title", "kind", "content"]
+  }
+}

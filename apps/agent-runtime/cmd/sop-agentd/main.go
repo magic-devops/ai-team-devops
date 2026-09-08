@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,6 +15,8 @@ import (
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/config"
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/daemon"
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/logging"
+	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/runtool"
+	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/toolserver"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +34,8 @@ func main() {
 	}
 	root.AddCommand(versionCmd())
 	root.AddCommand(doctorCmd())
+	root.AddCommand(runToolCmd())
+	root.AddCommand(toolServerCmd())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -71,4 +76,46 @@ func doctorCmd() *cobra.Command {
 			return daemon.Doctor(cmd.Context())
 		},
 	}
+}
+
+func runToolCmd() *cobra.Command {
+	var root string
+	c := &cobra.Command{
+		Use:   "run-tool --root PATH",
+		Short: "执行 Hermes core 授权的一次性本地工具调用",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			var req runtool.Request
+			if err := json.NewDecoder(os.Stdin).Decode(&req); err != nil {
+				req = runtool.Request{}
+				writeRunToolResponse(runtool.Response{OK: false, ExitCode: -1, Error: "invalid json: " + err.Error()})
+				return nil
+			}
+			writeRunToolResponse(runtool.Run(cmd.Context(), root, req))
+			return nil
+		},
+	}
+	c.Flags().StringVar(&root, "root", "", "workspace root")
+	_ = c.MarkFlagRequired("root")
+	return c
+}
+
+func writeRunToolResponse(resp runtool.Response) {
+	raw, _ := json.Marshal(resp)
+	fmt.Println(string(raw))
+}
+
+func toolServerCmd() *cobra.Command {
+	var root string
+	c := &cobra.Command{
+		Use:   "tool-server --root PATH",
+		Short: "启动 Hermes core 授权的 JSONL 长连接工具服务",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return toolserver.RunStdio(cmd.Context(), root)
+		},
+	}
+	c.Flags().StringVar(&root, "root", "", "workspace root")
+	_ = c.MarkFlagRequired("root")
+	return c
 }

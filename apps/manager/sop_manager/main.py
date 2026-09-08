@@ -93,6 +93,9 @@ app.middleware("http")(legacy_unversioned_api_redirect_middleware)
 # ── 按需注册路由模块（业务 REST 挂载在 /api/v1/*；未版本化 /api/* 由上方中间件重定向）────────
 from sop_manager.routers import requirements, tasks, issues, agents, skills, mcp_mgr, system, dev_flow
 from sop_manager.routers import graph_loop, pages_productization, plugins_governance
+from sop_manager.routers.hermes_v5 import mount_hermes_v5
+
+mount_hermes_v5(app)
 from sop_manager.routers import models, orchestration, docker_env, skill_repo, vibe, design_docs, workspace
 from sop_manager.routers import notify, cli_wrapper
 

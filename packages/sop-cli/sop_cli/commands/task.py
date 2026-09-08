@@ -15,8 +15,10 @@ import typer
 from rich.table import Table
 
 from .._util import console, get_client, get_config, kv, ok, warn
+from . import hermes as hermes_cmd
 
 app = typer.Typer(help="任务：list/schedule/feed/report/create/pull/done/fail/delete/issue（本地优先，远端增强）")
+app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v2", help="Hermes v5 任务：list/get/create/patch")
 
 
 def _now() -> str:

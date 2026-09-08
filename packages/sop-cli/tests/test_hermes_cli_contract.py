@@ -1,0 +1,71 @@
+from pathlib import Path
+import json
+
+from typer.testing import CliRunner
+from sop_cli.commands import hermes
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_root_cli_registers_non_colliding_hermes_commands():
+    source = (ROOT / "packages/sop-cli/sop_cli/__main__.py").read_text(encoding="utf-8")
+
+    for command in ("workspace", "device", "session", "run", "approval", "asset", "hermes"):
+        assert f'name="{command}"' in source
+    assert 'build_resource_app("devices")' in source
+    assert 'build_resource_app("sessions")' in source
+    assert 'build_resource_app("runs")' in source
+    assert 'build_resource_app("assets")' in source
+
+
+def test_existing_singular_task_requirement_are_preserved_with_v2_subcommands():
+    task_source = (ROOT / "packages/sop-cli/sop_cli/commands/task.py").read_text(encoding="utf-8")
+    requirement_source = (ROOT / "packages/sop-cli/sop_cli/commands/requirement.py").read_text(encoding="utf-8")
+
+    assert '@app.command(name="list")' in task_source
+    assert 'app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v2"' in task_source
+    assert '@app.command(name="list")' in requirement_source
+    assert 'app.add_typer(hermes_cmd.build_resource_app("requirements"), name="v2"' in requirement_source
+
+
+def test_hermes_cli_defaults_actions_to_dry_run_until_apply():
+    result = CliRunner().invoke(hermes.build_resource_app("runs"), ["start", "--help"])
+    assert result.exit_code == 0
+    assert "--dry-run" in result.output
+    assert "--expected-version" in result.output
+
+
+def test_named_run_commands_send_dry_run_and_explicit_apply(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def run_action(self, run_id, action, **kwargs):
+            calls.append((run_id, action, kwargs))
+            return {"ok": True, "items": []}
+
+    monkeypatch.setattr(hermes, "get_hermes_client", Client)
+    app = hermes.build_resource_app("runs")
+    for action in ("start", "cancel", "retry", "replay", "export"):
+        for flags, dry in (([], True), (["--apply"], False)):
+            result = CliRunner().invoke(app, [action, "r", "--expected-version", "2", "--json", *flags])
+            assert result.exit_code == 0, result.output
+            assert json.loads(result.output)["ok"]
+            assert calls[-1] == ("r", action, {"expected_version": 2, "dry_run": dry, "idempotency_key": None})
+
+
+def test_missing_connection_is_machine_readable_non_destructive_failure(monkeypatch):
+    monkeypatch.delenv("HERMES_URL", raising=False)
+    monkeypatch.delenv("HERMES_TOKEN_FILE", raising=False)
+    result = CliRunner().invoke(hermes.build_resource_app("runs"), ["list", "--json"])
+    assert result.exit_code != 0
+    assert json.loads(result.output)["ok"] is False
+
+
+def test_actions_without_entity_data_render_safely():
+    hermes._print_payload({"ok": True, "items": [{"id": "run.start"}]}, as_json=False)

@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -252,13 +253,13 @@ func (d *Daemon) flushOutboxOnce(ctx context.Context) {
 }
 
 // deliver 是占位实现：未来 M9 改为统一 /api/v1/events:ingest。
-// 现阶段只对若干已存在路由做最小映射，其他事件先直接 Ack（避免长期积压）。
+// 现阶段只对若干已存在路由做最小映射，其他事件保留在 outbox 重试。
 func (d *Daemon) deliver(ctx context.Context, e outbox.Event) error {
 	switch e.Type {
 	case "sop.task.status_changed":
 		taskID := e.Subject
 		if taskID == "" {
-			return nil
+			return errors.New("sop.task.status_changed subject is required")
 		}
 		body := map[string]any{}
 		for k, v := range e.Data {
@@ -282,9 +283,7 @@ func (d *Daemon) deliver(ctx context.Context, e outbox.Event) error {
 		}
 		return d.http.Do(ctx, "POST", "/api/v1/sync/push", body, nil)
 	default:
-		// 未实现的事件类型：暂时静默 Ack，避免长期堆积（M9 切到统一 ingest 端点后会全量上送）
-		d.log.Debug("event silently acked (no route yet)", zap.String("type", e.Type))
-		return nil
+		return fmt.Errorf("unsupported event type %q: retriable delivery route is not configured", e.Type)
 	}
 }
 

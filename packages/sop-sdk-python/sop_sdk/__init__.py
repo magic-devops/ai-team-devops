@@ -13,23 +13,27 @@ from __future__ import annotations
 
 from .client import ManagerClient, build_default_client
 from .config import AgentConfig, load_config
-from .security import Auth, BearerAuth, HmacAuth, NoAuth
 from .errors import (
-    SopError,
+    HermesContractError,
+    HermesUnavailableError,
     SopAuthError,
+    SopConflictError,
+    SopError,
     SopForbiddenError,
     SopNotFoundError,
-    SopConflictError,
     SopServerError,
     SopTransportError,
 )
+from .hermes import HermesClient
 from .ipc import AgentdIpcClient
+from .security import Auth, BearerAuth, HmacAuth, NoAuth
 
 __version__ = "2.0.0-dev"
 
 __all__ = [
     "__version__",
     "ManagerClient",
+    "HermesClient",
     "build_default_client",
     "AgentConfig",
     "load_config",
@@ -38,6 +42,8 @@ __all__ = [
     "HmacAuth",
     "NoAuth",
     "AgentdIpcClient",
+    "HermesContractError",
+    "HermesUnavailableError",
     "SopError",
     "SopAuthError",
     "SopForbiddenError",
