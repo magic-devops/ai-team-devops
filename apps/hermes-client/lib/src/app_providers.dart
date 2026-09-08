@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'hermes_api_client.dart';
+import 'local_runtime.dart';
 import 'models.dart';
 import 'settings_controller.dart';
 import 'settings_store.dart';
@@ -14,13 +17,32 @@ final settingsProvider =
   SettingsController.new,
 );
 
+final localRuntimeProvider = Provider<LocalRuntime>((ref) {
+  final runtime = BundledLocalRuntime();
+  ref.onDispose(runtime.dispose);
+  return runtime;
+});
+
+final localRuntimeStateProvider = StreamProvider<LocalRuntimeSnapshot>((ref) {
+  return ref.watch(localRuntimeProvider).snapshots;
+});
+
+final localTokenReaderProvider = Provider<Future<String> Function(String)>(
+  (ref) => (path) => File(path).readAsString(),
+);
+
+final apiClientFactoryProvider =
+    Provider<HermesApiClient Function(ConnectionSettings?)>(
+  (ref) => (settings) => HermesApiClient(settings: settings),
+);
+
 final workspaceSelectionProvider = Provider<String?>(
   (ref) => ref.watch(settingsProvider).asData?.value.workspaceId,
 );
 
 final apiProvider = Provider<HermesApiClient>((ref) {
   final settings = ref.watch(settingsProvider).asData?.value;
-  final client = HermesApiClient(settings: settings);
+  final client = ref.watch(apiClientFactoryProvider)(settings);
   ref.onDispose(client.close);
   return client;
 });
@@ -63,6 +85,14 @@ final healthProvider = FutureProvider<HermesEnvelope>((ref) async {
 
 final readinessProvider = FutureProvider<HermesEnvelope>((ref) async {
   return ref.watch(apiProvider).readiness();
+});
+
+final diagnosticsProvider = FutureProvider<HermesEnvelope>((ref) async {
+  final settings = ref.watch(settingsProvider).asData?.value;
+  if (settings?.isConfigured != true) {
+    throw const HermesUnavailableException('No Hermes base URL configured.');
+  }
+  return ref.watch(apiProvider).diagnostics();
 });
 
 final syncProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {

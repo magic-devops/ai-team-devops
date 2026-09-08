@@ -6,11 +6,13 @@ import os
 import secrets
 import socket
 import stat
+import sys
 from pathlib import Path
 
 import uvicorn
 
 from .api import create_app
+from .runtime import CoreAlreadyRunning, InstanceLock
 
 
 def ensure_token_file(path: Path) -> str:
@@ -47,22 +49,35 @@ def main() -> None:
     parser.add_argument("--agentd", default="")
     parser.add_argument("--export-openapi", type=Path)
     args = parser.parse_args()
+    if not 0 <= args.port <= 65535:
+        parser.error("--port must be between 0 and 65535")
 
     data_dir = Path(args.data_dir).expanduser().resolve()
     token_file = Path(args.token_file).expanduser().absolute()
-    token = ensure_token_file(token_file)
-    app = create_app(data_dir, token, database_url=os.getenv("HERMES_DATABASE_URL", ""), agentd=args.agentd)
     if args.export_openapi:
+        token = ensure_token_file(token_file)
+        app = create_app(data_dir, token, database_url=os.getenv("HERMES_DATABASE_URL", ""), agentd=args.agentd)
         args.export_openapi.parent.mkdir(parents=True, exist_ok=True)
         args.export_openapi.write_text(json.dumps(app.openapi(), indent=2) + "\n")
         return
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((args.host, args.port))
-    sock.listen(128)
-    port = sock.getsockname()[1]
-    print(json.dumps({"url": f"http://{args.host}:{port}", "token_file": str(token_file), "pid": os.getpid()}), flush=True)
-    server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
-    server.run(sockets=[sock])
+    try:
+        with InstanceLock(data_dir), socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            token = ensure_token_file(token_file)
+            app = create_app(data_dir, token, database_url=os.getenv("HERMES_DATABASE_URL", ""), agentd=args.agentd)
+            sock.bind((args.host, args.port))
+            sock.listen(128)
+            port = sock.getsockname()[1]
+            print(json.dumps({"url": f"http://{args.host}:{port}", "token_file": str(token_file), "pid": os.getpid()}), flush=True)
+            server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+            server.run(sockets=[sock])
+    except CoreAlreadyRunning:
+        print(json.dumps({"ok": False, "error": {"code": "core_already_running",
+                         "message": "A Core is already running for this data directory; reconnect to it or stop its owner first"}}), file=sys.stderr, flush=True)
+        raise SystemExit(2) from None
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"ok": False, "error": {"code": "local_startup_failed", "type": type(exc).__name__,
+                         "message": "Core startup failed; check data-directory ownership, token permissions, and port availability"}}), file=sys.stderr, flush=True)
+        raise SystemExit(2) from None
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from . import __version__
 from .models import API_BASE, ACTIONS, RESOURCES, RESOURCE_DATA_FIELDS, RESOURCE_STATUS_OPTIONS, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, payload
 from .execution import Execution
 from .transactional import Store, digest
+from .diagnostics import runtime_checks
 
 
 def resource_contracts() -> dict[str, dict[str, object]]:
@@ -88,13 +89,23 @@ def create_router(store: Store, execution: Execution, identity: Callable):
     @router.get("/system/readiness", response_model=Envelope)
     def readiness(principal: Principal = Depends(identity)):
         require(principal, "read")
-        checks = [{"id": "store", "status": "passed", "backend": store.engine.dialect.name},
-                  {"id": "langgraph", "status": "passed"},
-                  {"id": "executor", "status": "passed" if execution.available() else "unavailable"}]
+        checks = runtime_checks(store, execution)
         return response(principal, "", checks,
                         summary={"ready": all(c["status"] == "passed" for c in checks),
                                  "resource_contracts": resource_contracts()},
+                        cli={"command": "sop hermes readiness --json"},
                         ok=all(c["status"] == "passed" for c in checks))
+
+    @router.get("/system/diagnostics", response_model=Envelope)
+    def diagnostics(principal: Principal = Depends(identity)):
+        require(principal, "read")
+        checks = runtime_checks(store, execution)
+        passed = sum(check["status"] == "passed" for check in checks)
+        return response(principal, "", checks, ok=passed == len(checks),
+                        summary={"version": __version__, "total": len(checks), "passed": passed,
+                                 "failed": len(checks) - passed, "ready": passed == len(checks)},
+                        cli={"command": "sop hermes diagnostics --json"},
+                        agent_consumption={"read_only": True, "checks": [check["id"] for check in checks]})
 
     @router.get("/sync", response_model=Envelope)
     def sync(request: Request, after: int = Query(0, ge=0), principal: Principal = Depends(identity)):

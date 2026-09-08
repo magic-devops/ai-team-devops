@@ -756,6 +756,17 @@
     "detail": "详情与证据",
     "recordedOutput": "运行输出",
     "noRecordedOutput": "暂无运行输出",
+    "diagnostics": {
+      "title": "运行环境诊断",
+      "degraded": "需要处理",
+      "check": "检查项",
+      "store": "业务存储",
+      "checkpoints": "运行检查点",
+      "executor": "端侧执行器",
+      "storage": "磁盘空间",
+      "passed": "通过",
+      "failed": "失败"
+    },
     "selectEntity": "选择一条实体查看版本、证据和可执行动作。",
     "emptyResource": "暂无资源",
     "permissionReadOnly": "当前 Hermes 权限为只读，创建和编辑已禁用。",

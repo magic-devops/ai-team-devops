@@ -617,6 +617,17 @@
     "detail": "詳細と証拠",
     "recordedOutput": "実行出力",
     "noRecordedOutput": "実行出力はまだありません",
+    "diagnostics": {
+      "title": "実行環境の診断",
+      "degraded": "対応が必要",
+      "check": "確認項目",
+      "store": "業務ストレージ",
+      "checkpoints": "実行チェックポイント",
+      "executor": "ローカル実行器",
+      "storage": "ディスク容量",
+      "passed": "正常",
+      "failed": "失敗"
+    },
     "selectEntity": "エンティティを選択して、バージョン、証拠、実行可能アクションを確認します。",
     "emptyResource": "リソースはありません",
     "permissionReadOnly": "現在の Hermes 権限は読み取り専用です。作成と編集は無効です。",

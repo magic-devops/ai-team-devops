@@ -99,10 +99,12 @@ def _print_payload(payload: Mapping[str, Any], *, as_json: bool) -> None:
         console.print(table)
 
 
-def _run_call(call: Callable[[HermesClient], dict[str, Any]], *, as_json: bool) -> None:
+def _run_call(call: Callable[[HermesClient], dict[str, Any]], *, as_json: bool) -> dict[str, Any]:
     try:
         with get_hermes_client() as client:
-            _print_payload(call(client), as_json=as_json)
+            result = call(client)
+            _print_payload(result, as_json=as_json)
+            return result
     except (SopError, ValueError, OSError, typer.BadParameter) as exc:
         status = getattr(exc, "status", None)
         if as_json:
@@ -284,7 +286,14 @@ def approval_decision(
     )
 
 
-system_app = typer.Typer(help="Hermes system/readiness and sync commands", no_args_is_help=True)
+system_app = typer.Typer(help="Hermes runtime diagnostics, readiness and sync commands", no_args_is_help=True)
+
+
+@system_app.command("diagnostics")
+def system_diagnostics(json_output: bool = typer.Option(False, "--json")) -> None:
+    result = _run_call(lambda client: client.system_diagnostics(), as_json=json_output)
+    if not result.get("ok", False):
+        raise typer.Exit(1)
 
 
 @system_app.command("readiness")
@@ -293,7 +302,9 @@ def system_readiness(
     full: bool = typer.Option(False, "--full"),
 ) -> None:
     if not full:
-        _run_call(lambda client: client.system_readiness(), as_json=json_output)
+        result = _run_call(lambda client: client.system_readiness(), as_json=json_output)
+        if not result.get("ok", False):
+            raise typer.Exit(1)
         return
     roots = [Path(os.environ["HERMES_SOURCE_ROOT"])] if os.environ.get("HERMES_SOURCE_ROOT") else Path(__file__).resolve().parents
     script = next((root / "scripts/hermes-readiness.py" for root in roots

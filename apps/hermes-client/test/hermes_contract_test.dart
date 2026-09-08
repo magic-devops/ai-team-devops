@@ -101,4 +101,129 @@ void main() {
     await expectLater(redirected.list(Resource.workspaces),
         throwsA(isA<HermesApiException>()));
   });
+
+  test('readiness and diagnostics preserve HTTP 200 degraded envelopes',
+      () async {
+    final requests = <String>[];
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request.url.path);
+        return http.Response(
+            jsonEncode({
+              'ok': false,
+              'summary': {
+                'version': '1.0.0',
+                'total': 4,
+                'passed': 3,
+                'failed': 1,
+                'ready': false,
+              },
+              'items': [
+                {
+                  'id': 'executor',
+                  'status': 'failed',
+                  'detail': 'executor probe failed',
+                }
+              ],
+              'permissions': ['read'],
+            }),
+            200);
+      }),
+    );
+    addTearDown(client.close);
+
+    final readiness = await client.readiness();
+    final diagnostics = await client.diagnostics();
+
+    expect(readiness.ok, isFalse);
+    expect(readiness.summary['failed'], 1);
+    expect(readiness.items.single['id'], 'executor');
+    expect(diagnostics.ok, isFalse);
+    expect(requests, [
+      '/api/hermes/v1/system/readiness',
+      '/api/hermes/v1/system/diagnostics',
+    ]);
+  });
+
+  test('401 and action ok false still throw', () async {
+    final unauthorized = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async => http.Response(
+          jsonEncode({
+            'ok': false,
+            'error': 'unauthorized',
+          }),
+          401)),
+    );
+    addTearDown(unauthorized.close);
+    await expectLater(
+      unauthorized.readiness(),
+      throwsA(isA<HermesApiException>()),
+    );
+
+    final actionFalse = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async => http.Response(
+          jsonEncode({
+            'ok': false,
+            'error': 'write rejected',
+          }),
+          200)),
+    );
+    addTearDown(actionFalse.close);
+    await expectLater(
+      actionFalse.runAction(
+        'run-1',
+        'start',
+        expectedVersion: 1,
+        workspaceId: 'w1',
+      ),
+      throwsA(isA<HermesApiException>()),
+    );
+  });
+
+  test('probe degraded bypass rejects malformed and HTML payloads', () async {
+    final missingItems = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async => http.Response(
+          jsonEncode({
+            'ok': false,
+            'summary': {'ready': false},
+          }),
+          200)),
+    );
+    addTearDown(missingItems.close);
+    await expectLater(
+      missingItems.diagnostics(),
+      throwsA(isA<HermesApiException>()),
+    );
+
+    final html = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient(
+        (request) async => http.Response('<html>oops</html>', 200),
+      ),
+    );
+    addTearDown(html.close);
+    await expectLater(
+      html.readiness(),
+      throwsA(isA<HermesApiException>()),
+    );
+  });
 }

@@ -36,8 +36,9 @@ def run_check(name: str, command: list[str], required: bool, cwd: Path, env: dic
     for secret_name in ("HERMES_TOKEN", "SECRET_KEY"):
         if env.get(secret_name):
             output = output.replace(env[secret_name], "[REDACTED_SECRET]")
+    detail = output if len(output) <= 3000 else output[:1500] + "\n[output truncated]\n" + output[-1500:]
     return Check(name, required, "passed" if proc.returncode == 0 else "failed",
-                 output[-3000:] or f"exit {proc.returncode}", evidence, round((time.monotonic() - started) * 1000))
+                 detail or f"exit {proc.returncode}", evidence, round((time.monotonic() - started) * 1000))
 
 
 def checks_for(root: Path, full: bool) -> list[Check]:
@@ -64,6 +65,8 @@ def checks_for(root: Path, full: bool) -> list[Check]:
         run("manager.scope-permissions-pages", [python, "-m", "pytest", "apps/manager/sop_manager/routers/test_hermes_workspace.py", "-q"], evidence="execution")
         run("sdk-cli.contracts", [python, "-m", "pytest", "packages/sop-sdk-python/tests/test_hermes_client.py", "packages/sop-cli/tests/test_hermes_cli_contract.py", "-q"], evidence="execution")
         run("sdk.generator", [python, "-m", "pytest", "apis/generated/hermes-v1/generator_regression_test.py", "-q"])
+        run("distribution.contracts", [python, "-m", "pytest", "scripts/tests/test_hermes_distribution.py", "-q"], evidence="execution")
+        run("cli.diagnostics.help", [python, "-m", "sop_cli", "hermes", "diagnostics", "--help"], evidence="execution")
         for command in ("workspace", "device", "session", "run", "approval", "asset", "system"):
             run(f"cli.{command}.help", [python, "-m", "sop_cli", command, "--help"], evidence="execution")
         run("scripts.syntax", ["bash", "-n", "scripts/hermes-bootstrap.sh", "scripts/hermes-package.sh", "scripts/hermes-mobile-check.sh"])

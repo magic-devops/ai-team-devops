@@ -66,6 +66,27 @@
         }
       }
     },
+    "/api/hermes/v1/system/diagnostics": {
+      "get": {
+        "tags": [
+          "Hermes Workspace"
+        ],
+        "summary": "Diagnostics",
+        "operationId": "diagnostics_api_hermes_v1_system_diagnostics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/sync": {
       "get": {
         "tags": [

@@ -25,7 +25,7 @@ def _envelope(items=None, summary=None):
     }
 
 
-def test_list_resource_uses_v2_bearer_workspace_and_query():
+def test_list_resource_uses_v1_bearer_workspace_and_query():
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -63,6 +63,18 @@ def test_health_is_unauthenticated():
     client.health()
 
     assert seen["authorization"] is None
+
+
+def test_diagnostics_preserves_degraded_checks_for_clients():
+    def handler(request):
+        assert request.url.path == "/api/hermes/v1/system/diagnostics"
+        assert request.headers["Authorization"] == "Bearer token-1"
+        return httpx.Response(200, json={**_envelope([{"id": "executor", "status": "failed"}]), "ok": False})
+
+    with HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler)) as client:
+        result = client.system_diagnostics()
+        assert result["ok"] is False
+        assert result["items"][0]["id"] == "executor"
 
 
 def test_create_patch_and_run_action_bodies_match_contract():

@@ -20,6 +20,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -254,8 +255,8 @@ function boundedTextRule(t: (key: string) => string) {
   ];
 }
 
-function scopeSignature(connection: ConnectionForm, resource: string, generation: number) {
-  return [connection.baseUrl, connection.workspaceId || "", resource, generation].join("\u001f");
+function scopeSignature(connection: ConnectionForm, resource: string, generation: number, tokenGeneration: number) {
+  return [connection.baseUrl, connection.workspaceId || "", resource, generation, tokenGeneration].join("\u001f");
 }
 
 function buildBusinessData(resource: HermesResource, values: BusinessFormValues, mode: DrawerMode) {
@@ -286,7 +287,7 @@ export function Workspace() {
   const [query, setQuery] = useState<QueryState>({ q: "", limit: 20 });
   const [activeResource, setActiveResource] = useState<HermesResource>("runs");
   const [selected, setSelected] = useState<HermesEntity | undefined>();
-  const [actionResult, setActionResult] = useState<{ title: string; response: HermesApiResponse<unknown> } | undefined>();
+  const [actionResult, setActionResult] = useState<{ title: string; response: HermesApiResponse<unknown>; diagnostics?: boolean } | undefined>();
   const [businessDrawer, setBusinessDrawer] = useState<{ mode: DrawerMode; resource: HermesResource; entity?: HermesEntity } | undefined>();
   const [workspaceDrawer, setWorkspaceDrawer] = useState(false);
   const [businessForm] = Form.useForm<BusinessFormValues>();
@@ -296,7 +297,7 @@ export function Workspace() {
   const workspaceReady = connected && Boolean(connection.workspaceId);
   const canCreateResource = MUTABLE_RESOURCES.has(activeResource);
   const canEditResource = EDITABLE_RESOURCES.has(activeResource);
-  const currentScopeSignature = scopeSignature(connection, activeResource, contextGeneration);
+  const currentScopeSignature = scopeSignature(connection, activeResource, contextGeneration, tokenGeneration);
 
   useEffect(() => {
     setSelected(undefined);
@@ -362,12 +363,12 @@ export function Workspace() {
 
   const createWorkspace = useMutation({
     mutationFn: async (values: { name: string; root: string }) => {
-      const requestScope = scopeSignature(connection, "workspaces", contextGeneration);
+      const requestScope = scopeSignature(connection, "workspaces", contextGeneration, tokenGeneration);
       const response = await client.createWorkspace({ data: values, idempotency_key: idempotencyKey("workspace") });
       return { response, requestScope, resource: "workspaces" };
     },
     onSuccess: ({ response, requestScope, resource }) => {
-      const isCurrentRequest = requestScope === scopeSignature(connection, resource, contextGeneration);
+      const isCurrentRequest = requestScope === scopeSignature(connection, resource, contextGeneration, tokenGeneration);
       if (isCurrentRequest) {
         const workspace = response.items[0];
         if (workspace?.id) setConnection((prev) => ({ ...prev, workspaceId: workspace.id }));
@@ -382,7 +383,7 @@ export function Workspace() {
   const saveBusinessEntity = useMutation({
     mutationFn: async (values: BusinessFormValues) => {
       if (!businessDrawer) throw new Error("No drawer state");
-      const requestScope = scopeSignature(connection, businessDrawer.resource, contextGeneration);
+      const requestScope = scopeSignature(connection, businessDrawer.resource, contextGeneration, tokenGeneration);
       const requestResource = businessDrawer.resource;
       const requestEntityId = businessDrawer.entity?.id;
       const data = buildBusinessData(businessDrawer.resource, values, businessDrawer.mode);
@@ -411,10 +412,18 @@ export function Workspace() {
     },
   });
 
+  const runtimeDiagnostics = useMutation({
+    mutationFn: async () => ({ response: await client.diagnostics(), requestScope: currentScopeSignature }),
+    onSuccess: ({ response, requestScope }) => {
+      if (requestScope !== currentScopeSignature) return;
+      setActionResult({ title: t("workspace.diagnostics.title"), response, diagnostics: true });
+    },
+  });
+
   const runAction = useMutation({
     mutationFn: async (action: "start" | "cancel" | "retry" | "replay" | "export") => {
       if (!selected) throw new Error("No run selected");
-      const requestScope = scopeSignature(connection, "runs", contextGeneration);
+      const requestScope = scopeSignature(connection, "runs", contextGeneration, tokenGeneration);
       const requestEntityId = selected.id;
       const response = await client.runAction(selected.id, action, {
         idempotency_key: idempotencyKey(action),
@@ -448,7 +457,7 @@ export function Workspace() {
 
   const approvalDecision = useMutation({
     mutationFn: async ({ row, decision }: { row: HermesEntity; decision: "approve" | "reject" }) => {
-      const requestScope = scopeSignature(connection, "runs", contextGeneration);
+      const requestScope = scopeSignature(connection, "runs", contextGeneration, tokenGeneration);
       const response = await client.approvalDecision(row.id, {
         decision,
         idempotency_key: idempotencyKey(`approval-${decision}`),
@@ -562,7 +571,7 @@ export function Workspace() {
         </Row>
       </Card>
 
-      <ErrorAlert error={listQuery.error || workspacesQuery.error || readinessQuery.error || approvalsQuery.error || createWorkspace.error || saveBusinessEntity.error || runAction.error || approvalDecision.error} />
+      <ErrorAlert error={listQuery.error || workspacesQuery.error || readinessQuery.error || approvalsQuery.error || createWorkspace.error || saveBusinessEntity.error || runAction.error || approvalDecision.error || runtimeDiagnostics.error} />
 
       <div className="grid gap-3 border-b py-3 sm:grid-cols-3">
         <div className="min-w-0">
@@ -575,7 +584,12 @@ export function Workspace() {
           </div>
         </div>
         <Statistic styles={{ content: { fontSize: 16 } }} title={t("workspace.summary.items")} value={rows.length} prefix={<Workflow className="h-4 w-4" />} />
-        <Statistic styles={{ content: { fontSize: 16 } }} title={t("workspace.summary.readiness")} value={readinessQuery.data?.ok ? t("workspace.ready") : t("workspace.unknown")} prefix={<Activity className="h-4 w-4" />} />
+        <div className="flex items-center justify-between gap-2">
+          <Statistic styles={{ content: { fontSize: 16 } }} title={t("workspace.summary.readiness")} value={readinessQuery.data ? readinessQuery.data.ok ? t("workspace.ready") : t("workspace.diagnostics.degraded") : t("workspace.unknown")} prefix={<Activity className="h-4 w-4" />} />
+          <Tooltip title={t("workspace.diagnostics.title")}>
+            <Button aria-label={t("workspace.diagnostics.title")} icon={<Activity className="h-4 w-4" />} disabled={!connected || !permissions.has("read")} loading={runtimeDiagnostics.isPending} onClick={() => runtimeDiagnostics.mutate()} />
+          </Tooltip>
+        </div>
       </div>
 
       <Tabs
@@ -780,9 +794,28 @@ export function Workspace() {
         size="large"
         onClose={() => setActionResult(undefined)}
       >
+        {actionResult?.diagnostics ? (
+          <Space direction="vertical" size="middle" className="w-full">
+            <Alert type={actionResult.response.ok ? "success" : "warning"} showIcon message={t(actionResult.response.ok ? "workspace.ready" : "workspace.diagnostics.degraded")} />
+            <Table<{ id: string; status: string; detail: string }>
+              size="small" rowKey="id" pagination={false}
+              dataSource={actionResult.response.items.filter((item): item is { id: string; status: string; detail: string } =>
+                typeof item === "object" && item !== null && "id" in item && typeof item.id === "string" &&
+                "status" in item && typeof item.status === "string" && "detail" in item && typeof item.detail === "string")}
+              columns={[
+                { title: t("workspace.diagnostics.check"), dataIndex: "id", render: (value: string) => t(`workspace.diagnostics.${value}`, value) },
+                { title: t("workspace.status"), dataIndex: "status", render: (value: string) => <Tag color={value === "passed" ? "success" : "error"}>{t(`workspace.diagnostics.${value}`, value)}</Tag> },
+                { title: t("workspace.detail"), dataIndex: "detail" },
+              ]}
+            />
+            <Typography.Paragraph copyable code>sop hermes diagnostics --json</Typography.Paragraph>
+            <Collapse items={[{ key: "evidence", label: t("workspace.advanced.evidence"), children: <pre className="overflow-auto text-xs">{shortJson(actionResult.response)}</pre> }]} />
+          </Space>
+        ) : (
         <pre className="max-h-[70vh] overflow-auto rounded-md border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--text)]">
           {shortJson(actionResult?.response)}
         </pre>
+        )}
       </Drawer>
 
       <Drawer

@@ -42,8 +42,9 @@ describe("Hermes Workspace contracts", () => {
   });
 
   it("guards late mutation callbacks by captured scope and resource identity", () => {
-    expect(workspaceSource).toContain('requestScope = scopeSignature(connection, "workspaces", contextGeneration)');
-    expect(workspaceSource).toContain("requestScope === scopeSignature(connection, resource, contextGeneration)");
+    expect(workspaceSource).toContain('requestScope = scopeSignature(connection, "workspaces", contextGeneration, tokenGeneration)');
+    expect(workspaceSource).toContain("requestScope === scopeSignature(connection, resource, contextGeneration, tokenGeneration)");
+    expect(workspaceSource).toContain("scopeSignature(connection, activeResource, contextGeneration, tokenGeneration)");
     expect(workspaceSource).toContain("requestResource === activeResource");
     expect(workspaceSource).toContain("requestEntityId === selected?.id");
     expect(workspaceSource).toContain("if (!isCurrentRequest) return;");

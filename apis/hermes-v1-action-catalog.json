@@ -62,6 +62,7 @@
       "events": "GET /sync?after=0"
     },
     "system": {
+      "diagnostics": "GET /system/diagnostics",
       "readiness": "GET /system/readiness",
       "health": "GET /health",
       "actions": "GET /actions"

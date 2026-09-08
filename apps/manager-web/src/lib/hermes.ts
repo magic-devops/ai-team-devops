@@ -201,7 +201,13 @@ export class HermesClient {
         })()
       : {};
     const parsed = normalizeResponse<T>(body);
-    if (!response.ok || !parsed.ok) {
+    const isRuntimeProbe = path === "/system/readiness" || path === "/system/diagnostics";
+    if (response.ok && isRuntimeProbe &&
+      (!body || typeof body !== "object" || !("ok" in body) || typeof body.ok !== "boolean" ||
+        !("items" in body) || !Array.isArray(body.items))) {
+      throw new HermesUnavailableError("Invalid Hermes runtime diagnostics response.", { status: response.status });
+    }
+    if (!response.ok || !parsed.ok && !isRuntimeProbe) {
       throw new HermesUnavailableError(errorMessage(typeof body === "string" ? body : parsed, response.statusText), {
         status: response.status,
         traceId: parsed.trace_id,
@@ -220,6 +226,10 @@ export class HermesClient {
 
   readiness() {
     return this.request("/system/readiness");
+  }
+
+  diagnostics() {
+    return this.request<{ id: string; status: string; detail: string }>("/system/diagnostics");
   }
 
   sync(after = 0) {

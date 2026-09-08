@@ -13,6 +13,24 @@ function mockJsonResponse(body: unknown, init: ResponseInit = {}) {
 }
 
 describe("HermesClient", () => {
+  it.each([{ error: "bad" }, { ok: false }, { ok: "false", items: [] }, "<html>proxy error</html>"])("rejects malformed runtime probe payload %j", async (payload) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse(payload));
+    const client = createHermesClient({ baseUrl: "http://127.0.0.1:8787", token: "secret" });
+    await expect(client.diagnostics()).rejects.toThrow("Invalid Hermes runtime diagnostics response");
+    await expect(client.readiness()).rejects.toThrow("Invalid Hermes runtime diagnostics response");
+  });
+
+  it("retains degraded runtime checks while still rejecting unauthorized probes", async () => {
+    const payload = { ok: false, items: [{ id: "executor", status: "failed", detail: "Install runtime" }], permissions: ["read"] };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse(payload));
+    const client = createHermesClient({ baseUrl: "https://hermes.example", token: "secret" });
+    expect(await client.diagnostics()).toMatchObject(payload);
+    expect(await client.readiness()).toMatchObject(payload);
+    fetchMock.mockResolvedValue(mockJsonResponse({ ok: false, error: { message: "Forbidden" } }, { status: 403 }));
+    await expect(client.diagnostics()).rejects.toThrow("Forbidden");
+    fetchMock.mockResolvedValue(mockJsonResponse({ ok: false, error: { message: "Action rejected" } }));
+    await expect(client.actions()).rejects.toThrow("Action rejected");
+  });
   it("preserves audit and agent context and refuses unsafe remote endpoints", async () => {
     const payload = { ok: true, items: [], audit: { actor: "owner", trace_id: "trace" }, agent_consumption: { workspace_id: "ws" }, cli: { command: "sop run list" } };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(mockJsonResponse(payload));

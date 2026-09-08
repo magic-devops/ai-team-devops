@@ -645,6 +645,17 @@
     "detail": "Detail and evidence",
     "recordedOutput": "Run output",
     "noRecordedOutput": "No run output yet",
+    "diagnostics": {
+      "title": "Runtime diagnostics",
+      "degraded": "Needs attention",
+      "check": "Check",
+      "store": "Business storage",
+      "checkpoints": "Run checkpoints",
+      "executor": "Local executor",
+      "storage": "Disk space",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
     "selectEntity": "Select an entity to inspect version, evidence, and executable actions.",
     "emptyResource": "No resources yet",
     "permissionReadOnly": "Current Hermes permissions are read-only; create and edit are disabled.",

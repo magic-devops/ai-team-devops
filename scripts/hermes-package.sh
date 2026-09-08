@@ -145,6 +145,8 @@ mkdir -p "${CORE_RUNTIME}"
     --collect-all langgraph_sdk \
     --hidden-import langgraph.checkpoint.sqlite \
     --hidden-import aiosqlite \
+    --hidden-import hermes_core.runtime \
+    --hidden-import hermes_core.diagnostics \
     --distpath "${PYI_DIST}" \
     --workpath "${PYI_WORK}" \
     --specpath "${BUILD_ROOT}" \
@@ -214,7 +216,7 @@ ready_path = Path(sys.argv[1])
 token_path = Path(sys.argv[2])
 workspace_root = Path(sys.argv[3])
 
-deadline = time.time() + 30
+deadline = time.time() + 90
 ready = None
 while time.time() < deadline:
     if ready_path.exists() and ready_path.stat().st_size:
@@ -251,6 +253,16 @@ while True:
 if health.get("ok") is not True or health.get("service") != "hermes-core":
     raise SystemExit(f"unexpected health response: {health}")
 
+diagnostics = request("GET", "/api/hermes/v1/system/diagnostics")
+diagnostic_ids = {item.get("id") for item in diagnostics.get("items", [])}
+required_diagnostics = {"store", "checkpoints", "executor", "storage"}
+if diagnostics.get("ok") is not True or diagnostics.get("summary", {}).get("ready") is not True:
+    raise SystemExit(f"diagnostics not ready: {diagnostics}")
+if diagnostics.get("summary", {}).get("version") != "1.0.0":
+    raise SystemExit(f"diagnostics version mismatch: {diagnostics.get('summary')}")
+if diagnostic_ids != required_diagnostics:
+    raise SystemExit(f"diagnostics probes mismatch: {sorted(diagnostic_ids)}")
+
 workspace = request("POST", "/api/hermes/v1/workspaces", {
     "data": {"name": "Package QA", "root": str(workspace_root)},
     "idempotency_key": "package-qa-workspace",
@@ -280,6 +292,7 @@ if run["status"] != "completed" or run["data"]["node_results"]["list"]["exit_cod
 
 print(json.dumps({
     "health": {"ok": health["ok"], "service": health["service"], "version": health.get("version")},
+    "diagnostics": {"ok": diagnostics["ok"], "summary": diagnostics["summary"], "probes": sorted(diagnostic_ids)},
     "workspace_id": workspace_id,
     "execution": "completed",
     "runs_envelope_keys": sorted(runs.keys()),
@@ -287,12 +300,25 @@ print(json.dumps({
 PY
 
 mkdir -p "${ROOT}/dist"
+MANIFEST="${DIST}/hermes-manifest.json"
+"${PYTHON_BIN}" "${ROOT}/scripts/hermes-distribution.py" manifest \
+  --root "${DIST}" \
+  --out "${MANIFEST}" \
+  --version "1.0.0" \
+  --platform "${HOST_OS}" \
+  --arch "${HOST_ARCH}" \
+  --mode "${PACKAGE_MODE}" \
+  --api-base "/api/hermes/v1" \
+  --force
+"${PYTHON_BIN}" "${ROOT}/scripts/hermes-distribution.py" verify \
+  --root "${DIST}" \
+  --manifest "${MANIFEST}"
 ARCHIVE="${ROOT}/dist/hermes-1.0.0-${HOST_NAME}-${PACKAGE_MODE}.tar.gz"
-tar -C "${DIST}" -czf "${ARCHIVE}.tmp" .
+COPYFILE_DISABLE=1 tar -C "${DIST}" -czf "${ARCHIVE}.tmp" .
 mv "${ARCHIVE}.tmp" "${ARCHIVE}"
 
 echo "installer/image packaging is out of scope for this script; produced tar runtime bundle only" >&2
 
 echo "unsigned development artifact; no signed release claim" >&2
 
-echo "packaged ${HOST_NAME} ${PACKAGE_MODE}: ${CORE_BIN}, ${AGENTD_BIN}, ${ARCHIVE}"
+echo "packaged ${HOST_NAME} ${PACKAGE_MODE}: ${CORE_BIN}, ${AGENTD_BIN}, ${MANIFEST}, ${ARCHIVE}"

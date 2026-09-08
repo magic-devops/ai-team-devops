@@ -1,17 +1,25 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_providers.dart';
 import 'models.dart';
-import 'hermes_api_client.dart';
+
+class RuntimeStopSafety {
+  const RuntimeStopSafety({
+    required this.canGuarantee,
+    required this.busyRuns,
+    required this.detail,
+  });
+
+  final bool canGuarantee;
+  final List<HermesEntity> busyRuns;
+  final String detail;
+
+  bool get hasBusyRuns => busyRuns.isNotEmpty;
+}
 
 class SettingsController extends AsyncNotifier<ConnectionSettings> {
-  Process? _localProcess;
-
   @override
   Future<ConnectionSettings> build() {
     return ref.watch(secureStoreProvider).load();
@@ -30,7 +38,7 @@ class SettingsController extends AsyncNotifier<ConnectionSettings> {
           ? null
           : trimmedWorkspace,
     );
-    final client = HermesApiClient(settings: normalized);
+    final client = ref.read(apiClientFactoryProvider)(normalized);
     try {
       await client.list(Resource.workspaces);
     } finally {
@@ -47,73 +55,58 @@ class SettingsController extends AsyncNotifier<ConnectionSettings> {
     state = AsyncData(next);
   }
 
-  Future<ConnectionSettings> bootstrapLocal({
-    required String dataDir,
-    required String tokenFile,
-  }) async {
-    if (kIsWeb ||
-        !(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
-      throw const HermesUnavailableException(
-        'Local bootstrap is available only on desktop. Configure a remote Hermes core URL on this device.',
-      );
-    }
-    if (_localProcess != null) {
-      throw const HermesUnavailableException(
-          'A local core is already running in this client.');
-    }
-    final executable = File(Platform.resolvedExecutable);
-    final runtime = Platform.isMacOS
-        ? Directory('${executable.parent.parent.path}/Resources/runtime')
-        : Directory('${executable.parent.path}/runtime');
-    final suffix = Platform.isWindows ? '.exe' : '';
-    final core = File('${runtime.path}/hermes-core/hermes-core$suffix');
-    final agentd = File('${runtime.path}/agentd/sop-agentd$suffix');
-    if (!await core.exists() || !await agentd.exists()) {
-      throw const HermesUnavailableException(
-          'Bundled runtime is missing. Install a complete Hermes desktop package.');
-    }
-    final process = await Process.start(core.path, [
-      '--data-dir',
-      dataDir,
-      '--token-file',
-      tokenFile,
-      '--port',
-      '0',
-      '--agentd',
-      agentd.path,
-    ]);
-    _localProcess = process;
-    final stderr = process.stderr.listen((_) {});
-    unawaited(process.exitCode.then((_) {
-      if (identical(_localProcess, process)) _localProcess = null;
-      stderr.cancel();
-    }));
+  Future<ConnectionSettings> bootstrapLocal() {
+    return _startLocal(restart: false);
+  }
+
+  Future<ConnectionSettings> restartLocal() {
+    return _startLocal(restart: true);
+  }
+
+  Future<ConnectionSettings> _startLocal({required bool restart}) async {
+    final runtime = ref.read(localRuntimeProvider);
     try {
-      final line = await process.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .first
-          .timeout(const Duration(seconds: 20));
-      final payload = jsonDecode(line) as Map<String, dynamic>;
-      final ready = HermesBootstrapReady.fromJson(payload);
-      final token = await File(ready.tokenFile).readAsString();
+      final ready = restart
+          ? await runtime.restartBundled()
+          : await runtime.startBundled();
+      final token = await ref.read(localTokenReaderProvider)(ready.tokenFile);
       final settings = ConnectionSettings(
         baseUrl: ready.url.replaceAll(RegExp(r'/+$'), ''),
         token: token.trim(),
         tokenFile: ready.tokenFile,
         localPid: ready.pid,
       );
-      final client = HermesApiClient(settings: settings);
+      final client = ref.read(apiClientFactoryProvider)(settings);
       try {
-        for (var attempt = 0;; attempt++) {
-          try {
-            await client.list(Resource.workspaces);
-            break;
-          } catch (_) {
-            if (attempt >= 20) rethrow;
-            await Future<void>.delayed(const Duration(milliseconds: 250));
+        final deadline = DateTime.now().add(const Duration(seconds: 15));
+        for (;;) {
+          final remaining = deadline.difference(DateTime.now());
+          if (remaining <= Duration.zero) {
+            throw const HermesUnavailableException(
+              'Hermes Core readiness did not become available within 15s.',
+            );
           }
+          late final HermesEnvelope readiness;
+          try {
+            readiness = await client.readiness().timeout(remaining);
+          } on TimeoutException {
+            throw const HermesUnavailableException(
+              'Hermes Core readiness did not become available within 15s.',
+            );
+          } on HermesUnavailableException {
+            final delay = _startupRetryDelay(remaining);
+            if (delay == null) rethrow;
+            await Future<void>.delayed(delay);
+            continue;
+          }
+          if (!readiness.ok || readiness.summary['ready'] == false) {
+            throw HermesUnavailableException(
+              'Hermes Core readiness failed: ${readiness.summary}',
+            );
+          }
+          break;
         }
+        await client.list(Resource.workspaces);
       } finally {
         client.close();
       }
@@ -121,14 +114,94 @@ class SettingsController extends AsyncNotifier<ConnectionSettings> {
       state = AsyncData(settings);
       return settings;
     } catch (_) {
-      process.kill();
-      _localProcess = null;
+      await runtime.stopOwned();
       rethrow;
+    }
+  }
+
+  Future<void> stopLocal() async {
+    await ref.read(localRuntimeProvider).stopOwned();
+    final current = state.asData?.value ?? await build();
+    if (current.localPid != null) {
+      await ref.read(secureStoreProvider).clear();
+      state = const AsyncData(ConnectionSettings());
+    }
+  }
+
+  Future<RuntimeStopSafety> checkStopSafety() async {
+    final settings = state.asData?.value ?? await build();
+    if (settings.isConfigured != true) {
+      return const RuntimeStopSafety(
+        canGuarantee: true,
+        busyRuns: [],
+        detail: 'Hermes Core is not configured.',
+      );
+    }
+    final runtimeUrl = ref.read(localRuntimeProvider).snapshot.url;
+    if (runtimeUrl != null && settings.baseUrl != runtimeUrl) {
+      return RuntimeStopSafety(
+        canGuarantee: false,
+        busyRuns: const [],
+        detail:
+            'Configured endpoint ${settings.baseUrl} does not match owned runtime $runtimeUrl.',
+      );
+    }
+    final client = ref.read(apiClientFactoryProvider)(settings);
+    try {
+      const workspaceLimit = 50;
+      const runLimit = 100;
+      final workspaces =
+          await client.list(Resource.workspaces, limit: workspaceLimit);
+      var truncated = workspaces.length >= workspaceLimit;
+      final busy = <HermesEntity>[];
+      for (final workspace in workspaces) {
+        final runs = await client.list(
+          Resource.runs,
+          workspaceId: workspace.id,
+          limit: runLimit,
+        );
+        if (runs.length >= runLimit) truncated = true;
+        busy.addAll(runs.where(_isBusyRun));
+      }
+      return RuntimeStopSafety(
+        canGuarantee: !truncated,
+        busyRuns: busy,
+        detail: truncated
+            ? 'Checked result reached API limit; running job state may be incomplete.'
+            : 'Checked ${workspaces.length} workspace(s).',
+      );
+    } catch (error) {
+      return RuntimeStopSafety(
+        canGuarantee: false,
+        busyRuns: const [],
+        detail: error.toString(),
+      );
+    } finally {
+      client.close();
     }
   }
 
   Future<void> disconnect() async {
     await ref.read(secureStoreProvider).clear();
     state = const AsyncData(ConnectionSettings());
+  }
+
+  bool _isBusyRun(HermesEntity run) {
+    final status = run.status.toLowerCase();
+    return {
+      'queued',
+      'pending',
+      'starting',
+      'running',
+      'in_progress',
+      'active',
+      'cancelling',
+    }.contains(status);
+  }
+
+  Duration? _startupRetryDelay(Duration remaining) {
+    if (remaining <= const Duration(milliseconds: 250)) return null;
+    const delay = Duration(milliseconds: 250);
+    return remaining < delay ? remaining : delay;
   }
 }

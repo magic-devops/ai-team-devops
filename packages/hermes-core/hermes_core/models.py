@@ -21,6 +21,7 @@ RESOURCE_DATA_FIELDS = {
     "assets": ("title", "name", "content", "summary", "description", "source", "kind"),
 }
 ACTIONS = [
+    {"id": "diagnostics", "permission": "read", "method": "GET", "path": f"{API_BASE}/system/diagnostics"},
     {"id": "read", "permission": "read", "method": "GET", "path": f"{API_BASE}/{{resource}}"},
     {"id": "create", "permission": "write", "method": "POST", "path": f"{API_BASE}/{{resource}}"},
     {"id": "update", "permission": "write", "method": "PATCH", "path": f"{API_BASE}/{{resource}}/{{id}}"},

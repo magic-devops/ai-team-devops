@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../app_providers.dart';
 import '../models.dart';
@@ -41,28 +42,43 @@ class WorkspacesPage extends ConsumerWidget {
           ConnectionBanner(settings: settings),
           const SizedBox(height: 16),
           Expanded(
-            child: AsyncEntityList(
-              value: workspaces,
-              empty: '暂无工作区',
-              itemBuilder: (workspace) => EntityTile(
-                entity: workspace,
-                selected: settings?.workspaceId == workspace.id,
-                trailing: Wrap(
-                  spacing: 6,
-                  children: [
-                    FilledButton.tonal(
-                      onPressed: () async {
-                        await ref
-                            .read(settingsProvider.notifier)
-                            .selectWorkspace(workspace.id);
-                        ref.invalidate(workspacesProvider);
-                      },
-                      child: const Text('选择'),
+            child: settings?.isConfigured == true
+                ? AsyncEntityList(
+                    value: workspaces,
+                    empty: '暂无工作区',
+                    itemBuilder: (workspace) => EntityTile(
+                      entity: workspace,
+                      selected: settings?.workspaceId == workspace.id,
+                      trailing: Wrap(
+                        spacing: 6,
+                        children: [
+                          FilledButton.tonal(
+                            onPressed: () async {
+                              await ref
+                                  .read(settingsProvider.notifier)
+                                  .selectWorkspace(workspace.id);
+                              ref.invalidate(workspacesProvider);
+                            },
+                            child: const Text('选择'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  )
+                : _UnconfiguredWorkspaceState(
+                    canStartLocal:
+                        ref.watch(localRuntimeProvider).isDesktopSupported,
+                    onSettings: () => context.go('/settings'),
+                    onStartLocal: () async {
+                      await ref
+                          .read(settingsProvider.notifier)
+                          .bootstrapLocal();
+                      ref.invalidate(workspacesProvider);
+                      ref.invalidate(readinessProvider);
+                      ref.invalidate(healthProvider);
+                      ref.invalidate(diagnosticsProvider);
+                    },
+                  ),
           ),
         ],
       ),
@@ -99,5 +115,87 @@ class WorkspacesPage extends ConsumerWidget {
     name.dispose();
     root.dispose();
     if (created == true) ref.invalidate(workspacesProvider);
+  }
+}
+
+class _UnconfiguredWorkspaceState extends StatefulWidget {
+  const _UnconfiguredWorkspaceState({
+    required this.canStartLocal,
+    required this.onSettings,
+    required this.onStartLocal,
+  });
+
+  final bool canStartLocal;
+  final VoidCallback onSettings;
+  final Future<void> Function() onStartLocal;
+
+  @override
+  State<_UnconfiguredWorkspaceState> createState() =>
+      _UnconfiguredWorkspaceStateState();
+}
+
+class _UnconfiguredWorkspaceStateState
+    extends State<_UnconfiguredWorkspaceState> {
+  bool busy = false;
+  Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: SectionPanel(
+          title: '还没有连接 Hermes Core',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.canStartLocal
+                  ? '桌面端可直接启动随包 Core；也可以配置远端 Core。'
+                  : '请先配置远端 Core。'),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (widget.canStartLocal)
+                    FilledButton.icon(
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              setState(() {
+                                busy = true;
+                                error = null;
+                              });
+                              try {
+                                await widget.onStartLocal();
+                              } catch (failure) {
+                                if (mounted) setState(() => error = failure);
+                              } finally {
+                                if (mounted) setState(() => busy = false);
+                              }
+                            },
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('启动本地 Core'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : widget.onSettings,
+                    icon: const Icon(Icons.settings_rounded),
+                    label: const Text('打开设置'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

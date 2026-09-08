@@ -192,6 +192,9 @@ class HermesClient:
     def system_readiness(self) -> dict[str, Any]:
         return self._request("GET", "/system/readiness")
 
+    def system_diagnostics(self) -> dict[str, Any]:
+        return self._request("GET", "/system/diagnostics")
+
     def sync(self, *, after: int = 0) -> dict[str, Any]:
         return self._request("GET", "/sync", params={"after": after})
 

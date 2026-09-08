@@ -34,7 +34,7 @@ class Execution:
         self.allow_commands = True
 
     def available(self):
-        return bool(self.allow_commands and self.agentd and Path(self.agentd).is_file())
+        return bool(self.allow_commands and self.agentd and Path(self.agentd).is_file() and os.access(self.agentd, os.X_OK))
 
     def validate_root(self, root: Path):
         if self.allowed_roots is not None and not any(root == allowed or root.is_relative_to(allowed) for allowed in self.allowed_roots):

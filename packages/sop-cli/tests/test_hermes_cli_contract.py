@@ -76,3 +76,28 @@ def test_missing_connection_is_machine_readable_non_destructive_failure(monkeypa
 
 def test_actions_without_entity_data_render_safely():
     hermes._print_payload({"ok": True, "items": [{"id": "run.start"}]}, as_json=False)
+
+
+def test_diagnostics_json_and_failure_exit(monkeypatch):
+    class Client:
+        ready = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def system_diagnostics(self):
+            return {"ok": self.ready, "items": [{"id": "store", "status": "passed" if self.ready else "failed"}]}
+
+        def system_readiness(self):
+            return self.system_diagnostics()
+
+    monkeypatch.setattr(hermes, "get_hermes_client", Client)
+    for ready, exit_code in ((True, 0), (False, 1)):
+        Client.ready = ready
+        for command in ("diagnostics", "readiness"):
+            result = CliRunner().invoke(hermes.system_app, [command, "--json"])
+            assert result.exit_code == exit_code, result.output
+            assert json.loads(result.output)["ok"] is ready

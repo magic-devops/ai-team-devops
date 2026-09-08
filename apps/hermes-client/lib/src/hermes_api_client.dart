@@ -26,6 +26,7 @@ class HermesApiClient {
     Map<String, Object?> query = const {},
     Map<String, dynamic>? body,
     bool authenticated = true,
+    bool allowDegradedOkFalse = false,
   }) async {
     final request = http.Request(
         method, _uri(path, query: query, requireToken: authenticated))
@@ -42,7 +43,7 @@ class HermesApiClient {
           .send(request)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 30));
-      return _decode(response);
+      return _decode(response, allowDegradedOkFalse: allowDegradedOkFalse);
     } on TimeoutException {
       throw const HermesUnavailableException(
           'Hermes request timed out. Refresh state before retrying a write.');
@@ -227,15 +228,26 @@ class HermesApiClient {
   }
 
   Future<HermesEnvelope> readiness() {
-    return _get('/system/readiness');
+    return _get('/system/readiness', allowDegradedOkFalse: true);
+  }
+
+  Future<HermesEnvelope> diagnostics() {
+    return _get('/system/diagnostics', allowDegradedOkFalse: true);
   }
 
   Future<HermesEnvelope> _get(
     String path, {
     String? workspaceId,
     Map<String, Object?> query = const {},
+    bool allowDegradedOkFalse = false,
   }) async {
-    return _request('GET', path, query: query, workspaceId: workspaceId);
+    return _request(
+      'GET',
+      path,
+      query: query,
+      workspaceId: workspaceId,
+      allowDegradedOkFalse: allowDegradedOkFalse,
+    );
   }
 
   Future<HermesEnvelope> _post(
@@ -320,7 +332,10 @@ class HermesApiClient {
     };
   }
 
-  HermesEnvelope _decode(http.Response response) {
+  HermesEnvelope _decode(
+    http.Response response, {
+    bool allowDegradedOkFalse = false,
+  }) {
     if (response.statusCode >= 300 && response.statusCode < 400) {
       throw HermesApiException('Redirect refused. Verify the Hermes endpoint.',
           statusCode: response.statusCode);
@@ -328,9 +343,24 @@ class HermesApiClient {
     if (response.body.isEmpty) {
       throw HermesApiException('Hermes returned an empty response.');
     }
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      throw HermesApiException('Hermes returned a malformed response.',
+          statusCode: response.statusCode);
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw HermesApiException('Hermes returned a malformed response.',
+          statusCode: response.statusCode);
+    }
+    final body = decoded;
     final envelope = HermesEnvelope.fromJson(body);
-    if (response.statusCode >= 400 || !envelope.ok) {
+    if (allowDegradedOkFalse && !_isStructuredProbeEnvelope(body)) {
+      throw HermesApiException('Hermes probe response was malformed.',
+          traceId: envelope.traceId, statusCode: response.statusCode);
+    }
+    if (response.statusCode >= 400 || (!envelope.ok && !allowDegradedOkFalse)) {
       throw HermesApiException(
         envelope.error?.toString() ?? 'Hermes request failed',
         traceId: envelope.traceId,
@@ -338,6 +368,11 @@ class HermesApiClient {
       );
     }
     return envelope;
+  }
+
+  bool _isStructuredProbeEnvelope(Map<String, dynamic> body) {
+    final items = body['items'];
+    return body['ok'] is bool && items is List;
   }
 
   List<HermesEntity> _entities(HermesEnvelope envelope) {
