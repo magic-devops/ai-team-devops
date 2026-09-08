@@ -8,7 +8,21 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from sqlalchemy import JSON, Column, Integer, MetaData, String, Table, Text, and_, create_engine, event, insert, select, update
+from sqlalchemy import (
+    JSON,
+    Column,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    and_,
+    create_engine,
+    event,
+    insert,
+    select,
+    update,
+)
 
 from .models import CoreError, Principal
 
@@ -123,7 +137,7 @@ class Store:
 
     def mutate(self, principal: Principal, workspace: str, kind: str, entity_id: str, *, operation: str, key: str,
                request: dict, trace: str, expected: int | None, transform: Callable[[dict], dict],
-               precondition: Callable | None = None):
+               precondition: Callable | None = None, audit_data: dict | None = None):
         with self.transaction() as conn:
             receipt_id, cached = self._receipt(conn, principal, workspace, operation + ":" + entity_id, key, request)
             if cached is not None:
@@ -139,7 +153,7 @@ class Store:
             result = conn.execute(update(self.entities).where(self.entities.c.id == entity_id, self.entities.c.version == item["version"]).values(**changes, version=changed["version"], updated_at=changed["updated_at"]))
             if result.rowcount != 1:
                 raise CoreError("version_conflict", "Concurrent modification", 409)
-            self._record(conn, principal, workspace, changed, operation, trace, {"status": changed["status"]})
+            self._record(conn, principal, workspace, changed, operation, trace, {"status": changed["status"], **(audit_data or {})})
             conn.execute(insert(self.receipts).values(id=receipt_id, request_hash=digest(request), result=changed, created_at=now()))
             return changed
 

@@ -8,9 +8,9 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from urllib.parse import urlsplit
 from collections.abc import Iterator, Mapping
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -96,14 +96,15 @@ class HermesClient:
             workspace_id=env.get("HERMES_WORKSPACE", ""),
         )
 
-    def _headers(self, *, auth_required: bool) -> dict[str, str]:
+    def _headers(self, *, auth_required: bool, workspace_id: str = "") -> dict[str, str]:
         headers: dict[str, str] = {}
         if auth_required:
             if not self.token:
                 raise SopAuthError("Hermes token is required; set HERMES_TOKEN or pass token explicitly")
             headers["Authorization"] = f"Bearer {self.token}"
-        if self.workspace_id:
-            headers["X-Workspace-Id"] = self.workspace_id
+        scoped_workspace = (workspace_id or self.workspace_id).strip()
+        if scoped_workspace:
+            headers["X-Workspace-Id"] = scoped_workspace
         return headers
 
     def _request(
@@ -114,10 +115,11 @@ class HermesClient:
         params: Mapping[str, Any] | None = None,
         body: Mapping[str, Any] | None = None,
         auth_required: bool = True,
+        workspace_id: str = "",
     ) -> dict[str, Any]:
         url_path = path if path.startswith("/") else f"/{path}"
         content = None
-        headers = self._headers(auth_required=auth_required)
+        headers = self._headers(auth_required=auth_required, workspace_id=workspace_id)
         if body is not None:
             content = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -229,6 +231,12 @@ class HermesClient:
     def create_workspace(self, data: Mapping[str, Any], *, idempotency_key: str | None = None) -> dict[str, Any]:
         return self._request("POST", "/workspaces", body=self._mutation_body(data, idempotency_key=idempotency_key))
 
+    def repository(self, workspace_id: str) -> dict[str, Any]:
+        workspace_id = (workspace_id or "").strip()
+        if not workspace_id:
+            raise ValueError("workspace_id is required")
+        return self._request("GET", f"/workspaces/{workspace_id}/repository", workspace_id=workspace_id)
+
     def list_resource(
         self,
         resource: str,
@@ -307,13 +315,20 @@ class HermesClient:
     def run_events(self, run_id: str, *, after: int = 0) -> dict[str, Any]:
         return self._request("GET", f"/runs/{run_id}/events", params={"after": after})
 
+    def run_changes(self, run_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/runs/{run_id}/changes")
+
     def task_delivery(self, task_id: str) -> dict[str, Any]:
         return self._request("GET", f"/tasks/{task_id}/delivery")
 
     def task_dispatch(self, task_id: str, nodes: list[dict[str, Any]], *, expected_version: int,
-                      dry_run: bool = True, idempotency_key: str | None = None) -> dict[str, Any]:
+                      dry_run: bool = True, idempotency_key: str | None = None,
+                      isolation: str = "workspace", base_commit: str = "") -> dict[str, Any]:
+        if isolation not in {"workspace", "git_worktree"}:
+            raise ValueError("isolation must be workspace or git_worktree")
         return self._request("POST", f"/tasks/{task_id}/dispatch", body={
             "nodes": nodes, "expected_version": expected_version, "dry_run": dry_run,
+            "isolation": isolation, "base_commit": base_commit,
             "idempotency_key": idempotency_key or self.new_idempotency_key("task-dispatch"),
         })
 

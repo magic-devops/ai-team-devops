@@ -13,6 +13,17 @@ function mockJsonResponse(body: unknown, init: ResponseInit = {}) {
 }
 
 describe("HermesClient", () => {
+  it("reads scoped repository and stored changes, and pins dispatch to a commit", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse({ ok: true, items: [] }));
+    const client = createHermesClient({ baseUrl: "https://hermes.example", token: "test", workspaceId: "ws" });
+    await client.repository();
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/workspaces/ws/repository", expect.objectContaining({ headers: expect.objectContaining({ "X-Workspace-Id": "ws" }) }));
+    await client.runChanges("run 1");
+    expect(fetchMock).toHaveBeenLastCalledWith("https://hermes.example/api/hermes/v1/runs/run%201/changes", expect.anything());
+    const plan = { nodes: [], isolation: "git_worktree" as const, base_commit: "a".repeat(40), expected_version: 1, idempotency_key: "pinned", dry_run: true };
+    await client.taskDispatch("task", plan);
+    expect(fetchMock).toHaveBeenLastCalledWith(expect.stringContaining("/dispatch"), expect.objectContaining({ body: JSON.stringify(plan) }));
+  });
   it("binds task delivery requests to scope, versions, decisions and dry-run", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => mockJsonResponse({ ok: true, items: [] }));
     const client = createHermesClient({ baseUrl: "https://hermes.example", token: "test", workspaceId: "ws" });

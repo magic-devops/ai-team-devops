@@ -171,7 +171,15 @@ export class HermesClient {
     return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/delivery`);
   }
 
-  taskDispatch(taskId: string, body: HermesRunActionBody & { nodes: HermesRunNode[] }) {
+  repository() {
+    return this.request<{ id: string; root: string; head_commit: string; branch: string; dirty: boolean }>(`/workspaces/${encodeURIComponent(this.connection.workspaceId || "")}/repository`);
+  }
+
+  runChanges(runId: string) {
+    return this.request(`/runs/${encodeURIComponent(runId)}/changes`);
+  }
+
+  taskDispatch(taskId: string, body: HermesRunActionBody & { nodes: HermesRunNode[]; isolation?: "workspace" | "git_worktree"; base_commit?: string }) {
     return this.request<HermesDelivery>(`/tasks/${encodeURIComponent(taskId)}/dispatch`, { method: "POST", body: JSON.stringify(body) });
   }
 

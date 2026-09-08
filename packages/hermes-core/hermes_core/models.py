@@ -21,6 +21,8 @@ RESOURCE_DATA_FIELDS = {
     "assets": ("title", "name", "content", "summary", "description", "source", "kind"),
 }
 ACTIONS = [
+    {"id": "workspace.repository", "permission": "read", "method": "GET", "path": f"{API_BASE}/workspaces/{{id}}/repository"},
+    {"id": "run.changes", "permission": "read", "method": "GET", "path": f"{API_BASE}/runs/{{id}}/changes"},
     {"id": "task.delivery", "permission": "read", "method": "GET", "path": f"{API_BASE}/tasks/{{id}}/delivery"},
     {"id": "task.dispatch", "permission": "execute", "method": "POST", "path": f"{API_BASE}/tasks/{{id}}/dispatch"},
     {"id": "task.review", "permission": "approve", "method": "POST", "path": f"{API_BASE}/tasks/{{id}}/review"},
@@ -83,6 +85,8 @@ class Node(BaseModel):
 
 class TaskDispatch(RunAction):
     nodes: list[Node] = Field(min_length=1, max_length=64)
+    isolation: Literal["workspace", "git_worktree"] = "workspace"
+    base_commit: str = Field(default="", pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})?$")
 
 
 class TaskReview(RunAction):

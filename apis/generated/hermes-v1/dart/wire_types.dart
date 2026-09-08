@@ -86,12 +86,16 @@ class TaskDispatch {
   final int expected_version;
   final String idempotency_key;
   final List<Node> nodes;
+  final String? base_commit;
   final bool? dry_run;
+  final String? isolation;
   const TaskDispatch({
     required this.expected_version,
     required this.idempotency_key,
     required this.nodes,
+    this.base_commit,
     this.dry_run,
+    this.isolation,
   });
 }
 

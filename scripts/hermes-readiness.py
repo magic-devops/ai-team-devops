@@ -71,6 +71,8 @@ def checks_for(root: Path, full: bool) -> list[Check]:
             run(f"cli.{command}.help", [python, "-m", "sop_cli", command, "--help"], evidence="execution")
         for command in ("delivery", "dispatch", "review"):
             run(f"cli.task.{command}.help", [python, "-m", "sop_cli", "task", "v1", command, "--help"], evidence="execution")
+        for group, command in (("workspace", "repository"), ("run", "changes")):
+            run(f"cli.{group}.{command}.help", [python, "-m", "sop_cli", group, command, "--help"], evidence="execution")
         run("scripts.syntax", ["bash", "-n", "scripts/hermes-bootstrap.sh", "scripts/hermes-package.sh", "scripts/hermes-mobile-check.sh"])
         if full:
             web = root / "apps/manager-web"

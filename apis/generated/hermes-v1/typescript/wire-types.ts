@@ -47,7 +47,9 @@ export interface TaskDispatch {
   expected_version: number;
   idempotency_key: string;
   nodes: Array<Node>;
+  base_commit?: string;
   dry_run?: boolean;
+  isolation?: "workspace" | "git_worktree";
 }
 
 export interface TaskReview {

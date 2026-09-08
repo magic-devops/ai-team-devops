@@ -13,11 +13,28 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
-from .models import API_BASE, ACTIONS, RESOURCES, RESOURCE_DATA_FIELDS, RESOURCE_STATUS_OPTIONS, CoreError, Decision, Envelope, Mutation, Node, Principal, RunAction, TaskDispatch, TaskReview, payload
 from .delivery import Delivery
-from .execution import Execution
-from .transactional import Store, digest
 from .diagnostics import runtime_checks
+from .execution import Execution
+from .models import (
+    ACTIONS,
+    API_BASE,
+    RESOURCE_DATA_FIELDS,
+    RESOURCE_STATUS_OPTIONS,
+    RESOURCES,
+    CoreError,
+    Decision,
+    Envelope,
+    Mutation,
+    Node,
+    Principal,
+    RunAction,
+    TaskDispatch,
+    TaskReview,
+    payload,
+)
+from .repository import Repository
+from .transactional import Store, digest
 
 
 def resource_contracts() -> dict[str, dict[str, object]]:
@@ -35,8 +52,9 @@ def resource_contracts() -> dict[str, dict[str, object]]:
 
 def create_router(store: Store, execution: Execution, identity: Callable):
     router = APIRouter(prefix=API_BASE, tags=["Hermes Workspace"])
-    delivery = Delivery(store)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of"}
+    repository = Repository(execution)
+    delivery = Delivery(store, repository)
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -224,7 +242,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         approval = store.get(principal, workspace, "approvals", approval_id)
         run_id = approval["data"]["run_id"]
         run = store.get(principal, workspace, "runs", run_id)
-        definition = {key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version")}
+        definition = {key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit")}
         if digest(definition) != approval["data"]["definition_hash"]:
             raise CoreError("approval_stale", "Run definition changed after approval was requested", 409)
         if approval["data"].get("attempt", 1) != run["data"].get("attempt", 1):
@@ -273,6 +291,27 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         workspace = workspace_id(request, principal)
         return response(principal, workspace, [delivery.detail(principal, workspace, task_id)],
                         cli={"command": f"sop task v1 delivery {task_id} --json"})
+
+    @router.get("/workspaces/{entity_id}/repository", response_model=Envelope)
+    def repository_info(entity_id: str, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "read")
+        workspace = workspace_id(request, principal)
+        if workspace != entity_id:
+            raise CoreError("scope_mismatch", "Repository must belong to the selected workspace", 403)
+        row = store.get(principal, "", "workspaces", workspace)
+        return response(principal, workspace, [repository.inspect(row["data"]["root"], workspace)],
+                        cli={"command": f"sop workspace repository {workspace} --json"})
+
+    @router.get("/runs/{run_id}/changes", response_model=Envelope)
+    def run_changes(run_id: str, request: Request, principal: Principal = Depends(identity)):
+        require(principal, "read")
+        workspace = workspace_id(request, principal)
+        run = store.get(principal, workspace, "runs", run_id)
+        evidence = run["data"].get("code_evidence")
+        return response(principal, workspace, [{"id": run_id, "run_version": run["version"],
+            "code_workspace": run["data"].get("code_workspace"), "code_evidence": evidence}],
+            summary={"available": evidence is not None, "snapshot": True},
+            cli={"command": f"sop run changes {run_id} --json"})
 
     @router.post("/tasks/{task_id}/dispatch", response_model=Envelope)
     def task_dispatch(task_id: str, body: TaskDispatch, request: Request, principal: Principal = Depends(identity)):
@@ -324,6 +363,8 @@ def create_router(store: Store, execution: Execution, identity: Callable):
             execution.validate_root(root)
             data["root"] = str(root)
         if resource == "runs":
+            if data.get("isolation", "workspace") != "workspace" or data.get("base_commit"):
+                raise CoreError("task_dispatch_required", "Create isolated code runs through task dispatch", 422)
             raw = data.get("nodes", [])
             if not isinstance(raw, list) or not 1 <= len(raw) <= 64:
                 raise CoreError("invalid_graph", "A run requires 1 to 64 execution nodes")

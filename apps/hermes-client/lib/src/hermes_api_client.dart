@@ -68,23 +68,46 @@ class HermesApiClient {
       _get('/tasks/${Uri.encodeComponent(taskId)}/delivery',
           workspaceId: workspaceId);
 
+  Future<HermesEnvelope> workspaceRepository(String workspaceId) =>
+      _get('/workspaces/${Uri.encodeComponent(workspaceId)}/repository',
+          workspaceId: workspaceId);
+
+  Future<HermesEnvelope> runChanges(String runId,
+          {required String workspaceId}) =>
+      _get('/runs/${Uri.encodeComponent(runId)}/changes',
+          workspaceId: workspaceId);
+
   Future<HermesEnvelope> taskDispatch(
     String taskId, {
     required String workspaceId,
     required int expectedVersion,
     required List<Map<String, dynamic>> nodes,
     required String idempotencyKey,
+    String isolation = 'workspace',
+    String? baseCommit,
     bool dryRun = true,
-  }) =>
-      _post(
-          '/tasks/${Uri.encodeComponent(taskId)}/dispatch',
-          {
-            'expected_version': expectedVersion,
-            'nodes': nodes,
-            'idempotency_key': idempotencyKey,
-            'dry_run': dryRun,
-          },
-          workspaceId: workspaceId);
+  }) {
+    if (isolation == 'git_worktree' &&
+        (baseCommit == null || baseCommit.isEmpty)) {
+      throw HermesApiException(
+          'base_commit is required for git worktree dispatch.');
+    }
+    if (!{'workspace', 'git_worktree'}.contains(isolation)) {
+      throw HermesApiException('Unsupported dispatch isolation: $isolation');
+    }
+    return _post(
+        '/tasks/${Uri.encodeComponent(taskId)}/dispatch',
+        {
+          'expected_version': expectedVersion,
+          'nodes': nodes,
+          'idempotency_key': idempotencyKey,
+          'isolation': isolation,
+          if (baseCommit != null && baseCommit.isNotEmpty)
+            'base_commit': baseCommit,
+          'dry_run': dryRun,
+        },
+        workspaceId: workspaceId);
+  }
 
   Future<HermesEnvelope> taskReview(
     String taskId, {

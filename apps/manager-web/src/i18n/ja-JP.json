@@ -589,6 +589,22 @@
     "linkSettings": "ログインとテーマ"
   },
   "workspace": {
+    "code": {
+      "review": "コードレビュー",
+      "pending": "コード証跡はまだありません",
+      "incomplete": "証跡が不完全です。未追跡ファイル、サブモジュール変更、差分の切り詰めを解消してください。",
+      "search": "変更ファイルを絞り込む",
+      "file": "ファイル",
+      "diff": "コード差分",
+      "noChanges": "追跡ファイルの変更なし",
+      "snapshot": "証跡ハッシュ",
+      "repositoryRequired": "有効な Git 基準を選択してください",
+      "executionDirectory": "実行ディレクトリ",
+      "currentDirectory": "プロジェクトディレクトリ",
+      "isolatedDirectory": "独立 Git ワークツリー",
+      "committedOnly": "選択したコミットのみ使用します。未コミットの変更はコピーしません。",
+      "refreshBase": "基準を更新"
+    },
     "delivery": {
       "title": "タスク納品", "criteria": "受入条件", "assignee": "担当者 / Agent", "noCriteria": "タスクに受入条件を追加してください。",
       "openRun": "実行とエビデンス", "node": "ステップ", "argv": "コマンド引数（JSON 配列）", "expectedExit": "期待終了コード", "actualExit": "実際の終了コード", "timeout": "タイムアウト（秒）",

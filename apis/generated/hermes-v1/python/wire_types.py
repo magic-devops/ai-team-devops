@@ -54,7 +54,9 @@ class TaskDispatch:
     expected_version: int
     idempotency_key: str
     nodes: list[Node]
+    base_commit: str | None = None
     dry_run: bool | None = None
+    isolation: Literal["workspace", "git_worktree"] | None = None
 
 @dataclass
 class TaskReview:

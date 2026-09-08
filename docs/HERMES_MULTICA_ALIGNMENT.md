@@ -24,7 +24,7 @@
 | 执行、超时、重试、审批 | 复用 LangGraph 命令节点、审批检查点、Go 执行器结果 | 任意拓扑并行 DAG、补偿动作和外部 Agent 中断未全覆盖 |
 | Agent 目录与运行适配 | 保存负责人标签及派发快照 | 标签不是运行时；CLI/ACP 适配器、认证探测、预算与能力协商未完成 |
 | 人与 Agent Squads | 原生侧未实现执行级团队路由 | 需要成员模型、路由、委派证据和权限验证 |
-| 项目与仓库上下文 | 工作空间根目录、任务验收条件进入运行快照 | Git worktree 隔离、仓库缓存、差异审查及上下文索引未形成完整原生闭环 |
+| 项目与仓库上下文 | 固定提交、每运行独立 detached/locked worktree、代码差异快照、Web/Flutter 审查、CLI/SDK 已贯通 | 仓库缓存、上下文索引、分支合并、托管平台 PR 和工作树清理控制面尚未交付 |
 | Daemon 与远程执行 | 本地 Core/agentd 启停、诊断、受控命令执行已有实现 | 设备登记不是配对；主动连接、远程领取、撤销和跨设备恢复未验收 |
 | Autopilot 与周期调度 | 有调度资源登记 | 原生周期执行、事件唤醒和可靠补偿未完成 |
 | 独立 Agent Chat | 会话资源可管理 | 多提供方流式对话、工具消息、中断未闭环 |
@@ -83,5 +83,38 @@ TaskDispatch/TaskReview 契约。readiness 加入三个 task v1 子命令的 hel
 - 失败运行不能提交“验收通过”；错误保留原因，成功刷新版本。
 - 负责人标签、设备登记、资产登记不能分别显示为 Agent 已执行、设备已配对、插件已安装。
 
-完整对齐仍需外部 Agent/Git worktree、设备配对/租约、周期调度、Squads/收件箱、
+完整对齐仍需外部 Agent、Git 托管集成、设备配对/租约、周期调度、Squads/收件箱、
 技能安装、成本和渠道集成。每项同时交付协议、权限、UI、CLI、失败恢复和真实执行证据。
+
+## 隔离代码交付
+
+派发显式选择 `isolation=git_worktree` 并携带完整 `base_commit`；预览读取仓库状态，
+应用仍使用原 SHA，不在确认时悄悄切换 HEAD。未提交草稿不复制、不暂存、不回滚。
+默认 `workspace` 模式仍用于直接在项目中运行的 SQL/Python/Shell 等操作。
+
+Core 数据目录须位于源仓库之外。执行目录按 tenant/business/workspace/run 分配，
+使用 Git `worktree add --detach --lock`；暂停审批、失败、验收后均保留工作树。
+已登记目录缺失、符号链接替换、仓库身份变化或遗留未登记目录时拒绝继续，不重建后跳过成功节点。
+异常目录由运维核对 Git `worktree list --porcelain`、运行记录和备份；需要恢复关联时使用 Git 官方 repair 流程。
+本阶段没有自动 merge、commit、unlock、remove 或 prune，不以删除目录冒充回滚。
+
+Git worktree 是检出隔离，不是安全沙箱。Git 对象、引用和配置仍共享；具有 execute
+权限的任意命令仍具备本机进程权限。只对可信仓库和可信执行者开放本地执行。
+内部 Git 操作关闭 hooks/fsmonitor，清除继承的 `GIT_*` 环境变量；不宣称 OS 容器隔离。
+
+运行结束或审批暂停时保存相对基线的差异、文件状态、未跟踪文件、HEAD、时间与 SHA-256，
+并在审计事件中保留快照。失败也尽力采集，采集失败不能使用上次结果冒充本次证据。
+差异截断、未跟踪文件或子模块脏状态使 `complete=false`，禁止验收通过；可退回修改。
+代码快照描述采集时的文件状态，不是签名制品，也不保证工作树此后未被外部进程修改。
+
+新增只读接口：`GET /workspaces/{id}/repository`、`GET /runs/{id}/changes`。
+后者只返回已存储快照，不执行新的 Git 操作。代码证据与执行目录是服务端字段，客户端不能写入。
+
+```sh
+sop workspace repository WORKSPACE_ID --json
+sop task v1 dispatch TASK_ID --plan plan.json --expected-version 1 --isolation git_worktree --base-commit COMMIT_SHA --dry-run --json
+sop run changes RUN_ID --json
+```
+
+设计依据：[Git worktree 生命周期](https://git-scm.com/docs/git-worktree)、
+[Git 仓库布局](https://git-scm.com/docs/gitrepository-layout)。

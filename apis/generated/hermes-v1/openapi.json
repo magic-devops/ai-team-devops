@@ -339,6 +339,90 @@
         }
       }
     },
+    "/api/hermes/v1/workspaces/{entity_id}/repository": {
+      "get": {
+        "tags": [
+          "Hermes Workspace"
+        ],
+        "summary": "Repository Info",
+        "operationId": "repository_info_api_hermes_v1_workspaces__entity_id__repository_get",
+        "parameters": [
+          {
+            "name": "entity_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Entity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/runs/{run_id}/changes": {
+      "get": {
+        "tags": [
+          "Hermes Workspace"
+        ],
+        "summary": "Run Changes",
+        "operationId": "run_changes_api_hermes_v1_runs__run_id__changes_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/tasks/{task_id}/dispatch": {
       "post": {
         "tags": [
@@ -1026,6 +1110,21 @@
             "maxItems": 64,
             "minItems": 1,
             "title": "Nodes"
+          },
+          "isolation": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "git_worktree"
+            ],
+            "title": "Isolation",
+            "default": "workspace"
+          },
+          "base_commit": {
+            "type": "string",
+            "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})?$",
+            "title": "Base Commit",
+            "default": ""
           }
         },
         "additionalProperties": false,

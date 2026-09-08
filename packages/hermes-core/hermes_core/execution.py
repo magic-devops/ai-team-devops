@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -9,14 +9,15 @@ import signal
 import subprocess
 import time
 import uuid
-from pathlib import Path
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from .models import CoreError, Node, Principal
+from .repository import Repository
 from .transactional import Store, digest
 
 
@@ -40,13 +41,13 @@ class Execution:
         if self.allowed_roots is not None and not any(root == allowed or root.is_relative_to(allowed) for allowed in self.allowed_roots):
             raise CoreError("root_forbidden", "Workspace directory is not registered for execution on this host", 403)
 
-    def patch(self, principal, workspace, run_id, action, change, owner=None):
+    def patch(self, principal, workspace, run_id, action, change, owner=None, audit_data=None):
         def guarded(item):
             if owner is not None and (item["data"].get("execution_owner") != owner or item["status"] != "running"):
                 raise CoreError("lease_lost", "Execution ownership changed", 409)
             return change(item)
         return self.store.mutate(principal, workspace, "runs", run_id, operation=action,
-            key=uuid.uuid4().hex, request={}, trace=uuid.uuid4().hex, expected=None, transform=guarded)
+            key=uuid.uuid4().hex, request={}, trace=uuid.uuid4().hex, expected=None, transform=guarded, audit_data=audit_data)
 
     def recover(self, principal, workspace):
         cursor = ""
@@ -98,6 +99,7 @@ class Execution:
         request = json.dumps({"argv": node.argv, "timeout_seconds": node.timeout_seconds})
         with subprocess.Popen([self.agentd, "run-tool", "--root", root], stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                              env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
                               start_new_session=os.name != "nt") as proc:
             try:
                 proc.stdin.write(request)
@@ -149,7 +151,7 @@ class Execution:
         if run["status"] not in {"queued", "interrupted", "retrying"}:
             return
         nodes = [Node.model_validate(node) for node in run["data"]["nodes"]]
-        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version")})
+        definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit")})
 
         def claim(item):
             if item["status"] not in {"queued", "interrupted", "retrying"}:
@@ -163,6 +165,7 @@ class Execution:
                 if approval_id != expected_approval:
                     raise CoreError("stale_resume", "Resume approval does not match the current gate", 409)
             return {"status": "running", "data": {**item["data"], "execution_owner": owner,
+                "code_evidence": None,
                 "recovery_requires_review": False, "lease_expires_at": time.time() + self.lease_seconds}}
 
         try:
@@ -220,6 +223,8 @@ class Execution:
         graph.add_edge(previous, END)
         config = {"configurable": {"thread_id": digest([principal.tenant, principal.business, workspace, run_id, run["data"].get("attempt", 1)])}}
         try:
+            if run["data"].get("isolation") == "git_worktree":
+                root = Repository(self).prepare(principal, workspace, run, owner)
             if self.store.engine.dialect.name == "postgresql":
                 from langgraph.checkpoint.postgres import PostgresSaver
                 url = self.store.engine.url.render_as_string(hide_password=False).replace("postgresql+psycopg:", "postgresql:")
@@ -248,11 +253,18 @@ class Execution:
                 input_value = Command(resume=resume) if resume is not None else (None if snapshot.values else {"results": {}})
                 result = compiled.invoke(input_value, config)
                 status = "interrupted" if result.get("__interrupt__") else "completed"
+                if run["data"].get("isolation") == "git_worktree":
+                    Repository(self).capture(principal, workspace, run_id, root, owner)
                 self.patch(principal, workspace, run_id, "run." + status, lambda item: {
                     "status": status,
                     "data": {**item["data"], "execution_owner": None, "lease_expires_at": None}}, owner)
         except Exception as exc:
             message = str(exc)[:2000]
+            if run["data"].get("isolation") == "git_worktree" and root != run["data"]["workspace_root"]:
+                try:
+                    Repository(self).capture(principal, workspace, run_id, root, owner)
+                except Exception as evidence_error:
+                    message += "; Code evidence unavailable: " + str(evidence_error)[:500]
             try:
                 self.patch(principal, workspace, run_id, "run.failed", lambda item: {
                     "status": "failed",

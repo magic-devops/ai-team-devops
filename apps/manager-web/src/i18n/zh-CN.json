@@ -728,6 +728,22 @@
     "linkSettings": "登录与主题"
   },
   "workspace": {
+    "code": {
+      "review": "代码审查",
+      "pending": "尚未生成代码证据",
+      "incomplete": "代码证据不完整。请处理未跟踪文件、子模块修改或差异截断后再验收。",
+      "search": "筛选变更文件",
+      "file": "文件",
+      "diff": "代码差异",
+      "noChanges": "无已跟踪文件变更",
+      "snapshot": "证据摘要",
+      "repositoryRequired": "请先选择有效的 Git 基线",
+      "executionDirectory": "执行目录",
+      "currentDirectory": "项目目录",
+      "isolatedDirectory": "独立 Git 工作树",
+      "committedOnly": "仅使用所选提交，不会复制项目中的未提交修改。",
+      "refreshBase": "刷新基线"
+    },
     "delivery": {
       "title": "任务交付", "criteria": "验收条件", "assignee": "负责人 / Agent", "noCriteria": "请先编辑任务，补充验收条件。",
       "openRun": "查看执行与证据", "node": "执行步骤", "argv": "命令参数（JSON 数组）", "expectedExit": "预期退出码", "actualExit": "实际退出码", "timeout": "超时（秒）",

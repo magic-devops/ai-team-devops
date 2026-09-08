@@ -617,6 +617,22 @@
     "linkSettings": "Login & theme"
   },
   "workspace": {
+    "code": {
+      "review": "Code Review",
+      "pending": "Code evidence is not available yet",
+      "incomplete": "Evidence is incomplete. Resolve untracked files, submodule changes or truncated diffs before acceptance.",
+      "search": "Filter changed files",
+      "file": "File",
+      "diff": "Code diff",
+      "noChanges": "No tracked changes",
+      "snapshot": "Evidence hash",
+      "repositoryRequired": "Select a valid Git baseline first",
+      "executionDirectory": "Execution directory",
+      "currentDirectory": "Project directory",
+      "isolatedDirectory": "Isolated Git worktree",
+      "committedOnly": "Only the selected commit is used. Uncommitted project changes are not copied.",
+      "refreshBase": "Refresh baseline"
+    },
     "delivery": {
       "title": "Task Delivery", "criteria": "Acceptance criteria", "assignee": "Assignee / Agent", "noCriteria": "Add acceptance criteria to the task first.",
       "openRun": "Execution and evidence", "node": "Step", "argv": "Command arguments (JSON array)", "expectedExit": "Expected exit", "actualExit": "Actual exit", "timeout": "Timeout (seconds)",

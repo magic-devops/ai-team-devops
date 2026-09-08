@@ -31,10 +31,14 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
   HermesEnvelope? envelope;
   Map<String, dynamic>? preview;
   Map<String, dynamic>? previewRequest;
+  Map<String, dynamic>? repository;
   String decision = 'accept';
+  String isolation = 'workspace';
   String? error;
   String? feedback;
+  String? repositoryError;
   bool busy = false;
+  bool repositoryBusy = false;
   bool get sameContext =>
       identical(ref.read(apiProvider), widget.client) &&
       ref.read(workspaceSelectionProvider) == widget.workspaceId;
@@ -65,6 +69,35 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
     }
   }
 
+  Future<void> _loadRepository() async {
+    if (!mounted || repositoryBusy || !sameContext) return;
+    setState(() {
+      repositoryBusy = true;
+      repositoryError = null;
+      repository = null;
+      preview = null;
+      previewRequest = null;
+    });
+    try {
+      final result =
+          await widget.client.workspaceRepository(widget.workspaceId);
+      final item = result.items.isEmpty
+          ? null
+          : Map<String, dynamic>.from(result.items.first as Map);
+      final head = item?['head_commit']?.toString() ?? '';
+      if (item == null || head.isEmpty) {
+        throw HermesApiException('Hermes 未返回仓库 head_commit。');
+      }
+      if (mounted && sameContext) setState(() => repository = item);
+    } catch (err) {
+      if (mounted && sameContext) {
+        setState(() => repositoryError = err.toString());
+      }
+    } finally {
+      if (mounted) setState(() => repositoryBusy = false);
+    }
+  }
+
   Future<void> _perform(Future<void> Function() action) async {
     if (!mounted || busy || !sameContext) return;
     setState(() {
@@ -82,6 +115,25 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
   }
 
   Future<void> _dispatch(HermesEntity task, {bool apply = false}) async {
+    final selectedIsolation = apply
+        ? (previewRequest!['isolation']?.toString() ?? 'workspace')
+        : isolation;
+    final String? baseCommit;
+    if (apply) {
+      baseCommit = previewRequest!['base_commit']?.toString();
+    } else if (selectedIsolation == 'git_worktree') {
+      baseCommit = repository?['head_commit']?.toString();
+    } else {
+      baseCommit = null;
+    }
+    if (selectedIsolation == 'git_worktree') {
+      if (repositoryError != null && !apply) {
+        throw HermesApiException(repositoryError!);
+      }
+      if (baseCommit == null || baseCommit.isEmpty) {
+        throw HermesApiException('请选择 Git worktree 前先加载仓库当前提交。');
+      }
+    }
     final request = apply
         ? previewRequest!
         : <String, dynamic>{
@@ -89,6 +141,9 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
             'version': task.version,
             'nodes': (jsonDecode(plan.text) as Map<String, dynamic>)['nodes'],
             'key': 'task-dispatch-${DateTime.now().microsecondsSinceEpoch}',
+            'isolation': selectedIsolation,
+            if (baseCommit != null && baseCommit.isNotEmpty)
+              'base_commit': baseCommit,
           };
     final nodes = (request['nodes'] as List)
         .map((node) => Map<String, dynamic>.from(node as Map))
@@ -98,6 +153,8 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
         expectedVersion: request['version'] as int,
         nodes: nodes,
         idempotencyKey: request['key'] as String,
+        isolation: request['isolation']?.toString() ?? 'workspace',
+        baseCommit: request['base_commit']?.toString(),
         dryRun: !apply);
     if (!mounted || !sameContext) return;
     if (apply) {
@@ -119,7 +176,7 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
             'version': task.version,
             'run_id': run.id,
             'run_version': run.version,
-            'decision': decision,
+            'decision': _selectedDecision(run),
             'comment': comment.text.trim(),
             'key': 'task-review-${DateTime.now().microsecondsSinceEpoch}',
           };
@@ -178,9 +235,16 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
         !['completed', 'archived'].contains(task?.status);
     final canReview = permissions.contains('approve') &&
         ['awaiting_review', 'blocked', 'cancelled'].contains(phase);
+    final canAccept = run?.status == 'completed' && _evidenceComplete(run);
+    final selectedDecision = run == null ? decision : _selectedDecision(run);
     final fresh = previewRequest?['version'] == task?.version &&
         (previewRequest?['run_version'] == null ||
             previewRequest?['run_version'] == run?.version);
+    final gitSelected = isolation == 'git_worktree';
+    final gitDispatchBlocked = gitSelected &&
+        (repositoryBusy ||
+            repositoryError != null ||
+            (repository?['head_commit']?.toString().isEmpty ?? true));
     final size = MediaQuery.sizeOf(context);
     return Dialog(
       insetPadding: const EdgeInsets.all(12),
@@ -266,9 +330,42 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                                             const JsonEncoder.withIndent('  ')
                                                 .convert(entry.value)))
                                   ]),
+                            _codeEvidenceSection(run),
                           ],
                           if (canDispatch) ...[
                             const Divider(),
+                            DropdownButtonFormField<String>(
+                                initialValue: isolation,
+                                decoration:
+                                    const InputDecoration(labelText: '任务隔离方式'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'workspace', child: Text('共享工作区')),
+                                  DropdownMenuItem(
+                                      value: 'git_worktree',
+                                      child: Text('Git worktree')),
+                                ],
+                                onChanged: busy
+                                    ? null
+                                    : (value) {
+                                        if (value == null) return;
+                                        setState(() {
+                                          isolation = value;
+                                          preview = null;
+                                          previewRequest = null;
+                                          if (value == 'workspace') {
+                                            repositoryError = null;
+                                          }
+                                        });
+                                        if (value == 'git_worktree') {
+                                          _loadRepository();
+                                        }
+                                      }),
+                            if (gitSelected) ...[
+                              const SizedBox(height: 8),
+                              _repositorySnapshot(),
+                            ],
+                            const SizedBox(height: 8),
                             TextField(
                                 controller: plan,
                                 minLines: 5,
@@ -280,7 +377,7 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                             Align(
                                 alignment: Alignment.centerLeft,
                                 child: FilledButton.tonalIcon(
-                                    onPressed: busy
+                                    onPressed: busy || gitDispatchBlocked
                                         ? null
                                         : () => _perform(() => _dispatch(task)),
                                     icon: const Icon(Icons.preview_outlined),
@@ -289,13 +386,13 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                           if (canReview && run != null) ...[
                             const Divider(),
                             DropdownButtonFormField<String>(
-                                initialValue: decision,
+                                initialValue: selectedDecision,
                                 decoration:
                                     const InputDecoration(labelText: '交付决策'),
                                 items: [
                                   DropdownMenuItem(
                                       value: 'accept',
-                                      enabled: run.status == 'completed',
+                                      enabled: canAccept,
                                       child: const Text('验收通过')),
                                   const DropdownMenuItem(
                                       value: 'request_changes',
@@ -304,6 +401,9 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                                 onChanged: busy
                                     ? null
                                     : (value) {
+                                        if (value == 'accept' && !canAccept) {
+                                          return;
+                                        }
                                         decision = value!;
                                         _clearPreview();
                                       }),
@@ -321,8 +421,8 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                                 child: FilledButton.tonalIcon(
                                     onPressed: busy ||
                                             comment.text.trim().isEmpty ||
-                                            (decision == 'accept' &&
-                                                run.status != 'completed')
+                                            (selectedDecision == 'accept' &&
+                                                !canAccept)
                                         ? null
                                         : () =>
                                             _perform(() => _review(task, run)),
@@ -332,6 +432,9 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                           if (preview != null) ...[
                             const Divider(),
                             const Text('预览已生成，尚未写入'),
+                            if (previewRequest?['isolation'] == 'git_worktree')
+                              Text(
+                                  'Git worktree @ ${_shortSha(previewRequest?['base_commit'])}'),
                             SelectableText(const JsonEncoder.withIndent('  ')
                                 .convert(
                                     preview!['plan'] ?? preview!['review'])),
@@ -339,6 +442,14 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
                             FilledButton(
                                 onPressed: busy ||
                                         !fresh ||
+                                        (previewRequest!['kind'] ==
+                                                'dispatch' &&
+                                            previewRequest!['isolation'] ==
+                                                'git_worktree' &&
+                                            (previewRequest!['base_commit']
+                                                    ?.toString()
+                                                    .isEmpty ??
+                                                true)) ||
                                         !(canDispatch || canReview)
                                     ? null
                                     : () => _perform(() =>
@@ -376,6 +487,137 @@ class _TaskDeliveryDialogState extends ConsumerState<TaskDeliveryDialog> {
             .contains(run.status),
         _ => false,
       };
+
+  Widget _repositorySnapshot() {
+    if (repositoryBusy) return const LinearProgressIndicator();
+    final repoError = repositoryError;
+    if (repoError != null) return ErrorState(message: repoError);
+    final repo = repository;
+    if (repo == null) return const Text('正在读取仓库状态...');
+    final head = repo['head_commit']?.toString() ?? '';
+    final branch = repo['branch']?.toString() ?? '';
+    final root = repo['root']?.toString() ?? '';
+    final dirty = repo['dirty'] == true;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+          border: Border.all(color: Theme.of(context).dividerColor),
+          borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('当前提交 ${_shortSha(head)}',
+              style: Theme.of(context).textTheme.titleSmall),
+          if (branch.isNotEmpty) Text('分支 $branch'),
+          if (root.isNotEmpty) SelectableText(root),
+          if (dirty)
+            Text('检测到未提交变更；Git worktree 只基于当前提交派发，未提交变更不会包含在内。',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _codeEvidenceSection(HermesEntity run) {
+    final workspace = run.data['code_workspace'];
+    final evidence = run.data['code_evidence'];
+    final workspaceMap = workspace is Map
+        ? Map<String, dynamic>.from(workspace)
+        : const <String, dynamic>{};
+    if (evidence is! Map) return const SizedBox.shrink();
+    final evidenceMap = Map<String, dynamic>.from(evidence);
+    final files = (evidenceMap['files'] as List? ?? const [])
+        .whereType<Map>()
+        .map((file) => Map<String, dynamic>.from(file))
+        .toList();
+    final untracked = (evidenceMap['untracked'] as List? ?? const [])
+        .map((v) => '$v')
+        .toList();
+    final patch = evidenceMap['patch']?.toString() ?? '';
+    final truncated = evidenceMap['truncated'] == true;
+    final complete = evidenceMap['complete'] == true;
+    return ExpansionTile(
+        initiallyExpanded: true,
+        tilePadding: EdgeInsets.zero,
+        title: const Text('代码变更证据'),
+        children: [
+          Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(spacing: 8, runSpacing: 4, children: [
+                if (workspaceMap['mode'] != null)
+                  Chip(label: Text('模式 ${workspaceMap['mode']}')),
+                if (workspaceMap['base_commit'] != null)
+                  Chip(
+                      label: Text(
+                          'base ${_shortSha(workspaceMap['base_commit'])}')),
+                if (evidenceMap['head_commit'] != null)
+                  Chip(
+                      label: Text(
+                          'head ${_shortSha(evidenceMap['head_commit'])}')),
+                if (evidenceMap['captured_at'] != null)
+                  Chip(label: Text('采集 ${evidenceMap['captured_at']}')),
+              ])),
+          if (truncated)
+            Text('变更证据已截断，无法验收通过；请要求修改。',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (!complete)
+            Text('代码证据不完整，暂不能验收通过；仍可要求修改。',
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (files.isNotEmpty)
+            ExpansionTile(title: Text('变更文件 (${files.length})'), children: [
+              for (final file in files)
+                ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: SelectableText(file['path']?.toString() ?? ''),
+                    trailing: Text(file['status']?.toString() ?? ''))
+            ]),
+          if (untracked.isNotEmpty)
+            ExpansionTile(
+                title: Text('未跟踪文件 (${untracked.length})'),
+                children: [
+                  for (final path in untracked)
+                    ListTile(
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        title: SelectableText(path))
+                ]),
+          if (patch.isNotEmpty)
+            ExpansionTile(title: const Text('代码 diff'), children: [
+              SizedBox(
+                  width: double.infinity,
+                  child: SelectableText(patch,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontFamily: 'monospace')))
+            ]),
+        ]);
+  }
+
+  bool _evidenceComplete(HermesEntity? run) {
+    if (run == null) return false;
+    final codeWorkspace = run.data['code_workspace'];
+    final workspaceMode = codeWorkspace is Map ? codeWorkspace['mode'] : null;
+    final isolation =
+        run.data['isolation']?.toString() ?? workspaceMode?.toString();
+    if (isolation != 'git_worktree') return true;
+    final evidence = run.data['code_evidence'];
+    return evidence is Map && evidence['complete'] == true;
+  }
+
+  String _selectedDecision(HermesEntity run) {
+    if (decision == 'accept' &&
+        !(run.status == 'completed' && _evidenceComplete(run))) {
+      return 'request_changes';
+    }
+    return decision;
+  }
+
+  String _shortSha(Object? value) {
+    final sha = value?.toString() ?? '';
+    if (sha.length <= 12) return sha;
+    return sha.substring(0, 12);
+  }
 
   String _phaseLabel(String phase) => switch (phase) {
         'unplanned' => '待派发',

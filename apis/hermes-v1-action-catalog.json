@@ -15,7 +15,8 @@
   "resources": {
     "workspaces": {
       "collection": ["GET", "POST"],
-      "entity": ["GET", "PATCH"]
+      "entity": ["GET", "PATCH"],
+      "repository": "GET /workspaces/{id}/repository"
     },
     "sessions": {
       "collection": ["GET", "POST"],
@@ -25,6 +26,7 @@
       "collection": ["GET", "POST"],
       "entity": ["GET", "PATCH"],
       "events": "GET /runs/{id}/events?after=0",
+      "changes": "GET /runs/{id}/changes",
       "actions": ["start", "cancel", "retry", "replay", "export"]
     },
     "assets": {
@@ -108,13 +110,13 @@
   },
   "run_action_body": ["idempotency_key", "expected_version", "dry_run"],
   "approval_decision_body": ["decision", "idempotency_key", "expected_version", "dry_run"],
-  "task_dispatch_body": ["nodes", "idempotency_key", "expected_version", "dry_run"],
+  "task_dispatch_body": ["nodes", "isolation", "base_commit", "idempotency_key", "expected_version", "dry_run"],
   "task_review_body": ["run_id", "run_version", "decision", "comment", "idempotency_key", "expected_version", "dry_run"],
   "wire": {
     "entity": ["id", "kind", "version", "status", "data", "created_at", "updated_at"],
     "workspace_data": ["name", "root"],
     "run_data": ["title", "session_id", "nodes"],
-    "run_server_fields": ["workspace_root", "workspace_version", "node_results", "attempt", "active_node", "execution_owner", "lease_expires_at"],
+    "run_server_fields": ["workspace_root", "workspace_version", "node_results", "attempt", "active_node", "execution_owner", "lease_expires_at", "code_workspace", "code_evidence"],
     "run_node": ["id", "title", "kind", "argv", "expected_exit_code", "timeout_seconds"],
     "asset_data": ["title", "kind", "content"]
   }

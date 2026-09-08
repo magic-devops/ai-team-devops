@@ -1,9 +1,9 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
-from typer.testing import CliRunner
 from sop_cli.__main__ import app as sop_app
 from sop_cli.commands import hermes
+from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -42,6 +42,58 @@ def test_hermes_cli_defaults_actions_to_dry_run_until_apply():
     assert "--expected-version" in result.output
 
 
+def test_task_dispatch_help_exposes_worktree_isolation_options():
+    result = CliRunner().invoke(hermes.build_resource_app("tasks"), ["dispatch", "--help"])
+    compact_help = "".join(result.output.split())
+
+    assert result.exit_code == 0
+    assert "--isolation" in result.output
+    assert "workspace|git_wor" in compact_help
+    assert "ktree" in compact_help
+    assert "--base-commit" in result.output
+
+
+def test_task_dispatch_passes_isolation_base_commit_and_dry_run(monkeypatch, tmp_path):
+    calls = []
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"nodes": [{"id": "n1"}]}), encoding="utf-8")
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def task_dispatch(self, task_id, nodes, **kwargs):
+            calls.append((task_id, nodes, kwargs))
+            return {"ok": True, "items": []}
+
+    monkeypatch.setattr(hermes, "get_hermes_client", Client)
+    result = CliRunner().invoke(hermes.build_resource_app("tasks"), [
+        "dispatch", "task-1",
+        "--plan", str(plan),
+        "--expected-version", "3",
+        "--isolation", "git_worktree",
+        "--base-commit", "abc123",
+        "--json",
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["ok"]
+    assert calls == [(
+        "task-1",
+        [{"id": "n1"}],
+        {
+            "expected_version": 3,
+            "dry_run": True,
+            "idempotency_key": None,
+            "isolation": "git_worktree",
+            "base_commit": "abc123",
+        },
+    )]
+
+
 def test_named_run_commands_send_dry_run_and_explicit_apply(monkeypatch):
     calls = []
 
@@ -64,6 +116,50 @@ def test_named_run_commands_send_dry_run_and_explicit_apply(monkeypatch):
             assert result.exit_code == 0, result.output
             assert json.loads(result.output)["ok"]
             assert calls[-1] == ("r", action, {"expected_version": 2, "dry_run": dry, "idempotency_key": None})
+
+
+def test_run_changes_command_reads_code_evidence(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def run_changes(self, run_id):
+            calls.append(run_id)
+            return {"ok": True, "items": [{"id": "change-1", "kind": "code_evidence"}]}
+
+    monkeypatch.setattr(hermes, "get_hermes_client", Client)
+    result = CliRunner().invoke(hermes.build_resource_app("runs"), ["changes", "run-1", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["items"][0]["kind"] == "code_evidence"
+    assert calls == ["run-1"]
+
+
+def test_workspace_repository_command_reads_repository(monkeypatch):
+    calls = []
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def repository(self, workspace_id):
+            calls.append(workspace_id)
+            return {"ok": True, "items": [{"id": "repo-1", "kind": "repository"}]}
+
+    monkeypatch.setattr(hermes, "get_hermes_client", Client)
+    result = CliRunner().invoke(hermes.workspace_app, ["repository", "ws-1", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["items"][0]["id"] == "repo-1"
+    assert calls == ["ws-1"]
 
 
 def test_missing_connection_is_machine_readable_non_destructive_failure(monkeypatch):

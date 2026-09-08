@@ -22,6 +22,7 @@ import type {
   HermesEntity,
   HermesRunNode,
 } from "../lib/hermes";
+import { CodeEvidencePanel, type CodeEvidence } from "./CodeEvidencePanel";
 
 type PlanNode = {
   id: string;
@@ -37,6 +38,8 @@ type Preview = {
   nodes?: HermesRunNode[];
   comment?: string;
   result: HermesDelivery;
+  isolation?: "workspace" | "git_worktree";
+  baseCommit?: string;
 };
 
 export function TaskDeliveryPanel({
@@ -63,6 +66,15 @@ export function TaskDeliveryPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [isolation, setIsolation] = useState<"workspace" | "git_worktree">(
+    "workspace",
+  );
+  const repository = useQuery({
+    queryKey: ["hermes-repository", scopeKey],
+    queryFn: () => client.repository(),
+    enabled: isolation === "git_worktree",
+    retry: false,
+  });
   const query = useQuery({
     queryKey: ["task-delivery", scopeKey, task.id],
     queryFn: () => client.taskDelivery(task.id),
@@ -73,6 +85,10 @@ export function TaskDeliveryPanel({
   const current = item?.task;
   const run = item?.run;
   const phase = item?.phase || "unplanned";
+  const code = run?.data.code_evidence as CodeEvidence | undefined;
+  const codeComplete =
+    run?.data.isolation !== "git_worktree" ||
+    Boolean(code?.complete && !code.truncated && code.untracked.length === 0);
   const canDispatch =
     permissions.has("write") &&
     permissions.has("execute") &&
@@ -114,11 +130,19 @@ export function TaskDeliveryPanel({
       return { ...node, kind: "command", title: node.id, argv };
     });
     const key = crypto.randomUUID();
+    const baseCommit =
+      isolation === "git_worktree"
+        ? repository.data?.items[0]?.head_commit
+        : "";
+    if (isolation === "git_worktree" && (!baseCommit || repository.isError))
+      throw new Error(t("workspace.code.repositoryRequired"));
     const result = await client.taskDispatch(task.id, {
       expected_version: current.version,
       nodes,
       idempotency_key: key,
       dry_run: true,
+      isolation,
+      base_commit: baseCommit,
     });
     setPreview({
       kind: "dispatch",
@@ -126,6 +150,8 @@ export function TaskDeliveryPanel({
       version: current.version,
       nodes,
       result: result.items[0],
+      isolation,
+      baseCommit,
     });
   }
 
@@ -159,6 +185,8 @@ export function TaskDeliveryPanel({
         nodes: preview.nodes,
         idempotency_key: preview.key,
         dry_run: false,
+        isolation: preview.isolation,
+        base_commit: preview.baseCommit,
       });
     } else if (run && preview.runVersion && preview.kind !== "dispatch") {
       await client.taskReview(task.id, {
@@ -271,6 +299,54 @@ export function TaskDeliveryPanel({
             ],
           }}
         >
+          <Form.Item label={t("workspace.code.executionDirectory")}>
+            <Select
+              value={isolation}
+              onChange={(value) => {
+                setIsolation(value);
+                setPreview(undefined);
+              }}
+              options={[
+                {
+                  value: "workspace",
+                  label: t("workspace.code.currentDirectory"),
+                },
+                {
+                  value: "git_worktree",
+                  label: t("workspace.code.isolatedDirectory"),
+                },
+              ]}
+            />
+          </Form.Item>
+          {isolation === "git_worktree" && (
+            <Space orientation="vertical" className="w-full mb-3">
+              {repository.isFetching && <Spin size="small" />}
+              {repository.isError && (
+                <Alert type="error" showIcon title={String(repository.error)} />
+              )}
+              {repository.data?.items[0] && (
+                <>
+                  <Typography.Text copyable code>
+                    {repository.data.items[0].head_commit}
+                  </Typography.Text>
+                  <Alert
+                    type={repository.data.items[0].dirty ? "warning" : "info"}
+                    showIcon
+                    title={t("workspace.code.committedOnly")}
+                  />
+                </>
+              )}
+              <Button
+                icon={<RefreshCw size={16} />}
+                onClick={() => {
+                  setPreview(undefined);
+                  void repository.refetch();
+                }}
+              >
+                {t("workspace.code.refreshBase")}
+              </Button>
+            </Space>
+          )}
           <Form.List name="nodes">
             {(fields, { add, remove }) => (
               <>
@@ -354,6 +430,7 @@ export function TaskDeliveryPanel({
           </Button>
         </Form>
       )}
+      {run && <CodeEvidencePanel run={run} />}
       {canReview && (
         <Space orientation="vertical" className="w-full">
           <Select
@@ -368,7 +445,7 @@ export function TaskDeliveryPanel({
               {
                 value: "accept",
                 label: t("workspace.delivery.accept"),
-                disabled: run?.status !== "completed",
+                disabled: run?.status !== "completed" || !codeComplete,
               },
               {
                 value: "request_changes",
@@ -393,7 +470,8 @@ export function TaskDeliveryPanel({
               busy ||
               !comment.trim() ||
               query.isError ||
-              (decision === "accept" && run?.status !== "completed")
+              (decision === "accept" &&
+                (run?.status !== "completed" || !codeComplete))
             }
             onClick={() => perform(previewReview)}
           >

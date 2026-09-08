@@ -4,8 +4,9 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from collections.abc import Callable, Mapping
+from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -25,6 +26,19 @@ RESOURCE_NAMES = (
 )
 DELETE_NAMES = {"assets", "devices", "schedules"}
 FIELD_OPTION = typer.Option(None, "--field", help="Merge KEY=JSON_VALUE into body.data")
+
+
+class DispatchIsolation(str, Enum):
+    workspace = "workspace"
+    git_worktree = "git_worktree"
+
+
+DISPATCH_ISOLATION_OPTION = typer.Option(
+    DispatchIsolation.workspace,
+    "--isolation",
+    help="Dispatch isolation",
+)
+BASE_COMMIT_OPTION = typer.Option("", "--base-commit", help="Pinned base commit SHA for git_worktree dispatch")
 
 
 def get_hermes_client() -> HermesClient:
@@ -201,6 +215,8 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
             task_id: str,
             plan: Path = typer.Option(..., "--plan", exists=True, dir_okay=False, help="JSON file containing a nodes array"),
             expected_version: int = typer.Option(..., "--expected-version", min=1),
+            isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
+            base_commit: str = BASE_COMMIT_OPTION,
             apply: bool = typer.Option(False, "--apply/--dry-run"),
             idempotency_key: str = typer.Option("", "--idempotency-key"),
             json_output: bool = typer.Option(False, "--json"),
@@ -210,7 +226,8 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 if not isinstance(nodes, list):
                     raise ValueError("--plan must contain a nodes array")
                 return client.task_dispatch(task_id, nodes, expected_version=expected_version,
-                                            dry_run=not apply, idempotency_key=idempotency_key or None)
+                                            dry_run=not apply, idempotency_key=idempotency_key or None,
+                                            isolation=isolation.value, base_commit=base_commit)
             _run_call(call, as_json=json_output)
 
         @app.command("review")
@@ -238,6 +255,13 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
             json_output: bool = typer.Option(False, "--json"),
         ) -> None:
             _run_call(lambda client: client.run_events(run_id, after=after), as_json=json_output)
+
+        @app.command("changes")
+        def run_changes(
+            run_id: str = typer.Argument(..., metavar="RUN_ID"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.run_changes(run_id), as_json=json_output)
 
         @app.command("action")
         def run_action(
@@ -297,6 +321,14 @@ def create_workspace(
 ) -> None:
     parsed = _merge_fields(_load_object(data, label="--data"), field)
     _run_call(lambda client: client.create_workspace(parsed, idempotency_key=idempotency_key or None), as_json=json_output)
+
+
+@workspace_app.command("repository")
+def workspace_repository(
+    workspace_id: str = typer.Argument(..., metavar="WORKSPACE_ID"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.repository(workspace_id), as_json=json_output)
 
 
 @approval_app.command("list")

@@ -105,6 +105,83 @@ def test_create_patch_and_run_action_bodies_match_contract():
     ]
 
 
+def test_repository_uses_workspace_path_and_header_scope():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["workspace"] = request.headers.get("X-Workspace-Id")
+        return httpx.Response(200, json=_envelope([{"id": "repo-1", "kind": "repository"}]))
+
+    client = HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler))
+
+    payload = client.repository("ws-repo")
+
+    assert payload["items"][0]["id"] == "repo-1"
+    assert seen == {
+        "path": "/api/hermes/v1/workspaces/ws-repo/repository",
+        "workspace": "ws-repo",
+    }
+
+
+def test_run_changes_reads_stored_code_evidence_envelope():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        return httpx.Response(200, json=_envelope([{"id": "change-1", "kind": "code_evidence"}]))
+
+    client = HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler))
+
+    payload = client.run_changes("run-1")
+
+    assert payload["items"][0]["kind"] == "code_evidence"
+    assert seen == {"path": "/api/hermes/v1/runs/run-1/changes"}
+
+
+def test_task_dispatch_carries_isolation_and_preserves_base_commit():
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=_envelope())
+
+    client = HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler))
+
+    client.task_dispatch(
+        "task-1",
+        [{"id": "node-1"}],
+        expected_version=7,
+        idempotency_key="dispatch-key",
+        isolation="git_worktree",
+        base_commit="abc123",
+    )
+
+    assert requests == [{
+        "nodes": [{"id": "node-1"}],
+        "expected_version": 7,
+        "dry_run": True,
+        "isolation": "git_worktree",
+        "base_commit": "abc123",
+        "idempotency_key": "dispatch-key",
+    }]
+
+
+def test_task_dispatch_defaults_to_workspace_without_implicit_head():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=_envelope())
+
+    client = HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler))
+
+    client.task_dispatch("task-1", [], expected_version=1, idempotency_key="dispatch-key")
+
+    assert bodies[0]["isolation"] == "workspace"
+    assert bodies[0]["base_commit"] == ""
+
+
 def test_iter_resource_follows_summary_next_cursor():
     cursors = []
 

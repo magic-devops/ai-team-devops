@@ -9,8 +9,9 @@ from .transactional import Store, digest, now
 
 
 class Delivery:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, repository):
         self.store = store
+        self.repository = repository
 
     def detail(self, principal: Principal, workspace: str, task_id: str) -> dict:
         task = self.store.get(principal, workspace, "tasks", task_id)
@@ -94,6 +95,10 @@ class Delivery:
             ):
                 raise CoreError("invalid_command", "Delivery requires at least one valid command node", 422)
             current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
+            if body.isolation == "git_worktree":
+                self.repository.validate_base(current_workspace["data"]["root"], body.base_commit)
+            elif body.base_commit:
+                raise CoreError("invalid_isolation", "A base commit requires Git worktree isolation", 422)
             source = {
                 "task_id": task_id,
                 "task_version": task["version"],
@@ -108,6 +113,8 @@ class Delivery:
                 "workspace_root": current_workspace["data"]["root"],
                 "workspace_version": current_workspace["version"],
                 "task_source": source,
+                "isolation": body.isolation,
+                "base_commit": body.base_commit,
             }
             if body.dry_run:
                 return {"id": task_id, "task": task, "plan": run_data, "dry_run": True}
@@ -161,6 +168,10 @@ class Delivery:
             if not body.comment.strip():
                 raise CoreError("review_required", "Record a review conclusion", 422)
             if body.decision == "accept":
+                if run["data"].get("isolation") == "git_worktree":
+                    evidence = run["data"].get("code_evidence")
+                    if not evidence or evidence.get("complete") is not True or evidence.get("truncated") or evidence.get("untracked"):
+                        raise CoreError("code_evidence_incomplete", "Complete code evidence is required; stage intended new files and rerun before acceptance", 409)
                 results = run["data"].get("node_results", {})
                 if run["status"] != "completed" or not all(
                     results.get(node["id"], {}).get("succeeded") is True for node in run["data"]["nodes"]
