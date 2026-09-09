@@ -184,14 +184,53 @@
         "GET"
       ],
       "actions": [
+        "preview",
         "configure",
         "trigger",
         "pause",
-        "resume"
+        "resume",
+        "webhook-test"
       ],
+      "preview": "POST /schedules/preview",
       "history": "GET /schedules/{id}/history",
-      "trigger_kind": "interval",
+      "webhook_test": "POST /schedules/{id}/webhook-test",
+      "trigger_kind": [
+        "interval",
+        "cron",
+        "webhook"
+      ],
+      "configure_body": [
+        "title",
+        "trigger",
+        "nodes",
+        "enabled",
+        "misfire_coalesce",
+        "idempotency_key",
+        "expected_version",
+        "dry_run"
+      ],
+      "trigger_body": {
+        "interval": [
+          "type",
+          "interval_seconds",
+          "starts_at"
+        ],
+        "cron": [
+          "type",
+          "cron_expression",
+          "timezone"
+        ],
+        "webhook": [
+          "type",
+          "secret_ref",
+          "max_body_bytes"
+        ]
+      },
       "configure_permissions": [
+        "config",
+        "execute"
+      ],
+      "preview_permissions": [
         "config",
         "execute"
       ],
@@ -204,6 +243,15 @@
       "resume_permissions": [
         "config",
         "execute"
+      ],
+      "webhook_test_permissions": [
+        "execute"
+      ]
+    },
+    "collaboration": {
+      "members": "GET /collaboration/members",
+      "members_permissions": [
+        "read"
       ]
     },
     "remote": {
@@ -465,6 +513,16 @@
       "path": "/api/hermes/v1/agents/catalog"
     },
     {
+      "id": "schedule.preview",
+      "permissions": [
+        "config",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/preview",
+      "resource": "schedules"
+    },
+    {
       "id": "task.agent-dispatch",
       "permissions": [
         "write",
@@ -519,6 +577,15 @@
       ],
       "method": "GET",
       "path": "/api/hermes/v1/schedules/{id}/history",
+      "resource": "schedules"
+    },
+    {
+      "id": "schedule.webhook-test",
+      "permissions": [
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/schedules/{id}/webhook-test",
       "resource": "schedules"
     },
     {
@@ -808,6 +875,114 @@
       "method": "POST",
       "path": "/api/hermes/v1/runs/{id}/export",
       "resource": "runs"
+    },
+    {
+      "id": "collaboration.members",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/collaboration/members",
+      "resource": "members"
+    },
+    {
+      "id": "collaboration.channels.list",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/collaboration/channels",
+      "resource": "channels"
+    },
+    {
+      "id": "collaboration.channel.configure",
+      "permissions": [
+        "config"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/channels/{id}/configure",
+      "resource": "channels"
+    },
+    {
+      "id": "collaboration.threads.list",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/collaboration/channels/{id}/threads",
+      "resource": "threads"
+    },
+    {
+      "id": "collaboration.thread.create",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/threads",
+      "resource": "threads"
+    },
+    {
+      "id": "collaboration.thread.archive",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/threads/{id}/archive",
+      "resource": "threads"
+    },
+    {
+      "id": "collaboration.messages.list",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/collaboration/threads/{id}/messages",
+      "resource": "messages"
+    },
+    {
+      "id": "collaboration.message.send",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/messages",
+      "resource": "messages"
+    },
+    {
+      "id": "collaboration.message.edit",
+      "permissions": [
+        "write"
+      ],
+      "method": "PATCH",
+      "path": "/api/hermes/v1/collaboration/messages/{id}",
+      "resource": "messages"
+    },
+    {
+      "id": "collaboration.message.archive",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/messages/{id}/archive",
+      "resource": "messages"
+    },
+    {
+      "id": "collaboration.inbox",
+      "permissions": [
+        "read"
+      ],
+      "method": "GET",
+      "path": "/api/hermes/v1/collaboration/inbox",
+      "resource": "messages"
+    },
+    {
+      "id": "collaboration.read.mark",
+      "permissions": [
+        "write"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/collaboration/read",
+      "resource": "message_cursors"
     }
   ],
   "resource_action_permissions": {
@@ -870,7 +1045,7 @@
       "approvals": "decision only",
       "artifacts": "read only",
       "devices": "create/pairing/revoke only",
-      "schedules": "configure/trigger/pause/resume/history only"
+      "schedules": "preview/configure/trigger/pause/resume/history/webhook-test only"
     }
   }
 }

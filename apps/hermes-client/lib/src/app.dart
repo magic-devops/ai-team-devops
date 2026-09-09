@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'pages/assets_page.dart';
 import 'pages/automation_page.dart';
+import 'pages/collaboration_page.dart';
 import 'pages/plan_page.dart';
 import 'pages/runs_page.dart';
 import 'pages/settings_page.dart';
@@ -38,6 +39,9 @@ final _router = GoRouter(
         GoRoute(path: '/plan', builder: (_, __) => const PlanPage()),
         GoRoute(path: '/runs', builder: (_, __) => const RunsPage()),
         GoRoute(
+            path: '/teammessages',
+            builder: (_, __) => const CollaborationPage()),
+        GoRoute(
             path: '/automation', builder: (_, __) => const AutomationPage()),
         GoRoute(path: '/assets', builder: (_, __) => const AssetsPage()),
         GoRoute(path: '/settings', builder: (_, __) => const SettingsPage()),
@@ -61,6 +65,7 @@ class _HermesShellState extends State<HermesShell> {
     '/plan',
     '/assets',
     '/runs',
+    '/teammessages',
     '/automation',
     '/settings'
   ];
@@ -128,6 +133,7 @@ const _destinations = [
   _NavItem('项目', Icons.account_tree_rounded),
   _NavItem('资产', Icons.inventory_2_rounded),
   _NavItem('收件箱', Icons.inbox_rounded),
+  _NavItem('团队消息', Icons.forum_rounded),
   _NavItem('自动化', Icons.precision_manufacturing_rounded),
   _NavItem('设置', Icons.tune_rounded),
 ];

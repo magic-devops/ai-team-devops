@@ -7,6 +7,7 @@ PYTHON_BIN="$(command -v "${PYTHON_BIN}" || true)"
 FLUTTER_BIN="${FLUTTER_BIN:-$(command -v flutter || true)}"
 PACKAGE_MODE="full"
 FLUTTER_BUNDLE="${HERMES_FLUTTER_BUNDLE:-}"
+RELEASE_PACKAGE="${HERMES_RELEASE_PACKAGE:-auto}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,8 +23,12 @@ while [[ $# -gt 0 ]]; do
       FLUTTER_BUNDLE="${2:?--flutter-bundle requires a path}"
       shift 2
       ;;
+    --release-package)
+      RELEASE_PACKAGE="${2:?--release-package requires auto|portable|dmg|windows|deb|appimage}"
+      shift 2
+      ;;
     -h|--help)
-      echo "usage: bash scripts/hermes-package.sh [--core-only|--full] [--flutter-bundle PATH]" >&2
+      echo "usage: bash scripts/hermes-package.sh [--core-only|--full] [--flutter-bundle PATH] [--release-package auto|portable|dmg|windows|deb|appimage]" >&2
       exit 0
       ;;
     *)
@@ -99,11 +104,6 @@ if [[ "${PACKAGE_MODE}" == "full" ]]; then
       exit 2
     fi
   fi
-fi
-
-if [[ "${HERMES_RELEASE:-0}" == "1" ]]; then
-  echo "Signed installer distribution is not implemented by this development bundler; release refused." >&2
-  exit 4
 fi
 
 if ! "${PYTHON_BIN}" -c 'import PyInstaller' >/dev/null 2>&1; then
@@ -318,8 +318,20 @@ ARCHIVE="${ROOT}/dist/hermes-1.0.0-${HOST_NAME}-${PACKAGE_MODE}.tar.gz"
 COPYFILE_DISABLE=1 tar -C "${DIST}" -czf "${ARCHIVE}.tmp" .
 mv "${ARCHIVE}.tmp" "${ARCHIVE}"
 
-echo "installer/image packaging is out of scope for this script; produced tar runtime bundle only" >&2
+echo "verified tar runtime bundle created" >&2
 
-echo "unsigned development artifact; no signed release claim" >&2
+if [[ "${HERMES_RELEASE:-0}" == "1" ]]; then
+  "${PYTHON_BIN}" "${ROOT}/scripts/hermes-release.py" package \
+    --stage "${DIST}" \
+    --archive "${ARCHIVE}" \
+    --out-dir "${ROOT}/dist" \
+    --version "1.0.0" \
+    --platform "${HOST_OS}" \
+    --arch "${HOST_ARCH}" \
+    --mode "${PACKAGE_MODE}" \
+    --package "${RELEASE_PACKAGE}"
+else
+  echo "unsigned development artifact; no signed release claim" >&2
+fi
 
 echo "packaged ${HOST_NAME} ${PACKAGE_MODE}: ${CORE_BIN}, ${AGENTD_BIN}, ${MANIFEST}, ${ARCHIVE}"

@@ -8,6 +8,7 @@ class AgentDispatch {
   final String? isolation;
   final String? prompt;
   final String? squad_id;
+  final String? target_device_id;
   const AgentDispatch({
     required this.expected_version,
     required this.idempotency_key,
@@ -18,6 +19,37 @@ class AgentDispatch {
     this.isolation,
     this.prompt,
     this.squad_id,
+    this.target_device_id,
+  });
+}
+
+class ChannelConfigure {
+  final String idempotency_key;
+  final List<String> members;
+  final String title;
+  final bool? archived;
+  final String? description;
+  final bool? dry_run;
+  final int? expected_version;
+  const ChannelConfigure({
+    required this.idempotency_key,
+    required this.members,
+    required this.title,
+    this.archived,
+    this.description,
+    this.dry_run,
+    this.expected_version,
+  });
+}
+
+class CollaborationAction {
+  final String idempotency_key;
+  final bool? dry_run;
+  final int? expected_version;
+  const CollaborationAction({
+    required this.idempotency_key,
+    this.dry_run,
+    this.expected_version,
   });
 }
 
@@ -66,6 +98,61 @@ class HTTPValidationError {
   });
 }
 
+class MarkRead {
+  final String channel_id;
+  final int cursor;
+  final String idempotency_key;
+  final bool? dry_run;
+  final int? expected_version;
+  final String? thread_id;
+  const MarkRead({
+    required this.channel_id,
+    required this.cursor,
+    required this.idempotency_key,
+    this.dry_run,
+    this.expected_version,
+    this.thread_id,
+  });
+}
+
+class MessageEdit {
+  final String body;
+  final String idempotency_key;
+  final bool? dry_run;
+  final int? expected_version;
+  final List<String>? mentions;
+  const MessageEdit({
+    required this.body,
+    required this.idempotency_key,
+    this.dry_run,
+    this.expected_version,
+    this.mentions,
+  });
+}
+
+class MessageSend {
+  final String body;
+  final String channel_id;
+  final String idempotency_key;
+  final String thread_id;
+  final bool? dry_run;
+  final int? expected_version;
+  final List<String>? mentions;
+  final String? parent_id;
+  final List<String>? recipients;
+  const MessageSend({
+    required this.body,
+    required this.channel_id,
+    required this.idempotency_key,
+    required this.thread_id,
+    this.dry_run,
+    this.expected_version,
+    this.mentions,
+    this.parent_id,
+    this.recipients,
+  });
+}
+
 class Mutation {
   final String idempotency_key;
   final Map<String, Object?>? data;
@@ -109,9 +196,11 @@ class PairRedeem {
 
 class RemoteClaim {
   final String idempotency_key;
+  final List<String>? runtime_capabilities;
   final String? worker_version;
   const RemoteClaim({
     required this.idempotency_key,
+    this.runtime_capabilities,
     this.worker_version,
   });
 }
@@ -155,24 +244,41 @@ class RunAction {
 
 class ScheduleConfigure {
   final String idempotency_key;
-  final int interval_seconds;
   final List<Node> nodes;
-  final String starts_at;
   final String title;
+  final ScheduleTrigger trigger;
   final bool? dry_run;
   final bool? enabled;
   final int? expected_version;
   final bool? misfire_coalesce;
   const ScheduleConfigure({
     required this.idempotency_key,
-    required this.interval_seconds,
     required this.nodes,
-    required this.starts_at,
     required this.title,
+    required this.trigger,
     this.dry_run,
     this.enabled,
     this.expected_version,
     this.misfire_coalesce,
+  });
+}
+
+class ScheduleTrigger {
+  final String? cron_expression;
+  final int? interval_seconds;
+  final int? max_body_bytes;
+  final String? secret_ref;
+  final String? starts_at;
+  final String? timezone;
+  final String? type;
+  const ScheduleTrigger({
+    this.cron_expression,
+    this.interval_seconds,
+    this.max_body_bytes,
+    this.secret_ref,
+    this.starts_at,
+    this.timezone,
+    this.type,
   });
 }
 
@@ -211,6 +317,27 @@ class TaskReview {
     required this.run_id,
     required this.run_version,
     this.dry_run,
+  });
+}
+
+class ThreadCreate {
+  final String channel_id;
+  final String idempotency_key;
+  final String title;
+  final String? body;
+  final bool? dry_run;
+  final int? expected_version;
+  final List<String>? mentions;
+  final List<String>? recipients;
+  const ThreadCreate({
+    required this.channel_id,
+    required this.idempotency_key,
+    required this.title,
+    this.body,
+    this.dry_run,
+    this.expected_version,
+    this.mentions,
+    this.recipients,
   });
 }
 

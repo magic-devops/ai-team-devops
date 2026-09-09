@@ -42,6 +42,14 @@ class DispatchIsolation(str, Enum):
     git_worktree = "git_worktree"
 
 
+class RuntimeCapability(str, Enum):
+    command = "command"
+    agent = "agent"
+
+
+RUNTIME_CAPABILITY_OPTION = typer.Option(None, "--runtime-capability", help="Opt in to runtime kinds; repeat for command and agent")
+
+
 DISPATCH_ISOLATION_OPTION = typer.Option(
     DispatchIsolation.workspace,
     "--isolation",
@@ -273,6 +281,26 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
 
     if resource == "schedules":
 
+        @app.command("preview")
+        def schedule_preview(
+            data: str = typer.Option(..., "--data", help="Typed schedule configuration JSON"),
+            runs: int = typer.Option(5, "--runs", min=1, max=20),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            parsed = _load_object(data, label="--data")
+            _run_call(lambda client: client.schedule_preview(parsed, runs=runs), as_json=json_output)
+
+        @app.command("webhook-test")
+        def schedule_webhook_test(
+            schedule_id: str,
+            expected_version: int = typer.Option(..., "--expected-version", min=1),
+            apply: bool = typer.Option(False, "--apply/--dry-run"),
+            idempotency_key: str = typer.Option("", "--idempotency-key"),
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            _run_call(lambda client: client.schedule_webhook_test(schedule_id, expected_version=expected_version,
+                      dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
+
         @app.command("configure")
         def schedule_configure(
             schedule_id: str = typer.Argument(..., metavar="SCHEDULE_ID"),
@@ -357,6 +385,7 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
             squad_id: str = typer.Option("", "--squad-id", help="Squad id; only the leader wakes and routes members"),
             expected_version: int = typer.Option(..., "--expected-version", min=1),
             target_version: int = typer.Option(..., "--target-version", min=1, help="Selected agent/squad row.version"),
+            device_id: str = DEVICE_ID_OPTION,
             isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
             base_commit: str = BASE_COMMIT_OPTION,
             apply: bool = typer.Option(False, "--apply/--dry-run"),
@@ -367,6 +396,7 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 task_id,
                 expected_version=expected_version,
                 target_version=target_version,
+                target_device_id=device_id,
                 prompt=prompt,
                 agent_id=agent_id,
                 squad_id=squad_id,
@@ -504,6 +534,108 @@ def approval_decision(
 
 
 system_app = typer.Typer(help="Hermes runtime diagnostics, readiness and sync commands", no_args_is_help=True)
+collaboration_app = typer.Typer(help="Membership-scoped team channels, threads and inbox", no_args_is_help=True)
+system_app.add_typer(collaboration_app, name="collaboration")
+
+
+@collaboration_app.command("channels")
+def collaboration_channels(
+    include_archived: bool = typer.Option(False, "--include-archived"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.collaboration_channels(include_archived=include_archived), as_json=json_output)
+
+
+@collaboration_app.command("members")
+def collaboration_members(json_output: bool = typer.Option(False, "--json")) -> None:
+    _run_call(lambda client: client.collaboration_members(), as_json=json_output)
+
+
+@collaboration_app.command("configure")
+def collaboration_configure(
+    channel_id: str,
+    data: str = typer.Option(..., "--data", help="Channel title, member identities and description JSON"),
+    expected_version: int | None = typer.Option(None, "--expected-version", min=1),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    parsed = _load_object(data, label="--data")
+    _run_call(lambda client: client.collaboration_configure_channel(channel_id, parsed, expected_version=expected_version,
+              dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
+
+
+@collaboration_app.command("threads")
+def collaboration_threads(
+    channel_id: str,
+    include_archived: bool = typer.Option(False, "--include-archived"),
+    cursor: str = typer.Option("", "--cursor"),
+    limit: int = typer.Option(100, "--limit", min=1, max=500),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.collaboration_threads(channel_id, cursor=cursor, limit=limit, include_archived=include_archived), as_json=json_output)
+
+
+@collaboration_app.command("messages")
+def collaboration_messages(
+    thread_id: str,
+    after: int = typer.Option(0, "--after", min=0),
+    limit: int = typer.Option(100, "--limit", min=1, max=500),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.collaboration_messages(thread_id, after=after, limit=limit), as_json=json_output)
+
+
+@collaboration_app.command("inbox")
+def collaboration_inbox(
+    limit: int = typer.Option(100, "--limit", min=1, max=500),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.collaboration_inbox(limit=limit), as_json=json_output)
+
+
+def _register_collaboration_write(name: str, call: Callable) -> None:
+    @collaboration_app.command(name)
+    def write(
+        data: str = typer.Option(..., "--data", help="Typed collaboration action JSON"),
+        apply: bool = typer.Option(False, "--apply/--dry-run"),
+        idempotency_key: str = typer.Option("", "--idempotency-key"),
+        json_output: bool = typer.Option(False, "--json"),
+    ) -> None:
+        parsed = _load_object(data, label="--data")
+        _run_call(lambda client: call(client, parsed, dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
+
+
+_register_collaboration_write("thread-create", HermesClient.collaboration_create_thread)
+_register_collaboration_write("send", HermesClient.collaboration_send_message)
+_register_collaboration_write("read", HermesClient.collaboration_mark_read)
+
+
+@collaboration_app.command("edit")
+def collaboration_edit(
+    message_id: str,
+    data: str = typer.Option(..., "--data", help="Message body and mentions JSON"),
+    expected_version: int = typer.Option(..., "--expected-version", min=1),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    parsed = _load_object(data, label="--data")
+    _run_call(lambda client: client.collaboration_edit_message(message_id, parsed, expected_version=expected_version,
+              dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
+
+
+@collaboration_app.command("archive")
+def collaboration_archive(
+    resource: str,
+    entity_id: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=1),
+    apply: bool = typer.Option(False, "--apply/--dry-run"),
+    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    json_output: bool = typer.Option(False, "--json"),
+) -> None:
+    _run_call(lambda client: client.collaboration_archive(resource, entity_id, expected_version=expected_version,
+              dry_run=not apply, idempotency_key=idempotency_key or None), as_json=json_output)
 
 
 @system_app.command("diagnostics")
@@ -561,6 +693,7 @@ def remote_worker(
     target_root: Path | None = TARGET_ROOT_OPTION,
     workspace_map: list[str] | None = WORKSPACE_MAP_OPTION,
     agentd: str = typer.Option("", "--agentd"),
+    runtime_capability: list[RuntimeCapability] | None = RUNTIME_CAPABILITY_OPTION,
     once: bool = typer.Option(False, "--once"),
     poll_interval: float = typer.Option(5.0, "--poll-interval"),
     outbox_dir: Path | None = OUTBOX_DIR_OPTION,
@@ -592,6 +725,7 @@ def remote_worker(
         argv.extend(["--workspace-map", item])
     if agentd:
         argv.extend(["--agentd", agentd])
+    argv.extend(argument for capability in runtime_capability or [] for argument in ("--runtime-capability", capability.value))
     if once:
         argv.append("--once")
     if outbox_dir is not None:

@@ -3,15 +3,19 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from hermes_core.api import create_app
+from hermes_core.collaboration import COLLAB_ACTIONS
 from hermes_core.models import ACTIONS
 
 EXPECTED_PERMISSIONS = {
     "task.dispatch": ["write", "execute"],
     "task.agent-dispatch": ["write", "execute"],
+    "schedule.preview": ["config", "execute"],
     "schedule.configure": ["config", "execute"],
     "schedule.trigger": ["execute"],
     "schedule.pause": ["config"],
     "schedule.resume": ["config", "execute"],
+    "schedule.webhook-test": ["execute"],
+    "collaboration.members": ["read"],
     "device.pairing": ["config", "execute"],
     "device.revoke": ["config"],
     "workspace.create": ["config"],
@@ -55,7 +59,7 @@ def test_static_action_catalog_matches_runtime_actions_and_metadata():
     catalog = json.loads(catalog_path.read_text())
 
     assert catalog["action_descriptor"]["permission_contract"].startswith("Every action advertises all required permissions")
-    assert catalog["actions"] == ACTIONS
+    assert catalog["actions"] == ACTIONS + COLLAB_ACTIONS
     assert all("permission" not in action for action in catalog["actions"])
 
     by_id = _by_id(catalog["actions"])
@@ -65,4 +69,4 @@ def test_static_action_catalog_matches_runtime_actions_and_metadata():
     resource_permissions = catalog["resource_action_permissions"]
     assert resource_permissions["create"]["devices"] == ["config"]
     assert resource_permissions["update"]["workspaces"] == ["config"]
-    assert resource_permissions["immutable_or_dedicated"]["schedules"] == "configure/trigger/pause/resume/history only"
+    assert resource_permissions["immutable_or_dedicated"]["schedules"] == "preview/configure/trigger/pause/resume/history/webhook-test only"

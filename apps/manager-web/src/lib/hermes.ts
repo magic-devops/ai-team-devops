@@ -163,21 +163,54 @@ export type HermesTaskAgentDispatchBody = {
   dry_run: boolean;
   agent_id?: string;
   squad_id?: string;
+  target_device_id?: string;
   prompt: string;
   isolation: "workspace" | "git_worktree";
   base_commit: string;
 };
 
+export type HermesScheduleTrigger =
+  | { type: "interval"; interval_seconds: number; starts_at: string }
+  | { type: "cron"; cron_expression: string; timezone: string; starts_at?: string }
+  | { type: "webhook"; secret_ref: string; max_body_bytes: number };
+
 export type HermesScheduleConfigureBody = {
   title: string;
-  interval_seconds: number;
-  starts_at: string;
+  trigger: HermesScheduleTrigger;
   nodes: HermesScheduleNode[];
   enabled: boolean;
   misfire_coalesce: boolean;
   idempotency_key: string;
   expected_version?: number;
   dry_run: boolean;
+};
+
+export type HermesCollaborationAction = {
+  idempotency_key: string;
+  expected_version?: number;
+  dry_run: boolean;
+};
+
+export type HermesChannelConfigure = HermesCollaborationAction & {
+  title: string;
+  members: string[];
+  description: string;
+  archived: boolean;
+};
+
+export type HermesThreadCreate = HermesCollaborationAction & {
+  channel_id: string;
+  title: string;
+  body: string;
+  mentions: string[];
+};
+
+export type HermesMessageSend = HermesCollaborationAction & {
+  channel_id: string;
+  thread_id: string;
+  parent_id?: string;
+  body: string;
+  mentions: string[];
 };
 
 export class HermesUnavailableError extends Error {
@@ -398,6 +431,14 @@ export class HermesClient {
     });
   }
 
+  schedulePreview(body: HermesScheduleConfigureBody, runs = 5) {
+    return this.request<HermesEntity>(`/schedules/preview?runs=${runs}`, { method: "POST", body: JSON.stringify({ ...body, dry_run: true }) });
+  }
+
+  scheduleWebhookTest(id: string, body: HermesRunActionBody) {
+    return this.request<HermesEntity>(`/schedules/${encodeURIComponent(id)}/webhook-test`, { method: "POST", body: JSON.stringify(body) });
+  }
+
   scheduleAction(id: string, action: "trigger" | "pause" | "resume", body: HermesRunActionBody) {
     return this.request(`/schedules/${encodeURIComponent(id)}/${action}`, {
       method: "POST",
@@ -411,6 +452,50 @@ export class HermesClient {
 
   agents(query: HermesQuery = {}) {
     return this.request<HermesEntity<HermesAgentProfileData>>(`/agents${queryString(query)}`);
+  }
+
+  collaborationChannels(includeArchived = false) {
+    return this.request<HermesEntity>(`/collaboration/channels?include_archived=${includeArchived}`);
+  }
+
+  collaborationMembers() {
+    return this.request<{ id: string }>("/collaboration/members");
+  }
+
+  collaborationConfigureChannel(id: string, body: HermesChannelConfigure) {
+    return this.request<HermesEntity>(`/collaboration/channels/${encodeURIComponent(id)}/configure`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  collaborationThreads(channelId: string, query: HermesQuery & { include_archived?: boolean } = {}) {
+    return this.request<HermesEntity>(`/collaboration/channels/${encodeURIComponent(channelId)}/threads${queryString(query)}`);
+  }
+
+  collaborationCreateThread(body: HermesThreadCreate) {
+    return this.request<HermesEntity>("/collaboration/threads", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  collaborationMessages(threadId: string, after = 0) {
+    return this.request<HermesEntity>(`/collaboration/threads/${encodeURIComponent(threadId)}/messages${queryString({ after, limit: 100 })}`);
+  }
+
+  collaborationSendMessage(body: HermesMessageSend) {
+    return this.request<HermesEntity>("/collaboration/messages", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  collaborationEditMessage(id: string, body: HermesCollaborationAction & { body: string; mentions: string[] }) {
+    return this.request<HermesEntity>(`/collaboration/messages/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+  }
+
+  collaborationArchive(kind: "threads" | "messages", id: string, body: HermesCollaborationAction) {
+    return this.request<HermesEntity>(`/collaboration/${kind}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  collaborationInbox() {
+    return this.request<HermesEntity>("/collaboration/inbox?limit=100");
+  }
+
+  collaborationMarkRead(body: HermesCollaborationAction & { channel_id: string; thread_id?: string; cursor: number }) {
+    return this.request<HermesEntity>("/collaboration/read", { method: "POST", body: JSON.stringify(body) });
   }
 
   agentCatalog() {

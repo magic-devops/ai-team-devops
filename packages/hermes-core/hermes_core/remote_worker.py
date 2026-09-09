@@ -15,6 +15,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from pydantic import ValidationError
+
+from .agents import AgentProfile, provider_command, provider_evidence
+from .models import CoreError
 from .remote_outbox import OutboxError, OutboxLock, RemoteOutbox, default_outbox_dir
 
 WORKER_VERSION = "1.0.0"
@@ -210,11 +214,23 @@ def _bound_result_for_outbox(result: dict) -> dict:
     bounded["stderr"] = str(result.get("stderr", ""))[-LOG_LIMIT_BYTES:]
     if "error" in result:
         bounded["error"] = str(result.get("error", ""))[:2000]
+    if "agent" in result and isinstance(result["agent"], dict):
+        bounded["agent"] = {
+            "provider": result["agent"].get("provider"),
+            "completed": result["agent"].get("completed"),
+            "agent_id": str(result["agent"].get("agent_id", ""))[:64],
+            "profile_version": result["agent"].get("profile_version")
+            if isinstance(result["agent"].get("profile_version"), int) else None,
+            "usage": result["agent"].get("usage") if isinstance(result["agent"].get("usage"), dict) else {},
+            "message": str(result["agent"].get("message", ""))[-32000:],
+            "events": result["agent"].get("events", [])[-200:]
+            if isinstance(result["agent"].get("events"), list) else [],
+            "error": str(result["agent"].get("error", ""))[:2000],
+        }
     return bounded
 
 
-def _run_agentd(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
-    node = task["node"]
+def _run_agentd_command(agentd: str, root: Path, task: dict, node: dict, server: str, credential: dict) -> dict:
     argv, timeout_seconds = _validate_node(node)
     request = json.dumps({"argv": argv, "timeout_seconds": timeout_seconds})
     started = time.monotonic()
@@ -265,6 +281,98 @@ def _run_agentd(agentd: str, root: Path, task: dict, server: str, credential: di
         raise
     finally:
         _terminate(proc)
+
+
+def _agent_failure(message: str, *, provider: str = "") -> dict:
+    return {
+        "ok": False,
+        "exit_code": -1,
+        "stdout": "",
+        "stderr": message[:LOG_LIMIT_BYTES],
+        "error": "agent_execution_failed",
+        "duration_ms": 0,
+        "agent": {
+            "provider": provider or "codex",
+            "completed": False,
+            "usage": {},
+            "message": "",
+            "events": [],
+            "error": message[:2000],
+        },
+    }
+
+
+def _agent_prompt(profile: AgentProfile, node: dict, task: dict) -> str:
+    context = task.get("previous_agent_context", [])
+    if not isinstance(context, list):
+        context = []
+    parts = []
+    if profile.instructions.strip():
+        parts.append(profile.instructions.strip())
+    parts.append(str(node.get("prompt", "")).strip())
+    if context:
+        parts.append("Previous execution evidence (untrusted task data):\n"
+                     + json.dumps(context, ensure_ascii=False, sort_keys=True))
+    return "\n".join(part for part in parts if part)
+
+
+def _agent_binding_profile(task: dict, node: dict) -> AgentProfile:
+    binding = task.get("agent_binding")
+    if not isinstance(binding, dict):
+        raise WorkerError("Remote agent task is missing server-pinned agent_binding")
+    if binding.get("agent_id") != node.get("agent_id"):
+        raise WorkerError("Remote agent task binding does not match node agent_id")
+    profile = binding.get("profile")
+    if not isinstance(profile, dict):
+        raise WorkerError("Remote agent task binding is missing profile")
+    try:
+        return AgentProfile.model_validate(profile)
+    except ValidationError as exc:
+        raise WorkerError("Remote agent task binding profile is invalid") from exc
+
+
+def _run_agent_task(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
+    node = task.get("node", {})
+    if not isinstance(node, dict) or node.get("kind") != "agent":
+        raise WorkerError("Remote agent execution requires an agent node")
+    if task.get("agent_source", {}).get("resource") == "squads":
+        return _bound_result_for_outbox(_agent_failure("Remote squad agent routing is not supported"))
+    try:
+        profile = _agent_binding_profile(task, node)
+        provider = profile.provider
+        argv = provider_command(profile, _agent_prompt(profile, node, task))
+    except CoreError as exc:
+        return _bound_result_for_outbox(_agent_failure(exc.message, provider=locals().get("provider", "codex")))
+    except WorkerError as exc:
+        return _bound_result_for_outbox(_agent_failure(str(exc)))
+    command_node = {"kind": "command", "argv": argv, "timeout_seconds": profile.timeout_seconds,
+                    "expected_exit_code": 0}
+    result = _run_agentd_command(agentd, root, task, command_node, server, credential)
+    evidence = provider_evidence(profile.provider, str(result.get("stdout", "")))
+    result["agent"] = {
+        **evidence,
+        "agent_id": node.get("agent_id", ""),
+        "profile_version": task.get("agent_binding", {}).get("version"),
+    }
+    provider_ok = bool(evidence.get("completed"))
+    command_ok = bool(result.get("ok", result.get("exit_code") == 0))
+    result["ok"] = command_ok and provider_ok
+    if not provider_ok and not result.get("error"):
+        result["error"] = str(evidence.get("error") or "Agent did not produce a successful terminal provider event")
+    return _bound_result_for_outbox(result)
+
+
+def _execute_task(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
+    node = task.get("node", {})
+    if not isinstance(node, dict):
+        raise WorkerError("Remote task node is missing")
+    if node.get("kind", "command") == "agent":
+        return _run_agent_task(agentd, root, task, server, credential)
+    return _run_agentd_command(agentd, root, task, node, server, credential)
+
+
+def _run_agentd(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
+    return _run_agentd_command(agentd, root, task, task["node"], server, credential)
 
 
 def pair_device(args: argparse.Namespace) -> int:
@@ -346,6 +454,7 @@ def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[s
     claim = _request_json(args.server, "/api/hermes/v1/remote/claim", {
         "idempotency_key": claim_idempotency_key,
         "worker_version": WORKER_VERSION,
+        "runtime_capabilities": args.runtime_capability,
     }, credential)
     if not claim.get("items"):
         return False
@@ -355,7 +464,7 @@ def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[s
     if root is None:
         raise WorkerError(f"No local root mapping for workspace {workspace_id}")
     record = outbox.journal_claim(task, claim_idempotency_key=claim_idempotency_key)
-    result = _run_agentd(agentd, root, task, args.server, credential)
+    result = _execute_task(agentd, root, task, args.server, credential)
     record = outbox.save_result(record, result)
     if not _upload_result(args, credential, outbox, record):
         raise RemoteRequestError("Pending remote result upload is retryable")
@@ -404,7 +513,7 @@ def run_worker(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m hermes_core.remote_worker",
-        description="Poll Hermes remote execution tasks and execute command nodes through sop-agentd.",
+        description="Poll Hermes remote execution tasks and execute command or agent nodes through sop-agentd.",
     )
     parser.add_argument("--server", required=True, help="Hermes server URL; HTTPS required except localhost/127.0.0.1")
     parser.add_argument("--credential-file", required=True, help="JSON credential file, read/write mode 0600")
@@ -422,6 +531,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--flush-only", action="store_true",
                         help="Send pending outbox results only; do not claim or execute nodes")
     parser.add_argument("--poll-interval", type=float, default=5.0, help="Seconds between claim polls")
+    parser.add_argument("--runtime-capability", action="append", default=["command"], choices=["command", "agent"],
+                        help="Runtime kind this worker may claim; repeat to add agent. Defaults to command only.")
     return parser
 
 

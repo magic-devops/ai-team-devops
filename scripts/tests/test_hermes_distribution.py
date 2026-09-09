@@ -5,8 +5,12 @@ import io
 import json
 import os
 import stat
+import subprocess
+import sys
 import tarfile
 from pathlib import Path
+
+import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "hermes-distribution.py"
 SPEC = importlib.util.spec_from_file_location("hermes_distribution", SCRIPT)
@@ -27,8 +31,8 @@ def _bundle(root: Path) -> Path:
     return bundle
 
 
-def _manifest(stage: Path) -> Path:
-    rc = dist.main(["manifest", "--root", str(stage), "--mode", "core-only"])
+def _manifest(stage: Path, *, version: str = "1.0.0", platform: str = "macos", arch: str = "arm64") -> Path:
+    rc = dist.main(["manifest", "--root", str(stage), "--mode", "core-only", "--version", version, "--platform", platform, "--arch", arch])
     assert rc == 0
     return stage / dist.MANIFEST_NAME
 
@@ -38,6 +42,61 @@ def _archive(stage: Path, archive: Path) -> Path:
         for path in sorted(stage.rglob("*")):
             tar.add(path, arcname=path.relative_to(stage).as_posix(), recursive=False)
     return archive
+
+
+def _keypair(root: Path) -> tuple[Path, Path]:
+    private_key = root / "release-private.pem"
+    public_key = root / "release-public.pem"
+    assert dist.main(["keygen", "--private-key", str(private_key), "--public-key", str(public_key)]) == 0
+    return private_key, public_key
+
+
+def _signed_release(tmp_path: Path, stage: Path, archive: Path) -> tuple[Path, Path, Path]:
+    private_key, public_key = _keypair(tmp_path)
+    release_manifest = tmp_path / f"{archive.name}.hermes-release.json"
+    assert dist.main([
+        "sign-release",
+        "--archive",
+        str(archive),
+        "--manifest",
+        str(stage / dist.MANIFEST_NAME),
+        "--private-key",
+        str(private_key),
+        "--publisher",
+        "Hermes Test ReleaseOps",
+        "--out",
+        str(release_manifest),
+    ]) == 0
+    return release_manifest, private_key, public_key
+
+
+def _run_distribution_cli(args: list[str]) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, str(SCRIPT), *args]
+    return subprocess.run(command, check=False, capture_output=True, text=True)  # noqa: S603
+
+
+def _sign_release_with_manifest(
+    tmp_path: Path,
+    *,
+    archive: Path,
+    bundle_manifest: Path,
+    private_key: Path,
+) -> Path:
+    release_manifest = tmp_path / f"{archive.stem}-{len(list(tmp_path.glob('*.hermes-release.json')))}.hermes-release.json"
+    assert dist.main([
+        "sign-release",
+        "--archive",
+        str(archive),
+        "--manifest",
+        str(bundle_manifest),
+        "--private-key",
+        str(private_key),
+        "--publisher",
+        "Hermes Test ReleaseOps",
+        "--out",
+        str(release_manifest),
+    ]) == 0
+    return release_manifest
 
 
 def _write_manifest(path: Path, files: object) -> Path:
@@ -386,3 +445,627 @@ def test_cli_returns_structured_os_errors(tmp_path: Path, capsys) -> None:
     assert dist.main(["verify", "--root", str(tmp_path / "missing-root"), "--manifest", str(tmp_path / "m.json")]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["error"]["message"].startswith("install root does not exist")
+
+
+def test_signed_release_roundtrip_and_signed_install(tmp_path: Path) -> None:
+    stage = _bundle(tmp_path)
+    _manifest(stage, platform="linux", arch="x64")
+    archive = _archive(stage, tmp_path / "hermes-1.0.0-linux-x64-core-only.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, stage, archive)
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+
+    dest = tmp_path / "signed-installed"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core\n"
+    assert stat.S_IMODE((dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").stat().st_mode) == 0o755
+
+
+def test_actual_ed25519_cli_signed_install_update_roundtrip_preserves_files_and_modes(tmp_path: Path) -> None:
+    old_stage = _bundle(tmp_path / "old")
+    _manifest(old_stage, version="1.0.0", platform="linux", arch="x64")
+    old_archive = _archive(old_stage, tmp_path / "old.tar.gz")
+    private_key = tmp_path / "release-private.pem"
+    public_key = tmp_path / "release-public.pem"
+
+    keygen = _run_distribution_cli(
+        [
+            "keygen",
+            "--private-key",
+            str(private_key),
+            "--public-key",
+            str(public_key),
+        ]
+    )
+    assert keygen.returncode == 0
+    assert "BEGIN PRIVATE KEY" not in keygen.stdout
+    assert stat.S_IMODE(private_key.stat().st_mode) == 0o600
+
+    old_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=old_archive,
+        bundle_manifest=old_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+    dest = tmp_path / "cli-hermes"
+    install = _run_distribution_cli(
+        [
+            "signed-install",
+            "--archive",
+            str(old_archive),
+            "--release-manifest",
+            str(old_release),
+            "--public-key",
+            str(public_key),
+            "--dest",
+            str(dest),
+            "--platform",
+            "linux",
+            "--arch",
+            "x64",
+            "--version",
+            "1.0.0",
+        ]
+    )
+    assert install.returncode == 0
+
+    new_stage = _bundle(tmp_path / "new")
+    binary = new_stage / "Hermes" / "runtime" / "hermes-core" / "hermes-core"
+    binary.write_text("core v2\n", encoding="utf-8")
+    binary.chmod(0o755)
+    _manifest(new_stage, version="1.0.1", platform="linux", arch="x64")
+    new_archive = _archive(new_stage, tmp_path / "new.tar.gz")
+    new_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=new_archive,
+        bundle_manifest=new_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+    update = _run_distribution_cli(
+        [
+            "signed-update",
+            "--archive",
+            str(new_archive),
+            "--release-manifest",
+            str(new_release),
+            "--public-key",
+            str(public_key),
+            "--dest",
+            str(dest),
+            "--platform",
+            "linux",
+            "--arch",
+            "x64",
+            "--version",
+            "1.0.1",
+        ]
+    )
+    assert update.returncode == 0
+    assert binary.read_text(encoding="utf-8") == "core v2\n"
+    installed_binary = dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core"
+    assert installed_binary.read_text(encoding="utf-8") == "core v2\n"
+    assert stat.S_IMODE(installed_binary.stat().st_mode) == 0o755
+
+
+def test_signed_install_rejects_archive_when_extracted_manifest_differs_from_signed_payload(tmp_path: Path) -> None:
+    claimed_stage = _bundle(tmp_path / "claimed")
+    _manifest(claimed_stage, version="1.0.0", platform="linux", arch="x64")
+    shipped_stage = _bundle(tmp_path / "shipped")
+    _manifest(shipped_stage, version="1.0.0", platform="macos", arch="arm64")
+    archive = _archive(shipped_stage, tmp_path / "shipped.tar.gz")
+    private_key, public_key = _keypair(tmp_path)
+    release_manifest = _sign_release_with_manifest(
+        tmp_path,
+        archive=archive,
+        bundle_manifest=claimed_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+    dest = tmp_path / "signed-installed"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 1
+    assert not dest.exists()
+
+
+def test_signed_install_uses_private_frozen_archive_after_release_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trusted_stage = _bundle(tmp_path / "trusted")
+    _manifest(trusted_stage, version="1.0.0", platform="linux", arch="x64")
+    archive = _archive(trusted_stage, tmp_path / "hermes.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, trusted_stage, archive)
+    swapped_stage = _bundle(tmp_path / "swapped")
+    (swapped_stage / "Hermes" / "runtime" / "hermes-core" / "hermes-core").write_text("swapped\n", encoding="utf-8")
+    _manifest(swapped_stage, version="1.0.0", platform="linux", arch="x64")
+    swapped_archive = _archive(swapped_stage, tmp_path / "swapped.tar.gz")
+
+    original_verify_release = dist.verify_release_manifest
+
+    def swap_original_archive_after_verification(**kwargs: object) -> dict[str, object]:
+        result = original_verify_release(**kwargs)
+        archive.write_bytes(swapped_archive.read_bytes())
+        return result
+
+    extracted_archives: list[Path] = []
+    original_extract_archive = dist._extract_archive
+
+    def assert_private_frozen_archive(extract_archive: Path, target: Path) -> None:
+        extracted_archives.append(extract_archive)
+        assert extract_archive != archive
+        assert extract_archive.parent.name == "release-archive"
+        assert stat.S_IMODE(extract_archive.parent.stat().st_mode) == 0o700
+        assert extract_archive.parent.parent.name.startswith(".hermes.release-")
+        assert stat.S_IMODE(extract_archive.parent.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(extract_archive.stat().st_mode) == 0o400
+        original_extract_archive(extract_archive, target)
+
+    monkeypatch.setattr(dist, "verify_release_manifest", swap_original_archive_after_verification)
+    monkeypatch.setattr(dist, "_extract_archive", assert_private_frozen_archive)
+
+    dest = tmp_path / "signed-installed"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+    assert extracted_archives
+    assert not extracted_archives[0].exists()
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core\n"
+
+
+def test_verify_release_reports_malformed_signed_metadata_without_traceback(tmp_path: Path, capsys) -> None:
+    stage = _bundle(tmp_path)
+    _manifest(stage)
+    archive = _archive(stage, tmp_path / "hermes.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, stage, archive)
+    payload = json.loads(release_manifest.read_text(encoding="utf-8"))
+    payload["payload"].pop("bundle_manifest")
+    release_manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+    ]) == 1
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    assert json.loads(captured.out.strip().splitlines()[-1])["error"]["message"] == (
+        "release payload bundle_manifest must be an object"
+    )
+
+
+def test_verify_release_rejects_archive_tampering(tmp_path: Path) -> None:
+    stage = _bundle(tmp_path)
+    _manifest(stage)
+    archive = _archive(stage, tmp_path / "hermes.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, stage, archive)
+    archive.write_bytes(archive.read_bytes() + b"tamper")
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+    ]) == 1
+
+
+def test_verify_release_rejects_payload_signature_tampering(tmp_path: Path) -> None:
+    stage = _bundle(tmp_path)
+    _manifest(stage)
+    archive = _archive(stage, tmp_path / "hermes.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, stage, archive)
+    payload = json.loads(release_manifest.read_text(encoding="utf-8"))
+    payload["payload"]["version"] = "9.9.9"
+    release_manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+    ]) == 1
+
+
+def test_verify_release_rejects_untrusted_public_key_and_platform_drift(tmp_path: Path) -> None:
+    stage = _bundle(tmp_path)
+    _manifest(stage, platform="macos", arch="arm64")
+    archive = _archive(stage, tmp_path / "hermes.tar.gz")
+    release_manifest, _, public_key = _signed_release(tmp_path, stage, archive)
+    _, wrong_public_key = _keypair(tmp_path / "wrong")
+
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(wrong_public_key),
+    ]) == 1
+    assert dist.main([
+        "verify-release",
+        "--archive",
+        str(archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--platform",
+        "linux",
+    ]) == 1
+
+
+def test_signed_update_replaces_existing_install_and_can_keep_backup(tmp_path: Path) -> None:
+    old_stage = _bundle(tmp_path / "old")
+    _manifest(old_stage, version="1.0.0", platform="linux", arch="x64")
+    old_archive = _archive(old_stage, tmp_path / "old.tar.gz")
+    release_manifest, private_key, public_key = _signed_release(tmp_path, old_stage, old_archive)
+    dest = tmp_path / "hermes"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(old_archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+
+    new_stage = _bundle(tmp_path / "new")
+    (new_stage / "Hermes" / "runtime" / "hermes-core" / "hermes-core").write_text("core v2\n", encoding="utf-8")
+    _manifest(new_stage, version="1.0.1", platform="linux", arch="x64")
+    new_archive = _archive(new_stage, tmp_path / "new.tar.gz")
+    new_release = tmp_path / "new.hermes-release.json"
+    assert dist.main([
+        "sign-release",
+        "--archive",
+        str(new_archive),
+        "--manifest",
+        str(new_stage / dist.MANIFEST_NAME),
+        "--private-key",
+        str(private_key),
+        "--publisher",
+        "Hermes Test ReleaseOps",
+        "--out",
+        str(new_release),
+    ]) == 0
+
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(new_archive),
+        "--release-manifest",
+        str(new_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+        "--keep-backup",
+    ]) == 0
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core v2\n"
+    backups = sorted(tmp_path.glob(".hermes.backup-*"))
+    assert len(backups) == 1
+    assert (backups[0] / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core\n"
+
+
+def test_signed_update_rejects_downgrade_and_requires_same_version_repair_flag(tmp_path: Path) -> None:
+    old_stage = _bundle(tmp_path / "old")
+    _manifest(old_stage, version="1.0.1", platform="linux", arch="x64")
+    old_archive = _archive(old_stage, tmp_path / "old.tar.gz")
+    release_manifest, private_key, public_key = _signed_release(tmp_path, old_stage, old_archive)
+    dest = tmp_path / "hermes"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(old_archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+    ]) == 0
+
+    same_stage = _bundle(tmp_path / "same")
+    (same_stage / "Hermes" / "runtime" / "hermes-core" / "hermes-core").write_text("core repaired\n", encoding="utf-8")
+    _manifest(same_stage, version="1.0.1", platform="linux", arch="x64")
+    same_archive = _archive(same_stage, tmp_path / "same.tar.gz")
+    same_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=same_archive,
+        bundle_manifest=same_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(same_archive),
+        "--release-manifest",
+        str(same_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+    ]) == 1
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(same_archive),
+        "--release-manifest",
+        str(same_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+        "--allow-same-version",
+    ]) == 0
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core repaired\n"
+
+    downgrade_stage = _bundle(tmp_path / "downgrade")
+    _manifest(downgrade_stage, version="1.0.0", platform="linux", arch="x64")
+    downgrade_archive = _archive(downgrade_stage, tmp_path / "downgrade.tar.gz")
+    downgrade_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=downgrade_archive,
+        bundle_manifest=downgrade_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(downgrade_archive),
+        "--release-manifest",
+        str(downgrade_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 1
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core repaired\n"
+
+
+def test_signed_update_rejects_symlink_destination_before_resolve(tmp_path: Path) -> None:
+    old_stage = _bundle(tmp_path / "old")
+    _manifest(old_stage, version="1.0.0", platform="linux", arch="x64")
+    old_archive = _archive(old_stage, tmp_path / "old.tar.gz")
+    release_manifest, private_key, public_key = _signed_release(tmp_path, old_stage, old_archive)
+    real_dest = tmp_path / "real-hermes"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(old_archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(real_dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+
+    new_stage = _bundle(tmp_path / "new")
+    _manifest(new_stage, version="1.0.1", platform="linux", arch="x64")
+    new_archive = _archive(new_stage, tmp_path / "new.tar.gz")
+    new_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=new_archive,
+        bundle_manifest=new_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+    linked_dest = tmp_path / "linked-hermes"
+    os.symlink(real_dest, linked_dest)
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(new_archive),
+        "--release-manifest",
+        str(new_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(linked_dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+    ]) == 1
+
+
+def test_signed_update_restores_backup_when_post_promotion_verify_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_stage = _bundle(tmp_path / "old")
+    _manifest(old_stage, version="1.0.0", platform="linux", arch="x64")
+    old_archive = _archive(old_stage, tmp_path / "old.tar.gz")
+    release_manifest, private_key, public_key = _signed_release(tmp_path, old_stage, old_archive)
+    dest = tmp_path / "hermes"
+    assert dist.main([
+        "signed-install",
+        "--archive",
+        str(old_archive),
+        "--release-manifest",
+        str(release_manifest),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.0",
+    ]) == 0
+
+    new_stage = _bundle(tmp_path / "new")
+    (new_stage / "Hermes" / "runtime" / "hermes-core" / "hermes-core").write_text("core v2\n", encoding="utf-8")
+    _manifest(new_stage, version="1.0.1", platform="linux", arch="x64")
+    new_archive = _archive(new_stage, tmp_path / "new.tar.gz")
+    new_release = _sign_release_with_manifest(
+        tmp_path,
+        archive=new_archive,
+        bundle_manifest=new_stage / dist.MANIFEST_NAME,
+        private_key=private_key,
+    )
+
+    original_verify_root = dist.verify_root
+
+    def fail_after_promotion(root: Path, manifest_path: Path) -> dict[str, object]:
+        result = original_verify_root(root, manifest_path)
+        installed_binary = Path(root) / "Hermes" / "runtime" / "hermes-core" / "hermes-core"
+        if Path(root) == dest and installed_binary.read_text(encoding="utf-8") == "core v2\n":
+            raise dist.DistributionError("injected post-promotion verify failure")
+        return result
+
+    monkeypatch.setattr(dist, "verify_root", fail_after_promotion)
+
+    assert dist.main([
+        "signed-update",
+        "--archive",
+        str(new_archive),
+        "--release-manifest",
+        str(new_release),
+        "--public-key",
+        str(public_key),
+        "--dest",
+        str(dest),
+        "--platform",
+        "linux",
+        "--arch",
+        "x64",
+        "--version",
+        "1.0.1",
+    ]) == 1
+    assert (dest / "Hermes" / "runtime" / "hermes-core" / "hermes-core").read_text(encoding="utf-8") == "core\n"
+    assert not list(tmp_path.glob(".hermes.backup-*"))
+    assert not list(tmp_path.glob(".hermes.failed-promotion-*"))

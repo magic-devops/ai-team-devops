@@ -53,8 +53,7 @@ describe("HermesClient", () => {
 
     const schedule = {
       title: "Morning health",
-      interval_seconds: 3600,
-      starts_at: "2026-09-08T09:00:00+08:00",
+      trigger: { type: "interval" as const, interval_seconds: 3600, starts_at: "2026-09-08T09:00:00+08:00" },
       nodes: [{ id: "pwd", title: "PWD", kind: "command" as const, argv: ["pwd"], expected_exit_code: 0, timeout_seconds: 300 }],
       enabled: true,
       misfire_coalesce: true,

@@ -226,4 +226,150 @@ void main() {
       throwsA(isA<HermesApiException>()),
     );
   });
+
+  test('collaboration SDK uses dedicated endpoints and canonical envelopes',
+      () async {
+    final requests = <http.Request>[];
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response(
+          jsonEncode({
+            'ok': true,
+            'items': [
+              {
+                'id': 'ch_scoped',
+                'kind': 'channels',
+                'version': 1,
+                'status': 'active',
+                'data': {
+                  'logical_id': 'team',
+                  'title': 'Team',
+                  'members': ['owner', 'dalton']
+                },
+                'created_at': '2026-09-09T00:00:00Z',
+                'updated_at': '2026-09-09T00:00:00Z',
+              }
+            ],
+            'audit': {'actor': 'owner'},
+            'permissions': ['read', 'write', 'config'],
+            'trace_id': 'trace-collab',
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    final configured = await client.collaborationConfigureChannel(
+      'team',
+      workspaceId: 'ws',
+      title: 'Team',
+      members: ['owner', 'dalton'],
+      description: 'Coordination',
+      archived: false,
+      idempotencyKey: 'same-key',
+      dryRun: true,
+    );
+    await client.collaborationThreads('ch_scoped', workspaceId: 'ws');
+    await client.collaborationThreads(
+      'ch_scoped',
+      workspaceId: 'ws',
+      includeArchived: true,
+      cursor: 'th_1',
+      limit: 50,
+    );
+    await client.collaborationCreateThread(
+      workspaceId: 'ws',
+      channelId: 'ch_scoped',
+      title: 'Release',
+      body: 'Start',
+      mentions: ['dalton'],
+      recipients: ['owner', 'dalton'],
+      idempotencyKey: 'same-key',
+    );
+    await client.collaborationMessages('thread-1', workspaceId: 'ws', after: 4);
+    await client.collaborationSendMessage(
+      workspaceId: 'ws',
+      channelId: 'ch_scoped',
+      threadId: 'thread-1',
+      parentId: 'msg-0',
+      body: 'Reply',
+      mentions: ['owner'],
+      recipients: ['owner'],
+      idempotencyKey: 'same-key',
+      dryRun: false,
+    );
+    await client.collaborationEditMessage(
+      'msg-1',
+      workspaceId: 'ws',
+      expectedVersion: 2,
+      body: 'Edited',
+      mentions: ['dalton'],
+      idempotencyKey: 'same-key',
+    );
+    await client.collaborationArchive('messages', 'msg-1',
+        workspaceId: 'ws',
+        expectedVersion: 2,
+        idempotencyKey: 'same-key',
+        dryRun: false);
+    await client.collaborationInbox(workspaceId: 'ws');
+    await client.collaborationMarkRead(
+      workspaceId: 'ws',
+      channelId: 'ch_scoped',
+      threadId: 'thread-1',
+      cursor: 12,
+      idempotencyKey: 'read-key',
+    );
+
+    expect((configured.items.first as Map)['id'], 'ch_scoped');
+    expect(requests.map((request) => '${request.method} ${request.url.path}'), [
+      'POST /api/hermes/v1/collaboration/channels/team/configure',
+      'GET /api/hermes/v1/collaboration/channels/ch_scoped/threads',
+      'GET /api/hermes/v1/collaboration/channels/ch_scoped/threads',
+      'POST /api/hermes/v1/collaboration/threads',
+      'GET /api/hermes/v1/collaboration/threads/thread-1/messages',
+      'POST /api/hermes/v1/collaboration/messages',
+      'PATCH /api/hermes/v1/collaboration/messages/msg-1',
+      'POST /api/hermes/v1/collaboration/messages/msg-1/archive',
+      'GET /api/hermes/v1/collaboration/inbox',
+      'POST /api/hermes/v1/collaboration/read',
+    ]);
+    expect(requests.first.headers['X-Workspace-Id'], 'ws');
+    expect(jsonDecode(requests.first.body)['idempotency_key'], 'same-key');
+    expect(requests[2].url.queryParameters,
+        containsPair('include_archived', 'true'));
+    expect(requests[2].url.queryParameters, containsPair('cursor', 'th_1'));
+    expect(requests[2].url.queryParameters, containsPair('limit', '50'));
+    expect(jsonDecode(requests[5].body)['parent_id'], 'msg-0');
+    expect(jsonDecode(requests[6].body)['expected_version'], 2);
+    expect(jsonDecode(requests.last.body)['cursor'], 12);
+  });
+
+  test('collaboration members come from server actor directory', () async {
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async => http.Response(
+          jsonEncode({
+            'ok': true,
+            'items': [
+              {'id': 'owner'},
+              {'id': 'dalton'}
+            ],
+          }),
+          200)),
+    );
+    addTearDown(client.close);
+
+    final members = await client.collaborationMembers(workspaceId: 'ws');
+
+    expect(members, ['owner', 'dalton']);
+  });
 }

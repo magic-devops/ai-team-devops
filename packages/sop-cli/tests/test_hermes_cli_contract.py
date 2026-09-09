@@ -4,8 +4,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import httpx
 from sop_cli.__main__ import app as sop_app
 from sop_cli.commands import hermes
+from sop_sdk.hermes import HermesClient
 from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +40,14 @@ class ContractClient:
 
     def schedule_configure(self, schedule_id, data, **kwargs):
         self.calls.append(("schedule_configure", schedule_id, data, kwargs))
+        return {"ok": True, "items": []}
+
+    def schedule_preview(self, data, **kwargs):
+        self.calls.append(("schedule_preview", data, kwargs))
+        return {"ok": True, "items": []}
+
+    def schedule_webhook_test(self, schedule_id, **kwargs):
+        self.calls.append(("schedule_webhook_test", schedule_id, kwargs))
         return {"ok": True, "items": []}
 
     def schedule_action(self, schedule_id, action, **kwargs):
@@ -95,6 +105,46 @@ def test_root_cli_registers_non_colliding_hermes_commands():
     assert 'build_resource_app("sessions")' in source
     assert 'build_resource_app("runs")' in source
     assert 'build_resource_app("assets")' in source
+
+
+def test_collaboration_cli_json_preview_apply_and_scope(monkeypatch):
+    requests = []
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json={"ok": True, "items": []})
+
+    monkeypatch.setattr(hermes, "get_hermes_client", lambda: HermesClient(
+        "http://127.0.0.1:8799", token=os.environ.get("HERMES_TEST_TOKEN", "token-for-test"), workspace_id="workspace-a",
+        transport=httpx.MockTransport(respond),
+    ))
+    body = json.dumps({"channel_id": "channel-a", "thread_id": "thread-a", "body": "Review evidence"})
+    for flags in ([], ["--apply"]):
+        _invoke_ok(hermes.collaboration_app, ["send", "--data", body, "--idempotency-key", "message-one", "--json", *flags])
+    assert [json.loads(request.content)["dry_run"] for request in requests] == [True, False]
+    assert all(request.url.path == "/api/hermes/v1/collaboration/messages" for request in requests)
+    assert all(request.headers["x-workspace-id"] == "workspace-a" for request in requests)
+    assert all(json.loads(request.content)["idempotency_key"] == "message-one" for request in requests)
+    _invoke_ok(hermes.collaboration_app, ["members", "--json"])
+    assert requests[-1].url.path == "/api/hermes/v1/collaboration/members"
+
+
+def test_collaboration_cli_unavailable_manager_is_non_destructive(monkeypatch):
+    requests = []
+
+    def unavailable(request):
+        requests.append(request)
+        raise httpx.ConnectError("offline", request=request)
+
+    monkeypatch.setattr(hermes, "get_hermes_client", lambda: HermesClient(
+        "http://127.0.0.1:8799", token=os.environ.get("HERMES_TEST_TOKEN", "token-for-test"), workspace_id="workspace-a",
+        transport=httpx.MockTransport(unavailable),
+    ))
+    result = CliRunner().invoke(hermes.collaboration_app, ["configure", "delivery", "--data", '{"title":"Delivery","members":["actor"]}', "--json"])
+    assert result.exit_code != 0
+    assert json.loads(result.output)["ok"] is False
+    assert len(requests) == 1
+    assert json.loads(requests[0].content)["dry_run"] is True
 
 
 def test_root_version_flag_is_eager_and_usable_without_command():
@@ -166,11 +216,13 @@ def test_top_level_readiness_commands_are_registered_by_subprocess():
         ("squad", "catalog"),
         ("squad", "create"),
         ("squad", "patch"),
+        ("schedule", "preview"),
         ("schedule", "configure"),
         ("schedule", "trigger"),
         ("schedule", "pause"),
         ("schedule", "resume"),
         ("schedule", "history"),
+        ("schedule", "webhook-test"),
         ("device", "pairing"),
         ("device", "pair"),
         ("device", "revoke"),
@@ -203,11 +255,13 @@ def test_readiness_invokes_real_hermes_cli_contracts_only():
         '("squad", "catalog")',
         '("squad", "create")',
         '("squad", "patch")',
+        '("schedule", "preview")',
         '("schedule", "configure")',
         '("schedule", "trigger")',
         '("schedule", "pause")',
         '("schedule", "resume")',
         '("schedule", "history")',
+        '("schedule", "webhook-test")',
         '("device", "pairing")',
         '("device", "pair")',
         '("device", "revoke")',
@@ -292,6 +346,7 @@ def test_task_agent_dispatch_passes_selected_target_version_and_dry_run(monkeypa
     assert calls == [("task-1", {
         "expected_version": 3,
         "target_version": 4,
+        "target_device_id": "",
         "prompt": "Implement it",
         "agent_id": "agent-1",
         "squad_id": "",
@@ -339,26 +394,39 @@ def test_agent_squad_catalog_and_create_commands(monkeypatch):
 def test_schedule_and_device_pairing_commands(monkeypatch):
     ContractClient.calls = []
     monkeypatch.setattr(hermes, "get_hermes_client", ContractClient)
+    configure = {
+        "title": "Nightly",
+        "trigger": {"type": "interval", "interval_seconds": 60, "starts_at": "2026-09-09T00:00:00+00:00"},
+        "nodes": [{"id": "check", "kind": "command", "argv": ["python", "-V"]}],
+    }
 
     _invoke_ok(hermes.build_resource_app("schedules"), [
-        "configure", "sch-1", "--field", "title=Nightly", "--expected-version", "1", "--json",
+        "preview", "--data", json.dumps(configure), "--runs", "3", "--json",
+    ])
+    _invoke_ok(hermes.build_resource_app("schedules"), [
+        "configure", "sch-1", "--data", json.dumps(configure), "--expected-version", "1", "--json",
     ])
     _invoke_ok(hermes.build_resource_app("schedules"), [
         "trigger", "sch-1", "--expected-version", "2", "--apply", "--json",
     ])
     _invoke_ok(hermes.build_resource_app("schedules"), ["history", "sch-1", "--limit", "5", "--json"])
+    _invoke_ok(hermes.build_resource_app("schedules"), [
+        "webhook-test", "sch-1", "--expected-version", "2", "--apply", "--json",
+    ])
     _invoke_ok(hermes.build_resource_app("devices"), ["pairing", "dev-1", "--expected-version", "3", "--json"])
     _invoke_ok(hermes.build_resource_app("devices"), ["pair", "dev-1", "--secret", "pair-secret", "--json"])
     _invoke_ok(hermes.build_resource_app("devices"), ["revoke", "dev-1", "--expected-version", "3", "--json"])
 
     assert ContractClient.calls == [
-        ("schedule_configure", "sch-1", {"title": "Nightly"}, {
+        ("schedule_preview", configure, {"runs": 3}),
+        ("schedule_configure", "sch-1", configure, {
             "expected_version": 1,
             "dry_run": True,
             "idempotency_key": None,
         }),
         ("schedule_action", "sch-1", "trigger", {"expected_version": 2, "dry_run": False, "idempotency_key": None}),
         ("schedule_history", "sch-1", {"limit": 5, "cursor": ""}),
+        ("schedule_webhook_test", "sch-1", {"expected_version": 2, "dry_run": False, "idempotency_key": None}),
         ("device_pairing", "dev-1", {"expected_version": 3, "dry_run": True, "idempotency_key": None}),
         ("device_pair", "dev-1", "pair-secret"),
         ("device_revoke", "dev-1", {"expected_version": 3, "dry_run": True, "idempotency_key": None}),
@@ -386,6 +454,7 @@ def test_remote_worker_command_invokes_real_worker_module(monkeypatch, tmp_path)
         "--workspace-id", "ws-1",
         "--target-root", str(tmp_path),
         "--agentd", "/bin/echo",
+        "--runtime-capability", "agent",
         "--once",
         "--poll-interval", "1.5",
     ])
@@ -409,6 +478,8 @@ def test_remote_worker_command_invokes_real_worker_module(monkeypatch, tmp_path)
         f"ws-1={tmp_path}",
         "--agentd",
         "/bin/echo",
+        "--runtime-capability",
+        "agent",
         "--once",
     ], {"check": False})]
 

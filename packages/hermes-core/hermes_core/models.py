@@ -64,6 +64,13 @@ _PATCHABLE_RESOURCES = ("workspaces", "sessions", "runs", "tasks", "requirements
 ACTIONS = [
     _action("agent.catalog", ["read"], "GET", f"{API_BASE}/agents/catalog"),
     _action(
+        "schedule.preview",
+        ["config", "execute"],
+        "POST",
+        f"{API_BASE}/schedules/preview",
+        resource="schedules",
+    ),
+    _action(
         "task.agent-dispatch",
         ["write", "execute"],
         "POST",
@@ -87,6 +94,7 @@ ACTIONS = [
         resource="schedules",
     ),
     _action("schedule.history", ["read"], "GET", f"{API_BASE}/schedules/{{id}}/history", resource="schedules"),
+    _action("schedule.webhook-test", ["execute"], "POST", f"{API_BASE}/schedules/{{id}}/webhook-test", resource="schedules"),
     _action(
         "device.pairing",
         ["config", "execute"],

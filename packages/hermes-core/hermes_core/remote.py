@@ -31,6 +31,7 @@ class RemoteClaim(BaseModel):
     model_config = ConfigDict(extra="forbid")
     idempotency_key: str = Field(min_length=1, max_length=160)
     worker_version: str = Field(default="", max_length=80)
+    runtime_capabilities: list[str] = Field(default_factory=lambda: ["command"], max_length=8)
 
 
 class RemoteHeartbeat(BaseModel):
@@ -213,8 +214,38 @@ def _sanitize_result(raw: dict[str, Any], expected_exit_code: int) -> dict[str, 
         "error": str(raw.get("error", ""))[:2000],
         "expected_exit_code": expected_exit_code,
     }
+    if "agent" in raw:
+        result["agent"] = _sanitize_agent_result(raw["agent"])
     result["succeeded"] = ok and exit_code == expected_exit_code and not result["error"]
     return result
+
+
+def _sanitize_agent_result(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise CoreError("invalid_result", "Remote agent result must be an object when provided", 422)
+    provider = raw.get("provider")
+    completed = raw.get("completed")
+    if not isinstance(provider, str) or provider not in {"codex", "claude", "opencode"}:
+        raise CoreError("invalid_result", "Remote agent result requires a supported provider", 422)
+    if not isinstance(completed, bool):
+        raise CoreError("invalid_result", "Remote agent result completed must be a boolean", 422)
+    usage = raw.get("usage", {})
+    if not isinstance(usage, dict):
+        raise CoreError("invalid_result", "Remote agent result usage must be an object", 422)
+    events = raw.get("events", [])
+    if not isinstance(events, list):
+        raise CoreError("invalid_result", "Remote agent result events must be a list", 422)
+    safe_events = [event for event in events[-200:] if isinstance(event, dict)]
+    return {
+        "provider": provider,
+        "completed": completed,
+        "agent_id": str(raw.get("agent_id", ""))[:64],
+        "profile_version": raw.get("profile_version") if isinstance(raw.get("profile_version"), int) else None,
+        "usage": usage,
+        "message": str(raw.get("message", ""))[-32000:],
+        "events": safe_events,
+        "error": str(raw.get("error", ""))[:2000],
+    }
 
 
 def _planned_nodes(run: dict[str, Any]) -> list[RemoteNode]:
@@ -223,7 +254,7 @@ def _planned_nodes(run: dict[str, Any]) -> list[RemoteNode]:
         if not isinstance(raw_node, dict):
             raise CoreError("invalid_graph", "Run nodes must be objects", 422)
         kind = str(raw_node.get("kind", "command"))
-        if kind == "command":
+        if kind in {"command", "agent"}:
             node = Node.model_validate(raw_node)
             nodes.append(RemoteNode(node.id, node.kind, node.argv, node.expected_exit_code,
                                     node.timeout_seconds, node.model_dump()))
@@ -237,13 +268,15 @@ def _planned_nodes(run: dict[str, Any]) -> list[RemoteNode]:
 
 def _unsupported_reason(run: dict[str, Any], nodes: list[RemoteNode]) -> str:
     if run["data"].get("isolation", "workspace") != "workspace" or run["data"].get("base_commit"):
-        return "Remote execution currently supports workspace command runs only; git_worktree isolation is not supported."
+        return "Remote execution currently supports workspace runs only; git_worktree isolation is not supported."
     if any(node.kind == "approval" for node in nodes):
-        return "Remote execution currently supports command nodes only; approval nodes require the server checkpoint path."
-    if any(node.kind == "agent" for node in nodes):
-        return "Remote execution currently does not run agent nodes; agent_id/prompt require the real adapter before dispatch."
-    if any(node.kind != "command" for node in nodes):
-        return "Remote execution currently supports command nodes only."
+        return "Remote execution currently supports command and agent nodes only; approval nodes require the server checkpoint path."
+    if any(node.kind == "agent" for node in nodes) and run["data"].get("agent_source", {}).get("resource") == "squads":
+        return "Remote squad agent routing is not supported; use local agent execution until squad routing is wired."
+    if any(node.kind == "agent" and not _agent_binding(run, node) for node in nodes):
+        return "Remote agent nodes require server-pinned agent_bindings before dispatch."
+    if any(node.kind not in {"command", "agent"} for node in nodes):
+        return "Remote execution currently supports command and agent nodes only."
     return ""
 
 
@@ -285,13 +318,75 @@ def _assert_device_active_in_tx(store: Store, conn, device: dict[str, Any], cred
         raise CoreError("device_revoked", "Device credential is no longer current", 403)
 
 
+def _runtime_set(values: list[str]) -> set[str]:
+    return {value for value in values if isinstance(value, str) and value in {"command", "agent"}}
+
+
+def _device_allowed_runtimes(device: dict[str, Any]) -> set[str]:
+    raw = device["data"].get("allowed_runtimes")
+    if raw is None:
+        return {"command"}
+    if not isinstance(raw, list):
+        return set()
+    return _runtime_set(raw)
+
+
+def _claimable_node(node: RemoteNode, worker_capabilities: set[str], allowed_runtimes: set[str]) -> bool:
+    return node.kind in worker_capabilities and node.kind in allowed_runtimes
+
+
+def _agent_binding(run: dict[str, Any], node: RemoteNode) -> dict[str, Any] | None:
+    if node.kind != "agent":
+        return None
+    bindings = run["data"].get("agent_bindings", {})
+    if not isinstance(bindings, dict):
+        return None
+    binding = bindings.get(node.id)
+    if not isinstance(binding, dict):
+        return None
+    if binding.get("agent_id") != node.raw.get("agent_id"):
+        return None
+    if not isinstance(binding.get("profile"), dict):
+        return None
+    return binding
+
+
+def _previous_agent_context(run: dict[str, Any], node: RemoteNode) -> list[dict[str, Any]]:
+    context: list[dict[str, Any]] = []
+    results = run["data"].get("node_results", {})
+    if not isinstance(results, dict):
+        return context
+    for candidate in _planned_nodes(run):
+        if candidate.id == node.id:
+            break
+        if candidate.kind != "agent":
+            continue
+        result = results.get(candidate.id)
+        if not isinstance(result, dict):
+            continue
+        agent = result.get("agent", {})
+        if isinstance(agent, dict):
+            context.append({
+                "node_id": candidate.id,
+                "agent_id": candidate.raw.get("agent_id", ""),
+                "message": str(agent.get("message", ""))[-32000:],
+                "completed": bool(agent.get("completed", False)),
+            })
+    return context
+
+
 def _task_payload(run: dict[str, Any], workspace: str, device_id: str, owner: str,
                   node: RemoteNode, version: int) -> dict[str, Any]:
-    return {"run_id": run["id"], "run_version": version, "owner": owner,
+    task = {"run_id": run["id"], "run_version": version, "owner": owner,
             "workspace_id": workspace, "device_id": device_id, "lease_seconds": REMOTE_LEASE_SECONDS,
-            "node": node.model_dump(), "boundary": {"supports": ["command"],
-            "unsupported": ["approval", "agent", "git_worktree"],
+            "node": node.model_dump(), "boundary": {"supports": [node.kind],
+            "unsupported": ["approval", "git_worktree", "squad_agent_routing"],
             "workspace_root_from_server_is_untrusted": True}}
+    if node.kind == "agent":
+        task["agent_binding"] = _agent_binding(run, node)
+        task["agent_source"] = run["data"].get("agent_source", {})
+        task["previous_agent_context"] = _previous_agent_context(run, node)
+    return task
 
 
 def _active_assignment(store: Store, principal: Principal, workspace: str, device_id: str) -> dict[str, Any] | None:
@@ -502,6 +597,8 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
     def claim(body: RemoteClaim, request: Request):  # noqa: C901
         identity_data = device_auth(request)
         principal, workspace, device = identity_data.principal, identity_data.workspace, identity_data.device
+        worker_capabilities = _runtime_set(body.runtime_capabilities)
+        allowed_runtimes = _device_allowed_runtimes(device)
         recover_expired_remote(store, principal, workspace)
         active = _active_assignment(store, principal, workspace, device["id"])
         if active is not None:
@@ -536,6 +633,8 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
                                  expected=run["version"], transform=lambda item: {"status": "completed",
                                  "data": {**item["data"], "execution_owner": None, "lease_expires_at": None,
                                           "active_node": None}})
+                    continue
+                if not _claimable_node(node, worker_capabilities, allowed_runtimes):
                     continue
                 owner = REMOTE_OWNER_PREFIX + secrets.token_urlsafe(24)
 

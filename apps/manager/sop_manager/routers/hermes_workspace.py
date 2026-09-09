@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends
-
 from hermes_core.api import create_router, install_errors
 from hermes_core.execution import Execution
 from hermes_core.models import PERMISSIONS, Principal
 from hermes_core.transactional import Store
 
-from sop_manager.routers.auth_sql import current_user
-from sop_manager.routers.sql_models import User
 from sop_manager.path_config import resolved_runtime_dir
+from sop_manager.routers.auth_sql import current_user
+from sop_manager.routers.sql_models import SessionLocal, User
+
+CURRENT_USER_DEPENDENCY = Depends(current_user)
 
 
 def mount_hermes_workspace(app):
@@ -32,7 +33,7 @@ def mount_hermes_workspace(app):
 
     app.router.lifespan_context = lifespan
 
-    def identity(user: User = Depends(current_user)):
+    def identity(user: User = CURRENT_USER_DEPENDENCY):
         tenant = str(user.tenant_id)
         role = str(user.role)
         if role == "super_admin":
@@ -48,7 +49,17 @@ def mount_hermes_workspace(app):
                             or str(user.id) in row["data"].get("members", []))
         return Principal(str(user.id), tenant=tenant, business="team", permissions=permissions, workspace_ids=allowed)
 
+    def workspace_actor_directory(principal: Principal, workspace: str) -> list[str]:
+        row = store.get(principal, "", "workspaces", workspace)
+        identities = {principal.actor, str(row["data"].get("owner", ""))}
+        identities.update(str(member) for member in row["data"].get("members", []))
+        identities.discard("")
+        with SessionLocal() as session:
+            users = session.query(User.id).filter(User.id.in_(identities), User.tenant_id == principal.tenant,
+                                                 User.status == "active").all()
+        return sorted({principal.actor, *(str(user.id) for user in users)})
+
     install_errors(app)
-    app.include_router(create_router(store, execution, identity))
+    app.include_router(create_router(store, execution, identity, actor_directory=workspace_actor_directory))
     app.state.hermes_store = store
     app.state.hermes_execution = execution

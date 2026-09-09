@@ -54,27 +54,31 @@ describe("Hermes native automation panel contract", () => {
     expect(automationSource).not.toContain("client.delete(");
   });
 
-  it("matches Goodall interval scheduling and Multica leader routing semantics", () => {
+  it("matches typed scheduling and leader routing semantics", () => {
     expect(automationSource).toContain("client.scheduleConfigure(draft.scheduleId, draft.body)");
+    expect(automationSource).toContain("client.schedulePreview(draft.body, 5)");
+    expect(automationSource).toContain("trigger_type");
+    expect(automationSource).toContain("cron_expression");
+    expect(automationSource).toContain("timezone");
+    expect(automationSource).toContain("secret_ref");
+    expect(automationSource).toContain("max_body_bytes");
     expect(automationSource).toContain("interval_seconds");
     expect(automationSource).toContain("starts_at");
     expect(automationSource).toContain("misfire_coalesce");
     expect(automationSource).toContain('kind: "agent"');
-    expect(automationSource).toContain('scheduleAction.mutate({ entity: row, action: "trigger" })');
+    expect(automationSource).toMatch(/scheduleAction\.mutate\(\{\s*entity: row,\s*action: "trigger",?\s*\}\)/);
     expect(automationSource).toContain("refetchInterval: resourceEnabled ? 5000 : false");
     expect(automationSource).toContain("loading={schedulesQuery.isLoading}");
     expect(automationSource).toContain("if (isVersionConflict(error)) invalidateAutomation()");
     expect(automationSource).toContain("workspace.actionFailed");
     expect(automationSource).toContain('const isActive = row.status === "active"');
     expect(automationSource).toContain('const isPaused = row.status === "paused"');
-    expect(automationSource).toContain('scheduleActionDisabled("trigger", row.status');
-    expect(automationSource).toContain('scheduleActionDisabled("pause", row.status');
-    expect(automationSource).toContain('scheduleActionDisabled("resume", row.status');
+    expect(automationSource).toMatch(/scheduleActionDisabled\(\s*"trigger",\s*row\.status/);
+    expect(automationSource).toMatch(/scheduleActionDisabled\(\s*"pause",\s*row\.status/);
+    expect(automationSource).toMatch(/scheduleActionDisabled\(\s*"resume",\s*row\.status/);
     expect(automationSource).toContain("hasExactlyOneLeader");
     expect(automationSource).toContain("workspace.automation.leaderRoutes");
     expect(automationSource).not.toContain("workspace.automation.nativeScheduleHint");
-    expect(automationSource).not.toContain("cron");
-    expect(automationSource).not.toContain("timezone");
   });
 
   it("gates schedule actions with backend permission semantics and state", () => {
@@ -103,6 +107,7 @@ describe("Hermes native automation panel contract", () => {
     const values = {
       schedule_id: "daily-health",
       title: "Daily health",
+      trigger_type: "interval" as const,
       interval_seconds: 3600,
       starts_at: "2026-09-08T09:00:00+08:00",
       enabled: true,
@@ -113,6 +118,15 @@ describe("Hermes native automation panel contract", () => {
     const apply = buildScheduleConfigureDraft(values, undefined, "stable-key", false);
     expect(preview.scheduleId).toBe("daily-health");
     expect(preview.body.dry_run).toBe(true);
+    expect(preview.body).toMatchObject({
+      trigger: {
+        type: "interval",
+        interval_seconds: 3600,
+        starts_at: "2026-09-08T09:00:00+08:00",
+      },
+    });
+    expect(preview.body).not.toHaveProperty("interval_seconds");
+    expect(preview.body).not.toHaveProperty("starts_at");
     expect(apply.body.dry_run).toBe(false);
     expect(apply.body.idempotency_key).toBe(preview.body.idempotency_key);
     expect(isSchedulePreviewCurrent({ drawerKey: preview.drawerKey, fingerprint: preview.fingerprint, idempotencyKey: preview.body.idempotency_key, response: { ok: true, items: [] } }, apply)).toBe(true);
@@ -120,6 +134,51 @@ describe("Hermes native automation panel contract", () => {
     const changed = buildScheduleConfigureDraft({ ...values, interval_seconds: 7200 }, undefined, "stable-key", false);
     expect(isSchedulePreviewCurrent({ drawerKey: preview.drawerKey, fingerprint: preview.fingerprint, idempotencyKey: preview.body.idempotency_key, response: { ok: true, items: [] } }, changed)).toBe(false);
     expect(automationSource).toContain("setSchedulePreview(undefined)");
+  });
+
+  it("builds cron and webhook typed schedule payloads without legacy root fields", () => {
+    const base = {
+      schedule_id: "workflow",
+      title: "Workflow",
+      enabled: true,
+      misfire_coalesce: true,
+      nodes: [{ id: "pwd", title: "PWD", kind: "command" as const, argvText: "pwd", expected_exit_code: 0, timeout_seconds: 300 }],
+    };
+    const cron = buildScheduleConfigureDraft({
+      ...base,
+      trigger_type: "cron" as const,
+      starts_at: "2026-09-08T09:00:00Z",
+      cron_expression: "0 9 * * 1-5",
+      timezone: "Asia/Shanghai",
+    }, undefined, "cron-key", true);
+    expect(cron.body).toMatchObject({
+      trigger: {
+        type: "cron",
+        cron_expression: "0 9 * * 1-5",
+        timezone: "Asia/Shanghai",
+        starts_at: "2026-09-08T09:00:00Z",
+      },
+    });
+    expect(cron.body).not.toHaveProperty("interval_seconds");
+    expect(cron.body).not.toHaveProperty("starts_at");
+
+    const webhook = buildScheduleConfigureDraft({
+      ...base,
+      trigger_type: "webhook" as const,
+      secret_ref: "HERMES_WEBHOOK_SECRET",
+      max_body_bytes: 65536,
+    }, undefined, "webhook-key", true);
+    expect(webhook.body).toMatchObject({
+      trigger: {
+        type: "webhook",
+        secret_ref: "HERMES_WEBHOOK_SECRET",
+        max_body_bytes: 65536,
+      },
+    });
+    expect(webhook.body).not.toHaveProperty("interval_seconds");
+    expect(webhook.body).not.toHaveProperty("starts_at");
+    expect(automationSource).toContain("client.scheduleWebhookTest");
+    expect(automationSource).toContain("workspace.automation.webhookSignatureGuide");
   });
 
   it("surfaces pairing secret fields without relying on raw evidence JSON", () => {
@@ -141,7 +200,7 @@ describe("Hermes native automation panel contract", () => {
       data: { pairing_secret: "[redacted]", pairing_expires_at: 1788861600, secret_returned_once: true },
     });
     expect(automationSource).toContain("Input.Password");
-    expect(automationSource).toContain("navigator.clipboard.writeText(pairingSecret.secret)");
+    expect(automationSource).toMatch(/navigator\.clipboard\s*\.writeText\(pairingSecret\.secret\)/);
     expect(automationSource).toContain("redactPairingSecrets(response)");
     expect(automationSource).toContain("setPairingSecret(undefined)");
     expect(automationSource).toContain("row.status === \"revoked\"");
@@ -165,7 +224,7 @@ describe("Hermes native automation panel contract", () => {
     const remotePreview = buildDispatchDraft({ task_id: "task-1", target_kind: "remote-command" as const, target_device_id: "device-1", command_id: "pwd", command_title: "PWD", argvText: "pwd", expected_exit_code: 0, timeout_seconds: 300, prompt: "", isolation: "workspace", base_commit: "" }, [task], [agent], squad, [device], "remote-key", true);
     expect(remotePreview.body).toMatchObject({ expected_version: 6, idempotency_key: "remote-key", dry_run: true, target_device_id: "device-1", isolation: "workspace", base_commit: "" });
     expect(automationSource).toContain("setDispatchPreview(undefined)");
-    expect(automationSource).toContain("disabled={!workspaceReady || !canDispatch || !hasCurrentDispatchPreview}");
+    expect(automationSource).toMatch(/disabled=\{\s*!workspaceReady\s*\|\|\s*!canDispatch\s*\|\|\s*!hasCurrentDispatchPreview\s*\}/);
   });
 
   it("opens runs from nested delivery or direct run dispatch responses", () => {
@@ -187,14 +246,15 @@ describe("Hermes native automation panel contract", () => {
     expect(automationSource).toContain('variant: "scheduleHistory"');
     expect(automationSource).toContain("workspace.automation.scheduleRuns");
     expect(automationSource).toContain("dataSource={resultHistoryRuns}");
-    expect(automationSource).toContain("closeResult(); onOpenRun(row);");
+    expect(automationSource).toMatch(/closeResult\(\);\s*onOpenRun\(row\);/);
   });
 
   it("keeps schedule and history tables horizontally stable on narrow viewports", () => {
-    expect(automationSource).toContain('width: 240, ellipsis: true, render: (_, row) => <Button type="link" className="max-w-full overflow-hidden text-ellipsis px-0"');
-    expect(automationSource).toContain('title: t("workspace.automation.interval"), width: 100');
-    expect(automationSource).toContain("scroll={{ x: 1100 }}");
-    expect(automationSource).toContain('title: t("workspace.columns.created"), dataIndex: "created_at", width: 170');
+    expect(automationSource).toMatch(/width: 240,\s*ellipsis: true,\s*render: \(_, row\) => \(\s*<Button\s*type="link"\s*className="max-w-full overflow-hidden text-ellipsis px-0"/);
+    expect(automationSource).toMatch(/title: t\("workspace.automation.trigger"\),\s*width: 240/);
+    expect(automationSource).toMatch(/title: t\("workspace.automation.nextRun"\),\s*width: 190/);
+    expect(automationSource).toContain("scroll={{ x: 1240 }}");
+    expect(automationSource).toMatch(/title: t\("workspace.columns.created"\),\s*dataIndex: "created_at",\s*width: 170/);
     expect(automationSource).toContain("scroll={{ x: 700 }}");
   });
 

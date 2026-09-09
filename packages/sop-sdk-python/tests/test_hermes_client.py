@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -29,6 +28,18 @@ def _envelope(items=None, summary=None):
     }
 
 
+def _schedule_config(trigger: dict | None = None) -> dict:
+    return {
+        "title": "Nightly command",
+        "trigger": trigger or {
+            "type": "interval",
+            "interval_seconds": 60,
+            "starts_at": "2026-09-09T00:00:00+00:00",
+        },
+        "nodes": [{"id": "check", "kind": "command", "argv": ["python", "-V"]}],
+    }
+
+
 class _TestClientTransport(httpx.BaseTransport):
     def __init__(self, client: TestClient) -> None:
         self.client = client
@@ -46,6 +57,37 @@ class _TestClientTransport(httpx.BaseTransport):
             headers=response.headers,
             request=request,
         )
+
+
+def test_collaboration_sdk_drives_native_router_and_idempotent_messages(tmp_path):
+    app = create_app(tmp_path / "core", _token())
+    http = TestClient(app)
+    with HermesClient("http://127.0.0.1", token=_token(), transport=_TestClientTransport(http)) as client:
+        workspace = client.create_workspace({"name": "Team", "root": str(tmp_path)}, idempotency_key="workspace")["items"][0]
+        client.workspace_id = workspace["id"]
+        actor = client.collaboration_members()["items"][0]["id"]
+        data = {"title": "Delivery", "members": [actor], "description": "Evidence"}
+        preview = client.collaboration_configure_channel("general", data, idempotency_key="channel")
+        assert preview["summary"]["dry_run"]
+        assert not client.collaboration_channels()["items"]
+        channel = client.collaboration_configure_channel("general", data, dry_run=False, idempotency_key="channel")["items"][0]
+        updated = client.collaboration_configure_channel(channel["id"], {**data, "title": "Review"}, expected_version=1,
+                                                          dry_run=False, idempotency_key="channel-edit")["items"][0]
+        assert updated["id"] == channel["id"] and updated["version"] == 2
+        thread = client.collaboration_create_thread({"channel_id": channel["id"], "title": "Tests", "body": "Evidence"},
+                                                     dry_run=False, idempotency_key="thread")["items"][0]
+        message = {"channel_id": channel["id"], "thread_id": thread["id"], "body": "Verified", "mentions": [actor]}
+        sent = client.collaboration_send_message(message, dry_run=False, idempotency_key="send")
+        repeat = client.collaboration_send_message(message, dry_run=False, idempotency_key="send")
+        assert sent["items"] == repeat["items"]
+        messages = client.collaboration_messages(thread["id"])["items"]
+        assert len(messages) == 2
+        edited = client.collaboration_edit_message(sent["items"][0]["id"], {"body": "Rechecked"}, expected_version=1,
+                                                    dry_run=False, idempotency_key="edit")["items"][0]
+        assert edited["data"]["body"] == "Rechecked"
+        assert client.collaboration_archive("messages", edited["id"], expected_version=edited["version"],
+                                             dry_run=False, idempotency_key="archive")["items"][0]["status"] == "archived"
+        assert len(client.collaboration_messages(thread["id"])["items"]) == 1
 
 
 def test_list_resource_uses_v1_bearer_workspace_and_query():
@@ -174,11 +216,12 @@ def test_agent_and_squad_contracts_use_native_resources_and_catalog():
     ]
 
 
-def test_new_sdk_actions_are_backed_by_core_openapi(tmp_path):
+def test_new_sdk_actions_are_backed_by_core_openapi_and_action_catalog(tmp_path):
     app_paths = create_app(tmp_path / "db", _token()).openapi()["paths"]
-    generated_paths = json.loads(
-        (Path(__file__).resolve().parents[3] / "apis/generated/hermes-v1/openapi.json").read_text(encoding="utf-8"),
-    )["paths"]
+    action_catalog = json.loads(
+        (Path(__file__).resolve().parents[3] / "apis/hermes-v1-action-catalog.json").read_text(encoding="utf-8"),
+    )
+    actions = {action["id"]: action for action in action_catalog["actions"]}
     expected = (
         ("/api/hermes/v1/agents/catalog", "get"),
         ("/api/hermes/v1/{resource}", "get"),
@@ -186,11 +229,14 @@ def test_new_sdk_actions_are_backed_by_core_openapi(tmp_path):
         ("/api/hermes/v1/{resource}/{entity_id}", "patch"),
         ("/api/hermes/v1/tasks/{task_id}/dispatch", "post"),
         ("/api/hermes/v1/tasks/{task_id}/agent-dispatch", "post"),
+        ("/api/hermes/v1/schedules/preview", "post"),
         ("/api/hermes/v1/schedules/{schedule_id}/configure", "post"),
         ("/api/hermes/v1/schedules/{schedule_id}/trigger", "post"),
         ("/api/hermes/v1/schedules/{schedule_id}/pause", "post"),
         ("/api/hermes/v1/schedules/{schedule_id}/resume", "post"),
         ("/api/hermes/v1/schedules/{schedule_id}/history", "get"),
+        ("/api/hermes/v1/schedules/{schedule_id}/webhook-test", "post"),
+        ("/api/hermes/v1/collaboration/members", "get"),
         ("/api/hermes/v1/devices/{device_id}/pairing", "post"),
         ("/api/hermes/v1/devices/pair", "post"),
         ("/api/hermes/v1/devices/{device_id}/revoke", "post"),
@@ -208,10 +254,23 @@ def test_new_sdk_actions_are_backed_by_core_openapi(tmp_path):
 
     for path, method in expected:
         assert method in app_paths[path]
-        assert method in generated_paths[path]
     for path in absent:
         assert path not in app_paths
-        assert path not in generated_paths
+    assert list(app_paths).index("/api/hermes/v1/schedules/preview") < list(app_paths).index(
+        "/api/hermes/v1/schedules/{schedule_id}/configure",
+    )
+    for action_id, permissions in {
+        "schedule.preview": ["config", "execute"],
+        "schedule.configure": ["config", "execute"],
+        "schedule.trigger": ["execute"],
+        "schedule.pause": ["config"],
+        "schedule.resume": ["config", "execute"],
+        "schedule.webhook-test": ["execute"],
+        "task.agent-dispatch": ["write", "execute"],
+        "collaboration.members": ["read"],
+    }.items():
+        assert actions[action_id]["permissions"] == permissions
+        assert "permission" not in actions[action_id]
 
 
 def test_sdk_contracts_work_against_create_app_routes(tmp_path):
@@ -306,16 +365,28 @@ def test_sdk_contracts_work_against_create_app_routes(tmp_path):
 
         schedule = client.schedule_configure(
             "nightly",
-            {
-                "title": "Nightly command",
-                "interval_seconds": 60,
-                "starts_at": datetime.now(timezone.utc).isoformat(),
-                "nodes": [{"id": "check", "kind": "command", "argv": ["python", "-V"]}],
-            },
+            _schedule_config(),
             dry_run=False,
             idempotency_key="schedule-configure",
         )["items"][0]
         assert schedule["status"] == "active"
+        cron_preview = client.schedule_preview(
+            _schedule_config({"type": "cron", "cron_expression": "30 2 * * *", "timezone": "America/New_York"}),
+        )
+        assert cron_preview["items"][0]["data"]["trigger"]["type"] == "cron"
+        webhook = client.schedule_configure(
+            "webhook",
+            _schedule_config({"type": "webhook", "secret_ref": "HERMES_WEBHOOK_SECRET", "max_body_bytes": 65536}),
+            dry_run=False,
+            idempotency_key="webhook-configure",
+        )["items"][0]
+        webhook_test = client.schedule_webhook_test(
+            "webhook",
+            expected_version=webhook["version"],
+            dry_run=False,
+            idempotency_key="webhook-test",
+        )["items"][0]
+        assert webhook_test["data"]["schedule"]["trigger"] == "webhook:test"
         paused = client.schedule_action(
             "nightly",
             "pause",
@@ -448,7 +519,9 @@ def test_schedule_and_device_pairing_actions_are_explicit_dry_runs():
 
     client = HermesClient("https://hermes.example", token=_token(), transport=httpx.MockTransport(handler))
 
-    client.schedule_configure("sch-1", {"title": "Nightly"}, idempotency_key="schedule-key")
+    client.schedule_configure("sch-1", _schedule_config(), idempotency_key="schedule-key")
+    client.schedule_preview(_schedule_config({"type": "webhook", "secret_ref": "HERMES_WEBHOOK_SECRET"}), runs=3)
+    client.schedule_webhook_test("sch-1", expected_version=2, idempotency_key="webhook-test-key")
     client.schedule_action("sch-1", "trigger", expected_version=2, idempotency_key="trigger-key")
     client.schedule_history("sch-1", limit=10, cursor="c1")
     client.device_pairing("device-1", expected_version=3, idempotency_key="pairing-key")
@@ -457,9 +530,19 @@ def test_schedule_and_device_pairing_actions_are_explicit_dry_runs():
 
     assert requests == [
         ("POST", "/api/hermes/v1/schedules/sch-1/configure", "Bearer token-1", None, {
-            "title": "Nightly",
+            **_schedule_config(),
             "dry_run": True,
             "idempotency_key": "schedule-key",
+        }),
+        ("POST", "/api/hermes/v1/schedules/preview", "Bearer token-1", None, {
+            **_schedule_config({"type": "webhook", "secret_ref": "HERMES_WEBHOOK_SECRET"}),
+            "dry_run": True,
+            "idempotency_key": requests[1][4]["idempotency_key"],
+        }),
+        ("POST", "/api/hermes/v1/schedules/sch-1/webhook-test", "Bearer token-1", None, {
+            "expected_version": 2,
+            "dry_run": True,
+            "idempotency_key": "webhook-test-key",
         }),
         ("POST", "/api/hermes/v1/schedules/sch-1/trigger", "Bearer token-1", None, {"idempotency_key": "trigger-key", "expected_version": 2, "dry_run": True}),
         ("GET", "/api/hermes/v1/schedules/sch-1/history", "Bearer token-1", None, {}),
@@ -471,6 +554,15 @@ def test_schedule_and_device_pairing_actions_are_explicit_dry_runs():
         ("POST", "/api/hermes/v1/devices/pair", None, None, {"device_id": "device-1", "secret": "pair-secret-1234567890"}),
         ("POST", "/api/hermes/v1/devices/device-1/revoke", "Bearer token-1", None, {"idempotency_key": "revoke-key", "expected_version": 3, "dry_run": True}),
     ]
+
+
+def test_schedule_configure_rejects_legacy_top_level_trigger_fields():
+    client = HermesClient("https://hermes.example", token=_token())
+
+    with pytest.raises(ValueError, match="requires"):
+        client.schedule_configure("sch-1", {"title": "Nightly"})
+    with pytest.raises(ValueError, match="nested under trigger"):
+        client.schedule_configure("sch-1", {**_schedule_config(), "interval_seconds": 60})
 
 
 def test_remote_transport_uses_device_auth_routes_only():

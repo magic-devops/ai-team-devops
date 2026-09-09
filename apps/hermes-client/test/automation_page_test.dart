@@ -41,6 +41,21 @@ void main() {
                 'id': 'schedule.configure',
                 'title': 'Configure schedule',
                 'permissions': ['config', 'execute'],
+              },
+              {
+                'id': 'schedule.preview',
+                'title': 'Preview schedule',
+                'permissions': ['config', 'execute'],
+              },
+              {
+                'id': 'schedule.webhook-test',
+                'title': 'Webhook test',
+                'permissions': ['config', 'execute'],
+              },
+              {
+                'id': 'collaboration.members',
+                'title': 'Collaboration members',
+                'permissions': ['read'],
               }
             ],
           }),
@@ -52,10 +67,13 @@ void main() {
 
     final actions = await client.actions();
 
-    expect(actions, hasLength(2));
+    expect(actions, hasLength(5));
     expect(actions.first['id'], 'schedule.trigger');
     expect(actions.first['permissions'], ['execute']);
-    expect(actions.last['permissions'], ['config', 'execute']);
+    expect(actions[1]['permissions'], ['config', 'execute']);
+    expect(actions[2]['id'], 'schedule.preview');
+    expect(actions[3]['id'], 'schedule.webhook-test');
+    expect(actions.last['permissions'], ['read']);
   });
 
   test('agent dispatch posts RunAction fields and target version', () async {
@@ -110,7 +128,52 @@ void main() {
     expect(body['base_commit'], 'a' * 40);
   });
 
-  test('schedule configure uses interval scheduling endpoint', () async {
+  test('agent dispatch can target an allowed remote agent device', () async {
+    final requests = <http.Request>[];
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org/api/hermes/v1',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response(
+          jsonEncode({
+            'ok': true,
+            'summary': {'dry_run': true},
+            'items': [
+              {'id': 'delivery', 'phase': 'preview'}
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    addTearDown(client.close);
+
+    await client.taskAgentDispatch(
+      'task-1',
+      workspaceId: 'ws',
+      expectedVersion: 7,
+      targetVersion: 4,
+      prompt: 'Ship it remotely',
+      agentId: 'agent-1',
+      targetDeviceId: 'device-1',
+      isolation: 'workspace',
+      idempotencyKey: 'dispatch-key',
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(
+        requests.single.url.path, '/api/hermes/v1/tasks/task-1/agent-dispatch');
+    final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(body['target_device_id'], 'device-1');
+    expect(body['agent_id'], 'agent-1');
+    expect(body['isolation'], 'workspace');
+    expect(body.containsKey('base_commit'), isFalse);
+  });
+
+  test('schedule configure sends typed interval trigger only', () async {
     final requests = <http.Request>[];
     final client = HermesApiClient(
       settings: const ConnectionSettings(
@@ -128,8 +191,11 @@ void main() {
       'daily-readiness',
       workspaceId: 'ws',
       title: 'Readiness',
-      intervalSeconds: 300,
-      startsAt: '2026-09-08T00:00:00Z',
+      trigger: {
+        'type': 'interval',
+        'interval_seconds': 300,
+        'starts_at': '2026-09-08T00:00:00Z',
+      },
       nodes: [
         {
           'id': 'check',
@@ -148,11 +214,96 @@ void main() {
     expect(requests.single.url.path,
         '/api/hermes/v1/schedules/daily-readiness/configure');
     final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
-    expect(body['interval_seconds'], 300);
-    expect(body['starts_at'], '2026-09-08T00:00:00Z');
+    expect(body.containsKey('interval_seconds'), isFalse);
+    expect(body.containsKey('starts_at'), isFalse);
+    expect(body['trigger'], {
+      'type': 'interval',
+      'interval_seconds': 300,
+      'starts_at': '2026-09-08T00:00:00Z',
+    });
     expect(body['misfire_coalesce'], true);
     expect(body['expected_version'], 2);
     expect(body['dry_run'], false);
+  });
+
+  test('schedule preview uses static preview route with typed cron trigger',
+      () async {
+    final requests = <http.Request>[];
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response(jsonEncode({'ok': true, 'items': []}), 200);
+      }),
+    );
+    addTearDown(client.close);
+
+    await client.schedulePreview(
+      workspaceId: 'ws',
+      title: 'Cron readiness',
+      trigger: {
+        'type': 'cron',
+        'cron_expression': '30 2 * * *',
+        'timezone': 'America/New_York',
+      },
+      nodes: const [
+        {
+          'id': 'check',
+          'kind': 'command',
+          'argv': ['true']
+        }
+      ],
+      enabled: true,
+      misfireCoalesce: true,
+      idempotencyKey: 'preview-key',
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.url.path, '/api/hermes/v1/schedules/preview');
+    expect(requests.single.url.queryParameters['runs'], '5');
+    final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(body['dry_run'], true);
+    expect(body['trigger'], {
+      'type': 'cron',
+      'cron_expression': '30 2 * * *',
+      'timezone': 'America/New_York',
+    });
+  });
+
+  test('schedule webhook test posts RunAction fields', () async {
+    final requests = <http.Request>[];
+    final client = HermesApiClient(
+      settings: const ConnectionSettings(
+        baseUrl: 'https://example.org',
+        token: 'test',
+      ),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return http.Response(jsonEncode({'ok': true, 'items': []}), 200);
+      }),
+    );
+    addTearDown(client.close);
+
+    await client.scheduleWebhookTest(
+      'daily-readiness',
+      workspaceId: 'ws',
+      expectedVersion: 9,
+      idempotencyKey: 'webhook-key',
+      dryRun: false,
+    );
+
+    expect(requests.single.method, 'POST');
+    expect(requests.single.url.path,
+        '/api/hermes/v1/schedules/daily-readiness/webhook-test');
+    final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
+    expect(body, {
+      'idempotency_key': 'webhook-key',
+      'expected_version': 9,
+      'dry_run': false,
+    });
   });
 
   test('task dispatch can target a paired remote device command', () async {
@@ -340,14 +491,17 @@ void main() {
 
   testWidgets('schedule configure requires preview for current edit',
       (tester) async {
-    final requests = <Map<String, dynamic>>[];
+    final requests = <({String path, Map<String, dynamic> body})>[];
     await _pumpAutomationPage(
       tester,
       initialTabIndex: 2,
       onRequest: (request) {
         if (request.method == 'POST' &&
             request.url.path.contains('/schedules/')) {
-          requests.add(jsonDecode(request.body) as Map<String, dynamic>);
+          requests.add((
+            path: request.url.path,
+            body: jsonDecode(request.body) as Map<String, dynamic>
+          ));
         }
       },
     );
@@ -356,7 +510,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('预览配置'));
     await tester.pumpAndSettle();
-    expect(requests.single['dry_run'], true);
+    expect(requests.single.path, '/api/hermes/v1/schedules/preview');
+    expect(requests.single.body['dry_run'], true);
+    expect(requests.single.body.containsKey('interval_seconds'), isFalse);
+    expect(requests.single.body['trigger'], {
+      'type': 'interval',
+      'interval_seconds': 300,
+      'starts_at': '2026-09-08T00:00:00Z',
+    });
     expect(find.text('应用配置'), findsOneWidget);
     var apply = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, '应用配置'),
@@ -370,6 +531,57 @@ void main() {
     );
     expect(apply.onPressed, isNull);
     expect(requests, hasLength(1));
+  });
+
+  testWidgets('webhook schedule test previews before apply', (tester) async {
+    final requests = <({String path, Map<String, dynamic> body})>[];
+    await _pumpAutomationPage(
+      tester,
+      initialTabIndex: 2,
+      responseFor: (request) {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/schedules')) {
+          return _automationResponse(
+            items: [
+              _scheduleItem(
+                trigger: const {
+                  'type': 'webhook',
+                  'secret_ref': 'HERMES_WEBHOOK_SECRET',
+                  'max_body_bytes': 65536,
+                },
+              )
+            ],
+          );
+        }
+        return null;
+      },
+      onRequest: (request) {
+        if (request.method == 'POST' &&
+            request.url.path
+                .endsWith('/schedules/daily-readiness/webhook-test')) {
+          requests.add((
+            path: request.url.path,
+            body: jsonDecode(request.body) as Map<String, dynamic>
+          ));
+        }
+      },
+    );
+
+    await tester.tap(find.byTooltip('Webhook 测试'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('预览测试'));
+    await tester.pumpAndSettle();
+    expect(requests.single.path,
+        '/api/hermes/v1/schedules/daily-readiness/webhook-test');
+    expect(requests.single.body['dry_run'], true);
+    expect(requests.single.body['expected_version'], 4);
+
+    await tester.tap(find.text('派发测试'));
+    await tester.pumpAndSettle();
+    expect(requests, hasLength(2));
+    expect(requests.last.body['dry_run'], false);
+    expect(requests.last.body['idempotency_key'],
+        requests.first.body['idempotency_key']);
   });
 
   testWidgets('remote dispatch invalidates preview when command changes',
@@ -406,6 +618,50 @@ void main() {
     );
     expect(apply.onPressed, isNull);
     expect(requests, hasLength(1));
+  });
+
+  testWidgets('remote agent dispatch selects only allowed runtime devices',
+      (tester) async {
+    final requests = <Map<String, dynamic>>[];
+    await _pumpAutomationPage(
+      tester,
+      initialTabIndex: 4,
+      onRequest: (request) {
+        if (request.method == 'POST' &&
+            request.url.path.endsWith('/agent-dispatch')) {
+          requests.add(jsonDecode(request.body) as Map<String, dynamic>);
+        }
+      },
+      responseFor: (request) {
+        if (request.url.path.endsWith('/devices')) {
+          return _automationResponse(items: [
+            _deviceItem(id: 'device-command', allowedRuntimes: ['command']),
+            _deviceItem(id: 'device-agent', allowedRuntimes: ['agent']),
+          ]);
+        }
+        return null;
+      },
+    );
+
+    await tester.tap(find.text('Remote Agent'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('device-agent'), findsWidgets);
+    expect(find.textContaining('device-command'), findsNothing);
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Prompt'), 'Run remote agent');
+    await tester.scrollUntilVisible(
+      find.text('预览派发'),
+      120,
+      scrollable: find.byType(Scrollable).at(1),
+    );
+    await tester.tap(find.text('预览派发'));
+    await tester.pumpAndSettle();
+
+    expect(requests.single['dry_run'], true);
+    expect(requests.single['target_device_id'], 'device-agent');
+    expect(requests.single['agent_id'], 'agent-1');
+    expect(requests.single['isolation'], 'workspace');
   });
 
   testWidgets('device creation sends only backend-supported fields',
@@ -687,7 +943,11 @@ Map<String, dynamic> _responseFor(
         : jsonDecode(request.body) as Map<String, dynamic>;
     return {
       'ok': true,
-      'summary': {'dry_run': body['dry_run'] == true},
+      'summary': {
+        'dry_run': body['dry_run'] == true,
+        if (path.endsWith('/schedules/preview'))
+          'next_runs': ['2026-09-08T00:05:00Z'],
+      },
       'items': [
         {'id': 'schedule-preview', 'phase': 'preview'}
       ],
@@ -776,17 +1036,7 @@ Map<String, dynamic> _responseFor(
       ],
     'schedules' => [_scheduleItem()],
     'devices' => [
-        {
-          'id': 'device-1',
-          'kind': 'devices',
-          'version': 5,
-          'status': 'active',
-          'data': {
-            'title': 'Desktop worker',
-            'platform': 'desktop',
-            'endpoint': 'local',
-          },
-        }
+        _deviceItem(id: 'device-1', allowedRuntimes: ['command', 'agent'])
       ],
     'tasks' => [
         {
@@ -836,9 +1086,33 @@ Map<String, dynamic> _responseFor(
   );
 }
 
+Map<String, dynamic> _deviceItem({
+  required String id,
+  required List<String> allowedRuntimes,
+  String status = 'active',
+}) {
+  return {
+    'id': id,
+    'kind': 'devices',
+    'version': 5,
+    'status': status,
+    'data': {
+      'title': id,
+      'platform': 'desktop',
+      'endpoint': 'local',
+      'allowed_runtimes': allowedRuntimes,
+    },
+  };
+}
+
 Map<String, dynamic> _scheduleItem({
   int version = 4,
   String status = 'active',
+  Map<String, dynamic> trigger = const {
+    'type': 'interval',
+    'interval_seconds': 300,
+    'starts_at': '2026-09-08T00:00:00Z',
+  },
 }) {
   return {
     'id': 'daily-readiness',
@@ -847,8 +1121,7 @@ Map<String, dynamic> _scheduleItem({
     'status': status,
     'data': {
       'title': 'Daily readiness',
-      'interval_seconds': 300,
-      'starts_at': '2026-09-08T00:00:00Z',
+      'trigger': trigger,
       'next_due_at': '2026-09-08T00:05:00Z',
       'nodes': [
         {

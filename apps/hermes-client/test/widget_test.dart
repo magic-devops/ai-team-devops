@@ -31,7 +31,7 @@ void main() {
       expect(find.byType(size.width < 760 ? NavigationBar : NavigationRail),
           findsOneWidget);
       expect(tester.takeException(), isNull);
-      for (final label in ['项目', '资产', '收件箱', '自动化', '设置', '工作台']) {
+      for (final label in ['项目', '资产', '收件箱', '团队消息', '自动化', '设置', '工作台']) {
         final navigation =
             find.byType(size.width < 760 ? NavigationBar : NavigationRail);
         await tester.tap(

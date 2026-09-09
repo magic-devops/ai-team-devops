@@ -15,6 +15,23 @@ class AgentDispatch:
     isolation: Literal["workspace", "git_worktree"] | None = None
     prompt: str | None = None
     squad_id: str | None = None
+    target_device_id: str | None = None
+
+@dataclass
+class ChannelConfigure:
+    idempotency_key: str
+    members: list[str]
+    title: str
+    archived: bool | None = None
+    description: str | None = None
+    dry_run: bool | None = None
+    expected_version: int | None = None
+
+@dataclass
+class CollaborationAction:
+    idempotency_key: str
+    dry_run: bool | None = None
+    expected_version: int | None = None
 
 @dataclass
 class Decision:
@@ -41,6 +58,35 @@ class HTTPValidationError:
     detail: list[ValidationError] | None = None
 
 @dataclass
+class MarkRead:
+    channel_id: str
+    cursor: int
+    idempotency_key: str
+    dry_run: bool | None = None
+    expected_version: int | None = None
+    thread_id: str | None = None
+
+@dataclass
+class MessageEdit:
+    body: str
+    idempotency_key: str
+    dry_run: bool | None = None
+    expected_version: int | None = None
+    mentions: list[str] | None = None
+
+@dataclass
+class MessageSend:
+    body: str
+    channel_id: str
+    idempotency_key: str
+    thread_id: str
+    dry_run: bool | None = None
+    expected_version: int | None = None
+    mentions: list[str] | None = None
+    parent_id: str | None = None
+    recipients: list[str] | None = None
+
+@dataclass
 class Mutation:
     idempotency_key: str
     data: dict[str, Any] | None = None
@@ -65,6 +111,7 @@ class PairRedeem:
 @dataclass
 class RemoteClaim:
     idempotency_key: str
+    runtime_capabilities: list[str] | None = None
     worker_version: str | None = None
 
 @dataclass
@@ -90,14 +137,23 @@ class RunAction:
 @dataclass
 class ScheduleConfigure:
     idempotency_key: str
-    interval_seconds: int
     nodes: list[Node]
-    starts_at: str
     title: str
+    trigger: ScheduleTrigger
     dry_run: bool | None = None
     enabled: bool | None = None
     expected_version: int | None = None
     misfire_coalesce: bool | None = None
+
+@dataclass
+class ScheduleTrigger:
+    cron_expression: str | None = None
+    interval_seconds: int | None = None
+    max_body_bytes: int | None = None
+    secret_ref: str | None = None
+    starts_at: str | None = None
+    timezone: str | None = None
+    type: Literal["interval", "cron", "webhook"] | None = None
 
 @dataclass
 class TaskDispatch:
@@ -118,6 +174,17 @@ class TaskReview:
     run_id: str
     run_version: int
     dry_run: bool | None = None
+
+@dataclass
+class ThreadCreate:
+    channel_id: str
+    idempotency_key: str
+    title: str
+    body: str | None = None
+    dry_run: bool | None = None
+    expected_version: int | None = None
+    mentions: list[str] | None = None
+    recipients: list[str] | None = None
 
 @dataclass
 class ValidationError:

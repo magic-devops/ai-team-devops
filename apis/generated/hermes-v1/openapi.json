@@ -5,6 +5,585 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/hermes/v1/collaboration/members": {
+      "get": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Members",
+        "operationId": "members_api_hermes_v1_collaboration_members_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/channels": {
+      "get": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Channels",
+        "operationId": "channels_api_hermes_v1_collaboration_channels_get",
+        "parameters": [
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/channels/{channel_id}/configure": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Configure Channel",
+        "operationId": "configure_channel_api_hermes_v1_collaboration_channels__channel_id__configure_post",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelConfigure"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/channels/{channel_id}/threads": {
+      "get": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Threads",
+        "operationId": "threads_api_hermes_v1_collaboration_channels__channel_id__threads_get",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel Id"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Archived"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/threads": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Create Thread",
+        "operationId": "create_thread_api_hermes_v1_collaboration_threads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/threads/{thread_id}/archive": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Archive Thread",
+        "operationId": "archive_thread_api_hermes_v1_collaboration_threads__thread_id__archive_post",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollaborationAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/threads/{thread_id}/messages": {
+      "get": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Messages",
+        "operationId": "messages_api_hermes_v1_collaboration_threads__thread_id__messages_get",
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "After"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/messages": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Send Message",
+        "operationId": "send_message_api_hermes_v1_collaboration_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSend"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/messages/{message_id}": {
+      "patch": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Edit Message",
+        "operationId": "edit_message_api_hermes_v1_collaboration_messages__message_id__patch",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/messages/{message_id}/archive": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Archive Message",
+        "operationId": "archive_message_api_hermes_v1_collaboration_messages__message_id__archive_post",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CollaborationAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/inbox": {
+      "get": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Inbox",
+        "operationId": "inbox_api_hermes_v1_collaboration_inbox_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/collaboration/read": {
+      "post": {
+        "tags": [
+          "Hermes Collaboration"
+        ],
+        "summary": "Mark Read",
+        "operationId": "mark_read_api_hermes_v1_collaboration_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/devices/{device_id}/pairing": {
       "post": {
         "tags": [
@@ -261,6 +840,61 @@
         }
       }
     },
+    "/api/hermes/v1/schedules/preview": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Preview",
+        "operationId": "preview_api_hermes_v1_schedules_preview_post",
+        "parameters": [
+          {
+            "name": "runs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 0,
+              "default": 5,
+              "title": "Runs"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleConfigure"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/schedules/{schedule_id}/configure": {
       "post": {
         "tags": [
@@ -320,6 +954,100 @@
         ],
         "summary": "Trigger",
         "operationId": "trigger_api_hermes_v1_schedules__schedule_id__trigger_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/webhook": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Webhook",
+        "operationId": "webhook_api_hermes_v1_schedules__schedule_id__webhook_post",
+        "parameters": [
+          {
+            "name": "schedule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schedule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/schedules/{schedule_id}/webhook-test": {
+      "post": {
+        "tags": [
+          "Hermes Scheduling"
+        ],
+        "summary": "Webhook Test",
+        "operationId": "webhook_test_api_hermes_v1_schedules__schedule_id__webhook_test_post",
         "parameters": [
           {
             "name": "schedule_id",
@@ -1489,6 +2217,12 @@
             "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})?$",
             "title": "Base Commit",
             "default": ""
+          },
+          "target_device_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Target Device Id",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -1499,6 +2233,100 @@
           "target_version"
         ],
         "title": "AgentDispatch"
+      },
+      "ChannelConfigure": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Members"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Description",
+            "default": ""
+          },
+          "archived": {
+            "type": "boolean",
+            "title": "Archived",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "title",
+          "members"
+        ],
+        "title": "ChannelConfigure"
+      },
+      "CollaborationAction": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key"
+        ],
+        "title": "CollaborationAction"
       },
       "Decision": {
         "properties": {
@@ -1626,6 +2454,182 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "MarkRead": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "channel_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "thread_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Thread Id",
+            "default": ""
+          },
+          "cursor": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cursor"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "channel_id",
+          "cursor"
+        ],
+        "title": "MarkRead"
+      },
+      "MessageEdit": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "mentions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Mentions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "body"
+        ],
+        "title": "MessageEdit"
+      },
+      "MessageSend": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "channel_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "thread_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Thread Id"
+          },
+          "parent_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Parent Id",
+            "default": ""
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "mentions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Mentions"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Recipients"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "channel_id",
+          "thread_id",
+          "body"
+        ],
+        "title": "MessageSend"
       },
       "Mutation": {
         "properties": {
@@ -1761,6 +2765,14 @@
             "maxLength": 80,
             "title": "Worker Version",
             "default": ""
+          },
+          "runtime_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 8,
+            "title": "Runtime Capabilities"
           }
         },
         "additionalProperties": false,
@@ -1877,16 +2889,8 @@
             "minLength": 1,
             "title": "Title"
           },
-          "interval_seconds": {
-            "type": "integer",
-            "maximum": 31536000.0,
-            "minimum": 10.0,
-            "title": "Interval Seconds"
-          },
-          "starts_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Starts At"
+          "trigger": {
+            "$ref": "#/components/schemas/ScheduleTrigger"
           },
           "nodes": {
             "items": {
@@ -1935,12 +2939,78 @@
         "type": "object",
         "required": [
           "title",
-          "interval_seconds",
-          "starts_at",
+          "trigger",
           "nodes",
           "idempotency_key"
         ],
         "title": "ScheduleConfigure"
+      },
+      "ScheduleTrigger": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "interval",
+              "cron",
+              "webhook"
+            ],
+            "title": "Type",
+            "default": "interval"
+          },
+          "interval_seconds": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 31536000.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval Seconds"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "cron_expression": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Cron Expression",
+            "default": ""
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Timezone",
+            "default": "UTC"
+          },
+          "secret_ref": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]{0,127}$",
+            "title": "Secret Ref",
+            "default": ""
+          },
+          "max_body_bytes": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Max Body Bytes",
+            "default": 65536
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ScheduleTrigger"
       },
       "TaskDispatch": {
         "properties": {
@@ -2055,6 +3125,75 @@
           "comment"
         ],
         "title": "TaskReview"
+      },
+      "ThreadCreate": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          },
+          "channel_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Channel Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000,
+            "title": "Body",
+            "default": ""
+          },
+          "mentions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Mentions"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Recipients"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "channel_id",
+          "title"
+        ],
+        "title": "ThreadCreate"
       },
       "ValidationError": {
         "properties": {

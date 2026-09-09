@@ -40,10 +40,15 @@ def make_client(tmp_path, principal: Principal | None = None, *, agentd: str = "
 def config_body(**overrides):
     starts_at = overrides.pop("starts_at", datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc))
     starts_at_value = starts_at if isinstance(starts_at, str) else starts_at.isoformat()
+    interval_seconds = overrides.pop("interval_seconds", 60)
+    trigger = overrides.pop("trigger", {
+        "type": "interval",
+        "interval_seconds": interval_seconds,
+        "starts_at": starts_at_value,
+    })
     body = {
         "title": "Nightly checks",
-        "interval_seconds": 60,
-        "starts_at": starts_at_value,
+        "trigger": trigger,
         "nodes": [{"id": "test", "argv": ["go", "test", "./..."], "timeout_seconds": 30}],
         "enabled": True,
         "misfire_coalesce": True,
@@ -89,6 +94,7 @@ def test_configure_rejects_invalid_config_and_missing_execute_authority(tmp_path
         config_body(nodes=[{"id": "nul", "argv": ["echo", "bad\x00arg"]}]),
         config_body(target_device_id="device-1"),
         config_body(authority={"actor": "forged"}),
+        {**config_body(), "interval_seconds": 60, "starts_at": datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc).isoformat()},
     ]
     for body in cases:
         response = client.post(BASE + "/schedules/build/configure", json=body)

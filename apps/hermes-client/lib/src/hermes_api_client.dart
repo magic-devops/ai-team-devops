@@ -126,6 +126,7 @@ class HermesApiClient {
     required String idempotencyKey,
     String? agentId,
     String? squadId,
+    String? targetDeviceId,
     String isolation = 'workspace',
     String? baseCommit,
     bool dryRun = true,
@@ -161,6 +162,8 @@ class HermesApiClient {
         'dry_run': dryRun,
         if (hasAgent) 'agent_id': agentId,
         if (hasSquad) 'squad_id': squadId,
+        if (targetDeviceId != null && targetDeviceId.isNotEmpty)
+          'target_device_id': targetDeviceId,
         'prompt': prompt.trim(),
         'isolation': isolation,
         if (baseCommit != null && baseCommit.isNotEmpty)
@@ -174,8 +177,7 @@ class HermesApiClient {
     String scheduleId, {
     required String workspaceId,
     required String title,
-    required int intervalSeconds,
-    required String startsAt,
+    required Map<String, dynamic> trigger,
     required List<Map<String, dynamic>> nodes,
     required bool enabled,
     required bool misfireCoalesce,
@@ -186,15 +188,12 @@ class HermesApiClient {
     if (scheduleId.trim().isEmpty) {
       throw HermesApiException('Schedule ID is required.');
     }
-    if (intervalSeconds < 10) {
-      throw HermesApiException('interval_seconds must be at least 10.');
-    }
+    _validateScheduleTrigger(trigger);
     return _post(
       '/schedules/${Uri.encodeComponent(scheduleId.trim())}/configure',
       {
         'title': title.trim(),
-        'interval_seconds': intervalSeconds,
-        'starts_at': startsAt.trim(),
+        'trigger': trigger,
         'nodes': nodes,
         'enabled': enabled,
         'misfire_coalesce': misfireCoalesce,
@@ -203,6 +202,35 @@ class HermesApiClient {
         'dry_run': dryRun,
       },
       workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> schedulePreview({
+    required String workspaceId,
+    required String title,
+    required Map<String, dynamic> trigger,
+    required List<Map<String, dynamic>> nodes,
+    required bool enabled,
+    required bool misfireCoalesce,
+    required String idempotencyKey,
+    int? expectedVersion,
+    int runs = 5,
+  }) {
+    _validateScheduleTrigger(trigger);
+    return _post(
+      '/schedules/preview',
+      {
+        'title': title.trim(),
+        'trigger': trigger,
+        'nodes': nodes,
+        'enabled': enabled,
+        'misfire_coalesce': misfireCoalesce,
+        'idempotency_key': idempotencyKey,
+        if (expectedVersion != null) 'expected_version': expectedVersion,
+        'dry_run': true,
+      },
+      workspaceId: workspaceId,
+      query: {'runs': runs},
     );
   }
 
@@ -227,6 +255,24 @@ class HermesApiClient {
     );
   }
 
+  Future<HermesEnvelope> scheduleWebhookTest(
+    String scheduleId, {
+    required String workspaceId,
+    required int expectedVersion,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) {
+    return _post(
+      '/schedules/${Uri.encodeComponent(scheduleId)}/webhook-test',
+      {
+        'idempotency_key': idempotencyKey,
+        'expected_version': expectedVersion,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> scheduleHistory(
     String scheduleId, {
     required String workspaceId,
@@ -236,6 +282,230 @@ class HermesApiClient {
       workspaceId: workspaceId,
     );
     return _maps(envelope);
+  }
+
+  Future<List<String>> collaborationMembers({
+    required String workspaceId,
+  }) async {
+    final envelope =
+        await _get('/collaboration/members', workspaceId: workspaceId);
+    return envelope.items
+        .whereType<Map>()
+        .map((item) => (item['id'] ?? '').toString())
+        .where((id) => id.isNotEmpty)
+        .toList();
+  }
+
+  Future<HermesEnvelope> collaborationChannels({
+    required String workspaceId,
+    bool includeArchived = false,
+  }) {
+    return _get('/collaboration/channels', workspaceId: workspaceId, query: {
+      'include_archived': includeArchived,
+    });
+  }
+
+  Future<HermesEnvelope> collaborationConfigureChannel(
+    String channelId, {
+    required String workspaceId,
+    required String title,
+    required List<String> members,
+    required String description,
+    required bool archived,
+    required String idempotencyKey,
+    int? expectedVersion,
+    bool dryRun = true,
+  }) {
+    if (channelId.trim().isEmpty) {
+      throw HermesApiException('Channel ID is required.');
+    }
+    if (title.trim().isEmpty) {
+      throw HermesApiException('Channel title is required.');
+    }
+    if (members.isEmpty) {
+      throw HermesApiException('Select at least one channel member.');
+    }
+    return _post(
+      '/collaboration/channels/${Uri.encodeComponent(channelId.trim())}/configure',
+      {
+        'title': title.trim(),
+        'members': members,
+        'description': description.trim(),
+        'archived': archived,
+        'idempotency_key': idempotencyKey,
+        if (expectedVersion != null) 'expected_version': expectedVersion,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> collaborationThreads(
+    String channelId, {
+    required String workspaceId,
+    bool includeArchived = false,
+    String cursor = '',
+    int limit = 100,
+  }) {
+    return _get(
+      '/collaboration/channels/${Uri.encodeComponent(channelId)}/threads',
+      workspaceId: workspaceId,
+      query: {
+        'include_archived': includeArchived,
+        'cursor': cursor,
+        'limit': limit,
+      },
+    );
+  }
+
+  Future<HermesEnvelope> collaborationCreateThread({
+    required String workspaceId,
+    required String channelId,
+    required String title,
+    required String body,
+    required List<String> mentions,
+    required List<String> recipients,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) {
+    if (channelId.isEmpty) {
+      throw HermesApiException('Select a channel first.');
+    }
+    if (title.trim().isEmpty) {
+      throw HermesApiException('Thread title is required.');
+    }
+    return _post(
+      '/collaboration/threads',
+      {
+        'channel_id': channelId,
+        'title': title.trim(),
+        'body': body.trim(),
+        'mentions': mentions,
+        'recipients': recipients,
+        'idempotency_key': idempotencyKey,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> collaborationMessages(
+    String threadId, {
+    required String workspaceId,
+    int after = 0,
+    int limit = 100,
+  }) {
+    return _get(
+      '/collaboration/threads/${Uri.encodeComponent(threadId)}/messages',
+      workspaceId: workspaceId,
+      query: {'after': after, 'limit': limit},
+    );
+  }
+
+  Future<HermesEnvelope> collaborationSendMessage({
+    required String workspaceId,
+    required String channelId,
+    required String threadId,
+    required String parentId,
+    required String body,
+    required List<String> mentions,
+    required List<String> recipients,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) {
+    if (body.trim().isEmpty) {
+      throw HermesApiException('Message body is required.');
+    }
+    return _post(
+      '/collaboration/messages',
+      {
+        'channel_id': channelId,
+        'thread_id': threadId,
+        'parent_id': parentId,
+        'body': body.trim(),
+        'mentions': mentions,
+        'recipients': recipients,
+        'idempotency_key': idempotencyKey,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> collaborationEditMessage(
+    String messageId, {
+    required String workspaceId,
+    required int expectedVersion,
+    required String body,
+    required List<String> mentions,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) {
+    if (body.trim().isEmpty) {
+      throw HermesApiException('Message body is required.');
+    }
+    return _patch(
+      '/collaboration/messages/${Uri.encodeComponent(messageId)}',
+      {
+        'expected_version': expectedVersion,
+        'body': body.trim(),
+        'mentions': mentions,
+        'idempotency_key': idempotencyKey,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> collaborationArchive(
+    String resource,
+    String id, {
+    required String workspaceId,
+    required int expectedVersion,
+    required String idempotencyKey,
+    bool dryRun = true,
+  }) {
+    if (!{'threads', 'messages'}.contains(resource)) {
+      throw HermesApiException('Unsupported collaboration archive: $resource');
+    }
+    return _post(
+      '/collaboration/$resource/${Uri.encodeComponent(id)}/archive',
+      {
+        'expected_version': expectedVersion,
+        'idempotency_key': idempotencyKey,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
+  }
+
+  Future<HermesEnvelope> collaborationInbox({
+    required String workspaceId,
+    int limit = 100,
+  }) {
+    return _get('/collaboration/inbox',
+        workspaceId: workspaceId, query: {'limit': limit});
+  }
+
+  Future<HermesEnvelope> collaborationMarkRead({
+    required String workspaceId,
+    required String channelId,
+    required String threadId,
+    required int cursor,
+    required String idempotencyKey,
+    bool dryRun = false,
+  }) {
+    return _post(
+      '/collaboration/read',
+      {
+        'channel_id': channelId,
+        'thread_id': threadId,
+        'cursor': cursor,
+        'idempotency_key': idempotencyKey,
+        'dry_run': dryRun,
+      },
+      workspaceId: workspaceId,
+    );
   }
 
   Future<HermesEnvelope> devicePairing(
@@ -484,8 +754,15 @@ class HermesApiClient {
     String path,
     Map<String, dynamic> body, {
     String? workspaceId,
+    Map<String, Object?> query = const {},
   }) async {
-    return _request('POST', path, body: body, workspaceId: workspaceId);
+    return _request(
+      'POST',
+      path,
+      query: query,
+      body: body,
+      workspaceId: workspaceId,
+    );
   }
 
   Future<HermesEnvelope> _patch(
@@ -633,6 +910,48 @@ class HermesApiClient {
 
   String _idempotencyKey(String prefix) {
     return '$prefix-${DateTime.now().toUtc().microsecondsSinceEpoch}';
+  }
+
+  void _validateScheduleTrigger(Map<String, dynamic> trigger) {
+    final type = trigger['type'];
+    if (type == 'interval') {
+      final intervalSeconds = trigger['interval_seconds'];
+      if (intervalSeconds is! int || intervalSeconds < 10) {
+        throw HermesApiException('interval_seconds must be at least 10.');
+      }
+      final startsAt = trigger['starts_at'];
+      if (startsAt is! String || startsAt.trim().isEmpty) {
+        throw HermesApiException(
+            'starts_at is required for interval schedules.');
+      }
+      return;
+    }
+    if (type == 'cron') {
+      final expression = trigger['cron_expression'];
+      if (expression is! String ||
+          expression.trim().split(RegExp(r'\s+')).length != 5) {
+        throw HermesApiException('cron_expression must contain five fields.');
+      }
+      final timezone = trigger['timezone'];
+      if (timezone is! String || timezone.trim().isEmpty) {
+        throw HermesApiException('timezone is required for cron schedules.');
+      }
+      return;
+    }
+    if (type == 'webhook') {
+      final secretRef = trigger['secret_ref'];
+      if (secretRef is! String || secretRef.trim().isEmpty) {
+        throw HermesApiException(
+            'secret_ref is required for webhook schedules.');
+      }
+      final maxBodyBytes = trigger['max_body_bytes'];
+      if (maxBodyBytes is! int || maxBodyBytes < 1 || maxBodyBytes > 1048576) {
+        throw HermesApiException(
+            'max_body_bytes must be between 1 and 1048576.');
+      }
+      return;
+    }
+    throw HermesApiException('Unsupported schedule trigger type: $type');
   }
 
   String _cleanPath(String value) {

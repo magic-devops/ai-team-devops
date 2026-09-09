@@ -8,6 +8,23 @@ export interface AgentDispatch {
   isolation?: "workspace" | "git_worktree";
   prompt?: string;
   squad_id?: string;
+  target_device_id?: string;
+}
+
+export interface ChannelConfigure {
+  idempotency_key: string;
+  members: Array<string>;
+  title: string;
+  archived?: boolean;
+  description?: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
+}
+
+export interface CollaborationAction {
+  idempotency_key: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
 }
 
 export interface Decision {
@@ -34,6 +51,35 @@ export interface HTTPValidationError {
   detail?: Array<ValidationError>;
 }
 
+export interface MarkRead {
+  channel_id: string;
+  cursor: number;
+  idempotency_key: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
+  thread_id?: string;
+}
+
+export interface MessageEdit {
+  body: string;
+  idempotency_key: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
+  mentions?: Array<string>;
+}
+
+export interface MessageSend {
+  body: string;
+  channel_id: string;
+  idempotency_key: string;
+  thread_id: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
+  mentions?: Array<string>;
+  parent_id?: string;
+  recipients?: Array<string>;
+}
+
 export interface Mutation {
   idempotency_key: string;
   data?: Record<string, unknown>;
@@ -58,6 +104,7 @@ export interface PairRedeem {
 
 export interface RemoteClaim {
   idempotency_key: string;
+  runtime_capabilities?: Array<string>;
   worker_version?: string;
 }
 
@@ -83,14 +130,23 @@ export interface RunAction {
 
 export interface ScheduleConfigure {
   idempotency_key: string;
-  interval_seconds: number;
   nodes: Array<Node>;
-  starts_at: string;
   title: string;
+  trigger: ScheduleTrigger;
   dry_run?: boolean;
   enabled?: boolean;
   expected_version?: number | null;
   misfire_coalesce?: boolean;
+}
+
+export interface ScheduleTrigger {
+  cron_expression?: string;
+  interval_seconds?: number | null;
+  max_body_bytes?: number;
+  secret_ref?: string;
+  starts_at?: string | null;
+  timezone?: string;
+  type?: "interval" | "cron" | "webhook";
 }
 
 export interface TaskDispatch {
@@ -111,6 +167,17 @@ export interface TaskReview {
   run_id: string;
   run_version: number;
   dry_run?: boolean;
+}
+
+export interface ThreadCreate {
+  channel_id: string;
+  idempotency_key: string;
+  title: string;
+  body?: string;
+  dry_run?: boolean;
+  expected_version?: number | null;
+  mentions?: Array<string>;
+  recipients?: Array<string>;
 }
 
 export interface ValidationError {

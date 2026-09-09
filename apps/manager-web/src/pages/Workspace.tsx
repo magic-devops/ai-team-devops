@@ -26,6 +26,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useTranslation } from "react-i18next";
 import { Activity, Database, Download, Edit3, KeyRound, Play, Plus, RefreshCw, Settings, ShieldCheck, Square, Workflow } from "lucide-react";
 import { AutomationPanel } from "./AutomationPanel";
+import { CollaborationPanel } from "./CollaborationPanel";
 import { TaskDeliveryPanel } from "./TaskDeliveryPanel";
 import {
   DEFAULT_HERMES_BASE_URL,
@@ -63,7 +64,7 @@ type QueryState = {
   limit: number;
 };
 
-type WorkspaceTab = HermesResource | "automation";
+type WorkspaceTab = HermesResource | "automation" | "collaboration";
 type DrawerMode = "create" | "edit";
 
 type BusinessFormValues = {
@@ -652,7 +653,7 @@ export function Workspace() {
         onChange={(key) => {
           const nextTab = key as WorkspaceTab;
           setActiveWorkspaceTab(nextTab);
-          if (nextTab === "automation") {
+          if (nextTab === "automation" || nextTab === "collaboration") {
             setSelected(undefined);
             setActionResult(undefined);
             setBusinessDrawer(undefined);
@@ -668,11 +669,13 @@ export function Workspace() {
           setWorkspaceDrawer(false);
           setQuery((prev) => ({ ...prev, status: undefined }));
         }}
-        items={[...RESOURCE_TABS.map((resource) => ({ key: resource, label: t(`workspace.resources.${resource}`) })), { key: "automation", label: t("workspace.automation.tab") }]}
+        items={[...RESOURCE_TABS.map((resource) => ({ key: resource, label: t(`workspace.resources.${resource}`) })), { key: "automation", label: t("workspace.automation.tab") }, { key: "collaboration", label: t("collaboration.tab") }]}
       />
 
       {activeWorkspaceTab === "automation" ? (
         <AutomationPanel client={client} workspaceReady={workspaceReady} connected={connected} permissions={permissions} scopeKey={currentScopeSignature} onOpenRun={(run) => { setSelected(run); setPendingRun(run); setActiveResource("runs"); setActiveWorkspaceTab("runs"); queryClient.invalidateQueries({ queryKey: ["hermes"] }); }} />
+      ) : activeWorkspaceTab === "collaboration" ? (
+        <CollaborationPanel key={currentScopeSignature} client={client} workspaceReady={workspaceReady} connected={connected} permissions={permissions} scopeKey={currentScopeSignature} />
       ) : (
       <>
       <Row gutter={[16, 16]}>

@@ -10,6 +10,64 @@ from .remote import is_paired_device
 from .transactional import Store, digest, now
 
 
+def _device_allows_runtime(device: dict, runtime: str) -> bool:
+    allowed = device["data"].get("allowed_runtimes")
+    if allowed is None:
+        return runtime == "command"
+    return isinstance(allowed, list) and runtime in allowed
+
+
+def _validate_remote_target(store: Store, conn, principal: Principal, workspace: str,
+                            body: TaskDispatch, agent_source) -> None:
+    device = store._get(conn, principal, workspace, "devices", body.target_device_id)
+    if not is_paired_device(store, principal, workspace, body.target_device_id, conn=conn):
+        raise CoreError("device_unpaired", "Pair an active device before dispatch", 409)
+    if body.isolation != "workspace":
+        raise CoreError("remote_unsupported", "Remote delivery requires workspace isolation", 422)
+    if any(node.kind == "approval" for node in body.nodes):
+        raise CoreError("remote_unsupported", "Remote approval nodes require the server checkpoint path", 422)
+    agent_nodes = [node for node in body.nodes if node.kind == "agent"]
+    if agent_nodes:
+        if not agent_source or agent_source.get("resource") != "agents":
+            raise CoreError("remote_unsupported", "Remote delivery supports single-agent dispatch only", 422)
+        if not _device_allows_runtime(device, "agent"):
+            raise CoreError("device_runtime_unsupported", "Device does not allow remote agent execution", 409)
+    if any(node.kind not in {"command", "agent"} for node in body.nodes):
+        raise CoreError("remote_unsupported", "Remote delivery supports command and agent nodes only", 422)
+
+
+def _validate_dispatch_request(task: dict, body: TaskDispatch) -> str:
+    if task["version"] != body.expected_version:
+        raise CoreError("version_conflict", "Task changed; reload the execution plan", 409)
+    if task["status"] in {"completed", "archived"} or task["data"].get("delivery", {}).get("phase") == "executing":
+        raise CoreError("delivery_active", "Resolve the current delivery before dispatching again", 409)
+    criteria = task["data"].get("acceptance_criteria")
+    if not isinstance(criteria, str) or not criteria.strip():
+        raise CoreError("acceptance_required", "Add acceptance criteria before dispatching", 422)
+    if len({node.id for node in body.nodes}) != len(body.nodes):
+        raise CoreError("invalid_graph", "Node IDs must be unique", 422)
+    commands = [node for node in body.nodes if node.kind == "command"]
+    if not any(node.kind in {"command", "agent"} for node in body.nodes) or any(
+        not node.argv or any("\x00" in arg for arg in node.argv) for node in commands
+    ):
+        raise CoreError("invalid_command", "Delivery requires at least one valid command node", 422)
+    return criteria
+
+
+def _validate_agent_bindings(store: Store, conn, principal: Principal, workspace: str,
+                             bindings: dict, agent_source) -> None:
+    if bindings and not agent_source:
+        raise CoreError("agent_dispatch_required", "Use version-pinned Agent or Squad dispatch", 422)
+    if not agent_source:
+        return
+    target = store._get(conn, principal, workspace, agent_source["resource"], agent_source["id"])
+    if target["version"] != agent_source["version"] or target["status"] != "active":
+        raise CoreError("configuration_changed", "Agent configuration changed during dispatch", 409)
+    versions = {member["agent_id"]: member["agent_version"] for member in agent_source["members"]}
+    if any(binding["version"] != versions[binding["agent_id"]] for binding in bindings.values()):
+        raise CoreError("configuration_changed", "Squad member changed during dispatch", 409)
+
+
 class Delivery:
     def __init__(self, store: Store, repository):
         self.store = store
@@ -78,41 +136,12 @@ class Delivery:
             if cached is not None and not body.dry_run:
                 return cached
             task = self.store._get(conn, principal, workspace, "tasks", task_id)
-            if task["version"] != body.expected_version:
-                raise CoreError("version_conflict", "Task changed; reload the execution plan", 409)
-            if (
-                task["status"] in {"completed", "archived"}
-                or task["data"].get("delivery", {}).get("phase") == "executing"
-            ):
-                raise CoreError(
-                    "delivery_active", "Resolve the current delivery before dispatching again", 409
-                )
-            criteria = task["data"].get("acceptance_criteria")
-            if not isinstance(criteria, str) or not criteria.strip():
-                raise CoreError("acceptance_required", "Add acceptance criteria before dispatching", 422)
-            if len({node.id for node in body.nodes}) != len(body.nodes):
-                raise CoreError("invalid_graph", "Node IDs must be unique", 422)
-            commands = [node for node in body.nodes if node.kind == "command"]
-            if not any(node.kind in {"command", "agent"} for node in body.nodes) or any(
-                not node.argv or any("\x00" in arg for arg in node.argv) for node in commands
-            ):
-                raise CoreError("invalid_command", "Delivery requires at least one valid command node", 422)
+            criteria = _validate_dispatch_request(task, body)
             bindings = Agents(self.store).bindings(conn, principal, workspace, body.nodes)
-            if bindings and not agent_source:
-                raise CoreError("agent_dispatch_required", "Use version-pinned Agent or Squad dispatch", 422)
-            if agent_source:
-                target = self.store._get(conn, principal, workspace, agent_source["resource"], agent_source["id"])
-                if target["version"] != agent_source["version"] or target["status"] != "active":
-                    raise CoreError("configuration_changed", "Agent configuration changed during dispatch", 409)
-                versions = {member["agent_id"]: member["agent_version"] for member in agent_source["members"]}
-                if any(binding["version"] != versions[binding["agent_id"]] for binding in bindings.values()):
-                    raise CoreError("configuration_changed", "Squad member changed during dispatch", 409)
+            _validate_agent_bindings(self.store, conn, principal, workspace, bindings, agent_source)
             current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
             if body.target_device_id:
-                if not is_paired_device(self.store, principal, workspace, body.target_device_id, conn=conn):
-                    raise CoreError("device_unpaired", "Pair an active device before dispatch", 409)
-                if body.isolation != "workspace" or any(node.kind != "command" for node in body.nodes):
-                    raise CoreError("remote_unsupported", "Remote delivery currently requires workspace command nodes", 422)
+                _validate_remote_target(self.store, conn, principal, workspace, body, agent_source)
             if body.isolation == "git_worktree":
                 self.repository.validate_base(current_workspace["data"]["root"], body.base_commit)
             elif body.base_commit:

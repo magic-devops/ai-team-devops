@@ -236,6 +236,7 @@ class _AutomationPageState extends ConsumerState<AutomationPage> {
             prompt: request.prompt,
             agentId: request.agentId,
             squadId: request.squadId,
+            targetDeviceId: request.targetDeviceId,
             isolation: request.isolation,
             baseCommit: request.baseCommit,
             idempotencyKey: key,
@@ -887,7 +888,7 @@ class _SchedulesTab extends ConsumerWidget {
             itemBuilder: (entity) => EntityTile(
               entity: entity,
               details: [
-                detailChip('interval', entity.data['interval_seconds']),
+                detailChip('trigger', _scheduleTriggerLabel(entity.data)),
                 detailChip('next', entity.data['next_due_at']),
                 detailChip('last run', entity.data['last_run_id']),
               ],
@@ -914,6 +915,13 @@ class _SchedulesTab extends ConsumerWidget {
                     onDone: onRefresh,
                     onError: onActionError,
                   ),
+                  if (_scheduleTriggerType(entity.data) == 'webhook')
+                    _ScheduleWebhookTestButton(
+                      entity: entity,
+                      disabledReason: configureReason,
+                      onDone: onRefresh,
+                      onError: onActionError,
+                    ),
                   IconButton(
                     tooltip: '历史',
                     onPressed: () => _showScheduleHistory(context, ref, entity),
@@ -1041,8 +1049,13 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
   final formKey = GlobalKey<FormState>();
   late final TextEditingController scheduleId;
   late final TextEditingController title;
+  late String triggerType;
   late final TextEditingController interval;
   late final TextEditingController startsAt;
+  late final TextEditingController cronExpression;
+  late final TextEditingController timezone;
+  late final TextEditingController webhookSecretRef;
+  late final TextEditingController webhookMaxBodyBytes;
   late final TextEditingController nodes;
   bool enabled = true;
   bool misfireCoalesce = true;
@@ -1056,16 +1069,36 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
   void initState() {
     super.initState();
     final data = widget.entity?.data ?? const <String, dynamic>{};
+    final trigger = (data['trigger'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
     scheduleId = TextEditingController(text: widget.entity?.id ?? '');
     title = TextEditingController(text: _text(data['title']));
+    triggerType = _normalizeTriggerType(trigger['type']);
     interval = TextEditingController(
-        text: _text(data['interval_seconds']).isEmpty
+        text: _text(trigger['interval_seconds']).isEmpty
             ? '300'
-            : _text(data['interval_seconds']));
+            : _text(trigger['interval_seconds']));
     startsAt = TextEditingController(
-      text: _text(data['starts_at']).isEmpty
+      text: _text(trigger['starts_at']).isEmpty
           ? DateTime.now().toUtc().toIso8601String()
-          : _text(data['starts_at']),
+          : _text(trigger['starts_at']),
+    );
+    cronExpression = TextEditingController(
+      text: _text(trigger['cron_expression']).isEmpty
+          ? '30 2 * * *'
+          : _text(trigger['cron_expression']),
+    );
+    timezone = TextEditingController(
+      text: _text(trigger['timezone']).isEmpty
+          ? 'Asia/Shanghai'
+          : _text(trigger['timezone']),
+    );
+    webhookSecretRef =
+        TextEditingController(text: _text(trigger['secret_ref']));
+    webhookMaxBodyBytes = TextEditingController(
+      text: _text(trigger['max_body_bytes']).isEmpty
+          ? '65536'
+          : _text(trigger['max_body_bytes']),
     );
     nodes = TextEditingController(
       text: const JsonEncoder.withIndent('  ').convert(data['nodes'] ??
@@ -1082,14 +1115,34 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
     );
     enabled = data['enabled'] != false;
     misfireCoalesce = data['misfire_coalesce'] != false;
-    for (final controller in [scheduleId, title, interval, startsAt, nodes]) {
+    for (final controller in [
+      scheduleId,
+      title,
+      interval,
+      startsAt,
+      cronExpression,
+      timezone,
+      webhookSecretRef,
+      webhookMaxBodyBytes,
+      nodes,
+    ]) {
       controller.addListener(_clearPreview);
     }
   }
 
   @override
   void dispose() {
-    for (final controller in [scheduleId, title, interval, startsAt, nodes]) {
+    for (final controller in [
+      scheduleId,
+      title,
+      interval,
+      startsAt,
+      cronExpression,
+      timezone,
+      webhookSecretRef,
+      webhookMaxBodyBytes,
+      nodes,
+    ]) {
       controller.removeListener(_clearPreview);
       controller.dispose();
     }
@@ -1117,18 +1170,35 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
                 const SizedBox(height: 12),
                 _bounded(controller: title, label: '标题'),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: interval,
-                  decoration: const InputDecoration(labelText: '间隔秒数'),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    final parsed = int.tryParse(value?.trim() ?? '');
-                    if (parsed == null || parsed < 10) return '不能小于 10 秒';
-                    return null;
-                  },
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'interval',
+                        icon: Icon(Icons.timer_outlined),
+                        label: Text('间隔'),
+                      ),
+                      ButtonSegment(
+                        value: 'cron',
+                        icon: Icon(Icons.calendar_month_outlined),
+                        label: Text('Cron'),
+                      ),
+                      ButtonSegment(
+                        value: 'webhook',
+                        icon: Icon(Icons.webhook_rounded),
+                        label: Text('Webhook'),
+                      ),
+                    ],
+                    selected: {triggerType},
+                    onSelectionChanged: (value) => setState(() {
+                      triggerType = value.single;
+                      _dropPreview();
+                    }),
+                  ),
                 ),
                 const SizedBox(height: 12),
-                _field(controller: startsAt, label: '开始时间（带 UTC offset）'),
+                ..._triggerFields(),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: nodes,
@@ -1216,21 +1286,30 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
       if (workspaceId == null || workspaceId.isEmpty) {
         throw const HermesUnavailableException('请先选择工作区。');
       }
-      final envelope = await ProviderScope.containerOf(context)
-          .read(apiProvider)
-          .scheduleConfigure(
-            request.scheduleId,
-            workspaceId: workspaceId,
-            title: request.title,
-            intervalSeconds: request.intervalSeconds,
-            startsAt: request.startsAt,
-            nodes: request.nodes,
-            enabled: request.enabled,
-            misfireCoalesce: request.misfireCoalesce,
-            expectedVersion: widget.entity?.version,
-            idempotencyKey: idempotencyKey!,
-            dryRun: dryRun,
-          );
+      final api = ProviderScope.containerOf(context).read(apiProvider);
+      final envelope = dryRun
+          ? await api.schedulePreview(
+              workspaceId: workspaceId,
+              title: request.title,
+              trigger: request.trigger,
+              nodes: request.nodes,
+              enabled: request.enabled,
+              misfireCoalesce: request.misfireCoalesce,
+              expectedVersion: widget.entity?.version,
+              idempotencyKey: idempotencyKey!,
+            )
+          : await api.scheduleConfigure(
+              request.scheduleId,
+              workspaceId: workspaceId,
+              title: request.title,
+              trigger: request.trigger,
+              nodes: request.nodes,
+              enabled: request.enabled,
+              misfireCoalesce: request.misfireCoalesce,
+              expectedVersion: widget.entity?.version,
+              idempotencyKey: idempotencyKey!,
+              dryRun: false,
+            );
       setState(() {
         busy = false;
         preview = envelope;
@@ -1252,22 +1331,18 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
   _ScheduleConfigureRequest _request() => _ScheduleConfigureRequest(
         scheduleId: scheduleId.text.trim(),
         title: title.text.trim(),
-        intervalSeconds: int.parse(interval.text.trim()),
-        startsAt: startsAt.text.trim(),
+        trigger: _trigger(),
         nodes: _parseNodes(nodes.text),
         enabled: enabled,
         misfireCoalesce: misfireCoalesce,
       );
 
   String? _currentFingerprint() {
-    final parsedInterval = int.tryParse(interval.text.trim());
-    if (parsedInterval == null) return null;
     try {
       return _ScheduleConfigureRequest(
         scheduleId: scheduleId.text.trim(),
         title: title.text.trim(),
-        intervalSeconds: parsedInterval,
-        startsAt: startsAt.text.trim(),
+        trigger: _trigger(),
         nodes: _parseNodes(nodes.text),
         enabled: enabled,
         misfireCoalesce: misfireCoalesce,
@@ -1289,6 +1364,84 @@ class _ScheduleConfigureDialogState extends State<_ScheduleConfigureDialog> {
     previewFingerprint = null;
     idempotencyKey = null;
     error = null;
+  }
+
+  List<Widget> _triggerFields() {
+    if (triggerType == 'cron') {
+      return [
+        TextFormField(
+          controller: cronExpression,
+          decoration: const InputDecoration(labelText: 'Cron 表达式（五段）'),
+          validator: (value) {
+            final text = value?.trim() ?? '';
+            if (text.split(RegExp(r'\s+')).length != 5) return '需要五段 cron';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        _field(controller: timezone, label: '时区（IANA）'),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: startsAt,
+          decoration: const InputDecoration(labelText: '开始时间（可选 UTC offset）'),
+        ),
+      ];
+    }
+    if (triggerType == 'webhook') {
+      return [
+        _field(controller: webhookSecretRef, label: '签名密钥环境变量名'),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: webhookMaxBodyBytes,
+          decoration: const InputDecoration(labelText: '最大请求体字节数'),
+          keyboardType: TextInputType.number,
+          validator: (value) {
+            final parsed = int.tryParse(value?.trim() ?? '');
+            if (parsed == null || parsed < 1 || parsed > 1048576) {
+              return '范围 1-1048576';
+            }
+            return null;
+          },
+        ),
+      ];
+    }
+    return [
+      TextFormField(
+        controller: interval,
+        decoration: const InputDecoration(labelText: '间隔秒数'),
+        keyboardType: TextInputType.number,
+        validator: (value) {
+          final parsed = int.tryParse(value?.trim() ?? '');
+          if (parsed == null || parsed < 10) return '不能小于 10 秒';
+          return null;
+        },
+      ),
+      const SizedBox(height: 12),
+      _field(controller: startsAt, label: '开始时间（带 UTC offset）'),
+    ];
+  }
+
+  Map<String, dynamic> _trigger() {
+    if (triggerType == 'cron') {
+      return {
+        'type': 'cron',
+        'cron_expression': cronExpression.text.trim(),
+        'timezone': timezone.text.trim(),
+        if (startsAt.text.trim().isNotEmpty) 'starts_at': startsAt.text.trim(),
+      };
+    }
+    if (triggerType == 'webhook') {
+      return {
+        'type': 'webhook',
+        'secret_ref': webhookSecretRef.text.trim(),
+        'max_body_bytes': int.parse(webhookMaxBodyBytes.text.trim()),
+      };
+    }
+    return {
+      'type': 'interval',
+      'interval_seconds': int.parse(interval.text.trim()),
+      'starts_at': startsAt.text.trim(),
+    };
   }
 }
 
@@ -1345,6 +1498,132 @@ class _ScheduleActionButton extends ConsumerWidget {
   }
 }
 
+class _ScheduleWebhookTestButton extends ConsumerStatefulWidget {
+  const _ScheduleWebhookTestButton({
+    required this.entity,
+    required this.disabledReason,
+    required this.onDone,
+    required this.onError,
+  });
+
+  final HermesEntity entity;
+  final String? disabledReason;
+  final VoidCallback onDone;
+  final void Function(Object error) onError;
+
+  @override
+  ConsumerState<_ScheduleWebhookTestButton> createState() =>
+      _ScheduleWebhookTestButtonState();
+}
+
+class _ScheduleWebhookTestButtonState
+    extends ConsumerState<_ScheduleWebhookTestButton> {
+  HermesEnvelope? preview;
+  String? idempotencyKey;
+  bool busy = false;
+  Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.disabledReason == null;
+    return GuardedAction(
+      enabled: enabled,
+      reason: widget.disabledReason ?? '',
+      child: IconButton(
+        tooltip: 'Webhook 测试',
+        onPressed: enabled ? _showDialog : null,
+        icon: const Icon(Icons.webhook_rounded),
+      ),
+    );
+  }
+
+  Future<void> _showDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('${widget.entity.title} Webhook 测试'),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (busy) const LinearProgressIndicator(),
+                if (error != null) ErrorState(message: error.toString()),
+                if (preview != null) _DispatchPreview(envelope: preview),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+            FilledButton.icon(
+              onPressed:
+                  busy ? null : () => _submit(setDialogState, dryRun: true),
+              icon: const Icon(Icons.visibility_rounded),
+              label: const Text('预览测试'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: busy || preview == null
+                  ? null
+                  : () => _submit(setDialogState, dryRun: false),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('派发测试'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submit(
+    StateSetter setDialogState, {
+    required bool dryRun,
+  }) async {
+    setDialogState(() {
+      busy = true;
+      error = null;
+      if (dryRun) {
+        preview = null;
+        idempotencyKey =
+            'schedule-webhook-test-${DateTime.now().microsecondsSinceEpoch}';
+      }
+    });
+    try {
+      final workspaceId = ref.read(workspaceSelectionProvider);
+      if (workspaceId == null || workspaceId.isEmpty) {
+        throw const HermesUnavailableException('请先选择工作区。');
+      }
+      final envelope = await ref.read(apiProvider).scheduleWebhookTest(
+            widget.entity.id,
+            workspaceId: workspaceId,
+            expectedVersion: widget.entity.version,
+            idempotencyKey: idempotencyKey!,
+            dryRun: dryRun,
+          );
+      setDialogState(() {
+        busy = false;
+        preview = dryRun ? envelope : null;
+        if (!dryRun) idempotencyKey = null;
+      });
+      if (!dryRun && mounted) {
+        Navigator.pop(context);
+        widget.onDone();
+      }
+    } catch (err) {
+      setDialogState(() {
+        busy = false;
+        error = err;
+        preview = null;
+        idempotencyKey = null;
+      });
+      widget.onError(err);
+    }
+  }
+}
+
 class _DevicesTab extends ConsumerWidget {
   const _DevicesTab({
     required this.data,
@@ -1381,6 +1660,7 @@ class _DevicesTab extends ConsumerWidget {
         details: [
           detailChip('platform', entity.data['platform']),
           detailChip('endpoint', entity.data['endpoint']),
+          detailChip('runtimes', _allowedRuntimeLabel(entity)),
           detailChip('pairing expires', entity.data['pairing_expires_at']),
         ],
         trailing: Wrap(
@@ -1873,6 +2153,7 @@ class _DispatchTabState extends State<_DispatchTab> {
   String targetKind = 'agent';
   String agentId = '';
   String squadId = '';
+  String targetDeviceId = '';
   String isolation = 'workspace';
   int expectedVersion = 1;
 
@@ -1902,6 +2183,29 @@ class _DispatchTabState extends State<_DispatchTab> {
   @override
   Widget build(BuildContext context) {
     final canExecute = widget.executeReason == null;
+    final remoteAgentDevices = widget.data.devices
+        .where((device) =>
+            {'paired', 'active'}.contains(device.status) &&
+            _deviceSupportsRuntime(device, 'agent'))
+        .toList();
+    final targetSegments = [
+      const ButtonSegment(
+        value: 'agent',
+        icon: Icon(Icons.smart_toy_rounded),
+        label: Text('Agent'),
+      ),
+      const ButtonSegment(
+        value: 'squad',
+        icon: Icon(Icons.groups_2_rounded),
+        label: Text('Squad'),
+      ),
+      if (remoteAgentDevices.isNotEmpty)
+        const ButtonSegment(
+          value: 'remote-agent',
+          icon: Icon(Icons.devices_other_rounded),
+          label: Text('Remote Agent'),
+        ),
+    ];
     return SplitPane(
       left: SectionPanel(
         title: '任务派发',
@@ -1938,26 +2242,65 @@ class _DispatchTabState extends State<_DispatchTab> {
                   ),
                   const SizedBox(height: 12),
                   SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: 'agent',
-                        icon: Icon(Icons.smart_toy_rounded),
-                        label: Text('Agent'),
-                      ),
-                      ButtonSegment(
-                        value: 'squad',
-                        icon: Icon(Icons.groups_2_rounded),
-                        label: Text('Squad'),
-                      ),
-                    ],
+                    segments: targetSegments,
                     selected: {targetKind},
                     onSelectionChanged: (value) => setState(() {
                       targetKind = value.single;
+                      if (targetKind == 'remote-agent') {
+                        isolation = 'workspace';
+                        targetDeviceId =
+                            remoteAgentDevices.firstOrNull?.id ?? '';
+                      }
                       widget.onRequestChanged();
                     }),
                   ),
                   const SizedBox(height: 12),
-                  if (targetKind == 'agent')
+                  if (targetKind == 'remote-agent') ...[
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: remoteAgentDevices
+                              .any((device) => device.id == targetDeviceId)
+                          ? targetDeviceId
+                          : null,
+                      decoration:
+                          const InputDecoration(labelText: 'Remote device'),
+                      items: remoteAgentDevices
+                          .map((device) => DropdownMenuItem(
+                                value: device.id,
+                                child: Text(
+                                  '${device.title} · ${_allowedRuntimeLabel(device)}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) => setState(() {
+                        targetDeviceId = value ?? '';
+                        widget.onRequestChanged();
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue:
+                          widget.data.agents.any((agent) => agent.id == agentId)
+                              ? agentId
+                              : null,
+                      decoration: const InputDecoration(labelText: 'Agent'),
+                      items: widget.data.agents
+                          .map((agent) => DropdownMenuItem(
+                                value: agent.id,
+                                child: Text(
+                                  '${agent.title} · v${agent.version}',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ))
+                          .toList(),
+                      onChanged: (value) => setState(() {
+                        agentId = value ?? '';
+                        widget.onRequestChanged();
+                      }),
+                    ),
+                  ] else if (targetKind == 'agent')
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       initialValue:
@@ -2009,29 +2352,31 @@ class _DispatchTabState extends State<_DispatchTab> {
                     minLines: 4,
                     maxLines: 8,
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: isolation,
-                    decoration: const InputDecoration(labelText: '隔离方式'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'workspace', child: Text('Workspace')),
-                      DropdownMenuItem(
-                          value: 'git_worktree', child: Text('Git worktree')),
-                    ],
-                    onChanged: (value) => setState(() {
-                      isolation = value ?? 'workspace';
-                      widget.onRequestChanged();
-                    }),
-                  ),
-                  if (isolation == 'git_worktree') ...[
+                  if (targetKind != 'remote-agent') ...[
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: baseCommit,
-                      decoration:
-                          const InputDecoration(labelText: 'base_commit'),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: isolation,
+                      decoration: const InputDecoration(labelText: '隔离方式'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'workspace', child: Text('Workspace')),
+                        DropdownMenuItem(
+                            value: 'git_worktree', child: Text('Git worktree')),
+                      ],
+                      onChanged: (value) => setState(() {
+                        isolation = value ?? 'workspace';
+                        widget.onRequestChanged();
+                      }),
                     ),
+                    if (isolation == 'git_worktree') ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: baseCommit,
+                        decoration:
+                            const InputDecoration(labelText: 'base_commit'),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 16),
                   Wrap(
@@ -2122,7 +2467,8 @@ class _DispatchTabState extends State<_DispatchTab> {
   }
 
   _DispatchRequest _request() {
-    final target = targetKind == 'agent'
+    final isRemoteAgent = targetKind == 'remote-agent';
+    final target = targetKind == 'agent' || isRemoteAgent
         ? widget.data.agents.where((agent) => agent.id == agentId).firstOrNull
         : widget.data.squads.where((squad) => squad.id == squadId).firstOrNull;
     return _DispatchRequest(
@@ -2130,10 +2476,11 @@ class _DispatchTabState extends State<_DispatchTab> {
       expectedVersion: expectedVersion,
       targetVersion: target?.version ?? 0,
       prompt: prompt.text,
-      agentId: targetKind == 'agent' ? agentId : null,
+      agentId: targetKind == 'agent' || isRemoteAgent ? agentId : null,
       squadId: targetKind == 'squad' ? squadId : null,
-      isolation: isolation,
-      baseCommit: baseCommit.text.trim(),
+      targetDeviceId: isRemoteAgent ? targetDeviceId : null,
+      isolation: isRemoteAgent ? 'workspace' : isolation,
+      baseCommit: isRemoteAgent ? '' : baseCommit.text.trim(),
     );
   }
 
@@ -2148,6 +2495,23 @@ class _DispatchTabState extends State<_DispatchTab> {
     if (squadId.isEmpty && widget.data.squads.isNotEmpty) {
       squadId = widget.data.squads.first.id;
     }
+    if (targetDeviceId.isEmpty && widget.data.devices.isNotEmpty) {
+      targetDeviceId = widget.data.devices
+              .where((device) =>
+                  {'paired', 'active'}.contains(device.status) &&
+                  _deviceSupportsRuntime(device, 'agent'))
+              .firstOrNull
+              ?.id ??
+          '';
+    }
+    final selectedDevice = widget.data.devices
+        .where((device) => device.id == targetDeviceId)
+        .firstOrNull;
+    if (targetKind == 'remote-agent' &&
+        (selectedDevice == null ||
+            !_deviceSupportsRuntime(selectedDevice, 'agent'))) {
+      targetKind = 'agent';
+    }
   }
 }
 
@@ -2159,6 +2523,7 @@ class _DispatchRequest {
     required this.prompt,
     required this.agentId,
     required this.squadId,
+    required this.targetDeviceId,
     required this.isolation,
     required this.baseCommit,
   });
@@ -2169,6 +2534,7 @@ class _DispatchRequest {
   final String prompt;
   final String? agentId;
   final String? squadId;
+  final String? targetDeviceId;
   final String isolation;
   final String baseCommit;
 
@@ -2179,6 +2545,7 @@ class _DispatchRequest {
         'prompt': prompt.trim(),
         'agentId': agentId ?? '',
         'squadId': squadId ?? '',
+        'targetDeviceId': targetDeviceId ?? '',
         'isolation': isolation,
         'baseCommit': baseCommit.trim(),
       });
@@ -2188,8 +2555,7 @@ class _ScheduleConfigureRequest {
   const _ScheduleConfigureRequest({
     required this.scheduleId,
     required this.title,
-    required this.intervalSeconds,
-    required this.startsAt,
+    required this.trigger,
     required this.nodes,
     required this.enabled,
     required this.misfireCoalesce,
@@ -2197,8 +2563,7 @@ class _ScheduleConfigureRequest {
 
   final String scheduleId;
   final String title;
-  final int intervalSeconds;
-  final String startsAt;
+  final Map<String, dynamic> trigger;
   final List<Map<String, dynamic>> nodes;
   final bool enabled;
   final bool misfireCoalesce;
@@ -2206,8 +2571,7 @@ class _ScheduleConfigureRequest {
   String get fingerprint => jsonEncode({
         'scheduleId': scheduleId,
         'title': title,
-        'intervalSeconds': intervalSeconds,
-        'startsAt': startsAt,
+        'trigger': trigger,
         'nodes': nodes,
         'enabled': enabled,
         'misfireCoalesce': misfireCoalesce,
@@ -2242,6 +2606,25 @@ String _scheduleRunId(HermesEntity run) {
   return _text(schedule['id']).isNotEmpty
       ? _text(schedule['id'])
       : _text(schedule['schedule_id']);
+}
+
+Set<String> _allowedRuntimes(HermesEntity device) {
+  final raw = device.data['allowed_runtimes'];
+  if (raw == null) return {'command'};
+  if (raw is! List) return {};
+  return raw
+      .map((value) => value.toString())
+      .where((value) => value.isNotEmpty)
+      .toSet();
+}
+
+bool _deviceSupportsRuntime(HermesEntity device, String runtime) {
+  return _allowedRuntimes(device).contains(runtime);
+}
+
+String _allowedRuntimeLabel(HermesEntity device) {
+  final values = _allowedRuntimes(device).toList()..sort();
+  return values.isEmpty ? 'none' : values.join(', ');
 }
 
 class _DispatchPreview extends StatelessWidget {
@@ -2290,6 +2673,29 @@ String _role(Object? value) {
   return {'leader', 'implementer', 'reviewer'}.contains(text)
       ? text
       : 'implementer';
+}
+
+String _normalizeTriggerType(Object? value) {
+  final text = _text(value);
+  return {'interval', 'cron', 'webhook'}.contains(text) ? text : 'interval';
+}
+
+String _scheduleTriggerType(Map<String, dynamic> data) {
+  final trigger = (data['trigger'] as Map?)?.cast<String, dynamic>() ??
+      const <String, dynamic>{};
+  return _normalizeTriggerType(trigger['type']);
+}
+
+String _scheduleTriggerLabel(Map<String, dynamic> data) {
+  final trigger = (data['trigger'] as Map?)?.cast<String, dynamic>() ??
+      const <String, dynamic>{};
+  return switch (_normalizeTriggerType(trigger['type'])) {
+    'cron' =>
+      'cron ${_text(trigger['cron_expression'])} ${_text(trigger['timezone'])}'
+          .trim(),
+    'webhook' => 'webhook ${_text(trigger['secret_ref'])}'.trim(),
+    _ => 'interval ${_text(trigger['interval_seconds'])}s'.trim(),
+  };
 }
 
 TextFormField _field({

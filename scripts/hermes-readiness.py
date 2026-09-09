@@ -42,6 +42,48 @@ def run_check(name: str, command: list[str], required: bool, cwd: Path, env: dic
                  detail or f"exit {proc.returncode}", evidence, round((time.monotonic() - started) * 1000))
 
 
+def native_flutter_toolchain_unavailable(target: str) -> str | None:
+    if target == "macos":
+        xcrun = shutil.which("xcrun")
+        if xcrun is None:
+            return "xcrun not found; Xcode command line tools are unavailable on this host"
+        try:
+            probe = subprocess.run(  # noqa: S603 - fixed local toolchain probe
+                [xcrun, "-find", "xcodebuild"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return f"Xcode toolchain probe failed: {exc}"
+        if probe.returncode != 0:
+            detail = (probe.stdout or "").strip()
+            return detail or "xcodebuild is unavailable on this host"
+    return None
+
+
+def flutter_checks(client: Path, flutter: str | None, env: dict[str, str]) -> list[Check]:
+    if not flutter:
+        return [Check("flutter.analyze-tests-build", True, "unavailable", "Install Flutter or set FLUTTER_BIN")]
+    version = run_check("flutter.runtime", [flutter, "--version"], True, client, env, timeout=120)
+    checks = [version]
+    if version.status != "passed":
+        return [*checks, Check("flutter.analyze-tests-build", True, "unavailable", "Flutter runtime is not usable")]
+    for name, args in (("analyze", ["analyze"]), ("tests", ["test"])):
+        checks.append(run_check("flutter." + name, [flutter, *args], True, client, env,
+                                evidence="execution" if name == "tests" else "static", timeout=600))
+    target = {"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(platform.system())
+    if target:
+        unavailable = native_flutter_toolchain_unavailable(target)
+        if unavailable:
+            checks.append(Check("flutter.build." + target, True, "unavailable", unavailable))
+        else:
+            checks.append(run_check("flutter.build." + target, [flutter, "build", target, "--debug"],
+                                    True, client, env, timeout=900))
+    return checks
+
+
 def checks_for(root: Path, full: bool) -> list[Check]:
     checks: list[Check] = []
     python = sys.executable
@@ -67,6 +109,8 @@ def checks_for(root: Path, full: bool) -> list[Check]:
         run("sdk-cli.contracts", [python, "-m", "pytest", "packages/sop-sdk-python/tests/test_hermes_client.py", "packages/sop-cli/tests/test_hermes_cli_contract.py", "-q"], evidence="execution")
         run("sdk.generator", [python, "-m", "pytest", "apis/generated/hermes-v1/generator_regression_test.py", "-q"])
         run("distribution.contracts", [python, "-m", "pytest", "scripts/tests/test_hermes_distribution.py", "-q"], evidence="execution")
+        run("release.contracts", [python, "-m", "pytest", "scripts/tests/test_hermes_release.py", "-q"], evidence="execution")
+        run("readiness.contracts", [python, "-m", "pytest", "scripts/tests/test_hermes_readiness.py", "-q"])
         run("cli.diagnostics.help", [python, "-m", "sop_cli", "hermes", "diagnostics", "--help"], evidence="execution")
         for command in ("workspace", "device", "session", "run", "approval", "asset", "system"):
             run(f"cli.{command}.help", [python, "-m", "sop_cli", command, "--help"], evidence="execution")
@@ -79,33 +123,25 @@ def checks_for(root: Path, full: bool) -> list[Check]:
             ("squad", "catalog"), ("squad", "create"), ("squad", "patch"),
             ("schedule", "configure"), ("schedule", "trigger"), ("schedule", "pause"),
             ("schedule", "resume"), ("schedule", "history"),
+            ("schedule", "preview"), ("schedule", "webhook-test"),
             ("device", "pairing"), ("device", "pair"), ("device", "revoke"),
             ("system", "remote-worker"),
         ):
             run(f"cli.{group}.{command}.help", [python, "-m", "sop_cli", group, command, "--help"], evidence="execution")
+        for command in ("channels", "members", "configure", "threads", "thread-create", "messages", "send", "edit", "archive", "read", "inbox"):
+            run(f"cli.collaboration.{command}.help", [python, "-m", "sop_cli", "hermes", "collaboration", command, "--help"], evidence="execution")
         run("remote-worker.help", [python, "-m", "hermes_core.remote_worker", "--help"], evidence="execution")
         run("core.remote-worker.help", [python, "-m", "hermes_core", "remote-worker", "--help"], evidence="execution")
         run("scripts.syntax", ["bash", "-n", "scripts/hermes-bootstrap.sh", "scripts/hermes-package.sh", "scripts/hermes-mobile-check.sh"])
         if full:
+            if built.status == "passed":
+                run("automation.process-smoke", [python, "scripts/hermes-automation-smoke.py"], evidence="execution", timeout=180)
             web = root / "apps/manager-web"
             pnpm = shutil.which("pnpm") or "pnpm"
             run("web.typecheck", [pnpm, "run", "typecheck"], directory=web)
             run("web.tests", [pnpm, "test"], directory=web, evidence="execution", timeout=600)
             run("web.build", [pnpm, "run", "build"], directory=web, timeout=600)
-            if flutter:
-                client = root / "apps/hermes-client"
-                version = run("flutter.runtime", [flutter, "--version"], directory=client, timeout=120)
-                if version.status == "passed":
-                    for name, args in (("analyze", ["analyze"]), ("tests", ["test"])):
-                        run("flutter." + name, [flutter, *args], directory=client,
-                            evidence="execution" if name == "tests" else "static", timeout=600)
-                    target = {"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(platform.system())
-                    if target:
-                        run("flutter.build." + target, [flutter, "build", target, "--debug"], directory=client, timeout=900)
-                else:
-                    checks.append(Check("flutter.analyze-tests-build", True, "unavailable", "Flutter runtime is not usable"))
-            else:
-                checks.append(Check("flutter.analyze-tests-build", True, "unavailable", "Install Flutter or set FLUTTER_BIN"))
+            checks.extend(flutter_checks(root / "apps/hermes-client", flutter, env))
             run("packaging.pyinstaller", [python, "-c", "import PyInstaller; print(PyInstaller.__version__)"])
     return checks
 

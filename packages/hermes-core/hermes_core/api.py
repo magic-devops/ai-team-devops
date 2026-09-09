@@ -3,8 +3,8 @@ from __future__ import annotations
 import hmac
 import json
 import uuid
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from . import __version__
 from .agents import AgentDispatch, Agents
+from .collaboration import COLLAB_ACTIONS, create_collaboration_router, filter_collaboration_events
 from .delivery import Delivery
 from .diagnostics import runtime_checks
 from .execution import Execution
@@ -53,7 +54,7 @@ def resource_contracts() -> dict[str, dict[str, object]]:
     }
 
 
-def create_router(store: Store, execution: Execution, identity: Callable):
+def create_router(store: Store, execution: Execution, identity: Callable, *, actor_directory: Callable | None = None):
     router = APIRouter(prefix=API_BASE, tags=["Hermes Workspace"])
     repository = Repository(execution)
     delivery = Delivery(store, repository)
@@ -109,7 +110,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
 
     @router.get("/actions", response_model=Envelope)
     def actions(principal: Principal = Depends(identity)):
-        return response(principal, "", ACTIONS)
+        return response(principal, "", ACTIONS + COLLAB_ACTIONS)
 
     @router.get("/system/readiness", response_model=Envelope)
     def readiness(principal: Principal = Depends(identity)):
@@ -137,7 +138,9 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         require(principal, "read")
         workspace = workspace_id(request, principal)
         rows = store.stream(principal, workspace, after=after)
-        return response(principal, workspace, rows, summary={"total": len(rows), "cursor": rows[-1]["seq"] if rows else after})
+        cursor = rows[-1]["seq"] if rows else after
+        rows = filter_collaboration_events(store, principal, workspace, rows)
+        return response(principal, workspace, rows, summary={"total": len(rows), "cursor": cursor})
 
     @router.get("/runs/{run_id}/events", response_model=Envelope)
     def events(run_id: str, request: Request, after: int = Query(0, ge=0), principal: Principal = Depends(identity)):
@@ -511,6 +514,7 @@ def create_router(store: Store, execution: Execution, identity: Callable):
         return response(principal, workspace, [row])
 
     combined = APIRouter()
+    combined.include_router(create_collaboration_router(store, identity, actor_directory=actor_directory))
     combined.include_router(create_remote_router(store, identity))
     combined.include_router(create_scheduling_router(store, execution, identity))
     combined.include_router(router)
@@ -550,10 +554,20 @@ def create_app(data_dir: Path, token: str, *, database_url: str = "", principals
                 return principal
         raise CoreError("unauthorized", "Workspace token is invalid", 401)
 
+    def workspace_actor_directory(principal: Principal, workspace: str) -> list[str]:
+        return sorted({
+            candidate.actor
+            for secret, candidate in credentials.items()
+            if secret and candidate.actor
+            and candidate.tenant == principal.tenant
+            and candidate.business == principal.business
+            and (candidate.workspace_ids is None or workspace in candidate.workspace_ids)
+        })
+
     app = FastAPI(title="Hermes Workspace", version=__version__, lifespan=execution.lifespan)
     app.state.hermes_store, app.state.hermes_execution = store, execution
     app.add_middleware(CORSMiddleware, allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:[0-9]+)?",
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Workspace-Id"])
     install_errors(app)
-    app.include_router(create_router(store, execution, identity))
+    app.include_router(create_router(store, execution, identity, actor_directory=workspace_actor_directory))
     return app

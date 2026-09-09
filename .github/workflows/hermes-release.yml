@@ -1,0 +1,217 @@
+name: hermes-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Hermes release version"
+        required: true
+        type: choice
+        options:
+          - "1.0.0"
+        default: "1.0.0"
+      mode:
+        description: "Package mode"
+        required: true
+        type: choice
+        options:
+          - core-only
+          - full
+        default: core-only
+      package:
+        description: "Platform package type"
+        required: true
+        type: choice
+        options:
+          - portable
+          - auto
+          - dmg
+          - windows
+          - deb
+          - appimage
+        default: portable
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - id: targets
+        env:
+          PACKAGE: ${{ inputs.package }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          package, mode = os.environ['PACKAGE'], os.environ['MODE']
+          if package in {'auto', 'dmg', 'windows'} and mode != 'full':
+              raise SystemExit('auto, dmg and windows packages require full mode')
+          platforms = {'dmg': ['macos'], 'windows': ['windows'],
+                       'deb': ['linux'], 'appimage': ['linux']}.get(package, ['linux', 'macos', 'windows'])
+          targets = {'linux': ('ubuntu-latest', 'x64'), 'macos': ('macos-latest', 'arm64'),
+                     'windows': ('windows-latest', 'x64')}
+          matrix = {'include': [{'os': targets[p][0], 'platform': p, 'arch': targets[p][1]} for p in platforms]}
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write('matrix=' + json.dumps(matrix) + '\n')
+          PY
+  build-and-verify:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      HERMES_FLUTTER_VERSION: "3.47.2"
+      HERMES_RELEASE_PRIVATE_KEY_PEM: ${{ secrets.HERMES_RELEASE_PRIVATE_KEY }}
+      HERMES_RELEASE_PUBLIC_KEY_PEM: ${{ secrets.HERMES_RELEASE_PUBLIC_KEY }}
+      HERMES_RELEASE_PUBLISHER_SECRET: ${{ secrets.HERMES_RELEASE_PUBLISHER }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/agent-runtime/go.mod"
+      - uses: subosito/flutter-action@v2
+        if: ${{ inputs.mode == 'full' }}
+        with:
+          flutter-version: ${{ env.HERMES_FLUTTER_VERSION }}
+          channel: stable
+      - name: Verify Flutter version
+        if: ${{ inputs.mode == 'full' }}
+        run: |
+          set -euo pipefail
+          actual="$(flutter --version --machine | python -c 'import json,sys; print(json.load(sys.stdin)["frameworkVersion"])')"
+          if [[ "$actual" != "$HERMES_FLUTTER_VERSION" ]]; then
+            echo "Flutter version mismatch: expected $HERMES_FLUTTER_VERSION, got $actual" >&2
+            exit 1
+          fi
+      - name: Install Python build and signing dependencies
+        run: python -m pip install -e "packages/hermes-core[test,build]" -e apps/manager
+      - name: Verify Hermes core
+        run: |
+          PYTHONPATH=packages/hermes-core python -m compileall -q packages/hermes-core/hermes_core
+          PYTHONPATH=packages/hermes-core pytest -q packages/hermes-core/tests
+      - name: Verify agent runtime
+        run: go test ./...
+        working-directory: apps/agent-runtime
+      - name: Verify distribution contract
+        run: python -m pytest -q scripts/tests/test_hermes_distribution.py
+      - name: Build verified Hermes runtime bundle
+        env:
+          PYTHON_BIN: python
+        run: bash scripts/hermes-package.sh --${{ inputs.mode }}
+      - name: Package release artifacts when real credentials are configured
+        if: ${{ env.HERMES_RELEASE_PRIVATE_KEY_PEM != '' && env.HERMES_RELEASE_PUBLIC_KEY_PEM != '' && env.HERMES_RELEASE_PUBLISHER_SECRET != '' }}
+        env:
+          HERMES_RELEASE: "1"
+          HERMES_RELEASE_PRIVATE_KEY: ${{ runner.temp }}/hermes-release-private.pem
+          HERMES_RELEASE_PUBLIC_KEY: ${{ runner.temp }}/hermes-release-public.pem
+          HERMES_RELEASE_PUBLISHER: ${{ secrets.HERMES_RELEASE_PUBLISHER }}
+          HERMES_MACOS_P12_BASE64: ${{ secrets.HERMES_MACOS_P12_BASE64 }}
+          HERMES_MACOS_P12_PASSWORD: ${{ secrets.HERMES_MACOS_P12_PASSWORD }}
+          HERMES_MACOS_CODESIGN_IDENTITY: ${{ secrets.HERMES_MACOS_CODESIGN_IDENTITY }}
+          HERMES_NOTARY_APPLE_ID: ${{ secrets.HERMES_NOTARY_APPLE_ID }}
+          HERMES_NOTARY_TEAM_ID: ${{ secrets.HERMES_NOTARY_TEAM_ID }}
+          HERMES_NOTARY_PASSWORD: ${{ secrets.HERMES_NOTARY_PASSWORD }}
+          HERMES_WINDOWS_PFX: ${{ runner.temp }}/hermes-windows.pfx
+          HERMES_WINDOWS_PFX_PASSWORD: ${{ secrets.HERMES_WINDOWS_PFX_PASSWORD }}
+          HERMES_WINDOWS_PFX_BASE64: ${{ secrets.HERMES_WINDOWS_PFX_BASE64 }}
+          HERMES_WINDOWS_PUBLISHER: ${{ secrets.HERMES_WINDOWS_PUBLISHER }}
+          HERMES_WINDOWS_PUBLISHER_DISPLAY_NAME: ${{ secrets.HERMES_WINDOWS_PUBLISHER_DISPLAY_NAME }}
+          HERMES_WINDOWS_PACKAGE_NAME: ${{ vars.HERMES_WINDOWS_PACKAGE_NAME }}
+          HERMES_WINDOWS_TIMESTAMP_URL: ${{ secrets.HERMES_WINDOWS_TIMESTAMP_URL }}
+          HERMES_LINUX_GPG_KEY_ID: ${{ secrets.HERMES_LINUX_GPG_KEY_ID }}
+          HERMES_LINUX_CHECKSUM_SIGNER: ${{ secrets.HERMES_LINUX_CHECKSUM_SIGNER }}
+          HERMES_LINUX_APPIMAGE_SIGN: ${{ secrets.HERMES_LINUX_APPIMAGE_SIGN }}
+          HERMES_LINUX_OPENSSL_PRIVATE_KEY: ${{ runner.temp }}/hermes-linux-checksum.pem
+          HERMES_LINUX_OPENSSL_PUBLIC_KEY: ${{ runner.temp }}/hermes-linux-checksum.pub.pem
+          HERMES_LINUX_MINISIGN_SECRET_KEY: ${{ runner.temp }}/hermes-minisign.key
+          HERMES_LINUX_OPENSSL_PRIVATE_KEY_PEM: ${{ secrets.HERMES_LINUX_OPENSSL_PRIVATE_KEY }}
+          HERMES_LINUX_OPENSSL_PUBLIC_KEY_PEM: ${{ secrets.HERMES_LINUX_OPENSSL_PUBLIC_KEY }}
+          HERMES_LINUX_MINISIGN_SECRET_KEY_TEXT: ${{ secrets.HERMES_LINUX_MINISIGN_SECRET_KEY }}
+          HERMES_LINUX_MINISIGN_PUBLIC_KEY: ${{ secrets.HERMES_LINUX_MINISIGN_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          cleanup() {
+            rm -f "$HERMES_RELEASE_PRIVATE_KEY" "$HERMES_RELEASE_PUBLIC_KEY" \
+              "$HERMES_WINDOWS_PFX" "$HERMES_LINUX_OPENSSL_PRIVATE_KEY" \
+              "$HERMES_LINUX_OPENSSL_PUBLIC_KEY" "$HERMES_LINUX_MINISIGN_SECRET_KEY" \
+              "$RUNNER_TEMP/hermes-macos-certificate.p12"
+            if [[ "${RUNNER_OS:-}" == "macOS" && -n "${HERMES_MACOS_KEYCHAIN:-}" ]]; then
+              security delete-keychain "$HERMES_MACOS_KEYCHAIN" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+          umask 077
+          printf '%s' "$HERMES_RELEASE_PRIVATE_KEY_PEM" > "$HERMES_RELEASE_PRIVATE_KEY"
+          printf '%s' "$HERMES_RELEASE_PUBLIC_KEY_PEM" > "$HERMES_RELEASE_PUBLIC_KEY"
+          chmod 600 "$HERMES_RELEASE_PRIVATE_KEY" "$HERMES_RELEASE_PUBLIC_KEY"
+          if [[ -n "${HERMES_LINUX_OPENSSL_PRIVATE_KEY_PEM:-}" ]]; then
+            printf '%s' "$HERMES_LINUX_OPENSSL_PRIVATE_KEY_PEM" > "$HERMES_LINUX_OPENSSL_PRIVATE_KEY"
+            chmod 600 "$HERMES_LINUX_OPENSSL_PRIVATE_KEY"
+          fi
+          if [[ -n "${HERMES_LINUX_OPENSSL_PUBLIC_KEY_PEM:-}" ]]; then
+            printf '%s' "$HERMES_LINUX_OPENSSL_PUBLIC_KEY_PEM" > "$HERMES_LINUX_OPENSSL_PUBLIC_KEY"
+            chmod 600 "$HERMES_LINUX_OPENSSL_PUBLIC_KEY"
+          fi
+          if [[ -n "${HERMES_LINUX_MINISIGN_SECRET_KEY_TEXT:-}" ]]; then
+            printf '%s' "$HERMES_LINUX_MINISIGN_SECRET_KEY_TEXT" > "$HERMES_LINUX_MINISIGN_SECRET_KEY"
+            chmod 600 "$HERMES_LINUX_MINISIGN_SECRET_KEY"
+          fi
+          if [[ -n "${HERMES_WINDOWS_PFX_BASE64:-}" ]]; then
+            printf '%s' "$HERMES_WINDOWS_PFX_BASE64" | base64 --decode > "$HERMES_WINDOWS_PFX"
+            chmod 600 "$HERMES_WINDOWS_PFX"
+          fi
+          if [[ "${RUNNER_OS:-}" == "macOS" && -n "${HERMES_MACOS_P12_BASE64:-}" ]]; then
+            HERMES_MACOS_KEYCHAIN="$RUNNER_TEMP/hermes-release.keychain-db"
+            HERMES_MACOS_KEYCHAIN_PASSWORD="${HERMES_MACOS_KEYCHAIN_PASSWORD:-hermes-release-${GITHUB_RUN_ID}}"
+            printf '%s' "$HERMES_MACOS_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/hermes-macos-certificate.p12"
+            chmod 600 "$RUNNER_TEMP/hermes-macos-certificate.p12"
+            security create-keychain -p "$HERMES_MACOS_KEYCHAIN_PASSWORD" "$HERMES_MACOS_KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$HERMES_MACOS_KEYCHAIN"
+            security unlock-keychain -p "$HERMES_MACOS_KEYCHAIN_PASSWORD" "$HERMES_MACOS_KEYCHAIN"
+            security import "$RUNNER_TEMP/hermes-macos-certificate.p12" -k "$HERMES_MACOS_KEYCHAIN" -P "$HERMES_MACOS_P12_PASSWORD" -T /usr/bin/codesign
+            security list-keychains -d user -s "$HERMES_MACOS_KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$HERMES_MACOS_KEYCHAIN_PASSWORD" "$HERMES_MACOS_KEYCHAIN"
+          fi
+          archive="$(ls "dist/hermes-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.mode }}.tar.gz")"
+          stage="$(find "dist/hermes-${{ inputs.version }}" -maxdepth 1 -type d -name "${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.mode }}.*" | head -1)"
+          test -n "$stage"
+          python scripts/hermes-release.py package \
+            --stage "$stage" \
+            --archive "$archive" \
+            --out-dir dist \
+            --version "${{ inputs.version }}" \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --mode "${{ inputs.mode }}" \
+            --package "${{ inputs.package }}"
+      - name: Upload verified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.mode }}
+          path: |
+            dist/hermes-${{ inputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}-${{ inputs.mode }}.tar.gz
+            dist/*.hermes-release.json
+            dist/*.dmg
+            dist/*.msix
+            dist/*.appx
+            dist/*.msixbundle
+            dist/*.appxbundle
+            dist/*.deb
+            dist/*.AppImage
+            dist/*.sha256
+            dist/*.sha256.sig
+            dist/*.sha256.minisig
+          if-no-files-found: error

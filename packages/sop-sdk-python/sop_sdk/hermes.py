@@ -10,7 +10,7 @@ import os
 import uuid
 from collections.abc import Iterator, Mapping
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -41,6 +41,8 @@ _LIST_RESOURCES = {
 _DELETE_RESOURCES = {"assets"}
 _RUN_ACTIONS = {"start", "cancel", "retry", "replay", "export"}
 _SCHEDULE_ACTIONS = {"trigger", "pause", "resume"}
+_SCHEDULE_CONFIG_REQUIRED_KEYS = {"title", "trigger", "nodes"}
+_SCHEDULE_CONFIG_LEGACY_TRIGGER_KEYS = {"interval_seconds", "starts_at", "cron_expression", "timezone", "secret_ref", "max_body_bytes"}
 
 
 class HermesClient:
@@ -401,6 +403,7 @@ class HermesClient:
         idempotency_key: str | None = None,
         isolation: str = "workspace",
         base_commit: str = "",
+        target_device_id: str = "",
     ) -> dict[str, Any]:
         if isolation not in {"workspace", "git_worktree"}:
             raise ValueError("isolation must be workspace or git_worktree")
@@ -421,6 +424,8 @@ class HermesClient:
             body["agent_id"] = agent_id
         else:
             body["squad_id"] = squad_id
+        if target_device_id:
+            body["target_device_id"] = target_device_id
         return self._request("POST", f"/tasks/{task_id}/agent-dispatch", body=body)
 
     def task_review(self, task_id: str, *, run_id: str, run_version: int, expected_version: int,
@@ -464,6 +469,7 @@ class HermesClient:
         dry_run: bool = True,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
+        self._validate_schedule_config(data)
         body = dict(data)
         body["dry_run"] = dry_run
         body["idempotency_key"] = idempotency_key or self.new_idempotency_key("hermes-schedule-configure")
@@ -490,6 +496,85 @@ class HermesClient:
 
     def schedule_history(self, schedule_id: str, *, limit: int = 50, cursor: str = "") -> dict[str, Any]:
         return self._request("GET", f"/schedules/{schedule_id}/history", params={"limit": limit, "cursor": cursor})
+
+    def schedule_preview(self, data: Mapping[str, Any], *, runs: int = 5) -> dict[str, Any]:
+        self._validate_schedule_config(data)
+        body = {**data, "dry_run": True, "idempotency_key": self.new_idempotency_key("schedule-preview")}
+        return self._request("POST", "/schedules/preview", params={"runs": runs}, body=body)
+
+    @staticmethod
+    def _validate_schedule_config(data: Mapping[str, Any]) -> None:
+        missing = _SCHEDULE_CONFIG_REQUIRED_KEYS - set(data)
+        if missing:
+            raise ValueError(f"schedule configuration requires {', '.join(sorted(_SCHEDULE_CONFIG_REQUIRED_KEYS))}")
+        legacy_keys = _SCHEDULE_CONFIG_LEGACY_TRIGGER_KEYS & (set(data) - {"trigger"})
+        if legacy_keys:
+            raise ValueError("schedule trigger fields must be nested under trigger")
+        trigger = data.get("trigger")
+        if not isinstance(trigger, Mapping):
+            raise ValueError("schedule configuration trigger must be a JSON object")
+        trigger_type = trigger.get("type")
+        if trigger_type not in {"interval", "cron", "webhook"}:
+            raise ValueError("schedule trigger type must be interval, cron, or webhook")
+
+    def schedule_webhook_test(self, schedule_id: str, *, expected_version: int,
+                              dry_run: bool = True, idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("POST", f"/schedules/{quote(schedule_id, safe='')}/webhook-test", body={
+            "expected_version": expected_version, "dry_run": dry_run,
+            "idempotency_key": idempotency_key or self.new_idempotency_key("webhook-test"),
+        })
+
+    def collaboration_channels(self, *, include_archived: bool = False) -> dict[str, Any]:
+        return self._request("GET", "/collaboration/channels", params={"include_archived": str(include_archived).lower()})
+
+    def collaboration_members(self) -> dict[str, Any]:
+        return self._request("GET", "/collaboration/members")
+
+    def collaboration_configure_channel(self, channel_id: str, data: Mapping[str, Any], *,
+                                        dry_run: bool = True, idempotency_key: str | None = None,
+                                        expected_version: int | None = None) -> dict[str, Any]:
+        body = self._collaboration_body(data, dry_run, idempotency_key, expected_version)
+        return self._request("POST", f"/collaboration/channels/{quote(channel_id, safe='')}/configure", body=body)
+
+    def collaboration_threads(self, channel_id: str, *, cursor: str = "", limit: int = 100, include_archived: bool = False) -> dict[str, Any]:
+        return self._request("GET", f"/collaboration/channels/{quote(channel_id, safe='')}/threads", params={"cursor": cursor, "limit": limit, "include_archived": include_archived})
+
+    def collaboration_create_thread(self, data: Mapping[str, Any], *, dry_run: bool = True,
+                                    idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("POST", "/collaboration/threads", body=self._collaboration_body(data, dry_run, idempotency_key))
+
+    def collaboration_messages(self, thread_id: str, *, after: int = 0, limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", f"/collaboration/threads/{quote(thread_id, safe='')}/messages", params={"after": after, "limit": limit})
+
+    def collaboration_send_message(self, data: Mapping[str, Any], *, dry_run: bool = True,
+                                   idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("POST", "/collaboration/messages", body=self._collaboration_body(data, dry_run, idempotency_key))
+
+    def collaboration_edit_message(self, message_id: str, data: Mapping[str, Any], *, expected_version: int,
+                                   dry_run: bool = True, idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("PATCH", f"/collaboration/messages/{quote(message_id, safe='')}",
+                             body=self._collaboration_body(data, dry_run, idempotency_key, expected_version))
+
+    def collaboration_archive(self, resource: str, entity_id: str, *, expected_version: int,
+                              dry_run: bool = True, idempotency_key: str | None = None) -> dict[str, Any]:
+        if resource not in {"threads", "messages"}:
+            raise ValueError("collaboration archive resource must be threads or messages")
+        return self._request("POST", f"/collaboration/{resource}/{quote(entity_id, safe='')}/archive",
+                             body=self._collaboration_body({}, dry_run, idempotency_key, expected_version))
+
+    def collaboration_inbox(self, *, limit: int = 100) -> dict[str, Any]:
+        return self._request("GET", "/collaboration/inbox", params={"limit": limit})
+
+    def collaboration_mark_read(self, data: Mapping[str, Any], *, dry_run: bool = True,
+                                idempotency_key: str | None = None) -> dict[str, Any]:
+        return self._request("POST", "/collaboration/read", body=self._collaboration_body(data, dry_run, idempotency_key))
+
+    def _collaboration_body(self, data: Mapping[str, Any], dry_run: bool, key: str | None,
+                            expected_version: int | None = None) -> dict[str, Any]:
+        body = {**data, "dry_run": dry_run, "idempotency_key": key or self.new_idempotency_key("collaboration")}
+        if expected_version is not None:
+            body["expected_version"] = expected_version
+        return body
 
     def device_pairing(
         self,

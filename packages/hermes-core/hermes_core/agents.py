@@ -50,6 +50,7 @@ class AgentDispatch(RunAction):
     prompt: str = Field(default="", max_length=16000)
     isolation: Literal["workspace", "git_worktree"] = "workspace"
     base_commit: str = Field(default="", pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})?$")
+    target_device_id: str = Field(default="", max_length=64)
 
     @model_validator(mode="after")
     def target(self):

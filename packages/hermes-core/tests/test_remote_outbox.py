@@ -91,6 +91,24 @@ def _task() -> dict[str, Any]:
     }
 
 
+def _agent_task() -> dict[str, Any]:
+    return {
+        **_task(),
+        "node": {"id": "agent-1", "kind": "agent", "agent_id": "agent-1", "prompt": "write proof",
+                 "timeout_seconds": 60, "expected_exit_code": 0},
+        "agent_binding": {
+            "agent_id": "agent-1",
+            "version": 3,
+            "profile": {"title": "Outbox Codex", "provider": "codex", "model": "gpt-5.5",
+                        "instructions": "", "timeout_seconds": 60, "status": "active"},
+            "sha256": "profile-sha",
+        },
+        "agent_source": {"resource": "agents", "id": "agent-1", "version": 3},
+        "previous_agent_context": [],
+        "boundary": {"supports": ["agent"]},
+    }
+
+
 def _agentd(tmp_path: Path) -> Path:
     script = tmp_path / "fake-sop-agentd"
     script.write_text(
@@ -102,6 +120,38 @@ def _agentd(tmp_path: Path) -> Path:
         "count.write_text(str(int(count.read_text() or '0') + 1) if count.exists() else '1')\n"
         "json.loads(sys.stdin.read())\n"
         "print(json.dumps({'exit_code': 0, 'stdout': 'agentd-ok', 'stderr': '', 'duration_ms': 7}))\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o700)
+    return script
+
+
+def _agentd_executes_argv(tmp_path: Path) -> Path:
+    script = tmp_path / "fake-agentd-exec"
+    script.write_text(
+        "#!" + sys.executable + "\n"
+        "from pathlib import Path\n"
+        "import json, subprocess, sys\n"
+        "root = Path(sys.argv[sys.argv.index('--root') + 1])\n"
+        "count = root / 'agent-executions.txt'\n"
+        "count.write_text(str(int(count.read_text() or '0') + 1) if count.exists() else '1')\n"
+        "payload = json.loads(sys.stdin.read())\n"
+        "proc = subprocess.run(payload['argv'], cwd=root, text=True, capture_output=True, timeout=payload['timeout_seconds'])\n"
+        "print(json.dumps({'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout, "
+        "'stderr': proc.stderr, 'duration_ms': 9}))\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o700)
+    return script
+
+
+def _codex_provider(tmp_path: Path) -> Path:
+    script = tmp_path / "codex"
+    script.write_text(
+        "#!" + sys.executable + "\n"
+        "import json\n"
+        "print(json.dumps({'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'agent outbox ok'}}))\n"
+        "print(json.dumps({'type': 'turn.completed', 'usage': {'total_tokens': 5}}))\n",
         encoding="utf-8",
     )
     script.chmod(0o700)
@@ -165,6 +215,38 @@ def test_lost_success_response_retries_same_result_until_ack(tmp_path: Path) -> 
         assert first["node_id"] == second["node_id"]
         assert first["idempotency_key"] == second["idempotency_key"]
         assert first["result"] == second["result"]
+    finally:
+        server.shutdown()
+
+
+def test_lost_success_response_preserves_remote_agent_result_until_ack(tmp_path: Path,
+                                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    state = {"claims": [_agent_task()], "drop_next_result_response": True, "result_statuses": [200]}
+    server, server_url = _serve(state)
+    try:
+        credential_file = tmp_path / "credential.json"
+        outbox_dir = tmp_path / "outbox"
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        credential = _credential(server_url)
+        _write_credential(credential_file, credential)
+        agentd = _agentd_executes_argv(tmp_path)
+        _codex_provider(bin_dir)
+        monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
+
+        assert worker_main(_argv(server_url, credential_file, outbox_dir, tmp_path, agentd,
+                                 "--once", "--runtime-capability", "agent")) == 1
+        assert (tmp_path / "agent-executions.txt").read_text(encoding="utf-8") == "1"
+        assert worker_main(_argv(server_url, credential_file, outbox_dir, tmp_path, agentd,
+                                 "--once", "--runtime-capability", "agent")) == 0
+        assert (tmp_path / "agent-executions.txt").read_text(encoding="utf-8") == "1"
+        first, second = state["result_requests"]
+        assert first["idempotency_key"] == second["idempotency_key"]
+        assert first["result"] == second["result"]
+        assert second["result"]["agent"]["completed"] is True
+        assert second["result"]["agent"]["message"] == "agent outbox ok"
+        assert second["result"]["agent"]["profile_version"] == 3
+        assert RemoteOutbox(outbox_dir, credential).status()["counts"] == {"acknowledged": 1}
     finally:
         server.shutdown()
 
