@@ -115,7 +115,8 @@ const zh = {
   stale: "候选已失效",
   deployment: "部署与交接",
   notHandedOff: "尚未交接实际部署",
-  deploymentHint: "本阶段没有部署回执；候选审批不会启动流水线、灰度或回退。",
+  deploymentHint:
+    "候选审批不会自动部署。请明确准备固定部署计划并核对实际运行与健康证据。",
   review: "评审候选",
   approve: "批准候选",
   reject: "拒绝候选",
@@ -272,7 +273,7 @@ const en: typeof zh = {
   deployment: "Deployment and handoff",
   notHandedOff: "Not handed off for deployment",
   deploymentHint:
-    "No deployment receipt is connected in this stage. Candidate approval does not start a pipeline, canary or rollback.",
+    "Candidate approval does not deploy automatically. Prepare a fixed deployment plan and review actual execution and health evidence.",
   review: "Review candidate",
   approve: "Approve candidate",
   reject: "Reject candidate",
@@ -427,7 +428,7 @@ const ja: typeof zh = {
   deployment: "デプロイと引き継ぎ",
   notHandedOff: "実際のデプロイには未引き継ぎ",
   deploymentHint:
-    "この段階ではデプロイの受領証は接続されていません。候補の承認はパイプライン、カナリア、ロールバックを開始しません。",
+    "候補の承認では自動デプロイしません。固定デプロイ計画を準備し、実際の実行と健全性の証拠を確認してください。",
   review: "候補を審査",
   approve: "候補を承認",
   reject: "候補を却下",

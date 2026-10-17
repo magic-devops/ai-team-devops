@@ -124,6 +124,17 @@ class ManagerClient:
         """Preview a fixed candidate; this never approves or deploys it."""
         return self._request("POST", "/api/v1/delivery/release-preview", json_body=dict(body))
 
+    def delivery_deployments(self) -> dict[str, Any]:
+        """Read controlled environments and actual deployment evidence in this project."""
+        return self._request("GET", "/api/v1/delivery/deployments")
+
+    def delivery_deployment(self, deployment_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/deployments/{_resource_segment(deployment_id)}")
+
+    def delivery_deployment_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Preview a fixed deploy or rollback; this performs no infrastructure action."""
+        return self._request("POST", "/api/v1/delivery/deployment-preview", json_body=dict(body))
+
     def delivery_inbox(self, *, scope: str = "mine") -> dict[str, Any]:
         """Read actual personal or team delivery work in the selected project."""
         if scope not in {"mine", "team"}:

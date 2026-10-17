@@ -60,7 +60,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
     repository = Repository(execution)
     delivery = Delivery(store, repository)
     agents = Agents(store)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot"}
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot", "deployment_source"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -157,6 +157,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         require(principal, "export" if action == "export" else "execute")
         workspace = workspace_id(request, principal)
         run = store.get(principal, workspace, "runs", run_id)
+        if run["data"].get("deployment_source") and action != "export":
+            raise CoreError("managed_deployment", "Use the managed deployment operation; generic run actions cannot repeat deployment side effects", 409)
         if action not in {"start", "cancel", "retry", "replay", "export"}:
             raise CoreError("unknown_action", "Unsupported run action", 404)
         operation = f"run.{action}:{run_id}"
@@ -491,6 +493,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             raise CoreError("server_owned_fields", "Task delivery evidence is server-managed", 422)
 
         def transform(item):
+            if resource == "runs" and item["data"].get("deployment_source"):
+                raise CoreError("managed_deployment", "Managed deployment plans and evidence are immutable", 409)
             if resource == "tasks" and item["data"].get("delivery", {}).get("phase") in {"executing", "accepted"}:
                 raise CoreError("delivery_active", "Dispatched and accepted tasks are immutable; request changes on an open delivery or create a follow-up task", 409)
             if resource == "tasks" and item["data"].get("delivery") and body.data.get("status") == "completed":

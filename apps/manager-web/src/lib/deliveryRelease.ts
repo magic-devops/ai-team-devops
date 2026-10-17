@@ -5,6 +5,7 @@ import {
   type DeliveryWorkspace,
 } from "./delivery";
 import { projectHeaders } from "./projectPortfolio";
+import type { DeploymentStatus } from "./deliveryDeployment";
 
 export type ReleaseScope = { requirement_ids: string[]; task_ids: string[] };
 export type ReleaseTarget = {
@@ -197,7 +198,11 @@ export type ReleaseCandidate = {
     can_reject: boolean;
     can_revoke: boolean;
   };
-  deployment: { status: "not_handed_off"; verified: false };
+  deployment: {
+    status: "not_handed_off" | "superseded" | DeploymentStatus;
+    verified: boolean;
+    deployment_id: string | null;
+  };
 };
 export type ReleasePermissions = {
   can_configure: boolean;

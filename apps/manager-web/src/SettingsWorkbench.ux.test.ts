@@ -35,21 +35,15 @@ describe("Settings workbench UX contract", () => {
     expect(source).not.toContain("onSubmit={(e) => {\n                e.preventDefault();\n                if (!profileDraft.name.trim()) return;\n                saveProfile.mutate();\n              }}");
   });
 
-  it("keeps release pipeline creation in a preview-first drawer flow", () => {
-    expect(source).toContain("deploymentPipelineDrawerOpen");
-    expect(source).not.toContain("pipelineQuickSummary");
-    expect(profilesSource).toContain("pipelineQuickSummary");
-    expect(profilesSource).toContain("pipelineOpenDrawer");
-    expect(profilesSource).toContain("setDeploymentPipelineDrawerOpen(true)");
-    expect(profilesSource).toContain("Switch checked={deploymentPipelineDraft.dry_run}");
+  it("keeps configuration exports and sends deployment work to the current project releases", () => {
     expect(profilesSource).toContain("createDeploymentPackage.mutate()");
-    expect(profilesSource).toContain("createDeploymentApproval.mutate()");
-    expect(profilesSource).toContain("createDeploymentCanaryPolicy.mutate()");
-    expect(profilesSource).toContain("createDeploymentPipeline.mutate(true)");
-    expect(profilesSource).toContain("createDeploymentPipeline.mutate(false)");
-    expect(profilesSource).toContain("executeDeploymentPipeline.mutate(true)");
-    expect(profilesSource).toContain("callbackDeploymentPipelineExecution.mutate()");
-    expect(profilesSource).toContain("remediateDeploymentPipeline.mutate(false)");
+    expect(profilesSource).toContain("page.settings.configurationOnlyNotice");
+    expect(profilesSource).toContain("href={controlledReleasesHref}");
+    expect(source).toContain('projectWorkspaceHash(projectId, "#/dev-flow?view=releases")');
+    for (const retired of ["deploymentPipeline", "DeploymentApproval", "DeploymentCanary", "DeploymentExecutor", "DeploymentRollback", "DeploymentExecutionAudit"]) {
+      expect(source).not.toContain(retired);
+      expect(profilesSource).not.toContain(retired);
+    }
   });
 
   it("keeps SSO risk governance tasking in a focused drawer flow", () => {

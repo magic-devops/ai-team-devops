@@ -204,10 +204,6 @@ def _promote_runbook_version(runbook: dict, version: dict, actor: str, note: str
     _write_runbook_event(runbook["id"], "version_promoted", actor, note, {"version_id": version["id"], "version_no": version.get("version_no")})
     return runbook
 
-class PipelineCreate(BaseModel):
-    name: str
-    environment: str = "staging"
-    steps: list[str] = Field(default_factory=list)
 
 class RcaCreate(BaseModel):
     incident_id: str
@@ -428,43 +424,15 @@ class SelfHealRollbackIn(BaseModel):
     operator: str = "Ops Lead"
     evidence: dict = Field(default_factory=dict)
 
-class PipelineStatus(BaseModel):
-    status: str
-    duration_s: int | None = None
-    error_msg: str = ""
 
 @router.get("/pipelines")
 def list_pipelines():
-    return {**_scope(), "items": _load_all("pipelines"), "total": len(_load_all("pipelines"))}
+    items = _load_all("pipelines")
+    return {**_scope(), "items": items, "total": len(items), "historical_only": True, "deployment_evidence": False}
 
-@router.post("/pipelines")
-def create_pipeline(body: PipelineCreate):
-    item = {**_scope(), "id": str(uuid4()), **body.model_dump(),
-            "status": "idle", "last_triggered_at": None, "duration_s": None, "created_at": _now()}
-    _save("pipelines", item)
-    return item
 
-@router.put("/pipelines/{pipeline_id}/trigger")
-def trigger_pipeline(pipeline_id: str):
-    item = _load_scoped_item("pipelines", pipeline_id, "pipeline not found")
-    item.update({"status": "running", "last_triggered_at": _now()})
-    _save("pipelines", item)
-    return item
 
-@router.put("/pipelines/{pipeline_id}/status")
-def update_pipeline_status(pipeline_id: str, body: PipelineStatus):
-    item = _load_scoped_item("pipelines", pipeline_id, "pipeline not found")
-    item.update({"status": body.status, "duration_s": body.duration_s, "error_msg": body.error_msg, "updated_at": _now()})
-    _save("pipelines", item)
-    return item
 
-@router.delete("/pipelines/{pipeline_id}")
-def delete_pipeline(pipeline_id: str):
-    _load_scoped_item("pipelines", pipeline_id, "pipeline not found")
-    p = _dir("pipelines") / f"{pipeline_id}.json"
-    with project_file_write_scope():
-        p.unlink()
-    return {**_scope(), "deleted": pipeline_id}
 
 @router.get("/rca")
 def list_rca():

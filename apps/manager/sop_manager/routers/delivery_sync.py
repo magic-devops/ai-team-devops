@@ -66,6 +66,53 @@ def sync_once(app, sessions=SessionLocal):
                     db.rollback()
                     # Revoked permissions and CAS races must not mutate or stop other projects.
                     logger.debug("Delivery sync deferred for %s", execution_id)
+    return applied + _sync_deployments(app, sessions, store, [project_id for (project_id,) in rows])
+
+
+def _sync_deployments(app, sessions, store, project_ids):
+    from .delivery_deployment import _context, active_deployment_ids
+
+    applied = 0
+    for project_id in project_ids:
+        with sessions() as db:
+            project = db.get(Project, project_id)
+            row = db.get(DeliveryWorkspace, project_id)
+            if project is None or project.status == "archived" or row is None:
+                continue
+            ids = active_deployment_ids(row.data)
+        for deployment_id in ids:
+            with sessions() as db:
+                project = db.get(Project, project_id)
+                row = db.get(DeliveryWorkspace, project_id)
+                if project is None or project.status == "archived" or row is None:
+                    continue
+                entry = next((item for item in row.data.get("deployments", []) if item["id"] == deployment_id), None)
+                if entry is None or deployment_id not in active_deployment_ids(row.data) or not entry["operations"]:
+                    continue
+                operation = entry["operations"][-1]
+                if not operation.get("run_id"):
+                    continue
+                user = db.get(User, operation["requested_by"]["id"])
+                if user is None or user.status != "active":
+                    continue
+                try:
+                    workspace_id = entry["snapshot"]["definition"]["workspace_id"]
+                    principal, _ = _context(store, user, project, workspace_id, "read")
+                    run = store.get(principal, workspace_id, "runs", operation["run_id"])
+                    if run["version"] == operation.get("run_version"):
+                        continue
+                    execute(
+                        Command(
+                            action="deployment.sync", payload={"id": deployment_id},
+                            expected_version=row.version,
+                            idempotency_key=f"deployment-sync-{operation['id']}-{run['version']}",
+                        ),
+                        user=user, db=db, project_id=project_id, request=SimpleNamespace(app=app),
+                    )
+                    applied += 1
+                except (HTTPException, CoreError):
+                    db.rollback()
+                    logger.debug("Deployment observation deferred for %s", deployment_id)
     return applied
 
 

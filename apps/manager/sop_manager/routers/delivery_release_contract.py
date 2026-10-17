@@ -251,8 +251,13 @@ class ReleaseCandidatePermissions(ReleaseContract):
 
 
 class ReleaseDeployment(ReleaseContract):
-    status: Literal["not_handed_off"] = "not_handed_off"
-    verified: Literal[False] = False
+    status: Literal[
+        "not_handed_off", "pending_dispatch", "planned", "queued", "running",
+        "awaiting_promotion", "verified", "failed", "unknown", "cancelled",
+        "rolled_back", "superseded",
+    ] = "not_handed_off"
+    verified: bool = False
+    deployment_id: str | None = None
 
 
 class ReleaseCandidate(ReleaseContract):

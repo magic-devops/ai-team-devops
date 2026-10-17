@@ -471,9 +471,7 @@ def test_rca_insight_create_rca_persists_candidate_with_runbook(monkeypatch, tmp
             tags=["rollback", "pipeline"],
             steps=["freeze traffic", "rollback", "verify"],
         ))
-        ops_center.create_pipeline(ops_center.PipelineCreate(name="production deploy", environment="production"))
-        pipeline = ops_center.list_pipelines()["items"][0]
-        ops_center.update_pipeline_status(pipeline["id"], ops_center.PipelineStatus(status="failed", error_msg="rollback required"))
+        ops_center._save("pipelines", {"id": "historic-pipeline", "name": "production deploy", "environment": "production", "status": "failed", "error_msg": "rollback required", "created_at": "2025-01-01T00:00:00Z"})
 
         analysis = ops_center.rca_insights(ops_center.RcaInsightIn(limit=10))
         candidate = next(item for item in analysis["candidates"] if item["kind"] == "pipeline_failure")

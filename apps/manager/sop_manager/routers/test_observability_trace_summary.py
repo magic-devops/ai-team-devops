@@ -94,11 +94,12 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
     assert "/api/v1/system/ops/observability/traces" == summary["agent_consumption"]["api"]
 
 
-def test_system_pages_settings_contract_exposes_trace_observability():
+def test_system_pages_observability_page_contract_exposes_trace_navigation():
     from sop_manager.routers.system_pages import system_pages_readiness
 
-    payload = system_pages_readiness(q="设置")
-    settings = next(item for item in payload["items"] if item["id"] == "settings")
+    payload = system_pages_readiness(q="日志观测")
+    settings = next(item for item in payload["items"] if item["id"] == "settingsObservability")
+    assert settings["path"] == "#/settings/observability"
 
     apis = set(settings["implementation_contract"]["apis"])
     assert "/api/v1/system/ops/observability/traces" in apis

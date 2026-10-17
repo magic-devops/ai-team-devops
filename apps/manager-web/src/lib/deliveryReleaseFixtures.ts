@@ -180,7 +180,11 @@ export const releaseCandidate: ReleaseCandidate = {
   reasons: [],
   review_basis: "e".repeat(64),
   permissions: { can_approve: true, can_reject: true, can_revoke: true },
-  deployment: { status: "not_handed_off", verified: false },
+  deployment: {
+    status: "not_handed_off",
+    verified: false,
+    deployment_id: null,
+  },
 };
 export const releaseIndex: DeliveryReleases = {
   project_id: "P",

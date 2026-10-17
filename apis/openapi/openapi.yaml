@@ -1821,7 +1821,13 @@ paths:
         Release policy configuration requires configure; CI import and candidate creation require write; review/revoke require
         approve. Import takes raw DSSE JSON text, verifies configured Ed25519 keys and fixed scope/repository/workflow/policy
         generation, and retains failures. Current candidate validity never rewrites its original snapshot. Policy, scope, CI
-        attempt or approval-authority invalidation latches permanently. Existing manual release records cannot satisfy deployment_verified.'
+        attempt or approval-authority invalidation latches permanently. Existing manual release records cannot satisfy deployment_verified.
+
+
+        Deployment environment configuration requires configure. Explicit side effects require project approve and separately
+        runtime execute for the fixed workspace/target. Sync requires project write/runtime read and only observes actual results.
+        No generic retry/replay, manual metrics, or legacy success registration can establish deployment. Every active or unknown
+        intent blocks project archive.'
       security:
       - bearerAuth: []
       parameters:
@@ -3272,146 +3278,6 @@ paths:
                 additionalProperties: true
                 type: object
                 title: Response System Page Backlog Tasks Api V1 System Pages Backlog Tasks Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/system/ops/deployment-rollback-runbooks:
-    post:
-      tags:
-      - system-ops
-      summary: Create Deployment Rollback Runbook
-      operationId: create_deployment_rollback_runbook_api_v1_system_ops_deployment_rollback_runbooks_post
-      security:
-      - HTTPBearer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeploymentRollbackRunbookIn'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Create Deployment Rollback Runbook Api V1 System Ops Deployment Rollback Runbooks Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}/action:
-    post:
-      tags:
-      - system-ops
-      summary: Deployment Rollback Runbook Action
-      operationId: deployment_rollback_runbook_action_api_v1_system_ops_deployment_rollback_runbooks__runbook_id__action_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: runbook_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Runbook Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeploymentRollbackRunbookActionIn'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Deployment Rollback Runbook Action Api V1 System Ops Deployment Rollback Runbooks  Runbook Id  Action
-                  Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/system/ops/deployment-execution-audits/{audit_id}/tasks:
-    post:
-      tags:
-      - system-ops
-      summary: Deployment Execution Audit Tasks
-      operationId: deployment_execution_audit_tasks_api_v1_system_ops_deployment_execution_audits__audit_id__tasks_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: audit_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Audit Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeploymentExecutionAuditTaskIn'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Deployment Execution Audit Tasks Api V1 System Ops Deployment Execution Audits  Audit Id  Tasks
-                  Post
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/system/ops/deployment-pipelines/{run_id}/remediation:
-    post:
-      tags:
-      - system-ops
-      summary: Deployment Pipeline Remediation
-      operationId: deployment_pipeline_remediation_api_v1_system_ops_deployment_pipelines__run_id__remediation_post
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: run_id
-        in: path
-        required: true
-        schema:
-          type: string
-          title: Run Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeploymentPipelineRemediationIn'
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-                title: Response Deployment Pipeline Remediation Api V1 System Ops Deployment Pipelines  Run Id  Remediation
-                  Post
         '422':
           description: Validation Error
           content:
@@ -5155,6 +5021,112 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       description: Pure fixed candidate preview. Requires current project write authority and writable project state. Candidate
         creation additionally requires the exact preview_basis and outer version/idempotency identity.
+  /api/v1/delivery/deployments:
+    get:
+      tags:
+      - delivery
+      summary: Deployments
+      operationId: deliveryDeployments
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentIndex'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Pure project-scoped controlled environments and immutable deployment intents. Configuration is distinct from
+        runtime availability and verified health.
+  /api/v1/delivery/deployments/{deployment_id}:
+    get:
+      tags:
+      - delivery
+      summary: Deployment Detail
+      operationId: deliveryDeploymentDetail
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: deployment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Deployment Id
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Read the exact deployment, fixed target/plan, actual operation health and logs. Unknown IDs never fall back
+        to another intent.
+  /api/v1/delivery/deployment-preview:
+    post:
+      tags:
+      - delivery
+      summary: Deployment Preview
+      operationId: deliveryDeploymentPreview
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentPreviewInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentPreview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Fixed read-only preview for an approved candidate and explicit environment, or rollback_of with an actually
+        verified stable baseline. Creation requires the original preview_basis, expected_version and idempotency key. Normal
+        request auditing remains enabled.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -9533,6 +9505,14 @@ components:
           - release.candidate.create
           - release.candidate.review
           - release.candidate.revoke
+          - deployment.environment.save
+          - deployment.create
+          - deployment.dispatch
+          - deployment.start
+          - deployment.advance
+          - deployment.observe
+          - deployment.cancel
+          - deployment.sync
           - execution.queue
           - execution.sync
           - execution.review
@@ -9767,8 +9747,89 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/ReleaseCandidateRevoke'
+      - if:
+          properties:
+            action:
+              const: deployment.environment.save
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentEnvironmentSave'
+      - if:
+          properties:
+            action:
+              const: deployment.create
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentCreate'
+      - if:
+          properties:
+            action:
+              const: deployment.dispatch
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentAction'
+      - if:
+          properties:
+            action:
+              const: deployment.start
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentAction'
+      - if:
+          properties:
+            action:
+              const: deployment.advance
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentAction'
+      - if:
+          properties:
+            action:
+              const: deployment.observe
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentAction'
+      - if:
+          properties:
+            action:
+              const: deployment.cancel
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentAction'
+      - if:
+          properties:
+            action:
+              const: deployment.sync
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeploymentSync'
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
-        Candidate approval never proves deployment.
+        Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
+        and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay.
     TaskEdit:
       additionalProperties: false
       properties:
@@ -10139,21 +10200,45 @@ components:
           description: Explicit references fixed to requirement_basis; never silently rebound after source changes.
     DeliveryRequirement:
       type: object
-      required: [id, basis]
+      required:
+      - id
+      - basis
       properties:
-        id: { type: string }
+        id:
+          type: string
         basis:
           type: string
           minLength: 64
           maxLength: 64
           description: Current SHA-256 requirement basis, including legacy requirements without a delivery flow
-        title: { type: string }
-        description: { type: [string, 'null'] }
-        priority: { type: [string, 'null'] }
-        acceptance_criteria: { type: [array, 'null'], items: { type: string } }
-        flow: { type: object }
-        tasks_total: { type: integer, minimum: 0 }
-        tasks_done: { type: integer, minimum: 0 }
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        priority:
+          type:
+          - string
+          - 'null'
+        acceptance_criteria:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        flow:
+          type: object
+        tasks_total:
+          type: integer
+          minimum: 0
+        tasks_done:
+          type: integer
+          minimum: 0
+        deployment_verified:
+          type: boolean
+          description: Server-derived current approved candidate and latest physical 100% health-verified deployment fact; never
+            accepted from stored workflow flags.
     DeliveryTask:
       type: object
       properties:
@@ -10346,8 +10431,8 @@ components:
             released:
               type: integer
               minimum: 0
-              description: Verified deployment count. No deployment receipt adapter is integrated in this release-preparation
-                phase.
+              description: Requirements covered by currently valid approved candidates and latest actual fully verified deployment;
+                partial canary, manual records and superseded physical history do not count.
             recorded_released:
               type: integer
               minimum: 0
@@ -11184,11 +11269,11 @@ components:
           type: array
         providers:
           items:
-            $ref: '#/components/schemas/ExecutionProvider'
+            $ref: '#/components/schemas/ProviderCapability'
           title: Providers
           type: array
         policy:
-          $ref: '#/components/schemas/ExecutionPolicy'
+          $ref: '#/components/schemas/RuntimePolicy'
         can_execute:
           title: Can Execute
           type: boolean
@@ -14984,6 +15069,7 @@ components:
           - issue
           - milestone
           - execution
+          - deployment
           title: Kind
           type: string
         view:
@@ -15023,6 +15109,12 @@ components:
           - type: 'null'
           default: null
           title: Execution Id
+        deployment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Deployment Id
       required:
       - project_id
       - kind
@@ -16521,15 +16613,32 @@ components:
       additionalProperties: false
       properties:
         status:
-          const: not_handed_off
           default: not_handed_off
+          enum:
+          - not_handed_off
+          - pending_dispatch
+          - planned
+          - queued
+          - running
+          - awaiting_promotion
+          - verified
+          - failed
+          - unknown
+          - cancelled
+          - rolled_back
+          - superseded
           title: Status
           type: string
         verified:
-          const: false
           default: false
           title: Verified
           type: boolean
+        deployment_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Deployment Id
       title: ReleaseDeployment
       type: object
     ReleaseKey:
@@ -16944,4 +17053,823 @@ components:
       - comment
       - review_basis
       title: ReleaseCandidateRevoke
+      type: object
+    DeploymentActions:
+      additionalProperties: false
+      properties:
+        can_dispatch:
+          title: Can Dispatch
+          type: boolean
+        can_start:
+          title: Can Start
+          type: boolean
+        can_advance:
+          title: Can Advance
+          type: boolean
+        can_observe:
+          title: Can Observe
+          type: boolean
+        can_cancel:
+          title: Can Cancel
+          type: boolean
+        can_sync:
+          title: Can Sync
+          type: boolean
+        can_rollback:
+          title: Can Rollback
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/DeploymentReason'
+          title: Reasons
+          type: array
+      required:
+      - can_dispatch
+      - can_start
+      - can_advance
+      - can_observe
+      - can_cancel
+      - can_sync
+      - can_rollback
+      - reasons
+      title: DeploymentActions
+      type: object
+    DeploymentBaseline:
+      additionalProperties: false
+      properties:
+        deployment_id:
+          title: Deployment Id
+          type: string
+        candidate_id:
+          title: Candidate Id
+          type: string
+        candidate_snapshot:
+          $ref: '#/components/schemas/ReleaseSnapshot'
+        environment_id:
+          title: Environment Id
+          type: string
+        environment_generation:
+          title: Environment Generation
+          type: integer
+        target_snapshot:
+          $ref: '#/components/schemas/ExecutionTarget'
+        verified_at:
+          title: Verified At
+          type: string
+      required:
+      - deployment_id
+      - candidate_id
+      - candidate_snapshot
+      - environment_id
+      - environment_generation
+      - target_snapshot
+      - verified_at
+      title: DeploymentBaseline
+      type: object
+    DeploymentEnvironment:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        generation:
+          title: Generation
+          type: integer
+        active:
+          title: Active
+          type: boolean
+        definition:
+          $ref: '#/components/schemas/DeploymentEnvironmentDefinition'
+        created_at:
+          title: Created At
+          type: string
+        updated_at:
+          title: Updated At
+          type: string
+        locked_by:
+          items:
+            type: string
+          title: Locked By
+          type: array
+        can_edit:
+          title: Can Edit
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/DeploymentReason'
+          title: Reasons
+          type: array
+      required:
+      - id
+      - name
+      - generation
+      - active
+      - definition
+      - created_at
+      - updated_at
+      - locked_by
+      - can_edit
+      - reasons
+      title: DeploymentEnvironment
+      type: object
+    DeploymentEnvironmentDefinition:
+      additionalProperties: false
+      properties:
+        workspace_id:
+          maxLength: 200
+          minLength: 1
+          title: Workspace Id
+          type: string
+        target_device_id:
+          default: ''
+          maxLength: 200
+          title: Target Device Id
+          type: string
+        runner_argv:
+          items:
+            type: string
+          maxItems: 64
+          minItems: 1
+          title: Runner Argv
+          type: array
+        apply_argv:
+          items:
+            type: string
+          maxItems: 128
+          minItems: 1
+          title: Apply Argv
+          type: array
+        probe_argv:
+          items:
+            type: string
+          maxItems: 128
+          minItems: 1
+          title: Probe Argv
+          type: array
+        artifact_origins:
+          items:
+            type: string
+          maxItems: 8
+          minItems: 1
+          title: Artifact Origins
+          type: array
+        max_artifact_bytes:
+          default: 268435456
+          maximum: 268435456
+          minimum: 1
+          title: Max Artifact Bytes
+          type: integer
+        timeout_seconds:
+          default: 120
+          maximum: 3540
+          minimum: 3
+          title: Timeout Seconds
+          type: integer
+        observation_seconds:
+          default: 10
+          maximum: 600
+          minimum: 1
+          title: Observation Seconds
+          type: integer
+        min_samples:
+          default: 2
+          maximum: 100
+          minimum: 1
+          title: Min Samples
+          type: integer
+        traffic_steps:
+          items:
+            maximum: 100
+            minimum: 1
+            type: integer
+          maxItems: 10
+          minItems: 1
+          title: Traffic Steps
+          type: array
+      required:
+      - workspace_id
+      - runner_argv
+      - apply_argv
+      - probe_argv
+      - artifact_origins
+      title: DeploymentEnvironmentDefinition
+      type: object
+    DeploymentOperation:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        index:
+          title: Index
+          type: integer
+        observe:
+          title: Observe
+          type: boolean
+        status:
+          title: Status
+          type: string
+        plan:
+          additionalProperties: true
+          title: Plan
+          type: object
+        plan_digest:
+          title: Plan Digest
+          type: string
+        requested_by:
+          $ref: '#/components/schemas/ReleaseActor'
+        runtime_scope:
+          additionalProperties:
+            type: string
+          title: Runtime Scope
+          type: object
+        run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Run Id
+        run_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Run Version
+        run_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Run Status
+        result:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Result
+        created_at:
+          title: Created At
+          type: string
+        updated_at:
+          title: Updated At
+          type: string
+      required:
+      - id
+      - index
+      - observe
+      - status
+      - plan
+      - plan_digest
+      - requested_by
+      - runtime_scope
+      - run_id
+      - run_version
+      - run_status
+      - result
+      - created_at
+      - updated_at
+      title: DeploymentOperation
+      type: object
+    DeploymentPermissions:
+      additionalProperties: false
+      properties:
+        can_configure:
+          title: Can Configure
+          type: boolean
+        can_prepare:
+          title: Can Prepare
+          type: boolean
+        can_operate:
+          title: Can Operate
+          type: boolean
+        can_sync:
+          title: Can Sync
+          type: boolean
+      required:
+      - can_configure
+      - can_prepare
+      - can_operate
+      - can_sync
+      title: DeploymentPermissions
+      type: object
+    DeploymentReason:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: DeploymentReason
+      type: object
+    DeploymentSnapshot:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - deploy
+          - rollback
+          title: Kind
+          type: string
+        candidate_id:
+          title: Candidate Id
+          type: string
+        candidate_snapshot:
+          $ref: '#/components/schemas/ReleaseSnapshot'
+        environment_id:
+          title: Environment Id
+          type: string
+        environment_name:
+          title: Environment Name
+          type: string
+        environment_generation:
+          title: Environment Generation
+          type: integer
+        definition:
+          $ref: '#/components/schemas/DeploymentEnvironmentDefinition'
+        target_snapshot:
+          $ref: '#/components/schemas/ExecutionTarget'
+        baseline:
+          anyOf:
+          - $ref: '#/components/schemas/DeploymentBaseline'
+          - type: 'null'
+        rollback_of:
+          title: Rollback Of
+          type: string
+        traffic_steps:
+          items:
+            type: integer
+          title: Traffic Steps
+          type: array
+        reason:
+          title: Reason
+          type: string
+      required:
+      - kind
+      - candidate_id
+      - candidate_snapshot
+      - environment_id
+      - environment_name
+      - environment_generation
+      - definition
+      - target_snapshot
+      - baseline
+      - rollback_of
+      - traffic_steps
+      - reason
+      title: DeploymentSnapshot
+      type: object
+    DeploymentView:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        candidate_id:
+          title: Candidate Id
+          type: string
+        environment_id:
+          title: Environment Id
+          type: string
+        kind:
+          enum:
+          - deploy
+          - rollback
+          title: Kind
+          type: string
+        status:
+          enum:
+          - pending_dispatch
+          - planned
+          - queued
+          - running
+          - awaiting_promotion
+          - verified
+          - failed
+          - unknown
+          - cancelled
+          - rolled_back
+          title: Status
+          type: string
+        requested_by:
+          $ref: '#/components/schemas/ReleaseActor'
+        snapshot:
+          $ref: '#/components/schemas/DeploymentSnapshot'
+        operations:
+          items:
+            $ref: '#/components/schemas/DeploymentOperation'
+          title: Operations
+          type: array
+        created_at:
+          title: Created At
+          type: string
+        updated_at:
+          title: Updated At
+          type: string
+        verified_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Verified At
+        actual_traffic:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Actual Traffic
+        issue_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Issue Id
+        current:
+          title: Current
+          type: boolean
+        business_valid:
+          title: Business Valid
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/DeploymentReason'
+          title: Reasons
+          type: array
+        basis:
+          title: Basis
+          type: string
+        actions:
+          $ref: '#/components/schemas/DeploymentActions'
+      required:
+      - id
+      - candidate_id
+      - environment_id
+      - kind
+      - status
+      - requested_by
+      - snapshot
+      - operations
+      - created_at
+      - updated_at
+      - verified_at
+      - actual_traffic
+      - issue_id
+      - current
+      - business_valid
+      - reasons
+      - basis
+      - actions
+      title: DeploymentView
+      type: object
+    ProviderCapability:
+      additionalProperties: false
+      properties:
+        id:
+          enum:
+          - codex
+          - claude
+          - opencode
+          title: Id
+          type: string
+        executable_present:
+          title: Executable Present
+          type: boolean
+        version:
+          anyOf:
+          - maxLength: 80
+            type: string
+          - type: 'null'
+          default: null
+          title: Version
+        auth:
+          const: unknown
+          default: unknown
+          title: Auth
+          type: string
+      required:
+      - id
+      - executable_present
+      title: ProviderCapability
+      type: object
+    RuntimePolicy:
+      additionalProperties: false
+      properties:
+        allowed_runtimes:
+          items:
+            enum:
+            - command
+            - agent
+            type: string
+          maxItems: 2
+          title: Allowed Runtimes
+          type: array
+        allowed_providers:
+          items:
+            enum:
+            - codex
+            - claude
+            - opencode
+            type: string
+          maxItems: 3
+          title: Allowed Providers
+          type: array
+      required:
+      - allowed_runtimes
+      - allowed_providers
+      title: RuntimePolicy
+      type: object
+    DeploymentIndex:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        environments:
+          items:
+            $ref: '#/components/schemas/DeploymentEnvironment'
+          title: Environments
+          type: array
+        deployments:
+          items:
+            $ref: '#/components/schemas/DeploymentView'
+          title: Deployments
+          type: array
+        permissions:
+          $ref: '#/components/schemas/DeploymentPermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - environments
+      - deployments
+      - permissions
+      title: DeploymentIndex
+      type: object
+    DeploymentDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        deployment:
+          $ref: '#/components/schemas/DeploymentView'
+        environments:
+          items:
+            $ref: '#/components/schemas/DeploymentEnvironment'
+          title: Environments
+          type: array
+        permissions:
+          $ref: '#/components/schemas/DeploymentPermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - deployment
+      - environments
+      - permissions
+      title: DeploymentDetail
+      type: object
+    DeploymentPreview:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        allowed:
+          title: Allowed
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/DeploymentReason'
+          title: Reasons
+          type: array
+        preview_basis:
+          title: Preview Basis
+          type: string
+        snapshot:
+          anyOf:
+          - $ref: '#/components/schemas/DeploymentSnapshot'
+          - type: 'null'
+        permissions:
+          $ref: '#/components/schemas/DeploymentPermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - allowed
+      - reasons
+      - preview_basis
+      - snapshot
+      - permissions
+      title: DeploymentPreview
+      type: object
+    DeploymentPreviewInput:
+      additionalProperties: false
+      properties:
+        candidate_id:
+          default: ''
+          maxLength: 200
+          title: Candidate Id
+          type: string
+        environment_id:
+          default: ''
+          maxLength: 200
+          title: Environment Id
+          type: string
+        rollback_of:
+          default: ''
+          maxLength: 200
+          title: Rollback Of
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+      required:
+      - reason
+      title: DeploymentPreviewInput
+      type: object
+    DeploymentEnvironmentSave:
+      additionalProperties: false
+      properties:
+        workspace_id:
+          maxLength: 200
+          minLength: 1
+          title: Workspace Id
+          type: string
+        target_device_id:
+          default: ''
+          maxLength: 200
+          title: Target Device Id
+          type: string
+        runner_argv:
+          items:
+            type: string
+          maxItems: 64
+          minItems: 1
+          title: Runner Argv
+          type: array
+        apply_argv:
+          items:
+            type: string
+          maxItems: 128
+          minItems: 1
+          title: Apply Argv
+          type: array
+        probe_argv:
+          items:
+            type: string
+          maxItems: 128
+          minItems: 1
+          title: Probe Argv
+          type: array
+        artifact_origins:
+          items:
+            type: string
+          maxItems: 8
+          minItems: 1
+          title: Artifact Origins
+          type: array
+        max_artifact_bytes:
+          default: 268435456
+          maximum: 268435456
+          minimum: 1
+          title: Max Artifact Bytes
+          type: integer
+        timeout_seconds:
+          default: 120
+          maximum: 3540
+          minimum: 3
+          title: Timeout Seconds
+          type: integer
+        observation_seconds:
+          default: 10
+          maximum: 600
+          minimum: 1
+          title: Observation Seconds
+          type: integer
+        min_samples:
+          default: 2
+          maximum: 100
+          minimum: 1
+          title: Min Samples
+          type: integer
+        traffic_steps:
+          items:
+            maximum: 100
+            minimum: 1
+            type: integer
+          maxItems: 10
+          minItems: 1
+          title: Traffic Steps
+          type: array
+        id:
+          default: ''
+          maxLength: 200
+          title: Id
+          type: string
+        name:
+          maxLength: 80
+          minLength: 1
+          title: Name
+          type: string
+        active:
+          default: true
+          title: Active
+          type: boolean
+      required:
+      - workspace_id
+      - runner_argv
+      - apply_argv
+      - probe_argv
+      - artifact_origins
+      - name
+      title: DeploymentEnvironmentSave
+      type: object
+    DeploymentCreate:
+      additionalProperties: false
+      properties:
+        candidate_id:
+          default: ''
+          maxLength: 200
+          title: Candidate Id
+          type: string
+        environment_id:
+          default: ''
+          maxLength: 200
+          title: Environment Id
+          type: string
+        rollback_of:
+          default: ''
+          maxLength: 200
+          title: Rollback Of
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+        preview_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Preview Basis
+          type: string
+      required:
+      - reason
+      - preview_basis
+      title: DeploymentCreate
+      type: object
+    DeploymentAction:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+        basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Basis
+          type: string
+        comment:
+          maxLength: 2000
+          minLength: 1
+          title: Comment
+          type: string
+      required:
+      - id
+      - basis
+      - comment
+      title: DeploymentAction
+      type: object
+    DeploymentSync:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+      required:
+      - id
+      title: DeploymentSync
       type: object

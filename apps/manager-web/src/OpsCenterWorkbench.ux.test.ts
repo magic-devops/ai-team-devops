@@ -10,6 +10,13 @@ const runbooksSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pag
 const selfHealSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/ops-center/OpsCenterSelfHealPanel.tsx"), "utf8");
 
 describe("OpsCenter workbench UX contract", () => {
+  it("shows scoped historical pipelines with a current project release entry and no manual success writes", () => {
+    expect(source).toContain("page.opsCenter.pipelineHistoryOnly");
+    expect(source).toContain('projectWorkspaceHash(projectId, "#/dev-flow?view=releases")');
+    for (const retired of ["opsPipelineCreate", "opsPipelineTrigger", "opsPipelineStatus", "opsPipelineDelete", "createPip", "finishPip"]) {
+      expect(source).not.toContain(retired);
+    }
+  });
   it("keeps OpsCenter modules routable and focused", () => {
     expect(source).toContain("OPS_CENTER_TAB_ROUTES");
     expect(source).toContain("readOpsCenterTabFromHash");

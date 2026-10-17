@@ -341,3 +341,17 @@ Manager完整1212项通过（325.18秒），Web完整437项/83文件通过（98.
 纯GET三请求前后28张Manager/运行/检查点表全部相同；另含POST预览的窗口保留正常请求审计新增1条，其余27表不变，没有关闭审计。证据 `.sop-runtime/delivery-evidence/delivery-release/` 包含公开制品/JUnit/签名、HTTP/GUI事实、唯一审查、RED/GREEN/完整日志、源码/证据散列和清理/commit回执。测试私钥仅清点散列后清理，依赖store与凭据不提交，全部阶段非忽略更改提交且不push。
 
 本阶段桌面表单及固定预览截图已采集。后续既有浏览器标签因URL协议策略拒绝访问，未绕过；本阶段390px中英日及最终详情实机视觉复核仍为明确待办，不以历史阶段截图或组件测试冒称已完成。完整目标保持active，production_integration_complete=false；继续视觉复核、真实部署/灰度/回滚及环境授权、智能运维问题闭环、生产身份/模型、原生Sigstore适配、长期流水线与规模验证。
+
+## 受控部署、真实健康与恢复增量（2026-10-17）
+
+采用 `docs/DELIVERY_DEPLOYMENT_DESIGN.md` 和 `docs/CONTROLLED_DEPLOYMENT_GUIDE.md`。Manager固定环境代次、已批准候选、真实目标、稳定基线与操作计划；Hermes复用managed run、设备授权及可靠outbox，执行端runner在副作用前持久化journal，严格HTTPS来源/字节摘要/大小、独立实际探针与观察时长。没有新业务Task或schema，普通run重试/重放/PATCH不能绕过。正常release→operations不使质量自失效，重开继续失效；没有历史basis兼容或补签。
+
+环境、预览、运行健康与失败/回滚四界面接入服务端操作能力、原key/CAS、冲突显式读取采用、精确部署深链和三语。未知结果不自动重跑，失败探针展示真实错误和耗时。41个旧执行、JSON灰度、手工成功及无作用域历史路由退役；配置导出仅configuration_only，OpsCenter只读项目历史及规范发布入口。
+
+真实公开HTTP、本地Git/构建测试/签名、HTTPS制品、本机agentd和配对worker验证25%不计发布、100%实际健康后计发布、构建通过但运行健康失败、恢复前个真实稳定制品、唯一Issue不自动关闭、问题转需求重复提交不重复。实际终止runner后保持unknown并阻止再次apply，只读observe恢复且原operation的apply记录仅一条。正常心跳不改变预览语义依据，worker身份变化仍阻止领取。纯GET三请求前后28张表一致，POST预览仅正常审计增加1条，其余27表不变；暂停新预览被阻止，既有原生验收任务仍有效。
+
+最终Manager完整1265通过（365.00秒）；Web完整470项/92文件（48.89秒）、类型（29.765秒）与生产构建（46.15秒）通过。Core完整222通过/5 Windows跳过（333.30秒）在最终P2修复前，修复后部署专项46通过/1跳过（112.11秒），未重跑完整Core。旧路由98、旧Web31、退役负责人契约74、root相关56、SDK/CLI最终相关15、最终三语增量9均通过，计数重叠不相加。独立审查P1暂停项目新副作用、P2已知非零apply经observe误成成功均修复，原始6复现全部通过。40个Python文件对照HEAD无新增lint，严格OpenAPI853引用/37模型/4路径，41退役路径检查通过。
+
+初次Manager1255通过/4旧DTO假设失败，修改为明确不存在/退役契约后最终完整清零。Windows完整Core环境故障使用已有时区资源与源码路径的进程局部配置，100实际probe测试预算从20至60秒；无安装或系统环境修改。原始失败、辅助脚本编码/HTTP状态/Windows launcher及并发冲突事实均留档。13旧文件仅EOL/EOF规范化已按原hash精确证明；Web构建后仅三语提示及测试小改另9项通过。
+
+证据 `.sop-runtime/delivery-evidence/delivery-deployment/` 包含三库before-stage一致备份、公开制品/JUnit/签名/源码、实际路由探针及journal、HTTP边界、唯一审查、RED/GREEN/完整日志、源码与证据散列、精确清理及commit回执。验证服务停止，执行工作区和真实历史保留；测试私钥/凭据只清点散列后清理，不提交缓存、不push。本阶段390px中英日与最终部署详情实机视觉仍待复核，先前浏览器协议策略阻止访问，未绕过。完整目标active、production_integration_complete=false；继续智能问题诊断与处理提案、内部日志/受控干预、生产身份/模型及规模验证。

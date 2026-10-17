@@ -13,6 +13,12 @@ from sop_manager.task_acceptance import TaskAcceptanceCriteria
 from sop_manager.task_owner import TaskOwnerId
 
 from .delivery_ci_contract import ReleaseCiImport, ReleasePolicySave
+from .delivery_deployment_contract import (
+    DeploymentAction,
+    DeploymentCreate,
+    DeploymentEnvironmentSave,
+    DeploymentSync,
+)
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_release_contract import ReleaseCandidateCreate, ReleaseCandidateReview, ReleaseCandidateRevoke
 from .delivery_scheduling_contract import (
@@ -97,6 +103,14 @@ class Command(Input):
         "release.candidate.create",
         "release.candidate.review",
         "release.candidate.revoke",
+        "deployment.environment.save",
+        "deployment.create",
+        "deployment.dispatch",
+        "deployment.start",
+        "deployment.advance",
+        "deployment.observe",
+        "deployment.cancel",
+        "deployment.sync",
         "execution.queue",
         "execution.sync",
         "execution.review",
@@ -752,6 +766,14 @@ PAYLOADS = {
     "release.candidate.create": ReleaseCandidateCreate,
     "release.candidate.review": ReleaseCandidateReview,
     "release.candidate.revoke": ReleaseCandidateRevoke,
+    "deployment.environment.save": DeploymentEnvironmentSave,
+    "deployment.create": DeploymentCreate,
+    "deployment.dispatch": DeploymentAction,
+    "deployment.start": DeploymentAction,
+    "deployment.advance": DeploymentAction,
+    "deployment.observe": DeploymentAction,
+    "deployment.cancel": DeploymentAction,
+    "deployment.sync": DeploymentSync,
 }
 
 
@@ -770,7 +792,7 @@ def default_flow():
     }
 
 
-def stage_gates(requirement, flow, tasks, issues):
+def stage_gates(requirement, flow, tasks, issues, *, deployment_verified=False):
     stage = flow["stage"]
     revision = flow["revision"]
     artifacts = [a for a in flow["artifacts"] if a["revision"] == revision]
@@ -837,7 +859,7 @@ def stage_gates(requirement, flow, tasks, issues):
             }
         )
     if stage == "release":
-        # Candidate approval authorizes preparation. Only a real deployment
-        # adapter can provide this boundary; manual history cannot satisfy it.
-        checks.append({"id": "deployment_verified", "ok": False})
+        # The caller derives this fact from current canonical execution evidence;
+        # a stored flow flag or manual release history cannot supply it.
+        checks.append({"id": "deployment_verified", "ok": deployment_verified is True})
     return checks

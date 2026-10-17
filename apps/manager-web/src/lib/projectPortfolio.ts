@@ -6,7 +6,7 @@ import { portfolioRiskCodes, type PortfolioRiskCode, type PortfolioRoute, type P
 export type ProjectCapabilities = { can_enter: boolean; can_write: boolean; can_dispatch: boolean; can_configure: boolean; can_transition: boolean; can_archive: boolean; can_restore: boolean };
 export type PortfolioProject = { id: string; tenant_id: string; tenant_code: string; business_id: string | null; business_code: string; business_name: string; project_code: string; name: string; description: string; project_path: string; vector_db: string; is_template: boolean; template_id: string; status: ProjectStatus; version: number; created_at: string; updated_at: string; permissions: ProjectCapabilities };
 export type PortfolioRiskCounts = Record<PortfolioRiskCode, number> & { total_items: number };
-export type PortfolioTarget = { project_id: string; kind: "project" | "task" | "requirement" | "issue" | "milestone" | "execution"; view: string; detail: string; requirement_id: string | null; task_id: string | null; issue_id: string | null; milestone_id: string | null; execution_id: string | null };
+export type PortfolioTarget = { project_id: string; kind: "project" | "task" | "requirement" | "issue" | "milestone" | "execution" | "deployment"; view: string; detail: string; requirement_id: string | null; task_id: string | null; issue_id: string | null; milestone_id: string | null; execution_id: string | null; deployment_id?: string | null };
 export type PortfolioRisk = { id: string; entity_kind: "task" | "requirement" | "issue" | "milestone"; entity_id: string; title: string; categories: PortfolioRiskCode[]; due_on: string | null; target: PortfolioTarget };
 export type PortfolioMilestone = { id: string; title: string; starts_on: string | null; ends_on: string; target: PortfolioTarget };
 export type ProjectLifecycleFacts = { as_of: string; basis: string; metrics: ProgressMetrics; risk_counts: PortfolioRiskCounts; unclosed_intents_total: number };
@@ -54,6 +54,7 @@ export function portfolioTargetHash(target: PortfolioTarget, background: string)
   if (target.issue_id) params.set("issue", target.issue_id);
   if (target.milestone_id) { params.set("milestone_id", target.milestone_id); params.set("scope_id", target.milestone_id); }
   if (target.execution_id) params.set("execution_id", target.execution_id);
+  if (target.deployment_id) { params.set("view", "releases"); params.set("deployment_id", target.deployment_id); }
   return projectWorkspaceHash(target.project_id, target.kind !== "execution" && target.task_id && !target.requirement_id ? `#/tasks/execution?task_id=${encodeURIComponent(target.task_id)}` : `#/dev-flow?${params}`, background);
 }
 export function enterPortfolioProject(project: PortfolioProject, target?: PortfolioTarget, background = "") {

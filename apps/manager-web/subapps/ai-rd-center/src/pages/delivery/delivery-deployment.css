@@ -1,0 +1,168 @@
+.deployment-workbench,
+.deployment-detail,
+.deployment-environment-form,
+.deployment-inputs,
+.deployment-preview,
+.deployment-fixed-plan,
+.deployment-action-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.deployment-workbench {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 18px;
+}
+.deployment-workbench h3,
+.deployment-preview h3,
+.deployment-detail h2 {
+  margin: 0;
+}
+.deployment-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: start;
+}
+.deployment-drawer label:not(.ant-checkbox-wrapper) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.deployment-drawer .ant-select {
+  width: 100%;
+  min-width: 0;
+}
+.deployment-preview,
+.deployment-action-form {
+  border: 1px solid var(--border);
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+.deployment-environment-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.deployment-environment-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.deployment-environment-row > div:last-child {
+  text-align: end;
+}
+.deployment-environment-list {
+  display: grid;
+  gap: 4px;
+}
+.deployment-health-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.deployment-health-summary > div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.deployment-health-summary span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.deployment-health-summary strong {
+  font-size: 16px;
+}
+.deployment-operation,
+.deployment-probe {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.deployment-log {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-height: 380px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font-size: 12px;
+}
+.deployment-reasons {
+  padding-inline-start: 20px;
+  color: var(--muted-strong);
+  overflow-wrap: anywhere;
+}
+.deployment-handoff {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.deployment-handoff > .ant-btn {
+  justify-self: start;
+}
+.deployment-handoff-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.deployment-handoff-row .ant-btn {
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.deployment-detail .ant-timeline {
+  margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .deployment-editor,
+  .deployment-health-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .deployment-environment-row {
+    display: grid;
+    gap: 8px;
+  }
+  .deployment-environment-row > div:last-child {
+    text-align: start;
+  }
+  .deployment-drawer .ant-drawer-header {
+    padding: 14px;
+  }
+  .deployment-drawer .ant-drawer-body {
+    padding: 14px;
+  }
+  .deployment-drawer .ant-drawer-footer {
+    padding: 10px 14px;
+  }
+  .deployment-drawer .delivery-release-actions {
+    gap: 8px;
+  }
+  .deployment-drawer .ant-btn {
+    height: auto;
+    min-height: 32px;
+    white-space: normal;
+  }
+  .deployment-preview,
+  .deployment-action-form {
+    padding: 10px;
+  }
+  .deployment-detail .ant-tabs-nav {
+    max-width: 100%;
+  }
+}

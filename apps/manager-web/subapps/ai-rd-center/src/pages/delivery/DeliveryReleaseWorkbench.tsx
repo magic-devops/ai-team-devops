@@ -34,6 +34,7 @@ import {
 import { DeliveryReleaseEditor } from "./DeliveryReleaseEditor";
 import { DeliveryReleaseEvidenceEditor } from "./DeliveryReleaseEvidenceEditor";
 import { DeliveryReleaseDetail } from "./DeliveryReleaseDetail";
+import { DeliveryDeploymentWorkbench } from "./DeliveryDeploymentWorkbench";
 import "./delivery-release.css";
 
 export function DeliveryReleaseWorkbench({
@@ -55,6 +56,10 @@ export function DeliveryReleaseWorkbench({
   const [editor, setEditor] = useState<"candidate" | "policy" | "ci" | null>(
     null,
   );
+  const [deploymentPreparation, setDeploymentPreparation] = useState<{
+    candidateId: string;
+    rollbackOf: string;
+  } | null>(null);
   useEffect(() => {
     const sync = () => setRoute(parseReleaseRoute(location.hash));
     window.addEventListener("hashchange", sync);
@@ -511,7 +516,11 @@ export function DeliveryReleaseWorkbench({
                     {item.snapshot.ci.commit_sha}
                   </span>
                   <span className="delivery-release-meta">
-                    {tr("notHandedOff")}
+                    {item.deployment.status === "not_handed_off"
+                      ? tr("notHandedOff")
+                      : t(
+                          `deliveryDeployment.status.${item.deployment.status}`,
+                        )}
                   </span>
                 </button>
               ))}
@@ -603,13 +612,39 @@ export function DeliveryReleaseWorkbench({
         {releaseTime(quality?.as_of || index?.as_of || null, i18n.language)}
       </p>
       <DeliveryReleaseDetail
-        releaseId={route.releaseId}
+        releaseId={
+          route.deploymentId || deploymentPreparation ? "" : route.releaseId
+        }
         projectId={projectId}
         sessionId={sessionId}
         background={background}
         onSaved={saved}
         onClose={() => navigate({ releaseId: "" })}
+        onPrepareDeployment={(candidateId) =>
+          setDeploymentPreparation({ candidateId, rollbackOf: "" })
+        }
+        onOpenDeployment={(deploymentId) => navigate({ deploymentId })}
       />
+      {view === "releases" && (
+        <DeliveryDeploymentWorkbench
+          projectId={projectId}
+          sessionId={sessionId}
+          releaseId={route.releaseId}
+          deploymentId={route.deploymentId}
+          preparation={deploymentPreparation}
+          background={background}
+          readOnly={!writable}
+          onSaved={saved}
+          onClosePreparation={() => setDeploymentPreparation(null)}
+          onRollback={(id) =>
+            setDeploymentPreparation({ candidateId: "", rollbackOf: id })
+          }
+          onOpenDeployment={(deploymentId, releaseId) =>
+            navigate({ deploymentId, releaseId })
+          }
+          onCloseDeployment={() => navigate({ deploymentId: "" })}
+        />
+      )}
       <Drawer
         open={Boolean(route.evidenceId)}
         title={tr("evidence")}

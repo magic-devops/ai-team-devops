@@ -234,3 +234,7 @@ sop --show-completion       # 打印当前 shell 的补全脚本
 `sop delivery release-preview --file candidate.json` 仅预览当前文件。保存使用现有 `sop delivery command --file command.json`，显式提供原 `expected_version`、`preview_basis` 和 `idempotency_key`；网络结果未知重试原文件，冲突后核对再重新预览。新命令为 `release.policy.save`、`release.ci.import`、`release.candidate.create`、`release.candidate.review`、`release.candidate.revoke`；旧人工 `release.save` 已退出。
 
 CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/测试新制品，再签DSSE证明。导入命令的 `payload.envelope` 保留文件原始JSON文本，私钥不进入API或命令文件。批准候选不等于已部署；详见 `docs/DELIVERY_RELEASE_DESIGN.md`。
+
+`sop delivery deployments` 读取当前项目的受控环境和部署意图；`--id <id>` 读取精确部署详情、实际运行、健康证据及失败问题。`sop delivery deployment-preview --file deployment.json` 预览明确的 `candidate_id`、`environment_id`、`reason`，回滚则只提交 `rollback_of` 和 `reason`。保存继续使用 `sop delivery command --file command.json`，携带预览原版本、`preview_basis` 及固定幂等键。
+
+部署通过 `deployment.environment.save`、`deployment.create`、`deployment.dispatch`、`deployment.start`、`deployment.advance`、`deployment.observe`、`deployment.cancel`、`deployment.sync` 操作。环境配置与实际运行权限分别检查；开始、灰度晋级和回滚都需明确操作。结果未知时查询原意图或执行只读观察，不能自动重新执行 apply。只有当前候选的实际 100% 流量及健康检查通过才计入已发布。执行端需安装标准 runner，并配置受信 HTTPS 来源和独立探针；协议、配置和恢复说明见 `docs/DELIVERY_DEPLOYMENT_DESIGN.md`。

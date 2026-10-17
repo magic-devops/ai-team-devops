@@ -6,9 +6,9 @@ from contextlib import nullcontext
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import ValidationError
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,12 @@ from .delivery_contract import (
     ProgressResponse,
     TaskPlanPreview,
     TaskReviewsResponse,
+)
+from .delivery_deployment_contract import (
+    DeploymentDetail,
+    DeploymentIndex,
+    DeploymentPreview,
+    DeploymentPreviewInput,
 )
 from .delivery_execution_contract import (
     ExecutionObservationsResponse,
@@ -435,11 +441,75 @@ def task_plan_preview(
     return create_preview(db, project, user, body, request)
 
 
+@router.get("/deployments", response_model=DeploymentIndex)
+def deployments(
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_deployment import deployment_index
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    return deployment_index(
+        db, project, row.data if row else initial_state(), user,
+        version=row.version if row else 0,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
+@router.get("/deployments/{deployment_id}", response_model=DeploymentDetail)
+def deployment_detail(
+    deployment_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_deployment import deployment_detail as read_detail
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    return read_detail(
+        db, project, row.data if row else initial_state(), user, deployment_id,
+        version=row.version if row else 0,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
+@router.post("/deployment-preview", response_model=DeploymentPreview)
+def deployment_preview(
+    body: DeploymentPreviewInput,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_deployment import deployment_preview as prepare
+
+    project = _project(db, user, project_id)
+    if not _role_permissions(db, user, project)["approve"]:
+        raise HTTPException(403, "Project approve permission required")
+    _require_writable_state(project)
+    row = db.get(DeliveryWorkspace, project.id)
+    return prepare(
+        db, project, row.data if row else initial_state(), user, body,
+        version=row.version if row else 0,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
 def _command_permission(action, payload):
     if action == "project.lifecycle":
         return "lifecycle"
-    if action in {"member.runtime.bind", "member.runtime.unbind", "release.policy.save"}:
+    if action in {"member.runtime.bind", "member.runtime.unbind", "release.policy.save", "deployment.environment.save"}:
         return "configure"
+    if action.startswith("deployment.") and action != "deployment.sync":
+        return "approve"
     if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
         action == "project.update" and {
             "name", "description", "business_id", "project_path", "vector_db", "vector_db_config", "is_template"
@@ -488,6 +558,7 @@ def execute(
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
     request: Request = None,
+    background_tasks: BackgroundTasks = None,
 ):
     project = _project(db, user, project_id)
     permissions = _role_permissions(db, user, project)
@@ -506,6 +577,7 @@ def execute(
     if receipt:
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
+        _schedule_queued_deployment(db, project, user, body, request, background_tasks, receipt.version)
         return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
@@ -528,14 +600,69 @@ def execute(
             if receipt:
                 if receipt.request_hash != fingerprint:
                     raise HTTPException(409, "Idempotency key already used with different input")
+                _schedule_queued_deployment(db, project, user, body, request, background_tasks, receipt.version)
                 return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
-            return _commit_command(db, project, user, body, payload, key, fingerprint, request)
+            return _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks)
     except Exception:
         db.rollback()
         raise
 
 
-def _commit_command(db, project, user, body, payload, key, fingerprint, request):
+def _schedule_queued_deployment(db, project, user, body, request, background_tasks, applied_version):
+    """Resume only an already committed start; never create or restart a run."""
+    if body.action != "deployment.start" or request is None or background_tasks is None:
+        return
+    from hermes_core.models import CoreError
+
+    from .delivery_deployment import _context
+    from .delivery_deployment_runtime import _origin
+
+    store = getattr(request.app.state, "hermes_store", None)
+    execution = getattr(request.app.state, "hermes_execution", None)
+    workspace = db.get(DeliveryWorkspace, project.id)
+    if store is None or execution is None or workspace is None:
+        return
+    data = workspace.data
+    entry = next((item for item in data.get("deployments", []) if item["id"] == body.payload["id"]), None)
+    if entry is None or not entry["operations"]:
+        return
+    operation = entry["operations"][-1]
+    if not operation.get("run_id"):
+        return
+    workspace_id = entry["snapshot"]["definition"]["workspace_id"]
+    event = db.scalar(select(DeliveryEvent).where(
+        DeliveryEvent.project_id == project.id,
+        DeliveryEvent.tenant_id == project.tenant_id,
+        DeliveryEvent.version == applied_version,
+        DeliveryEvent.action == "deployment.start",
+        DeliveryEvent.resource_id == entry["id"],
+    ))
+    committed = event.data.get("result", {}).get("start_run") if event else None
+    if committed != {"workspace_id": workspace_id, "run_id": operation["run_id"]}:
+        return
+    try:
+        # The replaying caller and the original operation actor each need their
+        # own current authority. A saved receipt never grants fresh execution.
+        _context(store, user, project, workspace_id, "execute")
+        if not operation["observe"]:
+            from .project_lifecycle import require_active
+
+            require_active(project)
+        principal = _origin(db, project, data, entry, operation, store)
+        run = store.get(principal, workspace_id, "runs", operation["run_id"])
+    except (HTTPException, CoreError):
+        return
+    source = run["data"].get("deployment_source", {})
+    if (
+        run["status"] != "queued" or run["data"].get("target_device_id")
+        or source.get("plan_digest") != operation["plan_digest"]
+        or source.get("requested_by") != operation["requested_by"]["id"]
+    ):
+        return
+    background_tasks.add_task(execution.execute, principal, workspace_id, run["id"])
+
+
+def _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks=None):
     reservation = None
     try:
         row = db.get(DeliveryWorkspace, project.id)
@@ -574,7 +701,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request)
         if len(applied) == 3:
             event_data["result"] = applied[2]
         db.flush()
-        if body.action != "project.lifecycle" and not body.action.startswith("release."):
+        if body.action != "project.lifecycle" and not body.action.startswith(("release.", "deployment.")):
             remember_basis(db, project, data)
         updated = db.execute(
             update(DeliveryWorkspace)
@@ -613,6 +740,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request)
         )
         db.commit()
         db.expire_all()
+        _schedule_queued_deployment(db, project, user, body, request, background_tasks, next_version)
         return {**_snapshot(db, project, user), "replayed": False, "applied_version": next_version}
     except IntegrityError as exc:
         db.rollback()
@@ -630,6 +758,12 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request)
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action.startswith("deployment."):
+        from .delivery_deployment import apply_deployment
+
+        store = getattr(request.app.state, "hermes_store", None) if request else None
+        execution = getattr(request.app.state, "hermes_execution", None) if request else None
+        return apply_deployment(db, project, user, data, action, payload, store, execution)
     if action.startswith("release."):
         from .delivery_release import apply_release
 

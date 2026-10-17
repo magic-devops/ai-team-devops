@@ -272,7 +272,9 @@ def _scope_payload(context, selected, included, requirements, tasks):
             {
                 key: value
                 for key, value in row.items()
-                if key in {"id", "revision", "basis", "stage", "accepted", "task_ids"}
+                # Normal post-acceptance progress must retain the same signed
+                # scope. Reopening changes accepted/revision and still expires it.
+                if key in {"id", "revision", "basis", "accepted", "task_ids"}
             }
             for row in requirements
             if row["id"] in selected["requirement_ids"]
@@ -475,6 +477,8 @@ def _semantic_candidate(candidate):
 
 
 def _candidate_view(db, project, data, user, candidate):
+    from .delivery_deployment_facts import release_deployment_view
+
     value = deepcopy(candidate)
     reasons = _candidate_reasons(db, project, data, candidate)
     valid = not candidate.get("invalidated") and not reasons
@@ -492,7 +496,9 @@ def _candidate_view(db, project, data, user, candidate):
             "can_reject": allowed and pending,
             "can_revoke": allowed and candidate["decision"] in {"pending", "approved"},
         },
-        deployment={"status": "not_handed_off", "verified": False},
+        deployment=release_deployment_view(
+            data, candidate["id"], business_valid=valid and candidate["decision"] == "approved",
+        ),
     )
     return value
 

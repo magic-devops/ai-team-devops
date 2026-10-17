@@ -143,7 +143,10 @@ def _approval(requirement, tasks, issues, reasons):
     flow = _flow(requirement)
     if flow["closed"] or flow.get("legacy_completed") or flow["stage"] not in STAGE_IDS[:-1] or reasons:
         return False
-    checks = stage_gates(requirement, flow, tasks, issues)
+    checks = stage_gates(
+        requirement, flow, tasks, issues,
+        deployment_verified=requirement.get("deployment_verified") is True,
+    )
     return bool(checks) and all(check.get("ok") is True for check in checks)
 
 

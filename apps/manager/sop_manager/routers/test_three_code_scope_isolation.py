@@ -21,16 +21,8 @@ from sop_manager.routers.data_analytics import (
 from sop_manager.routers.agents import agent_runs
 from sop_manager.routers.billing import PaymentIn, list_invoices, record_payment, snapshot_invoice
 from sop_manager.routers.notify import InboundAction, InboundMsg, inbound, inbound_action, messages
-from sop_manager.routers.ops_center import (
-    PipelineCreate,
-    PipelineStatus,
-    create_pipeline,
-    list_pipelines,
-    trigger_pipeline,
-    update_pipeline_status,
-)
+from sop_manager.routers.ops_center import _save as save_ops_history, list_pipelines
 from sop_manager.routers.tasks import (
-    _agent_claims_path,
     _agent_reports_payload,
     _agent_reports_path,
     _append_jsonl,
@@ -199,8 +191,8 @@ def test_agent_runs_do_not_cross_business_scope(tmp_path):
 
 def test_ops_center_records_do_not_cross_project_scope(tmp_path):
     with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        created = create_pipeline(PipelineCreate(name="项目 A 流水线", environment="prod", steps=["deploy"]))
-        assert created["project_id"] == "project-a"
+        save_ops_history("pipelines", {"id": "historic-a", "name": "项目 A 流水线", "environment": "prod", "status": "failed"})
+        assert list_pipelines()["items"][0]["project_id"] == "project-a"
 
     with scoped_project(tmp_path, business="biz-a", project="project-b"):
         payload = list_pipelines()
@@ -208,18 +200,12 @@ def test_ops_center_records_do_not_cross_project_scope(tmp_path):
     assert payload["items"] == []
 
 
-def test_ops_center_write_rejects_cross_project_scope(tmp_path):
+def test_ops_center_history_does_not_cross_business_scope(tmp_path):
     with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        created = create_pipeline(PipelineCreate(name="项目 A 流水线", environment="prod", steps=["deploy"]))
+        save_ops_history("pipelines", {"id": "historic-a", "name": "项目 A 流水线", "status": "failed"})
 
-    with scoped_project(tmp_path, business="biz-a", project="project-b"):
-        with pytest.raises(HTTPException) as trigger_exc:
-            trigger_pipeline(created["id"])
-        with pytest.raises(HTTPException) as status_exc:
-            update_pipeline_status(created["id"], PipelineStatus(status="failed", duration_s=12, error_msg="x"))
-
-    assert trigger_exc.value.status_code == 404
-    assert status_exc.value.status_code == 404
+    with scoped_project(tmp_path, business="biz-b", project="project-a"):
+        assert list_pipelines()["items"] == []
 
 
 def test_data_governance_records_do_not_cross_business_scope(tmp_path):

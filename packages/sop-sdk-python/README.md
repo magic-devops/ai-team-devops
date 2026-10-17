@@ -129,6 +129,8 @@ from sop_tools.manager_client import report_task_status  # 现状写法不变
 
 CI导入的 `payload.envelope` 必须是原始DSSE JSON文本，不能预先解析后丢失重复字段。CI保管Ed25519私钥，Manager只配置可信公钥。`scripts/delivery-ci-attest.py --help` 提供真实干净Git checkout、构建/测试子进程、JUnit及新制品的签名入口；先读取明确质量范围再固定传入依据。人工记录、候选已批准与实际部署分别表达，当前候选审批不触发基础设施操作。协议与权限见 `docs/DELIVERY_RELEASE_DESIGN.md`。
 
+受控部署使用 `delivery_deployments()`、`delivery_deployment(id)` 和 `delivery_deployment_preview(body)`。预览需明确候选、环境及理由，或明确 `rollback_of` 和理由；不会默认选择环境或基线。所有动作继续通过 `delivery_command(body)` 提交固定版本、依据与幂等键。部署创建、派发、开始、灰度晋级、只读观察、取消与结果同步分别表达；未知结果不能自动重跑。详情返回服务端允许操作、固定执行目标、真实探针和唯一失败问题。环境配置不是运行授权，100% 实际流量及健康验证通过才建立当前发布事实。详见 `docs/DELIVERY_DEPLOYMENT_DESIGN.md`。
+
 - CLI 命令：`packages/sop-cli/README.md`
 - 安装与环境：`docs/TOOLS_AND_SCRIPTS.md`
 - 同步与 IPC：`ai-sop-ops/SYNC_AND_PLATFORMS.md`

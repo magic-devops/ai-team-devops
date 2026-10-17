@@ -25,7 +25,9 @@ def test_deployment_package_versions_manifest_and_masked_preview(monkeypatch, tm
 
     created = system_ops.create_deployment_package(
         profile,
-        system_ops.DeploymentPackageIn(version="2026.05.24-rc1", channel="staging", release_notes="first governed rollout"),
+        system_ops.DeploymentPackageIn(
+            version="2026.05.24-rc1", channel="staging", release_notes="first governed rollout"
+        ),
         _=object(),
     )
     listed = system_ops.list_deployment_packages(profile, _=object())
@@ -42,62 +44,44 @@ def test_deployment_package_versions_manifest_and_masked_preview(monkeypatch, tm
     assert "docker-compose.override.yml" in {item["name"] for item in detail["manifest"]["files"]}
     assert compose.media_type == "text/yaml; charset=utf-8"
     assert "manager:" in compose.body.decode("utf-8")
+    for payload in (
+        created["item"],
+        created["manifest"],
+        detail["item"],
+        detail["manifest"],
+        listed["items"][0],
+    ):
+        assert payload["configuration_only"] is True
+        assert payload["deployment_evidence"] is False
 
 
-def test_deployment_package_approval_publish_links_release_and_pipeline(monkeypatch, tmp_path: Path) -> None:
+def test_historical_package_release_claims_are_removed_from_response_without_rewriting_history(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("SOP_RUNTIME_DIR", str(tmp_path))
-    profile = "prod-oceanbase"
-    system_ops.upsert_profile(
-        profile,
-        system_ops.EnvProfileIn(
-            name=profile,
-            mode="private",
-            database="oceanbase",
-            manager_url="https://manager.internal",
-            public_url="https://manager.example.com",
-            features={"worker": True, "temporal": True, "sso": True},
-            env={"DB_TYPE": "oceanbase", "SECRET_TOKEN": "plain-secret"},
-            notes="production rollout",
-        ),
-        _=object(),
-    )
-    package = system_ops.create_deployment_package(
-        profile,
-        system_ops.DeploymentPackageIn(version="2026.05.24-release", channel="production", release_notes="approval publish"),
-        _=object(),
-    )
-
-    requested = system_ops.create_deployment_package_approval(
-        system_ops.DeploymentPackageApprovalIn(
-            package_id=package["item"]["id"],
-            environment="production",
-            requested_by="release-manager",
-            reviewers=["ops-lead"],
-            policy="single",
-            notes="release window approved by CAB",
-        ),
-        _=object(),
-    )
-    approved = system_ops.deployment_package_approval_action(
-        requested["item"]["id"],
-        system_ops.DeploymentPackageApprovalActionIn(action="approve", actor="ops-lead", note="checks are green"),
-        _=object(),
-    )
-    published = system_ops.deployment_package_approval_action(
-        requested["item"]["id"],
-        system_ops.DeploymentPackageApprovalActionIn(action="publish", actor="release-manager", note="publish to production"),
-        _=object(),
-    )
-    approvals = system_ops.list_deployment_package_approvals(profile=profile, _=object())
-    detail = system_ops.get_deployment_package(package["item"]["id"], _=object())
-    pipelines = system_ops.list_deployment_pipelines(package_id=package["item"]["id"], _=object())
-
-    assert requested["item"]["status"] == "pending"
-    assert approved["item"]["status"] == "approved"
-    assert published["item"]["status"] == "published"
-    assert published["item"]["pipeline_run_id"]
-    assert approvals["total"] == 1
-    assert detail["item"]["release_status"] == "published"
-    assert detail["item"]["published_approval_id"] == requested["item"]["id"]
-    assert pipelines["total"] == 1
-    assert pipelines["items"][0]["status"] == "ready"
+    package = {
+        "id": "legacy",
+        "profile": "local-dev",
+        "version": "v1",
+        "files": [],
+        "release_status": "published",
+        "published_at": "2025-01-01T00:00:00Z",
+        "published_by": "operator",
+        "published_approval_id": "approval",
+        "canary_policy_id": "canary",
+        "canary_completed_at": "2025-01-01T00:00:00Z",
+        "deployment_evidence": True,
+        "configuration_only": False,
+    }
+    system_ops._save_deployment_packages({"items": [package]})
+    index = system_ops._deployment_packages_path()
+    original = index.read_bytes()
+    detail = system_ops.get_deployment_package("legacy", _=object())
+    listed = system_ops.list_deployment_packages("local-dev", _=object())
+    for payload in (detail["item"], detail["manifest"], listed["items"][0]):
+        assert payload["configuration_only"] is True
+        assert payload["deployment_evidence"] is False
+        assert not any(
+            key == "release_status" or key.startswith(("published_", "canary_")) for key in payload
+        )
+    assert index.read_bytes() == original

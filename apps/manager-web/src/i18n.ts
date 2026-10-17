@@ -17,6 +17,13 @@ import { schedulingTranslations } from "./i18n/delivery-scheduling";
 import { teamIdentityTranslations } from "./i18n/delivery-team";
 import { teamRuntimeTranslations } from "./i18n/delivery-team-runtime";
 import { projectPortfolioTranslations } from "./i18n/project-portfolio";
+import { deploymentTranslations } from "./i18n/delivery-deployment";
+import { deploymentReasonTranslations } from "./i18n/delivery-deployment-reasons";
+import {
+  legacyDeploymentRetirementZh,
+  legacyDeploymentRetirementEn,
+  legacyDeploymentRetirementJa,
+} from "./i18n/legacy-deployment-retirement";
 import {
   releaseTranslations,
   releaseReasonTranslations,
@@ -46,6 +53,17 @@ i18n
       "zh-CN": {
         translation: {
           ...zhCN,
+          page: {
+            ...zhCN.page,
+            settings: {
+              ...zhCN.page.settings,
+              ...legacyDeploymentRetirementZh.page.settings,
+            },
+            opsCenter: {
+              ...zhCN.page.opsCenter,
+              ...legacyDeploymentRetirementZh.page.opsCenter,
+            },
+          },
           collaboration: collaborationTranslations["zh-CN"],
           delivery: deliveryTranslations["zh-CN"],
           assistance: assistanceTranslations["zh-CN"],
@@ -59,12 +77,25 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["zh-CN"],
           projectPortfolio: projectPortfolioTranslations["zh-CN"],
           deliveryRelease: releaseTranslations["zh-CN"],
+          deliveryDeployment: deploymentTranslations["zh-CN"],
+          deliveryDeploymentReasons: deploymentReasonTranslations["zh-CN"],
           deliveryReleaseReasons: releaseReasonTranslations["zh-CN"],
         },
       },
       "en-US": {
         translation: {
           ...enUS,
+          page: {
+            ...enUS.page,
+            settings: {
+              ...enUS.page.settings,
+              ...legacyDeploymentRetirementEn.page.settings,
+            },
+            opsCenter: {
+              ...enUS.page.opsCenter,
+              ...legacyDeploymentRetirementEn.page.opsCenter,
+            },
+          },
           collaboration: collaborationTranslations["en-US"],
           delivery: deliveryTranslations["en-US"],
           assistance: assistanceTranslations["en-US"],
@@ -78,12 +109,25 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["en-US"],
           projectPortfolio: projectPortfolioTranslations["en-US"],
           deliveryRelease: releaseTranslations["en-US"],
+          deliveryDeployment: deploymentTranslations["en-US"],
+          deliveryDeploymentReasons: deploymentReasonTranslations["en-US"],
           deliveryReleaseReasons: releaseReasonTranslations["en-US"],
         },
       },
       "ja-JP": {
         translation: {
           ...jaJP,
+          page: {
+            ...jaJP.page,
+            settings: {
+              ...jaJP.page.settings,
+              ...legacyDeploymentRetirementJa.page.settings,
+            },
+            opsCenter: {
+              ...jaJP.page.opsCenter,
+              ...legacyDeploymentRetirementJa.page.opsCenter,
+            },
+          },
           collaboration: collaborationTranslations["ja-JP"],
           delivery: deliveryTranslations["ja-JP"],
           assistance: assistanceTranslations["ja-JP"],
@@ -97,6 +141,8 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["ja-JP"],
           projectPortfolio: projectPortfolioTranslations["ja-JP"],
           deliveryRelease: releaseTranslations["ja-JP"],
+          deliveryDeployment: deploymentTranslations["ja-JP"],
+          deliveryDeploymentReasons: deploymentReasonTranslations["ja-JP"],
           deliveryReleaseReasons: releaseReasonTranslations["ja-JP"],
         },
       },

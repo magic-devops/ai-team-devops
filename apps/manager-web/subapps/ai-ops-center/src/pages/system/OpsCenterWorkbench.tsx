@@ -4,7 +4,8 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
-import { getToken } from "@/lib/authStorage";
+import { projectWorkspaceHash } from "@/lib/projectPortfolioRoute";
+import { getProjectId, getSessionRevision, getWorkspaceScope, getToken } from "@/lib/authStorage";
 import { NeedLogin, RefreshButton } from "@/components/PageStates";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
@@ -29,11 +30,11 @@ const OPS_CENTER_TAB_ROUTES: Record<string, Tab> = {
 const OPS_CENTER_TAB_META: Record<Tab, { href: string; labelKey: string; shortLabelKey: string; descKey: string; outputKey: string; focusKey: string }> = {
   pipelines: {
     href: "#/system/ops-center/pipeline",
-    labelKey: "page.opsCenter.modules.pipeline.label",
-    shortLabelKey: "page.opsCenter.tabs.pipeline",
-    descKey: "page.opsCenter.modules.pipeline.description",
-    outputKey: "page.opsCenter.modules.pipeline.output",
-    focusKey: "page.opsCenter.modules.pipeline.focus",
+    labelKey: "page.opsCenter.pipelineHistoryTitle",
+    shortLabelKey: "page.opsCenter.pipelineHistoryTitle",
+    descKey: "page.opsCenter.pipelineHistoryOnly",
+    outputKey: "page.opsCenter.pipelineHistoryOnly",
+    focusKey: "page.opsCenter.pipelineHistoryTitle",
   },
   "alert-sources": {
     href: "#/system/ops-center/alerts",
@@ -103,12 +104,12 @@ function parseJsonPayload(value: string) {
 
 export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }: { focused?: boolean; initialTab?: Tab }) {
   const authed = Boolean(getToken());
+  const projectId = getProjectId();
+  const controlledReleasesHref = projectId ? projectWorkspaceHash(projectId, "#/dev-flow?view=releases") : "#/dev-flow?view=releases";
   const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(() => readOpsCenterTabFromHash(initialTab));
-  const [showForm, setShowForm] = useState(false);
-  const [pForm, setPForm] = useState({ name: "", environment: "staging", steps: "" });
   const [rcaForm, setRcaForm] = useState({ incident_id: "", root_cause: "", impact: "", resolution: "" });
   const [rcaCreateDrawerOpen, setRcaCreateDrawerOpen] = useState(false);
   const [rcaInsightFilter, setRcaInsightFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100", priority: "P1", owner_id: "", dev_tool: "codex" });
@@ -204,7 +205,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const [imChannels, setImChannels] = useState<string[]>([]);
 
   const summaryQ = useQuery({ queryKey: ["opsCenterSummary"], queryFn: api.opsCenterSummary, enabled: authed });
-  const pipQ = useQuery({ queryKey: ["opsPipelines"], queryFn: api.opsPipelines, enabled: authed });
+  const pipQ = useQuery({ queryKey: ["opsPipelines", getSessionRevision(), getWorkspaceScope()], queryFn: api.opsPipelines, enabled: authed });
   const rcaQ = useQuery({ queryKey: ["opsRca"], queryFn: api.opsRca, enabled: authed && tab === "rca" });
   const alertSourcesQ = useQuery({ queryKey: ["opsAlertSources"], queryFn: api.opsAlertSources, enabled: authed && tab === "alert-sources" });
   const externalAlertsQ = useQuery({ queryKey: ["opsExternalAlerts"], queryFn: () => api.opsExternalAlerts({ limit: 100 }), enabled: authed && tab === "alert-sources" });
@@ -244,35 +245,17 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     const onHashChange = () => {
       const next = readOpsCenterTabFromHash(initialTab);
       setTab(next);
-      setShowForm(false);
     };
     window.addEventListener("hashchange", onHashChange);
     onHashChange();
     return () => window.removeEventListener("hashchange", onHashChange);
   }, [initialTab]);
 
-  const createPip = useMutation({
-    mutationFn: () => api.opsPipelineCreate({ name: pForm.name, environment: pForm.environment, steps: pForm.steps.split("\n").filter(Boolean) }),
-    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["opsPipelines"] }); setShowForm(false); },
-  });
-  const triggerPip = useMutation({
-    mutationFn: (id: string) => api.opsPipelineTrigger(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsPipelines"] }),
-  });
-  const finishPip = useMutation({
-    mutationFn: (id: string) => api.opsPipelineStatus(id, { status: "success", duration_s: 60 }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsPipelines"] }),
-  });
-  const deletePip = useMutation({
-    mutationFn: (id: string) => api.opsPipelineDelete(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["opsPipelines"] }),
-  });
   const createRca = useMutation({
     mutationFn: () => api.opsRcaCreate(rcaForm),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["opsRca"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-      setShowForm(false);
       setRcaCreateDrawerOpen(false);
       setRcaForm({ incident_id: "", root_cause: "", impact: "", resolution: "" });
     },
@@ -369,7 +352,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       setAlertSourceResult({ type: "created", ...data });
       void qc.invalidateQueries({ queryKey: ["opsAlertSources"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-      setShowForm(false);
       setAlertSourceDrawerOpen(false);
     },
   });
@@ -630,7 +612,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         setSelectedRunbookId(id);
         void qc.invalidateQueries({ queryKey: ["opsRunbookVersions", id] });
       }
-      setShowForm(false);
       setRunbookEditorDrawerOpen(false);
       setRbForm({ id: "", name: "", steps: "", tags: "", owner: "Ops Lead", change_note: "" });
     },
@@ -685,7 +666,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["opsSelfHeal"] });
       void qc.invalidateQueries({ queryKey: ["opsCenterSummary"] });
-      setShowForm(false);
       setSelfHealPolicyDrawerOpen(false);
       setShForm({ trigger_condition: "", action: "", enabled: true });
     },
@@ -806,7 +786,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         metrics={
           <WorkbenchStats items={[
             { label: t("page.opsCenter.metrics.healthScore"), value: summaryQ.data?.summary?.health_score ?? 100, trend: (summaryQ.data?.summary?.health_score ?? 100) < 80 ? "down" : "neutral" },
-            { label: t("page.opsCenter.metrics.failedPipelines"), value: summaryQ.data?.summary?.pipelines_failed ?? 0, trend: (summaryQ.data?.summary?.pipelines_failed ?? 0) > 0 ? "down" : "neutral" },
+            { label: t("page.opsCenter.pipelineHistoryFailed"), value: summaryQ.data?.summary?.pipelines_failed ?? 0, trend: (summaryQ.data?.summary?.pipelines_failed ?? 0) > 0 ? "down" : "neutral" },
             { label: t("page.opsCenter.metrics.rcaOpen"), value: summaryQ.data?.summary?.rca_open ?? 0, trend: (summaryQ.data?.summary?.rca_open ?? 0) > 0 ? "down" : "neutral" },
             { label: t("page.opsCenter.metrics.externalAlerts"), value: summaryQ.data?.summary?.external_open_alerts ?? 0, trend: (summaryQ.data?.summary?.external_high_alerts ?? 0) > 0 ? "down" : "neutral" },
             { label: t("page.opsCenter.metrics.selfHealMatched"), value: summaryQ.data?.summary?.self_heal_matched ?? 0 },
@@ -891,7 +871,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
             onChange={(value) => {
               const next = value as Tab;
               setTab(next);
-              setShowForm(false);
               updateOpsCenterHash(next);
             }}
             options={TABS.map((item) => ({
@@ -907,32 +886,18 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
         </div> : null}
 
         {tab === "pipelines" && (
-          <WorkbenchPanel title={t("page.opsCenter.modules.pipeline.label")} actions={
+          <WorkbenchPanel title={t("page.opsCenter.pipelineHistoryTitle")} actions={
             <div className="flex gap-2">
               <AiAssistButton onClick={() => setAiOpen(true)} />
               <RefreshButton onClick={() => void pipQ.refetch()} pending={pipQ.isFetching} />
-              <button onClick={() => setShowForm(v => !v)} className="rounded-lg bg-[var(--brand)] px-3 py-1.5 text-sm text-white hover:opacity-90">+ 新建</button>
+              <a href={controlledReleasesHref} className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--brand)]">{t("page.settings.controlledReleases")}</a>
             </div>
           }>
-            {showForm && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-raised)] p-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input className="input-base" placeholder="流水线名称 *" value={pForm.name} onChange={e => setPForm(f => ({ ...f, name: e.target.value }))} />
-                  <select className="input-base" value={pForm.environment} onChange={e => setPForm(f => ({ ...f, environment: e.target.value }))}>
-                    {["dev", "staging", "production"].map(e => <option key={e}>{e}</option>)}
-                  </select>
-                </div>
-                <textarea className="input-base w-full h-20 resize-none" placeholder="步骤（每行一个）" value={pForm.steps} onChange={e => setPForm(f => ({ ...f, steps: e.target.value }))} />
-                <div className="flex gap-2">
-                  <button onClick={() => createPip.mutate()} disabled={!pForm.name || createPip.isPending} className="rounded-lg bg-[var(--brand)] px-4 py-1.5 text-sm text-white disabled:opacity-50">
-                    {createPip.isPending ? "创建中..." : "创建"}
-                  </button>
-                  <button onClick={() => setShowForm(false)} className="rounded-lg border border-[var(--border)] px-4 py-1.5 text-sm">取消</button>
-                </div>
-              </div>
-            )}
+            <p className="mb-4 text-sm text-[var(--muted-strong)]">{t("page.opsCenter.pipelineHistoryOnly")}</p>
+            {pipQ.isPending ? <p role="status" className="mb-4 text-sm text-[var(--muted)]">{t("common.loading")}</p> : null}
+            {pipQ.isError ? <p role="alert" className="mb-4 text-sm text-[var(--danger)]">{String((pipQ.error as Error)?.message || t("common.error"))}</p> : null}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {(pipQ.data?.items ?? []).length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">暂无流水线</p>}
+              {!pipQ.isPending && !pipQ.isError && (pipQ.data?.items ?? []).length === 0 && <p className="col-span-3 py-8 text-center text-sm text-[var(--muted)]">{t("page.opsCenter.pipelineHistoryEmpty")}</p>}
               {(pipQ.data?.items ?? []).map((p: any) => (
                 <div key={p.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
                   <div className="flex items-start justify-between">
@@ -942,11 +907,6 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-xs ${p.status === "running" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500"}`}>{p.status}</span>
                   </div>
-	                  <div className="mt-3 flex gap-2">
-	                    {p.status !== "running" && <button onClick={() => triggerPip.mutate(p.id)} className="text-xs text-[var(--brand)] hover:underline">触发</button>}
-	                    {p.status === "running" && <button onClick={() => finishPip.mutate(p.id)} className="text-xs text-green-600 hover:underline">完成</button>}
-	                    <button onClick={() => deletePip.mutate(p.id)} className="text-xs text-red-500 hover:underline">删除</button>
-	                  </div>
                 </div>
               ))}
             </div>

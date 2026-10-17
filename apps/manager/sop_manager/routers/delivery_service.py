@@ -187,6 +187,7 @@ def remember_basis(db, project, data):
 
 
 def materialize(db, project, data, user):
+    from .delivery_deployment_facts import current_deployed_requirement_ids
     from .delivery_verification import VerificationContext
 
     verification = VerificationContext(db, project, data)
@@ -224,6 +225,7 @@ def materialize(db, project, data, user):
             task["status"] = "blocked"
     issues = [serialize(i) for i in records(db, Issue, project).order_by(Issue.created_at.desc()).all()]
     reqs = []
+    deployed_requirements = current_deployed_requirement_ids(db, project, data)
     for row in (
         records(db, Requirement, project).order_by(Requirement.created_at.desc(), Requirement.id).all()
     ):
@@ -231,7 +233,8 @@ def materialize(db, project, data, user):
         req["basis"] = requirement_basis(row)
         flow = deepcopy(data["flows"].get(row.id, default_flow()))
         flow["legacy_completed"] = row.status == "completed" and row.id not in data["flows"]
-        flow["gates"] = stage_gates(req, flow, tasks, issues)
+        req["deployment_verified"] = row.id in deployed_requirements
+        flow["gates"] = stage_gates(req, flow, tasks, issues, deployment_verified=req["deployment_verified"])
         req["flow"] = flow
         req["tasks_total"] = sum(t["req_id"] == row.id for t in tasks)
         req["tasks_done"] = sum(t["req_id"] == row.id and t["status"] == "completed" for t in tasks)
@@ -243,7 +246,7 @@ def materialize(db, project, data, user):
         "blocked": sum(bool(r["flow"].get("blocked_reason")) for r in reqs)
         + sum(t["status"] == "blocked" for t in tasks),
         "accepted": sum(verification.requirement_accepted(r["id"]) for r in reqs),
-        "released": 0,
+        "released": len(deployed_requirements),
         "recorded_released": sum(r["flow"]["stage"] == "operations" for r in reqs),
         "open_issues": sum(i["status"] not in {"resolved", "closed"} for i in issues),
     }
@@ -585,7 +588,11 @@ def _apply_lifecycle(db, project, user, data, action, body, values):
         if flow["closed"]:
             raise HTTPException(409, "Delivery already closed")
         snapshot = materialize(db, project, data, user)
-        gates = stage_gates(serialize(row), flow, snapshot["tasks"], snapshot["issues"])
+        current_requirement = next(item for item in snapshot["requirements"] if item["id"] == row.id)
+        gates = stage_gates(
+            serialize(row), flow, snapshot["tasks"], snapshot["issues"],
+            deployment_verified=current_requirement["deployment_verified"],
+        )
         missing = [g["id"] for g in gates if not g["ok"]]
         if missing:
             raise HTTPException(422, {"code": "stage_gates", "missing": missing})

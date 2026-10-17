@@ -56,7 +56,7 @@ class PortfolioRiskCounts(PortfolioContract):
 
 class PortfolioTarget(PortfolioContract):
     project_id: str
-    kind: Literal['project', 'task', 'requirement', 'issue', 'milestone', 'execution']
+    kind: Literal['project', 'task', 'requirement', 'issue', 'milestone', 'execution', 'deployment']
     view: str
     detail: str = 'details'
     requirement_id: str | None = None
@@ -64,6 +64,7 @@ class PortfolioTarget(PortfolioContract):
     issue_id: str | None = None
     milestone_id: str | None = None
     execution_id: str | None = None
+    deployment_id: str | None = None
 
 
 class PortfolioRisk(PortfolioContract):

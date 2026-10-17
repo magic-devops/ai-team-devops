@@ -21,6 +21,7 @@ import {
   ReleaseSnapshotFacts,
   releaseTime,
 } from "./DeliveryReleaseFacts";
+import { DeliveryDeploymentHandoff } from "./DeliveryDeploymentWorkbench";
 type ReviewSession = {
   captured: DeliveryReleaseDetail;
   action: "approve" | "reject" | "revoke";
@@ -35,6 +36,8 @@ export function DeliveryReleaseDetail({
   background,
   onClose,
   onSaved,
+  onPrepareDeployment,
+  onOpenDeployment,
 }: {
   releaseId: string;
   projectId: string;
@@ -42,6 +45,8 @@ export function DeliveryReleaseDetail({
   background: string;
   onClose: () => void;
   onSaved: (workspace: DeliveryWorkspace) => void;
+  onPrepareDeployment?: (id: string) => void;
+  onOpenDeployment?: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const identity = useDrawerIdentity(
@@ -65,6 +70,8 @@ export function DeliveryReleaseDetail({
           sessionId={sessionId}
           background={background}
           onSaved={onSaved}
+          onPrepareDeployment={onPrepareDeployment}
+          onOpenDeployment={onOpenDeployment}
         />
       )}
     </Drawer>
@@ -76,12 +83,16 @@ export function ReleaseDetailContent({
   sessionId,
   background,
   onSaved,
+  onPrepareDeployment,
+  onOpenDeployment,
 }: {
   projectId: string;
   releaseId: string;
   sessionId: string;
   background: string;
   onSaved: (workspace: DeliveryWorkspace) => void;
+  onPrepareDeployment?: (id: string) => void;
+  onOpenDeployment?: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
@@ -286,11 +297,29 @@ export function ReleaseDetailContent({
       </details>
       <section className="delivery-release-deployment">
         <h3>{tr("deployment")}</h3>
-        <Alert
-          type="info"
-          title={tr("notHandedOff")}
-          description={tr("deploymentHint")}
-        />
+        {candidate.deployment.status !== "not_handed_off" && (
+          <p>{t(`deliveryDeployment.status.${candidate.deployment.status}`)}</p>
+        )}
+        {onPrepareDeployment && onOpenDeployment ? (
+          <DeliveryDeploymentHandoff
+            projectId={projectId}
+            sessionId={sessionId}
+            candidateId={candidate.id}
+            canPrepare={
+              !query.isError &&
+              candidate.status === "approved" &&
+              candidate.valid
+            }
+            onPrepare={() => onPrepareDeployment(candidate.id)}
+            onOpen={onOpenDeployment}
+          />
+        ) : (
+          <Alert
+            type="info"
+            title={tr("notHandedOff")}
+            description={tr("deploymentHint")}
+          />
+        )}
       </section>
       <section>
         <h3>{tr("reviewHistory")}</h3>

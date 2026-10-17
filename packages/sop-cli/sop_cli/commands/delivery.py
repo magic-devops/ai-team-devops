@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / schedule / schedule-preview / observation / baseline / reviews / team-runtime / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / preview / command"
 )
 
 
@@ -25,6 +25,32 @@ class ProjectState(str, Enum):
     active = "active"
     paused = "paused"
     archived = "archived"
+
+
+@app.command("deployments")
+def deployments(deployment_id: Annotated[str, typer.Option("--id")] = ""):
+    """读取受控环境与真实部署，或明确ID的固定计划和实际证据。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_deployment(deployment_id) if deployment_id else client.delivery_deployments()
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("deployment-preview")
+def deployment_preview(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """预览明确候选部署或已验证基线回滚；写入使用通用command和原key。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Expected a JSON object")
+        with get_client() as client:
+            console.print_json(data=client.delivery_deployment_preview(body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("quality")

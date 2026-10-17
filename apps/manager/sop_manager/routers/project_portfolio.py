@@ -150,12 +150,16 @@ def project_facts(db, project, data=None, *, as_of=None):
         }
     )
     intents = [entry for entry in effective.get("executions", []) if entry["status"] not in CLOSED]
+    from .delivery_deployment import active_deployment_ids
+
+    deployment_ids = active_deployment_ids(effective)
     basis = fact_basis(
         {
             "progress_basis": scoped["basis"],
             "utc_day": now.date().isoformat(),
             "risks": risks,
             "intents": intents,
+            "active_deployment_ids": deployment_ids,
             "milestones": effective.get("milestones", []),
         }
     )
@@ -164,7 +168,7 @@ def project_facts(db, project, data=None, *, as_of=None):
         "basis": basis,
         "metrics": scoped["metrics"],
         "risk_counts": counts,
-        "unclosed_intents_total": len(intents),
+        "unclosed_intents_total": len(intents) + len(deployment_ids),
         "nearest_milestone": nearest,
         "risks": risks,
     }

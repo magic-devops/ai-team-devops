@@ -10,6 +10,7 @@ import { safeExecutionReturn } from "./executionCommands";
 export type ReleaseRoute = {
   view: "quality" | "releases";
   releaseId: string;
+  deploymentId: string;
   evidenceId: string;
   query: string;
   kind: "all" | "requirement" | "task";
@@ -28,6 +29,7 @@ export function parseReleaseRoute(hash: string): ReleaseRoute {
   return {
     view: p.get("view") === "releases" ? "releases" : "quality",
     releaseId: clean(p.get("release_id"), 128),
+    deploymentId: clean(p.get("deployment_id"), 128),
     evidenceId: clean(p.get("ci_evidence_id"), 128),
     query: clean(p.get("quality_q")),
     kind: kind === "requirement" || kind === "task" ? kind : "all",
@@ -53,6 +55,7 @@ export function parseReleaseRoute(hash: string): ReleaseRoute {
 export function releaseHash(route: ReleaseRoute, background = "") {
   const p = new URLSearchParams({ view: route.view });
   if (route.releaseId) p.set("release_id", route.releaseId);
+  if (route.deploymentId) p.set("deployment_id", route.deploymentId);
   if (route.evidenceId) p.set("ci_evidence_id", route.evidenceId);
   if (route.query) p.set("quality_q", route.query);
   if (route.kind !== "all") p.set("quality_kind", route.kind);

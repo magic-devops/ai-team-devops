@@ -27,6 +27,7 @@ def _facts(value):
 
 
 def preview(db, project, user, data, body, *, version):
+    from .delivery_deployment import active_deployment_ids
     from .delivery_execution import CLOSED
 
     facts = project_facts(db, project, data)
@@ -47,12 +48,26 @@ def preview(db, project, user, data, body, *, version):
             "delivery_members": data.get("members", []),
             "facts_basis": facts["basis"],
             "intents": intents,
+            "deployments": data.get("deployments", []),
             "target_status": body.target_status,
             "reason": body.reason,
         }
     )
     blockers = []
     if body.target_status == "archived":
+        active_deployments = set(active_deployment_ids(data))
+        for deployment in data.get("deployments", []):
+            if deployment["id"] in active_deployments:
+                blockers.append({
+                    "code": "project_deployment_unclosed",
+                    "message": "Resolve this deployment or its unknown outcome before archiving.",
+                    "target": {
+                        "project_id": project.id, "kind": "deployment", "view": "releases",
+                        "detail": "details", "deployment_id": deployment["id"],
+                    },
+                    "status": deployment["status"],
+                    "run_id": next((operation.get("run_id") for operation in reversed(deployment.get("operations", [])) if operation.get("run_id")), None),
+                })
         for entry in intents:
             if entry["status"] not in CLOSED:
                 blockers.append(

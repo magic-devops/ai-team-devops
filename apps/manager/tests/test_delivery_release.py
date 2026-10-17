@@ -312,7 +312,7 @@ def test_signed_ci_to_candidate_review_has_typed_history_and_never_deploys(trust
     candidate = index["candidates"][0]
     assert candidate["status"] == "approved" and candidate["valid"]
     assert candidate["snapshot"] == original
-    assert candidate["deployment"] == {"status": "not_handed_off", "verified": False}
+    assert candidate["deployment"] == {"status": "not_handed_off", "verified": False, "deployment_id": None}
     assert candidate["reviews"][0]["actor"] == {"id": "lead", "name": "lead"}
     assert data["flows"]["R-release"]["stage"] == "release"
 

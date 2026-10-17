@@ -86,7 +86,7 @@ def capture_facts(db, project):
                 "revision": flow["revision"],
                 "basis": requirement["basis"],
                 "accepted": accepted[requirement["id"]],
-                "released": False,
+                "released": requirement.get("deployment_verified") is True,
             }
         )
     by_requirement = {r["id"]: r for r in snapshot["requirements"]}
