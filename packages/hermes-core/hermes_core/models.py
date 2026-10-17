@@ -63,6 +63,7 @@ _CREATABLE_RESOURCES = (
 _PATCHABLE_RESOURCES = ("workspaces", "sessions", "runs", "tasks", "requirements", "assets", "agents", "squads")
 ACTIONS = [
     _action("agent.catalog", ["read"], "GET", f"{API_BASE}/agents/catalog"),
+    _action("device.runtime-policy", ["config", "execute"], "POST", f"{API_BASE}/devices/{{id}}/runtime-policy", resource="devices"),
     _action(
         "schedule.preview",
         ["config", "execute"],
@@ -182,8 +183,8 @@ class Node(BaseModel):
     title: str = Field(default="", max_length=200)
     kind: Literal["command", "approval", "agent"] = "command"
     argv: list[str] = Field(default_factory=list, max_length=128)
-    expected_exit_code: int = Field(default=0, ge=0, le=255)
-    timeout_seconds: int = Field(default=60, ge=1, le=3600)
+    expected_exit_code: int = Field(default=0, ge=0, le=255, strict=True)
+    timeout_seconds: int = Field(default=60, ge=1, le=3600, strict=True)
     agent_id: str = Field(default="", max_length=64)
     prompt: str = Field(default="", max_length=32000)
 
@@ -193,6 +194,7 @@ class TaskDispatch(RunAction):
     isolation: Literal["workspace", "git_worktree"] = "workspace"
     base_commit: str = Field(default="", pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})?$")
     target_device_id: str = Field(default="", max_length=64)
+    target_basis: str = Field(default="", max_length=64)
 
 
 class TaskReview(RunAction):

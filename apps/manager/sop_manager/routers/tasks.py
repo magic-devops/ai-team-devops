@@ -262,31 +262,8 @@ class TaskSchedulerInsightTasksIn(BaseModel):
     priority: str = Field("P1", pattern="^P[0-3]$")
 
 
-class TaskAgentReportIn(BaseModel):
-    claim_id: str = Field("", max_length=80)
-    agent: str = Field("", max_length=120)
-    status: Optional[str] = Field(None, pattern="^(pending|in_progress|blocked|completed)$")
-    progress: int = Field(0, ge=0, le=100)
-    summary: str = Field("", max_length=4000)
-    confidence: Optional[float] = Field(None, ge=0, le=1)
-    artifact_url: str = Field("", max_length=800)
-    artifact_path: str = Field("", max_length=400)
-    artifacts: List[Dict[str, Any]] = Field(default_factory=list, max_length=50)
-    branch: str = Field("", max_length=120)
-    gate_results: List[Dict[str, Any]] = Field(default_factory=list, max_length=50)
-    block_reason: str = Field("", max_length=1000)
-    next_action: str = Field("", max_length=1000)
 
 
-class TaskAgentClaimIn(BaseModel):
-    task_id: str = ""
-    packet_id: str = ""
-    agent: str = Field("HermesAgent", max_length=120)
-    dev_tool: str = Field("", max_length=80)
-    lease_seconds: int = Field(900, ge=60, le=86400)
-    force: bool = False
-    auto_start: bool = True
-    note: str = Field("", max_length=1000)
 
 
 class TaskAgentPlanIn(BaseModel):
@@ -296,14 +273,6 @@ class TaskAgentPlanIn(BaseModel):
     include_context: bool = True
 
 
-class TaskAgentHeartbeatIn(BaseModel):
-    claim_id: str = Field("", max_length=80)
-    task_id: str = ""
-    agent: str = Field("", max_length=120)
-    progress: int = Field(0, ge=0, le=100)
-    state: str = Field("running", pattern="^(claimed|running|heartbeat|blocked)$")
-    status_message: str = Field("", max_length=1000)
-    extend_seconds: int = Field(900, ge=60, le=86400)
 
 
 class QualityPolicyIn(BaseModel):
@@ -948,25 +917,22 @@ def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, assigned_to: s
             "dependencies": blocked_by,
             "done_definition": [
                 "实现范围与任务描述一致，不引入无关重构。",
-                "所有必需质量卡点有证据，失败卡点需要回写 blocked 和下一步动作。",
-                "执行结果通过 agent-report 或 task update 回写，保留 artifact/branch/notes。",
+                "通过固定任务、智能体版本与执行目标预览，明确测试命令。",
+                "运行结果由设备执行协议回写；测试证据通过后仍需人工验收。",
             ],
         },
         "quality_gates": gates,
         "claim": claim,
         "callbacks": {
-            "claim": "POST /api/v1/tasks/agent-feed/claim",
-            "heartbeat": "POST /api/v1/tasks/agent-feed/heartbeat",
-            "pull": f"POST /api/v1/tasks/{tid}:pull",
-            "update": f"PATCH /api/v1/tasks/{tid}",
-            "agent_report": f"POST /api/v1/tasks/{tid}/agent-report",
-            "events_ingest": "POST /api/v1/events:ingest",
+            "preview": "POST /api/v1/delivery/execution-preview",
+            "command": "POST /api/v1/delivery/commands",
+            "observations": "GET /api/v1/delivery/executions/{execution_id}/observations",
         },
         "suggested_commands": [
             "sop context prepare --flush",
-            f"sop task claim --task-id {tid} --agent {assigned_to}",
-            f"sop task heartbeat --task-id {tid} --agent {assigned_to} --progress 50",
-            f"sop task report {tid} --status completed --confidence 0.8 --summary '<what changed>'",
+            "sop delivery targets",
+            "sop delivery execution-preview --file proposal.json",
+            "sop delivery command --file intent.json",
         ],
     }
 
@@ -997,7 +963,6 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
         "downstream": [edge for edge in snapshot.get("edges", []) if str(edge.get("source_id") or "") == tid],
     }
     gates = packet.get("quality_gates") or []
-    report_gate_args = " ".join([f"--gate {gate.get('id')}:passed:'<evidence>'" for gate in gates[:8]])
     context_files = [
         "AGENTS.md",
         ".ai-memory/rules/RULES.md",
@@ -1021,29 +986,29 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
             "required": True,
         },
         {
-            "id": "heartbeat",
-            "title": "开发中定期心跳续约",
-            "command": f"sop task heartbeat --task-id {tid} --agent {agent_name} --progress 50 --message 'implementation in progress'",
+            "id": "select-target",
+            "title": "选择有明确授权且能力可用的执行目标",
+            "command": "sop delivery targets",
             "required": True,
         },
         {
-            "id": "verify",
-            "title": "运行与影响面匹配的测试、构建或接口验证",
-            "command": "npm run -s typecheck && npm run -s build",
+            "id": "preview",
+            "title": "预览固定任务、目标、智能体与明确后置测试",
+            "command": "sop delivery execution-preview --file proposal.json",
             "required": True,
         },
         {
-            "id": "report",
-            "title": "回写交付结果、质量证据和后续动作",
-            "command": f"sop task report {tid} --agent {agent_name} --status completed --confidence 0.8 --summary '<what changed>' {report_gate_args}".strip(),
+            "id": "queue",
+            "title": "提交固定依据的派发；执行与测试后由人审查",
+            "command": "sop delivery command --file intent.json",
             "required": True,
         },
     ]
     if dependency_state["blocked_by"]:
         execution_steps.insert(2, {
             "id": "resolve-blockers",
-            "title": "先处理依赖阻塞或改为 blocked 回写原因",
-            "command": f"sop task report {tid} --agent {agent_name} --status blocked --block-reason '<blocked by {','.join(dependency_state['blocked_by'])}>'",
+            "title": "先检查并解决上游依赖阻塞",
+            "command": f"sop task agent-plan --task-id {tid} --json",
             "required": True,
         })
     return {
@@ -1069,16 +1034,8 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
         "quality_gates": gates,
         "context_files": context_files,
         "execution_steps": execution_steps,
-        "report_template": {
-            "status": "completed|blocked",
-            "progress": 100,
-            "confidence": 0.8,
-            "summary": "交付内容、改动范围、验证结果、风险与回滚方式",
-            "artifacts": [{"type": "diff|test|screenshot|log", "path": "<artifact path>", "summary": "<evidence summary>"}],
-            "gate_results": [{"id": gate.get("id"), "status": "passed", "evidence": gate.get("evidence")} for gate in gates],
-        },
         "agent_consumption": {
-            "purpose": "供 AI CLI/Agent 领取任务后理解目标、依赖、规约、质量卡点、回写格式并持续自主开发。",
+            "purpose": "读取目标、依赖和质量卡点；执行由固定身份的交付协议管理，历史登记不代表在线或交付完成。",
             "api": f"/api/v1/tasks/{tid}/agent-plan",
             "claim_plan_api": "/api/v1/tasks/agent-feed/execution-plan",
             "cli": f"sop task agent-plan --task-id {tid} --json",
@@ -1344,12 +1301,12 @@ def _scheduler_runbook(body: TaskSchedulerRunbookIn) -> Dict[str, Any]:
                 "type": "claim_ready_packet",
                 "severity": "medium",
                 "task_id": packet.get("task_id") or "",
-                "title": f"领取并执行就绪任务包：{packet.get('title') or packet.get('task_id')}",
-                "reason": "ready packet has no active claim",
+                "title": f"预览并派发就绪任务包：{packet.get('title') or packet.get('task_id')}",
+                "reason": "历史名称登记不代表当前执行；请核对交付工作台",
                 "commands": [
-                    f"sop task claim --task-id {packet.get('task_id')} --agent {body.assigned_to}",
-                    f"sop task heartbeat --task-id {packet.get('task_id')} --agent {body.assigned_to} --progress 50",
-                    f"sop task report {packet.get('task_id')} --status completed --confidence 0.8 --summary '<execution summary>'",
+                    "sop delivery targets",
+                    "sop delivery execution-preview --file proposal.json",
+                    "sop delivery command --file intent.json",
                 ],
             })
     if body.include_stale_claims:
@@ -1361,12 +1318,11 @@ def _scheduler_runbook(body: TaskSchedulerRunbookIn) -> Dict[str, Any]:
                 "type": "stale_claim",
                 "severity": "high",
                 "task_id": claim.get("task_id") or "",
-                "title": f"处理 Agent 租约心跳过期：{claim.get('task_id')}",
-                "reason": f"heartbeat lag {claim.get('heartbeat_lag_minutes')} minutes",
+                "title": f"核对历史 Agent 登记：{claim.get('task_id')}",
+                "reason": "历史登记过期不代表当前设备离线，请查看实际执行观测",
                 "commands": [
-                    f"sop task claims --status active --json",
-                    f"sop task heartbeat --claim-id {claim.get('claim_id')} --agent {claim.get('agent')} --progress {claim.get('progress') or 0} --message 'recover stale lease'",
-                    f"sop platforms agent-slo --json",
+                    "sop task claims --status all --json",
+                    "sop delivery workspace",
                 ],
             })
     if body.include_quality_blocks:
@@ -1382,7 +1338,7 @@ def _scheduler_runbook(body: TaskSchedulerRunbookIn) -> Dict[str, Any]:
                 "commands": [
                     f"sop task gates --task-id {tid} --json",
                     f"sop task evaluate --task-id {tid} --json",
-                    f"sop task report {tid} --status blocked --summary 'quality gate remediation required'",
+                    "sop delivery workspace",
                 ],
             })
     if body.include_dependency_blocks:
@@ -1786,7 +1742,7 @@ def _quality_tasks(body: QualityTasksIn) -> Dict[str, Any]:
                 "建议命令:",
                 f"- sop task gates --task-id {tid} --json",
                 f"- sop task evaluate --task-id {tid} --json",
-                f"- sop task report {tid} --status blocked --summary '补齐质量证据'",
+                "- sop delivery workspace",
             ]),
             "priority": "P0" if decision == "block" else body.priority,
             "estimate": "S",
@@ -2154,7 +2110,7 @@ def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
                 f"任务 {tid} 阻塞 {len(downstream)} 个下游任务，是当前 DAG 的关键上游瓶颈。",
                 [
                     f"sop task agent-plan --task-id {tid} --json",
-                    f"sop task claim --task-id {tid} --agent {body.assigned_to}",
+                    "sop delivery targets",
                     "sop task schedule-insights --include-blocked --json",
                 ],
                 [tid, *downstream],
@@ -2723,10 +2679,9 @@ def task_agent_feed(limit: int = Query(10, ge=1, le=100), agent: str = "", inclu
         "items": plan["agent_packets"],
         "event_wakeups": plan["event_wakeups"],
         "protocol": {
-            "claim": "POST /api/v1/tasks/agent-feed/claim",
-            "heartbeat": "POST /api/v1/tasks/agent-feed/heartbeat",
-            "report": "POST /api/v1/tasks/{task_id}/agent-report",
-            "lease_seconds_default": 900,
+            "preview": "POST /api/v1/delivery/execution-preview",
+            "command": "POST /api/v1/delivery/commands",
+            "observations": "GET /api/v1/delivery/executions/{execution_id}/observations",
         },
     }
 
@@ -2743,74 +2698,6 @@ def task_agent_claims(status: str = Query("active", pattern="^(active|all|closed
     return {"ok": True, "scope": _scope_payload(), "items": rows_all[:limit], "total": len(rows_all)}
 
 
-@router.post("/agent-feed/claim")
-def task_agent_claim(body: TaskAgentClaimIn):
-    t = table("tasks")
-    if t is None:
-        raise HTTPException(503, "数据库不可用")
-    agent = (body.agent or "HermesAgent").strip()[:120]
-    st = _ui_load()
-    task_rows = [_ui_merge_row(r, st) for r in rows("tasks", 1000)]
-    task_id = body.task_id.strip()
-    packet: Dict[str, Any] | None = None
-    if not task_id:
-        plan = _scheduler_plan(
-            task_rows,
-            TaskSchedulerIn(dry_run=True, max_items=50, max_parallel=20, include_blocked=False, policy="quality_first", event="agent.claim.pick", agent_pool=[agent]),
-        )
-        for item in plan["agent_packets"]:
-            if item.get("ready") and not _active_claim_for_task(str(item.get("task_id") or "")):
-                packet = item
-                task_id = str(item.get("task_id") or "")
-                break
-    task_id = _safe_task_id(task_id)
-    task = next((row for row in task_rows if row.get("id") == task_id), None)
-    if not task:
-        raise HTTPException(404, "任务不存在")
-    _require_task_dependencies([task_id])
-    if packet is None:
-        fallback_assignee, tool, reason = _dispatch_actor(task)
-        packet = _agent_packet(task, order=1, lane=1, assigned_to=agent or fallback_assignee, dev_tool=body.dev_tool or tool, reason=reason)
-    existing = _active_claim_for_task(task_id)
-    if existing and not body.force and str(existing.get("agent") or "") != agent:
-        raise HTTPException(409, {"detail": "任务已被其他 Agent 领取", "claim": existing})
-
-    claim_id = str(existing.get("claim_id") or "") if existing else f"claim-{uuid.uuid4().hex[:12]}"
-    ts = _utc_iso()
-    expires_at = _utc_iso(_utc_dt() + timedelta(seconds=body.lease_seconds))
-    claim = {
-        "claim_id": claim_id,
-        "packet_id": body.packet_id or packet.get("packet_id") or "",
-        "task_id": task_id,
-        "agent": agent,
-        "dev_tool": (body.dev_tool or packet.get("dev_tool") or "").strip()[:80],
-        "status": "claimed",
-        "progress": 0,
-        "claimed_at": ts,
-        "updated_at": ts,
-        "lease_expires_at": expires_at,
-        "scope": _scope_payload(),
-        "note": body.note,
-    }
-    state = _load_agent_claims()
-    state.setdefault("claims", {})[claim_id] = claim
-    _save_agent_claims(state)
-
-    fields = st.setdefault("fields", {}).setdefault(task_id, {})
-    if claim["dev_tool"]:
-        fields["dev_tool"] = claim["dev_tool"]
-    fields["debug_notes"] = f"Agent claimed: {agent} claim_id={claim_id} lease={expires_at} {body.note}".strip()[:2000]
-    _ui_save(st)
-    if body.auto_start:
-        t.update(where=f"id = '{task_id}'", values={"status": "in_progress", "assigned_to": agent, "updated_at": now()})
-    notify_webhook(
-        "task.agent_claimed",
-        {"task_id": task_id, "claim_id": claim_id, "agent": agent, "lease_expires_at": expires_at},
-        tenant_id=resolved_tenant_id(),
-        project_id=resolved_project_id(),
-    )
-    packet["claim"] = claim
-    return {"ok": True, "claim": claim, "packet": packet, "execution_plan": _agent_execution_plan(task_id, claim=claim, agent=agent)}
 
 
 @router.post("/agent-feed/execution-plan")
@@ -2854,53 +2741,6 @@ def task_agent_plan(task_id: str, claim_id: str = Query("", max_length=80), agen
     return _agent_execution_plan(task_id, claim=claim, agent=agent, include_context=include_context)
 
 
-@router.post("/agent-feed/heartbeat")
-def task_agent_heartbeat(body: TaskAgentHeartbeatIn):
-    state = _load_agent_claims()
-    claims = state.setdefault("claims", {})
-    claim: Dict[str, Any] | None = None
-    if body.claim_id:
-        claim = claims.get(body.claim_id)
-    if claim is None and body.task_id:
-        claim = _active_claim_for_task(_safe_task_id(body.task_id), agent=body.agent.strip())
-    if not claim:
-        raise HTTPException(404, "领取记录不存在或已过期")
-    claim_id = str(claim.get("claim_id") or body.claim_id)
-    if body.agent and str(claim.get("agent") or "") != body.agent.strip():
-        raise HTTPException(403, "Agent 与领取记录不一致")
-    ts = _utc_iso()
-    claim.update(
-        {
-            "status": body.state,
-            "progress": body.progress,
-            "status_message": body.status_message,
-            "updated_at": ts,
-            "lease_expires_at": _utc_iso(_utc_dt() + timedelta(seconds=body.extend_seconds)),
-        }
-    )
-    claims[claim_id] = claim
-    _save_agent_claims(state)
-    _append_jsonl(
-        _agent_reports_path(),
-        {
-            "id": f"agent-heartbeat-{uuid.uuid4().hex[:12]}",
-            "type": "heartbeat",
-            "claim_id": claim_id,
-            "task_id": claim.get("task_id"),
-            "agent": claim.get("agent"),
-            "progress": body.progress,
-            "status_message": body.status_message,
-            "created_at": ts,
-            "scope": _scope_payload(),
-        },
-    )
-    notify_webhook(
-        "agent.heartbeat",
-        {"task_id": claim.get("task_id"), "claim_id": claim_id, "agent": claim.get("agent"), "progress": body.progress},
-        tenant_id=resolved_tenant_id(),
-        project_id=resolved_project_id(),
-    )
-    return {"ok": True, "claim": claim}
 
 
 @router.post("/{task_id}:pull")
@@ -2923,127 +2763,6 @@ def pull_task(task_id: str):
     return _ui_merge_row(row, _ui_load())
 
 
-@router.post("/{task_id}/agent-report")
-def task_agent_report(task_id: str, body: TaskAgentReportIn):
-    task_id = _safe_task_id(task_id)
-    t = table("tasks")
-    if t is None:
-        raise HTTPException(503, "数据库不可用")
-    row = _task_by_id(task_id)
-    if not row:
-        raise HTTPException(404, "任务不存在")
-    gate_results = [g for g in body.gate_results if isinstance(g, dict)]
-    failed_gates = [
-        str(g.get("id") or g.get("name") or "unknown")
-        for g in gate_results
-        if str(g.get("status") or "").lower() in {"failed", "blocked", "error"}
-    ]
-    status = body.status
-    if body.block_reason.strip() and not status:
-        status = "blocked"
-    if failed_gates and status == "completed":
-        status = "blocked"
-    if status in {"in_progress", "completed"}:
-        _require_task_dependencies([task_id], target_status=status)
-    vals: Dict[str, Any] = {"updated_at": now()}
-    if status:
-        vals["status"] = status
-    if body.confidence is not None:
-        vals["confidence"] = body.confidence
-    note_parts = []
-    if body.summary.strip():
-        note_parts.append(body.summary.strip())
-    if failed_gates:
-        note_parts.append("失败卡点: " + ", ".join(failed_gates[:10]))
-    if body.block_reason.strip():
-        note_parts.append("阻塞原因: " + body.block_reason.strip())
-    if body.next_action.strip():
-        note_parts.append("下一步: " + body.next_action.strip())
-    if note_parts:
-        vals["human_notes"] = "\n".join(note_parts)[:4000]
-    t.update(where=f"id = '{task_id}'", values=vals)
-
-    st = _ui_load()
-    task_fields = st.setdefault("fields", {}).setdefault(task_id, {})
-    if body.artifact_url.strip():
-        task_fields["artifact_url"] = body.artifact_url.strip()[:800]
-    if body.artifact_path.strip():
-        task_fields["artifact_path"] = body.artifact_path.strip()[:400]
-    if body.branch.strip():
-        task_fields["branch"] = body.branch.strip()[:120]
-    task_fields["debug_notes"] = (
-        f"Agent report: agent={body.agent or '-'} claim={body.claim_id or '-'} progress={body.progress}% "
-        f"status={status or row.get('status') or 'pending'} gates={len(gate_results)} failed={len(failed_gates)} {body.summary.strip()}"
-    )[:2000]
-    _ui_save(st)
-
-    if body.claim_id:
-        claim_state = _load_agent_claims()
-        claim = (claim_state.get("claims") or {}).get(body.claim_id)
-        if claim:
-            if str(claim.get("task_id") or "") != task_id:
-                raise HTTPException(400, "claim_id 与 task_id 不匹配")
-            if body.agent and str(claim.get("agent") or "") != body.agent.strip():
-                raise HTTPException(403, "Agent 与领取记录不一致")
-            claim["status"] = "completed" if status == "completed" else "blocked" if status == "blocked" else "reported"
-            claim["progress"] = body.progress
-            claim["updated_at"] = _utc_iso()
-            claim["reported_at"] = claim["updated_at"]
-            claim["lease_expires_at"] = claim["updated_at"]
-            claim["report_status"] = status or row.get("status") or "pending"
-            claim_state.setdefault("claims", {})[body.claim_id] = claim
-            _save_agent_claims(claim_state)
-
-    quality = _evaluate_quality(
-        _ui_merge_row(row, st),
-        gate_results,
-        confidence=body.confidence,
-        artifact_url=body.artifact_url,
-        artifact_path=body.artifact_path,
-        status=status or row.get("status") or "pending",
-        source="agent-report",
-    )
-    _append_jsonl(_quality_evaluations_path(), quality)
-    if quality["decision"] == "block" and (status == "completed" or not status):
-        t.update(
-            where=f"id = '{task_id}'",
-            values={
-                "status": "blocked",
-                "human_notes": ("质量卡点阻断: " + ", ".join(quality.get("blockers") or []))[:4000],
-                "updated_at": now(),
-            },
-        )
-        status = "blocked"
-
-    report = {
-        "id": f"agent-report-{uuid.uuid4().hex[:12]}",
-        "task_id": task_id,
-        "claim_id": body.claim_id,
-        "agent": body.agent,
-        "created_at": _utc_now(),
-        "scope": _scope_payload(),
-        "status": status or row.get("status") or "pending",
-        "progress": body.progress,
-        "confidence": body.confidence,
-        "summary": body.summary,
-        "artifact_url": body.artifact_url,
-        "artifact_path": body.artifact_path,
-        "artifacts": body.artifacts,
-        "branch": body.branch,
-        "gate_results": gate_results,
-        "failed_gates": failed_gates,
-        "block_reason": body.block_reason,
-        "next_action": body.next_action,
-        "quality": quality,
-    }
-    _append_jsonl(_agent_reports_path(), report)
-    notify_webhook(
-        "task.agent_reported",
-        {"task_id": task_id, "status": report["status"], "progress": body.progress, "failed_gates": failed_gates},
-        tenant_id=resolved_tenant_id(),
-        project_id=resolved_project_id(),
-    )
-    return {"ok": True, "task_id": task_id, "status": report["status"], "failed_gates": failed_gates, "quality": quality, "report": report}
 
 
 @router.patch("/{task_id}/unblock")

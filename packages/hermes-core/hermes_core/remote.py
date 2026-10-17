@@ -12,8 +12,15 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Column, Float, MetaData, String, Table, delete, insert, select, update
 
-from .models import API_BASE, CoreError, Node, Principal, RunAction, payload
-from .transactional import Store, digest
+from .execution_targets import (
+    DeviceRuntimePolicy,
+    WorkerPresence,
+    initialize_target_storage,
+    record_worker_presence,
+    validate_execution_target_snapshot,
+)
+from .models import API_BASE, CoreError, Envelope, Node, Principal, RunAction, payload
+from .transactional import Store, digest, now
 
 PAIRING_TTL_SECONDS = 10 * 60
 REMOTE_LEASE_SECONDS = 120
@@ -32,6 +39,7 @@ class RemoteClaim(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=160)
     worker_version: str = Field(default="", max_length=80)
     runtime_capabilities: list[str] = Field(default_factory=lambda: ["command"], max_length=8)
+    worker_id: str = Field(default="", max_length=120)
 
 
 class RemoteHeartbeat(BaseModel):
@@ -94,7 +102,7 @@ def _remote_credentials(store: Store) -> Table:
 
 
 def _credential_row(store: Store, device_id: str) -> dict[str, Any]:
-    table = _remote_credentials(store)
+    table = _credential_table_definition()
     with store.engine.connect() as conn:
         row = conn.execute(select(table).where(table.c.device_id == device_id)).mappings().first()
     if row is None:
@@ -229,9 +237,9 @@ def _sanitize_agent_result(raw: Any) -> dict[str, Any]:
         raise CoreError("invalid_result", "Remote agent result requires a supported provider", 422)
     if not isinstance(completed, bool):
         raise CoreError("invalid_result", "Remote agent result completed must be a boolean", 422)
-    usage = raw.get("usage", {})
-    if not isinstance(usage, dict):
-        raise CoreError("invalid_result", "Remote agent result usage must be an object", 422)
+    usage = raw.get("usage")
+    if usage is not None and not isinstance(usage, dict):
+        raise CoreError("invalid_result", "Remote agent result usage must be an object or null", 422)
     events = raw.get("events", [])
     if not isinstance(events, list):
         raise CoreError("invalid_result", "Remote agent result events must be a list", 422)
@@ -241,7 +249,7 @@ def _sanitize_agent_result(raw: Any) -> dict[str, Any]:
         "completed": completed,
         "agent_id": str(raw.get("agent_id", ""))[:64],
         "profile_version": raw.get("profile_version") if isinstance(raw.get("profile_version"), int) else None,
-        "usage": usage,
+        "usage": usage or None,
         "message": str(raw.get("message", ""))[-32000:],
         "events": safe_events,
         "error": str(raw.get("error", ""))[:2000],
@@ -296,6 +304,14 @@ def _assert_run_still_remote_executable(store: Store, conn, principal: Principal
         raise CoreError("workspace_changed", "Workspace configuration changed; create a newly reviewed run", 409)
     if run["data"].get("target_device_id") != device_id:
         raise CoreError("forbidden", "Run is assigned to a different device", 403)
+    from .agents import validate_bound_profiles
+
+    validate_bound_profiles(store, conn, principal, workspace, run["data"].get("agent_bindings", {}))
+    snapshot = run["data"].get("target_snapshot")
+    if snapshot:
+        for node in _planned_nodes(run):
+            provider = (_agent_binding(run, node) or {}).get("profile", {}).get("provider", "") if node.kind == "agent" else ""
+            validate_execution_target_snapshot(store, None, principal, workspace, snapshot, provider=provider, conn=conn)
     source = run["data"].get("task_source")
     if source:
         task = store._get(conn, principal, workspace, "tasks", source["task_id"])
@@ -349,6 +365,43 @@ def _agent_binding(run: dict[str, Any], node: RemoteNode) -> dict[str, Any] | No
     if not isinstance(binding.get("profile"), dict):
         return None
     return binding
+
+
+def _validate_agent_result_binding(run, node, result):
+    import json
+
+    from .agents import provider_evidence
+
+    binding = _agent_binding(run, node)
+    agent = result.get("agent")
+    if not binding or not agent or (
+        agent.get("provider") != binding["profile"].get("provider")
+        or agent.get("agent_id") != binding["agent_id"]
+        or type(agent.get("profile_version")) is not int
+        or agent.get("profile_version") != binding["version"]
+    ):
+        raise CoreError("invalid_agent_evidence", "Agent result does not match the server-pinned profile", 422)
+    _validate_provider_event_shapes(agent.get("events", []))
+    if result["succeeded"]:
+        evidence = provider_evidence(agent["provider"], "\n".join(json.dumps(event) for event in agent.get("events", [])))
+        if agent.get("completed") is not True or not evidence["completed"]:
+            raise CoreError("invalid_agent_evidence", "Successful Agent result requires a successful terminal provider event", 422)
+
+
+def _validate_provider_event_shapes(events):
+    for event in events:
+        if "type" in event and not isinstance(event["type"], str):
+            raise CoreError("invalid_agent_evidence", "Provider event type must be a string", 422)
+        for field in ("item", "part", "usage"):
+            if event.get(field) is not None and not isinstance(event[field], dict):
+                raise CoreError("invalid_agent_evidence", f"Provider event {field} must be an object or null", 422)
+
+
+def _sanitize_node_result(run, node, raw):
+    result = _sanitize_result(raw, node.expected_exit_code)
+    if node.kind == "agent":
+        _validate_agent_result_binding(run, node, result)
+    return result
 
 
 def _previous_agent_context(run: dict[str, Any], node: RemoteNode) -> list[dict[str, Any]]:
@@ -454,8 +507,46 @@ def recover_expired_remote(store: Store, principal: Principal, workspace: str) -
 
 def create_remote_router(store: Store, identity: Callable):  # noqa: C901
     credential_table = _remote_credentials(store)
+    initialize_target_storage(store)
     router = APIRouter(prefix=API_BASE, tags=["Hermes Remote Execution"])
+    operator_identity = Depends(identity)
 
+    @router.post("/remote/presence", response_model=Envelope)
+    def presence(body: WorkerPresence, request: Request):
+        identity_data = device_auth(request)
+        result = record_worker_presence(store, identity_data, body)
+        return _response(identity_data.principal, identity_data.workspace, [result], summary={"presence_recorded": True})
+
+    @router.post("/devices/{device_id}/runtime-policy", response_model=Envelope)
+    def runtime_policy(device_id: str, body: DeviceRuntimePolicy, request: Request,
+                       principal: Principal = operator_identity):
+        _require(principal, "config")
+        _require(principal, "execute")
+        workspace = _workspace_id(store, request, principal)
+        operation = "device.runtime-policy"
+        if not body.dry_run:
+            cached = store.receipt(principal, workspace, operation + ":" + device_id,
+                                   body.idempotency_key, body.model_dump())
+            if cached is not None:
+                return _response(principal, workspace, [_public_device(cached)], summary={"dry_run": False})
+        device = store.get(principal, workspace, "devices", device_id)
+        if device["version"] != body.expected_version:
+            raise CoreError("version_conflict", "Device changed; reload policy before applying", 409)
+        if device["status"] == "revoked":
+            raise CoreError("device_revoked", "Revoked device cannot be configured", 409)
+        policy = {"allowed_runtimes": sorted(body.allowed_runtimes), "allowed_providers": sorted(body.allowed_providers)}
+        if body.dry_run:
+            return _response(principal, workspace, [{**_public_device(device), "proposed_policy": policy}], summary={"dry_run": True})
+
+        def configure(item):
+            if item["status"] == "revoked":
+                raise CoreError("device_revoked", "Revoked device cannot be configured", 409)
+            return {"data": {**item["data"], **policy, "policy_updated_by": principal.actor, "policy_updated_at": now()}}
+
+        result = store.mutate(principal, workspace, "devices", device_id, operation=operation,
+                              key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
+                              expected=body.expected_version, transform=configure, audit_data={"policy": policy})
+        return _response(principal, workspace, [_public_device(result)], summary={"dry_run": False})
     def device_auth(request: Request) -> DeviceIdentity:
         return _device_identity(store, request)
 
@@ -602,6 +693,13 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
         recover_expired_remote(store, principal, workspace)
         active = _active_assignment(store, principal, workspace, device["id"])
         if active is not None:
+            run = store.get(principal, workspace, "runs", active["run_id"])
+            snapshot = run["data"].get("target_snapshot")
+            if snapshot:
+                if body.worker_id != snapshot.get("worker_id"):
+                    raise CoreError("target_basis_changed", "Worker instance differs from the reviewed execution target", 409)
+                with store.engine.connect() as conn:
+                    _assert_run_still_remote_executable(store, conn, principal, workspace, run, device["id"])
             return _response(principal, workspace, [active], summary={"claimed": True, "idempotent": True},
                              cli=_run_cli(active["run_id"]))
         if _claim_key_seen(store, principal, workspace, body.idempotency_key):
@@ -636,6 +734,9 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
                     continue
                 if not _claimable_node(node, worker_capabilities, allowed_runtimes):
                     continue
+                snapshot = run["data"].get("target_snapshot")
+                if snapshot and body.worker_id != snapshot.get("worker_id"):
+                    raise CoreError("target_basis_changed", "Worker instance differs from the reviewed execution target", 409)
                 owner = REMOTE_OWNER_PREFIX + secrets.token_urlsafe(24)
 
                 def take(item: dict[str, Any], assigned_owner=owner, assigned_node=node) -> dict[str, Any]:
@@ -649,6 +750,7 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
                 claimed = store.mutate(principal, workspace, "runs", run["id"], operation="remote.claimed",
                                        key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
                                        expected=run["version"], transform=take,
+                                       audit_data={"node_id": node.id},
                                        precondition=lambda conn, current=run: (
                                            _assert_device_active_in_tx(store, conn, device, credential_table,
                                                                        identity_data.credential_secret),
@@ -686,9 +788,10 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
         result = store.mutate(principal, workspace, "runs", body.run_id, operation="remote.heartbeat",
                               key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
                               expected=None, transform=beat,
-                              precondition=lambda conn: _assert_device_active_in_tx(store, conn, device,
-                                                                                    credential_table,
-                                                                                    identity_data.credential_secret))
+                              precondition=lambda conn: (
+                                  _assert_device_active_in_tx(store, conn, device, credential_table, identity_data.credential_secret),
+                                  _assert_run_still_remote_executable(store, conn, principal, workspace,
+                                                                    store._get(conn, principal, workspace, "runs", body.run_id), device["id"])))
         return _response(principal, workspace, [{"run_id": body.run_id, "status": result["status"],
                                                 "lease_expires_at": result["data"].get("lease_expires_at")}],
                          cli=_run_cli(body.run_id))
@@ -704,10 +807,10 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
         node = node_by_id.get(body.node_id)
         if node is None:
             raise CoreError("unknown_node", "Result references an unknown run node", 404)
-        clean_result = _sanitize_result(body.result, node.expected_exit_code)
+        clean_result = _sanitize_node_result(current, node, body.result)
         current_existing = current["data"].get("node_results", {}).get(body.node_id)
         audit_data = {"node_id": body.node_id, "owner": body.owner,
-                      "attempt": current["data"].get("attempt", 1)}
+                      "attempt": current["data"].get("attempt", 1), "result": clean_result}
         if current_existing is not None:
             audit_data["superseded_result_sha256"] = digest(current_existing)
 

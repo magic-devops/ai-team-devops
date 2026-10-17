@@ -51,9 +51,18 @@ def context(store, user, workspace, permission="read"):
     return principal, row
 
 
-def catalog(store, user):
+def catalog(store, user, execution=None, *, project_id="", project_write=True, project_configure=False):
+    from hermes_core.execution_targets import workspace_execution_targets
+
     if store is None:
-        return {"workspaces": [], "can_execute": False, "providers": []}
+        return {
+            "project_id": project_id,
+            "as_of": stamp(),
+            "runtime_configured": False,
+            "workspaces": [],
+            "can_execute": False,
+            "can_configure_policy": False,
+        }
     principal = runtime_identity(user, store)
     rows = store.list(principal, "", "workspaces", limit=1000)
     result = []
@@ -68,63 +77,129 @@ def catalog(store, user):
             {
                 "id": row["id"],
                 "name": row["data"].get("name", row["id"]),
+                "version": row["version"],
                 "agents": [
                     {
                         "id": a["id"],
                         "version": a["version"],
-                        "title": a["data"].get("title"),
-                        "provider": a["data"].get("provider"),
+                        "title": a["data"]["title"],
+                        "provider": a["data"]["provider"],
                     }
                     for a in store.list(principal, row["id"], "agents", status="active")
                 ],
-                "devices": [
-                    {"id": d["id"], "name": d["data"].get("name", d["id"])}
-                    for d in store.list(principal, row["id"], "devices", status="active")
-                ],
+                **workspace_execution_targets(store, execution, principal, row["id"]),
             }
         )
     return {
         "workspaces": result,
-        "can_execute": "execute" in principal.permissions,
-        "providers": Agents.catalog(),
+        "project_id": project_id,
+        "as_of": stamp(),
+        "runtime_configured": True,
+        "can_execute": project_write and "execute" in principal.permissions,
+        "can_configure_policy": project_configure and {"config", "execute"}.issubset(principal.permissions),
     }
 
 
-def _queue(db, project, user, state, body, store):
+def prepare_plan(db, project, user, state, body, store, execution=None):
+    """Pure proposal validation shared by preview and the versioned write."""
+    from hermes_core.execution_targets import select_execution_target
+
     from .delivery_plan import require_dependencies
+    from .delivery_verification import VerificationContext
 
     principal, workspace = context(store, user, body.workspace_id, "execute")
     task = get_record(db, Task, project, body.task_id)
+    if VerificationContext(db, project, state).basis(task.id) != body.task_basis:
+        raise HTTPException(
+            409,
+            {"code": "task_basis_changed", "message": "Task changed; review the latest task before dispatch"},
+        )
     require_dependencies(db, project, state, task.id)
     requirement = get_record(db, Requirement, project, task.req_id)
-    flow = state["flows"].setdefault(requirement.id, default_flow())
+    flow = state["flows"].get(requirement.id, default_flow())
     if task.status == "completed" or flow["stage"] in {"testing", "acceptance", "release", "operations"}:
         raise HTTPException(409, "Reopen the requirement and task before dispatch")
     if not requirement.acceptance_criteria:
         raise HTTPException(422, "Define acceptance criteria before dispatch")
-    entries = state.setdefault("executions", [])
+    entries = state.get("executions", [])
     if any(e["task_id"] == task.id and e["status"] not in CLOSED for e in entries):
         raise HTTPException(409, "Review or cancel the current execution before redispatch")
+    agent = None
     if body.agent_id:
         agent = store.get(principal, workspace["id"], "agents", body.agent_id)
         if agent["version"] != body.agent_version or agent["status"] != "active":
             raise HTTPException(409, "Agent configuration changed; reload")
+    target = select_execution_target(
+        store,
+        execution,
+        principal,
+        workspace["id"],
+        target_kind=body.target_kind,
+        target_device_id=body.target_device_id,
+        provider=agent["data"]["provider"] if agent else "",
+        expected_basis=body.target_basis,
+    )
+    needed = {"agent"} if agent else {"command"}
+    if body.test_nodes:
+        needed.add("command")
+    if not needed.issubset(target["runtime_capabilities"]) or not needed.issubset(
+        target["policy"]["allowed_runtimes"]
+    ):
+        raise HTTPException(
+            409, {"code": "target_unavailable", "message": "Target cannot execute every planned node"}
+        )
+    snapshot = basis(task, requirement, flow["revision"])
+    nodes = body.nodes
+    if agent:
+        from hermes_core.agents import single_agent_nodes
+
+        nodes = single_agent_nodes(agent, _envelope_data({"snapshot": snapshot, "id": ""}), body.test_nodes)
+    result = {
+        "task_basis": body.task_basis,
+        "workspace_id": workspace["id"],
+        "workspace_version": workspace["version"],
+        "snapshot": snapshot,
+        "target": target,
+        "agent": None
+        if not agent
+        else {
+            "id": agent["id"],
+            "version": agent["version"],
+            "title": agent["data"]["title"],
+            "provider": agent["data"]["provider"],
+        },
+        "nodes": [node.model_dump(mode="json") for node in nodes],
+        "test_node_ids": [node.id for node in body.test_nodes] if agent else body.test_node_ids,
+    }
+    result["plan_basis"] = digest(result)
+    return result
+
+
+def _queue(db, project, user, state, body, store, execution=None):
+    plan = prepare_plan(db, project, user, state, body, store, execution)
+    task = get_record(db, Task, project, body.task_id)
     entry = {
         "id": identifier("execution"),
-        **body.model_dump(),
+        **body.model_dump(mode="json"),
+        "test_node_ids": plan["test_node_ids"],
+        "plan_nodes": plan["nodes"],
+        "plan_basis": plan["plan_basis"],
+        "target_snapshot": plan["target"],
+        "agent_snapshot": plan["agent"],
         "requested_by": user.id,
-        "workspace_version": workspace["version"],
-        "snapshot": basis(task, requirement, flow["revision"]),
+        "workspace_version": plan["workspace_version"],
+        "snapshot": plan["snapshot"],
         "status": "pending_dispatch",
         "created_at": stamp(),
         "run_id": "",
         "run_version": 0,
+        "attempt": 1,
         "runtime_task_id": "",
         "progress": 0,
         "results": {},
         "stale": False,
     }
-    entries.append(entry)
+    state.setdefault("executions", []).append(entry)
     task.status = "in_progress"
     return entry["id"], None
 
@@ -145,13 +220,62 @@ def _dispatch_body(entry):
         "idempotency_key": entry["id"],
         "dry_run": False,
         "target_device_id": entry["target_device_id"],
+        "target_basis": entry["target_basis"],
     }
     if entry["agent_id"]:
-        return AgentDispatch(**common, agent_id=entry["agent_id"], target_version=entry["agent_version"])
+        return AgentDispatch(
+            **common,
+            agent_id=entry["agent_id"],
+            target_version=entry["agent_version"],
+            test_nodes=entry["test_nodes"],
+        )
     return TaskDispatch(**common, nodes=entry["nodes"])
 
 
-def _dispatch(store, principal, entry):
+def _recover_dispatch(store, principal, entry):
+    """Recover committed external receipts before revalidating an unstarted plan."""
+    if not entry.get("target_basis"):
+        return False
+    envelope = store.receipt(
+        principal, entry["workspace_id"], "create:tasks", entry["id"], _envelope_data(entry)
+    )
+    if not envelope:
+        return False
+    operation = "task.agent-dispatch:" if entry["agent_id"] else "task.dispatch:"
+    cached = store.receipt(
+        principal,
+        entry["workspace_id"],
+        operation + envelope["id"],
+        entry["id"],
+        _dispatch_body(entry).model_dump(),
+    )
+    if not cached:
+        return False
+    entry.update(run_id=cached["run"]["id"], runtime_task_id=envelope["id"])
+    return True
+
+
+def _dispatch(store, principal, entry, execution=None):
+    from hermes_core.execution_targets import validate_execution_target_snapshot
+
+    if _recover_dispatch(store, principal, entry):
+        return
+    if not entry.get("target_snapshot"):
+        raise HTTPException(
+            409,
+            {
+                "code": "target_basis_missing",
+                "message": "Prepare a new plan with an explicit execution target",
+            },
+        )
+    validate_execution_target_snapshot(
+        store,
+        execution,
+        principal,
+        entry["workspace_id"],
+        entry["target_snapshot"],
+        provider=(entry.get("agent_snapshot") or {}).get("provider", ""),
+    )
     envelope = store.create(
         principal,
         entry["workspace_id"],
@@ -161,7 +285,7 @@ def _dispatch(store, principal, entry):
         entry["id"],
         status="active",
     )
-    service = Delivery(store, Repository(None))
+    service = Delivery(store, Repository(execution))
     request = _dispatch_body(entry)
     if entry["agent_id"]:
         result = Agents(store).dispatch(
@@ -178,20 +302,7 @@ def _cancel(db, project, entry, store, principal):
         raise HTTPException(409, "Execution already closed")
     if not entry["run_id"]:
         receipt_actor = replace(principal, actor=entry["requested_by"])
-        envelope = store.receipt(
-            receipt_actor, entry["workspace_id"], "create:tasks", entry["id"], _envelope_data(entry)
-        )
-        if envelope:
-            operation = "task.agent-dispatch:" if entry["agent_id"] else "task.dispatch:"
-            cached = store.receipt(
-                receipt_actor,
-                entry["workspace_id"],
-                operation + envelope["id"],
-                entry["id"],
-                _dispatch_body(entry).model_dump(),
-            )
-            if cached:
-                entry.update(run_id=cached["run"]["id"], runtime_task_id=envelope["id"])
+        _recover_dispatch(store, receipt_actor, entry)
     if entry["run_id"]:
         run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
         if run["status"] == "completed":
@@ -225,6 +336,8 @@ def _cancel(db, project, entry, store, principal):
 
 
 def _observe(db, project, state, entry, store, principal):
+    from .delivery_execution_observations import project_result
+
     run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
     task = get_record(db, Task, project, entry["task_id"])
     requirement = get_record(db, Requirement, project, entry["snapshot"]["requirement_id"])
@@ -236,18 +349,9 @@ def _observe(db, project, state, entry, store, principal):
     results = run["data"].get("node_results", {})
     entry.update(
         run_version=run["version"],
+        attempt=run["data"].get("attempt", 1),
         observed_at=stamp(),
-        results={
-            key: {
-                k: (
-                    str(value[k])[-12000:]
-                    if k in {"error", "stdout", "stderr"} and value.get(k) is not None
-                    else value.get(k)
-                )
-                for k in ("succeeded", "exit_code", "error", "stdout", "stderr")
-            }
-            for key, value in results.items()
-        },
+        results={key: project_result(value) for key, value in results.items() if isinstance(value, dict)},
         progress=round(
             sum(v.get("succeeded") is True for v in results.values())
             / max(len(run["data"].get("nodes", [])), 1)
@@ -336,10 +440,10 @@ def _review(entry, run, task, flow, body, user, store, principal):
         )
 
 
-def apply_execution(db, project, user, state, action, body, store):
+def apply_execution(db, project, user, state, action, body, store, execution=None):
     try:
         if action == "execution.queue":
-            return _queue(db, project, user, state, body, store)
+            return _queue(db, project, user, state, body, store, execution)
         entry = next((e for e in state.get("executions", []) if e["id"] == body.id), None)
         if not entry:
             raise HTTPException(404, "Execution not found in project")
@@ -370,7 +474,7 @@ def apply_execution(db, project, user, state, action, body, store):
                 raise HTTPException(
                     409, "Dispatch context changed; cancel this intent and prepare a new plan"
                 )
-            _dispatch(store, dispatcher, entry)
+            _dispatch(store, dispatcher, entry, execution)
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":
             if body.decision == "accept":
@@ -380,4 +484,4 @@ def apply_execution(db, project, user, state, action, body, store):
             _review(entry, run, task, flow, body, user, store, principal)
         return entry["id"], before
     except CoreError as exc:
-        raise HTTPException(exc.status, exc.message) from exc
+        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc

@@ -1,6 +1,9 @@
 """Real SQL + runtime store tests for the business/execution bridge."""
 
+import sys
+
 import pytest
+from hermes_core.execution import Execution
 from hermes_core.models import Principal
 from hermes_core.transactional import Store
 from sop_manager.routers.sql_models import Task, User
@@ -8,15 +11,28 @@ from test_delivery_workbench import command, env, requirement  # noqa: F401
 
 
 @pytest.fixture
-def bridge(env, tmp_path):  # noqa: F811 - pytest fixture injection
+def bridge(env, tmp_path, monkeypatch):  # noqa: F811 - pytest fixture injection
     client, sessions, actor = env
     with sessions() as db:
         db.get(User, "lead").role = "super_admin"
         db.commit()
     store = Store("sqlite:///" + str(tmp_path / "runtime.sqlite"))
     client.app.state.hermes_store = store
+    executor = Execution(store, tmp_path, agentd=sys.executable)
+    executor.allowed_roots = (tmp_path.resolve(),)
+    client.app.state.hermes_execution = executor
+    from hermes_core import execution_targets
+
+    original_which = execution_targets.shutil.which
+    monkeypatch.setattr(
+        execution_targets.shutil,
+        "which",
+        lambda command: sys.executable if command == "codex" else original_which(command),
+    )
     p = Principal("lead", tenant="tenant", business="team")
-    ws = store.create(p, "", "workspaces", {"name": "Test", "root": ".", "owner": "lead"}, "ws", "test")
+    ws = store.create(
+        p, "", "workspaces", {"name": "Test", "root": str(tmp_path), "owner": "lead"}, "ws", "test"
+    )
     rid = requirement(client)
     state = command(
         client, "task.create", {"requirement_id": rid, "title": "Implement", "owner_id": "user:lead"}
@@ -26,17 +42,29 @@ def bridge(env, tmp_path):  # noqa: F811 - pytest fixture injection
     store.engine.dispose()
 
 
-def queue(bridge):
+def queue_payload(bridge):
     client, _, _, _, ws, _, task = bridge
+    state = client.get("/api/v1/delivery/workspace").json()
+    current = next(t for t in state["tasks"] if t["id"] == task["id"])
+    targets = client.get("/api/v1/delivery/execution-targets").json()
+    target = next(w for w in targets["workspaces"] if w["id"] == ws["id"])["local"]
+    return {
+        "task_id": task["id"],
+        "workspace_id": ws["id"],
+        "task_basis": current["basis"],
+        "target_kind": "local",
+        "target_basis": target["basis"],
+        "nodes": [{"id": "tests", "argv": ["python", "-m", "pytest"]}],
+        "test_node_ids": ["tests"],
+    }
+
+
+def queue(bridge):
+    client = bridge[0]
     response = command(
         client,
         "execution.queue",
-        {
-            "task_id": task["id"],
-            "workspace_id": ws["id"],
-            "nodes": [{"id": "tests", "argv": ["python", "-m", "pytest"]}],
-            "test_node_ids": ["tests"],
-        },
+        queue_payload(bridge),
     )
     assert response.status_code == 200, response.text
     return response.json()["executions"][-1]
@@ -335,8 +363,11 @@ def test_existing_agent_adapter_receives_pinned_task_and_requirement_context(bri
         client,
         "execution.queue",
         {
-            "task_id": task["id"],
-            "workspace_id": ws["id"],
+            **{
+                key: value
+                for key, value in queue_payload(bridge).items()
+                if key not in {"nodes", "test_node_ids"}
+            },
             "agent_id": agent["id"],
             "agent_version": agent["version"],
         },

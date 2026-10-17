@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .delivery_execution_contract import ExecutionQueue
 from .delivery_scheduling_contract import (
     AllocationInput,
     CalendarSave,
@@ -673,31 +674,6 @@ class ReleaseSave(Input):
     rollback_plan: str = Field(min_length=1, max_length=10000)
     verification: str = Field(min_length=1, max_length=10000)
     _url = field_validator("artifact_url")(ArtifactAdd.safe_url.__func__)
-
-
-class ExecutionQueue(Input):
-    task_id: str = Field(min_length=1, max_length=64)
-    workspace_id: str = Field(min_length=1, max_length=64)
-    agent_id: str = Field(default="", max_length=64)
-    agent_version: int = Field(default=1, ge=1)
-    target_device_id: str = Field(default="", max_length=64)
-    nodes: list[dict] = Field(default_factory=list, max_length=32)
-    test_node_ids: list[str] = Field(default_factory=list, max_length=32)
-
-    @model_validator(mode="after")
-    def plan_valid(self):
-        from hermes_core.models import Node
-
-        if bool(self.agent_id) == bool(self.nodes):
-            raise ValueError("Choose an agent or a command plan")
-        nodes = [Node.model_validate(n) for n in self.nodes]
-        if any(n.kind != "command" or not n.argv for n in nodes):
-            raise ValueError("Command plans require executable command nodes")
-        ids = [n.id for n in nodes]
-        if len(set(ids)) != len(ids) or not set(self.test_node_ids).issubset(ids):
-            raise ValueError("Test nodes must reference unique plan nodes")
-        self.nodes = [n.model_dump() for n in nodes]
-        return self
 
 
 class ExecutionSync(Input):

@@ -1,5 +1,10 @@
 import { request } from "./http";
 import type { TaskPlanning } from "./deliveryTaskPlan";
+import type {
+  ExecutionAgent,
+  ExecutionTarget,
+  ExecutionPreview,
+} from "./deliveryExecution";
 
 export const deliveryStages = [
   "intake",
@@ -108,6 +113,16 @@ export type DeliveryExecution = {
   observed_at?: string;
   stale: boolean;
   issue_id?: string;
+  attempt?: number;
+  target_kind?: "local" | "device";
+  target_basis?: string;
+  task_basis?: string;
+  target_device_id?: string;
+  target_snapshot?: ExecutionTarget;
+  agent_snapshot?: ExecutionAgent | null;
+  test_nodes?: ExecutionPreview["nodes"];
+  plan_nodes?: ExecutionPreview["nodes"];
+  plan_basis?: string;
   test_node_ids: string[];
   snapshot: { title: string; revision: number; acceptance_criteria: string[] };
   results: Record<
@@ -122,21 +137,12 @@ export type DeliveryExecution = {
   >;
   review?: { decision: string; comment: string; actor: string; at: string };
 };
-export type DeliveryTargets = {
-  can_execute: boolean;
-  workspaces: {
-    id: string;
-    name: string;
-    agents: { id: string; title: string; version: number; provider: string }[];
-    devices: { id: string; name: string }[];
-  }[];
-  providers: { id: string; available: boolean }[];
-};
-export function fetchDeliveryTargets(projectId: string) {
-  return request<DeliveryTargets>("/api/v1/delivery/execution-targets", {
-    headers: { "X-Project-Id": projectId },
-  });
-}
+export {
+  fetchDeliveryTargets,
+  previewDeliveryExecution,
+  fetchExecutionObservations,
+} from "./deliveryExecution";
+export type { DeliveryTargets } from "./deliveryExecution";
 export type DeliveryMilestone = {
   id: string;
   title: string;

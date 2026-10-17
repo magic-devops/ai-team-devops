@@ -1677,7 +1677,8 @@ paths:
     get:
       tags: [delivery]
       operationId: deliveryExecutionTargets
-      summary: Accessible runtime workspaces, pinned agents and devices
+      summary: Explicit execution targets, configured grants and observed worker capabilities
+      description: Pure read. Presence is fresh for 120 seconds and does not change device configuration versions or target basis. Provider program detection never proves account authentication. Missing devices do not select local execution.
       security: [{ bearerAuth: [] }]
       parameters: [{ name: X-Project-Id, in: header, required: true, schema: { type: string } }]
       responses:
@@ -1685,13 +1686,51 @@ paths:
           description: Execution authorization and available target catalog
           content:
             application/json:
-              schema:
-                type: object
-                required: [workspaces, providers, can_execute]
-                properties:
-                  workspaces: { type: array, items: { type: object } }
-                  providers: { type: array, items: { type: object } }
-                  can_execute: { type: boolean }
+              schema: { $ref: '#/components/schemas/ExecutionTargetsResponse' }
+  /api/v1/delivery/execution-preview:
+    post:
+      tags: [delivery]
+      operationId: deliveryExecutionPreview
+      summary: Preview a pinned task, explicit execution target, agent and command tests
+      description: Pure read with no Manager/runtime writes or audit events. Uses exactly the queue validator. New task/target basis requires explicit adoption; preview grants no future permission. Agent test IDs are derived from test_nodes; nodes/test_node_ids are only for command mode. Provider authentication stays unknown.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: X-Project-Id, in: header, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExecutionQueue' }
+      responses:
+        '200':
+          description: Original requirement acceptance snapshot and normalized fixed plan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExecutionPreviewResponse' }
+        '403': { description: Project or runtime workspace access denied }
+        '409': { description: Fixed task/target basis or agent version changed }
+        '422': { description: Explicit target or command test definition is invalid }
+        '503': { description: Execution target is currently unavailable }
+  /api/v1/delivery/executions/{execution_id}/observations:
+    get:
+      tags: [delivery]
+      operationId: deliveryExecutionObservations
+      summary: Read existing execution events and structured node evidence
+      description: Pure bounded runtime stream projection with both project and workspace permissions. Cursor belongs to this project/execution/run. Logs are completed node results, not live within-node streaming. Unknown usage remains null; retry evidence preserves its attempt. Successful execution and tests still require human acceptance.
+      security: [{ bearerAuth: [] }]
+      parameters:
+      - { name: X-Project-Id, in: header, required: true, schema: { type: string } }
+      - { name: execution_id, in: path, required: true, schema: { type: string } }
+      - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      - { name: cursor, in: query, schema: { type: string, maxLength: 1000, default: '' } }
+      responses:
+        '200':
+          description: Ordered existing events, bounded node evidence and available actions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExecutionObservationsResponse' }
+        '403': { description: Project or runtime workspace access denied }
+        '404': { description: Execution is outside this project or missing }
+        '422': { description: Cursor is malformed or belongs to another execution }
   /api/v1/delivery/task-plan-preview:
     post:
       tags: [delivery]
@@ -6683,11 +6722,11 @@ components:
           - baseline.create
         payload:
           type: object
-          description: 'Validated per action. execution.queue requires task_id and workspace_id,
-
-            either agent_id + agent_version or nodes [{id, argv, timeout_seconds?}],
-
-            optional target_device_id and test_node_ids. sync/cancel require id.
+          description: 'Validated per action. execution.queue requires task_id, task_basis, workspace_id,
+            target_kind and target_basis. device requires target_device_id; local requires it empty.
+            Select agent_id + fixed agent_version with optional explicit test_nodes,
+            or command nodes with test_node_ids. Agent test IDs are server-derived.
+            No implicit local fallback. sync/cancel require id.
 
             review requires id, decision (accept/request_changes), comment and run_version.
 
@@ -6700,6 +6739,16 @@ components:
           minLength: 8
           maxLength: 100
       allOf:
+      - if:
+          properties:
+            action:
+              const: execution.queue
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ExecutionQueue'
       - if:
           properties:
             action:
@@ -7465,3 +7514,796 @@ components:
               hook_shim_present: { type: boolean }
               ready: { type: boolean }
               install_hint: { type: string }
+    Node:
+      additionalProperties: false
+      properties:
+        id:
+          pattern: ^[a-zA-Z][a-zA-Z0-9_-]{0,63}$
+          title: Id
+          type: string
+        title:
+          default: ''
+          maxLength: 200
+          title: Title
+          type: string
+        kind:
+          default: command
+          enum:
+          - command
+          - approval
+          - agent
+          title: Kind
+          type: string
+        argv:
+          items:
+            type: string
+          maxItems: 128
+          title: Argv
+          type: array
+        expected_exit_code:
+          default: 0
+          maximum: 255
+          minimum: 0
+          title: Expected Exit Code
+          type: integer
+        timeout_seconds:
+          default: 60
+          maximum: 3600
+          minimum: 1
+          title: Timeout Seconds
+          type: integer
+        agent_id:
+          default: ''
+          maxLength: 64
+          title: Agent Id
+          type: string
+        prompt:
+          default: ''
+          maxLength: 32000
+          title: Prompt
+          type: string
+      required:
+      - id
+      title: Node
+      type: object
+    ExecutionQueue:
+      additionalProperties: false
+      properties:
+        task_id:
+          maxLength: 64
+          minLength: 1
+          title: Task Id
+          type: string
+        task_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Task Basis
+          type: string
+        workspace_id:
+          maxLength: 64
+          minLength: 1
+          title: Workspace Id
+          type: string
+        target_kind:
+          enum:
+          - local
+          - device
+          title: Target Kind
+          type: string
+        target_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Target Basis
+          type: string
+        target_device_id:
+          default: ''
+          maxLength: 64
+          title: Target Device Id
+          type: string
+        agent_id:
+          default: ''
+          maxLength: 64
+          title: Agent Id
+          type: string
+        agent_version:
+          default: 1
+          minimum: 1
+          title: Agent Version
+          type: integer
+        nodes:
+          items:
+            $ref: '#/components/schemas/Node'
+          maxItems: 32
+          title: Nodes
+          type: array
+        test_nodes:
+          items:
+            $ref: '#/components/schemas/Node'
+          maxItems: 32
+          title: Test Nodes
+          type: array
+        test_node_ids:
+          items:
+            type: string
+          maxItems: 32
+          title: Test Node Ids
+          type: array
+      required:
+      - task_id
+      - task_basis
+      - workspace_id
+      - target_kind
+      - target_basis
+      title: ExecutionQueue
+      type: object
+      description: Explicit task_basis and target_basis; local forbids device ID, device requires it. Choose command nodes or
+        fixed agent_id/version with command-only post-test nodes. Unique IDs; test IDs derive server-side for Agent; no reserved
+        agent_* IDs for tests. All rules rechecked on queue/sync/start/claim.
+    ExecutionAgent:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        title:
+          title: Title
+          type: string
+        provider:
+          enum:
+          - codex
+          - claude
+          - opencode
+          title: Provider
+          type: string
+      required:
+      - id
+      - version
+      - title
+      - provider
+      title: ExecutionAgent
+      type: object
+    ExecutionPolicy:
+      additionalProperties: false
+      properties:
+        allowed_runtimes:
+          items:
+            enum:
+            - command
+            - agent
+            type: string
+          title: Allowed Runtimes
+          type: array
+        allowed_providers:
+          items:
+            enum:
+            - codex
+            - claude
+            - opencode
+            type: string
+          title: Allowed Providers
+          type: array
+      required:
+      - allowed_runtimes
+      - allowed_providers
+      title: ExecutionPolicy
+      type: object
+    ExecutionProvider:
+      additionalProperties: false
+      properties:
+        id:
+          enum:
+          - codex
+          - claude
+          - opencode
+          title: Id
+          type: string
+        executable_present:
+          title: Executable Present
+          type: boolean
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+        auth:
+          const: unknown
+          title: Auth
+          type: string
+      required:
+      - id
+      - executable_present
+      - version
+      - auth
+      title: ExecutionProvider
+      type: object
+    ExecutionTarget:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        kind:
+          enum:
+          - local
+          - device
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        version:
+          title: Version
+          type: integer
+        basis:
+          title: Basis
+          type: string
+        paired:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Paired
+        online:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Online
+        last_seen_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Seen At
+        expires_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expires At
+        worker_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Worker Id
+        capability_digest:
+          title: Capability Digest
+          type: string
+        runtime_capabilities:
+          items:
+            enum:
+            - command
+            - agent
+            type: string
+          title: Runtime Capabilities
+          type: array
+        providers:
+          items:
+            $ref: '#/components/schemas/ExecutionProvider'
+          title: Providers
+          type: array
+        policy:
+          $ref: '#/components/schemas/ExecutionPolicy'
+        can_execute:
+          title: Can Execute
+          type: boolean
+        reason_codes:
+          items:
+            type: string
+          title: Reason Codes
+          type: array
+      required:
+      - id
+      - kind
+      - name
+      - version
+      - basis
+      - paired
+      - online
+      - last_seen_at
+      - expires_at
+      - worker_id
+      - capability_digest
+      - runtime_capabilities
+      - providers
+      - policy
+      - can_execute
+      - reason_codes
+      title: ExecutionTarget
+      type: object
+    ExecutionWorkspace:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        version:
+          title: Version
+          type: integer
+        agents:
+          items:
+            $ref: '#/components/schemas/ExecutionAgent'
+          title: Agents
+          type: array
+        local:
+          $ref: '#/components/schemas/ExecutionTarget'
+        devices:
+          items:
+            $ref: '#/components/schemas/ExecutionTarget'
+          title: Devices
+          type: array
+      required:
+      - id
+      - name
+      - version
+      - agents
+      - local
+      - devices
+      title: ExecutionWorkspace
+      type: object
+    ExecutionTargetsResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        as_of:
+          title: As Of
+          type: string
+        runtime_configured:
+          title: Runtime Configured
+          type: boolean
+        can_execute:
+          title: Can Execute
+          type: boolean
+        can_configure_policy:
+          title: Can Configure Policy
+          type: boolean
+        workspaces:
+          items:
+            $ref: '#/components/schemas/ExecutionWorkspace'
+          title: Workspaces
+          type: array
+      required:
+      - project_id
+      - as_of
+      - runtime_configured
+      - can_execute
+      - can_configure_policy
+      - workspaces
+      title: ExecutionTargetsResponse
+      type: object
+    ExecutionSnapshot:
+      additionalProperties: false
+      properties:
+        task_id:
+          title: Task Id
+          type: string
+        title:
+          title: Title
+          type: string
+        description:
+          title: Description
+          type: string
+        assigned_to:
+          title: Assigned To
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        requirement_title:
+          title: Requirement Title
+          type: string
+        requirement_description:
+          title: Requirement Description
+          type: string
+        acceptance_criteria:
+          items:
+            type: string
+          title: Acceptance Criteria
+          type: array
+        revision:
+          title: Revision
+          type: integer
+      required:
+      - task_id
+      - title
+      - description
+      - assigned_to
+      - requirement_id
+      - requirement_title
+      - requirement_description
+      - acceptance_criteria
+      - revision
+      title: ExecutionSnapshot
+      type: object
+    ExecutionPreviewResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        task_basis:
+          title: Task Basis
+          type: string
+        plan_basis:
+          title: Plan Basis
+          type: string
+        workspace_id:
+          title: Workspace Id
+          type: string
+        workspace_version:
+          title: Workspace Version
+          type: integer
+        snapshot:
+          $ref: '#/components/schemas/ExecutionSnapshot'
+        target:
+          $ref: '#/components/schemas/ExecutionTarget'
+        agent:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionAgent'
+          - type: 'null'
+        nodes:
+          items:
+            $ref: '#/components/schemas/Node'
+          title: Nodes
+          type: array
+        test_node_ids:
+          items:
+            type: string
+          title: Test Node Ids
+          type: array
+      required:
+      - project_id
+      - version
+      - task_basis
+      - plan_basis
+      - workspace_id
+      - workspace_version
+      - snapshot
+      - target
+      - agent
+      - nodes
+      - test_node_ids
+      title: ExecutionPreviewResponse
+      type: object
+    ExecutionAgentEvidence:
+      additionalProperties: false
+      properties:
+        provider:
+          title: Provider
+          type: string
+        agent_id:
+          title: Agent Id
+          type: string
+        profile_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Profile Version
+        completed:
+          title: Completed
+          type: boolean
+        usage:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Usage
+        usage_truncated:
+          title: Usage Truncated
+          type: boolean
+        message:
+          title: Message
+          type: string
+        error:
+          title: Error
+          type: string
+        event_count:
+          title: Event Count
+          type: integer
+      required:
+      - provider
+      - agent_id
+      - profile_version
+      - completed
+      - usage
+      - usage_truncated
+      - message
+      - error
+      - event_count
+      title: ExecutionAgentEvidence
+      type: object
+    ExecutionNodeObservation:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        kind:
+          enum:
+          - command
+          - approval
+          - agent
+          title: Kind
+          type: string
+        is_test:
+          title: Is Test
+          type: boolean
+        status:
+          enum:
+          - pending
+          - running
+          - passed
+          - failed
+          - skipped
+          title: Status
+          type: string
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionNodeResult'
+          - type: 'null'
+      required:
+      - id
+      - title
+      - kind
+      - is_test
+      - status
+      - result
+      title: ExecutionNodeObservation
+      type: object
+    ExecutionNodeResult:
+      additionalProperties: false
+      properties:
+        succeeded:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Succeeded
+        exit_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Exit Code
+        expected_exit_code:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Expected Exit Code
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        stdout:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stdout
+        stderr:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stderr
+        duration_ms:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Ms
+        attempt:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt
+        skipped:
+          title: Skipped
+          type: boolean
+        stdout_truncated:
+          title: Stdout Truncated
+          type: boolean
+        stderr_truncated:
+          title: Stderr Truncated
+          type: boolean
+        output_source:
+          const: completed_node_result
+          title: Output Source
+          type: string
+        agent:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionAgentEvidence'
+          - type: 'null'
+      required:
+      - succeeded
+      - exit_code
+      - expected_exit_code
+      - error
+      - stdout
+      - stderr
+      - duration_ms
+      - attempt
+      - skipped
+      - stdout_truncated
+      - stderr_truncated
+      - output_source
+      - agent
+      title: ExecutionNodeResult
+      type: object
+    ExecutionObservationEvent:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        seq:
+          title: Seq
+          type: integer
+        at:
+          title: At
+          type: string
+        type:
+          title: Type
+          type: string
+        node_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node Id
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        message:
+          title: Message
+          type: string
+        attempt:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionNodeResult'
+          - type: 'null'
+      required:
+      - id
+      - seq
+      - at
+      - type
+      - node_id
+      - status
+      - message
+      - attempt
+      - result
+      title: ExecutionObservationEvent
+      type: object
+    ExecutionPermissions:
+      additionalProperties: false
+      properties:
+        can_start:
+          title: Can Start
+          type: boolean
+        can_cancel:
+          title: Can Cancel
+          type: boolean
+        can_review:
+          title: Can Review
+          type: boolean
+        can_sync:
+          title: Can Sync
+          type: boolean
+      required:
+      - can_start
+      - can_cancel
+      - can_review
+      - can_sync
+      title: ExecutionPermissions
+      type: object
+    ExecutionTestSummary:
+      additionalProperties: false
+      properties:
+        total:
+          title: Total
+          type: integer
+        passed:
+          title: Passed
+          type: integer
+        failed:
+          title: Failed
+          type: integer
+        pending:
+          title: Pending
+          type: integer
+        status:
+          enum:
+          - not_configured
+          - pending
+          - passed
+          - failed
+          title: Status
+          type: string
+      required:
+      - total
+      - passed
+      - failed
+      - pending
+      - status
+      title: ExecutionTestSummary
+      type: object
+    ExecutionObservationsResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        execution_id:
+          title: Execution Id
+          type: string
+        run_id:
+          title: Run Id
+          type: string
+        run_version:
+          title: Run Version
+          type: integer
+        attempt:
+          title: Attempt
+          type: integer
+        status:
+          title: Status
+          type: string
+        stale:
+          title: Stale
+          type: boolean
+        observed_at:
+          title: Observed At
+          type: string
+        events:
+          items:
+            $ref: '#/components/schemas/ExecutionObservationEvent'
+          title: Events
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        more:
+          title: More
+          type: boolean
+        nodes:
+          items:
+            $ref: '#/components/schemas/ExecutionNodeObservation'
+          title: Nodes
+          type: array
+        tests:
+          $ref: '#/components/schemas/ExecutionTestSummary'
+        permissions:
+          $ref: '#/components/schemas/ExecutionPermissions'
+        log_streaming:
+          const: false
+          default: false
+          title: Log Streaming
+          type: boolean
+      required:
+      - project_id
+      - execution_id
+      - run_id
+      - run_version
+      - attempt
+      - status
+      - stale
+      - observed_at
+      - events
+      - next_cursor
+      - more
+      - nodes
+      - tests
+      - permissions
+      title: ExecutionObservationsResponse
+      type: object

@@ -10,6 +10,7 @@ import stat
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -221,7 +222,7 @@ def _bound_result_for_outbox(result: dict) -> dict:
             "agent_id": str(result["agent"].get("agent_id", ""))[:64],
             "profile_version": result["agent"].get("profile_version")
             if isinstance(result["agent"].get("profile_version"), int) else None,
-            "usage": result["agent"].get("usage") if isinstance(result["agent"].get("usage"), dict) else {},
+            "usage": (result["agent"].get("usage") or None) if isinstance(result["agent"].get("usage"), dict) else None,
             "message": str(result["agent"].get("message", ""))[-32000:],
             "events": result["agent"].get("events", [])[-200:]
             if isinstance(result["agent"].get("events"), list) else [],
@@ -253,6 +254,11 @@ def _run_agentd_command(agentd: str, root: Path, task: dict, node: dict, server:
             if time.monotonic() - started > timeout_seconds + 10:
                 raise WorkerError("agentd did not return within the node time budget")
             if time.monotonic() - heartbeat_at >= 2:
+                presence = task.get("_worker_presence")
+                if presence:
+                    _request_json(server, "/api/hermes/v1/remote/presence", {
+                        **presence, "idempotency_key": "presence:" + uuid.uuid4().hex,
+                    }, credential, timeout=10)
                 _request_json(server, "/api/hermes/v1/remote/heartbeat", {
                     "run_id": task["run_id"],
                     "owner": task["owner"],
@@ -275,6 +281,10 @@ def _run_agentd_command(agentd: str, root: Path, task: dict, node: dict, server:
                       "error": "agentd_protocol"}
         result.setdefault("stdout", "")
         result.setdefault("stderr", stderr or "")
+        expected = node.get("expected_exit_code", 0)
+        if type(expected) is int and expected > 0 and result.get("exit_code") == expected and not result.get("error"):
+            # agentd reports process exit success; a command test can explicitly expect a nonzero exit.
+            result["ok"] = True
         return _bound_result_for_outbox(result)
     except Exception:
         _terminate(proc)
@@ -294,7 +304,7 @@ def _agent_failure(message: str, *, provider: str = "") -> dict:
         "agent": {
             "provider": provider or "codex",
             "completed": False,
-            "usage": {},
+            "usage": None,
             "message": "",
             "events": [],
             "error": message[:2000],
@@ -342,7 +352,9 @@ def _run_agent_task(agentd: str, root: Path, task: dict, server: str, credential
         provider = profile.provider
         argv = provider_command(profile, _agent_prompt(profile, node, task))
     except CoreError as exc:
-        return _bound_result_for_outbox(_agent_failure(exc.message, provider=locals().get("provider", "codex")))
+        result = _agent_failure(exc.message, provider=locals().get("provider", "codex"))
+        result["agent"].update(agent_id=node.get("agent_id", ""), profile_version=task.get("agent_binding", {}).get("version"))
+        return _bound_result_for_outbox(result)
     except WorkerError as exc:
         return _bound_result_for_outbox(_agent_failure(str(exc)))
     command_node = {"kind": "command", "argv": argv, "timeout_seconds": profile.timeout_seconds,
@@ -450,15 +462,21 @@ def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[s
     if outbox.has_quarantined():
         raise WorkerError("Outbox contains quarantined records; refusing new remote claims")
     _block_unknown_executing(outbox)
+    worker_presence = discover_worker_presence(args)
+    _request_json(args.server, "/api/hermes/v1/remote/presence", {
+        **worker_presence, "idempotency_key": "presence:" + uuid.uuid4().hex,
+    }, credential)
     claim_idempotency_key = f"claim:{credential['device_id']}:{time.time_ns()}"
     claim = _request_json(args.server, "/api/hermes/v1/remote/claim", {
         "idempotency_key": claim_idempotency_key,
         "worker_version": WORKER_VERSION,
         "runtime_capabilities": args.runtime_capability,
+        "worker_id": worker_presence["worker_id"],
     }, credential)
     if not claim.get("items"):
         return False
     task = claim["items"][0]
+    task["_worker_presence"] = worker_presence
     workspace_id = task["workspace_id"]
     root = workspace_roots.get(workspace_id)
     if root is None:
@@ -475,6 +493,7 @@ def run_worker(args: argparse.Namespace) -> int:
     _require_tls_or_loopback(args.server)
     credential = _load_credential(Path(args.credential_file))
     _assert_credential_server(args.server, credential)
+    args.worker_id = uuid.uuid4().hex
     outbox = RemoteOutbox(Path(args.outbox_dir) if args.outbox_dir else default_outbox_dir(Path(args.credential_file)),
                           credential)
     if args.outbox_status:
@@ -534,6 +553,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-capability", action="append", default=["command"], choices=["command", "agent"],
                         help="Runtime kind this worker may claim; repeat to add agent. Defaults to command only.")
     return parser
+
+
+def discover_worker_presence(args):
+    if not getattr(args, "worker_id", ""):
+        args.worker_id = uuid.uuid4().hex
+    return {"worker_id": args.worker_id, "worker_version": WORKER_VERSION,
+            "runtime_capabilities": sorted(set(args.runtime_capability)),
+            "providers": [{"id": provider, "executable_present": bool(shutil.which(provider)),
+                           "version": None, "auth": "unknown"} for provider in ("codex", "claude", "opencode")]}
 
 
 def _load_pair_secret(args: argparse.Namespace) -> None:

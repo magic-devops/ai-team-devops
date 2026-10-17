@@ -513,6 +513,16 @@
       "path": "/api/hermes/v1/agents/catalog"
     },
     {
+      "id": "device.runtime-policy",
+      "permissions": [
+        "config",
+        "execute"
+      ],
+      "method": "POST",
+      "path": "/api/hermes/v1/devices/{id}/runtime-policy",
+      "resource": "devices"
+    },
+    {
       "id": "schedule.preview",
       "permissions": [
         "config",

@@ -209,3 +209,25 @@ root 最终回归：文件 SQLite NullPool 方案下 Manager 全量 384 项通�
 证据 .sop-runtime/delivery-evidence/team-scheduling/ 包含http-proof.json、final-http-verification.json、final-read-after-ui.json、ui-proof.json、审查/修复、测试/构建、源与证据散列及清理/提交回执。磁盘满导致接口文档写入中断，从完整快照恢复并核验新导出；旧dist/.vite先散列再清理，重要源和截图保留。任务scratch仅清理已核实范围，活跃预览和本地认证保持忽略。
 
 阶段全部非忽略改动commit，不push；.pnpm-store缓存0跟踪。完整主目标active，production_integration_complete=false；下一步项目组合/项目归档/团队治理，生产身份与模型、可信CI、质量发布、部署回退、智能问题与运维闭环、规模验证继续待办。参考平台按具体能力接入，不作为强制部署依赖。
+
+## 外部 Agent 与测试交付增量（2026-10-17）
+
+设计 `docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-external-agent-delivery.md`。使用原业务 Task、交付意图与 Hermes 运行，明确本机/设备目标及固定 task/target/Agent 依据；不保留名称领取、名称心跳和人工报告三个旧写通道来模拟实际执行。
+
+- [x] 公开设备运行策略：工作区权限、config+execute、设备 CAS、完整替换及固定身份重放；权威 can_configure_policy 供 UI 控制入口。设备凭据 presence 与配置版本分开，120 秒时效、worker/能力依据、撤销及配对凭据轮换；程序检测不冒称厂商账号认证，auth 保持 unknown。
+- [x] 单 Agent 后置命令测试复用串行引擎；绑定 provider/Agent/固定配置版本与有效终态，派发同时校验 Agent 和后置 command 能力。Agent 文本与 exit 0 不冒充测试；失败不自动完成业务任务，人审和当前有效验收仍是唯一交付门禁。
+- [x] typed targets、纯 execution-preview、游标 observations 及 SDK/CLI/OpenAPI 同步；固定 task_basis/target_basis、项目版本和重试身份，预览零业务/运行/审计写入。原目标、Agent、计划节点、测试定义、尝试与原结果来源保持可追溯。
+- [x] 四界面落地：明确目标/命令表单/固定预览/409 保留与显式采用；完整设备策略编辑；实现、测试、人审三阶段与游标事件、已观测输出；当前和历史尝试、具体 Issue 与背景返回。当前失效覆盖旧 accepted 观测；未配置后置测试仍可合法人工核验，保持未配置标识且不造测试产物。三语及窄屏实现沿用现有主题与组件。
+- [x] 旧名称 claim/heartbeat/report API、SDK/CLI 与 Web 写入口删除；历史登记只读，不代表在线、有效测试或已验证交付。失败问题转需求去重，原问题不自动关闭。
+
+本阶段唯一增量独立审查 3 个 P2 已定点修复：UI 无测试人审被禁、旧终态观测遮蔽当前失效、畸形 provider 嵌套事件产生 500 或错误接受。非法事件返回 422，后置测试不被解锁；保留真实 RED→GREEN 回归，不进行第二轮广泛审查。
+
+root 已核验 Manager 全量 **576 项/135.14 秒**、Web 全量 **322 项/53 文件**、SDK/CLI 相关 **114 项**，TypeScript 退出 0、最终生产构建退出 0（31.01 秒）。Web 定点修复整卡渲染回归先复现无测试按钮 disabled 与旧失效仍显示 Verified delivery，再验证修复；日志 `web-review-red.log`、`web-review-green.log`、`web-review-types.log`。Hermes 全量170通过/15环境平台跳过（111.57秒），已有原生agentd补充6文件84通过/2 POSIX跳过；生成器1项通过。
+
+实际公开回路 `.sop-runtime/delivery-evidence/external-delivery/actual-loop-proof.json` 已成功：公开 policy→pair→presence，持续真实 worker/agentd→本地 Codex 协议 fixture→独立 Python 单测→后台回写→人工验收。成功任务经人 accepted；失败测试生成唯一 Issue `ISS-4f0f1975a70c4318`，转需求重放保持唯一 `REQ-5deecce1ed9f42e9`，Issue 仍 open。首次结果上传返回网络 503，durable outbox 实际落盘重发；两个业务运行只启动 **2 次** Agent 进程，确认传输重试不重复执行。外部厂商模型调用 **0**，账号认证 unknown，未宣称生产模型或厂商实机认证通过。
+
+证据统一在 `.sop-runtime/delivery-evidence/external-delivery/`。源码与current_state记录当前验证状态，最终源/证据散列、scratch清点清理与阶段全部commit由root收尾，不push；保留本地凭据、运行数据库和历史用户文件。
+
+完整目标保持 **active**，`production_integration_complete=false`。下一项与完整剩余范围继续保留：独立任务原生执行及自身验收条件、完整节点内部日志/干预恢复、团队与 runtime 稳定身份绑定、生产账户/模型、可信 CI 与提交级证据、项目组合/项目归档治理、版本和质量发布、真实部署/灰度/回滚、问题智能处理与运维闭环及规模验证。参考平台按具体能力吸收或接入，不成为全平台强制深接条件；不得用本阶段局部通过缩减用户全链路目标。
+
+最终UI与真实HTTP：ui-proof.json记录390px三语页面390/390、抽屉375/375、派发表单311/311；具体Issue/键盘返回、任务变更409保留参数→读取→显式采用→重预览→保存均通过，未启动计划随后取消。最后恢复已验收任务。纯GET对28张Manager/运行/检查点表零写，跨运行cursor422、跨项目404、原验收保留。严格YAML与559/118引用、25运行模型/54动作、216包lock离线check通过。相关lint与既有债分类留档。Windows测试解释器PID/Git CRLF按本机实证修fixture，不改生产检查。生产干净locked安装仍属后续验证边界。

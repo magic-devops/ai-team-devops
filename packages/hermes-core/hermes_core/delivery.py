@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import insert, update
 
 from .agents import Agents
+from .execution_targets import select_execution_plan_target
 from .models import CoreError, Principal, TaskDispatch, TaskReview
 from .remote import is_paired_device
 from .transactional import Store, digest, now
@@ -140,6 +141,10 @@ class Delivery:
             bindings = Agents(self.store).bindings(conn, principal, workspace, body.nodes)
             _validate_agent_bindings(self.store, conn, principal, workspace, bindings, agent_source)
             current_workspace = self.store._get(conn, principal, "", "workspaces", workspace)
+            target_snapshot = None
+            if body.target_device_id or body.target_basis:
+                target_snapshot = select_execution_plan_target(self.store, getattr(self.repository, "execution", None),
+                                                                principal, workspace, body, bindings, conn)
             if body.target_device_id:
                 _validate_remote_target(self.store, conn, principal, workspace, body, agent_source)
             if body.isolation == "git_worktree":
@@ -167,6 +172,8 @@ class Delivery:
                 run_data["agent_bindings"] = bindings
             if body.target_device_id:
                 run_data["target_device_id"] = body.target_device_id
+            if target_snapshot:
+                run_data["target_snapshot"] = target_snapshot
             if agent_source:
                 run_data["agent_source"] = {key: value for key, value in agent_source.items() if key != "request"}
             if body.dry_run:

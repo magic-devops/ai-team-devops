@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from hermes_core.agents import AgentProfile
@@ -13,6 +15,12 @@ from hermes_core.models import CoreError, Node, Principal
 from hermes_core.remote import create_remote_router
 from hermes_core.remote_worker import _execute_task
 from hermes_core.transactional import Store, digest
+from process_fixtures import install_python_script_launcher
+
+
+@pytest.fixture(autouse=True)
+def python_protocol_fixture_launcher(monkeypatch):
+    install_python_script_launcher(monkeypatch)
 
 
 def _client(tmp_path: Path) -> tuple[TestClient, Store]:
@@ -134,7 +142,15 @@ def test_public_agent_dispatch_accepts_remote_single_agent_with_allowed_device(t
     }, {"Authorization": "Bearer owner-token"})["items"][0]
     headers = {"Authorization": "Bearer owner-token", "X-Workspace-Id": workspace["id"]}
     device, paired = _pair_device(client, workspace["id"])
-    _allow_device_runtime(store, workspace["id"], device["id"], ["agent"])
+    current = store.get(Principal("owner"), workspace["id"], "devices", device["id"])
+    _post(client, f"/api/hermes/v1/devices/{device['id']}/runtime-policy", {
+        "expected_version": current["version"], "idempotency_key": "allow-agent", "dry_run": False,
+        "allowed_runtimes": ["agent"], "allowed_providers": ["codex"]}, headers)
+    _post(client, "/api/hermes/v1/remote/presence", {
+        "idempotency_key": "presence", "worker_id": "worker", "worker_version": "test",
+        "runtime_capabilities": ["agent"], "providers": [{"id": "codex", "executable_present": True}]}, _auth(paired, device["id"]))
+    from hermes_core.execution_targets import workspace_execution_targets
+    target = workspace_execution_targets(store, None, Principal("owner"), workspace["id"])["devices"][0]
     agent = _post(client, "/api/hermes/v1/agents", {
         "data": {"title": "Remote Codex", "provider": "codex", "instructions": "Be concise."},
         "idempotency_key": "public-agent",
@@ -152,19 +168,19 @@ def test_public_agent_dispatch_accepts_remote_single_agent_with_allowed_device(t
         "target_version": agent["version"],
         "prompt": "Run remotely.",
         "target_device_id": device["id"],
+        "target_basis": target["basis"],
     }, headers)["items"][0]
     run = dispatch["run"]
     assert run["data"]["target_device_id"] == device["id"]
     assert run["data"]["agent_source"]["resource"] == "agents"
     assert run["data"]["agent_bindings"]["agent_1"]["agent_id"] == agent["id"]
 
-    queued = store.mutate(Principal("owner"), workspace["id"], "runs", run["id"],
-                          operation="test.remote-agent-start", key="public-agent-start",
-                          request={}, trace="test", expected=run["version"],
-                          transform=lambda item: {"status": "queued"})
+    queued = _post(client, f"/api/hermes/v1/runs/{run['id']}/start", {
+        "expected_version": run["version"], "idempotency_key": "public-agent-start", "dry_run": False}, headers)["items"][0]
     claim = _post(client, "/api/hermes/v1/remote/claim", {
         "idempotency_key": "public-agent-claim",
         "worker_version": "test",
+        "worker_id": "worker",
         "runtime_capabilities": ["agent"],
     }, _auth(paired, device["id"]))["items"][0]
     assert claim["run_id"] == queued["id"]
@@ -224,6 +240,7 @@ def test_worker_executes_claimed_agent_with_existing_provider_protocol(tmp_path:
     codex = bin_dir / "codex"
     _write_fake_agentd(agentd)
     _write_fake_codex(codex, completed=True)
+    monkeypatch.setattr("hermes_core.remote_worker.provider_command", lambda profile, prompt: [sys.executable, str(codex), prompt])
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
     result = _execute_task(str(agentd), tmp_path, task, "http://127.0.0.1", {
         "device_id": device["id"],
@@ -272,6 +289,7 @@ def test_agent_provider_exit_zero_without_terminal_event_fails_node(tmp_path: Pa
     codex = bin_dir / "codex"
     _write_fake_agentd(agentd)
     _write_fake_codex(codex, completed=False)
+    monkeypatch.setattr("hermes_core.remote_worker.provider_command", lambda profile, prompt: [sys.executable, str(codex), prompt])
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
 
     result = _execute_task(str(agentd), tmp_path, task, "http://127.0.0.1", {

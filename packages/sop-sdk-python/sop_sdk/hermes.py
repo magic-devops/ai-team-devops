@@ -378,7 +378,7 @@ class HermesClient:
     def task_dispatch(self, task_id: str, nodes: list[dict[str, Any]], *, expected_version: int,
                       dry_run: bool = True, idempotency_key: str | None = None,
                       isolation: str = "workspace", base_commit: str = "",
-                      target_device_id: str = "") -> dict[str, Any]:
+                      target_device_id: str = "", target_basis: str = "") -> dict[str, Any]:
         if isolation not in {"workspace", "git_worktree"}:
             raise ValueError("isolation must be workspace or git_worktree")
         body = {
@@ -388,6 +388,8 @@ class HermesClient:
         }
         if target_device_id:
             body["target_device_id"] = target_device_id
+        if target_basis:
+            body["target_basis"] = target_basis
         return self._request("POST", f"/tasks/{task_id}/dispatch", body=body)
 
     def task_agent_dispatch(
@@ -404,6 +406,8 @@ class HermesClient:
         isolation: str = "workspace",
         base_commit: str = "",
         target_device_id: str = "",
+        target_basis: str = "",
+        test_nodes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if isolation not in {"workspace", "git_worktree"}:
             raise ValueError("isolation must be workspace or git_worktree")
@@ -426,6 +430,10 @@ class HermesClient:
             body["squad_id"] = squad_id
         if target_device_id:
             body["target_device_id"] = target_device_id
+        if target_basis:
+            body["target_basis"] = target_basis
+        if test_nodes is not None:
+            body["test_nodes"] = test_nodes
         return self._request("POST", f"/tasks/{task_id}/agent-dispatch", body=body)
 
     def task_review(self, task_id: str, *, run_id: str, run_version: int, expected_version: int,
@@ -575,6 +583,10 @@ class HermesClient:
         if expected_version is not None:
             body["expected_version"] = expected_version
         return body
+
+    def device_runtime_policy(self, device_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Replace an explicit policy with the caller's original CAS and retry identity."""
+        return self._request("POST", f"/devices/{device_id}/runtime-policy", body=dict(body))
 
     def device_pairing(
         self,

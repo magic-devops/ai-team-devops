@@ -57,6 +57,7 @@ import {
   type EditorSpec,
 } from "./DeliveryEditor";
 import "./delivery-workbench.css";
+import { safeExecutionReturn } from "@/lib/executionCommands";
 import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
 import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
@@ -1134,6 +1135,23 @@ function ProjectDelivery() {
       {view === "issues" && (
         <section>
           <div className="delivery-section-heading">
+            {safeExecutionReturn(
+              new URLSearchParams(location.hash.split("?")[1]).get(
+                "return_to",
+              ) || "",
+            ) && (
+              <Button
+                href={
+                  safeExecutionReturn(
+                    new URLSearchParams(location.hash.split("?")[1]).get(
+                      "return_to",
+                    ) || "",
+                  )!
+                }
+              >
+                {t("deliveryRuntime.back")}
+              </Button>
+            )}
             <p className="delivery-hint">{tr("promoteHint")}</p>
             <Button href="#/issues/tracker">{tr("issuesLink")}</Button>
           </div>
@@ -1584,6 +1602,7 @@ function ProjectDelivery() {
                                 commit(action, payload, false)
                               }
                               onSaved={saveWorkspace}
+                              onEditingChange={setTaskEditing}
                             />
                           </article>
                         ))}

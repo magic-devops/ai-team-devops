@@ -221,8 +221,6 @@ export function Tasks({
     notes: "",
   });
   const [qualityTasksResult, setQualityTasksResult] = useState<any>(null);
-  const [agentName, setAgentName] = useState("HermesAgent");
-  const [claimResult, setClaimResult] = useState<any>(null);
   const [agentPlanResult, setAgentPlanResult] = useState<any>(null);
   const [interactionOpsMemoryResult, setInteractionOpsMemoryResult] = useState<any>(null);
   const [interactionOpsExportResult, setInteractionOpsExportResult] = useState<any>(null);
@@ -524,7 +522,7 @@ export function Tasks({
     mutationFn: (dryRun: boolean) =>
       api.taskSchedulerInsightTasks({
         dry_run: dryRun,
-        assigned_to: agentName || "Scheduler Agent",
+        assigned_to: "",
         priority: "P1",
         limit: 20,
       }),
@@ -552,50 +550,15 @@ export function Tasks({
     },
   });
 
-  const claimMut = useMutation({
-    mutationFn: (packet?: any) =>
-      api.taskAgentClaim({
-        task_id: packet?.task_id,
-        packet_id: packet?.packet_id,
-        agent: agentName.trim() || "HermesAgent",
-        dev_tool: packet?.dev_tool || "codex",
-        lease_seconds: 900,
-        auto_start: true,
-    }),
-    onSuccess: (data) => {
-      setClaimResult(data);
-      if (data?.execution_plan) setAgentPlanResult(data.execution_plan);
-      void qc.invalidateQueries({ queryKey: ["taskAgentFeed"] });
-      void qc.invalidateQueries({ queryKey: ["taskAgentClaims"] });
-      void qc.invalidateQueries({ queryKey: ["tasks"] });
-      void qc.invalidateQueries({ queryKey: ["tasksSummary"] });
-    },
-  });
-
   const agentPlanMut = useMutation({
     mutationFn: (row: any) =>
       api.taskAgentExecutionPlan({
         claim_id: row?.claim_id,
         task_id: row?.task_id,
-        agent: row?.agent || agentName.trim() || "HermesAgent",
+        agent: row?.agent || "",
         include_context: true,
       }),
     onSuccess: (data) => setAgentPlanResult(data),
-  });
-
-  const heartbeatMut = useMutation({
-    mutationFn: (claim: any) =>
-      api.taskAgentHeartbeat({
-        claim_id: claim?.claim_id,
-        agent: claim?.agent,
-        progress: Number(claim?.progress || 0),
-        state: "heartbeat",
-        status_message: "ui heartbeat",
-        extend_seconds: 900,
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["taskAgentClaims"] });
-    },
   });
 
   const qualityEvaluateMut = useMutation({
@@ -647,7 +610,7 @@ export function Tasks({
     mutationFn: (dryRun: boolean) =>
       api.taskDependencyTasks({
         dry_run: dryRun,
-        assigned_to: agentName || "Dependency Agent",
+        assigned_to: "",
         priority: "P1",
         limit: 30,
         include_cycles: true,
@@ -1548,19 +1511,7 @@ export function Tasks({
             {schedulerPanel === "agent" ? (
             <>
             <Card title={t("page.tasks.agentFeed")}>
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <Input
-                  className="max-w-56"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder={t("page.tasks.agentName")}
-                />
-                <Button loading={claimMut.isPending} onClick={() => claimMut.mutate(undefined)}>
-                  {t("page.tasks.claimNext")}
-                </Button>
-              </div>
-              {claimMut.error ? <Alert className="mb-3" type="error" showIcon message={(claimMut.error as Error).message} /> : null}
-              {claimResult?.claim ? <Alert className="mb-3" type="success" showIcon message={t("page.tasks.claimedTask", { task: claimResult.claim.task_id, agent: claimResult.claim.agent })} /> : null}
+              <Alert className="mb-3" type="info" showIcon message={t("page.tasks.externalRuntimeHint")} action={<Button href="#/dev-flow?view=list">{t("page.tasks.openDelivery")}</Button>} />
               {agentFeedQ.error ? <Alert type="error" showIcon message={(agentFeedQ.error as Error).message} /> : null}
               <Table
                 rowKey={(row: any) => String(row.packet_id)}
@@ -1588,25 +1539,16 @@ export function Tasks({
                     width: 100,
                     render: (claim: any) => claim?.claim_id ? <Tag color="processing">{claim.agent}</Tag> : <Tag>{t("page.tasks.unclaimed")}</Tag>,
                   },
-                  {
-                    title: t("page.tasks.action"),
-                    key: "action",
-                    width: 96,
-                    render: (_: unknown, row: any) => (
-                      <Button size="small" loading={claimMut.isPending} disabled={!row.ready || Boolean(row.claim?.claim_id)} onClick={() => claimMut.mutate(row)}>
-                        {t("page.tasks.claim")}
-                      </Button>
-                    ),
-                  },
                 ]}
               />
             </Card>
 
-            <Card title={t("page.tasks.activeClaims")}>
+            <Card title={t("page.tasks.historicalClaims")}>
+              <Alert className="mb-3" type="info" showIcon message={t("page.tasks.historicalEvidenceHint")} />
               <Table
                 rowKey={(row: any) => String(row.claim_id)}
                 dataSource={agentClaimsQ.data?.items ?? []}
-                loading={agentClaimsQ.isLoading || heartbeatMut.isPending}
+                loading={agentClaimsQ.isLoading}
                 size="small"
                 pagination={false}
                 scroll={{ x: 620 }}
@@ -1633,9 +1575,6 @@ export function Tasks({
                         <Button size="small" loading={agentPlanMut.isPending} onClick={() => agentPlanMut.mutate(row)}>
                           {t("page.tasks.agentPlan")}
                         </Button>
-                        <Button size="small" onClick={() => heartbeatMut.mutate(row)}>
-                          {t("page.tasks.heartbeat")}
-                        </Button>
                       </Space>
                     ),
                   },
@@ -1653,7 +1592,7 @@ export function Tasks({
                     <Stat label={t("page.tasks.task")} value={agentPlanResult.task?.id || "-"} />
                     <Stat label={t("page.tasks.ready")} value={agentPlanResult.dependency_state?.ready ? "ready" : "blocked"} />
                     <Stat label={t("page.tasks.qualityGates")} value={agentPlanResult.quality_gates?.length ?? 0} />
-                    <Stat label={t("page.tasks.agent")} value={agentPlanResult.claim?.agent || agentName || "-"} />
+                    <Stat label={t("page.tasks.agent")} value={agentPlanResult.claim?.agent || "-"} />
                   </div>
                   <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
                     <div className="text-sm font-semibold text-[var(--text)]">{agentPlanResult.task?.title}</div>
@@ -1687,7 +1626,8 @@ export function Tasks({
               )}
             </Card>
 
-            <Card title={t("page.tasks.agentReports")}>
+            <Card title={t("page.tasks.historicalReports")}>
+              <Alert className="mb-3" type="info" showIcon message={t("page.tasks.historicalEvidenceHint")} />
               {agentReportsQ.error ? <Alert className="mb-3" type="error" showIcon message={(agentReportsQ.error as Error).message} /> : null}
               <div className="mb-3 grid grid-cols-2 gap-2">
                 <Stat label={t("page.tasks.reportCount")} value={agentReportsQ.data?.summary?.reports ?? 0} />

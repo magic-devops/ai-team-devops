@@ -22,6 +22,12 @@ from .delivery_contract import (
     TaskPlanPreview,
     TaskReviewsResponse,
 )
+from .delivery_execution_contract import (
+    ExecutionObservationsResponse,
+    ExecutionPreviewResponse,
+    ExecutionQueue,
+    ExecutionTargetsResponse,
+)
 from .delivery_scheduling_contract import (
     CivilDate,
     ScheduleChanges,
@@ -198,7 +204,7 @@ def delivery_progress_baseline(
     return baseline_detail(db, _project(db, user, project_id), baseline_id)
 
 
-@router.get("/execution-targets")
+@router.get("/execution-targets", response_model=ExecutionTargetsResponse)
 def execution_targets(
     request: Request,
     user: Annotated[User, Depends(current_user)],
@@ -207,8 +213,84 @@ def execution_targets(
 ):
     from .delivery_execution import catalog
 
-    _project(db, user, project_id)
-    return catalog(getattr(request.app.state, "hermes_store", None), user)
+    project = _project(db, user, project_id)
+    return catalog(
+        getattr(request.app.state, "hermes_store", None),
+        user,
+        getattr(request.app.state, "hermes_execution", None),
+        project_id=project.id,
+        project_write=_permissions(db, user, project)["write"],
+        project_configure=_permissions(db, user, project)["configure"],
+    )
+
+
+@router.post("/execution-preview", response_model=ExecutionPreviewResponse)
+def execution_preview(
+    body: ExecutionQueue,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from hermes_core.models import CoreError
+
+    from .delivery_execution import prepare_plan
+
+    project = _project(db, user, project_id)
+    if not _permissions(db, user, project)["write"]:
+        raise HTTPException(403, "Project write permission required")
+    row = db.get(DeliveryWorkspace, project.id)
+    state = reconcile(db, project, row.data) if row else initial_state()
+    try:
+        plan = prepare_plan(
+            db,
+            project,
+            user,
+            state,
+            body,
+            getattr(request.app.state, "hermes_store", None),
+            getattr(request.app.state, "hermes_execution", None),
+        )
+        return {"project_id": project.id, "version": row.version if row else 0, **plan}
+    except CoreError as exc:
+        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
+
+
+@router.get("/executions/{execution_id}/observations", response_model=ExecutionObservationsResponse)
+def execution_observations(
+    execution_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+    cursor: Annotated[str, Query(max_length=1000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from hermes_core.models import CoreError
+
+    from .delivery_execution_observations import observations
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    state = reconcile(db, project, row.data) if row else initial_state()
+    entry = next((item for item in state.get("executions", []) if item["id"] == execution_id), None)
+    if not entry:
+        raise HTTPException(404, "Execution not found in project")
+    try:
+        return observations(
+            db,
+            project,
+            user,
+            state,
+            entry,
+            getattr(request.app.state, "hermes_store", None),
+            getattr(request.app.state, "hermes_execution", None),
+            _permissions(db, user, project),
+            limit=limit,
+            cursor=cursor,
+        )
+    except CoreError as exc:
+        raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
 
 
 @router.get("/tasks/{task_id}/reviews", response_model=TaskReviewsResponse)
@@ -386,5 +468,6 @@ def _apply(db, project, user, data, action, payload, request):
         from .delivery_execution import apply_execution
 
         store = getattr(request.app.state, "hermes_store", None) if request else None
-        return apply_execution(db, project, user, data, action, payload, store)
+        execution = getattr(request.app.state, "hermes_execution", None) if request else None
+        return apply_execution(db, project, user, data, action, payload, store, execution)
     return apply_action(db, project, user, data, action, payload)

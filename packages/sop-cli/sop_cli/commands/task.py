@@ -641,7 +641,7 @@ def agent_claims(
     limit: int = typer.Option(50, "--limit", min=1, max=500),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
-    """查看 Agent 领取租约，用于调度中心、运维和自动执行器排障。"""
+    """只读历史名称登记；当前设备在线与执行租约请看交付工作台。"""
     try:
         out = get_client().task_agent_claims(status=status, limit=limit)
     except Exception as e:
@@ -665,41 +665,6 @@ def agent_claims(
     console.print(tbl)
 
 
-@app.command(name="claim")
-def agent_claim(
-    task_id: str = typer.Option("", "--task-id", help="指定任务 ID；为空则自动领取一个就绪任务"),
-    agent: str = typer.Option("HermesAgent", "--agent", help="Agent 名称"),
-    dev_tool: str = typer.Option("", "--dev-tool", help="codex/claude/cursor/qoder/openclaw/hermes-agent 等"),
-    lease_seconds: int = typer.Option(900, "--lease-seconds", min=60, max=86400),
-    force: bool = typer.Option(False, "--force", help="强制覆盖其他 Agent 的活跃租约"),
-    no_start: bool = typer.Option(False, "--no-start", help="只领取，不自动把任务置为 in_progress"),
-    note: str = typer.Option("", "--note", help="领取说明"),
-    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
-) -> None:
-    """领取一个 Agent 任务包并创建租约。"""
-    body = {
-        "task_id": task_id,
-        "agent": agent,
-        "dev_tool": dev_tool,
-        "lease_seconds": lease_seconds,
-        "force": force,
-        "auto_start": not no_start,
-        "note": note,
-    }
-    try:
-        out = get_client().task_agent_claim(body)
-    except Exception as e:
-        warn(f"Manager agent claim 不可用: {e}")
-        raise typer.Exit(1)
-    if json_out:
-        console.print_json(data=out)
-        return
-    claim = out.get("claim") or {}
-    ok(f"claimed {claim.get('task_id')} as {claim.get('agent')} claim_id={claim.get('claim_id')}")
-    kv("lease_expires_at", claim.get("lease_expires_at", ""))
-    plan = out.get("execution_plan") or {}
-    if plan.get("execution_steps"):
-        kv("execution_plan", f"sop task agent-plan --task-id {claim.get('task_id')} --claim-id {claim.get('claim_id')} --json")
 
 
 @app.command(name="agent-plan")
@@ -747,87 +712,8 @@ def agent_plan(
         console.print(gt)
 
 
-@app.command(name="heartbeat")
-def agent_heartbeat(
-    claim_id: str = typer.Option("", "--claim-id", help="领取 ID；推荐传入"),
-    task_id: str = typer.Option("", "--task-id", help="未传 claim-id 时可用任务 ID + agent 定位"),
-    agent: str = typer.Option("", "--agent", help="Agent 名称"),
-    progress: int = typer.Option(0, "--progress", min=0, max=100),
-    state: str = typer.Option("running", "--state", help="claimed|running|heartbeat|blocked"),
-    status_message: str = typer.Option("", "--message", "--status-message"),
-    extend_seconds: int = typer.Option(900, "--extend-seconds", min=60, max=86400),
-    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
-) -> None:
-    """发送 Agent 心跳并续约。"""
-    body = {
-        "claim_id": claim_id,
-        "task_id": task_id,
-        "agent": agent,
-        "progress": progress,
-        "state": state,
-        "status_message": status_message,
-        "extend_seconds": extend_seconds,
-    }
-    try:
-        out = get_client().task_agent_heartbeat(body)
-    except Exception as e:
-        warn(f"Manager agent heartbeat 不可用: {e}")
-        raise typer.Exit(1)
-    if json_out:
-        console.print_json(data=out)
-        return
-    claim = out.get("claim") or {}
-    ok(f"heartbeat {claim.get('claim_id')} progress={claim.get('progress')} lease={claim.get('lease_expires_at')}")
 
 
-@app.command(name="report")
-def agent_report(
-    task_id: str = typer.Argument(..., help="任务 ID"),
-    claim_id: str = typer.Option("", "--claim-id", help="领取 ID，用于关闭租约"),
-    agent: str = typer.Option("", "--agent", help="Agent 名称"),
-    status: str = typer.Option("completed", "--status", help="pending|in_progress|blocked|completed"),
-    progress: int = typer.Option(100, "--progress", min=0, max=100),
-    summary: str = typer.Option("", "--summary", "--notes", help="执行摘要"),
-    confidence: float | None = typer.Option(None, "--confidence", min=0, max=1),
-    artifact_url: str = typer.Option("", "--artifact-url"),
-    artifact_path: str = typer.Option("", "--artifact-path"),
-    branch: str = typer.Option("", "--branch"),
-    gate: list[str] | None = typer.Option(None, "--gate", help="质量卡点，格式 gate_id:passed|failed[:evidence]，可重复"),
-    block_reason: str = typer.Option("", "--block-reason"),
-    next_action: str = typer.Option("", "--next-action"),
-    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
-) -> None:
-    """回写 Agent 执行结果、质量卡点和交付证据。"""
-    body: dict[str, Any] = {
-        "claim_id": claim_id,
-        "agent": agent,
-        "status": status,
-        "progress": progress,
-        "summary": summary,
-        "artifact_url": artifact_url,
-        "artifact_path": artifact_path,
-        "branch": branch,
-        "gate_results": _parse_gate_results(gate),
-        "block_reason": block_reason,
-        "next_action": next_action,
-    }
-    if confidence is not None:
-        body["confidence"] = confidence
-    try:
-        out = get_client().task_agent_report(task_id, body)
-    except Exception as e:
-        warn(f"Manager agent-report 不可用: {e}")
-        raise typer.Exit(1)
-    if json_out:
-        console.print_json(data=out)
-        return
-    ok(f"reported {task_id} → {out.get('status', status)}")
-    if out.get("failed_gates"):
-        warn("failed gates: " + ", ".join(out.get("failed_gates") or []))
-    quality = out.get("quality") or {}
-    if quality:
-        kv("quality_decision", quality.get("decision", ""))
-        kv("quality_score", quality.get("score", ""))
 
 
 @app.command(name="reports")
@@ -839,7 +725,7 @@ def agent_reports(
     q: str = typer.Option("", "--q", help="关键词检索摘要、阻塞原因、后续动作"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
-    """查看 Agent 执行报告、质量决策、失败卡点和交付证据。"""
+    """只读历史报告；这些报告不作为当前执行、测试或人工验收证据。"""
     try:
         out = get_client().task_agent_reports(limit=limit, status=status, agent=agent, task_id=task_id, q=q)
     except Exception as e:

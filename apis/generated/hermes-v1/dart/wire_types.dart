@@ -8,7 +8,9 @@ class AgentDispatch {
   final String? isolation;
   final String? prompt;
   final String? squad_id;
+  final String? target_basis;
   final String? target_device_id;
+  final List<Node>? test_nodes;
   const AgentDispatch({
     required this.expected_version,
     required this.idempotency_key,
@@ -19,7 +21,9 @@ class AgentDispatch {
     this.isolation,
     this.prompt,
     this.squad_id,
+    this.target_basis,
     this.target_device_id,
+    this.test_nodes,
   });
 }
 
@@ -60,6 +64,21 @@ class Decision {
   final bool? dry_run;
   const Decision({
     required this.decision,
+    required this.expected_version,
+    required this.idempotency_key,
+    this.dry_run,
+  });
+}
+
+class DeviceRuntimePolicy {
+  final List<String> allowed_providers;
+  final List<String> allowed_runtimes;
+  final int expected_version;
+  final String idempotency_key;
+  final bool? dry_run;
+  const DeviceRuntimePolicy({
+    required this.allowed_providers,
+    required this.allowed_runtimes,
     required this.expected_version,
     required this.idempotency_key,
     this.dry_run,
@@ -194,13 +213,28 @@ class PairRedeem {
   });
 }
 
+class ProviderCapability {
+  final bool executable_present;
+  final String id;
+  final String? auth;
+  final String? version;
+  const ProviderCapability({
+    required this.executable_present,
+    required this.id,
+    this.auth,
+    this.version,
+  });
+}
+
 class RemoteClaim {
   final String idempotency_key;
   final List<String>? runtime_capabilities;
+  final String? worker_id;
   final String? worker_version;
   const RemoteClaim({
     required this.idempotency_key,
     this.runtime_capabilities,
+    this.worker_id,
     this.worker_version,
   });
 }
@@ -289,6 +323,7 @@ class TaskDispatch {
   final String? base_commit;
   final bool? dry_run;
   final String? isolation;
+  final String? target_basis;
   final String? target_device_id;
   const TaskDispatch({
     required this.expected_version,
@@ -297,6 +332,7 @@ class TaskDispatch {
     this.base_commit,
     this.dry_run,
     this.isolation,
+    this.target_basis,
     this.target_device_id,
   });
 }
@@ -353,5 +389,20 @@ class ValidationError {
     required this.type,
     this.ctx,
     this.input,
+  });
+}
+
+class WorkerPresence {
+  final String idempotency_key;
+  final List<ProviderCapability> providers;
+  final List<String> runtime_capabilities;
+  final String worker_id;
+  final String worker_version;
+  const WorkerPresence({
+    required this.idempotency_key,
+    required this.providers,
+    required this.runtime_capabilities,
+    required this.worker_id,
+    required this.worker_version,
   });
 }

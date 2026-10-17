@@ -15,7 +15,9 @@ class AgentDispatch:
     isolation: Literal["workspace", "git_worktree"] | None = None
     prompt: str | None = None
     squad_id: str | None = None
+    target_basis: str | None = None
     target_device_id: str | None = None
+    test_nodes: list[Node] | None = None
 
 @dataclass
 class ChannelConfigure:
@@ -36,6 +38,14 @@ class CollaborationAction:
 @dataclass
 class Decision:
     decision: Literal["approve", "reject"]
+    expected_version: int
+    idempotency_key: str
+    dry_run: bool | None = None
+
+@dataclass
+class DeviceRuntimePolicy:
+    allowed_providers: list[Literal["codex", "claude", "opencode"]]
+    allowed_runtimes: list[Literal["command", "agent"]]
     expected_version: int
     idempotency_key: str
     dry_run: bool | None = None
@@ -109,9 +119,17 @@ class PairRedeem:
     secret: str
 
 @dataclass
+class ProviderCapability:
+    executable_present: bool
+    id: Literal["codex", "claude", "opencode"]
+    auth: str | None = None
+    version: str | None = None
+
+@dataclass
 class RemoteClaim:
     idempotency_key: str
     runtime_capabilities: list[str] | None = None
+    worker_id: str | None = None
     worker_version: str | None = None
 
 @dataclass
@@ -163,6 +181,7 @@ class TaskDispatch:
     base_commit: str | None = None
     dry_run: bool | None = None
     isolation: Literal["workspace", "git_worktree"] | None = None
+    target_basis: str | None = None
     target_device_id: str | None = None
 
 @dataclass
@@ -193,3 +212,11 @@ class ValidationError:
     type: str
     ctx: dict[str, Any] | None = None
     input: Any | None = None
+
+@dataclass
+class WorkerPresence:
+    idempotency_key: str
+    providers: list[ProviderCapability]
+    runtime_capabilities: list[Literal["command", "agent"]]
+    worker_id: str
+    worker_version: str

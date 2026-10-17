@@ -201,6 +201,37 @@ def command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=F
         raise typer.Exit(1) from exc
 
 
+@app.command("execution-preview")
+def execution_preview(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """纯预览固定任务、目标、智能体与测试；冲突不自动采用新依据。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("执行提案必须是 JSON 对象")
+        with get_client() as client:
+            console.print_json(data=client.delivery_execution_preview(body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("execution-observations")
+def execution_observations(
+    execution_id: str,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 30,
+    cursor: Annotated[str, typer.Option("--cursor", help="该执行返回的原始 next_cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """读取真实节点事件和完成后日志；保留未知用量与截断标记。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_execution_observations(execution_id, limit=limit, cursor=cursor)
+        _show_progress_record(result, json_out, "执行观测")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 @app.command("preview")
 def preview(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
     """预览任务计划；JSON 显式指定 generator=template 或 ai，重试复用原文件。"""

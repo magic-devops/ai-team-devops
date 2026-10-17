@@ -135,6 +135,24 @@ class ManagerClient:
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")
 
+    def delivery_execution_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Validate the caller's pinned target and task without adopting newer versions."""
+        return self._request("POST", "/api/v1/delivery/execution-preview", json_body=dict(body))
+
+    def delivery_execution_observations(
+        self, execution_id: str, *, limit: int = 30, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read bounded existing events; preserve unknown usage and opaque run cursor."""
+        resource = _resource_segment(execution_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("observation limit must be an integer between 1 and 100")
+        if not isinstance(cursor, str) or len(cursor) > 1000 or any(ord(char) < 32 for char in cursor):
+            raise ValueError("observation cursor must be a valid opaque cursor of at most 1000 characters")
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            params["cursor"] = cursor
+        return self._request("GET", f"/api/v1/delivery/executions/{resource}/observations", params=params)
+
     def delivery_schedule(
         self, *, starts_on: str | None = None, ends_on: str | None = None
     ) -> dict[str, Any]:
@@ -661,8 +679,6 @@ class ManagerClient:
     def task_agent_claims(self, *, status: str = "active", limit: int = 50) -> dict[str, Any]:
         return self._request("GET", "/api/v1/tasks/agent-feed/claims", params={"status": status, "limit": limit})
 
-    def task_agent_claim(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/tasks/agent-feed/claim", json_body=dict(body))
 
     def task_agent_execution_plan(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks/agent-feed/execution-plan", json_body=dict(body))
@@ -681,11 +697,7 @@ class ManagerClient:
             params={"claim_id": claim_id, "agent": agent, "include_context": str(include_context).lower()},
         )
 
-    def task_agent_heartbeat(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/tasks/agent-feed/heartbeat", json_body=dict(body))
 
-    def task_agent_report(self, task_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
-        return self._request("POST", f"/api/v1/tasks/{task_id}/agent-report", json_body=dict(body))
 
     def task_agent_reports(
         self,

@@ -192,7 +192,6 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "show": "读取当前授权项目的任务详情",
             "schedule": "DAG 调度计划",
             "feed": "AI/CLI 任务包",
-            "report": "Agent 回写",
             "create": "创建",
             "update": "更新",
             "pull": "认领",

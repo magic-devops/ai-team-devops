@@ -262,11 +262,6 @@ export const api = {
   },
   taskAgentClaims: (status = "active", limit = 50) =>
     request<any>(`/api/v1/tasks/agent-feed/claims?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(String(limit))}`),
-  taskAgentClaim: (body: { task_id?: string; packet_id?: string; agent?: string; dev_tool?: string; lease_seconds?: number; force?: boolean; auto_start?: boolean; note?: string }) =>
-    request<any>("/api/v1/tasks/agent-feed/claim", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
   taskAgentExecutionPlan: (body: { claim_id?: string; task_id?: string; agent?: string; include_context?: boolean }) =>
     request<any>("/api/v1/tasks/agent-feed/execution-plan", {
       method: "POST",
@@ -278,16 +273,6 @@ export const api = {
     if (agent) qs.set("agent", agent);
     return request<any>(`/api/v1/tasks/${encodeURIComponent(taskId)}/agent-plan?${qs.toString()}`);
   },
-  taskAgentHeartbeat: (body: { claim_id?: string; task_id?: string; agent?: string; progress?: number; state?: string; status_message?: string; extend_seconds?: number }) =>
-    request<any>("/api/v1/tasks/agent-feed/heartbeat", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  taskAgentReport: (id: string, body: Record<string, unknown>) =>
-    request<any>(`/api/v1/tasks/${encodeURIComponent(id)}/agent-report`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
   taskAgentReports: (limit = 100, status = "", agent = "", taskId = "", q = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
     if (status) qs.set("status", status);

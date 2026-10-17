@@ -2,7 +2,6 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
-
 from hermes_core.api import create_app
 from hermes_core.cli import ensure_token_file
 from hermes_core.models import CoreError, Principal
@@ -30,7 +29,12 @@ def test_token_symlink_is_not_followed(tmp_path):
     target = tmp_path / "real-token"
     target.write_text("x" * 48)
     link = tmp_path / "token"
-    link.symlink_to(target)
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows account lacks symbolic link creation privilege")
+        raise
     with pytest.raises(ValueError, match="symbolic link"):
         ensure_token_file(link)
     assert target.read_text() == "x" * 48

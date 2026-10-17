@@ -30,14 +30,12 @@ from sop_manager.routers.ops_center import (
     update_pipeline_status,
 )
 from sop_manager.routers.tasks import (
-    TaskAgentHeartbeatIn,
     _agent_claims_path,
     _agent_reports_payload,
     _agent_reports_path,
     _append_jsonl,
     _save_agent_claims,
     task_agent_claims,
-    task_agent_heartbeat,
 )
 from sop_manager.routers.usage import UsageIn, record_usage_event, usage_summary_payload
 
@@ -197,37 +195,6 @@ def test_agent_runs_do_not_cross_business_scope(tmp_path):
         payload = agent_runs(agent="", status="", limit=100)
 
     assert payload["items"] == []
-
-
-def test_agent_heartbeat_rejects_cross_business_claim(tmp_path):
-    with scoped_project(tmp_path, business="biz-a", project="project-a"):
-        _save_agent_claims(
-            {
-                "version": 1,
-                "claims": {
-                    "claim-a": {
-                        "claim_id": "claim-a",
-                        "task_id": "T-scope-agent",
-                        "agent": "agent-a",
-                        "status": "claimed",
-                        "lease_expires_at": "2999-01-01T00:00:00Z",
-                        "scope": {
-                            "tenant_id": "tenant-a",
-                            "tenant_code": "tenant-a",
-                            "business_code": "biz-a",
-                            "project_id": "project-a",
-                            "project_code": "project-a",
-                        },
-                    }
-                },
-            }
-        )
-
-    with scoped_project(tmp_path, business="biz-b", project="project-a"):
-        with pytest.raises(HTTPException) as exc:
-            task_agent_heartbeat(TaskAgentHeartbeatIn(claim_id="claim-a", agent="agent-a", progress=20))
-
-    assert exc.value.status_code == 404
 
 
 def test_ops_center_records_do_not_cross_project_scope(tmp_path):

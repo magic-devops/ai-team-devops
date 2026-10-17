@@ -51,11 +51,21 @@ class AgentDispatch(RunAction):
     isolation: Literal["workspace", "git_worktree"] = "workspace"
     base_commit: str = Field(default="", pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})?$")
     target_device_id: str = Field(default="", max_length=64)
+    target_basis: str = Field(default="", max_length=64)
+    test_nodes: list[Node] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def target(self):
         if bool(self.agent_id) == bool(self.squad_id):
             raise ValueError("Select exactly one agent or squad")
+        if self.squad_id and self.test_nodes:
+            raise ValueError("Post-agent command tests require a single agent")
+        ids = [node.id for node in self.test_nodes]
+        if len(set(ids)) != len(ids) or any(node_id.startswith("agent_") for node_id in ids):
+            raise ValueError("Test node IDs must be unique and cannot use reserved agent_ names")
+        if any(node.kind != "command" or not node.argv or any("\x00" in arg for arg in node.argv)
+               for node in self.test_nodes):
+            raise ValueError("Post-agent tests require executable command nodes")
         return self
 
 
@@ -142,10 +152,29 @@ class Agents:
                            + json.dumps(members[1:], ensure_ascii=False))
             nodes.append(Node(id=f"agent_{index + 1}", title=f"{member['role']}: {agent['data']['title']}",
                               kind="agent", agent_id=agent["id"], timeout_seconds=agent["data"]["timeout_seconds"], prompt=prompt))
-        plan = TaskDispatch(**body.model_dump(exclude={"agent_id", "squad_id", "target_version", "prompt"}), nodes=nodes)
+        if resource == "agents":
+            nodes = single_agent_nodes(definition, task["data"], body.test_nodes, body.prompt)
+        plan = TaskDispatch(**body.model_dump(exclude={"agent_id", "squad_id", "target_version", "prompt", "test_nodes"}), nodes=nodes)
         source = {"resource": resource, "id": target, "version": definition["version"],
                   "members": members, "request": body.model_dump()}
         return delivery.dispatch(principal, workspace, task_id, plan, trace, agent_source=source)
+
+
+def single_agent_nodes(agent: dict, task_data: dict, test_nodes: list[Node], prompt: str = "") -> list[Node]:
+    """Build the same immutable Agent/test plan for preview and dispatch."""
+    profile = AgentProfile.model_validate(agent["data"])
+    context = json.dumps({"task": task_data.get("title"), "description": task_data.get("description", ""),
+                          "acceptance_criteria": task_data.get("acceptance_criteria", ""), "request": prompt}, ensure_ascii=False)
+    return [Node(id="agent_1", title=f"implementer: {profile.title}", kind="agent", agent_id=agent["id"],
+                 timeout_seconds=profile.timeout_seconds, prompt=f"Role: implementer\n\nTask context:\n{context}"),
+            *test_nodes]
+
+
+def validate_bound_profiles(store, conn, principal, workspace, bindings):
+    for binding in bindings.values():
+        agent = store._get(conn, principal, workspace, "agents", binding["agent_id"])
+        if agent["status"] != "active" or agent["version"] != binding["version"]:
+            raise CoreError("configuration_changed", "Agent changed after the execution plan was reviewed", 409)
 
 
 def provider_command(profile: AgentProfile, prompt: str) -> list[str]:
@@ -169,7 +198,7 @@ def provider_command(profile: AgentProfile, prompt: str) -> list[str]:
 
 
 def provider_evidence(provider: str, stdout: str) -> dict:  # noqa: C901 - three distinct provider wire protocols
-    events, usage, messages = [], {}, []
+    events, usage, messages = [], None, []
     errors = []
     finished, failed = False, False
     for line in stdout.splitlines():
@@ -186,7 +215,7 @@ def provider_evidence(provider: str, stdout: str) -> dict:  # noqa: C901 - three
             errors.append(str(error)[:2000])
         if provider == "codex":
             if kind == "turn.completed":
-                finished, usage = True, event.get("usage") or {}
+                finished, usage = True, event.get("usage") or None
             if kind in {"turn.failed", "error"}:
                 failed = True
             item = event.get("item") or {}
@@ -196,12 +225,16 @@ def provider_evidence(provider: str, stdout: str) -> dict:  # noqa: C901 - three
             if kind == "result":
                 finished = True
                 failed = bool(event.get("is_error") or event.get("permission_denials")) or event.get("subtype") != "success"
-                usage = {**(event.get("usage") or {}), "total_cost_usd": event.get("total_cost_usd")}
+                usage = dict(event.get("usage") or {})
+                if event.get("total_cost_usd") is not None:
+                    usage["total_cost_usd"] = event["total_cost_usd"]
+                usage = usage or None
                 messages.append(str(event.get("result", "")))
         else:
             part = event.get("part") or {}
             if kind == "step_finish" and part.get("reason") == "stop":
-                finished, usage = True, {"tokens": part.get("tokens"), "cost": part.get("cost")}
+                finished = True
+                usage = {key: part[key] for key in ("tokens", "cost") if part.get(key) is not None} or None
             if kind == "text":
                 messages.append(str(part.get("text", "")))
             if kind == "error":

@@ -1,0 +1,276 @@
+.runtime-panel {
+  min-width: 0;
+}
+.runtime-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.runtime-panel h4 {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  color: var(--muted, #64748b);
+}
+.runtime-help {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.runtime-editor .ant-modal-body {
+  max-height: 72dvh;
+  overflow-y: auto;
+}
+.runtime-editor label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text, #243247);
+}
+.runtime-plan-selectors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.runtime-target-facts,
+.runtime-plan-preview,
+.runtime-conflict {
+  border: 1px solid var(--border, #dce3ec);
+  background: var(--surface-muted, #f6f8fb);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.runtime-target-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.runtime-target-columns > div + div {
+  border-left: 1px solid var(--border, #dce3ec);
+  padding-left: 14px;
+}
+.runtime-target-columns small {
+  font-weight: 600;
+  color: var(--muted, #64748b);
+}
+.runtime-target-columns p {
+  margin: 7px 0;
+  font-size: 12px;
+}
+.runtime-target-reasons {
+  border-top: 1px solid var(--border, #dce3ec);
+  margin-top: 10px;
+  padding-top: 10px;
+  color: var(--warning-text, #9a570e);
+  font-size: 12px;
+}
+.runtime-target-reasons p {
+  margin: 4px 0;
+}
+.runtime-policy-devices {
+  display: grid;
+  gap: 8px;
+}
+.runtime-policy-devices > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.runtime-editor fieldset {
+  border: 1px solid var(--border, #dce3ec);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 14px;
+}
+.runtime-editor legend {
+  font-size: 12px;
+  padding: 0 6px;
+  width: auto;
+  margin: 0;
+}
+.runtime-command-editor {
+  margin: 16px 0;
+}
+.runtime-command-row {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border, #dce3ec);
+  border-left: 3px solid var(--brand, #356ac3);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+}
+.runtime-command-title {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+.runtime-command-title > label {
+  flex: 1;
+  min-width: 0;
+}
+.runtime-arguments {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.runtime-arguments > button {
+  justify-self: start;
+}
+.runtime-argument {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.runtime-command-bounds {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+.runtime-command-bounds .ant-input-number {
+  width: 125px;
+}
+.runtime-command-bounds > .ant-checkbox-wrapper {
+  display: inline-flex;
+  padding-bottom: 4px;
+}
+.runtime-output {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: auto;
+  max-height: 260px;
+  max-width: 100%;
+  background: var(--surface-muted, #f6f8fb);
+  border: 1px solid var(--border, #dce3ec);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.runtime-execution-card {
+  border: 1px solid var(--border, #dce3ec);
+  border-left: 3px solid var(--brand, #356ac3);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+  min-width: 0;
+}
+.runtime-execution-card.is-failed {
+  border-left-color: var(--danger, #c84545);
+}
+.runtime-execution-card.is-accepted {
+  border-left-color: var(--success, #28865d);
+}
+.runtime-identity {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  display: block;
+  color: var(--muted, #64748b);
+  margin: 7px 0;
+}
+.runtime-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 0;
+}
+.runtime-stages > div {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  border: 1px solid var(--border, #dce3ec);
+  padding: 10px;
+  border-radius: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.runtime-stages small,
+.runtime-stages span {
+  font-size: 11px;
+  color: var(--muted, #64748b);
+}
+.runtime-stages strong {
+  font-size: 12px;
+}
+.runtime-stages [data-state="failed"] {
+  color: var(--danger, #c84545);
+}
+.runtime-stages [data-state="passed"],
+.runtime-stages [data-state="accepted"] {
+  color: var(--success, #28865d);
+}
+.runtime-node-progress {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #64748b);
+}
+.runtime-event {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.runtime-event time {
+  color: var(--muted, #64748b);
+  font-size: 10px;
+}
+.runtime-node-evidence {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border, #dce3ec);
+}
+.runtime-review {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.runtime-review label {
+  font-size: 12px;
+}
+.runtime-execution-card blockquote {
+  margin: 12px 0 0;
+  border-left: 2px solid var(--border, #dce3ec);
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+}
+.runtime-execution-card blockquote footer {
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  margin-top: 6px;
+}
+@media (max-width: 600px) {
+  .runtime-plan-selectors,
+  .runtime-stages {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .runtime-target-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .runtime-target-columns > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--border, #dce3ec);
+    padding: 10px 0 0;
+  }
+  .runtime-editor .ant-modal-body {
+    max-height: 68dvh;
+  }
+  .runtime-execution-card {
+    padding: 10px;
+  }
+  .runtime-command-bounds .ant-input-number {
+    width: 100%;
+  }
+  .runtime-command-bounds > label {
+    flex: 1;
+    min-width: 120px;
+  }
+}

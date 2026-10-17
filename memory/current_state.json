@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-06-19T04:12:21Z",
+  "updated_at": "2026-10-17T07:01:40.788197+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "team_calendar_reservations_dependency_scheduling_verified",
+    "status": "external_agent_delivery_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,26 +15,35 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/team-scheduling/",
+    "evidence": ".sop-runtime/delivery-evidence/external-delivery/",
     "verification_status": "verified",
-    "next_step": "project_portfolio_archive_and_team_governance_then_quality_release_operations",
+    "next_step": "standalone_task_native_acceptance_and_stable_team_runtime_identity_then_portfolio_quality_operations",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "manager": 547,
-      "web": 304,
-      "web_files": 49,
-      "sdk_cli_targeted": 55,
+      "manager": 576,
+      "hermes_full": 170,
+      "hermes_full_skipped": 15,
+      "hermes_native": 84,
+      "hermes_native_platform_skipped": 2,
+      "web": 322,
+      "web_files": 53,
+      "sdk_cli_targeted": 114,
+      "generator": 1,
       "typescript": "passed",
       "production_build": "passed",
       "actual_http_browser": "passed",
-      "review_p2_fixed": 2
+      "actual_worker_agentd_post_tests": "passed",
+      "outbox_network_retry": "passed",
+      "review_p2_fixed": 3
     },
     "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
     "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
-    "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md"
+    "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
+    "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
+    "commit_receipt": ".sop-runtime/delivery-evidence/external-delivery/commit-receipt.json"
   },
   "tasks": {
     "completed": [
@@ -461,12 +470,13 @@
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "Task 166 数据源与元数据管理聚焦模块契约和多语言产品化已完成；继续推进标签服务、指标中心等核心数据治理模块的专业化和智能化闭环。"
+    "current": "外部智能体、后置测试、人审与问题回流阶段已验证；继续独立任务原生交付、团队执行身份与完整项目/质量/发布运维待办。"
   },
   "metrics": {
-    "completion_rate": 100,
+    "completion_rate": null,
     "velocity": 0,
-    "blockers_count": 0
+    "blockers_count": 0,
+    "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "Task 166 数据源与元数据管理聚焦模块契约和多语言产品化已完成；继续推进标签服务、指标中心等核心数据治理模块的专业化和智能化闭环。"
+  "current": "外部智能体、后置测试、人审与问题回流阶段已验证；继续独立任务原生交付、团队执行身份与完整项目/质量/发布运维待办。"
 }

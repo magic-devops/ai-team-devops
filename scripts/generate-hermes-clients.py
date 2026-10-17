@@ -264,10 +264,10 @@ def main() -> None:
     (args.out_dir / "python").mkdir(exist_ok=True)
     (args.out_dir / "typescript").mkdir(exist_ok=True)
     (args.out_dir / "dart").mkdir(exist_ok=True)
-    (args.out_dir / "python" / "wire_types.py").write_text(_python(schemas), encoding="utf-8")
-    (args.out_dir / "typescript" / "wire-types.ts").write_text(_typescript(schemas), encoding="utf-8")
-    (args.out_dir / "dart" / "wire_types.dart").write_text(_dart(schemas), encoding="utf-8")
-    (args.out_dir / "openapi.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (args.out_dir / "python" / "wire_types.py").write_text(_python(schemas), encoding="utf-8", newline="\n")
+    (args.out_dir / "typescript" / "wire-types.ts").write_text(_typescript(schemas), encoding="utf-8", newline="\n")
+    (args.out_dir / "dart" / "wire_types.dart").write_text(_dart(schemas), encoding="utf-8", newline="\n")
+    (args.out_dir / "openapi.json").write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps({"ok": True, "schemas": len(schemas), "out_dir": str(args.out_dir)}, ensure_ascii=False))
 
 

@@ -12,7 +12,7 @@ from test_business_access import headers
 env = business_env
 
 
-@pytest.mark.parametrize("entry", ["update", "bulk", "pull", "report"])
+@pytest.mark.parametrize("entry", ["update", "bulk", "pull"])
 def test_explicit_resume_clears_only_a_manual_status_block(env, entry):
     client, sessions = env
     with sessions() as db:
@@ -24,12 +24,6 @@ def test_explicit_resume_clears_only_a_manual_status_block(env, entry):
         )
     elif entry == "pull":
         result = client.post("/api/v1/tasks/T-selected:pull", headers=headers())
-    elif entry == "report":
-        result = client.post(
-            "/api/v1/tasks/T-selected/agent-report",
-            headers=headers(),
-            json={"agent": "External agent", "status": "in_progress"},
-        )
     else:
         result = client.patch("/api/v1/tasks/T-selected", headers=headers(), json={"status": "in_progress"})
     assert result.status_code == 200, result.text
@@ -106,7 +100,7 @@ def test_recorded_completion_does_not_unlock_delivery_dependency(env, consumer):
 
 
 @pytest.mark.parametrize("auto_start", [True, False])
-def test_explicit_force_claim_cannot_claim_a_blocked_delivery_task(env, auto_start):
+def test_retired_force_claim_cannot_claim_a_delivery_task(env, auto_start):
     client, sessions = env
     seed_chain(client, sessions)
     response = client.post(
@@ -119,7 +113,7 @@ def test_explicit_force_claim_cannot_claim_a_blocked_delivery_task(env, auto_sta
             "auto_start": auto_start,
         },
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 404, response.text
     with sessions() as db:
         assert db.get(sql_models.Task, "T-downstream").status == "pending"
         assert db.get(sql_models.Task, "T-downstream").assigned_to == "writer"
@@ -144,7 +138,7 @@ def test_include_blocked_is_display_only_for_applied_dispatch(env):
         assert db.get(sql_models.Task, "T-downstream").assigned_to == "writer"
 
 
-@pytest.mark.parametrize("entry", ["update", "bulk", "pull", "report"])
+@pytest.mark.parametrize("entry", ["update", "bulk", "pull"])
 def test_canonical_dependencies_cannot_be_bypassed_by_status_write(env, entry):
     client, sessions = env
     seed_chain(client, sessions)
@@ -156,14 +150,8 @@ def test_canonical_dependencies_cannot_be_bypassed_by_status_write(env, entry):
         response = client.patch(
             "/api/v1/tasks/bulk", headers=headers(), json={"ids": ["T-downstream"], "status": "in_progress"}
         )
-    elif entry == "pull":
-        response = client.post("/api/v1/tasks/T-downstream:pull", headers=headers())
     else:
-        response = client.post(
-            "/api/v1/tasks/T-downstream/agent-report",
-            headers=headers(),
-            json={"agent": "External agent", "status": "in_progress"},
-        )
+        response = client.post("/api/v1/tasks/T-downstream:pull", headers=headers())
     assert response.status_code == 409, response.text
     with sessions() as db:
         assert db.get(sql_models.Task, "T-downstream").status == "pending"
@@ -332,7 +320,7 @@ def test_canonical_cycle_has_no_ready_claimable_member(env):
     response = client.post(
         "/api/v1/tasks/agent-feed/claim", headers=headers(), json={"task_id": "T-upstream", "force": True}
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 404, response.text
 
 
 def test_explicit_plan_block_prevents_dispatch_and_claim_even_without_predecessor(env):
@@ -365,7 +353,7 @@ def test_explicit_plan_block_prevents_dispatch_and_claim_even_without_predecesso
     response = client.post(
         "/api/v1/tasks/agent-feed/claim", headers=headers(), json={"task_id": "T-downstream", "force": True}
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 404, response.text
 
 
 def test_missing_or_foreign_predecessor_blocks_without_reading_foreign_evidence(env):

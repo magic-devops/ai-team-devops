@@ -16,7 +16,8 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
-from .agents import AgentProfile, provider_command, provider_evidence, squad_route
+from .agents import AgentProfile, provider_command, provider_evidence, squad_route, validate_bound_profiles
+from .execution_targets import validate_execution_target_snapshot
 from .models import CoreError, Node, Principal
 from .repository import Repository
 from .transactional import Store, digest
@@ -177,9 +178,17 @@ class Execution:
                 "code_evidence": None,
                 "recovery_requires_review": False, "lease_expires_at": time.time() + self.lease_seconds}}
 
+        def validate_plan(conn):
+            validate_bound_profiles(self.store, conn, principal, workspace, run["data"].get("agent_bindings", {}))
+            snapshot = run["data"].get("target_snapshot")
+            if snapshot:
+                for node in nodes:
+                    provider = run["data"].get("agent_bindings", {}).get(node.id, {}).get("profile", {}).get("provider", "")
+                    validate_execution_target_snapshot(self.store, self, principal, workspace, snapshot, provider=provider, conn=conn)
+
         try:
             run = self.store.mutate(principal, workspace, "runs", run_id, operation="run.claimed", key=owner,
-                request={}, trace=owner, expected=run["version"], transform=claim)
+                request={}, trace=owner, expected=run["version"], transform=claim, precondition=validate_plan)
         except CoreError:
             return
         root = run["data"]["workspace_root"]
@@ -214,13 +223,15 @@ class Execution:
                     result = {"succeeded": True, "approval_id": approval_id, "decision": "approve"}
                 else:
                     self.patch(principal, workspace, run_id, "node.started", lambda item: {
-                        "data": {**item["data"], "active_node": node.id}}, owner)
+                        "data": {**item["data"], "active_node": node.id}}, owner, audit_data={"node_id": node.id})
                     if node.kind == "agent":
                         result = self.agent_tool(principal, workspace, run_id, node, root, owner, current)
                     else:
                         result = self.tool(principal, workspace, run_id, node, root, owner)
+                result["attempt"] = current["data"].get("attempt", 1)
                 self.patch(principal, workspace, run_id, "node.evidence", lambda item: {
-                    "data": {**item["data"], "active_node": None, "node_results": {**item["data"].get("node_results", {}), node.id: result}}}, owner)
+                    "data": {**item["data"], "active_node": None, "node_results": {**item["data"].get("node_results", {}), node.id: result}}}, owner,
+                    audit_data={"node_id": node.id, "attempt": current["data"].get("attempt", 1), "result": result})
                 if not result["succeeded"]:
                     raise CoreError("quality_gate_failed", f"Node {node.id}: {result.get('error') or 'exit ' + str(result.get('exit_code'))}", 409)
                 return {"results": {**state.get("results", {}), node.id: result}}

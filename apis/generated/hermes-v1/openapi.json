@@ -584,6 +584,99 @@
         }
       }
     },
+    "/api/hermes/v1/remote/presence": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Presence",
+        "operationId": "presence_api_hermes_v1_remote_presence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkerPresence"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/devices/{device_id}/runtime-policy": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Runtime Policy",
+        "operationId": "runtime_policy_api_hermes_v1_devices__device_id__runtime_policy_post",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Device Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRuntimePolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/devices/{device_id}/pairing": {
       "post": {
         "tags": [
@@ -2223,6 +2316,20 @@
             "maxLength": 64,
             "title": "Target Device Id",
             "default": ""
+          },
+          "target_basis": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Target Basis",
+            "default": ""
+          },
+          "test_nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array",
+            "maxItems": 32,
+            "title": "Test Nodes"
           }
         },
         "additionalProperties": false,
@@ -2363,6 +2470,60 @@
           "decision"
         ],
         "title": "Decision"
+      },
+      "DeviceRuntimePolicy": {
+        "properties": {
+          "allowed_runtimes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "command",
+                "agent"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Allowed Runtimes"
+          },
+          "allowed_providers": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "codex",
+                "claude",
+                "opencode"
+              ]
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Allowed Providers"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allowed_runtimes",
+          "allowed_providers",
+          "idempotency_key",
+          "expected_version"
+        ],
+        "title": "DeviceRuntimePolicy"
       },
       "Envelope": {
         "properties": {
@@ -2752,6 +2913,48 @@
         ],
         "title": "PairRedeem"
       },
+      "ProviderCapability": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude",
+              "opencode"
+            ],
+            "title": "Id"
+          },
+          "executable_present": {
+            "type": "boolean",
+            "title": "Executable Present"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "auth": {
+            "type": "string",
+            "const": "unknown",
+            "title": "Auth",
+            "default": "unknown"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "executable_present"
+        ],
+        "title": "ProviderCapability"
+      },
       "RemoteClaim": {
         "properties": {
           "idempotency_key": {
@@ -2773,6 +2976,12 @@
             "type": "array",
             "maxItems": 8,
             "title": "Runtime Capabilities"
+          },
+          "worker_id": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Worker Id",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -3059,6 +3268,12 @@
             "maxLength": 64,
             "title": "Target Device Id",
             "default": ""
+          },
+          "target_basis": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Target Basis",
+            "default": ""
           }
         },
         "additionalProperties": false,
@@ -3234,6 +3449,58 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkerPresence": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "worker_id": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Worker Id"
+          },
+          "worker_version": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Worker Version"
+          },
+          "runtime_capabilities": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "command",
+                "agent"
+              ]
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Runtime Capabilities"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapability"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "title": "Providers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "worker_id",
+          "worker_version",
+          "runtime_capabilities",
+          "providers"
+        ],
+        "title": "WorkerPresence"
       }
     }
   }

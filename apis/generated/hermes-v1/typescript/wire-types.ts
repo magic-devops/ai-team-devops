@@ -8,7 +8,9 @@ export interface AgentDispatch {
   isolation?: "workspace" | "git_worktree";
   prompt?: string;
   squad_id?: string;
+  target_basis?: string;
   target_device_id?: string;
+  test_nodes?: Array<Node>;
 }
 
 export interface ChannelConfigure {
@@ -29,6 +31,14 @@ export interface CollaborationAction {
 
 export interface Decision {
   decision: "approve" | "reject";
+  expected_version: number;
+  idempotency_key: string;
+  dry_run?: boolean;
+}
+
+export interface DeviceRuntimePolicy {
+  allowed_providers: Array<"codex" | "claude" | "opencode">;
+  allowed_runtimes: Array<"command" | "agent">;
   expected_version: number;
   idempotency_key: string;
   dry_run?: boolean;
@@ -102,9 +112,17 @@ export interface PairRedeem {
   secret: string;
 }
 
+export interface ProviderCapability {
+  executable_present: boolean;
+  id: "codex" | "claude" | "opencode";
+  auth?: string;
+  version?: string | null;
+}
+
 export interface RemoteClaim {
   idempotency_key: string;
   runtime_capabilities?: Array<string>;
+  worker_id?: string;
   worker_version?: string;
 }
 
@@ -156,6 +174,7 @@ export interface TaskDispatch {
   base_commit?: string;
   dry_run?: boolean;
   isolation?: "workspace" | "git_worktree";
+  target_basis?: string;
   target_device_id?: string;
 }
 
@@ -186,4 +205,12 @@ export interface ValidationError {
   type: string;
   ctx?: Record<string, unknown>;
   input?: unknown;
+}
+
+export interface WorkerPresence {
+  idempotency_key: string;
+  providers: Array<ProviderCapability>;
+  runtime_capabilities: Array<"command" | "agent">;
+  worker_id: string;
+  worker_version: string;
 }

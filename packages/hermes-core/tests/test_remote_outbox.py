@@ -14,6 +14,12 @@ import pytest
 from hermes_core.remote_outbox import RECORD_LIMIT_BYTES, OutboxError, OutboxLock, OutboxLocked, RemoteOutbox
 from hermes_core.remote_worker import LOG_LIMIT_BYTES, WorkerError, _load_credential, _run_agentd
 from hermes_core.remote_worker import main as worker_main
+from process_fixtures import install_python_script_launcher
+
+
+@pytest.fixture(autouse=True)
+def python_protocol_fixture_launcher(monkeypatch):
+    install_python_script_launcher(monkeypatch)
 
 
 def _serve(state: dict[str, Any]):
@@ -21,6 +27,10 @@ def _serve(state: dict[str, Any]):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            if self.path == "/api/hermes/v1/remote/presence":
+                state.setdefault("presence_requests", []).append(body)
+                self._send(200, {"ok": True, "items": [{"worker_id": body["worker_id"]}]})
+                return
             if self.path == "/api/hermes/v1/remote/claim":
                 state.setdefault("claim_requests", []).append(body)
                 items = state.setdefault("claims", [])
@@ -231,7 +241,8 @@ def test_lost_success_response_preserves_remote_agent_result_until_ack(tmp_path:
         credential = _credential(server_url)
         _write_credential(credential_file, credential)
         agentd = _agentd_executes_argv(tmp_path)
-        _codex_provider(bin_dir)
+        provider = _codex_provider(bin_dir)
+        monkeypatch.setattr("hermes_core.remote_worker.provider_command", lambda profile, prompt: [sys.executable, str(provider), prompt])
         monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
 
         assert worker_main(_argv(server_url, credential_file, outbox_dir, tmp_path, agentd,

@@ -13,11 +13,12 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
-from .agents import AgentDispatch, Agents
+from .agents import AgentDispatch, Agents, validate_bound_profiles
 from .collaboration import COLLAB_ACTIONS, create_collaboration_router, filter_collaboration_events
 from .delivery import Delivery
 from .diagnostics import runtime_checks
 from .execution import Execution
+from .execution_targets import select_execution_target, validate_execution_target_snapshot
 from .models import (
     ACTIONS,
     API_BASE,
@@ -59,7 +60,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
     repository = Repository(execution)
     delivery = Delivery(store, repository)
     agents = Agents(store)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key"}
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -177,6 +178,11 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             current_workspace = store.get(principal, "", "workspaces", workspace)
             if run["data"].get("workspace_version") != current_workspace["version"]:
                 raise CoreError("workspace_changed", "Workspace configuration changed; create a newly reviewed run", 409)
+            snapshot = run["data"].get("target_snapshot")
+            if snapshot:
+                for node in run["data"].get("nodes", []):
+                    provider = run["data"].get("agent_bindings", {}).get(node["id"], {}).get("profile", {}).get("provider", "")
+                    validate_execution_target_snapshot(store, execution, principal, workspace, snapshot, provider=provider)
         if action == "export":
             evidence = []
             while True:
@@ -211,6 +217,10 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             if run["data"].get("task_source"):
                 raise CoreError("task_dispatch_required", "Create the next delivery from its task to retain review history", 409)
             data = {key: value for key, value in run["data"].items() if key not in run_internal_fields}
+            if data.get("target_device_id"):
+                data["target_snapshot"] = select_execution_target(
+                    store, execution, principal, workspace, target_kind="device",
+                    target_device_id=data["target_device_id"], expected_basis=data.get("target_basis"))
             result = store.create(principal, workspace, "runs", {**data, "replay_of": run_id}, body.idempotency_key, uuid.uuid4().hex,
                                   status="planned", operation=operation, request=body.model_dump())
             return response(principal, workspace, [result])
@@ -228,12 +238,18 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             return {"status": target}
 
         def guard_delivery(conn):
+            if action in {"start", "retry"}:
+                validate_bound_profiles(store, conn, principal, workspace, run["data"].get("agent_bindings", {}))
             source = run["data"].get("task_source")
             if source and action in {"start", "retry"}:
                 task = store._get(conn, principal, workspace, "tasks", source["task_id"])
                 link = task["data"].get("delivery", {})
                 if link.get("run_id") != run_id or link.get("phase") != "executing":
                     raise CoreError("delivery_closed", "The task delivery is no longer executable", 409)
+            if action in {"start", "retry"} and run["data"].get("target_snapshot"):
+                for node in run["data"].get("nodes", []):
+                    provider = run["data"].get("agent_bindings", {}).get(node["id"], {}).get("profile", {}).get("provider", "")
+                    validate_execution_target_snapshot(store, execution, principal, workspace, run["data"]["target_snapshot"], provider=provider, conn=conn)
 
         result = store.mutate(principal, workspace, "runs", run_id, operation="run." + action,
             key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
@@ -408,6 +424,11 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
                     raise CoreError("task_dispatch_required", "Dispatch agents from a task with acceptance criteria", 422)
             data["nodes"] = [node.model_dump() for node in nodes]
             if data.get("target_device_id"):
+                if not data.get("target_basis"):
+                    raise CoreError("target_basis_required", "Review the current execution target before creating a remote run", 422)
+                data["target_snapshot"] = select_execution_target(
+                    store, execution, principal, workspace, target_kind="device",
+                    target_device_id=data["target_device_id"], expected_basis=data["target_basis"])
                 if not is_paired_device(store, principal, workspace, str(data["target_device_id"])):
                     raise CoreError("device_unpaired", "Pair an active device before remote execution", 409)
                 if any(node.kind != "command" for node in nodes):
@@ -480,6 +501,11 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
                 raise CoreError("forbidden", "Workspace access denied", 403)
             if resource == "runs" and item["status"] != "planned":
                 raise CoreError("immutable_run", "Running definitions cannot be edited", 409)
+            if resource == "runs" and item["data"].get("target_snapshot") and any(
+                field in body.data and body.data[field] != item["data"].get(field)
+                for field in ("target_device_id", "target_basis")
+            ):
+                raise CoreError("immutable_target", "Create a newly reviewed plan to change the execution target", 409)
             if resource == "workspaces" and "owner" in body.data and body.data["owner"] != item["data"].get("owner"):
                 raise CoreError("owner_immutable", "Ownership cannot be transferred through a generic update", 403)
             merged = {**item["data"], **body.data}

@@ -117,8 +117,11 @@ def _audit_task_payload(row: AuditLog, body: AuditTaskIn) -> dict[str, Any]:
 
 # ── 审计中间件 ────────────────────────────────────────────────────
 _AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
-# Scheduling previews use a body to describe a pure read, never a mutation.
-_READ_ONLY_REQUESTS = {("POST", "/api/v1/delivery/schedule-preview")}
+# These exact preview endpoints use a body for a pure read.
+_READ_ONLY_REQUESTS = {
+    ("POST", "/api/v1/delivery/schedule-preview"),
+    ("POST", "/api/v1/delivery/execution-preview"),
+}
 _SKIP_PREFIXES = (
     "/api/v1/health",
     "/metrics",

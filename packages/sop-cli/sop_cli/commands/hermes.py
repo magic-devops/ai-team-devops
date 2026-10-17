@@ -35,6 +35,8 @@ CREDENTIAL_FILE_OPTION = typer.Option(..., "--credential-file")
 TARGET_ROOT_OPTION = typer.Option(None, "--target-root", exists=True, file_okay=False)
 WORKSPACE_MAP_OPTION = typer.Option(None, "--workspace-map")
 OUTBOX_DIR_OPTION = typer.Option(None, "--outbox-dir", help="Private durable result outbox directory")
+POLICY_FILE_OPTION = typer.Option(..., "--file", exists=True, dir_okay=False, readable=True)
+TEST_NODES_FILE_OPTION = typer.Option(None, "--tests", exists=True, dir_okay=False, help="JSON object containing explicit command test_nodes")
 
 
 class DispatchIsolation(str, Enum):
@@ -241,6 +243,21 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
 
     if resource == "devices":
 
+        @app.command("runtime-policy")
+        def device_runtime_policy(
+            device_id: str = typer.Argument(..., metavar="ID"),
+            file: Path = POLICY_FILE_OPTION,
+            json_output: bool = typer.Option(False, "--json"),
+        ) -> None:
+            """Replace explicit runtime/provider grants using the file's CAS, key and dry_run."""
+            def call(client):
+                body = _load_object(file.read_text(encoding="utf-8"), label="--file")
+                required = {"expected_version", "idempotency_key", "dry_run", "allowed_runtimes", "allowed_providers"}
+                if set(body) != required:
+                    raise ValueError("--file requires expected_version, idempotency_key, dry_run, allowed_runtimes and allowed_providers")
+                return client.device_runtime_policy(device_id, body)
+            _run_call(call, as_json=json_output)
+
         @app.command("pairing")
         def device_pairing(
             device_id: str = typer.Argument(..., metavar="ID"),
@@ -363,6 +380,7 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
             isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
             base_commit: str = BASE_COMMIT_OPTION,
             device_id: str = DEVICE_ID_OPTION,
+            target_basis: str = typer.Option("", "--target-basis", help="Pinned target capability/policy basis"),
             apply: bool = typer.Option(False, "--apply/--dry-run"),
             idempotency_key: str = typer.Option("", "--idempotency-key"),
             json_output: bool = typer.Option(False, "--json"),
@@ -374,7 +392,7 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 return client.task_dispatch(task_id, nodes, expected_version=expected_version,
                                             dry_run=not apply, idempotency_key=idempotency_key or None,
                                             isolation=isolation.value, base_commit=base_commit,
-                                            target_device_id=device_id)
+                                            target_device_id=device_id, **({"target_basis": target_basis} if target_basis else {}))
             _run_call(call, as_json=json_output)
 
         @app.command("agent-dispatch")
@@ -386,13 +404,22 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
             expected_version: int = typer.Option(..., "--expected-version", min=1),
             target_version: int = typer.Option(..., "--target-version", min=1, help="Selected agent/squad row.version"),
             device_id: str = DEVICE_ID_OPTION,
+            target_basis: str = typer.Option("", "--target-basis", help="Pinned target capability/policy basis"),
+            tests: Path | None = TEST_NODES_FILE_OPTION,
             isolation: DispatchIsolation = DISPATCH_ISOLATION_OPTION,
             base_commit: str = BASE_COMMIT_OPTION,
             apply: bool = typer.Option(False, "--apply/--dry-run"),
             idempotency_key: str = typer.Option("", "--idempotency-key"),
             json_output: bool = typer.Option(False, "--json"),
         ) -> None:
-            _run_call(lambda client: client.task_agent_dispatch(
+            def call(client):
+                options = {"target_basis": target_basis} if target_basis else {}
+                if tests is not None:
+                    test_nodes = _load_object(tests.read_text(encoding="utf-8"), label="--tests").get("test_nodes")
+                    if not isinstance(test_nodes, list):
+                        raise ValueError("--tests must contain a test_nodes array")
+                    options["test_nodes"] = test_nodes
+                return client.task_agent_dispatch(
                 task_id,
                 expected_version=expected_version,
                 target_version=target_version,
@@ -404,7 +431,9 @@ def build_resource_app(resource: str, *, allow_delete: bool | None = None) -> ty
                 idempotency_key=idempotency_key or None,
                 isolation=isolation.value,
                 base_commit=base_commit,
-            ), as_json=json_output)
+                **options,
+                )
+            _run_call(call, as_json=json_output)
 
         @app.command("review")
         def task_review(

@@ -5,6 +5,7 @@ import os
 import socket
 import subprocess
 import sys
+import sysconfig
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -181,8 +182,10 @@ def remote_server(tmp_path: Path):
         "uvicorn.run(app, host='127.0.0.1', port=port, log_level='warning')\n",
         encoding="utf-8",
     )
-    env = {**os.environ, "PYTHONPATH": str(CORE)}
-    proc = subprocess.Popen([sys.executable, str(server_script), str(data_dir), str(port)], env=env,  # noqa: S603
+    interpreter = sys._base_executable if os.name == "nt" else sys.executable
+    package_paths = sorted({sysconfig.get_path("purelib"), sysconfig.get_path("platlib")}) if os.name == "nt" else []
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(CORE), *package_paths])}
+    proc = subprocess.Popen([interpreter, str(server_script), str(data_dir), str(port)], env=env,  # noqa: S603
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     base = f"http://127.0.0.1:{port}/api/hermes/v1"
     deadline = time.time() + 15
@@ -233,6 +236,19 @@ def _pair_device(base: str, headers: dict, title: str, key: str) -> tuple[dict, 
     }, headers)["items"][0]
     paired = _json("POST", base + "/devices/pair", {"device_id": device["id"], "secret": pairing["pairing_secret"]})["items"][0]
     return device, paired
+
+
+def _review_command_target(base, data_dir, workspace, device, paired):
+    from hermes_core.execution_targets import workspace_execution_targets
+
+    auth = {"Authorization": "Bearer " + paired["credential"], "X-Hermes-Device-Id": device["id"]}
+    _json("POST", base + "/remote/presence", {"idempotency_key": "presence:" + device["id"],
+        "worker_id": "test-worker", "worker_version": "test", "runtime_capabilities": ["command"], "providers": []}, auth)
+    store = Store("sqlite:///" + str((data_dir / "workspace.sqlite").resolve()))
+    try:
+        return workspace_execution_targets(store, None, Principal("owner"), workspace["id"])["devices"][0]
+    finally:
+        store.engine.dispose()
 
 
 def _queue_remote(data_dir: Path, workspace_id: str, run: dict, device_id: str) -> dict:
@@ -367,6 +383,7 @@ def test_public_pair_task_dispatch_then_remote_claim_contract(remote_server):
     }, owner_headers)["items"][0]
     headers = {**owner_headers, "X-Workspace-Id": workspace["id"]}
     device, paired = _pair_device(base, headers, "Dispatch worker", "dispatch-device")
+    target = _review_command_target(base, data_dir, workspace, device, paired)
     task = _json("POST", base + "/tasks", {
         "data": {"title": "Public remote task", "acceptance_criteria": "command completes"},
         "idempotency_key": "dispatch-task",
@@ -377,6 +394,7 @@ def test_public_pair_task_dispatch_then_remote_claim_contract(remote_server):
             "idempotency_key": "dispatch-plan",
             "dry_run": False,
             "target_device_id": device["id"],
+            "target_basis": target["basis"],
             "nodes": [{"id": "one", "argv": [sys.executable, "-c", "print('public')"]}],
         }, headers)["items"][0]
     except HTTPError as exc:
@@ -394,6 +412,7 @@ def test_public_pair_task_dispatch_then_remote_claim_contract(remote_server):
     claim = _json("POST", base + "/remote/claim", {
         "idempotency_key": "public-claim",
         "worker_version": "test",
+        "worker_id": "test-worker",
     }, auth)["items"][0]
     assert claim["run_id"] == queued["id"]
     assert claim["node"]["id"] == "one"
@@ -508,6 +527,7 @@ def test_failed_remote_node_retry_new_claim_can_supersede_failed_result(remote_s
     }, owner_headers)["items"][0]
     headers = {**owner_headers, "X-Workspace-Id": workspace["id"]}
     device, paired = _pair_device(base, headers, "Retry worker", "retry-device")
+    target = _review_command_target(base, data_dir, workspace, device, paired)
     task = _json("POST", base + "/tasks", {
         "data": {"title": "Retry remote task", "acceptance_criteria": "retry can pass after failed attempt"},
         "idempotency_key": "retry-task",
@@ -517,6 +537,7 @@ def test_failed_remote_node_retry_new_claim_can_supersede_failed_result(remote_s
         "idempotency_key": "retry-dispatch",
         "dry_run": False,
         "target_device_id": device["id"],
+        "target_basis": target["basis"],
         "nodes": [{"id": "one", "argv": [sys.executable, "-c", "print('retry')"]}],
     }, headers)["items"][0]
     planned = dispatch["run"]
@@ -528,7 +549,7 @@ def test_failed_remote_node_retry_new_claim_can_supersede_failed_result(remote_s
     assert queued["status"] == "queued"
     auth = {"Authorization": "Bearer " + paired["credential"], "X-Hermes-Device-Id": device["id"]}
     first = _json("POST", base + "/remote/claim", {"idempotency_key": "retry-claim-1",
-                                                   "worker_version": "test"}, auth)["items"][0]
+                                                   "worker_version": "test", "worker_id": "test-worker"}, auth)["items"][0]
     failed = _json("POST", base + "/remote/result", {
         "run_id": planned["id"],
         "owner": first["owner"],
@@ -553,7 +574,7 @@ def test_failed_remote_node_retry_new_claim_can_supersede_failed_result(remote_s
     }, auth)
     assert stale["error"]["code"] == "lease_lost"
     second = _json("POST", base + "/remote/claim", {"idempotency_key": "retry-claim-2",
-                                                    "worker_version": "test"}, auth)["items"][0]
+                                                    "worker_version": "test", "worker_id": "test-worker"}, auth)["items"][0]
     assert second["run_id"] == planned["id"]
     assert second["node"]["id"] == "one"
     assert second["owner"] != first["owner"]

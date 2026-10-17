@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import sysconfig
 import time
 import urllib.request
 
@@ -117,8 +118,17 @@ def test_real_agentd_diagnostics(tmp_path):
 
 
 def test_real_core_duplicate_start_and_crash_recovery(tmp_path):
+    # Windows uv venv python.exe can be a launcher with a separately owned child.
+    # Spawn the actual interpreter so the readiness PID and cleanup handle agree.
+    interpreter = sys._base_executable if os.name == "nt" else sys.executable
+    child_environment = dict(os.environ)
+    if os.name == "nt":
+        package_paths = sorted({sysconfig.get_path("purelib"), sysconfig.get_path("platlib")})
+        child_environment["PYTHONPATH"] = os.pathsep.join([
+            *package_paths, child_environment.get("PYTHONPATH", ""),
+        ])
     command = [
-        sys.executable,
+        interpreter,
         "-m",
         "hermes_core",
         "--data-dir",
@@ -133,7 +143,7 @@ def test_real_core_duplicate_start_and_crash_recovery(tmp_path):
         startup = tmp_path / f"startup-{attempt}.json"
         errors = tmp_path / f"stderr-{attempt}.log"
         with startup.open("w") as stdout, errors.open("w") as stderr:
-            process = subprocess.Popen(command, stdout=stdout, stderr=stderr)  # noqa: S603 - isolated test Core argv
+            process = subprocess.Popen(command, stdout=stdout, stderr=stderr, env=child_environment)  # noqa: S603 - isolated test Core argv
             try:
                 deadline = time.monotonic() + 15
                 ready = None
@@ -158,12 +168,13 @@ def test_real_core_duplicate_start_and_crash_recovery(tmp_path):
                 if saved_token is not None:
                     assert token == saved_token
                 saved_token = token
-                duplicate = subprocess.run(command, capture_output=True, text=True, timeout=15)  # noqa: S603 - isolated test Core argv
+                duplicate = subprocess.run(command, capture_output=True, text=True, timeout=15, env=child_environment)  # noqa: S603 - isolated test Core argv
                 assert duplicate.returncode == 2
                 assert not duplicate.stdout
                 assert json.loads(duplicate.stderr)["error"]["code"] == "core_already_running"
                 assert process.poll() is None
             finally:
-                process.kill()
+                if process.poll() is None:
+                    process.kill()
                 process.wait(timeout=10)
     assert (tmp_path / "data" / "workspace.sqlite").is_file()

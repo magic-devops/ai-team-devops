@@ -25,11 +25,12 @@ def git_delivery(tmp_path):
         return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()  # noqa: S603,S607 - fixed Git operations in an isolated test repository
 
     git("init", "-q")
-    (root / "note.txt").write_text("base\n")
+    git("config", "core.autocrlf", "false")
+    (root / "note.txt").write_bytes(b"base\n")
     git("add", "note.txt")
     git("-c", "user.name=Hermes QA", "-c", "user.email=qa@example.invalid", "commit", "-qm", "base")
     head = git("rev-parse", "HEAD")
-    (root / "note.txt").write_text("user draft\n")
+    (root / "note.txt").write_bytes(b"user draft\n")
     app = create_app(
         tmp_path / "core",
         "owner",
