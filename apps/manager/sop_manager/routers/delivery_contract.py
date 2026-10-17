@@ -13,6 +13,7 @@ from sop_manager.task_acceptance import TaskAcceptanceCriteria
 from sop_manager.task_owner import TaskOwnerId
 
 from .delivery_execution_contract import ExecutionQueue
+from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
 from .delivery_scheduling_contract import (
     AllocationInput,
     CalendarSave,
@@ -72,6 +73,8 @@ class Command(Input):
         "resource.save",
         "resource.archive",
         "member.save",
+        "member.runtime.bind",
+        "member.runtime.unbind",
         "milestone.save",
         "requirement.create",
         "requirement.update",
@@ -728,6 +731,8 @@ PAYLOADS = {
     "resource.save": ResourceSave,
     "resource.archive": ResourceArchive,
     "member.save": MemberEdit,
+    "member.runtime.bind": MemberRuntimeBind,
+    "member.runtime.unbind": MemberRuntimeUnbind,
     "milestone.save": MilestoneEdit,
     "requirement.create": RequirementCreate,
     "requirement.update": RequirementEdit,

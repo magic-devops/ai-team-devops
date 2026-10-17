@@ -66,7 +66,12 @@ def record_observation(
     if workspace:
         effective = reconcile(db, project, workspace.data)
         changed = effective["flows"] != workspace.data["flows"]
+        original_entries = {entry["id"]: entry for entry in workspace.data.get("executions", [])}
         for entry in effective.get("executions", []):
+            if entry.get("executor_binding_invalidated") and not original_entries[entry["id"]].get(
+                "executor_binding_invalidated"
+            ):
+                changed = True
             if entry.get("stale") and not entry.get("planning_invalidated"):
                 entry["planning_invalidated"] = True
                 changed = True

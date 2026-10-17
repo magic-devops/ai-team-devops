@@ -10,6 +10,7 @@ import {
 } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ExecutionExecutorFacts } from "./ExecutionExecutorFacts";
 import { request } from "@/lib/http";
 import type { DeliveryAction, DeliveryExecution } from "@/lib/delivery";
 import {
@@ -164,6 +165,8 @@ export function ExecutionObservationCard({
   }
   const status = observation?.status || entry.status;
   const stale = Boolean(entry.stale || observation?.stale);
+  const runId = observation?.run_id || entry.run_id;
+  const pendingBindingInvalidated = !runId && Boolean(observation ? observation.executor_binding_invalidated : entry.executor_binding_invalidated);
   const permissions = observation?.permissions;
   const completed =
     observation?.nodes.filter((node) =>
@@ -208,10 +211,12 @@ export function ExecutionObservationCard({
         </small>
       </div>
       <code className="runtime-identity">
-        {entry.run_id || entry.id} · {tr("attempt")}{" "}
+        {runId || entry.id} · {tr("attempt")}{" "}
         {observation?.attempt ?? entry.attempt ?? "—"}
       </code>
       {stale && <Alert type="warning" title={tr("stale")} />}
+      {pendingBindingInvalidated && <Alert type="warning" title={t("deliveryTeamRuntime.pendingInvalidated")} />}
+      <ExecutionExecutorFacts snapshot={entry.executor_snapshot} />
       {readError && (
         <Alert
           type="warning"
@@ -289,12 +294,12 @@ export function ExecutionObservationCard({
           <Button
             size="small"
             type="primary"
-            disabled={busy || stale || Boolean(readError)}
+            disabled={busy || stale || !runId || Boolean(readError)}
             loading={busy}
             onClick={() =>
               void act(async () => {
                 await request(
-                  `/api/hermes/v1/runs/${encodeURIComponent(entry.run_id)}/start`,
+                  `/api/hermes/v1/runs/${encodeURIComponent(runId)}/start`,
                   {
                     method: "POST",
                     headers: {

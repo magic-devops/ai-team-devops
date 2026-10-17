@@ -148,6 +148,8 @@ def _reconcile_execution_evidence(db, project, data):
     latest = {entry["task_id"]: entry for entry in executions}
     runs = {entry["run_id"]: entry for entry in executions if entry.get("run_id")}
     for entry in executions:
+        if context.pending_executor_binding_invalidated(entry):
+            entry["executor_binding_invalidated"] = True
         definition = context.definition(entry["task_id"])
         entry["stale"] = (
             bool(entry.get("planning_invalidated"))
@@ -311,7 +313,7 @@ def apply_action(db, project, user, data, action, body):
 
         return apply_resource(data, user, action, body)
     elif action in {"member.save", "milestone.save"}:
-        return _save_entry(data, action, body, roster, values)
+        return _save_entry(data, action, body, roster, values, actor=user.id)
     elif action == "requirement.create":
         validate_owner(body.owner_id, roster)
         _milestone(body.milestone_id, data)
@@ -349,7 +351,7 @@ def apply_action(db, project, user, data, action, body):
     return resource_id, before
 
 
-def _save_entry(data, action, body, roster, values):
+def _save_entry(data, action, body, roster, values, *, actor):
     before = None
     collection = "members" if action == "member.save" else "milestones"
     if collection == "milestones":
@@ -363,6 +365,10 @@ def _save_entry(data, action, body, roster, values):
                 409,
                 {"code": "member_kind_immutable", "message": "Resource kind cannot change after creation"},
             )
+        if previous["kind"] == "agent" and previous["active"] and not body.active:
+            from .delivery_team_runtime import invalidate_member_runtime_binding
+
+            invalidate_member_runtime_binding(data, body.id, actor=actor, reason="member_inactive")
     resource_id = body.id or identifier("member" if collection == "members" else "milestone")
     values["id"] = resource_id
     data[collection] = [x for x in data[collection] if x["id"] != resource_id] + [values]

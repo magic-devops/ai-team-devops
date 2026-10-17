@@ -1,0 +1,24 @@
+.team-runtime-panel { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 16px; min-width: 0; }
+.team-runtime-panel .runtime-section-heading strong { font-size: 13px; }
+.team-runtime-panel .ant-alert { margin: 10px 0; }
+.team-runtime-facts { display: grid; gap: 12px; margin: 12px 0; min-width: 0; }
+.team-runtime-facts > div { min-width: 0; }
+.team-runtime-facts dt { font-size: 11px; color: var(--muted-strong, var(--muted)); margin-bottom: 5px; }
+.team-runtime-facts dd { font-size: 12px; margin: 0; overflow-wrap: anywhere; }
+.team-runtime-facts code { display: block; color: var(--muted-strong, var(--muted)); font-size: 10px; overflow-wrap: anywhere; }
+.team-runtime-reasons { padding-left: 18px; color: var(--muted-strong, var(--muted)); font-size: 12px; line-height: 1.6; }
+.team-runtime-editor .ant-modal-body { max-height: 70dvh; overflow-y: auto; }
+.team-runtime-editor label { display: grid; gap: 7px; margin: 14px 0; min-width: 0; font-size: 12px; }
+.team-runtime-editor .ant-select { width: 100%; min-width: 0; }
+.team-runtime-editor .ant-alert { margin: 12px 0; }
+.team-runtime-candidate { border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 12px 0; }
+.team-runtime-executor { border-left: 2px solid var(--brand); padding-left: 12px; margin: 12px 0; min-width: 0; }
+.team-runtime-executor > strong { font-size: 12px; }
+.team-runtime-selector { margin: 12px 0; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+.team-runtime-selector .ant-select { width: 100%; min-width: 0; }
+@media (max-width: 640px) {
+  .team-runtime-editor .ant-modal-footer { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .team-runtime-editor .ant-modal-footer .ant-btn { margin: 0; max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+  .team-runtime-candidate .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+  .team-runtime-selector .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+}

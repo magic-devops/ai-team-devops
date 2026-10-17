@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { runtimeTranslations } from "../i18n/delivery-runtime";
+import { teamRuntimeTranslations } from "../i18n/delivery-team-runtime";
 import { ExecutionTargetFacts } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionTargetFacts";
 import {
   ExecutionStageFacts,
@@ -41,7 +42,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) =>
       String(
-        (runtimeTranslations[language] as Record<string, unknown>)[
+        ((key.startsWith("deliveryTeamRuntime.") ? teamRuntimeTranslations[language] : runtimeTranslations[language]) as Record<string, unknown>)[
           key.split(".").slice(1).join(".")
         ] ??
           options?.defaultValue ??
@@ -96,6 +97,7 @@ function renderObservedCard(
   tests: ExecutionObservations["tests"]["status"],
   entryStale = false,
   status = "awaiting_review",
+  handoff?: { entryRunId: string; observedRunId: string; rawMarker: boolean; observedMarker: boolean },
 ) {
   language = "en-US";
   renderState.next = {
@@ -105,7 +107,9 @@ function renderObservedCard(
       ...observation,
       project_id: "project",
       execution_id: "execution-one",
-      run_id: "run-one",
+      run_id: handoff?.observedRunId ?? "run-one",
+      executor_binding_invalidated: handoff?.observedMarker ?? false,
+      executor_snapshot: null,
       run_version: 3,
       status,
       observed_at: "2026-10-17T00:00:00Z",
@@ -128,7 +132,8 @@ function renderObservedCard(
     workspace_id: "workspace",
     agent_id: "agent",
     status,
-    run_id: "run-one",
+    run_id: handoff?.entryRunId ?? "run-one",
+    executor_binding_invalidated: handoff?.rawMarker ?? false,
     run_version: 3,
     progress: 100,
     created_at: "2026-10-17T00:00:00Z",
@@ -160,6 +165,12 @@ function acceptButton(html: string) {
   );
 }
 describe("external execution presentation", () => {
+  it("does not present an audit invalidation marker as a pending gate after receipt recovery or sync", () => {
+    const warning = teamRuntimeTranslations["en-US"].pendingInvalidated.replaceAll("'", "&#x27;");
+    expect(renderObservedCard("pending", false, "planned", { entryRunId: "", observedRunId: "recovered-run", rawMarker: true, observedMarker: false })).not.toContain(warning);
+    expect(renderObservedCard("pending", false, "planned", { entryRunId: "synced-run", observedRunId: "synced-run", rawMarker: true, observedMarker: false })).not.toContain(warning);
+    expect(renderObservedCard("pending", false, "pending", { entryRunId: "", observedRunId: "", rawMarker: true, observedMarker: true })).toContain(warning);
+  });
   it("translates the fixed local target title while preserving a remote device name", () => {
     language = "zh-CN";
     const html = renderToStaticMarkup(

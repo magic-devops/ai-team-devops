@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / schedule / schedule-preview / observation / baseline / reviews / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / schedule / schedule-preview / observation / baseline / reviews / team-runtime / targets / preview / command"
 )
 
 
@@ -18,6 +18,22 @@ class ProgressScope(str, Enum):
     project = "project"
     milestone = "milestone"
     sprint = "sprint"
+
+
+@app.command("team-runtime")
+def team_runtime(
+    json_out: Annotated[bool, typer.Option("--json", help="保留固定版本、不可用原因及操作权限")] = False,
+):
+    """读取团队 Agent 与运行配置的关联，不修改绑定或授予执行权限。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_team_runtime_bindings()
+        if not json_out:
+            console.print("团队运行关联 · 配置有效性不代表执行设备或凭据就绪", markup=False)
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 def _show_progress_record(result: dict, json_out: bool, label: str):

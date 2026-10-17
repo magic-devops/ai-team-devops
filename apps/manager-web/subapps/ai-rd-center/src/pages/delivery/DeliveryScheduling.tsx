@@ -629,6 +629,7 @@ export function DeliveryScheduling({
         </>
       )}
       {mode === "members" && <DeliveryTeamMembers
+        sessionId={sessionId} onSaved={onSaved}
         workspace={workspace} schedule={data} calendarFailed={query.isError}
         route={route} onRoute={(patch) => changeRoute(patch, !("teamMemberId" in patch) && !("teamMode" in patch))}
         onEdit={onEditMember} onCalendar={openCalendar}

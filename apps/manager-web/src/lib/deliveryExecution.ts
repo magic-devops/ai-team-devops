@@ -9,6 +9,7 @@ import type {
   ExecutionCommandDraft,
 } from "./executionCommands";
 import { commandNodes } from "./executionCommands";
+import type { ExecutorSnapshot, TeamRuntimeBindings } from "./deliveryTeamRuntime";
 
 export type ExecutionProvider = {
   id: "codex" | "claude" | "opencode";
@@ -61,6 +62,8 @@ export type DeliveryTargets = {
   workspaces: ExecutionWorkspace[];
 };
 export type ExecutionPayload = {
+  executor_member_id: string;
+  executor_binding_basis: string;
   task_id: string;
   task_basis: string;
   workspace_id: string;
@@ -74,6 +77,7 @@ export type ExecutionPayload = {
   test_node_ids: string[];
 };
 export type ExecutionPreview = {
+  executor_snapshot: ExecutorSnapshot | null;
   project_id: string;
   version: number;
   task_basis: string;
@@ -149,6 +153,8 @@ export type ExecutionEvent = {
   result: ExecutionNodeResult | null;
 };
 export type ExecutionObservations = {
+  executor_snapshot: ExecutorSnapshot | null;
+  executor_binding_invalidated: boolean;
   project_id: string;
   execution_id: string;
   run_id: string;
@@ -222,6 +228,8 @@ export function fetchExecutionObservations(
   );
 }
 export type ExecutionDraftSession = {
+  executorMemberId: string;
+  executorBindingBasis: string;
   projectId: string;
   taskId: string;
   taskBasis: string;
@@ -242,6 +250,8 @@ export function openExecutionDraft(
   const task = data.tasks.find((item) => item.id === taskId);
   if (!task || !task.basis) throw new Error("Task unavailable");
   return {
+    executorMemberId: "",
+    executorBindingBasis: "",
     projectId: data.project.id,
     taskId,
     taskBasis: task.basis,
@@ -258,6 +268,7 @@ export function openExecutionDraft(
 export function executionPayload(
   session: ExecutionDraftSession,
 ): ExecutionPayload {
+  if (Boolean(session.executorMemberId) !== Boolean(session.executorBindingBasis) || (session.executorMemberId && session.mode !== "agent")) throw new Error("executorAssociationInvalid");
   if (!session.workspaceId || !session.target || !session.target.can_execute)
     throw new Error("targetRequired");
   if (session.mode === "agent" && !session.agentId)
@@ -266,6 +277,8 @@ export function executionPayload(
   if (session.mode === "command" && !nodes.length)
     throw new Error("commandCount");
   return {
+    executor_member_id: session.executorMemberId,
+    executor_binding_basis: session.executorBindingBasis,
     task_id: session.taskId,
     task_basis: session.taskBasis,
     workspace_id: session.workspaceId,
@@ -332,6 +345,7 @@ export function adoptExecutionDraft(
   data: DeliveryWorkspace,
   targets: DeliveryTargets,
   key: string,
+  bindings?: TeamRuntimeBindings,
 ): ExecutionDraftSession {
   if (
     session.projectId !== data.project.id ||
@@ -339,6 +353,18 @@ export function adoptExecutionDraft(
   )
     throw new Error("Scope changed");
   const task = data.tasks.find((item) => item.id === session.taskId);
+  if (session.executorMemberId) {
+    if (!bindings || bindings.project_id !== data.project.id) throw new Error("executorCatalogueRequired");
+    const member = bindings.members.find((row) => row.member_id === session.executorMemberId);
+    if (!member?.binding || member.status !== "current") throw new Error("executorUnavailable");
+    const boundWorkspace = targets.workspaces.find((item) => item.id === member.binding!.workspace_id);
+    const boundAgent = boundWorkspace?.agents.find((item) => item.id === member.binding!.agent_id && item.version === member.binding!.agent_version);
+    if (!task?.execution_gate.eligible || !boundWorkspace || !boundAgent) throw new Error("executorUnavailable");
+    const sameConfiguration = session.workspaceId === boundWorkspace.id && session.agentId === boundAgent.id && session.agentVersion === boundAgent.version;
+    const currentTarget = sameConfiguration && [boundWorkspace.local, ...boundWorkspace.devices].find((item) => item.id === session.target?.id && item.kind === session.target?.kind);
+    const target = currentTarget && currentTarget.can_execute && !executionTargetProblems(currentTarget, "agent", boundAgent.provider, Boolean(session.commands.length)).length ? structuredClone(currentTarget) : null;
+    return { ...session, mode: "agent", taskBasis: task.basis, executorBindingBasis: member.binding_basis, workspaceId: boundWorkspace.id, agentId: boundAgent.id, agentVersion: boundAgent.version, target, intent: { version: data.version, key }, commands: structuredClone(session.commands), preview: null };
+  }
   const workspace = targets.workspaces.find(
     (item) => item.id === session.workspaceId,
   );

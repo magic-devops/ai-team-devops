@@ -269,3 +269,21 @@ root最终核验：Manager完整850项通过（412.67秒），Web完整360项/63
 实际浏览器：团队搜索与成员深链、键盘进入成员和关联Task、停用保存、不可用负责人提示、稳定ID搜索并Enter重新分配成功，刷新仍为新owner，返回保留成员/筛选；关闭两类详情不再闪missing。390px中英日document390/390、drawer390/390，最终桌面1280/1280、详情560/560，恢复中文和默认视口。证据 `.sop-runtime/delivery-evidence/team-identity/` 包含验证、HTTP、UI、严格契约711引用、审查复验、截图、源码散列、清理与commit回执。
 
 本阶段全部非忽略源码、测试、契约、文档和记忆统一commit，不push；`.pnpm-store/`仍忽略且0跟踪。完整目标继续active，production_integration_complete=false。紧接着完成团队成员与真实AgentProfile可选绑定的预览/派发/重检闭环，再推进项目组合/归档、质量与版本发布、真实部署灰度回滚、问题智能处理与运维闭环、生产账户/模型、可信CI与规模验证；不以本阶段子集缩减全流程目标。
+
+## 团队执行成员与运行配置关联增量（2026-10-17）
+
+设计 `docs/DELIVERY_TEAM_RUNTIME_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-team-runtime.md`。Agent 成员可在详情中关联真实工作区、配置及固定版本；任务准备派发时明确选择执行成员，仍单独选择位置和后置测试。负责人、执行成员、配置、设备各自呈现。人员和工具不充当 Agent 绑定入口，同名不推导关联。
+
+关联使用独立代次和解绑墓碑，绑定/采用版本/解绑递增，停用解除后恢复须明确重绑；改名不改变依据。绑定要求项目 configure 与同租户工作区 read/实际访问，不要求或授予 execute/config。配置者可在运行不可读时解除坏关联。目录只读且不返回配置正文/环境/凭据，状态只称关联有效，不能代表设备在线、账号认证或执行授权。
+
+派发前重新校验固定关联，变化永久阻止原 pending 意图，A→B→A不复活；标记独立于Task stale、负责人、验收及排期依据。外部receipt/run（包括planned）是交接边界，跨库恢复先查原receipt，不重复创建运行。交接后原成员/配置快照和测试人审保留；解绑不能冒称撤销Core运行或阻止其启动领取。未知原始定义不能重建receipt请求，保持原数据并关闭操作，不补造历史关联。
+
+成员详情、关联编辑、派发计划、预览/历史四界面完整覆盖空态、读取失败、受限、版本冲突及明确采用。选择失效保留草稿，不静默转直接配置；can_bind/can_unbind分开。`GET /delivery/team-runtime-bindings`、两项commands、ExecutionQueue成对executor字段、新快照及观测、严格OpenAPI同步；CLI `sop delivery team-runtime --json` 和SDK `delivery_team_runtime_bindings()`纯读，写入沿用已有固定版本/幂等通用命令。
+
+root最终Manager全量 **904通过**（295.54秒），Web全量 **384项/69文件**（27.54秒），SDK/CLI相关 **13项**、类型及生产构建通过（47.03秒）。初始Manager903通过/1处未知原快照回归已最小修复并在最终全量消除；类型检查发现新增测试fixture缺字段，补全真实契约后通过。唯一独立增量审查1个P2的两项恢复界面症状已修复复验：已交接不再提示重新计划、启动使用恢复出的run ID。lint差异新增0；现有弃用/大包提示留档，统计有重叠不相加。
+
+真实公开HTTP+原生worker/agentd+本地Codex协议fixture证明：pending解绑重绑永久拒绝并可取消；已planned后解绑仍完成真实产物/独立Python测试/人工验收，负责人保持人员，原执行快照不变。实际GUI键盘保存关联、明确成员/设备/测试预览与保存、失效提示/取消、已验证三阶段展示均通过；390px三语document390/drawer390，派发表单374/374，最后恢复中文默认视口。改名关联依据/代次/任务验收不变；纯GET前后28张表一致。外部模型调用0、厂商账号认证仍未知，没有宣称生产模型质量已验。
+
+证据 `.sop-runtime/delivery-evidence/team-runtime/`：validation/actual-loop/final-http/ui/contract、唯一审查、RED/GREEN与完整日志、原三库before-stage一致备份、截图、源码/证据散列及清理/commit回执。无新schema迁移。阶段全部非忽略改动统一commit，不push；依赖store、凭据、隔离数据库保持忽略。
+
+完整目标继续active，production_integration_complete=false。下一阶段推进项目组合与项目归档治理，再补质量/版本发布、可信CI提交证据、真实部署灰度回滚、问题智能处理与运维闭环、节点内部日志/干预、生产账户/模型及规模验证。参考平台按实际能力吸收，不以本阶段局部交付缩减全链路范围。

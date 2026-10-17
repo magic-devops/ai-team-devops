@@ -225,6 +225,22 @@ class VerificationContext:
             and snapshots_match(entry.get("snapshot"), definition["snapshot"])
         )
 
+    def pending_executor_binding_invalidated(self, entry):
+        """An affiliation gate before handoff; never part of task scope or proof."""
+        if (
+            entry.get("run_id")
+            or not entry.get("executor_member_id")
+            or entry.get("status") in {"accepted", "changes_requested", "cancelled"}
+        ):
+            return False
+        if entry.get("executor_binding_invalidated") or not entry.get("executor_snapshot"):
+            return True
+        from .delivery_team_runtime import execution_binding_current
+
+        return not execution_binding_current(
+            self.project, self.data, entry["executor_member_id"], entry.get("executor_binding_basis", "")
+        )["current"]
+
     def native_accepted(self, task_id):
         if not self.execution_valid(task_id):
             return False

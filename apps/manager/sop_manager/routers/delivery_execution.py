@@ -91,6 +91,7 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
     from hermes_core.execution_targets import select_execution_target
 
     from .delivery_plan import require_dependencies
+    from .delivery_team_runtime import resolve_executor_binding
     from .delivery_verification import VerificationContext
 
     principal, workspace = context(store, user, body.workspace_id, "execute")
@@ -105,6 +106,20 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
     gate = verification.execution_gate(task.id)
     if not gate["eligible"]:
         raise HTTPException(409, gate["reasons"][0])
+    executor_snapshot = None
+    if body.executor_member_id:
+        executor_snapshot = resolve_executor_binding(
+            db,
+            project,
+            state,
+            user,
+            store,
+            member_id=body.executor_member_id,
+            expected_basis=body.executor_binding_basis,
+            workspace_id=body.workspace_id,
+            agent_id=body.agent_id,
+            agent_version=body.agent_version,
+        )
     agent = None
     if body.agent_id:
         agent = store.get(principal, workspace["id"], "agents", body.agent_id)
@@ -140,6 +155,7 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
         "workspace_id": workspace["id"],
         "workspace_version": workspace["version"],
         "snapshot": snapshot,
+        "executor_snapshot": executor_snapshot,
         "target": target,
         "agent": None
         if not agent
@@ -167,6 +183,8 @@ def _queue(db, project, user, state, body, store, execution=None):
         "plan_basis": plan["plan_basis"],
         "target_snapshot": plan["target"],
         "agent_snapshot": plan["agent"],
+        "executor_snapshot": plan["executor_snapshot"],
+        "executor_binding_invalidated": False,
         "requested_by": user.id,
         "workspace_version": plan["workspace_version"],
         "snapshot": plan["snapshot"],
@@ -187,6 +205,9 @@ def _queue(db, project, user, state, body, store, execution=None):
 
 def _envelope_data(entry):
     snapshot = entry["snapshot"]
+    source = {"kind": "manager.delivery", "execution_id": entry["id"], "snapshot": snapshot}
+    if entry.get("executor_snapshot") is not None:
+        source["executor_snapshot"] = entry["executor_snapshot"]
     return {
         "title": snapshot["title"],
         "description": "\n\n".join(
@@ -195,7 +216,7 @@ def _envelope_data(entry):
             if text
         ),
         "acceptance_criteria": "\n".join(snapshot["acceptance_criteria"]),
-        "source": {"kind": "manager.delivery", "execution_id": entry["id"], "snapshot": snapshot},
+        "source": source,
     }
 
 
@@ -219,7 +240,9 @@ def _dispatch_body(entry):
 
 def _recover_dispatch(store, principal, entry):
     """Recover committed external receipts before revalidating an unstarted plan."""
-    if not entry.get("target_basis"):
+    snapshot = entry.get("snapshot")
+    # A missing original definition cannot identify an immutable external request.
+    if not entry.get("target_basis") or not isinstance(snapshot, dict) or "requirement" not in snapshot:
         return False
     envelope = store.receipt(
         principal, entry["workspace_id"], "create:tasks", entry["id"], _envelope_data(entry)
@@ -439,6 +462,51 @@ def _review(entry, run, task, flow, body, user, store, principal):
         )
 
 
+def _handoff_pending(db, project, state, entry, store, principal, execution):
+    """Recover committed work first; authorize only a genuinely new handoff."""
+    if entry.get("run_id") or _recover_dispatch(
+        store, replace(principal, actor=entry["requested_by"]), entry
+    ):
+        return
+    originator = db.get(User, entry["requested_by"])
+    if not originator or originator.status != "active":
+        raise HTTPException(403, "Original dispatcher is no longer active; cancel and prepare a new plan")
+    check_project_access(originator, project.id, db)
+    dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
+    from .delivery_verification import VerificationContext
+
+    verification = VerificationContext(db, project, state)
+    if (
+        not verification.execution_snapshot_current(entry)
+        or workspace["version"] != entry["workspace_version"]
+    ):
+        raise HTTPException(409, "Dispatch context changed; cancel this intent and prepare a new plan")
+    if verification.pending_executor_binding_invalidated(entry):
+        raise HTTPException(
+            409,
+            {
+                "code": "executor_binding_invalidated",
+                "message": "The execution member association changed. Cancel this pending intent and prepare a new plan.",
+            },
+        )
+    if entry.get("executor_member_id"):
+        from .delivery_team_runtime import resolve_executor_binding
+
+        resolve_executor_binding(
+            db,
+            project,
+            state,
+            originator,
+            store,
+            member_id=entry["executor_member_id"],
+            expected_basis=entry["executor_binding_basis"],
+            workspace_id=entry["workspace_id"],
+            agent_id=entry["agent_id"],
+            agent_version=entry["agent_version"],
+        )
+    _dispatch(store, dispatcher, entry, execution)
+
+
 def apply_execution(db, project, user, state, action, body, store, execution=None):
     try:
         if action == "execution.queue":
@@ -450,29 +518,11 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         # Reader must independently have workspace access; replay uses the original
         # actor so a second operator cannot create a second external receipt/run.
         permission = {"execution.review": "approve", "execution.cancel": "execute"}.get(action, "read")
-        principal, workspace = context(store, user, entry["workspace_id"], permission)
+        principal, _ = context(store, user, entry["workspace_id"], permission)
         if action == "execution.cancel":
             _cancel(db, project, state, entry, store, principal)
             return entry["id"], before
-        if not entry["run_id"]:
-            originator = db.get(User, entry["requested_by"])
-            if not originator or originator.status != "active":
-                raise HTTPException(
-                    403, "Original dispatcher is no longer active; cancel and prepare a new plan"
-                )
-            check_project_access(originator, project.id, db)
-            dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
-            from .delivery_verification import VerificationContext
-
-            verification = VerificationContext(db, project, state)
-            if (
-                not verification.execution_snapshot_current(entry)
-                or workspace["version"] != entry["workspace_version"]
-            ):
-                raise HTTPException(
-                    409, "Dispatch context changed; cancel this intent and prepare a new plan"
-                )
-            _dispatch(store, dispatcher, entry, execution)
+        _handoff_pending(db, project, state, entry, store, principal, execution)
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":
             if entry["stale"]:

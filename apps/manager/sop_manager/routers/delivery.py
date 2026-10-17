@@ -34,6 +34,7 @@ from .delivery_scheduling_contract import (
     SchedulePreviewResponse,
     ScheduleResponse,
 )
+from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
 from .delivery_service import (
     apply_action,
     identifier,
@@ -204,6 +205,25 @@ def delivery_progress_baseline(
     return baseline_detail(db, _project(db, user, project_id), baseline_id)
 
 
+@router.get("/team-runtime-bindings", response_model=TeamRuntimeBindingsResponse)
+def team_runtime_bindings(
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_team_runtime import runtime_bindings_view
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    data = row.data if row else initial_state()
+    return runtime_bindings_view(
+        db, project, data, user, getattr(request.app.state, "hermes_store", None),
+        can_configure=_permissions(db, user, project)["configure"],
+        version=row.version if row else 0,
+    )
+
+
 @router.get("/execution-targets", response_model=ExecutionTargetsResponse)
 def execution_targets(
     request: Request,
@@ -332,6 +352,8 @@ def task_plan_preview(
 
 
 def _command_permission(action, payload):
+    if action in {"member.runtime.bind", "member.runtime.unbind"}:
+        return "configure"
     if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
         action == "project.update" and {"name", "description"} & payload.keys()
     ):
@@ -461,6 +483,11 @@ def execute(
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action in {"member.runtime.bind", "member.runtime.unbind"}:
+        from .delivery_team_runtime import apply_runtime_binding
+
+        store = getattr(request.app.state, "hermes_store", None) if request else None
+        return apply_runtime_binding(db, project, data, user, store, action, payload)
     if action in {"tasks.schedule", "member.calendar.save"}:
         from .delivery_scheduling import apply_scheduling
 

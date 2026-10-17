@@ -26,7 +26,7 @@ function memberDrawer(id: string, projectId = "project-a") {
   hooks.effects = [];
   vi.stubGlobal("location", { hash: "#/dev-flow?view=team" });
   const workspace = { project: { id: projectId }, members: projectId === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }] : [], tasks: [], permissions: { configure: false } } as unknown as DeliveryWorkspace;
-  const tree = DeliveryTeamMembers({ workspace, calendarFailed: false, route: { ...parseSchedulingRoute("#/dev-flow?view=team"), teamMemberId: id }, onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn() });
+  const tree = DeliveryTeamMembers({ workspace, sessionId: "test", onSaved: vi.fn(), calendarFailed: false, route: { ...parseSchedulingRoute("#/dev-flow?view=team"), teamMemberId: id }, onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn() });
   const drawer = findDrawer(tree)!;
   hooks.effects.forEach((effect) => effect());
   return drawer;

@@ -41,7 +41,7 @@ describe("team roster states", () => {
   const workspace = { project: { id: "project" }, members, tasks: [], permissions: { write: true, configure: false, approve: false } } as unknown as DeliveryWorkspace;
   function render(extra = {}) {
     vi.stubGlobal("location", { hash: "#/dev-flow?view=team" });
-    return renderToStaticMarkup(createElement(DeliveryTeamMembers, { workspace, calendarFailed: true, route: parseSchedulingRoute("#/dev-flow?view=team"), onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn(), ...extra }));
+    return renderToStaticMarkup(createElement(DeliveryTeamMembers, { workspace, sessionId: "test", onSaved: vi.fn(), calendarFailed: true, route: parseSchedulingRoute("#/dev-flow?view=team"), onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn(), ...extra }));
   }
   it("keeps the roster readable when calendars fail, with stable IDs and permission explanation", () => {
     const html = render();

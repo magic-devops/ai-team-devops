@@ -6,12 +6,14 @@ import type { DeliverySchedule, SchedulingRoute } from "@/lib/deliveryScheduling
 import { filterTeamMembers } from "@/lib/deliveryTeamIdentity";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
+import { DeliveryMemberRuntime } from "./DeliveryMemberRuntime";
 import "./delivery-team.css";
 
-export function DeliveryTeamMembers({ workspace, schedule, calendarFailed, route, onRoute, onEdit, onCalendar, onRetryCalendar, onTask }: {
+export function DeliveryTeamMembers({ workspace, schedule, calendarFailed, route, onRoute, onEdit, onCalendar, onRetryCalendar, onTask, sessionId, onSaved }: {
   workspace: DeliveryWorkspace; schedule?: DeliverySchedule; calendarFailed: boolean; route: SchedulingRoute;
   onRoute: (patch: Partial<SchedulingRoute>) => void; onEdit: (member: DeliveryMember) => void;
   onCalendar: (id: string) => void; onRetryCalendar: () => void; onTask: (target: DeliveryInboxTarget) => void;
+  sessionId: string; onSaved: (workspace: DeliveryWorkspace) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, values?: Record<string, unknown>) => t(`deliveryTeam.${key}`, values);
@@ -64,6 +66,7 @@ export function DeliveryTeamMembers({ workspace, schedule, calendarFailed, route
           {canConfigure && selected.active && <Button disabled={!calendar?.kind || calendarFailed} onClick={() => onCalendar(selected.id)}>{tr("configureCalendar")}</Button>}
         </div>
         {calendarFailed && <Alert type="error" title={tr("calendarUnavailable")} action={<Button size="small" onClick={onRetryCalendar}>{tr("retry")}</Button>} />}
+        {selected.kind === "agent" && <DeliveryMemberRuntime key={`${workspace.project.id}:${sessionId}:${selected.id}`} member={selected} projectId={workspace.project.id} sessionId={sessionId} onSaved={onSaved} />}
         {selected.kind !== "tool" && <section className="delivery-team-task-list"><h4>{tr("assignedTasks")} · {tasks.length}</h4>{!tasks.length ? <p className="delivery-hint">{tr("noTasks")}</p> : tasks.map((task) => <Button key={task.id} type="link" onClick={() => onTask({ view: "team", requirement_id: task.req_id, task_id: task.id, detail: "tasks" })}><span>{task.title}<small>{identity(workspace.members, task.owner_id)}</small></span></Button>)}</section>}
       </>}
     </Drawer>

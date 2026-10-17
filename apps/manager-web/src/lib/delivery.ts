@@ -2,6 +2,7 @@ import { request } from "./http";
 import type { TaskPlanning } from "./deliveryTaskPlan";
 import type { TaskAcceptance } from "./taskAcceptance";
 import type { ProgressState } from "./deliveryProgress";
+import type { ExecutorSnapshot } from "./deliveryTeamRuntime";
 import type {
   ExecutionAgent,
   ExecutionTarget,
@@ -132,6 +133,8 @@ export type DeliveryExecution = {
   target_device_id?: string;
   target_snapshot?: ExecutionTarget;
   agent_snapshot?: ExecutionAgent | null;
+  executor_snapshot?: ExecutorSnapshot | null;
+  executor_binding_invalidated?: boolean;
   test_nodes?: ExecutionPreview["nodes"];
   plan_nodes?: ExecutionPreview["nodes"];
   plan_basis?: string;
@@ -284,6 +287,8 @@ export type DeliveryAction =
   | "resource.save"
   | "resource.archive"
   | "member.save"
+  | "member.runtime.bind"
+  | "member.runtime.unbind"
   | "milestone.save"
   | "requirement.create"
   | "requirement.update"

@@ -4743,6 +4743,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/delivery/team-runtime-bindings:
+    get:
+      tags:
+      - delivery
+      summary: Team Runtime Bindings
+      operationId: deliveryTeamRuntimeBindings
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamRuntimeBindingsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Project context missing
+        '401':
+          description: Authentication required
+        '403':
+          description: Project access denied
+      description: Read-only saved Agent configuration associations and accessible pinned profiles. Current means an association
+        is valid, not that a device, credentials or execute permissions are ready.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -9071,16 +9107,16 @@ components:
           - execution.cancel
           - progress.record
           - baseline.create
+          - member.runtime.bind
+          - member.runtime.unbind
         payload:
           type: object
-          description: 'Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.
-            device requires target_device_id; local requires it empty. Select agent_id + fixed agent_version with optional explicit
-            test_nodes, or command nodes with test_node_ids. Agent test IDs are server-derived. No implicit local fallback. sync/cancel
-            require id.
-
-            review requires id, decision (accept/request_changes), comment and run_version.
-
-            '
+          description: "Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.\
+            \ device requires target_device_id; local requires it empty. Select agent_id + fixed agent_version with optional explicit\
+            \ test_nodes, or command nodes with test_node_ids. Agent test IDs are server-derived. No implicit local fallback.\
+            \ sync/cancel require id.\nreview requires id, decision (accept/request_changes), comment and run_version.\n Team\
+            \ runtime binding requires project configure and accessible same-tenant runtime read; it does not grant execute. Executor\
+            \ association is optional, explicit and fixed before handoff."
         expected_version:
           type: integer
           minimum: 0
@@ -9219,6 +9255,26 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/DeliveryTaskCreate'
+      - if:
+          properties:
+            action:
+              const: member.runtime.bind
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/MemberRuntimeBind'
+      - if:
+          properties:
+            action:
+              const: member.runtime.unbind
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/MemberRuntimeUnbind'
     TaskEdit:
       additionalProperties: false
       properties:
@@ -10337,6 +10393,17 @@ components:
           minimum: 1
           title: Agent Version
           type: integer
+        executor_member_id:
+          default: ''
+          maxLength: 100
+          pattern: ^(?:|[^\s\x00-\x1f\x7f]+)$
+          title: Executor Member Id
+          type: string
+        executor_binding_basis:
+          default: ''
+          pattern: ^(?:|[0-9a-f]{64})$
+          title: Executor Binding Basis
+          type: string
         nodes:
           items:
             $ref: '#/components/schemas/Node'
@@ -10678,6 +10745,10 @@ components:
           anyOf:
           - $ref: '#/components/schemas/ExecutionAgent'
           - type: 'null'
+        executor_snapshot:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutorSnapshot'
+          - type: 'null'
         nodes:
           items:
             $ref: '#/components/schemas/Node'
@@ -10698,6 +10769,7 @@ components:
       - snapshot
       - target
       - agent
+      - executor_snapshot
       - nodes
       - test_node_ids
       title: ExecutionPreviewResponse
@@ -10992,6 +11064,13 @@ components:
         stale:
           title: Stale
           type: boolean
+        executor_snapshot:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutorSnapshot'
+          - type: 'null'
+        executor_binding_invalidated:
+          title: Executor Binding Invalidated
+          type: boolean
         observed_at:
           title: Observed At
           type: string
@@ -11030,6 +11109,8 @@ components:
       - attempt
       - status
       - stale
+      - executor_snapshot
+      - executor_binding_invalidated
       - observed_at
       - events
       - next_cursor
@@ -13890,3 +13971,302 @@ components:
             $ref: '#/components/schemas/TaskReviewReason'
       description: Current scoped responsibility identity. Unavailable IDs remain identifiable; labels never select or authorize
         owners.
+    ExecutorSnapshot:
+      additionalProperties: false
+      properties:
+        member_id:
+          title: Member Id
+          type: string
+        member_name:
+          title: Member Name
+          type: string
+        binding_basis:
+          title: Binding Basis
+          type: string
+        binding_generation:
+          title: Binding Generation
+          type: integer
+        workspace_id:
+          title: Workspace Id
+          type: string
+        workspace_name:
+          title: Workspace Name
+          type: string
+        agent_id:
+          title: Agent Id
+          type: string
+        agent_version:
+          title: Agent Version
+          type: integer
+        agent_title:
+          title: Agent Title
+          type: string
+        profile_digest:
+          title: Profile Digest
+          type: string
+        provider:
+          title: Provider
+          type: string
+        recorded_at:
+          title: Recorded At
+          type: string
+        recorded_by:
+          title: Recorded By
+          type: string
+      required:
+      - member_id
+      - member_name
+      - binding_basis
+      - binding_generation
+      - workspace_id
+      - workspace_name
+      - agent_id
+      - agent_version
+      - agent_title
+      - profile_digest
+      - provider
+      - recorded_at
+      - recorded_by
+      title: ExecutorSnapshot
+      type: object
+    MemberRuntimeBind:
+      additionalProperties: false
+      properties:
+        member_id:
+          maxLength: 100
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Member Id
+          type: string
+        workspace_id:
+          maxLength: 64
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Workspace Id
+          type: string
+        agent_id:
+          maxLength: 64
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Agent Id
+          type: string
+        agent_version:
+          minimum: 1
+          title: Agent Version
+          type: integer
+      required:
+      - member_id
+      - workspace_id
+      - agent_id
+      - agent_version
+      title: MemberRuntimeBind
+      type: object
+    MemberRuntimeUnbind:
+      additionalProperties: false
+      properties:
+        member_id:
+          maxLength: 100
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Member Id
+          type: string
+      required:
+      - member_id
+      title: MemberRuntimeUnbind
+      type: object
+    MemberRuntimeState:
+      additionalProperties: false
+      properties:
+        member_id:
+          title: Member Id
+          type: string
+        binding_basis:
+          title: Binding Basis
+          type: string
+        generation:
+          title: Generation
+          type: integer
+        binding:
+          anyOf:
+          - $ref: '#/components/schemas/RuntimeBinding'
+          - type: 'null'
+        status:
+          enum:
+          - unbound
+          - current
+          - stale
+          - unavailable
+          title: Status
+          type: string
+        reasons:
+          items:
+            $ref: '#/components/schemas/RuntimeBindingReason'
+          title: Reasons
+          type: array
+        permissions:
+          $ref: '#/components/schemas/RuntimeBindingPermissions'
+      required:
+      - member_id
+      - binding_basis
+      - generation
+      - binding
+      - status
+      - reasons
+      - permissions
+      title: MemberRuntimeState
+      type: object
+    RuntimeBinding:
+      additionalProperties: false
+      properties:
+        workspace_id:
+          title: Workspace Id
+          type: string
+        agent_id:
+          title: Agent Id
+          type: string
+        agent_version:
+          title: Agent Version
+          type: integer
+        profile_digest:
+          title: Profile Digest
+          type: string
+        source:
+          $ref: '#/components/schemas/RuntimeBindingSource'
+        bound_by:
+          title: Bound By
+          type: string
+        bound_at:
+          title: Bound At
+          type: string
+      required:
+      - workspace_id
+      - agent_id
+      - agent_version
+      - profile_digest
+      - source
+      - bound_by
+      - bound_at
+      title: RuntimeBinding
+      type: object
+    RuntimeBindingAgent:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        title:
+          title: Title
+          type: string
+        provider:
+          title: Provider
+          type: string
+      required:
+      - id
+      - version
+      - title
+      - provider
+      title: RuntimeBindingAgent
+      type: object
+    RuntimeBindingPermissions:
+      additionalProperties: false
+      properties:
+        can_bind:
+          title: Can Bind
+          type: boolean
+        can_unbind:
+          title: Can Unbind
+          type: boolean
+      required:
+      - can_bind
+      - can_unbind
+      title: RuntimeBindingPermissions
+      type: object
+    RuntimeBindingReason:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: RuntimeBindingReason
+      type: object
+    RuntimeBindingSource:
+      additionalProperties: false
+      properties:
+        workspace_name:
+          title: Workspace Name
+          type: string
+        agent_title:
+          title: Agent Title
+          type: string
+        provider:
+          title: Provider
+          type: string
+      required:
+      - workspace_name
+      - agent_title
+      - provider
+      title: RuntimeBindingSource
+      type: object
+    RuntimeBindingWorkspace:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        agents:
+          items:
+            $ref: '#/components/schemas/RuntimeBindingAgent'
+          title: Agents
+          type: array
+      required:
+      - id
+      - name
+      - agents
+      title: RuntimeBindingWorkspace
+      type: object
+    TeamRuntimeBindingsResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        runtime_configured:
+          title: Runtime Configured
+          type: boolean
+        workspaces:
+          items:
+            $ref: '#/components/schemas/RuntimeBindingWorkspace'
+          title: Workspaces
+          type: array
+        members:
+          items:
+            $ref: '#/components/schemas/MemberRuntimeState'
+          title: Members
+          type: array
+      required:
+      - project_id
+      - version
+      - as_of
+      - runtime_configured
+      - workspaces
+      - members
+      title: TeamRuntimeBindingsResponse
+      type: object

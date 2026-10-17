@@ -181,6 +181,7 @@ export function DeliveryExecutionPanel({
       )}
       {draft && targets.data && (
         <ExecutionPlanEditor
+          members={data.members} sessionId={sessionId}
           initial={draft}
           initialTargets={structuredClone(targets.data)}
           canConfigure={

@@ -2,6 +2,8 @@
 
 import base64
 import json
+from copy import deepcopy
+from dataclasses import replace
 
 from fastapi import HTTPException
 from hermes_core.models import CoreError
@@ -88,10 +90,13 @@ def _after(cursor, project_id, execution_id, run_id):
 def observations(db, project, user, state, entry, store, execution, permissions, *, limit, cursor):
     from hermes_core.execution_targets import validate_execution_target_snapshot
 
-    from .delivery_execution import CLOSED, context
+    from .delivery_execution import CLOSED, _recover_dispatch, context
     from .delivery_verification import VerificationContext
 
     principal, _ = context(store, user, entry["workspace_id"])
+    entry = deepcopy(entry)
+    if not entry.get("run_id"):
+        _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
     run_id = entry.get("run_id") or ""
     after = _after(cursor, project.id, entry["id"], run_id)
     run = store.get(principal, entry["workspace_id"], "runs", run_id) if run_id else None
@@ -101,7 +106,9 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         else []
     )
     more, rows = len(rows) > limit, rows[:limit]
-    actionable = VerificationContext(db, project, state).execution_snapshot_current(entry)
+    verification = VerificationContext(db, project, state)
+    actionable = verification.execution_snapshot_current(entry)
+    executor_invalidated = verification.pending_executor_binding_invalidated(entry)
     stale = not actionable
     run_data = run["data"] if run else {}
     attempt = run_data.get("attempt", 1)
@@ -177,6 +184,8 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         if run["status"] == "completed"
         else run["status"],
         "stale": stale,
+        "executor_snapshot": entry.get("executor_snapshot"),
+        "executor_binding_invalidated": executor_invalidated,
         "observed_at": stamp(),
         "events": [
             {
@@ -226,7 +235,10 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             and "approve" in principal.permissions
             and entry["status"] not in CLOSED
             and bool(run and run["status"] in {"completed", "failed", "cancelled"}),
-            "can_sync": actionable and permissions["write"] and "read" in principal.permissions,
+            "can_sync": actionable
+            and not executor_invalidated
+            and permissions["write"]
+            and "read" in principal.permissions,
         },
         "log_streaming": False,
     }

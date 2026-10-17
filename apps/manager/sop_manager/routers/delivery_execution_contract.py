@@ -1,9 +1,11 @@
 """Typed execution proposals and observations; runtime remains the evidence authority."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from hermes_core.models import Node
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from .delivery_team_runtime_contract import ExecutorSnapshot
 
 
 class ExecutionInput(BaseModel):
@@ -19,12 +21,23 @@ class ExecutionQueue(ExecutionInput):
     target_device_id: str = Field(default="", max_length=64)
     agent_id: str = Field(default="", max_length=64)
     agent_version: int = Field(default=1, ge=1, strict=True)
+    executor_member_id: Annotated[str, StringConstraints(
+        strict=True, strip_whitespace=False, max_length=100,
+        pattern=r"^(?:|[^\s\x00-\x1f\x7f]+)$",
+    )] = ""
+    executor_binding_basis: Annotated[str, StringConstraints(
+        strict=True, strip_whitespace=False, pattern=r"^(?:|[0-9a-f]{64})$",
+    )] = ""
     nodes: list[Node] = Field(default_factory=list, max_length=32)
     test_nodes: list[Node] = Field(default_factory=list, max_length=32)
     test_node_ids: list[str] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def plan_valid(self):
+        if bool(self.executor_member_id) != bool(self.executor_binding_basis):
+            raise ValueError("Choose an executor member and its fixed binding basis together")
+        if self.executor_member_id and not self.agent_id:
+            raise ValueError("A team executor requires an explicit Agent configuration")
         if (self.target_kind == "device") != bool(self.target_device_id):
             raise ValueError("Choose an explicit local target or a device ID")
         if bool(self.agent_id) == bool(self.nodes):
@@ -149,6 +162,7 @@ class ExecutionPreviewResponse(ExecutionInput):
     snapshot: ExecutionSnapshot
     target: ExecutionTarget
     agent: ExecutionAgent | None
+    executor_snapshot: ExecutorSnapshot | None
     nodes: list[Node]
     test_node_ids: list[str]
 
@@ -225,6 +239,8 @@ class ExecutionObservationsResponse(ExecutionInput):
     attempt: int
     status: str
     stale: bool
+    executor_snapshot: ExecutorSnapshot | None
+    executor_binding_invalidated: bool
     observed_at: str
     events: list[ExecutionObservationEvent]
     next_cursor: str | None

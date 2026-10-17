@@ -135,6 +135,10 @@ class ManagerClient:
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")
 
+    def delivery_team_runtime_bindings(self) -> dict[str, Any]:
+        """Read saved team associations and accessible configuration versions; grants no execute rights."""
+        return self._request("GET", "/api/v1/delivery/team-runtime-bindings")
+
     def delivery_execution_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Validate the caller's pinned target and task without adopting newer versions."""
         return self._request("POST", "/api/v1/delivery/execution-preview", json_body=dict(body))
