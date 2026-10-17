@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Form, Input, InputNumber, Segmented, Select, Space, Steps, Switch, Table, Tag } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -24,13 +25,13 @@ const DEFAULT_ROUTE_FORM = { name: "", task_type: "general", model_id: "", prior
 const DEFAULT_DECISION_FORM = { task_type: "code", estimated_prompt_tokens: 4000, estimated_completion_tokens: 1200, required_quality: "balanced", allow_fallback: true };
 const DEFAULT_THROTTLE_FORM = { model_id: "", rpm_limit: 60, tpm_limit: 100000, enabled: true };
 const DEFAULT_USAGE_FORM = { model_id: "", prompt_tokens: 1000, completion_tokens: 500, cost_usd: 0.01, latency_ms: 800, task_type: "general" };
-const DEFAULT_ATTRIBUTION_FORM = { min_cost_usd: 0, dry_run: true, create_tasks: false, assigned_to: "AI Platform", dev_tool: "codex", note: "" };
+const DEFAULT_ATTRIBUTION_FORM = { min_cost_usd: 0, dry_run: true, create_tasks: false, owner_id: "", dev_tool: "codex", note: "" };
 const DEFAULT_EVAL_FORM = {
   model_ids: "gpt-5-mini, claude-sonnet",
   min_score: 75,
   dry_run: true,
   create_tasks: false,
-  assigned_to: "AI Platform",
+  owner_id: "",
   dev_tool: "codex",
   note: "",
   cases_json: JSON.stringify([
@@ -68,7 +69,7 @@ const DEFAULT_AUDIT_FORM = {
   allow_pii: false,
   allow_secrets: false,
   actions: ["create_task"],
-  assigned_to: "AI Platform",
+  owner_id: "",
   dev_tool: "codex",
 };
 const DEFAULT_POLICY_FORM = {
@@ -213,7 +214,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
     onSuccess: (data) => setFallbackDrillResult(data),
   });
   const costAnomalyTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.llmCostAnomalyTasks({ dry_run: dryRun, assigned_to: "AI Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.llmCostAnomalyTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => setCostAnomalyResult(data),
   });
   const costAttribution = useMutation({
@@ -222,7 +223,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
       dry_run: draft.dry_run,
       persist: true,
       create_tasks: draft.create_tasks,
-      assigned_to: draft.assigned_to,
+      owner_id: draft.owner_id,
       dev_tool: draft.dev_tool,
       note: draft.note,
     }),
@@ -259,7 +260,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
         dry_run: draft.dry_run,
         persist: true,
         create_tasks: draft.create_tasks,
-        assigned_to: draft.assigned_to,
+        owner_id: draft.owner_id,
         dev_tool: draft.dev_tool,
         note: draft.note,
       });
@@ -313,7 +314,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
     },
   });
   const governanceTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.llmGatewayGovernanceTasks({ dry_run: dryRun, assigned_to: "AI Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.llmGatewayGovernanceTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => setTaskResult(data),
   });
   const imBriefing = useMutation({
@@ -932,7 +933,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                 <p className="text-xs text-[var(--muted)]">执行人/工具</p>
-                <p className="mt-1 truncate text-sm font-semibold">{attributionForm.assigned_to} · {attributionForm.dev_tool}</p>
+                <p className="mt-1 truncate text-sm font-semibold">{attributionForm.owner_id} · {attributionForm.dev_tool}</p>
               </div>
             </div>
             <div className="mt-4 rounded-lg bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
@@ -1093,7 +1094,7 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                 <p className="text-xs text-[var(--muted)]">负责人</p>
-                <p className="mt-1 truncate text-sm font-semibold">{evalForm.assigned_to}</p>
+                <p className="mt-1 truncate text-sm font-semibold">{evalForm.owner_id}</p>
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
                 <p className="text-xs text-[var(--muted)]">用例 JSON</p>
@@ -1493,8 +1494,8 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
               <Form.Item name="create_tasks" label="同步生成治理任务" valuePropName="checked">
                 <Switch />
               </Form.Item>
-              <Form.Item name="assigned_to" label="负责人">
-                <Input />
+              <Form.Item name="owner_id" label="负责人">
+                <ProjectOwnerSelect />
               </Form.Item>
               <Form.Item name="dev_tool" label="执行工具">
                 <Input />
@@ -1547,8 +1548,8 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
               <Form.Item name="create_tasks" label="同步生成治理任务" valuePropName="checked">
                 <Switch />
               </Form.Item>
-              <Form.Item name="assigned_to" label="负责人">
-                <Input />
+              <Form.Item name="owner_id" label="负责人">
+                <ProjectOwnerSelect />
               </Form.Item>
               <Form.Item name="dev_tool" label="执行工具">
                 <Input />
@@ -1653,8 +1654,8 @@ export function LlmGatewayWorkbench({ focused = false, initialTab = "health" }: 
               <Form.Item name="max_prompt_tokens" label="最大 Prompt tokens">
                 <InputNumber min={1} precision={0} className="w-full" />
               </Form.Item>
-              <Form.Item name="assigned_to" label="负责人">
-                <Input />
+              <Form.Item name="owner_id" label="负责人">
+                <ProjectOwnerSelect />
               </Form.Item>
               <Form.Item name="dev_tool" label="执行工具">
                 <Input />

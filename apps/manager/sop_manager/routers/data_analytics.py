@@ -8,6 +8,8 @@ import csv
 import copy
 import io
 import json
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -1066,32 +1068,32 @@ class DataDevTemplateIn(BaseModel):
     description: str = Field("", max_length=3000)
 
 
-class DataDevTasksIn(BaseModel):
+class DataDevTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     priority: str = Field("", max_length=2)
-    assigned_to: str = Field("", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("", max_length=80)
 
 
-class DataDevScheduleIn(BaseModel):
+class DataDevScheduleIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     max_parallel: int = Field(4, ge=1, le=20)
     policy: str = Field("quality_first", pattern="^(quality_first|balanced|throughput|cost_saver)$")
     priority: str = Field("", max_length=2)
-    assigned_to: str = Field("", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("", max_length=80)
     event: str = Field("manual", max_length=80)
 
 
-class DataDevScheduleActionIn(BaseModel):
+class DataDevScheduleActionIn(TaskOwnerInput):
     action: str = Field(..., pattern="^(rerun|cancel|archive|restore)$")
     dry_run: bool = True
     max_parallel: int = Field(4, ge=1, le=20)
     policy: str = Field("quality_first", pattern="^(quality_first|balanced|throughput|cost_saver)$")
     priority: str = Field("", max_length=2)
-    assigned_to: str = Field("", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("", max_length=80)
     note: str = Field("", max_length=1000)
 
@@ -1111,13 +1113,13 @@ class DataDevPacketActionIn(BaseModel):
     note: str = Field("", max_length=1000)
 
 
-class DataDevEvidenceTasksIn(BaseModel):
+class DataDevEvidenceTasksIn(TaskOwnerInput):
     schedule_id: str = Field("", max_length=120)
     packet_id: str = Field("", max_length=120)
     decisions: list[str] = Field(default_factory=lambda: ["block", "warn"], max_length=5)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("Data Quality Agent", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -1129,14 +1131,14 @@ class DataDevEvidenceNotifyIn(BaseModel):
     dry_run: bool = True
 
 
-class DataDevRunbookIn(BaseModel):
+class DataDevRunbookIn(TaskOwnerInput):
     schedule_id: str = Field("", max_length=120)
     packet_id: str = Field("", max_length=120)
     decisions: list[str] = Field(default_factory=lambda: ["block", "warn"], max_length=5)
     include_unclaimed: bool = True
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("Data Automation Agent", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -1149,11 +1151,11 @@ class DataAlertNotifyIn(BaseModel):
     dry_run: bool = True
 
 
-class DataGovernanceTasksIn(BaseModel):
+class DataGovernanceTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("Data Governance Agent", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -1652,7 +1654,7 @@ def _template_task_item(template: dict[str, Any], body: DataDevTasksIn) -> dict[
         ),
         "priority": body.priority or template.get("priority") or "P1",
         "estimate": "L",
-        "assigned_to": body.assigned_to or template.get("owner") or "Data Platform Agent",
+        "owner_id": body.owner_id,
         "dev_tool": body.dev_tool or template.get("dev_tool") or "codex",
         "source": "data_development_template",
         "source_report_id": template.get("id"),
@@ -1717,7 +1719,7 @@ def _template_dag_steps(template: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _template_packet(template: dict[str, Any], body: DataDevScheduleIn, *, order: int, lane: int) -> dict[str, Any]:
     template_id = str(template.get("id") or "")
-    assigned_to = body.assigned_to or str(template.get("owner") or "Data Platform Agent")
+    owner_id = body.owner_id
     dev_tool = body.dev_tool or str(template.get("dev_tool") or "codex")
     steps = _template_dag_steps(template)
     blocked_by = [] if str(template.get("status") or "") == "active" else [f"template_status:{template.get('status') or 'unknown'}"]
@@ -1732,7 +1734,7 @@ def _template_packet(template: dict[str, Any], body: DataDevScheduleIn, *, order
         "title": f"数据开发：{template.get('name')}",
         "priority": body.priority or template.get("priority") or "P1",
         "status": template.get("status") or "active",
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
         "dispatch_reason": f"data_template type={template.get('type')} engine={template.get('engine')} policy={body.policy}",
         "scope": _data_scope(),
@@ -1877,7 +1879,7 @@ def _dev_agent_feed_items(data: dict[str, Any], *, schedule_id: str = "", includ
                 continue
             if not include_blocked and not bool(packet.get("ready")):
                 continue
-            if agent_norm and agent_norm not in str(packet.get("assigned_to") or "").lower():
+            if agent_norm and agent_norm not in str(packet.get("owner_id") or "").lower():
                 continue
             packet_id = str(packet.get("packet_id") or "")
             claim = claims.get(packet_id) if isinstance(claims.get(packet_id), dict) else None
@@ -1957,7 +1959,7 @@ def _dev_evidence_items(data: dict[str, Any], *, schedule_id: str = "", packet_i
                     "schedule_id": rid,
                     "packet_id": pid,
                     "title": packet.get("title") or "",
-                    "assigned_to": packet.get("assigned_to") or "",
+                    "owner_id": packet.get("owner_id") or "",
                     "ready": bool(packet.get("ready")),
                     "claim": claims.get(pid) if isinstance(claims.get(pid), dict) else None,
                     "report": report,
@@ -1997,7 +1999,7 @@ def _dev_ops_summary(data: dict[str, Any]) -> dict[str, Any]:
         recommendations.append({"id": "create_schedule", "priority": "P1", "title": "先生成数据开发智能调度", "action": "sop data dev-schedule --apply"})
     by_agent: dict[str, int] = {}
     for packet in packets:
-        agent = str(packet.get("assigned_to") or "unassigned")
+        agent = str(packet.get("owner_id") or "unassigned")
         by_agent[agent] = by_agent.get(agent, 0) + 1
     return {
         "ok": True,
@@ -2047,7 +2049,7 @@ def _dev_runbook_steps(data: dict[str, Any], body: DataDevRunbookIn) -> list[dic
                 "packet_id": item.get("packet_id") or "",
                 "title": f"修复质量证据：{item.get('title') or item.get('packet_id')}",
                 "reason": f"decision={decision} score={quality.get('score')} missing={','.join(missing) or '-'}",
-                "agent": body.assigned_to,
+                "agent": body.owner_id,
                 "dev_tool": body.dev_tool,
                 "commands": [
                     f"sop data dev-evidence --schedule-id {item.get('schedule_id')} --packet-id {item.get('packet_id')} --json",
@@ -2084,10 +2086,10 @@ def _dev_runbook_steps(data: dict[str, Any], body: DataDevRunbookIn) -> list[dic
                     "packet_id": packet.get("packet_id") or "",
                     "title": f"领取并执行数据开发包：{packet.get('title') or packet.get('packet_id')}",
                     "reason": "packet ready but not claimed/reported",
-                    "agent": packet.get("assigned_to") or body.assigned_to,
+                    "agent": packet.get("owner_id") or body.owner_id,
                     "dev_tool": packet.get("dev_tool") or body.dev_tool,
                     "commands": [
-                        f"sop data dev-packet-action --schedule-id {packet.get('schedule_id')} --packet-id {packet.get('packet_id')} --action claim --agent \"{packet.get('assigned_to') or body.assigned_to}\"",
+                        f"sop data dev-packet-action --schedule-id {packet.get('schedule_id')} --packet-id {packet.get('packet_id')} --action claim --agent \"{packet.get('owner_id') or body.owner_id}\"",
                         f"sop data dev-packet-action --schedule-id {packet.get('schedule_id')} --packet-id {packet.get('packet_id')} --action heartbeat --progress 50",
                         f"sop data dev-packet-action --schedule-id {packet.get('schedule_id')} --packet-id {packet.get('packet_id')} --action report --status completed --progress 100",
                     ],
@@ -2166,7 +2168,7 @@ def analytics_dev_runbook(body: DataDevRunbookIn, _: User = Depends(current_user
                 ),
                 "priority": step.get("priority") or body.priority,
                 "estimate": "M",
-                "assigned_to": step.get("agent") or body.assigned_to,
+                "owner_id": body.owner_id,
                 "dev_tool": step.get("dev_tool") or body.dev_tool,
                 "source": "data_development_runbook",
                 "source_report_id": f"{step.get('schedule_id')}:{step.get('packet_id')}:{step.get('type')}",
@@ -2257,7 +2259,7 @@ def analytics_dev_schedule(body: DataDevScheduleIn, _: User = Depends(current_us
         ids=[str(tpl.get("id")) for tpl in templates],
         dry_run=False,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     created: list[dict[str, Any]] = []
@@ -2350,7 +2352,7 @@ def analytics_dev_schedule_action(schedule_id: str, body: DataDevScheduleActionI
             max_parallel=body.max_parallel,
             policy=body.policy,
             priority=body.priority,
-            assigned_to=body.assigned_to,
+            owner_id=body.owner_id,
             dev_tool=body.dev_tool,
             event=f"rerun:{schedule_id}",
         )
@@ -2368,7 +2370,7 @@ def analytics_dev_schedule_action(schedule_id: str, body: DataDevScheduleActionI
             ids=template_ids,
             dry_run=False,
             priority=body.priority,
-            assigned_to=body.assigned_to,
+            owner_id=body.owner_id,
             dev_tool=body.dev_tool,
         )
         created: list[dict[str, Any]] = []
@@ -2572,7 +2574,7 @@ def analytics_dev_evidence_tasks(body: DataDevEvidenceTasksIn, _: User = Depends
                 ),
                 "priority": "P0" if quality.get("decision") == "block" else body.priority,
                 "estimate": "M",
-                "assigned_to": body.assigned_to,
+                "owner_id": body.owner_id,
                 "dev_tool": body.dev_tool,
                 "source": "data_development_evidence",
                 "source_report_id": f"{item.get('schedule_id')}:{item.get('packet_id')}",
@@ -2727,7 +2729,7 @@ def analytics_governance_tasks(body: DataGovernanceTasksIn, _: User = Depends(cu
             ),
             "priority": body.priority,
             "estimate": "M",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "source": "data_governance_quality",
             "source_report_id": row["asset"].get("id"),
@@ -2768,7 +2770,7 @@ def analytics_quality_alert_tasks(body: DataGovernanceTasksIn, _: User = Depends
             ),
             "priority": body.priority if alert.get("severity") != "critical" else "P0",
             "estimate": "M",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "source": "data_quality_alert",
             "source_report_id": alert.get("id"),
@@ -2955,7 +2957,7 @@ def analytics_blueprint_tasks(body: DataBlueprintTasksIn, _: User = Depends(curr
             ),
             "priority": body.priority or gap["priority"],
             "estimate": "L",
-            "assigned_to": body.assigned_to or "Data Platform Agent",
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool or "codex",
             "source": "data_intelligence_blueprint_gap",
             "source_report_id": gap["id"],
@@ -3097,18 +3099,18 @@ class ReportMetaIn(BaseModel):
     pinned: bool | None = None
 
 
-class ReportActionTasksIn(BaseModel):
+class ReportActionTasksIn(TaskOwnerInput):
     preview: bool = True
     max_tasks: int = Field(3, ge=1, le=8)
     priority: str = Field("P2", pattern="^P[0-3]$")
-    assigned_to: str = Field("AI-DevOps", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("sop", max_length=80)
 
 
-class AttributionTasksIn(BaseModel):
+class AttributionTasksIn(TaskOwnerInput):
     preview: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("DataOps", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -3117,10 +3119,10 @@ class ReportAttributionBatchIn(BaseModel):
     only_missing: bool = False
 
 
-class ReportIntelligenceTasksIn(BaseModel):
+class ReportIntelligenceTasksIn(TaskOwnerInput):
     preview: bool = True
     priority: str = Field("", pattern="^(|P[0-3])$")
-    assigned_to: str = Field("DataOps", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -3131,10 +3133,10 @@ class DecisionExplainIn(BaseModel):
     max_reports: int = Field(10, ge=1, le=50)
 
 
-class DecisionTasksIn(DecisionExplainIn):
+class DecisionTasksIn(DecisionExplainIn, TaskOwnerInput):
     preview: bool = True
     priority: str = Field("", pattern="^(|P[0-3])$")
-    assigned_to: str = Field("DataOps", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
     max_tasks: int = Field(5, ge=1, le=10)
 
@@ -3150,11 +3152,11 @@ class ReportSubscriptionIn(BaseModel):
     channels: list[str] = Field(default_factory=list)
 
 
-class DataBlueprintTasksIn(BaseModel):
+class DataBlueprintTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=80)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("Data Platform Agent", max_length=80)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field("codex", max_length=80)
 
 
@@ -3211,7 +3213,7 @@ def _report_action_candidates(report: dict[str, Any], body: ReportActionTasksIn)
                 ),
                 "priority": body.priority,
                 "estimate": "M" if idx < 2 else "S",
-                "assigned_to": body.assigned_to.strip() or "AI-DevOps",
+                "owner_id": body.owner_id.strip(),
                 "dev_tool": body.dev_tool.strip() or "sop",
                 "debug_notes": f"analytics_report_id={report.get('id')}",
                 "source_report_id": report.get("id"),
@@ -3479,7 +3481,7 @@ def analytics_decision_tasks(body: DecisionTasksIn, _: User = Depends(current_us
     candidates = build_decision_tasks(
         packet,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
         max_tasks=body.max_tasks,
     )
@@ -3542,7 +3544,7 @@ def create_reports_intelligence_tasks(
     candidates = build_report_intelligence_tasks(
         intelligence,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     if body.preview:
@@ -3596,7 +3598,7 @@ def create_report_attribution_tasks(
     candidates = build_attribution_tasks(
         attribution,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     if body.preview:
@@ -3713,7 +3715,7 @@ def create_analytics_report_action_tasks(
                 "status": "pending",
                 "priority": item["priority"],
                 "estimate": item["estimate"],
-                "assigned_to": item["assigned_to"],
+                "owner_id": item["owner_id"],
                 "actual_hours": 0.0,
                 "confidence": 0.0,
                 "human_notes": f"由洞察报告 {report_id} 生成",

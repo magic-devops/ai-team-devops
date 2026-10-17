@@ -139,7 +139,7 @@ export function MetricsWorkbench({ focused = false, initialTab = "catalog" }: { 
       ids: governanceTodos.map((metric: any) => metric.id),
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Metrics Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: (data) => {

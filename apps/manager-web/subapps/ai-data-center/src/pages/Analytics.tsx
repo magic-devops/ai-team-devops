@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Archive, Brain, Clock3, Database, Download, FileText, GitBranch, LibraryBig, ListChecks, Pin, Save, Send, Tags, Trash2, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -67,7 +68,7 @@ export function Analytics({
   const [reportSourceFilter, setReportSourceFilter] = useState("");
   const [reportQuery, setReportQuery] = useState("");
   const [reportMetaDrafts, setReportMetaDrafts] = useState<Record<string, { title: string; owner: string; tags: string; note: string; pinned: boolean }>>({});
-  const [reportActionDrafts, setReportActionDrafts] = useState<Record<string, { max_tasks: number; priority: string; assigned_to: string; dev_tool: string }>>({});
+  const [reportActionDrafts, setReportActionDrafts] = useState<Record<string, { max_tasks: number; priority: string; owner_id: string; dev_tool: string }>>({});
   const [reportActionPreviews, setReportActionPreviews] = useState<Record<string, any[]>>({});
   const [reportAttributionPreviews, setReportAttributionPreviews] = useState<Record<string, any[]>>({});
   const [selectedDataGaps, setSelectedDataGaps] = useState<string[]>([]);
@@ -281,14 +282,14 @@ export function Analytics({
     },
   });
   const previewActionTasks = useMutation({
-    mutationFn: ({ id, draft }: { id: string; draft: { max_tasks: number; priority: string; assigned_to: string; dev_tool: string } }) =>
+    mutationFn: ({ id, draft }: { id: string; draft: { max_tasks: number; priority: string; owner_id: string; dev_tool: string } }) =>
       api.analyticsReportActionTasks(id, { ...draft, preview: true }),
     onSuccess: (data, vars) => {
       setReportActionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
     },
   });
   const createActionTasks = useMutation({
-    mutationFn: ({ id, draft }: { id: string; draft: { max_tasks: number; priority: string; assigned_to: string; dev_tool: string } }) =>
+    mutationFn: ({ id, draft }: { id: string; draft: { max_tasks: number; priority: string; owner_id: string; dev_tool: string } }) =>
       api.analyticsReportActionTasks(id, { ...draft, preview: false }),
     onSuccess: (data, vars) => {
       setReportActionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
@@ -304,14 +305,14 @@ export function Analytics({
     },
   });
   const previewAttributionTasks = useMutation({
-    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; assigned_to: string; dev_tool: string } }) =>
+    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; owner_id: string; dev_tool: string } }) =>
       api.analyticsReportAttributionTasks(id, { ...draft, preview: true }),
     onSuccess: (data, vars) => {
       setReportAttributionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
     },
   });
   const createAttributionTasks = useMutation({
-    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; assigned_to: string; dev_tool: string } }) =>
+    mutationFn: ({ id, draft }: { id: string; draft: { priority: string; owner_id: string; dev_tool: string } }) =>
       api.analyticsReportAttributionTasks(id, { ...draft, preview: false }),
     onSuccess: (data, vars) => {
       setReportAttributionPreviews((prev) => ({ ...prev, [vars.id]: data.items ?? [] }));
@@ -342,7 +343,7 @@ export function Analytics({
         ids: selectedDataGaps,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: (data) => {
@@ -402,7 +403,7 @@ export function Analytics({
         ids: selectedAssets,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Governance Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
   });
@@ -412,7 +413,7 @@ export function Analytics({
         ids: selectedAlerts,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Governance Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: () => void qualityAlerts.refetch(),
@@ -438,7 +439,7 @@ export function Analytics({
         ids: selectedDevTemplates,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
   });
@@ -450,7 +451,7 @@ export function Analytics({
         max_parallel: 4,
         policy: "quality_first",
         priority: "P1",
-        assigned_to: "Data Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
         event: "analytics.catalog.action",
       }),
@@ -471,7 +472,7 @@ export function Analytics({
         max_parallel: 4,
         policy: "quality_first",
         priority: "P1",
-        assigned_to: "Data Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
         note: "analytics.catalog.history",
       }),
@@ -489,7 +490,7 @@ export function Analytics({
         include_unclaimed: true,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Automation Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: (data) => {
@@ -529,7 +530,7 @@ export function Analytics({
         decisions: ["block", "warn"],
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Quality Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: () => void devOpsSummary.refetch(),
@@ -568,11 +569,11 @@ export function Analytics({
     return reportActionDrafts[id] ?? {
       max_tasks: 3,
       priority: "P2",
-      assigned_to: String(report.owner || "AI-DevOps"),
+      owner_id: "",
       dev_tool: "sop",
     };
   };
-  const patchReportActionDraft = (report: any, patch: Partial<{ max_tasks: number; priority: string; assigned_to: string; dev_tool: string }>) => {
+  const patchReportActionDraft = (report: any, patch: Partial<{ max_tasks: number; priority: string; owner_id: string; dev_tool: string }>) => {
     const id = String(report.id);
     setReportActionDrafts((prev) => ({ ...prev, [id]: { ...reportActionDraft(report), ...patch } }));
   };
@@ -1007,7 +1008,7 @@ export function Analytics({
                         type="button"
                         className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--text)] hover:bg-[var(--surface)] disabled:opacity-50"
                         disabled={previewAttributionTasks.isPending}
-                        onClick={() => previewAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                        onClick={() => previewAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, owner_id: actionDraft.owner_id, dev_tool: actionDraft.dev_tool } })}
                       >
                         {t("page.analytics.previewAttributionTasks")}
                       </button>
@@ -1015,7 +1016,7 @@ export function Analytics({
                         type="button"
                         className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                         disabled={createAttributionTasks.isPending}
-                        onClick={() => createAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, assigned_to: actionDraft.assigned_to, dev_tool: actionDraft.dev_tool } })}
+                        onClick={() => createAttributionTasks.mutate({ id: String(report.id), draft: { priority: actionDraft.priority, owner_id: actionDraft.owner_id, dev_tool: actionDraft.dev_tool } })}
                       >
                         {t("page.analytics.createAttributionTasks")}
                       </button>
@@ -1166,10 +1167,9 @@ export function Analytics({
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
-                  <input
-                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text)]"
-                    value={actionDraft.assigned_to}
-                    onChange={(e) => patchReportActionDraft(report, { assigned_to: e.target.value })}
+                  <ProjectOwnerSelect
+                    value={actionDraft.owner_id}
+                    onChange={(owner_id) => patchReportActionDraft(report, { owner_id: owner_id })}
                     placeholder={t("page.analytics.actionAssigneePh")}
                   />
                   <input

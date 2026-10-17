@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from typing import Any
 
 from fastapi import APIRouter
@@ -14,14 +16,14 @@ from sop_manager.routers.tasks import TaskCreate, create_task, list_tasks
 router = APIRouter(prefix="/api/v1/pages", tags=["pages-productization"])
 
 
-class InteractionTaskIn(BaseModel):
+class InteractionTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     domain: str = "all"
     status: str = Field("watch", pattern="^(all|ready|watch|risk)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Designer"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_ready: bool = False
 
@@ -33,11 +35,11 @@ class InteractionOpsQuery(BaseModel):
     limit: int = Field(80, ge=1, le=200)
 
 
-class InteractionOpsActionIn(InteractionOpsQuery):
+class InteractionOpsActionIn(InteractionOpsQuery, TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("GovernanceOps", max_length=120)
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_low: bool = False
     actor: str = Field("InteractionOps Operator", max_length=120)
@@ -484,7 +486,7 @@ def _interaction_ops_payload(domain: str = "all", q: str = "", status: str = "wa
     )
 
 
-def _interaction_ops_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _interaction_ops_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     severity = str(item.get("severity") or "medium")
     return {
         "title": f"治理交付闭环：{item.get('title') or item.get('id')}",
@@ -510,7 +512,7 @@ def _interaction_ops_task_payload(item: dict[str, Any], *, priority: str, assign
         ).strip(),
         "priority": "P0" if severity == "high" else priority,
         "estimate": "M" if severity == "high" else "S",
-        "assigned_to": assigned_to or "GovernanceOps",
+        "owner_id": owner_id,
         "dev_tool": "sop-cli",
         "source": "interaction_ops",
         "source_report_id": str(item.get("source_report_id") or f"interaction-ops:unknown:{item.get('id')}"),
@@ -519,7 +521,7 @@ def _interaction_ops_task_payload(item: dict[str, Any], *, priority: str, assign
     }
 
 
-def _interaction_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _interaction_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     module_id = str(item.get("id") or "")
     gaps = [gap for gap in item.get("gaps") or [] if isinstance(gap, dict)]
     checks = [check for check in item.get("interaction_checks") or [] if isinstance(check, dict)]
@@ -556,7 +558,7 @@ def _interaction_task_payload(item: dict[str, Any], *, priority: str, assigned_t
         ).strip(),
         "priority": priority,
         "estimate": "M" if str(item.get("status")) == "risk" else "S",
-        "assigned_to": assigned_to or "Designer",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_interaction",
         "source_report_id": f"interaction:{module_id}",
@@ -678,7 +680,7 @@ def pages_interaction_tasks(body: InteractionTaskIn) -> dict[str, Any]:
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _interaction_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _interaction_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -754,7 +756,7 @@ def pages_interaction_ops_tasks(body: InteractionOpsActionIn) -> dict[str, Any]:
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in items:
-        payload_item = _interaction_ops_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _interaction_ops_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "source_report_id": report_id, "reason": "task_exists"})

@@ -12,6 +12,8 @@ import json
 import logging
 import time
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -568,13 +570,13 @@ class PlanIn(BaseModel):
     run_id: str = ""
 
 
-class PlanTasksIn(BaseModel):
+class PlanTasksIn(TaskOwnerInput):
     query: str = ""
     plan: dict[str, Any] = Field(default_factory=dict)
     commands: list[dict[str, Any]] = Field(default_factory=list)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "copilot"
 
 
@@ -977,7 +979,7 @@ def copilot_plan_tasks(body: PlanTasksIn) -> dict[str, Any]:
                 "description": spec["description"],
                 "priority": body.priority,
                 "estimate": spec.get("estimate") or "M",
-                "assigned_to": body.assigned_to or "Coder",
+                "owner_id": body.owner_id,
                 "source": "copilot_plan",
                 "preview": True,
                 "order": idx,
@@ -992,7 +994,7 @@ def copilot_plan_tasks(body: PlanTasksIn) -> dict[str, Any]:
             description=spec["description"],
             priority=body.priority,
             estimate=str(spec.get("estimate") or "M"),
-            assigned_to=body.assigned_to or "Coder",
+            owner_id=body.owner_id,
             dev_tool=body.dev_tool or "copilot",
             source="copilot_plan",
             debug_notes=json.dumps({
@@ -1006,7 +1008,7 @@ def copilot_plan_tasks(body: PlanTasksIn) -> dict[str, Any]:
             "title": spec["title"],
             "priority": body.priority,
             "estimate": spec.get("estimate") or "M",
-            "assigned_to": body.assigned_to or "Coder",
+            "owner_id": body.owner_id,
             "source": "copilot_plan",
             "created": True,
             "order": idx,

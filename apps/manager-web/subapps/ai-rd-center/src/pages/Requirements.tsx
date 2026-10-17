@@ -23,6 +23,7 @@ import { ProductRequirementsShell } from "./product/ProductRequirementsShell";
 import { parseRequirementsHash } from "./product/requirementsNav";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchStats } from "@/pages/shared/workbenchUi";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 const STATUS_ALL = "__all__";
 const PRIORITY_ALL = "__all__";
@@ -64,7 +65,7 @@ type Draft = {
 type TaskGenDraft = {
   mode: string;
   max_tasks: number;
-  assigned_to: string;
+  owner_id: string;
   dev_tool: string;
   create_dependencies: boolean;
 };
@@ -75,6 +76,7 @@ type TaskPlanItem = {
   description?: string;
   priority?: string;
   estimate?: string;
+  owner_id?: string;
   assigned_to?: string;
   work_type?: string;
   agent_hint?: string;
@@ -107,7 +109,7 @@ function defaultTaskGenDraft(row: RequirementRow): TaskGenDraft {
   return {
     mode: "standard",
     max_tasks: 6,
-    assigned_to: row.assigned_agent || "Coder",
+    owner_id: "",
     dev_tool: row.dev_tool || "",
     create_dependencies: true,
   };
@@ -215,7 +217,7 @@ export function Requirements({
   const [taskPlanDraft, setTaskPlanDraft] = useState<TaskGenDraft>({
     mode: "standard",
     max_tasks: 6,
-    assigned_to: "Coder",
+    owner_id: "",
     dev_tool: "",
     create_dependencies: true,
   });
@@ -350,7 +352,7 @@ export function Requirements({
         dry_run: dryRun,
         mode: taskPlanDraft.mode,
         max_tasks: taskPlanDraft.max_tasks,
-        assigned_to: taskPlanDraft.assigned_to,
+        owner_id: taskPlanDraft.owner_id,
         dev_tool: taskPlanDraft.dev_tool,
         create_dependencies: taskPlanDraft.create_dependencies,
       }),
@@ -366,7 +368,7 @@ export function Requirements({
 
   const opsTasksMut = useMutation({
     mutationFn: (dryRun: boolean) =>
-      api.requirementOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "RequirementOps Agent", limit: 20 }),
+      api.requirementOpsTasks({ dry_run: dryRun, priority: "P1", limit: 20 }),
     onSuccess: (data) => {
       setOpsTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["requirements"] });
@@ -1167,8 +1169,8 @@ function TaskPlanPanel({
             onChange={(e) => set({ max_tasks: Number(e.target.value) || 6 })}
           />
         </Field>
-        <Field label={t("page.requirements.agent")}>
-          <input className={fieldClass} value={draft.assigned_to} onChange={(e) => set({ assigned_to: e.target.value })} />
+        <Field label={t("deliveryTeam.owner")}>
+          <ProjectOwnerSelect value={draft.owner_id} onChange={(owner_id) => set({ owner_id })} label={t("deliveryTeam.owner")} />
         </Field>
         <Field label={t("page.requirements.devTool")}>
           <input className={fieldClass} value={draft.dev_tool} onChange={(e) => set({ dev_tool: e.target.value })} />

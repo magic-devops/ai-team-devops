@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { Button, Drawer, Form, Input, Select, Space, Steps } from "antd";
 import { RefreshButton } from "@/components/PageStates";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
@@ -299,7 +300,7 @@ export function OpsCenterRcaPanel({
                         />
                       </Form.Item>
                       <Form.Item label="负责人">
-                        <Input value={rcaInsightFilter.assigned_to} onChange={e => setRcaInsightFilter((f: any) => ({ ...f, assigned_to: e.target.value }))} />
+                        <ProjectOwnerSelect value={rcaInsightFilter.owner_id} onChange={(owner_id) => setRcaInsightFilter((f: any) => ({ ...f, owner_id: owner_id }))} />
                       </Form.Item>
                       <Form.Item label="执行工具">
                         <Input value={rcaInsightFilter.dev_tool} onChange={e => setRcaInsightFilter((f: any) => ({ ...f, dev_tool: e.target.value }))} />

@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from sop_manager.path_config import resolved_project_id, resolved_project_path
@@ -22,10 +23,10 @@ from .sql_models import Task, get_session
 router = APIRouter(prefix="/api/v1/platforms", tags=["platforms"])
 
 
-class PlatformOpsTasksBody(BaseModel):
+class PlatformOpsTasksBody(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "DevOps"
+    owner_id: TaskOwnerId = ""
     categories: list[str] = []
 
 
@@ -131,7 +132,7 @@ def platforms_hub() -> dict[str, Any]:
     }
 
 
-def _platform_ops_task_specs(*, priority: str, assigned_to: str, categories: list[str] | None = None) -> list[dict[str, Any]]:
+def _platform_ops_task_specs(*, priority: str, owner_id: str, categories: list[str] | None = None) -> list[dict[str, Any]]:
     rows = platform_rows(project_root=resolved_project_path())
     wanted = set(categories or [])
     include_all = not wanted
@@ -139,7 +140,7 @@ def _platform_ops_task_specs(*, priority: str, assigned_to: str, categories: lis
 
     def add(category: str, item: dict[str, Any]) -> None:
         if include_all or category in wanted:
-            specs.append({**item, "category": category, "priority": priority, "assigned_to": assigned_to, "status": "pending"})
+            specs.append({**item, "category": category, "priority": priority, "owner_id": owner_id, "status": "pending"})
 
     missing_cli = [r for r in rows if not r.get("cli_available")]
     missing_shim = [r for r in rows if str(r.get("integration")) == "hooks" and not r.get("hook_shim_present")]
@@ -217,7 +218,7 @@ def platforms_ops_plan() -> dict[str, Any]:
             },
         },
         "commands": commands,
-        "task_candidates": _platform_ops_task_specs(priority="P1", assigned_to="DevOps"),
+        "task_candidates": _platform_ops_task_specs(priority="P1", owner_id=""),
         "ai_packet": {
             "intent": "agent_toolchain_ops",
             "recommended_pages": ["#/platforms/tools", "#/platforms/mcp", "#/platforms/agents", "#/platforms/models", "#/platforms/ops"],
@@ -232,7 +233,7 @@ def platforms_ops_tasks(body: PlatformOpsTasksBody,
                         user: User = Depends(current_user),
                         db: Session = Depends(get_session)) -> dict[str, Any]:
     """把 Agent 与工具链治理候选项预览或落成任务。"""
-    specs = _platform_ops_task_specs(priority=body.priority, assigned_to=body.assigned_to, categories=body.categories)
+    specs = _platform_ops_task_specs(priority=body.priority, owner_id=body.owner_id, categories=body.categories)
     existing = {
         t.human_notes
         for t in db.query(Task).filter_by(tenant_id=user.tenant_id).all()
@@ -257,7 +258,7 @@ def platforms_ops_tasks(body: PlatformOpsTasksBody,
                 status="pending",
                 priority=row["priority"],
                 estimate=row["estimate"],
-                assigned_to=row["assigned_to"],
+                owner_id=row["owner_id"],
                 human_notes=marker,
             )
             db.add(task)

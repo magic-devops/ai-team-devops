@@ -33,6 +33,7 @@ import {
   type ProgressRoute,
 } from "@/lib/deliveryProgress";
 import { DeliveryEditor, type EditorSpec } from "./DeliveryEditor";
+import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { DeliveryProgressCharts } from "./DeliveryProgressCharts";
 import {
   DeliveryProgressComparison,
@@ -75,6 +76,7 @@ export function DeliveryProgress({
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryProgress.${key}`, options);
   const qc = useQueryClient();
+  const identity = useMemberIdentity();
   const [route, setRoute] = useState(() => parseProgressRoute(location.hash));
   const [dateDraft, setDateDraft] = useState(() => ({
     startsOn: route.startsOn,
@@ -286,7 +288,7 @@ export function DeliveryProgress({
                 latest.current.tasks
                   .map(
                     (task) =>
-                      `${task.title} (${task.id}) · ${task.assigned_to || "—"} · ${task.estimate || "—"} · ${task.starts_on || "—"} → ${task.ends_on || "—"}`,
+                      `${task.title} (${task.id}) · ${identity(workspace.members, task.owner_id)} · ${task.estimate || "—"} · ${task.starts_on || "—"} → ${task.ends_on || "—"}`,
                   )
                   .join("\n") || tr("noTasks"),
             },

@@ -288,13 +288,7 @@ def _cancel(db, project, state, entry, store, principal):
     if entry["status"] in CLOSED:
         raise HTTPException(409, "Execution already closed")
     verification = VerificationContext(db, project, state)
-    definition = verification.definition(entry["task_id"])
-    current = bool(
-        definition
-        and definition["execution_gate"]["eligible"]
-        and not entry.get("planning_invalidated")
-        and definition["snapshot"] == entry["snapshot"]
-    )
+    current = verification.execution_snapshot_current(entry)
     if not entry["run_id"]:
         if "requirement" not in entry.get("snapshot", {}):
             raise HTTPException(
@@ -344,15 +338,9 @@ def _observe(db, project, state, entry, store, principal):
     run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
     verification = VerificationContext(db, project, state)
     task = verification.tasks.get(entry["task_id"])
-    definition = verification.definition(entry["task_id"])
     requirement = verification.requirements.get(task.req_id) if task else None
     flow = state["flows"].setdefault(requirement.id, default_flow()) if requirement else None
-    entry["stale"] = (
-        bool(entry.get("planning_invalidated"))
-        or not definition
-        or not definition["execution_gate"]["eligible"]
-        or definition["snapshot"] != entry["snapshot"]
-    )
+    entry["stale"] = not verification.execution_snapshot_current(entry)
     results = run["data"].get("node_results", {})
     entry.update(
         run_version=run["version"],
@@ -476,12 +464,9 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
             dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
             from .delivery_verification import VerificationContext
 
-            definition = VerificationContext(db, project, state).definition(entry["task_id"])
+            verification = VerificationContext(db, project, state)
             if (
-                entry.get("planning_invalidated")
-                or not definition
-                or not definition["execution_gate"]["eligible"]
-                or definition["snapshot"] != entry["snapshot"]
+                not verification.execution_snapshot_current(entry)
                 or workspace["version"] != entry["workspace_version"]
             ):
                 raise HTTPException(

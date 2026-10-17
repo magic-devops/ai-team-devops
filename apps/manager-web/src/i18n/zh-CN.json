@@ -351,6 +351,10 @@
       "a2aProtocol": "A2A 协议"
     },
     "sub": {
+      "forecast": "风险预测",
+      "impact": "影响分析",
+      "reports": "质量报告",
+      "runs": "运行记录",
       "executive_overview": "运营总览",
       "platform_blueprint": "平台蓝图",
       "risk_board": "风险看板",

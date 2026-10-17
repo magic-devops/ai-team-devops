@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -141,7 +142,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
     maxParallel: 4,
     policy: "quality_first",
     priority: "P1",
-    assignedTo: "Data Platform Agent",
+    ownerId: "",
     devTool: "codex",
   });
   const [reportForm, setReportForm] = useState({
@@ -211,7 +212,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
       ids: selectedIds,
       dry_run: dryRun,
       priority: scheduleForm.priority,
-      assigned_to: scheduleForm.assignedTo,
+      owner_id: scheduleForm.ownerId,
       dev_tool: scheduleForm.devTool,
     }),
   });
@@ -235,7 +236,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
         max_parallel: scheduleForm.maxParallel,
         policy: scheduleForm.policy,
         priority: scheduleForm.priority,
-        assigned_to: scheduleForm.assignedTo,
+        owner_id: scheduleForm.ownerId,
         dev_tool: scheduleForm.devTool,
         note: "manager-web:data-development",
       }),
@@ -273,7 +274,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
       decisions: decision ? [decision] : ["block", "warn"],
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Data Quality Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
   });
@@ -286,7 +287,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
       include_unclaimed: true,
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Data Automation Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: setRunbookResult,
@@ -508,7 +509,7 @@ export function DataDevWorkbench({ focused = false, initialTab }: { focused?: bo
             <Select value={scheduleForm.policy} options={POLICIES.map((policy) => ({ value: policy, label: policy }))} onChange={(policy) => setScheduleForm((value) => ({ ...value, policy }))} />
             <InputNumber min={1} max={20} value={scheduleForm.maxParallel} onChange={(maxParallel) => setScheduleForm((value) => ({ ...value, maxParallel: Number(maxParallel ?? 1) }))} />
             <Select value={scheduleForm.priority} options={PRIORITIES.map((priority) => ({ value: priority, label: priority }))} onChange={(priority) => setScheduleForm((value) => ({ ...value, priority }))} />
-            <Input value={scheduleForm.assignedTo} placeholder={t("page.dataDev.schedules.assignedTo")} onChange={(event) => setScheduleForm((value) => ({ ...value, assignedTo: event.target.value }))} />
+            <ProjectOwnerSelect value={scheduleForm.ownerId} placeholder={t("page.dataDev.schedules.assignedTo")} onChange={(ownerId) => setScheduleForm((value) => ({ ...value, ownerId }))} />
             <Input value={scheduleForm.devTool} placeholder={t("page.dataDev.schedules.devTool")} onChange={(event) => setScheduleForm((value) => ({ ...value, devTool: event.target.value }))} />
             <Space wrap>
               <Button disabled={!canSchedule} icon={<Sparkles className="h-4 w-4" />} loading={scheduleMut.isPending} onClick={() => scheduleMut.mutate(true)}>{t("page.dataDev.schedules.preview")}</Button>

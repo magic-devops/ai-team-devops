@@ -55,7 +55,7 @@ def test_pages_interaction_tasks_preview_gap_tasks():
             q="",
             max_items=3,
             priority="P1",
-            assigned_to="Designer",
+            owner_id="",
         )
     )
 
@@ -97,7 +97,7 @@ def test_pages_interaction_ops_tasks_preview_is_idempotent_source_contract():
             q="",
             max_items=3,
             priority="P1",
-            assigned_to="GovernanceOps",
+            owner_id="",
         )
     )
 

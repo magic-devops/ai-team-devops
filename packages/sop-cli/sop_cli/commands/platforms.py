@@ -212,7 +212,7 @@ def ops_plan(
 def ops_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级"),
-    assigned_to: str = typer.Option("DevOps", "--assigned-to", help="默认处理人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     category: list[str] = typer.Option([], "--category", help="仅生成指定类别，可多次传入"),
     as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -220,7 +220,7 @@ def ops_tasks(
     body: dict[str, Any] = {
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "categories": category,
     }
     data = get_client(get_config()).platforms_ops_tasks(body)
@@ -327,12 +327,12 @@ def agent_slo(as_json: bool = typer.Option(False, "--json", help="输出机器�
 def agent_rebalance_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级"),
-    assigned_to: str = typer.Option("Coder", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     category: list[str] = typer.Option([], "--category", help="按 category/severity 过滤，可多次传入"),
     as_json: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
     """将 Agent SLO/再平衡建议预览或落为治理任务。"""
-    body = {"dry_run": not apply, "priority": priority, "assigned_to": assigned_to, "categories": category}
+    body = {"dry_run": not apply, "priority": priority, "owner_id": owner_id, "categories": category}
     data = get_client(get_config()).agents_runs_rebalance_tasks(body)
     if as_json:
         console.print_json(data=json.loads(json.dumps(data, ensure_ascii=False)))

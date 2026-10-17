@@ -9,10 +9,11 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_
 
 from .delivery_contract import STAGE_IDS, default_flow, stage_gates
-from .sql_models import Issue, ProjectMember, Requirement, Task, User
+from .delivery_task_contract import snapshots_match
+from .delivery_team import TeamContext, semantic_owner
+from .sql_models import Issue, Requirement, Task
 
 
 def stamp():
@@ -30,7 +31,6 @@ def initial_state():
         "milestones": [],
         "resources": [],
         "flows": {},
-        "task_owners": {},
         "task_details": {},
         "member_calendars": {},
     }
@@ -55,39 +55,20 @@ def get_record(db, model, project, rid):
 
 
 def members(db, project, data, user):
-    people = (
-        db.query(User, ProjectMember.role)
-        .outerjoin(
-            ProjectMember, and_(ProjectMember.user_id == User.id, ProjectMember.project_id == project.id)
-        )
-        .filter(
-            User.tenant_id == project.tenant_id,
-            or_(ProjectMember.project_id == project.id, User.role.in_(["tenant_admin", "super_admin"])),
-        )
-        .order_by(User.id)
-        .all()
-    )
-    result = [
-        {
-            "id": f"user:{u.id}",
-            "name": u.username,
-            "kind": "human",
-            "role": role or u.role,
-            "tool": "",
-            "active": u.status == "active",
-        }
-        for u, role in people
-    ]
-    return result + [
-        {key: member[key] for key in ("id", "name", "kind", "role", "tool", "active")}
-        for member in data["members"]
-    ]
+    return TeamContext(db, project, data).roster
 
 
 def validate_owner(owner, roster):
     if not owner:
         return ""
-    member = next((m for m in roster if m["id"] == owner and m["active"] and m["kind"] != "tool"), None)
+    member = next(
+        (
+            m
+            for m in roster
+            if m["id"] == owner and m["active"] and m.get("available") and m["kind"] in {"human", "agent"}
+        ),
+        None,
+    )
     if not member:
         raise HTTPException(422, "Choose an active project member or agent")
     return member["name"]
@@ -107,6 +88,22 @@ def _fingerprint(value):
     ).hexdigest()
 
 
+def _work_fingerprint(tasks, team, requirement_id):
+    return _fingerprint(
+        [
+            {
+                **{
+                    key: task[key]
+                    for key in ("id", "title", "description", "acceptance_criteria", "status", "owner_id")
+                },
+                "owner": semantic_owner(team.resolve_owner(task["owner_id"])),
+            }
+            for task in tasks
+            if task["req_id"] == requirement_id
+        ]
+    )
+
+
 def reconcile(db, project, state):
     """Legacy APIs still edit canonical rows; never reuse approvals against changed scope.
 
@@ -115,21 +112,13 @@ def reconcile(db, project, state):
     """
     data = deepcopy(state)
     tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.id).all()]
+    team = TeamContext(db, project, data)
     for req in records(db, Requirement, project).all():
         flow = data["flows"].get(req.id)
         if not flow:
             continue
         definition = _fingerprint([req.title, req.description, req.acceptance_criteria])
-        work = _fingerprint(
-            [
-                {
-                    k: t[k]
-                    for k in ("id", "title", "description", "acceptance_criteria", "status", "assigned_to")
-                }
-                for t in tasks
-                if t["req_id"] == req.id
-            ]
-        )
+        work = _work_fingerprint(tasks, team, req.id)
         changed = flow.get("definition", definition) != definition or (
             flow["stage"] in {"testing", "acceptance", "release", "operations"}
             and flow.get("tested_work", work) != work
@@ -164,7 +153,9 @@ def _reconcile_execution_evidence(db, project, data):
             bool(entry.get("planning_invalidated"))
             or not definition
             or not definition["execution_gate"]["eligible"]
-            or definition["snapshot"] != entry["snapshot"]
+            or not definition["snapshot"]["owner"]
+            or not definition["snapshot"]["owner"]["available"]
+            or not snapshots_match(definition["snapshot"], entry["snapshot"])
         )
     for flow in data["flows"].values():
         for artifact in flow["artifacts"]:
@@ -180,29 +171,14 @@ def _reconcile_execution_evidence(db, project, data):
 
 def remember_basis(db, project, data):
     tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.id).all()]
+    team = TeamContext(db, project, data)
     for req in records(db, Requirement, project).all():
         flow = data["flows"].get(req.id)
         if not flow:
             continue
         flow["definition"] = _fingerprint([req.title, req.description, req.acceptance_criteria])
         if flow["stage"] in {"testing", "acceptance", "release", "operations"}:
-            flow["tested_work"] = _fingerprint(
-                [
-                    {
-                        k: t[k]
-                        for k in (
-                            "id",
-                            "title",
-                            "description",
-                            "acceptance_criteria",
-                            "status",
-                            "assigned_to",
-                        )
-                    }
-                    for t in tasks
-                    if t["req_id"] == req.id
-                ]
-            )
+            flow["tested_work"] = _work_fingerprint(tasks, team, req.id)
 
 
 def materialize(db, project, data, user):
@@ -226,19 +202,9 @@ def materialize(db, project, data, user):
             and task["status"] == "completed"
         ):
             task["status"] = "in_progress"
-        task["owner_id"] = data["task_owners"].get(task["id"], "")
-        task["owner_explicit"] = task["id"] in data.get("task_owners", {})
-        candidates = [
-            m
-            for m in roster
-            if m["active"]
-            and m["kind"] != "tool"
-            and m["name"] == task["assigned_to"]
-            and (not task["owner_id"] or task["owner_id"] == m["id"])
-        ]
-        task["owner_active"] = len(candidates) == 1
-        if task["owner_active"]:
-            task["owner_id"] = candidates[0]["id"]
+        task["owner"] = verification.owner(verification.tasks[task["id"]])
+        task["owner_active"] = bool(task["owner"] and task["owner"]["available"])
+        task["assigned_to"] = (task["owner"] or {}).get("name") or ""
         task["planning"] = deepcopy(data.get("task_details", {}).get(task["id"], {}))
     from .delivery_plan import dependency_status, requirement_basis
 
@@ -302,17 +268,16 @@ def _create_task(db, project, data, requirement, draft, roster, task_id=None):
         "ends_on",
         "blocked_reason",
     }
-    values = draft.model_dump(exclude={"requirement_id", "owner_id", *planning_fields})
+    values = draft.model_dump(exclude={"requirement_id", *planning_fields})
+    validate_owner(draft.owner_id, roster)
     row = Task(
         id=task_id or identifier("T"),
         tenant_id=project.tenant_id,
         project_id=project.id,
         req_id=requirement.id if requirement else "",
-        assigned_to=validate_owner(draft.owner_id, roster),
         status="blocked" if draft.blocked_reason else "pending",
         **values,
     )
-    data["task_owners"][row.id] = draft.owner_id
     data.setdefault("task_details", {})[row.id] = draft.model_dump(mode="json", include=planning_fields)
     if requirement:
         from .delivery_plan import requirement_basis, requirement_snapshot
@@ -488,8 +453,8 @@ def _update_task(db, project, data, body, roster):
     business_change = links_changed or (
         "acceptance_criteria" in body.model_fields_set
         and body.acceptance_criteria != row.acceptance_criteria
-        or body.owner_id is not None
-        and body.owner_id != data.get("task_owners", {}).get(row.id, "")
+        or "owner_id" in body.model_fields_set
+        and body.owner_id != row.owner_id
         or body.status is not None
         and body.status != before["status"]
         or body.description is not None
@@ -499,9 +464,9 @@ def _update_task(db, project, data, body, roster):
     )
     if flow.get("stage") in {"release", "operations"} and business_change:
         raise HTTPException(409, "Reopen the requirement before changing accepted work")
-    if body.owner_id is not None:
-        row.assigned_to = validate_owner(body.owner_id, roster)
-        data["task_owners"][row.id] = body.owner_id
+    if "owner_id" in body.model_fields_set:
+        validate_owner(body.owner_id, roster)
+        row.owner_id = body.owner_id
     if body.status is not None:
         row.status = body.status
     if body.description is not None:
@@ -514,7 +479,7 @@ def _update_task(db, project, data, body, roster):
         links_changed
         or any(
             before[key] != getattr(row, key)
-            for key in ("description", "status", "assigned_to", "acceptance_criteria")
+            for key in ("description", "status", "owner_id", "acceptance_criteria")
         )
     ):
         invalidate(flow)

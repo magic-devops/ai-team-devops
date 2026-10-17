@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -38,7 +39,7 @@ export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsW
   const [decisionForm, setDecisionForm] = useState({
     question: t("page.analyticsReports.decisionQuestionDefault"),
     priority: "",
-    assigned_to: "DataOps",
+    owner_id: "",
     dev_tool: "codex",
     max_tasks: 5,
   });
@@ -83,11 +84,11 @@ export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsW
     },
   });
   const previewOpsTasks = useMutation({
-    mutationFn: () => api.analyticsReportsIntelligenceTasks({ preview: true, priority: "", assigned_to: "DataOps", dev_tool: "codex" }),
+    mutationFn: () => api.analyticsReportsIntelligenceTasks({ preview: true, priority: "", owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => setTaskPreviews(data?.items ?? []),
   });
   const createOpsTasks = useMutation({
-    mutationFn: () => api.analyticsReportsIntelligenceTasks({ preview: false, priority: "", assigned_to: "DataOps", dev_tool: "codex" }),
+    mutationFn: () => api.analyticsReportsIntelligenceTasks({ preview: false, priority: "", owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => {
       setTaskPreviews(data?.items ?? []);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -110,7 +111,7 @@ export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsW
         max_reports: 10,
         preview: true,
         priority: decisionForm.priority,
-        assigned_to: decisionForm.assigned_to,
+        owner_id: decisionForm.owner_id,
         dev_tool: decisionForm.dev_tool,
         max_tasks: decisionForm.max_tasks,
       }),
@@ -127,7 +128,7 @@ export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsW
         max_reports: 10,
         preview: false,
         priority: decisionForm.priority,
-        assigned_to: decisionForm.assigned_to,
+        owner_id: decisionForm.owner_id,
         dev_tool: decisionForm.dev_tool,
         max_tasks: decisionForm.max_tasks,
       }),
@@ -380,10 +381,9 @@ export function AnalyticsReportsWorkbench({ initialView = "overview" }: ReportsW
                   <option value="P2">P2</option>
                   <option value="P3">P3</option>
                 </select>
-                <input
-                  className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"
-                  value={decisionForm.assigned_to}
-                  onChange={(event) => setDecisionForm((form) => ({ ...form, assigned_to: event.target.value }))}
+                <ProjectOwnerSelect
+                  value={decisionForm.owner_id}
+                  onChange={(owner_id) => setDecisionForm((form) => ({ ...form, owner_id: owner_id }))}
                   placeholder={t("page.analyticsReports.assignee")}
                 />
                 <input

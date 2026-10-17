@@ -187,7 +187,7 @@ export function TagWorkbench({ focused = false, initialTab = "catalog" }: { focu
       ids: governanceCandidateIds,
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "TagOps Agent",
+      owner_id: "",
       dev_tool: "codex",
       min_coverage: 0.8,
     }),

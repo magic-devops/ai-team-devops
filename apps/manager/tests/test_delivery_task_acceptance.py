@@ -428,7 +428,7 @@ def test_collective_requirement_approval_cannot_revive_after_task_own_condition_
 @pytest.mark.parametrize(
     "field,changed,restored", [("status", "suspended", "active"), ("username", "New name", "lead")]
 )
-def test_native_only_owner_identity_change_and_restore_permanently_invalidates(
+def test_native_owner_status_invalidates_but_display_name_change_preserves_receipt(
     bridge, writer, field, changed, restored
 ):
     client, sessions, _, _, _, _, _ = bridge
@@ -446,9 +446,11 @@ def test_native_only_owner_identity_change_and_restore_permanently_invalidates(
     with sessions() as db:
         assert db.query(DeliveryTaskReview).count() == 0
         entry = db.get(DeliveryWorkspace, "project").data["executions"][-1]
-        assert entry["planning_invalidated"] is True
+        assert bool(entry.get("planning_invalidated")) is (field == "status")
         assert entry["snapshot"]["owner"]["name"] == "lead"
-    assert command(client, "execution.sync", {"id": intent["id"]}).status_code == 409
+    assert command(client, "execution.sync", {"id": intent["id"]}).status_code == (
+        409 if field == "status" else 200
+    )
 
 
 def test_same_name_owner_in_another_tenant_does_not_invalidate_native_delivery(bridge):
@@ -473,7 +475,7 @@ def test_same_name_owner_in_another_tenant_does_not_invalidate_native_delivery(b
                     tenant_id="separate",
                     project_id="separate-project",
                     title="Separate task",
-                    assigned_to="lead",
+                    owner_id="user:separate-lead",
                     acceptance_criteria=["Separate criterion"],
                 ),
             ]

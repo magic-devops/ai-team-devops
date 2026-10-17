@@ -3,6 +3,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Any, List
 from pathlib import Path
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 import base64, datetime, hashlib, hmac, json, time, uuid
 from sop_manager.path_config import (
     resolved_ai_memory_root,
@@ -222,11 +224,11 @@ class InboundMsg(BaseModel):
     payload: dict[str, Any] = {}
     idempotency_key: str = ""
 
-class InboundAction(BaseModel):
+class InboundAction(TaskOwnerInput):
     action: str = Field("task", pattern="^(task|requirement)$")
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     assigned_agent: str = "PM"
     dev_tool: str = "copilot"
 
@@ -771,7 +773,7 @@ def inbound_action(message_id: str, body: InboundAction):
             description=description,
             priority=body.priority,
             estimate="M",
-            assigned_to=body.assigned_to or "Coder",
+            owner_id=body.owner_id,
             dev_tool=body.dev_tool or "copilot",
             source="notify_inbound",
             source_report_id=message_id,

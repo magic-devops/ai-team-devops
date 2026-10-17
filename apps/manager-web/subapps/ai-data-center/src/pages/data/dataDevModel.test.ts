@@ -17,7 +17,7 @@ describe("dataDevModel", () => {
         maxParallel: 3,
         policy: "quality_first",
         priority: "P1",
-        assignedTo: "data-agent",
+        ownerId: "data-agent",
         devTool: "codex",
       }),
     ).toEqual({
@@ -26,7 +26,7 @@ describe("dataDevModel", () => {
       max_parallel: 3,
       policy: "quality_first",
       priority: "P1",
-      assigned_to: "data-agent",
+        owner_id: "data-agent",
       dev_tool: "codex",
       event: "manager-web:data-development",
     });

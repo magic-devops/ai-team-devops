@@ -258,7 +258,7 @@ export function Copilot({ initialMode = "chat" }: { initialMode?: CopilotMode })
         commands: planResult?.commands ?? [],
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Coder",
+
         dev_tool: "copilot",
       }),
     onSuccess: (data) => {

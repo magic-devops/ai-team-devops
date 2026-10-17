@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -36,10 +38,10 @@ class RolePolicyCheckIn(BaseModel):
     row: dict[str, Any] = Field(default_factory=dict)
 
 
-class AccessReviewTasksIn(BaseModel):
+class AccessReviewTasksIn(TaskOwnerInput):
     dry_run: bool = True
     limit: int = Field(20, ge=1, le=100)
-    assigned_to: str = Field("tenant_admin", max_length=64)
+    owner_id: TaskOwnerId = ""
     priority: str = Field("P1", pattern="^P[0-3]$")
 
 
@@ -877,7 +879,7 @@ def organization_access_review_tasks(
             ]),
             "priority": "P0" if item.get("severity") == "high" else body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "project_id": project_id,
             "source": "organization_access_review",
             "source_report_id": str(item.get("id") or ""),
@@ -895,7 +897,7 @@ def organization_access_review_tasks(
                 status="pending",
                 priority=task["priority"],
                 estimate=task["estimate"],
-                assigned_to=task["assigned_to"],
+                owner_id=task["owner_id"],
                 created_at=now_dt,
                 updated_at=now_dt,
             )

@@ -3,10 +3,12 @@ Hermes 平台架构控制面：把平台定位沉淀为可查询、可治理、�
 """
 from __future__ import annotations
 
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from typing import Any
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from sop_manager.path_config import (
     resolved_business_code,
@@ -19,11 +21,11 @@ from sop_manager.path_config import (
 router = APIRouter(prefix="/api/v1/hermes", tags=["hermes"])
 
 
-class BlueprintTaskIn(BaseModel):
+class BlueprintTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=50)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Platform Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 
@@ -426,7 +428,7 @@ def hermes_blueprint_tasks(body: BlueprintTaskIn) -> dict[str, Any]:
             ),
             "priority": body.priority or gap["priority"],
             "estimate": "L",
-            "assigned_to": body.assigned_to or "Platform Agent",
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool or "codex",
             "source": "hermes_blueprint_gap",
             "source_report_id": gap["id"],

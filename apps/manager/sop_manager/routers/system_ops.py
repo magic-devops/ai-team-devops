@@ -11,6 +11,8 @@ import time
 import urllib.parse
 import urllib.request
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -128,11 +130,11 @@ class DeploymentPipelineExecutionCallbackIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class DeploymentPipelineRemediationIn(BaseModel):
+class DeploymentPipelineRemediationIn(TaskOwnerInput):
     dry_run: bool = True
     include_low: bool = False
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "ReleaseOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     actor: str = "ops-admin"
     note: str = ""
@@ -213,7 +215,7 @@ class DeploymentRollbackDrillActionIn(BaseModel):
     create_pipeline: bool = True
 
 
-class DeploymentRollbackRunbookIn(BaseModel):
+class DeploymentRollbackRunbookIn(TaskOwnerInput):
     package_id: str = ""
     profile: str = ""
     drill_id: str = ""
@@ -224,18 +226,18 @@ class DeploymentRollbackRunbookIn(BaseModel):
     approval_required: bool = True
     create_preview_pipeline: bool = True
     task_priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "ReleaseOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     notes: str = ""
 
 
-class DeploymentRollbackRunbookActionIn(BaseModel):
+class DeploymentRollbackRunbookActionIn(TaskOwnerInput):
     action: str = Field(..., pattern="^(mark_ready|create_tasks|create_pipeline|archive)$")
     actor: str = "ops-admin"
     note: str = ""
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "ReleaseOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 
@@ -257,10 +259,10 @@ class DeploymentExecutionAuditIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class DeploymentExecutionAuditTaskIn(BaseModel):
+class DeploymentExecutionAuditTaskIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "ReleaseOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     include_low: bool = False
 
@@ -1735,7 +1737,7 @@ def _pipeline_remediation_task_plan(run: dict[str, Any], findings: list[dict[str
             ]),
             "priority": priority if priority in {"P0", "P1", "P2", "P3"} else "P1",
             "estimate": "S" if severity == "low" else "M",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "source": "system_ops.pipeline_self_heal",
             "source_report_id": str(run.get("id") or ""),
@@ -2098,7 +2100,7 @@ def _rollback_runbook_steps(package: dict[str, Any], body: DeploymentRollbackRun
         _runbook_step(
             "declare_incident",
             "Declare rollback trigger and freeze release window",
-            body.assigned_to,
+            body.owner_id,
             command=f"sop pages manifest --q {json.dumps(profile, ensure_ascii=False)} --json",
             status="pending",
             evidence=body.trigger,
@@ -2106,7 +2108,7 @@ def _rollback_runbook_steps(package: dict[str, Any], body: DeploymentRollbackRun
         _runbook_step(
             "verify_package",
             "Verify immutable deployment package checksum",
-            body.assigned_to,
+            body.owner_id,
             api=f"/api/v1/system/ops/deployment-packages/{package_id}",
             status="completed" if package.get("checksum") else "pending",
             evidence=str(package.get("checksum") or ""),
@@ -2114,7 +2116,7 @@ def _rollback_runbook_steps(package: dict[str, Any], body: DeploymentRollbackRun
         _runbook_step(
             "confirm_drill",
             "Confirm rollback drill readiness and evidence",
-            body.assigned_to,
+            body.owner_id,
             api=f"/api/v1/system/ops/deployment-rollback-drills/{(drill or {}).get('id', '')}" if drill else "",
             status="completed" if drill_ready else "pending",
             required=bool(drill),
@@ -2123,7 +2125,7 @@ def _rollback_runbook_steps(package: dict[str, Any], body: DeploymentRollbackRun
         _runbook_step(
             "preview_pipeline",
             "Preview rollback pipeline and commands",
-            body.assigned_to,
+            body.owner_id,
             api=f"/api/v1/system/ops/deployment-pipelines/{preview_id}" if preview_id else "/api/v1/system/ops/deployment-pipelines",
             status="completed" if preview_id else "pending",
             evidence=preview_id,
@@ -2131,28 +2133,28 @@ def _rollback_runbook_steps(package: dict[str, Any], body: DeploymentRollbackRun
         _runbook_step(
             "notify_stakeholders",
             "Notify release owner, SRE, support, and tenant admin",
-            body.assigned_to,
+            body.owner_id,
             command="sop ops notify-send --event deploy.rollback --json",
             status="pending",
         ),
         _runbook_step(
             "execute_rollback",
             "Execute guarded rollback pipeline",
-            body.assigned_to,
+            body.owner_id,
             api="/api/v1/system/ops/deployment-pipelines",
             status="pending",
         ),
         _runbook_step(
             "verify_recovery",
             "Verify health, metrics, audit chain, and user traffic recovery",
-            body.assigned_to,
+            body.owner_id,
             command="sop status --json",
             status="pending",
         ),
         _runbook_step(
             "archive_evidence",
             "Archive rollback evidence and follow-up tasks",
-            body.assigned_to,
+            body.owner_id,
             api="/api/v1/audit/events",
             status="pending",
         ),
@@ -2245,7 +2247,7 @@ def _create_deployment_rollback_runbook(body: DeploymentRollbackRunbookIn) -> di
         "operator": body.operator or "release-manager",
         "approval_required": body.approval_required,
         "task_priority": body.task_priority,
-        "assigned_to": body.assigned_to or "ReleaseOps",
+        "owner_id": body.owner_id,
         "dev_tool": body.dev_tool or "codex",
         "notes": body.notes,
         "package_checksum": package.get("checksum", ""),
@@ -2307,7 +2309,7 @@ def _rollback_runbook_task_plan(runbook: dict[str, Any], body: DeploymentRollbac
                 body.note or str(runbook.get("notes") or ""),
             ]),
             "priority": body.priority or str(runbook.get("task_priority") or "P1"),
-            "assigned_to": body.assigned_to or str(runbook.get("assigned_to") or "ReleaseOps"),
+            "owner_id": body.owner_id or str(runbook.get("owner_id") or ""),
             "dev_tool": body.dev_tool or str(runbook.get("dev_tool") or "codex"),
             "source": "system_ops.rollback_runbook",
             "source_report_id": str(runbook.get("id") or ""),
@@ -2579,7 +2581,7 @@ def _execution_audit_task_plan(audit: dict[str, Any], body: DeploymentExecutionA
                 str(audit.get("notes") or ""),
             ]),
             "priority": priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "source": "system_ops.execution_audit",
             "source_report_id": str(audit.get("id") or ""),
@@ -2590,7 +2592,7 @@ def _execution_audit_task_plan(audit: dict[str, Any], body: DeploymentExecutionA
             "title": f"[Execution Audit] Release status is {audit.get('status')}"[:200],
             "description": f"Audit {audit.get('id')} for package {audit.get('package_id')} is {audit.get('status')}. Review rollback, canary, and execution evidence before further rollout.",
             "priority": body.priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "source": "system_ops.execution_audit",
             "source_report_id": str(audit.get("id") or ""),
@@ -2617,7 +2619,7 @@ def _apply_execution_audit_tasks(audit: dict[str, Any], body: DeploymentExecutio
             raise HTTPException(503, f"create execution audit tasks failed: {exc}") from exc
     audit["updated_at"] = _now()
     events = audit.get("events", []) if isinstance(audit.get("events"), list) else []
-    events.append(_pipeline_event("tasks_previewed" if body.dry_run else "tasks_created", body.assigned_to, "", {"count": len(planned)}))
+    events.append(_pipeline_event("tasks_previewed" if body.dry_run else "tasks_created", body.owner_id, "", {"count": len(planned)}))
     audit["events"] = events
     _replace_deployment_execution_audit(audit)
     _audit_change("system_ops.execution_audit.tasks", str(audit.get("profile") or ""), {"audit_id": audit.get("id"), "dry_run": body.dry_run, "count": len(planned)})

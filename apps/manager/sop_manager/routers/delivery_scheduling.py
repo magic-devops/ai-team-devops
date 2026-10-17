@@ -40,7 +40,7 @@ def planning_basis(db, project, data=None):
                 "id": task.id,
                 "basis": context.basis(task.id),
                 "verified": context.verified(task.id),
-                "owner_id": data.get("task_owners", {}).get(task.id, ""),
+                "owner_id": task.owner_id,
                 "sprint_id": task.sprint_id,
                 "milestone_id": data.get("flows", {}).get(task.req_id, {}).get("milestone_id", ""),
                 "planning": {
@@ -53,7 +53,10 @@ def planning_basis(db, project, data=None):
             "tenant_id": project.tenant_id,
             "project_id": project.id,
             "tasks": tasks,
-            "members": sorted(context.roster, key=lambda m: m["id"]),
+            "members": [
+                {key: m[key] for key in ("id", "kind", "active", "available")}
+                for m in sorted(context.roster, key=lambda m: m["id"])
+            ],
             "calendars": data.get("member_calendars", {}),
         }
     )
@@ -256,7 +259,7 @@ def _date_owner_issues(start, end, owner_id, owner):
             issues.append(_issue("invalid_dates"))
     if not owner_id:
         issues.append(_issue("owner_missing"))
-    elif owner is None:
+    elif not owner or not owner["available"]:
         issues.append(_issue("owner_inactive", owner_id))
     return issues
 
@@ -316,7 +319,7 @@ def get_schedule(db, project, permissions, starts_on=None, ends_on=None):
         planned = data.get("task_details", {}).get(task.id, {})
         flow = data.get("flows", {}).get(task.req_id, {})
         owner = context.owner(task)
-        owner_id = data.get("task_owners", {}).get(task.id, "") or (owner or {}).get("id", "")
+        owner_id = task.owner_id
         start, end = planned.get("starts_on"), planned.get("ends_on")
         verified = context.verified(task.id)
         issues = _date_owner_issues(start, end, owner_id, owner)
@@ -346,8 +349,8 @@ def get_schedule(db, project, permissions, starts_on=None, ends_on=None):
                 if task.req_id in context.requirements
                 else "",
                 "owner_id": owner_id,
-                "owner_name": (owner or {}).get("name", task.assigned_to or ""),
-                "owner_active": owner is not None,
+                "owner_name": (owner or {}).get("name") or "",
+                "owner_active": bool(owner and owner["available"]),
                 "status": task.status,
                 "delivery_status": delivery_status,
                 "verified": verified,

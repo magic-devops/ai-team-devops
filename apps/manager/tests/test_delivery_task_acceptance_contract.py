@@ -28,12 +28,29 @@ def test_condition_changes_require_exact_task_basis_and_explicit_arrays():
         {"acceptance_criteria": []},
         {"requirement_criteria_indices": []},
         {"depends_on": []},
+        {"owner_id": "user:owner"},
     ):
         with pytest.raises(ValidationError):
             TaskEdit(id="task", **changes)
         TaskEdit(id="task", task_basis="a" * 64, **changes)
     with pytest.raises(ValidationError):
         TaskEdit(id="task", task_basis="a" * 64, acceptance_criteria=None)
+
+
+@pytest.mark.parametrize("owner_id", [None, True, 17, " user:lead", "user:lead\n"])
+@pytest.mark.parametrize("model", [TaskDraft, TaskEdit])
+def test_task_owner_ids_are_strict_nonnullable_stable_ids(model, owner_id):
+    values = {"title": "Task"} if model is TaskDraft else {"id": "task", "task_basis": "a" * 64}
+    with pytest.raises(ValidationError):
+        model(**values, owner_id=owner_id)
+
+
+def test_owner_edit_uses_exclude_unset_to_distinguish_clear_from_omission():
+    omitted = TaskEdit(id="task", description="Text edit")
+    assert omitted.owner_id == ""
+    assert "owner_id" not in omitted.model_dump(exclude_unset=True)
+    cleared = TaskEdit(id="task", owner_id="", task_basis="a" * 64)
+    assert cleared.model_dump(exclude_unset=True)["owner_id"] == ""
 
 
 def test_native_task_snapshot_has_real_optional_requirement():
@@ -50,13 +67,20 @@ def test_native_task_snapshot_has_real_optional_requirement():
     )
     assert ExecutionSnapshot(**data).requirement is None
     data["requirement"] = dict(
-        id="req", title="Requirement", description="Scope", revision=2,
-        acceptance_criteria=["Requirement condition"], criteria_indices=[0],
+        id="req",
+        title="Requirement",
+        description="Scope",
+        revision=2,
+        acceptance_criteria=["Requirement condition"],
+        criteria_indices=[0],
     )
     assert ExecutionSnapshot(**data).requirement.revision == 2
 
 
-@pytest.mark.parametrize("acceptance", [None, {}, {"available": True, "criteria": []}, {"available": False, "criteria": ["Old source"]}])
+@pytest.mark.parametrize(
+    "acceptance",
+    [None, {}, {"available": True, "criteria": []}, {"available": False, "criteria": ["Old source"]}],
+)
 def test_requirement_progress_cannot_bypass_task_acceptance(acceptance):
     task = {"id": "task", "req_id": "req", "status": "completed", "acceptance": acceptance}
     gates = stage_gates({"id": "req"}, {**default_flow(), "stage": "development"}, [task], [])

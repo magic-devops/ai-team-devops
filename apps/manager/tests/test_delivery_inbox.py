@@ -64,8 +64,8 @@ def test_explicit_human_id_survives_agent_name_collision_but_agent_is_not_mine(e
                 tenant_id="tenant",
                 project_id="project",
                 req_id=rid,
-                title="Legacy ambiguous name",
-                assigned_to="lead",
+                title="Unassigned task beside a same-name agent",
+                owner_id="",
             )
         )
         db.commit()
@@ -74,7 +74,7 @@ def test_explicit_human_id_survives_agent_name_collision_but_agent_is_not_mine(e
     assert other["id"] not in entries
 
 
-def test_tool_name_also_makes_legacy_name_ambiguous_without_hiding_explicit_assignment(env):
+def test_tool_name_does_not_assign_unassigned_tasks_or_hide_explicit_assignment(env):
     client, sessions, _ = env
     rid = requirement(client)
     member(client, "tool")
@@ -86,8 +86,8 @@ def test_tool_name_also_makes_legacy_name_ambiguous_without_hiding_explicit_assi
                 tenant_id="tenant",
                 project_id="project",
                 req_id=rid,
-                title="Old name-only task",
-                assigned_to="lead",
+                title="Unassigned task beside a same-name tool",
+                owner_id="",
             )
         )
         db.commit()
@@ -95,7 +95,7 @@ def test_tool_name_also_makes_legacy_name_ambiguous_without_hiding_explicit_assi
     assert [i["resource_id"] for i in entries] == [explicit["id"]]
 
 
-def test_unambiguous_legacy_materialized_human_assignment_and_missing_metadata_are_supported(env):
+def test_generic_stable_owner_assignment_and_missing_planning_metadata_are_supported(env):
     client, sessions, _ = env
     rid = requirement(client)
     with sessions() as db:
@@ -106,13 +106,12 @@ def test_unambiguous_legacy_materialized_human_assignment_and_missing_metadata_a
                 project_id="project",
                 req_id=rid,
                 title="Old unique assignee",
-                assigned_to="lead",
+                owner_id="user:lead",
             )
         )
         db.commit()
     snapshot = client.get("/api/v1/delivery/workspace").json()
     row = snapshot["tasks"][0]
-    row.pop("owner_explicit", None)
     row.pop("planning", None)
     row.pop("dependency_blocked", None)
     result = build_inbox(snapshot, {"id": "lead"}, now=NOW)
@@ -120,15 +119,16 @@ def test_unambiguous_legacy_materialized_human_assignment_and_missing_metadata_a
     assert result["counts"]["overdue"] == 0
 
 
-def test_legacy_canonical_reassignment_does_not_leave_stale_explicit_owner_in_mine(env):
+def test_canonical_reassignment_moves_the_task_between_stable_owner_inboxes(env):
     client, sessions, _ = env
     rid = requirement(client)
     own = task(client, rid)
     with sessions() as db:
-        db.get(Task, own["id"]).assigned_to = "reader"
+        db.get(Task, own["id"]).owner_id = "user:reader"
         db.commit()
     snapshot = client.get("/api/v1/delivery/workspace").json()
-    assert snapshot["tasks"][0]["owner_active"] is False
+    assert snapshot["tasks"][0]["owner_active"] is True
+    assert snapshot["tasks"][0]["owner_id"] == "user:reader"
     result = build_inbox(snapshot, {"id": "lead"}, now=NOW)
     assert not [i for i in result["items"] if i["kind"] == "task"]
     assert any(i["resource_id"] == own["id"] for i in inbox(client, scope="team")["items"])
@@ -353,7 +353,7 @@ def test_team_acceptance_in_mine_requires_approve_and_never_grants_runtime_permi
     finish(bridge, execution)
     sync(bridge, execution)
     snapshot = client.get("/api/v1/delivery/workspace").json()
-    snapshot["tasks"][0].update(owner_id="user:reader", owner_explicit=True, assigned_to="reader")
+    snapshot["tasks"][0].update(owner_id="user:reader", assigned_to="reader")
     snapshot["executions"][0]["snapshot"]["assigned_to"] = "reader"
     assert build_inbox(snapshot, {"id": "lead"}, now=NOW)["counts"]["acceptance"] == 1
     snapshot["permissions"]["approve"] = False

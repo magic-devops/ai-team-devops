@@ -4,6 +4,25 @@ import hashlib
 import json
 from copy import deepcopy
 
+from .delivery_team import semantic_owner
+
+
+def semantic_snapshot(snapshot):
+    """Audit labels remain original; responsibility comparisons use stable IDs."""
+    if snapshot is None:
+        return None
+    value = deepcopy(snapshot)
+    value.pop("assigned_to", None)
+    if "task" in value:
+        value["task"].pop("assigned_to", None)
+        value["task"].pop("owner_id", None)
+    value["owner"] = semantic_owner(value.get("owner"))
+    return value
+
+
+def snapshots_match(original, current):
+    return semantic_snapshot(original) == semantic_snapshot(current)
+
 
 def requirement_definition(requirement):
     return {

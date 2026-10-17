@@ -4,7 +4,7 @@ export type DataDevScheduleForm = {
   maxParallel: number;
   policy: string;
   priority: string;
-  assignedTo: string;
+  ownerId: string;
   devTool: string;
 };
 
@@ -14,7 +14,7 @@ export type DataDevSchedulePayload = {
   max_parallel: number;
   policy: string;
   priority: string;
-  assigned_to: string;
+  owner_id: string;
   dev_tool: string;
   event: string;
 };
@@ -37,7 +37,7 @@ export function buildSchedulePayload(form: DataDevScheduleForm): DataDevSchedule
     max_parallel: form.maxParallel,
     policy: form.policy,
     priority: form.priority,
-    assigned_to: form.assignedTo,
+    owner_id: form.ownerId,
     dev_tool: form.devTool,
     event: "manager-web:data-development",
   };

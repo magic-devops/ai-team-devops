@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { KeyRound, ListChecks, MessageSquare, FileText, Rocket, Send, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Dispatch, SetStateAction } from "react";
@@ -15,7 +16,7 @@ type SsoRiskEscalationDraft = {
   min_severity: string;
   score_threshold: string;
   priority: string;
-  assigned_to: string;
+  owner_id: string;
   dev_tool: string;
   include_low: boolean;
   limit: string;
@@ -436,7 +437,7 @@ export function SettingsSsoPanel({
                       <div className="mt-3 grid gap-3 sm:grid-cols-4">
                         <Info label={t("page.settings.ssoRiskTaskLimit")} value={ssoRiskTaskDraft.limit} />
                         <Info label={t("page.settings.ssoRiskTaskPriority", { defaultValue: "优先级" })} value={ssoRiskTaskDraft.priority} />
-                        <Info label={t("page.settings.ssoRiskTaskAssignee")} value={ssoRiskTaskDraft.assigned_to || "-"} />
+                        <Info label={t("page.settings.ssoRiskTaskAssignee")} value={ssoRiskTaskDraft.owner_id || "-"} />
                         <Info label={t("page.settings.ssoRiskTaskDevTool")} value={ssoRiskTaskDraft.dev_tool || "-"} />
                       </div>
                       <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
@@ -513,7 +514,7 @@ export function SettingsSsoPanel({
                               <Select value={ssoRiskTaskDraft.priority} onChange={(value) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, priority: value })} options={["P0", "P1", "P2", "P3"].map((value) => ({ value, label: value }))} />
                             </Form.Item>
                             <Form.Item label={t("page.settings.ssoRiskTaskAssignee")} required>
-                              <Input value={ssoRiskTaskDraft.assigned_to} onChange={(e) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, assigned_to: e.target.value })} />
+                              <ProjectOwnerSelect value={ssoRiskTaskDraft.owner_id} onChange={(owner_id) => setSsoRiskTaskDraft({ ...ssoRiskTaskDraft, owner_id: owner_id })} />
                             </Form.Item>
                           </div>
                           <Form.Item label={t("page.settings.ssoRiskTaskDevTool")}>
@@ -983,7 +984,7 @@ export function SettingsSsoPanel({
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             <Form.Item label={t("page.settings.ssoRiskEscalationAssignee")}>
-                              <Input value={ssoRiskEscalationDraft.assigned_to} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, assigned_to: e.target.value })} />
+                              <ProjectOwnerSelect value={ssoRiskEscalationDraft.owner_id} onChange={(owner_id) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, owner_id: owner_id })} />
                             </Form.Item>
                             <Form.Item label={t("page.settings.ssoRiskEscalationDevTool")}>
                               <Input value={ssoRiskEscalationDraft.dev_tool} onChange={(e) => setSsoRiskEscalationDraft({ ...ssoRiskEscalationDraft, dev_tool: e.target.value })} />
@@ -1085,7 +1086,7 @@ export function SettingsSsoPanel({
                     <div className="ssoRiskRunbookQuickSummary mt-4 grid gap-3 sm:grid-cols-4">
                       <Info label={t("page.settings.ssoRiskRunbookLimit")} value={ssoRiskRunbookDraft.limit} />
                       <Info label={t("tasks.priority")} value={ssoRiskRunbookDraft.priority} />
-                      <Info label={t("page.settings.ssoRiskRunbookAssignee")} value={ssoRiskRunbookDraft.assigned_to || "-"} />
+                      <Info label={t("page.settings.ssoRiskRunbookAssignee")} value={ssoRiskRunbookDraft.owner_id || "-"} />
                       <Info label={t("page.settings.ssoRiskRunbookChannels")} value={String(ssoRiskRunbookDraft.channels.length || (notifyChannels.data || []).length || 0)} />
                     </div>
                     <Button className="mt-3" block type="primary" icon={<FileText className="h-4 w-4" />} disabled={!selectedSsoProviderExists} onClick={() => setSsoRiskRunbookDrawerOpen(true)}>
@@ -1126,7 +1127,7 @@ export function SettingsSsoPanel({
                               <Select value={ssoRiskRunbookDraft.priority} onChange={(priority) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, priority })} options={["P0", "P1", "P2", "P3"].map((priority) => ({ value: priority, label: priority }))} />
                             </Form.Item>
                             <Form.Item label={t("page.settings.ssoRiskRunbookAssignee")}>
-                              <Input value={ssoRiskRunbookDraft.assigned_to} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, assigned_to: e.target.value })} />
+                              <ProjectOwnerSelect value={ssoRiskRunbookDraft.owner_id} onChange={(owner_id) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, owner_id: owner_id })} />
                             </Form.Item>
                             <Form.Item label={t("page.settings.ssoRiskEscalationDevTool")}>
                               <Input value={ssoRiskRunbookDraft.dev_tool} onChange={(e) => setSsoRiskRunbookDraft({ ...ssoRiskRunbookDraft, dev_tool: e.target.value })} />

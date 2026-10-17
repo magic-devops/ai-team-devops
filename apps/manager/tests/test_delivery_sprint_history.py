@@ -25,7 +25,7 @@ def _task(client):
     response = client.post(
         "/api/v1/tasks",
         headers=headers(),
-        json={"title": "Sprint work", "sprint_id": "SPRINT-selected", "assigned_to": "writer"},
+        json={"title": "Sprint work", "sprint_id": "SPRINT-selected", "owner_id": "user:writer"},
     )
     assert response.status_code == 200, response.text
     return response.json()["id"]

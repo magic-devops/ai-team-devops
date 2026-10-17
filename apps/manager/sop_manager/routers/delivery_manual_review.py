@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from .delivery_service import identifier, initial_state, reconcile
+from .delivery_task_contract import snapshots_match
 from .delivery_verification import VerificationContext
 from .sql_models import DeliveryTaskReview, DeliveryWorkspace
 
 REASONS = {
     "manual_review_execution_managed": "Review this task through its execution evidence.",
-    "manual_review_requires_human": "Assign this task to one active project human member.",
+    "task_owner_missing": "Assign a responsible project person or agent.",
+    "task_owner_unavailable": "Choose an active available responsible project person or agent.",
     "manual_review_requirement_missing": "The linked requirement is no longer in this project.",
     "manual_review_permission_required": "Project approval permission is required.",
     "manual_review_not_completed": "Record task completion before accepting manual delivery.",
@@ -30,8 +32,10 @@ def current_review(context, task_id, *, can_approve):
     codes = []
     if task_id in context.executions:
         codes.append("manual_review_execution_managed")
-    if not snapshot["owner"] or snapshot["owner"]["kind"] != "human":
-        codes.append("manual_review_requires_human")
+    if not snapshot["owner"]:
+        codes.append("task_owner_missing")
+    elif not snapshot["owner"]["available"]:
+        codes.append("task_owner_unavailable")
     if snapshot["task"]["req_id"] and snapshot["requirement"] is None:
         codes.append("manual_review_requirement_missing")
     eligible = not codes
@@ -125,7 +129,7 @@ def list_reviews(db, project, task_id, *, can_approve, limit=20, cursor=""):
             and not row.invalidated
             and current is not None
             and current["verified"]
-            and row.task_basis == current["basis"]
+            and snapshots_match(row.snapshot, context.snapshot(task_id))
         )
         result.append(
             {
@@ -176,7 +180,11 @@ def invalidate_reviews(db, project):
     )
     for row in rows:
         missing = row.task_id not in context.tasks
-        if missing or row.task_basis != context.basis(row.task_id) or row.task_id in context.executions:
+        if (
+            missing
+            or not snapshots_match(row.snapshot, context.snapshot(row.task_id))
+            or row.task_id in context.executions
+        ):
             row.invalidated = True
             row.invalidated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             row.invalidated_reason = "task_review_task_missing" if missing else "task_review_basis_changed"

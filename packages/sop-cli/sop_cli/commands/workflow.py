@@ -147,12 +147,12 @@ def ops_plan(json_out: bool = typer.Option(False, "--json")) -> None:
 def ops_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建任务；默认仅预览"),
     priority: str = typer.Option("P1", "--priority"),
-    assigned_to: str = typer.Option("Coder", "--assigned-to"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
     """将 WorkflowOps 候选项预览或生成任务。"""
     try:
-        out = get_client().workflow_ops_tasks({"dry_run": not apply, "priority": priority, "assigned_to": assigned_to})
+        out = get_client().workflow_ops_tasks({"dry_run": not apply, "priority": priority, "owner_id": owner_id})
     except Exception as e:
         warn(f"Manager workflow ops-tasks 不可用: {e}")
         raise typer.Exit(1)

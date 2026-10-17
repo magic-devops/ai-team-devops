@@ -203,7 +203,7 @@ def test_build_cost_anomaly_tasks_detects_expensive_models():
     result = build_cost_anomaly_tasks(
         usage,
         [{"id": "default", "enabled": True, "cost_anomaly_threshold_usd": 1.0}],
-        assigned_to="AI Platform",
+        owner_id="",
         dev_tool="codex",
     )
 
@@ -223,7 +223,7 @@ def test_build_cost_attribution_groups_provider_model_task_and_source():
     result = build_cost_attribution(
         usage,
         [{"id": "default", "enabled": True, "daily_budget_usd": 2.0, "cost_anomaly_threshold_usd": 1.0}],
-        assigned_to="AI Platform",
+        owner_id="",
         dev_tool="codex",
     )
 
@@ -435,7 +435,7 @@ def test_prompt_audit_routes_persist_and_create_tasks(tmp_path):
             task_type="code",
             model_id="gpt-5",
             dry_run=False,
-            assigned_to="AI Platform",
+            owner_id="",
             dev_tool="codex",
         ))
         listed = llm_gateway_v2.list_prompt_audit_runs()

@@ -12,15 +12,20 @@ from sqlalchemy.orm import Session
 
 from sop_manager.path_config import resolved_project_id, resolved_tenant_id
 from sop_manager.task_acceptance import normalize_task_acceptance
+from sop_manager.task_owner import validate_task_owner_values
 
-from .sql_models import DeliveryWorkspace, Issue, Requirement, Sprint, Task, get_session
+from .sql_models import DeliveryWorkspace, Issue, Project, Requirement, Sprint, Task, get_session
 
 
-def _to_dict(obj) -> dict:
+def _to_dict(obj, team=None) -> dict:
     d = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
     for k, v in d.items():
         if isinstance(v, datetime):
             d[k] = v.isoformat() + "Z"
+    if isinstance(obj, Task):
+        owner = team.resolve_owner(obj.owner_id) if team else None
+        d["owner"] = owner
+        d["assigned_to"] = (owner or {}).get("name") or ""
     return d
 
 
@@ -39,7 +44,8 @@ class _SqlTable:
     def to_pandas(self):
         import pandas as pd
 
-        rows = [_to_dict(r) for r in self._base_q().all()]
+        team = self._team()
+        rows = [_to_dict(r, team) for r in self._base_q().all()]
         return pd.DataFrame(rows) if rows else pd.DataFrame()
 
     def add(self, rows_list: list):
@@ -79,9 +85,20 @@ class _SqlTable:
                     setattr(obj, k, v)
             self._db.commit()
 
-    @staticmethod
-    def _task_values(values):
-        values = dict(values)
+    def _team(self):
+        if self._model is not Task:
+            return None
+        from .delivery_team import TeamContext
+        return TeamContext(self._db, self._project())
+
+    def _project(self):
+        project = self._db.get(Project, resolved_project_id())
+        if not project or project.tenant_id != resolved_tenant_id():
+            raise HTTPException(422, "Task project scope does not exist")
+        return project
+
+    def _task_values(self, values):
+        values = validate_task_owner_values(self._db, self._project(), values)
         if "acceptance_criteria" in values:
             try:
                 values["acceptance_criteria"] = normalize_task_acceptance(values["acceptance_criteria"])
@@ -131,7 +148,8 @@ def rows(name: str, limit: int = 500) -> list:
         .limit(limit)
         .all()
     )
-    return [_to_dict(o) for o in objs]
+    team = _SqlTable(model, db)._team()
+    return [_to_dict(o, team) for o in objs]
 
 
 def now() -> datetime:

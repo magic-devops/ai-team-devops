@@ -1,6 +1,8 @@
 """issues CRUD — 使用 SQLAlchemy，支持租户/项目隔离、分页"""
 from __future__ import annotations
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -163,10 +165,10 @@ def issues_hub(
     }
 
 
-class IssueOpsTasksIn(BaseModel):
+class IssueOpsTasksIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("IssueOps Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     categories: list[str] = Field(default_factory=list, max_length=20)
     limit: int = Field(20, ge=1, le=100)
 
@@ -268,7 +270,7 @@ def _issue_ops_plan_payload(items: list[Issue]) -> dict[str, Any]:
             ]),
             "priority": "P0" if risk.get("severity") == "P0" else "P1" if risk.get("severity") == "P1" else "P2",
             "estimate": "M",
-            "assigned_to": "IssueOps Agent",
+            "owner_id": "",
             "dev_tool": "codex-cli",
             "source": "issue_ops",
             "source_report_id": str(risk.get("id") or ""),
@@ -295,7 +297,7 @@ def _issue_ops_plan_payload(items: list[Issue]) -> dict[str, Any]:
         "commands": [
             {"label": "查看问题治理计划", "command": "sop issue ops-plan --json"},
             {"label": "预览治理任务", "command": "sop issue ops-tasks --limit 20 --json"},
-            {"label": "生成治理任务", "command": "sop issue ops-tasks --apply --assigned-to \"IssueOps Agent\""},
+            {"label": "生成治理任务", "command": "sop issue ops-tasks --apply"},
         ],
         "agent_packet": {
             "purpose": "IssueOps: prioritize unresolved issues, link them to executable tasks, and close the fix evidence loop.",
@@ -347,7 +349,7 @@ def issues_ops_tasks(
         for item in candidates:
             payload = dict(item)
             payload["priority"] = body.priority or payload.get("priority") or "P1"
-            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "IssueOps Agent"
+            payload["owner_id"] = body.owner_id
             out = create_task(TaskCreate(**payload))
             task_id = str(out.get("id") or "")
             created.append(task_id)
@@ -357,7 +359,7 @@ def issues_ops_tasks(
         for item in candidates:
             payload = dict(item)
             payload["priority"] = body.priority or payload.get("priority") or "P1"
-            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "IssueOps Agent"
+            payload["owner_id"] = body.owner_id
             items.append(payload)
     return {
         "ok": True,

@@ -146,7 +146,7 @@ def interaction_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
     include_ready: bool = typer.Option(False, "--include-ready", help="包含 ready 模块，用于持续增强"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("Designer", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -158,7 +158,7 @@ def interaction_tasks(
         "dry_run": dry_run,
         "include_ready": include_ready,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
     }
     try:
@@ -227,7 +227,7 @@ def interaction_ops_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际生成任务"),
     include_low: bool = typer.Option(False, "--include-low", help="包含低风险项"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("GovernanceOps", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     idempotency_key: str = typer.Option("", "--idempotency-key", help="幂等键"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -240,7 +240,7 @@ def interaction_ops_tasks(
         "dry_run": dry_run,
         "include_low": include_low,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
         "idempotency_key": idempotency_key,
     }
@@ -557,7 +557,7 @@ def isolation_scan_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
     include_protected: bool = typer.Option(False, "--include-protected", help="包含已 protected 源码项，用于持续审计"),
     priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -569,7 +569,7 @@ def isolation_scan_tasks(
         "dry_run": dry_run,
         "include_protected": include_protected,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
     }
     try:
@@ -710,7 +710,7 @@ def isolation_scan_compare_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
     include_resolved: bool = typer.Option(False, "--include-resolved", help="包含已修复项，用于回归验证任务"),
     priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -723,7 +723,7 @@ def isolation_scan_compare_tasks(
         "dry_run": dry_run,
         "include_resolved": include_resolved,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
     }
     try:
@@ -755,7 +755,7 @@ def isolation_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
     include_protected: bool = typer.Option(False, "--include-protected", help="包含已 protected 领域，用于持续审计"),
     priority: str = typer.Option("P0", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("SecurityAgent", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -767,7 +767,7 @@ def isolation_tasks(
         "dry_run": dry_run,
         "include_protected": include_protected,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
     }
     try:
@@ -800,7 +800,7 @@ def readiness_tasks(
     dry_run: bool = typer.Option(True, "--dry-run/--create", help="预览或实际生成任务"),
     include_complete: bool = typer.Option(False, "--include-complete", help="包含已 complete 模块，用于持续增强"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级 P0-P3"),
-    assigned_to: str = typer.Option("Coder", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     max_items: int = typer.Option(12, "--max-items", help="最大任务数"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -813,7 +813,7 @@ def readiness_tasks(
         "dry_run": dry_run,
         "include_complete": include_complete,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "max_items": max_items,
     }
     try:
@@ -879,7 +879,7 @@ def governance_tasks_update(
     dry_run: bool = typer.Option(True, "--dry-run/--apply", help="预览或实际批量更新"),
     status: str = typer.Option("", "--status", help="任务状态：pending/in_progress/blocked/completed"),
     priority: str = typer.Option("", "--priority", help="优先级：P0-P3"),
-    assigned_to: str = typer.Option("", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
     """对 SystemMap 治理任务做 scoped 批量处置，普通任务会被跳过。"""
@@ -888,7 +888,7 @@ def governance_tasks_update(
         "dry_run": dry_run,
         "status": status or None,
         "priority": priority or None,
-        "assigned_to": assigned_to or None,
+        "owner_id": owner_id or None,
     }
     try:
         out = get_client().system_pages_governance_tasks_bulk_update(**body)

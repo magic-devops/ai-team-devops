@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { Button, Drawer, Form, Input, Select, Space, Steps, Switch } from "antd";
 import { RefreshButton } from "@/components/PageStates";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
@@ -617,7 +618,7 @@ export function OpsCenterAlertSourcesPanel({
                           </div>
                           <div className="rounded-lg bg-[var(--surface-muted)] p-3">
                             <p className="text-xs text-[var(--muted)]">负责人</p>
-                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.assigned_to}</p>
+                            <p className="text-sm font-semibold">{opsStrategyLinkageForm.owner_id}</p>
                           </div>
                         </div>
                         <p className="mt-2 text-[11px] text-[var(--muted)]">工具：{opsStrategyLinkageForm.dev_tool}。IM 通道沿用本页已选择通道，执行联动会创建任务并发送风险简报。</p>
@@ -1033,9 +1034,9 @@ export function OpsCenterAlertSourcesPanel({
                       />
                     </Form.Item>
                     <Form.Item label="负责人">
-                      <Input
-                        value={alertSloEscalationForm.assigned_to}
-                        onChange={e => setAlertSloEscalationForm((f: any) => ({ ...f, assigned_to: e.target.value }))}
+                      <ProjectOwnerSelect
+                        value={alertSloEscalationForm.owner_id}
+                        onChange={(owner_id) => setAlertSloEscalationForm((f: any) => ({ ...f, owner_id: owner_id }))}
                       />
                     </Form.Item>
                     <Form.Item label="执行工具">
@@ -1258,9 +1259,9 @@ export function OpsCenterAlertSourcesPanel({
                       />
                     </Form.Item>
                     <Form.Item label="负责人">
-                      <Input
-                        value={opsStrategyLinkageForm.assigned_to}
-                        onChange={e => setOpsStrategyLinkageForm((f: any) => ({ ...f, assigned_to: e.target.value }))}
+                      <ProjectOwnerSelect
+                        value={opsStrategyLinkageForm.owner_id}
+                        onChange={(owner_id) => setOpsStrategyLinkageForm((f: any) => ({ ...f, owner_id: owner_id }))}
                       />
                     </Form.Item>
                     <Form.Item label="执行工具">

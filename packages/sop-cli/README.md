@@ -91,7 +91,9 @@ sop db-config list --json
 sop db-config add prod-ob --type oceanbase --role business --capability sql --capability vector --host ob.example.com --port 2881 --database app --username app --secret-ref env://APP_OB_URL
 sop db-config test prod-ob --url "$APP_OB_URL"
 sop task list --status pending
-sop task create "实现登录页 SSO 对接" --priority P1 --assignee Coder
+sop delivery workspace  # 查看当前项目 members 中的稳定 ID
+sop task create "实现登录页 SSO 对接" --priority P1 --owner-id "user:<成员ID>"
+sop task update "T-<任务ID>" --owner-id ""  # 明确清空负责人；省略该选项保持原负责人
 sop task pull T-123
 sop task done T-123 --confidence 0.9
 

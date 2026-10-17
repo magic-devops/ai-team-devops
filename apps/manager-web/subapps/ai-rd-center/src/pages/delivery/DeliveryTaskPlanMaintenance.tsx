@@ -23,6 +23,7 @@ import {
 } from "./DeliveryEditor";
 import { DeliveryTaskPlanning } from "./DeliveryTaskPlanning";
 import { Button } from "antd";
+import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import {
   allocationSummary,
   parseSchedulingRoute,
@@ -46,6 +47,7 @@ export function DeliveryTaskPlanMaintenance({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const identity = useMemberIdentity();
   const tr = (key: string) => t(`delivery.${key}`);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
   const [error, setError] = useState("");
@@ -167,12 +169,7 @@ export function DeliveryTaskPlanMaintenance({
             { label: tr("titleField"), value: current.task.title },
             {
               label: tr("owner"),
-              value:
-                latest.members.find(
-                  (member) => member.id === current.task.owner_id,
-                )?.name ||
-                current.task.assigned_to ||
-                tr("unassigned"),
+              value: identity(latest.members, current.task.owner_id),
             },
             {
               label: tr("current"),

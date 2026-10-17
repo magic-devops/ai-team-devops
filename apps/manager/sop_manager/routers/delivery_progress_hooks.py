@@ -27,53 +27,18 @@ def _models():
     return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent, DeliveryTaskReview
 
 
-def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), usernames=()):
-    """Actual review scopes affected by membership, name or account status changes."""
-    from .sql_models import DeliveryTaskReview, DeliveryWorkspace, Project, Task, User
+def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
+    """Actual stable responsibility scopes affected by account or membership changes."""
+    from .sql_models import DeliveryTaskReview, Project, Task
 
     if tenant_ids and user_ids:
-        names = set(usernames)
-        names.update(
-            db.connection()
-            .execute(select(User.username).where(User.id.in_(user_ids), User.tenant_id.in_(tenant_ids)))
-            .scalars()
-        )
-        if names:
-            for tenant_id, project_id in db.connection().execute(
-                select(Task.tenant_id, Task.project_id)
-                .where(Task.tenant_id.in_(tenant_ids), Task.assigned_to.in_(names))
-                .distinct()
-            ):
-                mark_progress(db, tenant_id, project_id)
-        # Project only stable owner maps, never lifetime execution/evidence JSON.
         owner_ids = {"user:" + value for value in user_ids}
-        for tenant_id, project_id, owners in (
-            db.connection()
-            .execute(
-                select(
-                    DeliveryWorkspace.tenant_id,
-                    DeliveryWorkspace.project_id,
-                    DeliveryWorkspace.data["task_owners"],
-                ).where(DeliveryWorkspace.tenant_id.in_(tenant_ids))
-            )
-            .yield_per(128)
+        for tenant_id, project_id in db.connection().execute(
+            select(Task.tenant_id, Task.project_id)
+            .where(Task.tenant_id.in_(tenant_ids), Task.owner_id.in_(owner_ids))
+            .distinct()
         ):
-            task_ids = (
-                [key for key, value in owners.items() if value in owner_ids]
-                if isinstance(owners, dict)
-                else []
-            )
-            if (
-                task_ids
-                and db.connection()
-                .execute(
-                    select(Task.id)
-                    .where(Task.id.in_(task_ids), Task.tenant_id == tenant_id, Task.project_id == project_id)
-                    .limit(1)
-                )
-                .first()
-            ):
-                mark_progress(db, tenant_id, project_id)
+            mark_progress(db, tenant_id, project_id)
         for tenant_id, project_id in db.connection().execute(
             select(DeliveryTaskReview.tenant_id, DeliveryTaskReview.project_id)
             .where(
@@ -106,9 +71,7 @@ def _identity_object_scopes(db, obj):
             )
             if original:
                 tenants.add(original)
-        _identity_scopes(
-            db, tenant_ids=tenants, user_ids={obj.id}, usernames={obj.username} if obj.username else ()
-        )
+        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id})
     elif isinstance(obj, ProjectMember):
         projects = {obj.project_id}
         if state.persistent:
@@ -236,7 +199,6 @@ def _core_identity_write(state, table):
                     state.session,
                     tenant_ids={value["tenant_id"]},
                     user_ids={value["id"]},
-                    usernames={value["username"]} if value.get("username") else (),
                 )
             elif not is_user and value.get("project_id"):
                 _identity_scopes(state.session, project_ids={value["project_id"]})

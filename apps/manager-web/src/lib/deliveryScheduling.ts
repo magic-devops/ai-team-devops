@@ -129,6 +129,10 @@ export type SchedulingRoute = {
   startsOn: string;
   endsOn: string;
   memberId: string;
+  teamMemberId: string;
+  teamKind: "all" | "human" | "agent" | "tool";
+  teamState: "all" | "active" | "inactive";
+  teamSearch: string;
   milestoneId: string;
   sprintId: string;
   issue: string;
@@ -191,6 +195,10 @@ const scheduleParams = [
   "starts_on",
   "ends_on",
   "member_id",
+  "team_member",
+  "team_kind",
+  "team_state",
+  "team_q",
   "milestone_id",
   "sprint_id",
   "schedule_issue",
@@ -215,6 +223,10 @@ export function parseSchedulingRoute(
     startsOn: params.get("starts_on") ?? range.startsOn,
     endsOn: params.get("ends_on") ?? range.endsOn,
     memberId: params.get("member_id") || "",
+    teamMemberId: params.get("team_member") || "",
+    teamKind: ["human", "agent", "tool"].includes(params.get("team_kind") || "") ? params.get("team_kind") as SchedulingRoute["teamKind"] : "all",
+    teamState: ["active", "inactive"].includes(params.get("team_state") || "") ? params.get("team_state") as SchedulingRoute["teamState"] : "all",
+    teamSearch: params.get("team_q") || "",
     milestoneId: params.get("milestone_id") || "",
     sprintId: params.get("sprint_id") || "",
     issue: params.get("schedule_issue") || "",
@@ -233,6 +245,10 @@ export function schedulingHash(route: SchedulingRoute, source = ""): string {
     route.startsOn,
     route.endsOn,
     route.memberId,
+    route.teamMemberId,
+    route.teamKind === "all" ? "" : route.teamKind,
+    route.teamState === "all" ? "" : route.teamState,
+    route.teamSearch,
     route.milestoneId,
     route.sprintId,
     route.issue,

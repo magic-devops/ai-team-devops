@@ -24,6 +24,8 @@ import os
 import re
 import time
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -661,10 +663,10 @@ class BulkCancelIn(BaseModel):
     workflow_ids: list[str] = Field(default_factory=list, min_length=1, max_length=100)
 
 
-class WorkflowOpsTasksIn(BaseModel):
+class WorkflowOpsTasksIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
 
 
 def _permissions(user: User, db) -> dict[str, bool]:
@@ -839,7 +841,7 @@ def workflow_events(limit: int = 100, workflow_id: str = "") -> dict[str, Any]:
     return {"ok": True, "items": out, "total": len(out)}
 
 
-def _workflow_ops_task_specs(rows: list[dict[str, Any]], *, priority: str, assigned_to: str) -> list[dict[str, Any]]:
+def _workflow_ops_task_specs(rows: list[dict[str, Any]], *, priority: str, owner_id: str) -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
     failed = [r for r in rows if r.get("status") == "failed"]
     long_running = [r for r in rows if r.get("status") == "running" and int(r.get("duration_s") or 0) >= 1800]
@@ -850,7 +852,7 @@ def _workflow_ops_task_specs(rows: list[dict[str, Any]], *, priority: str, assig
             "description": "分析 failed 工作流的错误、事件时间线和 DAG 步骤，形成修复建议并回填执行记录。",
             "priority": priority,
             "estimate": "M",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "status": "pending",
             "workflow_ids": [str(r.get("workflow_id")) for r in failed[:20]],
         })
@@ -861,7 +863,7 @@ def _workflow_ops_task_specs(rows: list[dict[str, Any]], *, priority: str, assig
             "description": "检查 running 超时实例是否卡在人工信号、外部依赖或 Temporal worker，必要时补发 signal 或取消重试。",
             "priority": priority,
             "estimate": "S",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "status": "pending",
             "workflow_ids": [str(r.get("workflow_id")) for r in long_running[:20]],
         })
@@ -871,7 +873,7 @@ def _workflow_ops_task_specs(rows: list[dict[str, Any]], *, priority: str, assig
         "description": "导出工作流实例、事件、DAG 和信号状态，供 AI Agent 诊断编排运行健康度。",
         "priority": priority,
         "estimate": "S",
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "status": "pending",
         "workflow_ids": [],
     })
@@ -915,7 +917,7 @@ async def workflow_ops_plan(limit: int = 200) -> dict[str, Any]:
         "recent_instances": rows[:20],
         "recent_events": events.get("items") or [],
         "commands": commands,
-        "task_candidates": _workflow_ops_task_specs(rows, priority="P1", assigned_to="Coder"),
+        "task_candidates": _workflow_ops_task_specs(rows, priority="P1", owner_id=""),
         "ai_packet": {
             "intent": "workflow_ops_diagnosis",
             "required_context": ["workflow instances", "workflow events", "workflow detail DAG", "signals"],
@@ -931,7 +933,7 @@ async def workflow_ops_tasks(body: WorkflowOpsTasksIn) -> dict[str, Any]:
     from sop_manager.routers.tasks import TaskCreate, create_task
 
     rows = await _current_runs(300)
-    specs = _workflow_ops_task_specs(rows, priority=body.priority, assigned_to=body.assigned_to)
+    specs = _workflow_ops_task_specs(rows, priority=body.priority, owner_id=body.owner_id)
     planned, created = [], []
     for spec in specs:
         planned.append(spec)
@@ -941,7 +943,7 @@ async def workflow_ops_tasks(body: WorkflowOpsTasksIn) -> dict[str, Any]:
                 description=f"{spec['description']}\n\nworkflow_ids={','.join(spec.get('workflow_ids') or [])}",
                 priority=spec["priority"],
                 estimate=spec["estimate"],
-                assigned_to=spec["assigned_to"],
+                owner_id=spec["owner_id"],
                 source="workflow_ops",
                 source_report_id=spec["id"],
                 source_report_title=spec["title"],

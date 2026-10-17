@@ -84,7 +84,7 @@ def migrate_lance_to_sql(tenant_id: str = "t-default", project_id: str = "proj-d
             status=t.get("status", "pending"),
             priority=t.get("priority", "P1"),
             estimate=t.get("estimate", "M"),
-            assigned_to=t.get("assigned_to", ""),
+            owner_id=t.get("owner_id", ""),
             actual_hours=float(t.get("actual_hours", 0.0)),
             confidence=float(t.get("confidence", 0.0)),
             human_notes=t.get("human_notes", ""),

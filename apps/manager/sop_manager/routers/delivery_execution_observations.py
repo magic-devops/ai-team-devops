@@ -101,16 +101,8 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         else []
     )
     more, rows = len(rows) > limit, rows[:limit]
-    definition = VerificationContext(db, project, state).definition(entry["task_id"])
-    actionable = bool(
-        definition
-        and definition["execution_gate"]["eligible"]
-        and definition["snapshot"] == entry["snapshot"]
-        and not entry.get("planning_invalidated")
-    )
-    stale = bool(
-        not actionable or entry.get("planning_invalidated") or definition["snapshot"] != entry["snapshot"]
-    )
+    actionable = VerificationContext(db, project, state).execution_snapshot_current(entry)
+    stale = not actionable
     run_data = run["data"] if run else {}
     attempt = run_data.get("attempt", 1)
     raw_nodes = run_data.get("nodes", entry.get("plan_nodes", entry.get("nodes", [])))

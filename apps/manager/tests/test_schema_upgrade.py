@@ -90,9 +90,9 @@ def test_upgraded_sqlite_rejects_null_criteria_and_replay_keeps_existing_text(tm
         connection.execute(text("CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL)"))
     apply_schema_upgrade(engine)
     with pytest.raises(IntegrityError), engine.begin() as connection:
-        connection.execute(text("INSERT INTO tasks VALUES ('T-null', 'Invalid', NULL)"))
+        connection.execute(text("INSERT INTO tasks (id,title,acceptance_criteria) VALUES ('T-null', 'Invalid', NULL)"))
     with engine.begin() as connection:
-        connection.execute(text("INSERT INTO tasks VALUES ('T-text', 'Valid', '[\"Keep this\"]')"))
+        connection.execute(text("INSERT INTO tasks (id,title,acceptance_criteria) VALUES ('T-text', 'Valid', '[\"Keep this\"]')"))
     assert apply_schema_upgrade(engine)["status"] == "current"
     with engine.connect() as connection:
         assert connection.execute(text("SELECT acceptance_criteria FROM tasks WHERE id='T-text'")).scalar() == '["Keep this"]'
@@ -153,6 +153,7 @@ def test_postgresql_upgrade_compiles_transactional_ddl_and_null_only_resume(monk
     """Compilation evidence only; this test does not claim a live PostgreSQL server."""
     from sop_manager import schema_upgrade
     from sqlalchemy.dialects import postgresql
+    from types import SimpleNamespace
 
     statements = []
     states = iter([
@@ -160,6 +161,12 @@ def test_postgresql_upgrade_compiles_transactional_ddl_and_null_only_resume(monk
         {"status": "current", "missing": []},
     ])
     monkeypatch.setattr(schema_upgrade, "verify_schema", lambda engine: next(states))
+
+    columns = [{"name": "assigned_to", "nullable": True}]
+    if not missing:
+        columns += [{"name": "acceptance_criteria", "nullable": True}, {"name": "owner_id", "nullable": False}]
+    monkeypatch.setattr(schema_upgrade, "inspect", lambda connection: SimpleNamespace(get_columns=lambda name: columns))
+    monkeypatch.setattr(schema_upgrade, "_identity_plan", lambda *args: (None, [], []))
 
     class Compiler:
         dialect = postgresql.dialect()
@@ -174,9 +181,12 @@ def test_postgresql_upgrade_compiles_transactional_ddl_and_null_only_resume(monk
 
     assert schema_upgrade.apply_schema_upgrade(Compiler())["status"] == "upgraded"
     if missing:
-        assert statements == [("ALTER TABLE tasks ADD COLUMN acceptance_criteria JSON DEFAULT '[]' NOT NULL", {})]
+        assert statements == [("ALTER TABLE tasks ADD COLUMN acceptance_criteria JSON DEFAULT '[]' NOT NULL", {}),
+                              ("ALTER TABLE tasks ADD COLUMN owner_id VARCHAR(100) DEFAULT '' NOT NULL", {}),
+                              ("ALTER TABLE tasks DROP COLUMN assigned_to", {})]
     else:
         assert statements == [
             ("UPDATE tasks SET acceptance_criteria=%(acceptance_criteria)s::JSON WHERE tasks.acceptance_criteria IS NULL", {"acceptance_criteria": []}),
             ("ALTER TABLE tasks ALTER COLUMN acceptance_criteria SET NOT NULL", {}),
+            ("ALTER TABLE tasks DROP COLUMN assigned_to", {}),
         ]

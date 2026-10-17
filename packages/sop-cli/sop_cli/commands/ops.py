@@ -199,7 +199,7 @@ def org_access_review(json_out: bool = typer.Option(False, "--json", help="输�
 def org_access_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建任务；默认只预览"),
     limit: int = typer.Option(20, "--limit", min=1, max=100, help="最多处理风险数"),
-    assigned_to: str = typer.Option("tenant_admin", "--assigned-to", help="任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     priority: str = typer.Option("P1", "--priority", help="medium 风险默认优先级 P0-P3"),
     json_out: bool = typer.Option(False, "--json", help="输出原始 JSON"),
 ) -> None:
@@ -208,7 +208,7 @@ def org_access_tasks(
         r = get_client(get_config()).organization_access_review_tasks({
             "dry_run": not apply,
             "limit": limit,
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "priority": priority,
         })
         if json_out:
@@ -365,7 +365,7 @@ def notify_action(
     action: str = typer.Option("task", "--action", help="task 或 requirement"),
     apply: bool = typer.Option(False, "--apply", help="实际创建；默认仅预览"),
     priority: str = typer.Option("P1", "--priority", help="优先级"),
-    assigned_to: str = typer.Option("Coder", "--assigned-to", help="任务处理人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     assigned_agent: str = typer.Option("PM", "--assigned-agent", help="需求负责人 Agent"),
     dev_tool: str = typer.Option("copilot", "--dev-tool", help="推荐开发工具"),
 ) -> None:
@@ -376,7 +376,7 @@ def notify_action(
                 "action": action,
                 "dry_run": not apply,
                 "priority": priority,
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "assigned_agent": assigned_agent,
                 "dev_tool": dev_tool,
             },
@@ -526,7 +526,7 @@ def usage_alert_tasks(
     ids: str = typer.Option("", "--ids", help="逗号分隔告警 ID；空则全部"),
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认预览"),
     priority: str = typer.Option("P1", "--priority", help="任务优先级"),
-    assigned_to: str = typer.Option("FinOps", "--assigned-to", help="负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("copilot", "--dev-tool", help="推荐工具"),
 ) -> None:
     try:
@@ -534,7 +534,7 @@ def usage_alert_tasks(
             "ids": [x.strip() for x in ids.split(",") if x.strip()],
             "dry_run": not apply,
             "priority": priority,
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "dev_tool": dev_tool,
         }
         console.print_json(data=get_client(get_config()).usage_alert_tasks(body))

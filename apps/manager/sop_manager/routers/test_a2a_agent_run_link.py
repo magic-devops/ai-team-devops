@@ -510,7 +510,7 @@ def test_a2a_trust_policy_governance_tasks_preview(tmp_path):
             a2a.AgentHeartbeatIn(credential_token=agent["credential_token"], success_rate=0.5),
         )
 
-        tasks = a2a.trust_tasks(a2a.TrustTasksIn(dry_run=True, assigned_to="Agent Platform", dev_tool="codex"))
+        tasks = a2a.trust_tasks(a2a.TrustTasksIn(dry_run=True, owner_id="", dev_tool="codex"))
 
     assert tasks["dry_run"] is True
     assert tasks["summary"]["policy_blocked_agents"] == 1
@@ -842,7 +842,7 @@ def test_a2a_execution_window_audit_flags_expired_stale_and_blocked_dispatches(t
 
         report = a2a.execution_windows(now="2026-05-21T00:20:00+00:00")
         tasks = a2a.execution_window_tasks(
-            a2a.ExecutionWindowTasksIn(dry_run=True, assigned_to="Agent Platform", dev_tool="codex"),
+            a2a.ExecutionWindowTasksIn(dry_run=True, owner_id="", dev_tool="codex"),
             now="2026-05-21T00:20:00+00:00",
         )
 

@@ -44,7 +44,7 @@ def seed_chain(client, sessions, *, root_status="completed"):
                     title="Manually implemented prerequisite",
                     acceptance_criteria=["Implementation and local test output satisfy the objective"],
                     status=root_status,
-                    assigned_to="writer",
+                    owner_id="user:writer",
                 ),
                 sql_models.Task(
                     id="T-downstream",
@@ -53,12 +53,11 @@ def seed_chain(client, sessions, *, root_status="completed"):
                     title="Follow-up implementation",
                     acceptance_criteria=["Follow-up behavior is checked after prerequisite acceptance"],
                     status="pending",
-                    assigned_to="writer",
+                    owner_id="user:writer",
                 ),
             ]
         )
         data = initial_state()
-        data["task_owners"] = {"T-upstream": "user:writer", "T-downstream": "user:writer"}
         data["task_details"] = {
             "T-upstream": {"depends_on": []},
             "T-downstream": {"depends_on": ["T-upstream"]},
@@ -118,7 +117,7 @@ def test_retired_force_claim_cannot_claim_a_delivery_task(env, auto_start):
     assert response.status_code == 404, response.text
     with sessions() as db:
         assert db.get(sql_models.Task, "T-downstream").status == "pending"
-        assert db.get(sql_models.Task, "T-downstream").assigned_to == "writer"
+        assert db.get(sql_models.Task, "T-downstream").owner_id == "user:writer"
 
 
 def test_include_blocked_is_display_only_for_applied_dispatch(env):
@@ -137,7 +136,7 @@ def test_include_blocked_is_display_only_for_applied_dispatch(env):
     assert response.json()["updated"] == 0
     assert response.json()["items"][0]["ready"] is False
     with sessions() as db:
-        assert db.get(sql_models.Task, "T-downstream").assigned_to == "writer"
+        assert db.get(sql_models.Task, "T-downstream").owner_id == "user:writer"
 
 
 @pytest.mark.parametrize("entry", ["update", "bulk", "pull"])

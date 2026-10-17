@@ -72,12 +72,12 @@ def test_build_attribution_tasks_uses_driver_recommendations():
         ],
     }
 
-    tasks = build_attribution_tasks(attribution, priority="P1", assigned_to="DataOps", dev_tool="codex")
+    tasks = build_attribution_tasks(attribution, priority="P1", owner_id="", dev_tool="codex")
 
     assert len(tasks) == 2
     assert tasks[0]["source"] == "analytics_attribution"
     assert tasks[0]["priority"] == "P1"
-    assert tasks[0]["assigned_to"] == "DataOps"
+    assert tasks[0]["owner_id"] == ""
 
 
 def test_summarize_report_intelligence_counts_attribution_reports():
@@ -148,7 +148,7 @@ def test_build_report_intelligence_tasks_creates_operational_candidates():
         ],
     }
 
-    tasks = build_report_intelligence_tasks(intelligence, priority="", assigned_to="DataOps", dev_tool="codex")
+    tasks = build_report_intelligence_tasks(intelligence, priority="", owner_id="", dev_tool="codex")
 
     assert len(tasks) == 1
     assert tasks[0]["source"] == "analytics_report_intelligence"
@@ -194,7 +194,7 @@ def test_build_decision_tasks_preserves_decision_context():
         ],
     }
 
-    tasks = build_decision_tasks(packet, priority="", assigned_to="DataOps", dev_tool="codex", max_tasks=3)
+    tasks = build_decision_tasks(packet, priority="", owner_id="", dev_tool="codex", max_tasks=3)
 
     assert len(tasks) == 1
     assert tasks[0]["source"] == "analytics_decision_attribution"

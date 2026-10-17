@@ -33,6 +33,7 @@ import {
   type TaskPlanRow,
 } from "@/lib/deliveryTaskPlan";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
+import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 type Baseline = {
   version: number;
@@ -120,9 +121,6 @@ export function DeliveryTaskPlanEditor({
   const coverage = new Set(
     items.flatMap((item) => item.requirement_criteria_indices),
   );
-  const owners = baseline.workspace.members
-    .filter((m) => m.active && m.kind !== "tool")
-    .map((m) => ({ value: m.id, label: m.name }));
   const update = (key: string, value: Partial<TaskPlanRow>) =>
     setRows((current) =>
       current.map((row) => (row.key === key ? { ...row, ...value } : row)),
@@ -542,17 +540,12 @@ export function DeliveryTaskPlanEditor({
               <div className="delivery-plan-fields">
                 <label>
                   {common("owner")}
-                  <Select
-                    aria-label={label(common("owner"))}
+                  <OwnerSelect
+                    label={label(common("owner"))}
                     value={row.owner_id}
-                    options={[
-                      { value: "", label: common("unassigned") },
-                      ...owners,
-                    ]}
+                    members={baseline.workspace.members}
                     onChange={(value) => update(row.key, { owner_id: value })}
                     disabled={busy}
-                    showSearch
-                    optionFilterProp="label"
                   />
                 </label>
                 <label>

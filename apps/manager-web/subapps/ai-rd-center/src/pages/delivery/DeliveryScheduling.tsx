@@ -12,14 +12,10 @@ import {
   Tag,
 } from "antd";
 import {
-  Bot,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Plus,
   RefreshCw,
-  Users,
-  Wrench,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -46,6 +42,7 @@ import { DeliveryDependencyTimeline } from "./DeliveryDependencyTimeline";
 import { DeliveryScheduleEditor } from "./DeliveryScheduleEditor";
 import { progressDateTime } from "./DeliveryProgressDetails";
 import "./delivery-scheduling.css";
+import { DeliveryTeamMembers } from "./DeliveryTeamMembers";
 
 type Props = {
   projectId: string;
@@ -245,7 +242,7 @@ export function DeliveryScheduling({
         <div className="delivery-actions">
           {view === "team" ? (
             <>
-              <Button href="#/projects">{tr("people")}</Button>
+              <Button href="#/projects/members">{tr("people")}</Button>
               <Button
                 icon={<Plus size={14} />}
                 disabled={!workspace.permissions.configure}
@@ -560,76 +557,6 @@ export function DeliveryScheduling({
               />
             </>
           )}
-          {mode === "members" && (
-            <>
-              <p className="delivery-hint">
-                {tr("toolsHint")} {tr("unitsHint")}
-              </p>
-              <div className="delivery-schedule-members">
-                {workspace.members.map((member) => {
-                  const resource = data.resources.find(
-                    (item) => item.id === member.id,
-                  );
-                  const Icon =
-                    member.kind === "human"
-                      ? Users
-                      : member.kind === "agent"
-                        ? Bot
-                        : Wrench;
-                  return (
-                    <article key={member.id}>
-                      <div className="delivery-schedule-member-heading">
-                        <span>
-                          <Icon size={20} />
-                        </span>
-                        <div>
-                          <h3>{member.name}</h3>
-                          <small>
-                            {tr(`kinds.${member.kind}`)} · {member.role}
-                          </small>
-                        </div>
-                        <Tag>
-                          {member.active ? tr("registered") : tr("inactive")}
-                        </Tag>
-                      </div>
-                      {member.tool && <p>{member.tool}</p>}
-                      <p>
-                        <CalendarDays size={14} />{" "}
-                        {resource?.calendar ? tr("weekly") : tr("noCalendar")} ·{" "}
-                        {tr(
-                          `units.${resource?.unit === "hours" ? "hoursPerDay" : resource?.unit === "slots" ? "slotsPerDay" : "unknown"}`,
-                        )}
-                      </p>
-                      <div className="delivery-actions">
-                        <Button
-                          size="small"
-                          disabled={
-                            !data.permissions.configure ||
-                            !member.active ||
-                            !resource?.kind ||
-                            query.isError
-                          }
-                          onClick={() => openCalendar(member.id)}
-                        >
-                          {tr("configure")}
-                        </Button>
-                        {member.kind !== "human" && (
-                          <Button
-                            size="small"
-                            type="text"
-                            disabled={!workspace.permissions.configure}
-                            onClick={() => onEditMember(member)}
-                          >
-                            {tr("editMember")}
-                          </Button>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </>
-          )}
           {mode === "milestones" &&
             (workspace.milestones.length ? (
               <div className="delivery-scheduling-milestones">
@@ -701,6 +628,12 @@ export function DeliveryScheduling({
             ))}
         </>
       )}
+      {mode === "members" && <DeliveryTeamMembers
+        workspace={workspace} schedule={data} calendarFailed={query.isError}
+        route={route} onRoute={(patch) => changeRoute(patch, !("teamMemberId" in patch) && !("teamMode" in patch))}
+        onEdit={onEditMember} onCalendar={openCalendar}
+        onRetryCalendar={() => void query.refetch()} onTask={onOpenTask}
+      />}
       <Drawer
         open={Boolean(route.day && route.dayMemberId && !hasTaskInspector)}
         title={tr("dayTitle", {

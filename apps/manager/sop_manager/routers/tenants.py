@@ -1,6 +1,8 @@
 """租户 & 项目管理路由 (SaaS 多租户 + 单项目模式)"""
 from __future__ import annotations
 import os, uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from collections import Counter
 from datetime import datetime
 from typing import Any, Optional, List
@@ -559,13 +561,13 @@ def update_member(project_id: str, user_id: str, body: MemberUpdate,
     return {"ok": True, "role": m.role}
 
 
-class ProjectBootstrapTasksBody(BaseModel):
+class ProjectBootstrapTasksBody(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
 
 
-def _project_bootstrap_task_specs(p: Project, counts: dict, *, priority: str, assigned_to: str) -> list[dict]:
+def _project_bootstrap_task_specs(p: Project, counts: dict, *, priority: str, owner_id: str) -> list[dict]:
     specs = []
     if not (p.project_path or "").strip():
         specs.append({
@@ -598,21 +600,21 @@ def _project_bootstrap_task_specs(p: Project, counts: dict, *, priority: str, as
         {
             **item,
             "priority": priority,
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "status": "pending",
         }
         for item in specs
     ]
 
 
-class ProjectOpsTasksBody(BaseModel):
+class ProjectOpsTasksBody(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     categories: list[str] = []
 
 
-def _project_ops_task_specs(p: Project, counts: dict, *, priority: str, assigned_to: str, categories: list[str] | None = None) -> list[dict]:
+def _project_ops_task_specs(p: Project, counts: dict, *, priority: str, owner_id: str, categories: list[str] | None = None) -> list[dict]:
     wanted = set(categories or [])
     include_all = not wanted
     specs: list[dict[str, Any]] = []
@@ -668,7 +670,7 @@ def _project_ops_task_specs(p: Project, counts: dict, *, priority: str, assigned
         "description": "导出需求、任务、问题、迭代、风险和下一步建议，供 Agent 作为稳定输入消费。",
         "estimate": "S",
     })
-    return [{**item, "priority": priority, "assigned_to": assigned_to, "status": "pending"} for item in specs]
+    return [{**item, "priority": priority, "owner_id": owner_id, "status": "pending"} for item in specs]
 
 
 def _create_project_tasks_from_specs(
@@ -704,7 +706,7 @@ def _create_project_tasks_from_specs(
                 status="pending",
                 priority=row["priority"],
                 estimate=row["estimate"],
-                assigned_to=row["assigned_to"],
+                owner_id=row["owner_id"],
                 human_notes=marker,
             )
             db.add(task)
@@ -731,7 +733,7 @@ def create_project_bootstrap_tasks(project_id: str, body: ProjectBootstrapTasksB
     if not p or p.tenant_id != user.tenant_id:
         raise HTTPException(404, "项目不存在")
     counts = _project_counts(db, project_id)
-    specs = _project_bootstrap_task_specs(p, counts, priority=body.priority, assigned_to=body.assigned_to)
+    specs = _project_bootstrap_task_specs(p, counts, priority=body.priority, owner_id=body.owner_id)
     result = _create_project_tasks_from_specs(db=db, user=user, project_id=project_id, specs=specs, source="project_bootstrap", dry_run=body.dry_run)
     if not body.dry_run:
         notify_webhook(
@@ -765,7 +767,7 @@ def project_ops_plan(project_id: str, request: Request,
         {"id": "doctor", "title": "执行端到端自检", "command": "sop doctor && sop sync doctor", "category": "ops"},
         {"id": "feed", "title": "查看 Agent 可领取任务", "command": "sop task feed --limit 10 --include-blocked", "category": "agent"},
     ]
-    task_specs = _project_ops_task_specs(p, counts, priority="P1", assigned_to="Coder")
+    task_specs = _project_ops_task_specs(p, counts, priority="P1", owner_id="")
     return {
         "ok": True,
         "project": review["project"],
@@ -807,7 +809,7 @@ def create_project_ops_tasks(project_id: str, body: ProjectOpsTasksBody,
     if not p or p.tenant_id != user.tenant_id:
         raise HTTPException(404, "项目不存在")
     counts = _project_counts(db, project_id)
-    specs = _project_ops_task_specs(p, counts, priority=body.priority, assigned_to=body.assigned_to, categories=body.categories)
+    specs = _project_ops_task_specs(p, counts, priority=body.priority, owner_id=body.owner_id, categories=body.categories)
     result = _create_project_tasks_from_specs(db=db, user=user, project_id=project_id, specs=specs, source="project_ops", dry_run=body.dry_run)
     if not body.dry_run:
         notify_webhook(
@@ -1174,7 +1176,7 @@ def clone_project(template_id: str, body: CloneProjectBody,
                 id=f"T-{uuid.uuid4().hex[:12]}", tenant_id=user.tenant_id,
                 project_id=new_id, title=t.title, description=t.description,
                 status="pending", priority=t.priority, estimate=t.estimate,
-                assigned_to=t.assigned_to,
+                owner_id="",
             ))
             cloned["tasks"] += 1
 

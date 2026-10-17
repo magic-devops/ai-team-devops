@@ -21,7 +21,7 @@ export const api = {
       activity_trend: { days: string[]; series: Array<{ name: string; data: number[] }> };
     }>("/api/v1/dashboard/charts"),
   hermesBlueprint: () => request<any>("/api/v1/hermes/blueprint"),
-  hermesBlueprintTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  hermesBlueprintTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/hermes/blueprint/tasks", { method: "POST", body: JSON.stringify(body) }),
   tenants: () => request<any[]>("/api/v1/tenants"),
   createTenant: (body: { name: string; slug: string; plan?: string }) =>
@@ -65,12 +65,12 @@ export const api = {
     request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/review`),
   projectOpsPlan: (projectId: string) =>
     request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/ops-plan`),
-  projectOpsTasks: (projectId: string, body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[] }) =>
+  projectOpsTasks: (projectId: string, body: { dry_run?: boolean; priority?: string; owner_id?: string; categories?: string[] }) =>
     request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/ops-tasks`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  projectBootstrapTasks: (projectId: string, body: { dry_run?: boolean; priority?: string; assigned_to?: string }) =>
+  projectBootstrapTasks: (projectId: string, body: { dry_run?: boolean; priority?: string; owner_id?: string }) =>
     request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/bootstrap-tasks`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -88,7 +88,7 @@ export const api = {
   requirementOpsTasks: (body: {
     dry_run?: boolean;
     priority?: string;
-    assigned_to?: string;
+    owner_id?: string;
     categories?: string[];
     limit?: number;
   }) => request<any>("/api/v1/requirements/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
@@ -146,7 +146,7 @@ export const api = {
       mode?: string;
       max_tasks?: number;
       sprint_id?: string;
-      assigned_to?: string;
+      owner_id?: string;
       dev_tool?: string;
       create_dependencies?: boolean;
     },
@@ -205,7 +205,7 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
-  bulkUpdateTasks: (body: { ids: string[]; status?: string; priority?: string; assigned_to?: string }) =>
+  bulkUpdateTasks: (body: { ids: string[]; status?: string; priority?: string; owner_id?: string }) =>
     request<any>("/api/v1/tasks/bulk", {
       method: "PATCH",
       body: JSON.stringify(body),
@@ -223,7 +223,7 @@ export const api = {
     include_blocked?: boolean;
     policy?: string;
     event?: string;
-    agent_pool?: string[];
+    owner_pool?: string[];
   }) =>
     request<any>("/api/v1/tasks/scheduler/plan", {
       method: "POST",
@@ -316,7 +316,7 @@ export const api = {
     description?: string;
     priority?: string;
     sprint_id?: string;
-    assigned_to?: string;
+    owner_id?: string;
   }) =>
     request<any>("/api/v1/tasks", { method: "POST", body: JSON.stringify(body) }),
   deleteTask: (id: string) =>
@@ -352,7 +352,7 @@ export const api = {
   sprintOpsTasks: (body: {
     dry_run?: boolean;
     priority?: string;
-    assigned_to?: string;
+    owner_id?: string;
     sprint_id?: string;
     categories?: string[];
     limit?: number;
@@ -388,7 +388,7 @@ export const api = {
       probe: { ok: boolean; reason: string };
     }>("/api/v1/workflows/engine/status"),
   workflowOpsPlan: () => request<any>("/api/v1/workflows/ops-plan"),
-  workflowOpsTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string }) =>
+  workflowOpsTasks: (body: { dry_run?: boolean; priority?: string; owner_id?: string }) =>
     request<any>("/api/v1/workflows/ops-tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -486,7 +486,7 @@ export const api = {
   },
   auditRecord: (body: { action: string; resource_type?: string; resource_id?: string; project_id?: string; details?: Record<string, unknown> }) =>
     request<any>("/api/v1/audit/record", { method: "POST", body: JSON.stringify(body) }),
-  auditEventTask: (auditId: string, body: { dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  auditEventTask: (auditId: string, body: { dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>(`/api/v1/audit/events/${encodeURIComponent(auditId)}/task`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -538,7 +538,7 @@ export const api = {
     commands?: Record<string, unknown>[];
     dry_run?: boolean;
     priority?: string;
-    assigned_to?: string;
+    owner_id?: string;
     dev_tool?: string;
   }) =>
     request<any>("/api/v1/copilot/plan/tasks", { method: "POST", body: JSON.stringify(body) }),
@@ -630,7 +630,7 @@ export const api = {
     request<{ ok: boolean; items: any[]; total: number; summary: Record<string, number> }>(
       `/api/v1/usage/alerts?limit=${encodeURIComponent(String(limit))}`,
     ),
-  usageAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  usageAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/usage/alerts/tasks", { method: "POST", body: JSON.stringify(body) }),
   billingSubscription: () => request<any>("/api/v1/billing/subscription"),
   billingPlans: () => request<{ ok: boolean; items: any[] }>("/api/v1/billing/plans"),
@@ -749,7 +749,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  systemPagesActionExecute: (body: { module_id: string; action_id: string; dry_run?: boolean; assigned_to?: string; priority?: string }) =>
+  systemPagesActionExecute: (body: { module_id: string; action_id: string; dry_run?: boolean; owner_id?: string; priority?: string }) =>
     request<any>("/api/v1/system/pages/actions/execute", {
       method: "POST",
       body: JSON.stringify(body),
@@ -764,7 +764,7 @@ export const api = {
     if (params.q) qs.set("q", params.q);
     return request<any>(`/api/v1/system/pages/isolation-audit/scan${qs.toString() ? `?${qs}` : ""}`);
   },
-  systemPagesIsolationScanTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_protected?: boolean }) =>
+  systemPagesIsolationScanTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_protected?: boolean }) =>
     request<any>("/api/v1/system/pages/isolation-audit/scan/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -783,12 +783,12 @@ export const api = {
     });
     return request<any>(`/api/v1/system/pages/isolation-audit/scan/runs/compare${qs.toString() ? `?${qs}` : ""}`);
   },
-  systemPagesIsolationScanCompareTasks: (body: { base_id?: string; target_id?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_resolved?: boolean }) =>
+  systemPagesIsolationScanCompareTasks: (body: { base_id?: string; target_id?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_resolved?: boolean }) =>
     request<any>("/api/v1/system/pages/isolation-audit/scan/runs/compare/tasks", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  systemPagesIsolationTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_protected?: boolean }) =>
+  systemPagesIsolationTasks: (body: { ids?: string[]; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_protected?: boolean }) =>
     request<any>("/api/v1/system/pages/isolation-audit/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -807,7 +807,7 @@ export const api = {
     });
     return request<any>(`/api/v1/system/pages/production-readiness${qs.toString() ? `?${qs}` : ""}`);
   },
-  systemPagesProductionReadinessTasks: (body: { ids?: string[]; domain?: string; stage?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_production_ready?: boolean }) =>
+  systemPagesProductionReadinessTasks: (body: { ids?: string[]; domain?: string; stage?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_production_ready?: boolean }) =>
     request<any>("/api/v1/system/pages/production-readiness/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -820,17 +820,17 @@ export const api = {
     return request<any>(`/api/v1/system/pages/experience-review${qs.toString() ? `?${qs}` : ""}`);
   },
   systemPagesFrontendPerformance: () => request<any>("/api/v1/system/pages/frontend-performance"),
-  systemPagesFrontendPerformanceTasks: (body: { names?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_watch?: boolean }) =>
+  systemPagesFrontendPerformanceTasks: (body: { names?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_watch?: boolean }) =>
     request<any>("/api/v1/system/pages/frontend-performance/tasks", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  systemPagesExperienceTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_simple?: boolean }) =>
+  systemPagesExperienceTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_simple?: boolean }) =>
     request<any>("/api/v1/system/pages/experience-review/tasks", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  systemPagesReadinessTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_complete?: boolean }) =>
+  systemPagesReadinessTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_complete?: boolean }) =>
     request<any>("/api/v1/system/pages/readiness/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -843,7 +843,7 @@ export const api = {
     if (params.limit) qs.set("limit", String(params.limit));
     return request<any>(`/api/v1/system/pages/governance-tasks${qs.toString() ? `?${qs}` : ""}`);
   },
-  systemPagesGovernanceTasksBulkUpdate: (body: { ids: string[]; dry_run?: boolean; status?: string; priority?: string; assigned_to?: string }) =>
+  systemPagesGovernanceTasksBulkUpdate: (body: { ids: string[]; dry_run?: boolean; status?: string; priority?: string; owner_id?: string }) =>
     request<any>("/api/v1/system/pages/governance-tasks/bulk-update", {
       method: "POST",
       body: JSON.stringify(body),
@@ -878,7 +878,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  systemPagesBacklogTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string }) =>
+  systemPagesBacklogTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string }) =>
     request<any>("/api/v1/system/pages/backlog/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -898,7 +898,7 @@ export const api = {
     if (params.limit) qs.set("limit", String(params.limit));
     return request<any>(`/api/v1/pages/interaction-analysis${qs.toString() ? `?${qs}` : ""}`);
   },
-  pagesInteractionTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_ready?: boolean }) =>
+  pagesInteractionTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_ready?: boolean }) =>
     request<any>("/api/v1/pages/interaction-analysis/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -911,7 +911,7 @@ export const api = {
     if (params.limit) qs.set("limit", String(params.limit));
     return request<any>(`/api/v1/pages/interaction-ops${qs.toString() ? `?${qs}` : ""}`);
   },
-  pagesInteractionOpsTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; assigned_to?: string; max_items?: number; include_low?: boolean; idempotency_key?: string }) =>
+  pagesInteractionOpsTasks: (body: { ids?: string[]; domain?: string; status?: string; q?: string; dry_run?: boolean; priority?: string; owner_id?: string; max_items?: number; include_low?: boolean; idempotency_key?: string }) =>
     request<any>("/api/v1/pages/interaction-ops/tasks", {
       method: "POST",
       body: JSON.stringify(body),
@@ -991,7 +991,7 @@ export const api = {
   platformsInstallShims: (id: string) =>
     request<any>(`/api/v1/platforms/install-shims/${encodeURIComponent(id)}`, { method: "POST" }),
   platformsOpsPlan: () => request<any>("/api/v1/platforms/ops-plan"),
-  platformsOpsTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[] }) =>
+  platformsOpsTasks: (body: { dry_run?: boolean; priority?: string; owner_id?: string; categories?: string[] }) =>
     request<any>("/api/v1/platforms/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
   agents: () => request<any[]>("/api/v1/agents"),
   agentsBuiltin: () => request<any[]>("/api/v1/agents/builtin"),
@@ -1004,7 +1004,7 @@ export const api = {
     return request<any>(`/api/v1/agents/runs?${qs}`);
   },
   agentRunsSlo: () => request<any>("/api/v1/agents/runs/slo"),
-  agentRunsRebalanceTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[] }) =>
+  agentRunsRebalanceTasks: (body: { dry_run?: boolean; priority?: string; owner_id?: string; categories?: string[] }) =>
     request<any>("/api/v1/agents/runs/rebalance-tasks", { method: "POST", body: JSON.stringify(body) }),
   agentGroups: () => request<any[]>("/api/v1/agents/groups"),
   agentProfile: (id: string) => request<any>(`/api/v1/agents/${encodeURIComponent(id)}/profile`),
@@ -1165,7 +1165,7 @@ export const api = {
     request<any>("/api/v1/notify/send", { method: "POST", body: JSON.stringify(body) }),
   notifyInbound: (body: { channel?: string; sender?: string; text: string; event?: string; payload?: Record<string, unknown> }) =>
     request<any>("/api/v1/notify/inbound", { method: "POST", body: JSON.stringify(body) }),
-  notifyInboundAction: (messageId: string, body: { action?: "task" | "requirement"; dry_run?: boolean; priority?: string; assigned_to?: string; assigned_agent?: string; dev_tool?: string }) =>
+  notifyInboundAction: (messageId: string, body: { action?: "task" | "requirement"; dry_run?: boolean; priority?: string; owner_id?: string; assigned_agent?: string; dev_tool?: string }) =>
     request<any>(`/api/v1/notify/inbound/${encodeURIComponent(messageId)}/action`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1244,12 +1244,12 @@ export const api = {
   },
   analyticsUpsertDevTemplate: (body: Record<string, unknown>) =>
     request<any>("/api/v1/analytics/development/templates", { method: "POST", body: JSON.stringify(body) }),
-  analyticsDevTemplateTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsDevTemplateTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/development/tasks", { method: "POST", body: JSON.stringify(body) }),
-  analyticsDevSchedule: (body: { ids?: string[]; dry_run?: boolean; max_parallel?: number; policy?: string; priority?: string; assigned_to?: string; dev_tool?: string; event?: string }) =>
+  analyticsDevSchedule: (body: { ids?: string[]; dry_run?: boolean; max_parallel?: number; policy?: string; priority?: string; owner_id?: string; dev_tool?: string; event?: string }) =>
     request<any>("/api/v1/analytics/development/schedule", { method: "POST", body: JSON.stringify(body) }),
   analyticsDevOpsSummary: () => request<any>("/api/v1/analytics/development/ops-summary"),
-  analyticsDevRunbook: (body: { schedule_id?: string; packet_id?: string; decisions?: string[]; include_unclaimed?: boolean; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsDevRunbook: (body: { schedule_id?: string; packet_id?: string; decisions?: string[]; include_unclaimed?: boolean; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/development/runbook", { method: "POST", body: JSON.stringify(body) }),
   analyticsDevSchedules: (limit = 20, q = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
@@ -1258,7 +1258,7 @@ export const api = {
   },
   analyticsDevScheduleDetail: (scheduleId: string) =>
     request<any>(`/api/v1/analytics/development/schedules/${encodeURIComponent(scheduleId)}`),
-  analyticsDevScheduleAction: (scheduleId: string, body: { action: "rerun" | "cancel" | "archive" | "restore"; dry_run?: boolean; max_parallel?: number; policy?: string; priority?: string; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  analyticsDevScheduleAction: (scheduleId: string, body: { action: "rerun" | "cancel" | "archive" | "restore"; dry_run?: boolean; max_parallel?: number; policy?: string; priority?: string; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>(`/api/v1/analytics/development/schedules/${encodeURIComponent(scheduleId)}/action`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1278,7 +1278,7 @@ export const api = {
     if (decision) qs.set("decision", decision);
     return request<any>(`/api/v1/analytics/development/evidence?${qs}`);
   },
-  analyticsDevEvidenceTasks: (body: { schedule_id?: string; packet_id?: string; decisions?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsDevEvidenceTasks: (body: { schedule_id?: string; packet_id?: string; decisions?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/development/evidence/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsDevEvidenceNotify: (body: { schedule_id?: string; packet_id?: string; decisions?: string[]; channels?: string[]; dry_run?: boolean }) =>
     request<any>("/api/v1/analytics/development/evidence/notify", { method: "POST", body: JSON.stringify(body) }),
@@ -1291,11 +1291,11 @@ export const api = {
     if (q) qs.set("q", q);
     return request<any>(`/api/v1/analytics/quality/alerts${qs.toString() ? `?${qs}` : ""}`);
   },
-  analyticsQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/quality/alerts/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsQualityAlertNotify: (body: { channels?: string[]; dry_run?: boolean }) =>
     request<any>("/api/v1/analytics/quality/alerts/notify", { method: "POST", body: JSON.stringify(body) }),
-  analyticsGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsLineage: () => request<any>("/api/v1/analytics/lineage"),
   analyticsLineageImpact: (nodeId: string) =>
@@ -1325,7 +1325,7 @@ export const api = {
   metadataLineage: () => request<any>("/api/v1/metadata/lineage"),
   metadataLineageImpact: (assetId: string) =>
     request<any>(`/api/v1/metadata/lineage/impact?asset_id=${encodeURIComponent(assetId)}`),
-  metadataGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  metadataGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/metadata/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
   metadataClassifyAsset: (assetId: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/metadata/assets/${encodeURIComponent(assetId)}/classify`, {
@@ -1338,7 +1338,7 @@ export const api = {
   analyticsBlueprint: () => request<any>("/api/v1/analytics/blueprint"),
   analyticsBlueprintSummary: () => request<any>("/api/v1/analytics/blueprint/summary"),
   analyticsBlueprintCharts: () => request<any>("/api/v1/analytics/blueprint/charts"),
-  analyticsBlueprintTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsBlueprintTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/blueprint/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsReports: (limit = 30, status = "", source = "", q = "") => {
     const qs = new URLSearchParams({ limit: String(limit) });
@@ -1359,7 +1359,7 @@ export const api = {
   },
   analyticsDecisionExplain: (body: { question?: string; report_ids?: string[]; include_evidence?: boolean; max_reports?: number }) =>
     request<any>("/api/v1/analytics/decision/explain", { method: "POST", body: JSON.stringify(body) }),
-  analyticsDecisionTasks: (body: { question?: string; report_ids?: string[]; include_evidence?: boolean; max_reports?: number; preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; max_tasks?: number }) =>
+  analyticsDecisionTasks: (body: { question?: string; report_ids?: string[]; include_evidence?: boolean; max_reports?: number; preview?: boolean; priority?: string; owner_id?: string; dev_tool?: string; max_tasks?: number }) =>
     request<any>("/api/v1/analytics/decision/tasks", { method: "POST", body: JSON.stringify(body) }),
   marketplaceCharts: () => request<any>("/api/v1/marketplace/charts"),
   notifyCharts: () => request<any>("/api/v1/notify/charts"),
@@ -1398,13 +1398,13 @@ export const api = {
     request<any>("/api/v1/analytics/reports/insight", { method: "POST", body: JSON.stringify(body) }),
   analyticsRefreshReportsAttribution: (body: { report_ids?: string[]; only_missing?: boolean }) =>
     request<any>("/api/v1/analytics/reports/attribution-batch", { method: "POST", body: JSON.stringify(body) }),
-  analyticsReportsIntelligenceTasks: (body: { preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  analyticsReportsIntelligenceTasks: (body: { preview?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/analytics/reports/intelligence/tasks", { method: "POST", body: JSON.stringify(body) }),
   analyticsRefreshReportAttribution: (reportId: string) =>
     request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/attribution`, { method: "POST" }),
   analyticsReportAttributionTasks: (
     reportId: string,
-    body: { preview?: boolean; priority?: string; assigned_to?: string; dev_tool?: string },
+    body: { preview?: boolean; priority?: string; owner_id?: string; dev_tool?: string },
   ) =>
     request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/attribution-tasks`, {
       method: "POST",
@@ -1434,7 +1434,7 @@ export const api = {
     }),
   analyticsReportActionTasks: (
     reportId: string,
-    body: { preview?: boolean; max_tasks?: number; priority?: string; assigned_to?: string; dev_tool?: string },
+    body: { preview?: boolean; max_tasks?: number; priority?: string; owner_id?: string; dev_tool?: string },
   ) =>
     request<any>(`/api/v1/analytics/reports/${encodeURIComponent(reportId)}/action-tasks`, {
       method: "POST",
@@ -1578,7 +1578,7 @@ export const api = {
   },
   ssoRiskReport: (provider: string) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-report`),
-  ssoRiskTasks: (provider: string, body: { dry_run?: boolean; include_low?: boolean; limit?: number; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  ssoRiskTasks: (provider: string, body: { dry_run?: boolean; include_low?: boolean; limit?: number; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-tasks`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1620,7 +1620,7 @@ export const api = {
     actions?: string[];
     channels?: string[];
     priority?: string;
-    assigned_to?: string;
+    owner_id?: string;
     dev_tool?: string;
     include_low?: boolean;
     limit?: number;
@@ -1640,14 +1640,14 @@ export const api = {
     }),
   ssoRiskRunbooks: (provider: string, limit = 20) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks?limit=${encodeURIComponent(String(limit))}`),
-  ssoCreateRiskRunbook: (provider: string, body: { include_low?: boolean; limit?: number; priority?: string; assigned_to?: string; dev_tool?: string; owner?: string; channels?: string[]; title?: string; notes?: string }) =>
+  ssoCreateRiskRunbook: (provider: string, body: { include_low?: boolean; limit?: number; priority?: string; owner_id?: string; dev_tool?: string; owner?: string; channels?: string[]; title?: string; notes?: string }) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
   ssoRiskRunbookDetail: (provider: string, runbookId: string) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks/${encodeURIComponent(runbookId)}`),
-  ssoRiskRunbookAction: (provider: string, runbookId: string, body: { action: string; actor?: string; dry_run?: boolean; step_id?: string; note?: string; include_low?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; title?: string }) =>
+  ssoRiskRunbookAction: (provider: string, runbookId: string, body: { action: string; actor?: string; dry_run?: boolean; step_id?: string; note?: string; include_low?: boolean; priority?: string; owner_id?: string; dev_tool?: string; channels?: string[]; title?: string }) =>
     request<any>(`/api/v1/sso/providers/${encodeURIComponent(provider)}/risk-runbooks/${encodeURIComponent(runbookId)}/action`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1795,7 +1795,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  opsDeploymentPipelineRemediation: (runId: string, body: { dry_run?: boolean; include_low?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; actor?: string; note?: string }) =>
+  opsDeploymentPipelineRemediation: (runId: string, body: { dry_run?: boolean; include_low?: boolean; priority?: string; owner_id?: string; dev_tool?: string; actor?: string; note?: string }) =>
     request<any>(`/api/v1/system/ops/deployment-pipelines/${encodeURIComponent(runId)}/remediation`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1826,14 +1826,14 @@ export const api = {
     });
     return request<any>(`/api/v1/system/ops/deployment-rollback-runbooks${qs.toString() ? `?${qs.toString()}` : ""}`);
   },
-  opsCreateDeploymentRollbackRunbook: (body: { package_id?: string; profile?: string; drill_id?: string; name?: string; environment?: string; trigger?: string; operator?: string; approval_required?: boolean; create_preview_pipeline?: boolean; task_priority?: string; assigned_to?: string; dev_tool?: string; notes?: string }) =>
+  opsCreateDeploymentRollbackRunbook: (body: { package_id?: string; profile?: string; drill_id?: string; name?: string; environment?: string; trigger?: string; operator?: string; approval_required?: boolean; create_preview_pipeline?: boolean; task_priority?: string; owner_id?: string; dev_tool?: string; notes?: string }) =>
     request<any>("/api/v1/system/ops/deployment-rollback-runbooks", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   opsDeploymentRollbackRunbookDetail: (runbookId: string) =>
     request<any>(`/api/v1/system/ops/deployment-rollback-runbooks/${encodeURIComponent(runbookId)}`),
-  opsDeploymentRollbackRunbookAction: (runbookId: string, body: { action: string; actor?: string; note?: string; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  opsDeploymentRollbackRunbookAction: (runbookId: string, body: { action: string; actor?: string; note?: string; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>(`/api/v1/system/ops/deployment-rollback-runbooks/${encodeURIComponent(runbookId)}/action`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1852,7 +1852,7 @@ export const api = {
     }),
   opsDeploymentExecutionAuditDetail: (auditId: string) =>
     request<any>(`/api/v1/system/ops/deployment-execution-audits/${encodeURIComponent(auditId)}`),
-  opsDeploymentExecutionAuditTasks: (auditId: string, body: { dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; include_low?: boolean }) =>
+  opsDeploymentExecutionAuditTasks: (auditId: string, body: { dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string; include_low?: boolean }) =>
     request<any>(`/api/v1/system/ops/deployment-execution-audits/${encodeURIComponent(auditId)}/tasks`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -1945,7 +1945,7 @@ export const api = {
   issueOpsTasks: (body: {
     dry_run?: boolean;
     priority?: string;
-    assigned_to?: string;
+    owner_id?: string;
     categories?: string[];
     limit?: number;
   }) => request<any>("/api/v1/issues/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
@@ -2014,7 +2014,7 @@ export const api = {
     request<{ ok: boolean; items: Array<Record<string, unknown>> }>("/api/v1/dev-flow/templates"),
 
   devFlowOpsPlan: () => request<any>("/api/v1/dev-flow/ops-plan"),
-  devFlowOpsTasks: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; categories?: string[]; limit?: number }) =>
+  devFlowOpsTasks: (body: { dry_run?: boolean; priority?: string; owner_id?: string; categories?: string[]; limit?: number }) =>
     request<any>("/api/v1/dev-flow/ops-tasks", { method: "POST", body: JSON.stringify(body) }),
 
   devFlowBurndown: (sprintId?: string) => {
@@ -2137,11 +2137,11 @@ export const api = {
     request<any>(`/api/v1/data-quality/alerts?severity=${severity}&status=${status}`),
   dataQualityAlertResolve: (id: string) =>
     request<any>(`/api/v1/data-quality/alerts/${encodeURIComponent(id)}/resolve`, { method: "POST" }),
-  dataQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  dataQualityAlertTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/data-quality/alerts/tasks", { method: "POST", body: JSON.stringify(body) }),
   dataQualityImpact: (alertIds: string[] = []) =>
     request<any>(`/api/v1/data-quality/impact${alertIds.length ? `?alert_ids=${encodeURIComponent(alertIds.join(","))}` : ""}`),
-  dataQualityImpactTasks: (body: { alert_ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  dataQualityImpactTasks: (body: { alert_ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/data-quality/impact/tasks", { method: "POST", body: JSON.stringify(body) }),
   dataQualityRca: (alertIds: string[] = []) =>
     request<any>(`/api/v1/data-quality/rca${alertIds.length ? `?alert_ids=${encodeURIComponent(alertIds.join(","))}` : ""}`),
@@ -2149,7 +2149,7 @@ export const api = {
     request<any>("/api/v1/data-quality/rca", { method: "POST", body: JSON.stringify(body) }),
   dataQualityRcaHistory: (limit = 50) =>
     request<any>(`/api/v1/data-quality/rca/history?limit=${limit}`),
-  dataQualityRcaTasks: (body: { rca_id?: string; alert_ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  dataQualityRcaTasks: (body: { rca_id?: string; alert_ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/data-quality/rca/tasks", { method: "POST", body: JSON.stringify(body) }),
   dataQualityForecast: (windowDays = 30, horizonDays = 7) =>
     request<any>(`/api/v1/data-quality/forecast?window_days=${windowDays}&horizon_days=${horizonDays}`),
@@ -2157,7 +2157,7 @@ export const api = {
     request<any>("/api/v1/data-quality/forecast", { method: "POST", body: JSON.stringify(body) }),
   dataQualityForecastHistory: (limit = 50) =>
     request<any>(`/api/v1/data-quality/forecast/history?limit=${limit}`),
-  dataQualityForecastTasks: (body: { forecast_id?: string; window_days?: number; horizon_days?: number; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  dataQualityForecastTasks: (body: { forecast_id?: string; window_days?: number; horizon_days?: number; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/data-quality/forecast/tasks", { method: "POST", body: JSON.stringify(body) }),
   dataQualitySubscriptions: () => request<any>("/api/v1/data-quality/subscriptions"),
   dataQualitySubscriptionCreate: (body: { name?: string; channel: string; enabled?: boolean; schedule?: string; severity_min?: string; min_impact_score?: number; include_impact?: boolean; owner?: string; event_types?: string[] }) =>
@@ -2200,7 +2200,7 @@ export const api = {
   metricValues: (metricId: string, grain = "day") =>
     request<any>(`/api/v1/metrics-service/catalog/${encodeURIComponent(metricId)}/values?grain=${encodeURIComponent(grain)}`),
   metricsSummary: () => request<any>("/api/v1/metrics-service/summary"),
-  metricsGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  metricsGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/metrics-service/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
   metricApprovals: (status = "", metricId = "") =>
     request<any>(`/api/v1/metrics-service/approvals?status=${encodeURIComponent(status)}&metric_id=${encodeURIComponent(metricId)}`),
@@ -2236,7 +2236,7 @@ export const api = {
   tagPublishContract: (entityId: string) =>
     request<any>(`/api/v1/tag-service/ontology/entities/${encodeURIComponent(entityId)}/publish`, { method: "POST" }),
   tagSummary: () => request<any>("/api/v1/tag-service/summary"),
-  tagGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; min_coverage?: number }) =>
+  tagGovernanceTasks: (body: { ids?: string[]; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string; min_coverage?: number }) =>
     request<any>("/api/v1/tag-service/governance/tasks", { method: "POST", body: JSON.stringify(body) }),
   tagApprovals: (status = "", targetId = "") =>
     request<any>(`/api/v1/tag-service/approvals?status=${encodeURIComponent(status)}&target_id=${encodeURIComponent(targetId)}`),
@@ -2306,7 +2306,7 @@ export const api = {
   a2aTrustPolicy: () => request<any>("/api/v1/a2a/trust/policy"),
   a2aTrustPolicyUpdate: (body: { stale_after_minutes?: number; min_success_rate?: number; max_load?: number; require_endpoint?: boolean; allowed_agent_types?: string[]; allowed_organization_codes?: string[]; required_capabilities?: string[]; enforce_on_negotiate?: boolean; enforce_on_dispatch?: boolean; enforce_on_pull?: boolean }) =>
     request<any>("/api/v1/a2a/trust/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aTrustTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  a2aTrustTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/a2a/trust/tasks", { method: "POST", body: JSON.stringify(body) }),
   a2aNegotiate: (body: { task_type: string; task_description?: string; required_capabilities?: string[]; priority?: string }) =>
     request<any>("/api/v1/a2a/negotiate", { method: "POST", body: JSON.stringify(body) }),
@@ -2331,7 +2331,7 @@ export const api = {
   a2aSlaPolicy: () => request<any>("/api/v1/a2a/sla/policy"),
   a2aSlaPolicyUpdate: (body: { default_sla_minutes?: number; due_soon_ratio?: number; priority_sla_minutes?: Record<string, number>; auto_retry_enabled?: boolean; max_auto_retries?: number; im_alert_enabled?: boolean }) =>
     request<any>("/api/v1/a2a/sla/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aSlaTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  a2aSlaTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/a2a/sla/tasks", { method: "POST", body: JSON.stringify(body) }),
   a2aSlaEscalations: (body: { dry_run?: boolean; channels?: string[] }) =>
     request<any>("/api/v1/a2a/sla/escalations", { method: "POST", body: JSON.stringify(body) }),
@@ -2339,11 +2339,11 @@ export const api = {
   a2aExecutionWindowPolicy: () => request<any>("/api/v1/a2a/execution-windows/policy"),
   a2aExecutionWindowPolicyUpdate: (body: { stale_after_minutes?: number; due_soon_seconds?: number; max_auto_reassign?: number; action_mode?: string; require_preview_for_high_risk?: boolean; auto_renew_enabled?: boolean; auto_reassign_enabled?: boolean; auto_expire_enabled?: boolean }) =>
     request<any>("/api/v1/a2a/execution-windows/policy", { method: "PUT", body: JSON.stringify(body) }),
-  a2aExecutionWindowTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  a2aExecutionWindowTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/a2a/execution-windows/tasks", { method: "POST", body: JSON.stringify(body) }),
   a2aExecutionWindowActions: (body: { dry_run?: boolean; renew_seconds?: number; max_actions?: number }) =>
     request<any>("/api/v1/a2a/execution-windows/actions", { method: "POST", body: JSON.stringify(body) }),
-  a2aGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  a2aGovernanceTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/a2a/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
   a2aImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
     request<any>("/api/v1/a2a/im-briefing", { method: "POST", body: JSON.stringify(body) }),
@@ -2369,25 +2369,25 @@ export const api = {
   llmPolicyEvaluate: (body: { task_type?: string; estimated_prompt_tokens?: number; estimated_completion_tokens?: number; required_quality?: string; allow_fallback?: boolean }) =>
     request<any>("/api/v1/llm-gateway/policy-evaluate", { method: "POST", body: JSON.stringify(body) }),
   llmFallbackDrill: () => request<any>("/api/v1/llm-gateway/fallback-drill", { method: "POST" }),
-  llmCostAnomalyTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  llmCostAnomalyTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/llm-gateway/cost-anomalies/tasks", { method: "POST", body: JSON.stringify(body) }),
   llmCostAttributionRuns: (limit = 30) =>
     request<any>(`/api/v1/llm-gateway/cost-attribution/runs?limit=${encodeURIComponent(String(limit))}`),
-  llmCostAttributionRun: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmCostAttributionRun: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/cost-attribution/run", { method: "POST", body: JSON.stringify(body) }),
-  llmCostAttributionTasks: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmCostAttributionTasks: (body: { min_cost_usd?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/cost-attribution/tasks", { method: "POST", body: JSON.stringify(body) }),
   llmModelEvalRuns: (limit = 30) =>
     request<any>(`/api/v1/llm-gateway/model-evals/runs?limit=${encodeURIComponent(String(limit))}`),
-  llmModelEvalRun: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmModelEvalRun: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/model-evals/run", { method: "POST", body: JSON.stringify(body) }),
-  llmModelEvalTasks: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmModelEvalTasks: (body: { model_ids?: string[]; cases?: any[]; actual_outputs?: Record<string, unknown>; min_score?: number; dry_run?: boolean; persist?: boolean; create_tasks?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/model-evals/tasks", { method: "POST", body: JSON.stringify(body) }),
   llmPromptAuditRuns: (limit = 30) =>
     request<any>(`/api/v1/llm-gateway/prompt-audit/runs?limit=${encodeURIComponent(String(limit))}`),
-  llmPromptAuditRun: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmPromptAuditRun: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/prompt-audit/run", { method: "POST", body: JSON.stringify(body) }),
-  llmPromptAuditTasks: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; assigned_to?: string; dev_tool?: string; note?: string }) =>
+  llmPromptAuditTasks: (body: { prompt: string; task_type?: string; model_id?: string; user_role?: string; max_prompt_tokens?: number; allow_pii?: boolean; allow_secrets?: boolean; actions?: string[]; dry_run?: boolean; persist?: boolean; owner_id?: string; dev_tool?: string; note?: string }) =>
     request<any>("/api/v1/llm-gateway/prompt-audit/tasks", { method: "POST", body: JSON.stringify(body) }),
   llmCostStats: (modelId = "", period = "7d") =>
     request<any>(`/api/v1/llm-gateway/cost?model_id=${modelId}&period=${period}`),
@@ -2402,7 +2402,7 @@ export const api = {
     request<any>(`/api/v1/llm-gateway/throttle/${encodeURIComponent(id)}`, { method: "DELETE" }),
   llmGatewaySummary: () => request<any>("/api/v1/llm-gateway/summary"),
   llmGatewayHealth: () => request<any>("/api/v1/llm-gateway/health"),
-  llmGatewayGovernanceTasks: (body: { dry_run?: boolean; assigned_to?: string; dev_tool?: string }) =>
+  llmGatewayGovernanceTasks: (body: { dry_run?: boolean; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/llm-gateway/governance-tasks", { method: "POST", body: JSON.stringify(body) }),
   llmGatewayImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
     request<any>("/api/v1/llm-gateway/im-briefing", { method: "POST", body: JSON.stringify(body) }),
@@ -2428,7 +2428,7 @@ export const api = {
     request<any>(`/api/v1/ops-center/rca/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
   opsRcaInsights: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number }) =>
     request<any>("/api/v1/ops-center/rca/insights", { method: "POST", body: JSON.stringify(body) }),
-  opsRcaInsightTasks: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  opsRcaInsightTasks: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/ops-center/rca/insights/tasks", { method: "POST", body: JSON.stringify(body) }),
   opsRcaInsightCreateRca: (body: { run_id?: string; trace_id?: string; correlation_id?: string; limit?: number; candidate_id?: string; owner?: string; status?: string; selected_runbook_ids?: string[]; note?: string }) =>
     request<any>("/api/v1/ops-center/rca/insights/rca", { method: "POST", body: JSON.stringify(body) }),
@@ -2500,7 +2500,7 @@ export const api = {
   }) => request<any>("/api/v1/ops-center/alert-noise/slo-escalation-policy", { method: "PUT", body: JSON.stringify(body) }),
   opsAlertSloEscalationRuns: (limit = 30) =>
     request<any>(`/api/v1/ops-center/alert-noise/slo-escalation/runs?limit=${encodeURIComponent(String(limit))}`),
-  opsAlertSloEscalationRun: (body: { dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; window_hours?: number; force?: boolean; note?: string }) =>
+  opsAlertSloEscalationRun: (body: { dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string; channels?: string[]; window_hours?: number; force?: boolean; note?: string }) =>
     request<any>("/api/v1/ops-center/alert-noise/slo-escalation/run", { method: "POST", body: JSON.stringify(body) }),
   opsAlertStrategyCanaryAudits: (limit = 30) =>
     request<any>(`/api/v1/ops-center/alert-noise/strategy-canary/audits?limit=${encodeURIComponent(String(limit))}`),
@@ -2510,7 +2510,7 @@ export const api = {
     request<any>(`/api/v1/ops-center/alert-noise/strategy-canary/audits/${encodeURIComponent(id)}/action`, { method: "POST", body: JSON.stringify(body) }),
   opsStrategyLinkageRuns: (limit = 30) =>
     request<any>(`/api/v1/ops-center/strategy-linkage/runs?limit=${encodeURIComponent(String(limit))}`),
-  opsStrategyLinkageRun: (body: { dry_run?: boolean; actions?: string[]; max_items?: number; priority?: string; assigned_to?: string; dev_tool?: string; channels?: string[]; note?: string }) =>
+  opsStrategyLinkageRun: (body: { dry_run?: boolean; actions?: string[]; max_items?: number; priority?: string; owner_id?: string; dev_tool?: string; channels?: string[]; note?: string }) =>
     request<any>("/api/v1/ops-center/strategy-linkage/run", { method: "POST", body: JSON.stringify(body) }),
   opsAlertSilenceCreate: (body: { name: string; matchers?: Record<string, unknown>; starts_at?: string; ends_at?: string; reason?: string; enabled?: boolean; owner?: string }) =>
     request<any>("/api/v1/ops-center/alert-noise/silences", { method: "POST", body: JSON.stringify(body) }),
@@ -2565,7 +2565,7 @@ export const api = {
     request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(body) }),
   opsSelfHealActionRollback: (id: string, body: { operator?: string; evidence?: Record<string, unknown> }) =>
     request<any>(`/api/v1/ops-center/self-heal/actions/${encodeURIComponent(id)}/rollback`, { method: "POST", body: JSON.stringify(body) }),
-  opsSelfHealTasks: (body: { signals?: Record<string, unknown>; dry_run?: boolean; priority?: string; assigned_to?: string; dev_tool?: string }) =>
+  opsSelfHealTasks: (body: { signals?: Record<string, unknown>; dry_run?: boolean; priority?: string; owner_id?: string; dev_tool?: string }) =>
     request<any>("/api/v1/ops-center/self-heal/tasks", { method: "POST", body: JSON.stringify(body) }),
   opsCenterImBriefing: (body: { channels?: string[]; dry_run?: boolean }) =>
     request<any>("/api/v1/ops-center/im-briefing", { method: "POST", body: JSON.stringify(body) }),

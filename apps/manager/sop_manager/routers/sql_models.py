@@ -24,6 +24,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker,
 from sqlalchemy.pool import NullPool, StaticPool
 
 from sop_manager.task_acceptance import normalize_task_acceptance
+from sop_manager.task_owner import normalize_task_owner_id
+from sop_manager.task_owner_sql import install_task_owner_guard
 from sop_manager.task_sql_guard import TaskAcceptanceJSON, install_task_sql_guard
 
 _DB_TYPE = os.getenv("DB_TYPE", "sqlite")
@@ -187,7 +189,7 @@ class Task(Base):
     status      = Column(String(32), default="pending")
     priority    = Column(String(8), default="P1")
     estimate    = Column(String(8), default="M")
-    assigned_to = Column(String(64), default="")
+    owner_id    = Column(String(100), default="", nullable=False)
     actual_hours= Column(Float, default=0.0)
     confidence  = Column(Float, default=0.0)
     human_notes = Column(Text, default="")
@@ -200,6 +202,10 @@ class Task(Base):
     @validates("acceptance_criteria")
     def validate_acceptance_criteria(self, _key, value):
         return normalize_task_acceptance(value)
+
+    @validates("owner_id")
+    def validate_owner_id(self, _key, value):
+        return normalize_task_owner_id(value)
 
 
 # ── 问题 ──────────────────────────────────────────────────────────
@@ -433,4 +439,5 @@ def create_all():
 from .delivery_progress_hooks import install_progress_hooks
 
 install_task_sql_guard()
+install_task_owner_guard()
 install_progress_hooks()

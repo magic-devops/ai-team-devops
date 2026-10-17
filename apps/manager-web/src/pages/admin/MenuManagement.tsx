@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -72,9 +73,9 @@ export function MenuManagement() {
   const [toast, setToast] = useState<string | null>(null);
   const [taskPreview, setTaskPreview] = useState<any | null>(null);
   const [taskPriority, setTaskPriority] = useState<"P0" | "P1" | "P2" | "P3">("P1");
-  const [taskAssignee, setTaskAssignee] = useState("Coder");
+  const [taskAssignee, setTaskAssignee] = useState("");
   const backlogTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.systemPagesBacklogTasks({ dry_run: dryRun, priority: taskPriority, assigned_to: taskAssignee.trim() || "Coder" }),
+    mutationFn: (dryRun: boolean) => api.systemPagesBacklogTasks({ dry_run: dryRun, priority: taskPriority, owner_id: taskAssignee || "" }),
     onSuccess: (data, dryRun) => {
       setTaskPreview(data);
       const summary = data?.summary ?? {};
@@ -482,10 +483,9 @@ function GovernanceTaskPanel({
           </label>
           <label className="grid gap-1 text-xs font-medium text-[var(--muted)]">
             {t("page.menuManagement.assignee")}
-            <input
-              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)]"
+            <ProjectOwnerSelect
               value={assignedTo}
-              onChange={(event) => onAssignedToChange(event.target.value)}
+              onChange={onAssignedToChange}
               placeholder={t("page.menuManagement.defaultAssignee")}
             />
           </label>

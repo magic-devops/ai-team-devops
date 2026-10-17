@@ -1,6 +1,8 @@
 """智能运维中心：部署流水线、根因分析、Runbook、自愈策略。"""
 from __future__ import annotations
 import hashlib
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query
@@ -216,10 +218,10 @@ class RcaInsightIn(BaseModel):
     correlation_id: str = ""
     limit: int = Field(100, ge=1, le=500)
 
-class RcaInsightTasksIn(RcaInsightIn):
+class RcaInsightTasksIn(RcaInsightIn, TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Ops Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 class RcaInsightCreateRcaIn(RcaInsightIn):
@@ -327,10 +329,10 @@ class AlertSloEscalationPolicyIn(BaseModel):
     owner: str = "Ops Lead"
     note: str = ""
 
-class AlertSloEscalationRunIn(BaseModel):
+class AlertSloEscalationRunIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Ops Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     channels: list[str] = Field(default_factory=list)
     window_hours: int = Field(24, ge=1, le=168)
@@ -351,12 +353,12 @@ class AlertStrategyCanaryActionIn(BaseModel):
     actor: str = "Ops Lead"
     note: str = ""
 
-class OpsStrategyLinkageRunIn(BaseModel):
+class OpsStrategyLinkageRunIn(TaskOwnerInput):
     dry_run: bool = True
     actions: list[str] = Field(default_factory=lambda: ["create_task", "im_notify"])
     max_items: int = Field(8, ge=1, le=50)
     priority: str = "P1"
-    assigned_to: str = "Ops Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     channels: list[str] = Field(default_factory=list)
     note: str = ""
@@ -396,11 +398,11 @@ class SelfHealEvaluateIn(BaseModel):
     signals: dict = Field(default_factory=dict)
     persist: bool = True
 
-class SelfHealTasksIn(BaseModel):
+class SelfHealTasksIn(TaskOwnerInput):
     signals: dict = Field(default_factory=dict)
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Ops Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 class ImBriefingIn(BaseModel):
@@ -768,7 +770,7 @@ def _alert_slo_escalation_run(body: AlertSloEscalationRunIn) -> dict:
         policy=policy,
         dry_run=body.dry_run,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     if not policy.get("enabled", True) and not body.force:
@@ -961,7 +963,7 @@ def _ops_strategy_linkage_run(body: OpsStrategyLinkageRunIn) -> dict:
         actions=body.actions,
         max_items=body.max_items,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     planned_tasks: list[dict] = []
@@ -988,7 +990,7 @@ def _ops_strategy_linkage_run(body: OpsStrategyLinkageRunIn) -> dict:
         from sop_manager.routers.tasks import TaskCreate, create_task
 
         for task in tasks_to_create:
-            created.append(create_task(TaskCreate(**task)))
+            created.append(create_task(TaskCreate(**{key: value for key, value in task.items() if key not in {"dedupe_status", "dedupe_key"}})))
             report_id = str(task.get("source_report_id") or "").strip()
             if report_id:
                 existing_report_ids.add(report_id)
@@ -1418,7 +1420,7 @@ def rca_insight_tasks(body: RcaInsightTasksIn):
         analysis,
         dry_run=body.dry_run,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     if body.dry_run:
@@ -1808,7 +1810,7 @@ def self_heal_tasks(body: SelfHealTasksIn):
         evaluation,
         dry_run=body.dry_run,
         priority=body.priority,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     if body.dry_run:

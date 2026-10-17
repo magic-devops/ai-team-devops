@@ -220,7 +220,7 @@ def build_a2a_governance_tasks(summary: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 "priority": priority_by_level.get(level, "P1"),
                 "estimate": "S" if level in {"low", "medium"} else "M",
-                "assigned_to": "Agent Platform",
+                "owner_id": "",
                 "dev_tool": "codex",
                 "source": "a2a_protocol_governance",
                 "source_report_id": f"a2a-risk-{idx}",

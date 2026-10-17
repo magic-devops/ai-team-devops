@@ -54,7 +54,7 @@ export function DevFlowWorkbench() {
       api.devFlowOpsTasks({
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "FlowOps Agent",
+
         limit: 20,
       }),
     onSuccess: (data) => {
@@ -75,7 +75,7 @@ export function DevFlowWorkbench() {
         domain: "delivery",
         status: "watch",
         priority: "P1",
-        assigned_to: "FlowOps Agent",
+
         max_items: 12,
         idempotency_key: "dev-flow:interaction-ops:delivery",
       }),

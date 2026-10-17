@@ -207,7 +207,7 @@ def test_breakdown_creates_assigned_tasks_and_rejects_bad_participant(env):
     assert result.status_code == 200, result.text
     with sessions() as db:
         tasks = db.query(Task).filter_by(req_id=rid).all()
-        assert len(tasks) == 2 and all(t.assigned_to for t in tasks)
+        assert len(tasks) == 2 and all(t.owner_id for t in tasks)
     assert (
         command(
             client, "task.create", {"requirement_id": rid, "title": "Invalid", "owner_id": "missing"}

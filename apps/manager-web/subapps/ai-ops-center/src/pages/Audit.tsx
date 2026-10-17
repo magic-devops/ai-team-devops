@@ -123,7 +123,7 @@ export function Audit({ initialModule = "chain" }: AuditProps) {
   });
   const eventTask = useMutation({
     mutationFn: ({ id, dryRun }: { id: string; dryRun: boolean }) =>
-      api.auditEventTask(id, { dry_run: dryRun, priority: "P1", assigned_to: "SecurityOps", dev_tool: "copilot" }),
+      api.auditEventTask(id, { dry_run: dryRun, priority: "P1", owner_id: "", dev_tool: "copilot" }),
     onSuccess: (data) => {
       if (data?.dry_run) {
         setTaskPreview(data.item);

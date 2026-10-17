@@ -402,7 +402,7 @@ def build_fallback_drill(routes: list[dict[str, Any]], provider_health: list[dic
     }
 
 
-def build_cost_anomaly_tasks(usage: list[dict[str, Any]], policies: list[dict[str, Any]], *, assigned_to: str, dev_tool: str) -> dict[str, Any]:
+def build_cost_anomaly_tasks(usage: list[dict[str, Any]], policies: list[dict[str, Any]], *, owner_id: str, dev_tool: str) -> dict[str, Any]:
     policy = _active_policy(policies)
     threshold = _num(policy.get("cost_anomaly_threshold_usd"), 1.0)
     by_model: dict[str, dict[str, Any]] = {}
@@ -435,7 +435,7 @@ def build_cost_anomaly_tasks(usage: list[dict[str, Any]], policies: list[dict[st
             ),
             "priority": "P0" if item["avg_cost_usd"] >= threshold * 2 else "P1",
             "estimate": "S",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "dev_tool": dev_tool,
             "source": "llm_gateway_cost_anomaly",
             "source_report_id": f"llm-cost-{item['model_id']}",
@@ -506,7 +506,7 @@ def build_cost_attribution(
     policies: list[dict[str, Any]],
     *,
     min_cost_usd: float = 0.0,
-    assigned_to: str = "AI Platform",
+    owner_id: str = "",
     dev_tool: str = "codex",
 ) -> dict[str, Any]:
     rows = [row for row in usage if _num(row.get("cost_usd")) >= max(0.0, _num(min_cost_usd))]
@@ -564,7 +564,7 @@ def build_cost_attribution(
             ]),
             "priority": "P0" if finding["level"] in {"critical", "high"} else "P1",
             "estimate": "S",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "dev_tool": dev_tool,
             "source": "llm_gateway_cost_attribution",
             "source_report_id": "llm-cost-attribution-" + hashlib.sha1(str(finding).encode("utf-8")).hexdigest()[:10],
@@ -706,7 +706,7 @@ def build_model_evaluation(
     cases: list[dict[str, Any]] | None = None,
     actual_outputs: dict[str, Any] | None = None,
     min_score: float = 75.0,
-    assigned_to: str = "AI Platform",
+    owner_id: str = "",
     dev_tool: str = "codex",
 ) -> dict[str, Any]:
     requested_models = [str(item).strip() for item in (model_ids or []) if str(item).strip()]
@@ -737,7 +737,7 @@ def build_model_evaluation(
                     "description": "模型评测没有发现可用模型候选。请先配置模型路由、fallback 或直接指定 model_ids。",
                     "priority": "P1",
                     "estimate": "S",
-                    "assigned_to": assigned_to,
+                    "owner_id": owner_id,
                     "dev_tool": dev_tool,
                     "source": "llm_gateway_model_eval",
                     "source_report_id": "llm-model-eval-no-model",
@@ -906,7 +906,7 @@ def build_model_evaluation(
             ),
             "priority": "P0" if finding["level"] == "high" else "P1",
             "estimate": "S",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "dev_tool": dev_tool,
             "source": "llm_gateway_model_eval",
             "source_report_id": "llm-model-eval-" + hashlib.sha1(str(finding).encode("utf-8")).hexdigest()[:10],
@@ -985,7 +985,7 @@ def build_prompt_audit(
     allow_pii: bool = False,
     allow_secrets: bool = False,
     actions: list[str] | None = None,
-    assigned_to: str = "AI Platform",
+    owner_id: str = "",
     dev_tool: str = "codex",
     now_iso: str = "",
 ) -> dict[str, Any]:
@@ -1088,7 +1088,7 @@ def build_prompt_audit(
                 ]),
                 "priority": "P0" if finding["severity"] in {"critical", "high"} else "P1",
                 "estimate": "S",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "llm_gateway_prompt_audit",
                 "source_report_id": finding["id"],
@@ -1202,7 +1202,7 @@ def build_gateway_governance_tasks(summary: dict[str, Any]) -> list[dict[str, An
                 ),
                 "priority": priority_by_level.get(level, "P1"),
                 "estimate": "S" if level in {"low", "medium"} else "M",
-                "assigned_to": "AI Platform",
+                "owner_id": "",
                 "dev_tool": "codex",
                 "source": "llm_gateway_governance",
                 "source_report_id": f"llm-risk-{idx}",

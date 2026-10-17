@@ -5,6 +5,8 @@ import csv
 import io
 import json
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -77,10 +79,10 @@ class AuditRecordIn(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class AuditTaskIn(BaseModel):
+class AuditTaskIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "copilot"
 
 
@@ -107,7 +109,7 @@ def _audit_task_payload(row: AuditLog, body: AuditTaskIn) -> dict[str, Any]:
         + json.dumps(detail, ensure_ascii=False, indent=2),
         "priority": body.priority,
         "estimate": "M",
-        "assigned_to": body.assigned_to or "SecurityOps",
+        "owner_id": body.owner_id,
         "source": "audit_event",
         "source_report_id": row.id,
         "source_report_title": title[:120],

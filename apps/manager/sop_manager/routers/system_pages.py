@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import hashlib
 import gzip
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -806,76 +808,76 @@ def _capability_actions_for(capability: str, policies: dict[str, list[str]]) -> 
     ]
 
 
-class BacklogTaskIn(BaseModel):
+class BacklogTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
 
 
-class ReadinessTaskIn(BaseModel):
+class ReadinessTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     domain: str = "all"
     status: str = Field("watch", pattern="^(all|complete|watch|risk)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_complete: bool = False
 
 
-class ProductionReadinessTaskIn(BaseModel):
+class ProductionReadinessTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     domain: str = "all"
     stage: str = Field("all", pattern="^(all|gap|contract_complete|runtime_ready|production_ready)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "PlatformOwner"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_production_ready: bool = False
 
 
-class ExperienceTaskIn(BaseModel):
+class ExperienceTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     domain: str = "all"
     status: str = Field("watch", pattern="^(all|simple|watch|complex)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Designer"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_simple: bool = False
 
 
-class FrontendPerformanceTaskIn(BaseModel):
+class FrontendPerformanceTaskIn(TaskOwnerInput):
     names: list[str] = Field(default_factory=list)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "FrontendAgent"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(8, ge=1, le=50)
     include_watch: bool = True
 
 
-class IsolationTaskIn(BaseModel):
+class IsolationTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P0", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityAgent"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_protected: bool = False
 
 
-class IsolationScanTaskIn(BaseModel):
+class IsolationScanTaskIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     status: str = Field("watch", pattern="^(all|protected|watch|risk)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P0", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityAgent"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_protected: bool = False
 
@@ -888,32 +890,32 @@ class IsolationScanRunIn(BaseModel):
     max_items: int = Field(20, ge=1, le=100)
 
 
-class IsolationScanCompareTaskIn(BaseModel):
+class IsolationScanCompareTaskIn(TaskOwnerInput):
     base_id: str = ""
     target_id: str = ""
     status: str = Field("all", pattern="^(all|protected|watch|risk)$")
     q: str = ""
     dry_run: bool = True
     priority: str = Field("P0", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityAgent"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
     include_resolved: bool = False
 
 
-class GovernanceTaskIn(BaseModel):
+class GovernanceTaskIn(TaskOwnerInput):
     scope: str = Field("all", pattern="^(all|registry_consistency|legacy_convergence|module_permission_ai|module_maturity)$")
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     max_items: int = Field(12, ge=1, le=100)
 
 
-class GovernanceTaskBulkUpdateIn(BaseModel):
+class GovernanceTaskBulkUpdateIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, min_length=1, max_length=200)
     dry_run: bool = True
     status: str | None = Field(default=None, pattern=TASK_STATUS_PATTERN)
     priority: str | None = Field(default=None, pattern=TASK_PRIORITY_PATTERN)
-    assigned_to: str | None = None
+    owner_id: TaskOwnerId = ""
 
 
 class CapabilityCheckIn(BaseModel):
@@ -927,11 +929,11 @@ class ModuleActionPlanIn(BaseModel):
     dry_run: bool = True
 
 
-class ModuleActionExecuteIn(BaseModel):
+class ModuleActionExecuteIn(TaskOwnerInput):
     module_id: str
     action_id: str
     dry_run: bool = False
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     priority: str = Field("P1", pattern="^P[0-3]$")
 
 
@@ -1107,6 +1109,7 @@ NAV_CONTRACT: list[dict[str, Any]] = [
     {"id": "webhooks", "path": "#/notify/webhooks", "domain": "ecosystem", "capability": "ecosystem.notify.webhooks"},
     {"id": "audit", "path": "#/audit", "domain": "governance", "capability": "governance.audit"},
     {"id": "systemMap", "path": "#/system-map", "domain": "governance", "capability": "governance.system-map"},
+    {"id": "systemMapProductization", "path": "#/system-map/productization", "domain": "governance", "capability": "governance.system-map.productization"},
     {"id": "frontendPerformanceGovernance", "path": "#/system-map/performance", "domain": "governance", "capability": "governance.system-map.frontend-performance"},
     {"id": "settings", "path": "#/settings", "domain": "system", "capability": "system.settings"},
     {"id": "settingsAccount", "path": "#/settings/account", "domain": "system", "capability": "system.settings.account"},
@@ -1618,7 +1621,7 @@ def _governance_status(react: list[dict[str, Any]], legacy: list[dict[str, Any]]
     }
 
 
-def _backlog_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _backlog_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     next_items = [str(x) for x in item.get("next", [])]
     return {
         "title": f"迁移 legacy 页面：{item.get('name')}",
@@ -1634,7 +1637,7 @@ def _backlog_task_payload(item: dict[str, Any], *, priority: str, assigned_to: s
         ).strip(),
         "priority": priority,
         "estimate": "M",
-        "assigned_to": assigned_to or "Coder",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_backlog",
         "source_report_id": str(item.get("id") or ""),
@@ -1808,7 +1811,7 @@ def _governance_task_text(item: dict[str, Any]) -> str:
             "id",
             "title",
             "description",
-            "assigned_to",
+            "owner_id",
             "priority",
             "status",
             "source",
@@ -1848,8 +1851,8 @@ def _system_governance_task_bulk_cli(ids: list[str], patch: dict[str, str], *, d
         args.append(f"--status {patch['status']}")
     if patch.get("priority"):
         args.append(f"--priority {patch['priority']}")
-    if patch.get("assigned_to"):
-        args.append(f"--assigned-to {shell_quote(str(patch['assigned_to']))}")
+    if "owner_id" in patch:
+        args.append(f"--owner-id {shell_quote(str(patch['owner_id']))}")
     args.append("--json")
     return " ".join(args)
 
@@ -1919,9 +1922,9 @@ def _system_governance_tasks_payload(*, status: str, source: str, q: str, limit:
             "bulk_actions": {
                 "statuses": list(SYSTEM_GOVERNANCE_TASK_STATUSES),
                 "priorities": list(SYSTEM_GOVERNANCE_TASK_PRIORITIES),
-                "fields": ["status", "priority", "assigned_to"],
+                "fields": ["status", "priority", "owner_id"],
                 "max_ids": 200,
-                "assigned_to_max_length": 64,
+                "owner_id_max_length": 100,
                 "dry_run_default": True,
             },
         },
@@ -1943,8 +1946,8 @@ def _system_governance_tasks_bulk_update_payload(body: GovernanceTaskBulkUpdateI
         patch["status"] = str(body.status)
     if body.priority is not None:
         patch["priority"] = str(body.priority).upper()
-    if body.assigned_to is not None and str(body.assigned_to).strip():
-        patch["assigned_to"] = str(body.assigned_to).strip()[:64]
+    if "owner_id" in body.model_fields_set:
+        patch["owner_id"] = body.owner_id
     payload = _system_governance_tasks_payload(status="all", source="all", q="", limit=200)
     governance_by_id = {str(item.get("id") or ""): item for item in payload.get("items") or [] if item.get("id")}
     all_known_ids = {str(item.get("id") or "") for item in _list_tasks_safe() if item.get("id")}
@@ -1986,7 +1989,7 @@ def _system_governance_tasks_bulk_update_payload(body: GovernanceTaskBulkUpdateI
     }
 
 
-def _readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _readiness_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     gaps = item.get("gaps") or []
     next_actions = [str(x) for x in item.get("next_actions") or [] if str(x).strip()]
     contract = item.get("implementation_contract") or {}
@@ -2017,7 +2020,7 @@ def _readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to:
         ).strip(),
         "priority": priority,
         "estimate": "M" if str(item.get("status")) == "risk" else "S",
-        "assigned_to": assigned_to or "Coder",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_readiness",
         "source_report_id": f"readiness:{module_id}",
@@ -2026,7 +2029,7 @@ def _readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to:
     }
 
 
-def _experience_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _experience_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     module_id = str(item.get("id") or "")
     recommendations = [str(x) for x in item.get("recommendations") or [] if str(x).strip()]
     dimensions = item.get("dimensions") or {}
@@ -2061,7 +2064,7 @@ def _experience_task_payload(item: dict[str, Any], *, priority: str, assigned_to
         ).strip(),
         "priority": priority,
         "estimate": "M" if str(item.get("status")) == "complex" else "S",
-        "assigned_to": assigned_to or "Designer",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_experience",
         "source_report_id": f"experience:{module_id}",
@@ -2070,7 +2073,7 @@ def _experience_task_payload(item: dict[str, Any], *, priority: str, assigned_to
     }
 
 
-def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     name = str(item.get("name") or "")
     budget = item.get("budget") or {}
     status = str(budget.get("status") or "watch")
@@ -2099,7 +2102,7 @@ def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, a
         ).strip(),
         "priority": "P0" if status == "risk" and load_scope == "initial" else "P1" if status == "risk" else priority,
         "estimate": "M" if status == "risk" else "S",
-        "assigned_to": assigned_to or "FrontendAgent",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_frontend_performance",
         "source_report_id": f"frontend-performance:{name}",
@@ -2108,7 +2111,7 @@ def _frontend_performance_task_payload(item: dict[str, Any], *, priority: str, a
     }
 
 
-def _production_readiness_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _production_readiness_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     module_id = str(item.get("id") or "")
     dimensions = item.get("dimensions") or {}
     gaps = [
@@ -2145,7 +2148,7 @@ def _production_readiness_task_payload(item: dict[str, Any], *, priority: str, a
         ).strip(),
         "priority": priority_value,
         "estimate": "M" if gaps else "S",
-        "assigned_to": assigned_to or "PlatformOwner",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_production_readiness",
         "source_report_id": f"production-readiness:{module_id}",
@@ -2154,7 +2157,7 @@ def _production_readiness_task_payload(item: dict[str, Any], *, priority: str, a
     }
 
 
-def _isolation_task_payload(item: dict[str, Any], *, scope_contract: dict[str, Any], priority: str, assigned_to: str) -> dict[str, Any]:
+def _isolation_task_payload(item: dict[str, Any], *, scope_contract: dict[str, Any], priority: str, owner_id: str) -> dict[str, Any]:
     domain_id = str(item.get("id") or "")
     tests = [str(x) for x in item.get("tests") or [] if str(x).strip()]
     scope_fields = [str(x) for x in item.get("scope_fields") or [] if str(x).strip()]
@@ -2182,7 +2185,7 @@ def _isolation_task_payload(item: dict[str, Any], *, scope_contract: dict[str, A
         ).strip(),
         "priority": priority,
         "estimate": "M" if str(item.get("status")) != "protected" else "S",
-        "assigned_to": assigned_to or "SecurityAgent",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_isolation",
         "source_report_id": f"isolation:{domain_id}",
@@ -2191,7 +2194,7 @@ def _isolation_task_payload(item: dict[str, Any], *, scope_contract: dict[str, A
     }
 
 
-def _isolation_scan_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _isolation_scan_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     module = str(item.get("module") or "").strip()
     source_id = module or str(item.get("id") or "").replace("source:", "")
     return {
@@ -2219,7 +2222,7 @@ def _isolation_scan_task_payload(item: dict[str, Any], *, priority: str, assigne
         ).strip(),
         "priority": priority,
         "estimate": "M" if str(item.get("status")) != "protected" else "S",
-        "assigned_to": assigned_to or "SecurityAgent",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_isolation_scan",
         "source_report_id": f"isolation_scan:{source_id}",
@@ -2228,7 +2231,7 @@ def _isolation_scan_task_payload(item: dict[str, Any], *, priority: str, assigne
     }
 
 
-def _isolation_scan_compare_task_payload(item: dict[str, Any], *, priority: str, assigned_to: str) -> dict[str, Any]:
+def _isolation_scan_compare_task_payload(item: dict[str, Any], *, priority: str, owner_id: str) -> dict[str, Any]:
     module = str(item.get("module") or item.get("id") or "").strip()
     change = str(item.get("change") or "changed")
     source_id = module or str(item.get("id") or "").strip()
@@ -2253,7 +2256,7 @@ def _isolation_scan_compare_task_payload(item: dict[str, Any], *, priority: str,
         ).strip(),
         "priority": effective_priority,
         "estimate": "M" if change in {"new_risk", "regressed"} else "S",
-        "assigned_to": assigned_to or "SecurityAgent",
+        "owner_id": owner_id,
         "dev_tool": "codex",
         "source": "system_page_isolation_scan_compare",
         "source_report_id": f"isolation_scan_compare:{source_id}:{change}",
@@ -2262,7 +2265,7 @@ def _isolation_scan_compare_task_payload(item: dict[str, Any], *, priority: str,
     }
 
 
-def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, max_items: int) -> list[dict[str, Any]]:
+def _governance_task_payloads(*, scope: str, priority: str, owner_id: str, max_items: int) -> list[dict[str, Any]]:
     react = _enrich_pages(REACT_PAGES)
     legacy = _enrich_pages(LEGACY_PAGES)
     validation = _registry_validation()
@@ -2276,7 +2279,7 @@ def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, ma
                     "description": json.dumps(validation, ensure_ascii=False, indent=2),
                     "priority": priority,
                     "estimate": "S",
-                    "assigned_to": assigned_to or "Coder",
+                    "owner_id": owner_id,
                     "dev_tool": "codex",
                     "source": "system_page_governance",
                     "source_report_id": "registry_consistency",
@@ -2286,7 +2289,7 @@ def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, ma
             )
     if include_all or scope == "legacy_convergence":
         for item in _migration_backlog(legacy, limit=max_items):
-            payload = _backlog_task_payload(item, priority=priority, assigned_to=assigned_to)
+            payload = _backlog_task_payload(item, priority=priority, owner_id=owner_id)
             rows.append(
                 {
                     **payload,
@@ -2311,7 +2314,7 @@ def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, ma
                 ),
                 "priority": priority,
                 "estimate": "M",
-                "assigned_to": assigned_to or "Coder",
+                "owner_id": owner_id,
                 "dev_tool": "codex",
                 "source": "system_page_governance",
                 "source_report_id": "module_permission_ai",
@@ -2342,7 +2345,7 @@ def _governance_task_payloads(*, scope: str, priority: str, assigned_to: str, ma
                     ).strip(),
                     "priority": priority,
                     "estimate": "M",
-                    "assigned_to": assigned_to or "Coder",
+                    "owner_id": owner_id,
                     "dev_tool": "codex",
                     "source": "system_page_governance",
                     "source_report_id": f"module_maturity:{item.get('id')}",
@@ -4054,7 +4057,7 @@ def _execute_module_action(module: dict[str, Any], action: dict[str, Any], body:
             "result": {"type": "manifest", "target": action.get("target"), "manifest": _module_manifest(role=role)},
         }
     elif action_id == "create_legacy_migration_tasks":
-        result = system_page_backlog_tasks(BacklogTaskIn(dry_run=False, priority=body.priority, assigned_to=body.assigned_to))
+        result = system_page_backlog_tasks(BacklogTaskIn(dry_run=False, priority=body.priority, owner_id=body.owner_id))
         output = {**plan, "executed": True, "result": {"type": "legacy_migration_tasks", **result}}
     elif action_id == "create_delivery_task":
         task = create_task(
@@ -4074,7 +4077,7 @@ def _execute_module_action(module: dict[str, Any], action: dict[str, Any], body:
                 ).strip(),
                 priority=body.priority,
                 estimate="M",
-                assigned_to=body.assigned_to,
+                owner_id=body.owner_id,
                 dev_tool="codex",
                 source="system_module_action",
                 source_report_id=module_id,
@@ -4964,7 +4967,7 @@ def system_pages_production_readiness_tasks(body: ProductionReadinessTaskIn) -> 
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _production_readiness_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _production_readiness_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5033,7 +5036,7 @@ def system_pages_frontend_performance_tasks(body: FrontendPerformanceTaskIn) -> 
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _frontend_performance_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _frontend_performance_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("name") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5079,7 +5082,7 @@ def system_page_experience_tasks(body: ExperienceTaskIn) -> dict[str, Any]:
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _experience_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _experience_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5130,7 +5133,7 @@ def system_page_readiness_tasks(body: ReadinessTaskIn) -> dict[str, Any]:
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _readiness_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _readiness_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5237,7 +5240,7 @@ def system_page_isolation_scan_compare_tasks(body: IsolationScanCompareTaskIn) -
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _isolation_scan_compare_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _isolation_scan_compare_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5319,7 +5322,7 @@ def system_page_isolation_scan_tasks(body: IsolationScanTaskIn) -> dict[str, Any
     created: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for item in rows:
-        payload_item = _isolation_scan_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _isolation_scan_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5385,7 +5388,7 @@ def system_page_isolation_tasks(body: IsolationTaskIn) -> dict[str, Any]:
     skipped: list[dict[str, Any]] = []
     scope_contract = audit.get("scope_contract") or {}
     for item in rows:
-        payload_item = _isolation_task_payload(item, scope_contract=scope_contract, priority=body.priority, assigned_to=body.assigned_to)
+        payload_item = _isolation_task_payload(item, scope_contract=scope_contract, priority=body.priority, owner_id=body.owner_id)
         report_id = str(payload_item.get("source_report_id") or "")
         if report_id in existing_ids:
             skipped.append({"id": str(item.get("id") or ""), "reason": "task_exists", "title": payload_item["title"]})
@@ -5477,7 +5480,7 @@ def system_page_backlog_tasks(body: BacklogTaskIn) -> dict[str, Any]:
     created = []
     for item in backlog:
         item_id = str(item.get("id") or "")
-        payload = _backlog_task_payload(item, priority=body.priority, assigned_to=body.assigned_to)
+        payload = _backlog_task_payload(item, priority=body.priority, owner_id=body.owner_id)
         if item_id in existing_ids:
             skipped.append({"id": item_id, "reason": "task_exists", "title": payload["title"]})
             continue

@@ -1,5 +1,7 @@
 """LLM 网关 v2：模型路由、成本统计、限流策略。"""
 from __future__ import annotations
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -81,9 +83,9 @@ class DecisionIn(BaseModel):
     required_quality: str = "balanced"
     allow_fallback: bool = True
 
-class GovernanceTasksIn(BaseModel):
+class GovernanceTasksIn(TaskOwnerInput):
     dry_run: bool = True
-    assigned_to: str = "AI Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 class GatewayPolicyIn(BaseModel):
@@ -106,7 +108,7 @@ class ImBriefingIn(BaseModel):
     channels: list[str] = Field(default_factory=list)
     dry_run: bool = True
 
-class PromptAuditIn(BaseModel):
+class PromptAuditIn(TaskOwnerInput):
     prompt: str = Field("", max_length=120000)
     task_type: str = "general"
     model_id: str = ""
@@ -117,16 +119,16 @@ class PromptAuditIn(BaseModel):
     actions: list[str] = Field(default_factory=lambda: ["create_task"])
     dry_run: bool = True
     persist: bool = True
-    assigned_to: str = "AI Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     note: str = ""
 
-class CostAttributionIn(BaseModel):
+class CostAttributionIn(TaskOwnerInput):
     min_cost_usd: float = 0.0
     dry_run: bool = True
     persist: bool = True
     create_tasks: bool = False
-    assigned_to: str = "AI Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     note: str = ""
 
@@ -146,7 +148,7 @@ class ModelEvalCaseIn(BaseModel):
     allow_pii: bool = False
     allow_secrets: bool = False
 
-class ModelEvalIn(BaseModel):
+class ModelEvalIn(TaskOwnerInput):
     model_ids: list[str] = Field(default_factory=list)
     cases: list[ModelEvalCaseIn] = Field(default_factory=list)
     actual_outputs: dict[str, Any] = Field(default_factory=dict)
@@ -154,7 +156,7 @@ class ModelEvalIn(BaseModel):
     dry_run: bool = True
     persist: bool = True
     create_tasks: bool = False
-    assigned_to: str = "AI Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     note: str = ""
 
@@ -382,7 +384,7 @@ def governance_tasks(body: GovernanceTasksIn):
     summary_payload = summarize_gateway_health(_load_all("routes"), _load_all("throttle"), _load_all("usage"))
     drafts = build_gateway_governance_tasks(summary_payload)
     for draft in drafts:
-        draft["assigned_to"] = body.assigned_to or draft["assigned_to"]
+        draft["owner_id"] = body.owner_id or draft["owner_id"]
         draft["dev_tool"] = body.dev_tool or draft["dev_tool"]
     if body.dry_run:
         return {**_scope(), "dry_run": True, "items": drafts, "created": []}
@@ -394,7 +396,7 @@ def governance_tasks(body: GovernanceTasksIn):
 
 @router.post("/cost-anomalies/tasks")
 def cost_anomaly_tasks(body: GovernanceTasksIn):
-    result = build_cost_anomaly_tasks(_load_all("usage"), [_load_policy()], assigned_to=body.assigned_to or "AI Platform", dev_tool=body.dev_tool or "codex")
+    result = build_cost_anomaly_tasks(_load_all("usage"), [_load_policy()], owner_id=body.owner_id, dev_tool=body.dev_tool or "codex")
     if body.dry_run:
         return {**_scope(), "dry_run": True, **result, "created": []}
     from sop_manager.routers.tasks import TaskCreate, create_task
@@ -428,7 +430,7 @@ def cost_attribution_run(body: CostAttributionIn):
         _load_all("usage"),
         [_load_policy()],
         min_cost_usd=body.min_cost_usd,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     created = []
@@ -500,7 +502,7 @@ def model_eval_run(body: ModelEvalIn):
         cases=[case.model_dump() for case in body.cases],
         actual_outputs=body.actual_outputs,
         min_score=body.min_score,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
     )
     created = []
@@ -557,7 +559,7 @@ def prompt_audit_run(body: PromptAuditIn):
         allow_pii=body.allow_pii,
         allow_secrets=body.allow_secrets,
         actions=body.actions,
-        assigned_to=body.assigned_to,
+        owner_id=body.owner_id,
         dev_tool=body.dev_tool,
         now_iso=_now(),
     )

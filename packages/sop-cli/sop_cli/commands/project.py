@@ -106,12 +106,12 @@ def ops_tasks(
     project_id: str = typer.Option("", "--project-id", "-p"),
     apply: bool = typer.Option(False, "--apply", help="实际创建任务；默认仅预览"),
     priority: str = typer.Option("P1", "--priority"),
-    assigned_to: str = typer.Option("Coder", "--assigned-to"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     json_out: bool = typer.Option(False, "--json"),
 ) -> None:
     """将项目治理操作包候选项预览或生成任务。"""
     pid = _project_id(project_id)
-    body = {"dry_run": not apply, "priority": priority, "assigned_to": assigned_to}
+    body = {"dry_run": not apply, "priority": priority, "owner_id": owner_id}
     try:
         out = get_client().project_ops_tasks(pid, body)
     except Exception as e:

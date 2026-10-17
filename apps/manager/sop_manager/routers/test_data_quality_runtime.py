@@ -118,7 +118,7 @@ def test_data_quality_alert_tasks_preview_uses_run_attribution(tmp_path):
         )
 
         tasks = data_quality.alert_tasks(
-            data_quality.AlertTasksIn(dry_run=True, priority="P1", assigned_to="Data Governance Agent", dev_tool="codex")
+            data_quality.AlertTasksIn(dry_run=True, priority="P1", owner_id="", dev_tool="codex")
         )
 
     assert tasks["dry_run"] is True

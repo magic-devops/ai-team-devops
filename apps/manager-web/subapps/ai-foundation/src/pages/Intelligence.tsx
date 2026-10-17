@@ -212,7 +212,7 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
         ids: (usageAlerts.data?.items ?? []).map((x: any) => String(x.id)).filter(Boolean),
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Ops",
+        owner_id: "",
         dev_tool: "copilot",
       }),
     onSuccess: (data) => {

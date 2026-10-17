@@ -2,6 +2,7 @@
 
 # ruff: noqa: F811 - shared pytest fixtures are imported and injected by name.
 
+import pytest
 from sop_manager.routers.sql_models import DeliveryProgressObservation, DeliveryWorkspace, Project, Task, User
 from sqlalchemy import bindparam, insert, update
 from test_delivery_execution import bridge, queue, sync  # noqa: F401
@@ -72,21 +73,34 @@ def test_bound_core_insert_keeps_static_identity_scope_when_parameters_only_cont
         assert count(db, "project") == before + 1
 
 
-def test_bound_core_user_batch_tracks_old_and_new_identity_without_reviving_native_receipt(bridge):
+@pytest.mark.parametrize(
+    "field,values,invalidated",
+    [
+        ("username", (("Changed lead", "Changed reader"), ("lead", "reader")), False),
+        ("status", (("suspended", "suspended"), ("active", "active")), True),
+    ],
+)
+def test_bound_core_user_batch_preserves_renamed_receipts_but_invalidates_disable_restore(
+    bridge, field, values, invalidated
+):
     _, sessions, _, _, _, _, _ = bridge
     intent = sync(bridge, queue(bridge))
-    for lead_name, reader_name in (("Changed lead", "Changed reader"), ("lead", "reader")):
+    original_snapshot = intent["snapshot"]
+    for lead_value, reader_value in values:
         with sessions() as db:
             db.execute(
                 update(User.__table__)
                 .where(User.id == bindparam("target_id"))
-                .values(username=bindparam("new_name")),
+                .values(**{field: bindparam("new_value")}),
                 [
-                    {"target_id": "lead", "new_name": lead_name},
-                    {"target_id": "reader", "new_name": reader_name},
+                    {"target_id": "lead", "new_value": lead_value},
+                    {"target_id": "reader", "new_value": reader_value},
                 ],
             )
             db.commit()
-    with sessions() as db:
-        assert db.get(DeliveryWorkspace, "project").data["executions"][-1]["planning_invalidated"]
-    assert sync(bridge, intent)["stale"]
+            entry = db.get(DeliveryWorkspace, "project").data["executions"][-1]
+            assert bool(entry.get("planning_invalidated")) is invalidated
+            assert entry["snapshot"] == original_snapshot
+            assert db.get(Task, entry["task_id"]).owner_id == "user:lead"
+            assert getattr(db.get(User, "lead"), field) == lead_value
+    assert sync(bridge, intent)["stale"] is invalidated

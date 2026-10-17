@@ -103,7 +103,7 @@ def test_build_alert_slo_escalation_creates_task_plan_for_high_risk_prediction()
         policy={"min_risk_level": "high", "min_breach_probability": 0.35, "actions": ["create_task", "im_notify"]},
         dry_run=True,
         priority="P1",
-        assigned_to="Ops Agent",
+        owner_id="",
         dev_tool="codex",
     )
 
@@ -176,7 +176,7 @@ def test_build_ops_strategy_linkage_creates_cross_module_plan():
         actions=["create_task", "im_notify"],
         max_items=6,
         priority="P1",
-        assigned_to="Ops Agent",
+        owner_id="",
         dev_tool="codex",
         now_iso="2026-05-24T00:00:00Z",
     )
@@ -387,7 +387,7 @@ def test_ops_center_strategy_linkage_preview_and_persist(tmp_path):
             dry_run=False,
             actions=["create_task"],
             max_items=5,
-            assigned_to="Ops Agent",
+            owner_id="",
         ))
         from sop_manager.routers.tasks import list_tasks
 
@@ -396,7 +396,7 @@ def test_ops_center_strategy_linkage_preview_and_persist(tmp_path):
             dry_run=False,
             actions=["create_task"],
             max_items=5,
-            assigned_to="Ops Agent",
+            owner_id="",
         ))
         linked_tasks_after = list_tasks(source="ops_center_strategy_linkage")
         listed = ops_center.list_ops_strategy_linkage_runs()
@@ -442,7 +442,7 @@ def test_ops_center_strategy_linkage_preview_and_persist(tmp_path):
                 dry_run=False,
                 actions=["create_task"],
                 max_items=5,
-                assigned_to="Ops Agent",
+                owner_id="",
             ))
             assert cross_scope_applied["summary"]["created"] >= 1
             assert cross_scope_applied["summary"]["skipped_existing"] == 0
@@ -1041,7 +1041,7 @@ def test_build_self_heal_tasks_creates_actionable_task_drafts():
         runbooks=[{"id": "rb-scale", "name": "服务扩容", "tags": ["scale"], "steps": ["确认容量", "扩容实例"]}],
     )
 
-    tasks = build_self_heal_tasks(evaluation, dry_run=True, priority="P1", assigned_to="Ops Agent", dev_tool="codex")
+    tasks = build_self_heal_tasks(evaluation, dry_run=True, priority="P1", owner_id="", dev_tool="codex")
 
     assert tasks["dry_run"] is True
     assert tasks["tasks"][0]["source"] == "ops_center_self_heal"
@@ -1118,7 +1118,7 @@ def test_build_ops_rca_insight_tasks_turns_candidates_into_actionable_tasks():
         rca=[],
     )
 
-    tasks = build_ops_rca_insight_tasks(analysis, dry_run=True, priority="P2", assigned_to="SRE", dev_tool="codex")
+    tasks = build_ops_rca_insight_tasks(analysis, dry_run=True, priority="P2", owner_id="", dev_tool="codex")
 
     assert tasks["dry_run"] is True
     assert tasks["summary"]["planned"] == 1

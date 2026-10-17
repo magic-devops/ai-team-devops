@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-17T08:18:06.007067+00:00",
+  "updated_at": "2026-10-17T09:21:21.800717+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "task_acceptance_delivery_verified",
+    "status": "stable_team_identity_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,37 +15,30 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/task-acceptance/",
+    "evidence": ".sop-runtime/delivery-evidence/team-identity/",
     "verification_status": "verified",
-    "next_step": "stable_team_runtime_identity_then_portfolio_archival_quality_release_and_operations",
+    "next_step": "optional_executor_binding_then_portfolio_archival_quality_release_and_operations",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "manager_full": {
-        "passed": 653,
-        "failed": 2,
-        "seconds": 485.02,
-        "resolution": "Two obsolete fixtures/permission assertions corrected and rechecked with 49 passing related tests; no production gates weakened."
-      },
-      "manager_full_failure_files_rechecked": 49,
-      "manager_final_cross_domain": 139,
-      "manager_final_sql_scope": 69,
-      "counts_overlap": true,
-      "web": 339,
-      "web_files": 57,
-      "web_seconds": 82.87,
-      "mobile_shell_targeted": 4,
-      "sdk_cli_targeted": 85,
-      "typescript_build": "passed",
+      "manager_full_passed": 850,
+      "manager_full_failed": 0,
+      "manager_full_seconds": 412.67,
+      "web": 360,
+      "web_files": 63,
+      "web_seconds": 28.99,
+      "sdk_cli_targeted": 24,
+      "additional_router_targeted": 3,
+      "typescript_no_emit": "passed",
       "production_build": "passed",
-      "production_build_after_mobile_css_seconds": 73,
+      "production_build_seconds": 57.52,
       "independent_reviews": 1,
-      "review_p1_fixed": 1,
       "review_p2_fixed": 1,
-      "unresolved_known_failures": 0,
-      "actual_worker_agentd_python_test_human_review": "passed",
-      "actual_stale_completed_recovery": "passed",
+      "unresolved_known_stage_failures": 0,
+      "counts_overlap": true,
+      "actual_http_identity_and_manual_review": "passed",
+      "original_real_native_receipt_rename": "passed",
       "actual_read_only_tables": 28,
       "sqlite_schema_upgrade": "verified",
       "postgres_upgrade": "ddl_compile_only",
@@ -57,8 +50,9 @@
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/task-acceptance/commit-receipt.json",
-    "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md"
+    "commit_receipt": ".sop-runtime/delivery-evidence/team-identity/commit-receipt.json",
+    "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md",
+    "team_identity_design": "docs/DELIVERY_TEAM_IDENTITY_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -485,7 +479,7 @@
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "独立任务自身验收、原生执行与问题回流阶段已验证；继续团队执行身份、项目组合/归档、质量发布及部署运维完整待办。"
+    "current": "团队稳定归属与协作工作台阶段已完整验证；继续可选执行成员绑定、项目组合/归档、质量发布及部署运维。"
   },
   "metrics": {
     "completion_rate": null,
@@ -493,5 +487,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "独立任务自身验收、原生执行与问题回流阶段已验证；继续团队执行身份、项目组合/归档、质量发布及部署运维完整待办。"
+  "current": "团队稳定归属与协作工作台阶段已完整验证；继续可选执行成员绑定、项目组合/归档、质量发布及部署运维。"
 }

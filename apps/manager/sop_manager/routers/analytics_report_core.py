@@ -168,7 +168,7 @@ def generate_insight_report(metrics: dict[str, Any], title: str = "智能数据�
     }
 
 
-def build_attribution_tasks(attribution: dict[str, Any], *, priority: str = "P1", assigned_to: str = "DataOps", dev_tool: str = "codex") -> list[dict[str, Any]]:
+def build_attribution_tasks(attribution: dict[str, Any], *, priority: str = "P1", owner_id: str = "", dev_tool: str = "codex") -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     for index, rec in enumerate(attribution.get("recommendations") or [], start=1):
         title = str(rec.get("title") or "跟进归因建议")
@@ -183,7 +183,7 @@ def build_attribution_tasks(attribution: dict[str, Any], *, priority: str = "P1"
             ]),
             "priority": priority or str(rec.get("priority_hint") or "P1"),
             "estimate": "M" if index <= 2 else "S",
-            "assigned_to": assigned_to or "DataOps",
+            "owner_id": owner_id,
             "dev_tool": dev_tool or "codex",
             "source": "analytics_attribution",
             "source_report_id": f"attribution-{index}",
@@ -304,7 +304,7 @@ def aggregate_report_intelligence(reports: list[dict[str, Any]]) -> dict[str, An
     }
 
 
-def build_report_intelligence_tasks(intelligence: dict[str, Any], *, priority: str = "P1", assigned_to: str = "DataOps", dev_tool: str = "codex") -> list[dict[str, Any]]:
+def build_report_intelligence_tasks(intelligence: dict[str, Any], *, priority: str = "P1", owner_id: str = "", dev_tool: str = "codex") -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     summary = intelligence.get("summary") if isinstance(intelligence.get("summary"), dict) else {}
     for index, rec in enumerate(intelligence.get("recommendations") or [], start=1):
@@ -324,7 +324,7 @@ def build_report_intelligence_tasks(intelligence: dict[str, Any], *, priority: s
             ]),
             "priority": priority or str(rec.get("priority_hint") or "P1"),
             "estimate": "M" if index <= 2 else "S",
-            "assigned_to": assigned_to or "DataOps",
+            "owner_id": owner_id,
             "dev_tool": dev_tool or "codex",
             "source": "analytics_report_intelligence",
             "source_report_id": f"report-intelligence-{index}",
@@ -465,7 +465,7 @@ def build_decision_tasks(
     decision_packet: dict[str, Any],
     *,
     priority: str = "",
-    assigned_to: str = "DataOps",
+    owner_id: str = "",
     dev_tool: str = "codex",
     max_tasks: int = 5,
 ) -> list[dict[str, Any]]:
@@ -491,7 +491,7 @@ def build_decision_tasks(
                 ),
                 "priority": effective_priority,
                 "estimate": "M" if index <= 2 else "S",
-                "assigned_to": assigned_to or "DataOps",
+                "owner_id": owner_id,
                 "dev_tool": dev_tool or "codex",
                 "source": "analytics_decision_attribution",
                 "source_report_id": ",".join(report_ids) if report_ids else f"decision-action-{index}",

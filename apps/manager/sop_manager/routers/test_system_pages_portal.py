@@ -333,7 +333,7 @@ def test_system_pages_experience_tasks_preview_modules_for_ui_simplification():
             include_simple=True,
             max_items=3,
             priority="P1",
-            assigned_to="Designer",
+            owner_id="",
         )
     )
 
@@ -344,7 +344,7 @@ def test_system_pages_experience_tasks_preview_modules_for_ui_simplification():
     first = result["planned"][0]
     assert first["source"] == "system_page_experience"
     assert first["priority"] == "P1"
-    assert first["assigned_to"] == "Designer"
+    assert first["owner_id"] == ""
     assert first["source_report_id"].startswith("experience:")
     assert "experience_score" in first["description"]
     assert "ui_contract" in first["description"]
@@ -411,7 +411,7 @@ def test_system_pages_readiness_tasks_preview_modules_for_continuous_enhancement
             include_complete=True,
             max_items=3,
             priority="P2",
-            assigned_to="Coder",
+            owner_id="",
         )
     )
 
@@ -422,7 +422,7 @@ def test_system_pages_readiness_tasks_preview_modules_for_continuous_enhancement
     first = result["planned"][0]
     assert first["source"] == "system_page_readiness"
     assert first["priority"] == "P2"
-    assert first["assigned_to"] == "Coder"
+    assert first["owner_id"] == ""
     assert first["source_report_id"].startswith("readiness:")
     assert "readiness_score" in first["description"]
     assert "implementation_contract" in first["description"]
@@ -492,7 +492,7 @@ def test_system_pages_governance_tasks_aggregates_real_generated_tasks(monkeypat
             "description": "readiness_score=72",
             "status": "pending",
             "priority": "P1",
-            "assigned_to": "Coder",
+            "owner_id": "",
             "source": "system_page_readiness",
             "source_report_id": "readiness:systemMap",
             "source_report_title": "模块治理",
@@ -505,7 +505,7 @@ def test_system_pages_governance_tasks_aggregates_real_generated_tasks(monkeypat
             "description": "before=protected after=risk",
             "status": "in_progress",
             "priority": "P0",
-            "assigned_to": "SecurityAgent",
+            "owner_id": "",
             "source": "system_page_isolation_scan_compare",
             "source_report_id": "isolation_scan_compare:auth:regressed",
             "source_report_title": "sop_manager/routers/auth.py",
@@ -518,7 +518,7 @@ def test_system_pages_governance_tasks_aggregates_real_generated_tasks(monkeypat
             "description": "legacy target",
             "status": "completed",
             "priority": "P2",
-            "assigned_to": "Coder",
+            "owner_id": "",
             "source": "system_page_backlog",
             "source_report_id": "legacy:console",
             "source_report_title": "Legacy Console",
@@ -569,7 +569,7 @@ def test_system_pages_governance_tasks_filters_source_status_and_keyword(monkeyp
                 "description": "readiness_score=72",
                 "status": "pending",
                 "priority": "P1",
-                "assigned_to": "Coder",
+                "owner_id": "",
                 "source": "system_page_readiness",
                 "source_report_id": "readiness:systemMap",
                 "source_report_title": "模块治理",
@@ -580,7 +580,7 @@ def test_system_pages_governance_tasks_filters_source_status_and_keyword(monkeyp
                 "description": "scope guard",
                 "status": "pending",
                 "priority": "P0",
-                "assigned_to": "SecurityAgent",
+                "owner_id": "",
                 "source": "system_page_isolation_scan",
                 "source_report_id": "isolation_scan:auth",
                 "source_report_title": "auth.py",
@@ -608,7 +608,7 @@ def test_system_pages_governance_tasks_bulk_update_scopes_to_generated_tasks(mon
             "title": "模块完整度治理",
             "status": "pending",
             "priority": "P1",
-            "assigned_to": "Coder",
+            "owner_id": "",
             "source": "system_page_readiness",
             "source_report_id": "readiness:systemMap",
         },
@@ -617,7 +617,7 @@ def test_system_pages_governance_tasks_bulk_update_scopes_to_generated_tasks(mon
             "title": "普通任务",
             "status": "pending",
             "priority": "P3",
-            "assigned_to": "Coder",
+            "owner_id": "",
             "source": "",
         },
     ]
@@ -632,7 +632,7 @@ def test_system_pages_governance_tasks_bulk_update_scopes_to_generated_tasks(mon
             dry_run=True,
             status="blocked",
             priority="P0",
-            assigned_to="OpsAgent",
+            owner_id="",
         )
     )
 
@@ -640,8 +640,8 @@ def test_system_pages_governance_tasks_bulk_update_scopes_to_generated_tasks(mon
     assert preview["dry_run"] is True
     assert preview["summary"] == {"planned": 1, "updated": 0, "skipped": 2}
     assert preview["planned"][0]["id"] == "T-readiness"
-    assert preview["planned"][0]["patch"] == {"status": "blocked", "priority": "P0", "assigned_to": "OpsAgent"}
-    assert preview["agent_consumption"]["cli"] == "sop pages governance-tasks-update --ids T-readiness,T-normal,T-missing --dry-run --status blocked --priority P0 --assigned-to OpsAgent --json"
+    assert preview["planned"][0]["patch"] == {"status": "blocked", "priority": "P0", "owner_id": ""}
+    assert preview["agent_consumption"]["cli"] == "sop pages governance-tasks-update --ids T-readiness,T-normal,T-missing --dry-run --status blocked --priority P0 --owner-id '' --json"
     assert preview["agent_consumption"]["allowed_statuses"] == ["pending", "in_progress", "blocked", "completed"]
     assert {item["id"]: item["reason"] for item in preview["skipped"]} == {
         "T-normal": "not_governance_task",
@@ -686,7 +686,7 @@ def test_system_pages_isolation_tasks_preview_core_domains_for_continuous_audit(
             include_protected=True,
             max_items=3,
             priority="P0",
-            assigned_to="SecurityAgent",
+            owner_id="",
         )
     )
 
@@ -697,7 +697,7 @@ def test_system_pages_isolation_tasks_preview_core_domains_for_continuous_audit(
     first = result["planned"][0]
     assert first["source"] == "system_page_isolation"
     assert first["priority"] == "P0"
-    assert first["assigned_to"] == "SecurityAgent"
+    assert first["owner_id"] == ""
     assert first["source_report_id"] == "isolation:analytics_reports"
     assert "scope_contract" in first["description"]
     assert "tenant_code" in first["description"]
@@ -743,7 +743,7 @@ def test_system_pages_isolation_scan_tasks_preview_source_findings_for_security_
             include_protected=True,
             max_items=2,
             priority="P0",
-            assigned_to="SecurityAgent",
+            owner_id="",
         )
     )
 
@@ -754,9 +754,9 @@ def test_system_pages_isolation_scan_tasks_preview_source_findings_for_security_
     first = result["planned"][0]
     assert first["source"] == "system_page_isolation_scan"
     assert first["priority"] == "P0"
-    assert first["assigned_to"] == "SecurityAgent"
+    assert first["owner_id"] == ""
     assert first["source_report_id"] == "isolation_scan:notify"
-    assert "sop_manager/routers/notify.py" in first["description"]
+    assert "sop_manager/routers/notify.py" in first["description"].replace("\\", "/")
     assert "scope_guard" in first["description"]
     assert "recommendation" in first["description"]
 
@@ -867,7 +867,7 @@ def test_system_pages_isolation_scan_compare_tasks_plan_regressions(monkeypatch,
             status="all",
             dry_run=True,
             max_items=5,
-            assigned_to="SecurityAgent",
+            owner_id="",
         )
     )
 
@@ -878,7 +878,7 @@ def test_system_pages_isolation_scan_compare_tasks_plan_regressions(monkeypatch,
     first = result["planned"][0]
     assert first["source"] == "system_page_isolation_scan_compare"
     assert first["priority"] == "P0"
-    assert first["assigned_to"] == "SecurityAgent"
+    assert first["owner_id"] == ""
     assert first["source_report_id"].startswith("isolation_scan_compare:")
     assert "before=" in first["description"]
     assert "after=" in first["description"]

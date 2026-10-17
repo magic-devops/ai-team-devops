@@ -94,7 +94,7 @@ export function IssuesWorkbench({ focused = false }: { focused?: boolean }) {
 
   const opsTasksMut = useMutation({
     mutationFn: (dryRun: boolean) =>
-      api.issueOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "IssueOps Agent", limit: 20 }),
+      api.issueOpsTasks({ dry_run: dryRun, priority: "P1", limit: 20 }),
     onSuccess: (res) => {
       const summary = res?.summary ?? {};
       message.success(

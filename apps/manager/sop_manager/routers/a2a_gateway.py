@@ -1,5 +1,7 @@
 """A2A 协议网关：外部 Agent 注册、能力协商、任务分发、执行证据回写。"""
 from __future__ import annotations
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import hashlib
@@ -144,24 +146,24 @@ class AgentProgressIn(BaseModel):
     message: str = ""
     artifact: dict = Field(default_factory=dict)
 
-class GovernanceTasksIn(BaseModel):
+class GovernanceTasksIn(TaskOwnerInput):
     dry_run: bool = True
-    assigned_to: str = "Agent Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
-class TrustTasksIn(BaseModel):
+class TrustTasksIn(TaskOwnerInput):
     dry_run: bool = True
-    assigned_to: str = "Agent Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
-class SlaTasksIn(BaseModel):
+class SlaTasksIn(TaskOwnerInput):
     dry_run: bool = True
-    assigned_to: str = "Agent Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
-class ExecutionWindowTasksIn(BaseModel):
+class ExecutionWindowTasksIn(TaskOwnerInput):
     dry_run: bool = True
-    assigned_to: str = "Agent Platform"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 class ExecutionWindowActionsIn(BaseModel):
@@ -513,7 +515,7 @@ def _build_sla_report(now: str = "") -> dict:
         },
     }
 
-def _build_sla_tasks(report: dict, *, assigned_to: str, dev_tool: str) -> list[dict]:
+def _build_sla_tasks(report: dict, *, owner_id: str, dev_tool: str) -> list[dict]:
     priority_by_status = {"overdue": "P0", "breached": "P1", "due_soon": "P1"}
     tasks = []
     for item in report.get("items") or []:
@@ -535,7 +537,7 @@ def _build_sla_tasks(report: dict, *, assigned_to: str, dev_tool: str) -> list[d
                 ),
                 "priority": priority_by_status[sla_status],
                 "estimate": "S" if sla_status == "due_soon" else "M",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "a2a_sla_governance",
                 "source_report_id": str(item.get("dispatch_id") or ""),
@@ -672,7 +674,7 @@ def _build_execution_windows(now: str = "", *, stale_after_minutes: int | None =
         },
     }
 
-def _build_execution_window_tasks(report: dict, *, assigned_to: str, dev_tool: str) -> list[dict]:
+def _build_execution_window_tasks(report: dict, *, owner_id: str, dev_tool: str) -> list[dict]:
     tasks = []
     for item in report.get("items") or []:
         if item.get("risk_level") not in {"high", "medium"}:
@@ -693,7 +695,7 @@ def _build_execution_window_tasks(report: dict, *, assigned_to: str, dev_tool: s
                 ),
                 "priority": priority,
                 "estimate": "S" if priority == "P1" else "M",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "a2a_execution_window_governance",
                 "source_report_id": str(item.get("dispatch_id") or ""),
@@ -702,7 +704,7 @@ def _build_execution_window_tasks(report: dict, *, assigned_to: str, dev_tool: s
         )
     return tasks
 
-def _build_trust_tasks(report: dict, *, assigned_to: str, dev_tool: str) -> list[dict]:
+def _build_trust_tasks(report: dict, *, owner_id: str, dev_tool: str) -> list[dict]:
     tasks: list[dict] = []
     for item in report.get("items") or []:
         decision = item.get("trust_decision") if isinstance(item.get("trust_decision"), dict) else {}
@@ -726,7 +728,7 @@ def _build_trust_tasks(report: dict, *, assigned_to: str, dev_tool: str) -> list
                 ),
                 "priority": priority,
                 "estimate": "M" if priority == "P0" else "S",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "a2a_trust_policy_governance",
                 "source_report_id": str(item.get("id") or ""),
@@ -1446,7 +1448,7 @@ def agent_trust_report(now: str = "", stale_after_minutes: int = 0):
 @router.post("/trust/tasks")
 def trust_tasks(body: TrustTasksIn, now: str = ""):
     report = agent_trust_report(now=now)
-    drafts = _build_trust_tasks(report, assigned_to=body.assigned_to or "Agent Platform", dev_tool=body.dev_tool or "codex")
+    drafts = _build_trust_tasks(report, owner_id=body.owner_id, dev_tool=body.dev_tool or "codex")
     if body.dry_run:
         return {**_scope(), "dry_run": True, "policy": report.get("policy"), "summary": report["summary"], "items": drafts, "created": []}
     from sop_manager.routers.tasks import TaskCreate, create_task
@@ -1812,7 +1814,7 @@ def update_execution_window_policy(body: ExecutionWindowPolicyIn):
 @router.post("/sla/tasks")
 def sla_tasks(body: SlaTasksIn, now: str = ""):
     report = _build_sla_report(now=now)
-    drafts = _build_sla_tasks(report, assigned_to=body.assigned_to or "Agent Platform", dev_tool=body.dev_tool or "codex")
+    drafts = _build_sla_tasks(report, owner_id=body.owner_id, dev_tool=body.dev_tool or "codex")
     if body.dry_run:
         return {**_scope(), "dry_run": True, "summary": report["summary"], "items": drafts, "created": []}
     from sop_manager.routers.tasks import TaskCreate, create_task
@@ -1831,7 +1833,7 @@ def execution_windows(now: str = "", stale_after_minutes: int = 0):
 def execution_window_tasks(body: ExecutionWindowTasksIn, now: str = "", stale_after_minutes: int = 0):
     override = stale_after_minutes if stale_after_minutes > 0 else None
     report = _build_execution_windows(now=now, stale_after_minutes=override)
-    drafts = _build_execution_window_tasks(report, assigned_to=body.assigned_to or "Agent Platform", dev_tool=body.dev_tool or "codex")
+    drafts = _build_execution_window_tasks(report, owner_id=body.owner_id, dev_tool=body.dev_tool or "codex")
     if body.dry_run:
         return {**_scope(), "dry_run": True, "summary": report["summary"], "policy": report.get("policy"), "items": drafts, "created": []}
     from sop_manager.routers.tasks import TaskCreate, create_task
@@ -1937,7 +1939,7 @@ def governance_tasks(body: GovernanceTasksIn):
     summary = summarize_a2a_health(_load_all("registry"), _load_all("dispatches"))
     drafts = build_a2a_governance_tasks(summary)
     for draft in drafts:
-        draft["assigned_to"] = body.assigned_to or draft["assigned_to"]
+        draft["owner_id"] = body.owner_id or draft["owner_id"]
         draft["dev_tool"] = body.dev_tool or draft["dev_tool"]
     if body.dry_run:
         return {**_scope(), "dry_run": True, "items": drafts, "created": []}

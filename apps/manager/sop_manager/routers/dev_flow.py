@@ -5,12 +5,14 @@
 from __future__ import annotations
 
 import json
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from sop_manager.path_config import resolved_ai_memory_root, resolved_business_code, resolved_project_id, resolved_project_path, resolved_tenant_id
 from sop_manager.routers.productization_contract import summarize_items, unified_payload
@@ -19,10 +21,10 @@ from .db_sql_compat import rows
 router = APIRouter(prefix="/api/v1/dev-flow", tags=["dev-flow"])
 
 
-class DevFlowOpsTasksIn(BaseModel):
+class DevFlowOpsTasksIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("FlowOps Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     categories: List[str] = Field(default_factory=list, max_length=20)
     limit: int = Field(20, ge=1, le=100)
 
@@ -514,7 +516,7 @@ def dev_flow_ops_tasks(body: DevFlowOpsTasksIn) -> Dict[str, Any]:
             ]),
             "priority": "P0" if item.get("severity") == "high" else body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "dev_flow_ops",
             "source_report_id": str(item.get("id") or ""),

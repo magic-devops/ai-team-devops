@@ -180,7 +180,7 @@ def test_sso_risk_tasks_preview_and_create_use_structured_findings(monkeypatch: 
         return {"ok": True, "id": f"T-SSO-{len(created_payloads)}"}
 
     monkeypatch.setattr(sso, "create_task", fake_create_task)
-    created = sso.sso_risk_tasks("corp", sso.SsoRiskTasksIn(dry_run=False, limit=2, assigned_to="SecurityOps"), _=object())
+    created = sso.sso_risk_tasks("corp", sso.SsoRiskTasksIn(dry_run=False, limit=2, owner_id=""), _=object())
 
     assert preview["dry_run"] is True
     assert preview["summary"]["planned"] == 3
@@ -315,7 +315,7 @@ def test_sso_risk_escalation_policy_runs_tasks_im_and_history(monkeypatch: pytes
             actions=["create_tasks", "send_im"],
             channels=["security-im"],
             priority="P1",
-            assigned_to="SecurityOps",
+            owner_id="",
             dev_tool="codex",
             include_low=True,
             limit=3,
@@ -411,7 +411,7 @@ def test_sso_risk_runbook_generates_tasks_and_im(monkeypatch: pytest.MonkeyPatch
             include_low=True,
             limit=3,
             priority="P1",
-            assigned_to="SecurityOps",
+            owner_id="",
             dev_tool="codex",
             owner="SecurityOps",
             channels=["security-im"],
@@ -444,7 +444,7 @@ def test_sso_risk_runbook_generates_tasks_and_im(monkeypatch: pytest.MonkeyPatch
     task_result = sso.sso_risk_runbook_action(
         "corp",
         runbook_id,
-        sso.SsoRiskRunbookActionIn(action="create_tasks", dry_run=False, include_low=True, assigned_to="SecurityOps"),
+        sso.SsoRiskRunbookActionIn(action="create_tasks", dry_run=False, include_low=True, owner_id=""),
         _=object(),
     )
     im_result = sso.sso_risk_runbook_action(

@@ -212,7 +212,7 @@ export function DataQualityWorkbench({ focused = false, initialTab = "rules" }: 
     },
   });
   const buildAlertTasks = useMutation({
-    mutationFn: (id?: string) => api.dataQualityAlertTasks({ ids: id ? [id] : [], dry_run: true, priority: "P1", assigned_to: "Data Governance Agent", dev_tool: "codex" }),
+    mutationFn: (id?: string) => api.dataQualityAlertTasks({ ids: id ? [id] : [], dry_run: true, priority: "P1", owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => setTaskResult(data),
   });
   const buildImpactTasks = useMutation({
@@ -220,7 +220,7 @@ export function DataQualityWorkbench({ focused = false, initialTab = "rules" }: 
       alert_ids: alertIds,
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Data Governance Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: (data) => setImpactTaskResult(data),
@@ -241,7 +241,7 @@ export function DataQualityWorkbench({ focused = false, initialTab = "rules" }: 
       alert_ids: alertIds,
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Data Governance Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: (data) => setRcaTaskResult(data),
@@ -269,7 +269,7 @@ export function DataQualityWorkbench({ focused = false, initialTab = "rules" }: 
       horizon_days: Number(forecastParams.horizon_days || 7),
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Data Governance Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: (data) => setForecastTaskResult(data),

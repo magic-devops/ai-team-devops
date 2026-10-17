@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from datetime import date, datetime, timezone
 
 from .delivery_contract import STAGE_IDS, default_flow, stage_gates
-from .delivery_task_contract import delivery_task_definition
+from .delivery_task_contract import delivery_task_definition, snapshots_match
 
 CATEGORIES = ("work", "approval", "acceptance", "blocked")
 FINISHED = {"completed", "cancelled", "closed"}
@@ -45,18 +45,13 @@ def _due(value):
     return None
 
 
-def _owned(owner_id, roster, user_id, *, explicit=True, assigned_to=""):
+def _owned(owner_id, roster, user_id):
     if not user_id or owner_id != "user:" + user_id:
         return False
-    humans = [m for m in roster if m.get("id") == owner_id and m.get("active", True)]
+    humans = [m for m in roster if m.get("id") == owner_id and m.get("active") and m.get("available")]
     if len(humans) != 1 or humans[0].get("kind") != "human":
         return False
-    if explicit:
-        return True
-    # materialize may infer owner_id for legacy assigned_to. Keep that inference
-    # only when the name is unique across people, agents AND tools.
-    matches = [m for m in roster if m.get("active", True) and m.get("name") == assigned_to]
-    return bool(assigned_to) and len(matches) == 1 and matches[0].get("id") == owner_id
+    return True
 
 
 def _flow(requirement):
@@ -104,11 +99,13 @@ def _awaiting(task, requirement, entry, latest):
         task,
         requirement,
         task.get("planning") or {},
-        evidence.get("owner"),
+        task.get("owner"),
         evidence.get("dependency_basis", {}),
         requirement_revision=_flow(requirement)["revision"] if requirement else 0,
     )
-    return task.get("delivery_status") == "awaiting_review" and definition["snapshot"] == evidence
+    return task.get("delivery_status") == "awaiting_review" and snapshots_match(
+        definition["snapshot"], evidence
+    )
 
 
 def _item(kind, record, requirement, owner_id, categories, reasons, today, *, task=None, status=None):
@@ -202,14 +199,7 @@ def build_inbox(snapshot, user, scope="mine", now=None):
     mine_tasks = {
         t["id"]
         for t in tasks
-        if t.get("owner_active", True) is not False
-        and _owned(
-            t.get("owner_id"),
-            roster,
-            user_id,
-            explicit=t.get("owner_explicit") is True,
-            assigned_to=t.get("assigned_to"),
-        )
+        if t.get("owner_active", True) is not False and _owned(t.get("owner_id"), roster, user_id)
     }
     issues_by_task = defaultdict(list)
     for issue in issues:

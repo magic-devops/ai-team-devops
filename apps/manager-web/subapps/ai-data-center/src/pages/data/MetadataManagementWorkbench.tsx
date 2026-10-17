@@ -184,7 +184,7 @@ export function MetadataManagementWorkbench({
   });
 
   const governanceTasksMut = useMutation({
-    mutationFn: (dryRun: boolean) => api.metadataGovernanceTasks({ dry_run: dryRun, priority: "P1", assigned_to: "Metadata Agent", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.metadataGovernanceTasks({ dry_run: dryRun, priority: "P1", owner_id: "", dev_tool: "codex" }),
     onSuccess: (payload) => {
       setGovernancePayload(payload);
       message.success(

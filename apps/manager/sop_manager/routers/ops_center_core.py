@@ -175,7 +175,7 @@ def build_self_heal_tasks(
     *,
     dry_run: bool,
     priority: str,
-    assigned_to: str,
+    owner_id: str,
     dev_tool: str,
 ) -> dict[str, Any]:
     tasks: list[dict[str, Any]] = []
@@ -199,7 +199,7 @@ def build_self_heal_tasks(
                 ),
                 "priority": "P0" if risk == "critical" else priority,
                 "estimate": "S",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "ops_center_self_heal",
                 "source_report_id": str(decision.get("policy_id") or ""),
@@ -1059,7 +1059,7 @@ def build_alert_slo_escalation(
     policy: dict[str, Any] | None = None,
     dry_run: bool = True,
     priority: str = "P1",
-    assigned_to: str = "Ops Agent",
+    owner_id: str = "",
     dev_tool: str = "codex",
 ) -> dict[str, Any]:
     policy = policy or {}
@@ -1117,7 +1117,7 @@ def build_alert_slo_escalation(
                 ]),
                 "priority": "P0" if risk == "critical" else priority,
                 "estimate": "S",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "ops_center_alert_slo_escalation",
                 "source_report_id": escalation_id,
@@ -1358,7 +1358,7 @@ def build_ops_strategy_linkage(
     actions: list[str] | None = None,
     max_items: int = 8,
     priority: str = "P1",
-    assigned_to: str = "Ops Agent",
+    owner_id: str = "",
     dev_tool: str = "codex",
     now_iso: str | None = None,
 ) -> dict[str, Any]:
@@ -1498,7 +1498,7 @@ def build_ops_strategy_linkage(
                 ]),
                 "priority": "P0" if link.get("risk_level") == "critical" else priority,
                 "estimate": "S",
-                "assigned_to": assigned_to,
+                "owner_id": owner_id,
                 "dev_tool": dev_tool,
                 "source": "ops_center_strategy_linkage",
                 "source_report_id": link["id"],
@@ -2029,7 +2029,7 @@ def build_ops_rca_insight_tasks(
     *,
     dry_run: bool,
     priority: str,
-    assigned_to: str,
+    owner_id: str,
     dev_tool: str,
 ) -> dict[str, Any]:
     tasks: list[dict[str, Any]] = []
@@ -2054,7 +2054,7 @@ def build_ops_rca_insight_tasks(
             ]),
             "priority": "P0" if severity == "critical" else "P1" if severity == "high" else priority,
             "estimate": "S",
-            "assigned_to": assigned_to,
+            "owner_id": owner_id,
             "dev_tool": dev_tool,
             "source": "ops_center_rca_insight",
             "source_report_id": str(item.get("id") or ""),

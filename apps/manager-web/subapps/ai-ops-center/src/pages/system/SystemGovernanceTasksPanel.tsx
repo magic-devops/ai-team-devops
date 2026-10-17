@@ -1,4 +1,5 @@
-import { Button, Input, Segmented, Select, Table, Tag } from "antd";
+import { Button, Segmented, Select, Table, Tag } from "antd";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,7 +14,7 @@ type SystemGovernanceTasksPanelProps = {
   onStatusChange: (status: string) => void;
   onSourceChange: (source: string) => void;
   onRefresh: () => void;
-  onBulkUpdate: (body: { ids: string[]; dry_run: boolean; status?: string; priority?: string; assigned_to?: string }) => void;
+  onBulkUpdate: (body: { ids: string[]; dry_run: boolean; status?: string; priority?: string; owner_id?: string }) => void;
 };
 
 export function SystemGovernanceTasksPanel({
@@ -49,7 +50,6 @@ export function SystemGovernanceTasksPanel({
   const bulkPriorityValues: string[] = Array.isArray(bulkActions.priorities) && bulkActions.priorities.length
     ? bulkActions.priorities.map(String)
     : fallbackPriorities;
-  const assigneeMaxLength = Number(bulkActions.assigned_to_max_length || 64);
   const sourceOptions = Array.isArray(summary.source_options)
     ? summary.source_options.map((item: any) => ({ label: item.label, value: item.value }))
     : [{ label: t("page.systemMap.governanceTasksAllSources"), value: "all" }];
@@ -70,7 +70,7 @@ export function SystemGovernanceTasksPanel({
     dry_run,
     status: bulkStatus || undefined,
     priority: bulkPriority || undefined,
-    assigned_to: bulkAssignee.trim() || undefined,
+    owner_id: bulkAssignee === "__clear__" ? "" : bulkAssignee || undefined,
   });
 
   return (
@@ -148,12 +148,11 @@ export function SystemGovernanceTasksPanel({
             placeholder={t("page.systemMap.governanceTaskBulkPriority")}
             options={bulkPriorityValues.map((value) => ({ label: value, value }))}
           />
-          <Input
-            className="max-w-44"
+          <ProjectOwnerSelect
             value={bulkAssignee}
-            onChange={(event) => setBulkAssignee(event.target.value)}
+            onChange={setBulkAssignee}
+            keepCurrent
             placeholder={t("page.systemMap.governanceTaskBulkAssignee")}
-            maxLength={assigneeMaxLength}
           />
           <Button
             htmlType="button"

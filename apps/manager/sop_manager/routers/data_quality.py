@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import re
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -91,19 +93,19 @@ class RulePatch(BaseModel):
     status: str | None = None
     config: dict[str, Any] | None = None
 
-class AlertTasksIn(BaseModel):
+class AlertTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list)
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Data Governance Agent"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 
-class QualityImpactTasksIn(BaseModel):
+class QualityImpactTasksIn(TaskOwnerInput):
     alert_ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     priority: str = Field(default="P1", pattern="^P[0-3]$")
-    assigned_to: str = Field(default="Data Governance Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field(default="codex", max_length=80)
 
 
@@ -145,12 +147,12 @@ class QualityRcaIn(BaseModel):
     include_impact: bool = True
 
 
-class QualityRcaTasksIn(BaseModel):
+class QualityRcaTasksIn(TaskOwnerInput):
     rca_id: str = Field(default="", max_length=120)
     alert_ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     priority: str = Field(default="P1", pattern="^P[0-3]$")
-    assigned_to: str = Field(default="Data Governance Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field(default="codex", max_length=80)
 
 
@@ -162,13 +164,13 @@ class QualityForecastIn(BaseModel):
     include_impact: bool = True
 
 
-class QualityForecastTasksIn(BaseModel):
+class QualityForecastTasksIn(TaskOwnerInput):
     forecast_id: str = Field(default="", max_length=120)
     window_days: int = Field(default=30, ge=3, le=180)
     horizon_days: int = Field(default=7, ge=1, le=60)
     dry_run: bool = True
     priority: str = Field(default="P1", pattern="^P[0-3]$")
-    assigned_to: str = Field(default="Data Governance Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field(default="codex", max_length=80)
 
 
@@ -463,7 +465,7 @@ def _quality_impact_task_items(body: QualityImpactTasksIn) -> tuple[dict[str, An
             "title": f"[数据质量] 复核受影响指标：{metric.get('name') or metric.get('id')}",
             "description": f"质量告警影响指标 {metric.get('name') or metric.get('id')}，匹配数据集 {', '.join(metric.get('matched_datasets') or []) or '-'}，字段 {', '.join(metric.get('matched_fields') or []) or '-'}。请复核口径、API 发布状态和下游消费者。",
             "priority": "P0" if metric.get("risk_level") == "high" else body.priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", "metric-impact", str(metric.get("risk_level") or "medium")],
         })
@@ -475,7 +477,7 @@ def _quality_impact_task_items(body: QualityImpactTasksIn) -> tuple[dict[str, An
             "title": f"[数据质量] 复核受影响标签：{tag.get('name') or tag.get('id')}",
             "description": f"质量告警影响标签 {tag.get('name') or tag.get('id')}，匹配实体 {', '.join(tag.get('matched_entities') or []) or '-'}，字段 {', '.join(tag.get('matched_fields') or []) or '-'}。请重新试算规则、复核画像覆盖率并确认标签契约。",
             "priority": "P0" if tag.get("risk_level") == "high" else body.priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", "tag-impact", str(tag.get("risk_level") or "medium")],
         })
@@ -487,7 +489,7 @@ def _quality_impact_task_items(body: QualityImpactTasksIn) -> tuple[dict[str, An
             "title": f"[数据质量] 修复受影响元数据资产：{asset.get('name') or asset.get('id')}",
             "description": f"质量告警影响元数据资产 {asset.get('name') or asset.get('id')}，匹配数据集 {', '.join(asset.get('matched_datasets') or []) or '-'}，字段 {', '.join(asset.get('matched_fields') or []) or '-'}。请补齐 owner、质量规则绑定与血缘影响说明。",
             "priority": "P0" if asset.get("risk_level") == "high" else body.priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", "metadata-impact", str(asset.get("risk_level") or "medium")],
         })
@@ -756,7 +758,7 @@ def _quality_rca_task_items(body: QualityRcaTasksIn) -> tuple[dict[str, Any], li
                 f"建议动作：{'; '.join(hypothesis.get('actions') or [])}"
             ),
             "priority": priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", "rca", str(hypothesis.get("category") or "quality"), str(hypothesis.get("risk_level") or "medium")],
         })
@@ -960,7 +962,7 @@ def _quality_forecast_task_items(body: QualityForecastTasksIn) -> tuple[dict[str
                 f"建议动作：{'; '.join(signal.get('recommended_actions') or [])}"
             ),
             "priority": priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", "forecast", level, str(signal.get("id") or "signal")],
         })
@@ -1076,7 +1078,7 @@ def alert_tasks(body: AlertTasksIn):
             "title": f"[数据质量] {alert.get('message', '质量告警处置')}",
             "description": description,
             "priority": priority,
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": body.dev_tool,
             "labels": ["data-quality", dataset, *root_causes[:3]],
         })

@@ -14,6 +14,7 @@ import { manualReviewTranslations } from "./i18n/delivery-manual-review";
 import { taskAcceptanceTranslations } from "./i18n/task-acceptance";
 import { runtimeTranslations } from "./i18n/delivery-runtime";
 import { schedulingTranslations } from "./i18n/delivery-scheduling";
+import { teamIdentityTranslations } from "./i18n/delivery-team";
 
 function getStoredLanguage() {
   try {
@@ -48,6 +49,7 @@ i18n
           deliverySchedule: schedulingTranslations["zh-CN"],
           deliveryRuntime: runtimeTranslations["zh-CN"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["zh-CN"],
+          deliveryTeam: teamIdentityTranslations["zh-CN"],
         },
       },
       "en-US": {
@@ -62,6 +64,7 @@ i18n
           deliverySchedule: schedulingTranslations["en-US"],
           deliveryRuntime: runtimeTranslations["en-US"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["en-US"],
+          deliveryTeam: teamIdentityTranslations["en-US"],
         },
       },
       "ja-JP": {
@@ -76,6 +79,7 @@ i18n
           deliverySchedule: schedulingTranslations["ja-JP"],
           deliveryRuntime: runtimeTranslations["ja-JP"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["ja-JP"],
+          deliveryTeam: teamIdentityTranslations["ja-JP"],
         },
       },
     },

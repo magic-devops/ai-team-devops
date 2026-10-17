@@ -71,7 +71,6 @@ def compare_scope(baseline, current):
         "sprint_id",
         "milestone_id",
         "owner_id",
-        "assigned_to",
         "estimate",
         "starts_on",
         "ends_on",

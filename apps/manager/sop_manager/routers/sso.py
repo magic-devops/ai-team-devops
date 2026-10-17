@@ -28,6 +28,8 @@ import time
 import urllib.parse
 import uuid
 import xml.etree.ElementTree as ET
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from typing import Any, Optional
 
 import httpx
@@ -92,12 +94,12 @@ class ScimTestIn(BaseModel):
     apply: bool = False
 
 
-class SsoRiskTasksIn(BaseModel):
+class SsoRiskTasksIn(TaskOwnerInput):
     dry_run: bool = True
     include_low: bool = False
     limit: int = Field(6, ge=1, le=20)
     priority: str = "P1"
-    assigned_to: str = "SecurityOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
 
 
@@ -129,14 +131,14 @@ class SsoRiskSubscriptionTestIn(BaseModel):
     force: bool = False
 
 
-class SsoRiskEscalationPolicyIn(BaseModel):
+class SsoRiskEscalationPolicyIn(TaskOwnerInput):
     enabled: bool = True
     min_severity: str = Field("high", pattern="^(high|medium|low)$")
     score_threshold: int = Field(70, ge=0, le=100)
     actions: list[str] = Field(default_factory=lambda: ["create_tasks", "send_im"])
     channels: list[str] = Field(default_factory=list)
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     include_low: bool = False
     limit: int = Field(6, ge=1, le=20)
@@ -152,11 +154,11 @@ class SsoRiskEscalationRunIn(BaseModel):
     force: bool = False
 
 
-class SsoRiskRunbookIn(BaseModel):
+class SsoRiskRunbookIn(TaskOwnerInput):
     include_low: bool = False
     limit: int = Field(6, ge=1, le=20)
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     owner: str = "SecurityOps"
     channels: list[str] = Field(default_factory=list)
@@ -164,7 +166,7 @@ class SsoRiskRunbookIn(BaseModel):
     notes: str = ""
 
 
-class SsoRiskRunbookActionIn(BaseModel):
+class SsoRiskRunbookActionIn(TaskOwnerInput):
     action: str = Field(..., pattern="^(preview_tasks|create_tasks|send_im|verify|mark_step_done|mark_step_failed|archive)$")
     actor: str = "security-admin"
     dry_run: bool = True
@@ -172,7 +174,7 @@ class SsoRiskRunbookActionIn(BaseModel):
     note: str = ""
     include_low: bool = False
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "SecurityOps"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "codex"
     channels: list[str] = Field(default_factory=list)
     title: str = ""
@@ -544,7 +546,7 @@ def _sso_risk_task_payload(provider: str, finding: dict[str, Any], body: SsoRisk
         ]),
         "priority": priority if priority in {"P0", "P1", "P2", "P3"} else "P1",
         "estimate": "S" if severity == "low" else "M",
-        "assigned_to": body.assigned_to or "SecurityOps",
+        "owner_id": body.owner_id,
         "dev_tool": body.dev_tool or "codex",
         "source": "sso_risk_governance",
         "source_report_id": str(finding.get("id") or kind),
@@ -865,7 +867,7 @@ def _default_sso_risk_escalation_policy() -> dict[str, Any]:
         "actions": ["create_tasks", "send_im"],
         "channels": [],
         "priority": "P1",
-        "assigned_to": "SecurityOps",
+        "owner_id": "",
         "dev_tool": "codex",
         "include_low": False,
         "limit": 6,
@@ -905,7 +907,7 @@ def _public_sso_risk_escalation_policy(raw: dict[str, Any] | None) -> dict[str, 
         "actions": selected_actions,
         "channels": [str(item) for item in channels if str(item).strip()],
         "priority": priority,
-        "assigned_to": str(merged.get("assigned_to") or "SecurityOps"),
+        "owner_id": str(merged.get("owner_id") or ""),
         "dev_tool": str(merged.get("dev_tool") or "codex"),
         "include_low": bool(merged.get("include_low", False)),
         "limit": max(1, min(int(merged.get("limit") or 6), 20)),
@@ -984,7 +986,7 @@ def _run_sso_risk_escalation(provider: str, cfg: dict[str, Any], body: SsoRiskEs
                 include_low=policy["include_low"],
                 limit=policy["limit"],
                 priority=policy["priority"],
-                assigned_to=policy["assigned_to"],
+                owner_id=policy["owner_id"],
                 dev_tool=policy["dev_tool"],
             ),
         )
@@ -1184,7 +1186,7 @@ def _sso_risk_runbook_steps(provider: str, report: dict[str, Any], body: SsoRisk
             f"remediate_{kind}",
             template["title"],
             kind,
-            body.assigned_to,
+            body.owner_id,
             evidence={
                 "finding_id": finding.get("id") or kind,
                 "severity": finding.get("severity"),
@@ -1215,7 +1217,7 @@ def _create_sso_risk_runbook(provider: str, cfg: dict[str, Any], body: SsoRiskRu
         "title": body.title or f"SSO Risk Runbook: {name}",
         "status": _sso_risk_runbook_status(steps),
         "owner": body.owner or "SecurityOps",
-        "assigned_to": body.assigned_to or "SecurityOps",
+        "owner_id": body.owner_id,
         "priority": body.priority,
         "dev_tool": body.dev_tool or "codex",
         "channels": body.channels,
@@ -1248,7 +1250,7 @@ def _create_sso_risk_runbook(provider: str, cfg: dict[str, Any], body: SsoRiskRu
 
 def _sso_risk_runbook_task_plan(runbook: dict[str, Any], body: SsoRiskRunbookActionIn) -> list[dict[str, Any]]:
     priority = body.priority or str(runbook.get("priority") or "P1")
-    assignee = body.assigned_to or str(runbook.get("assigned_to") or "SecurityOps")
+    assignee = body.owner_id or str(runbook.get("owner_id") or "")
     dev_tool = body.dev_tool or str(runbook.get("dev_tool") or "codex")
     tasks: list[dict[str, Any]] = []
     for step in runbook.get("steps", []) if isinstance(runbook.get("steps"), list) else []:
@@ -1272,7 +1274,7 @@ def _sso_risk_runbook_task_plan(runbook: dict[str, Any], body: SsoRiskRunbookAct
             ]),
             "priority": step_priority if step_priority in {"P0", "P1", "P2", "P3"} else "P1",
             "estimate": "S" if evidence.get("severity") == "low" else "M",
-            "assigned_to": assignee,
+            "owner_id": assignee,
             "dev_tool": dev_tool,
             "source": "sso_risk_runbook",
             "source_report_id": str(runbook.get("id") or ""),

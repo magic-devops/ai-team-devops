@@ -117,7 +117,7 @@ export function Notify({ initialModule = "connectors" }: { initialModule?: Notif
   });
   const inboundAction = useMutation({
     mutationFn: ({ id, action, dryRun }: { id: string; action: "task" | "requirement"; dryRun: boolean }) =>
-      api.notifyInboundAction(id, { action, dry_run: dryRun, priority: "P1", assigned_to: "Coder", assigned_agent: "PM", dev_tool: "copilot" }),
+      api.notifyInboundAction(id, { action, dry_run: dryRun, priority: "P1", owner_id: "", assigned_agent: "PM", dev_tool: "copilot" }),
     onSuccess: (data) => {
       setActionResult(data);
       if (!data?.dry_run) {

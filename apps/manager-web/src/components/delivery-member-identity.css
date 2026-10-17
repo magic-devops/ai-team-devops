@@ -1,0 +1,4 @@
+.delivery-owner-select { width: 100%; min-width: 0; }
+.delivery-project-owner { min-width: 0; width: 100%; }
+.delivery-owner-select .ant-select-selection-item { min-width: 0; }
+.delivery-owner-select .ant-select-item-option-content { overflow-wrap: anywhere; white-space: normal; }

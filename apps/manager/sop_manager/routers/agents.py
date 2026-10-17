@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import re
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, List
@@ -282,10 +284,10 @@ class AgentGroup(BaseModel):
     entry_agent: Optional[str] = ""
 
 
-class AgentRebalanceTasksIn(BaseModel):
+class AgentRebalanceTasksIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = "P1"
-    assigned_to: str = "Coder"
+    owner_id: TaskOwnerId = ""
     categories: list[str] = Field(default_factory=list)
 
 
@@ -421,7 +423,7 @@ def _agent_rebalance_tasks(body: AgentRebalanceTasksIn) -> dict[str, Any]:
             ]),
             "priority": body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to or "Coder",
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "agent_slo_rebalance",
             "source_report_id": str(item.get("id") or ""),

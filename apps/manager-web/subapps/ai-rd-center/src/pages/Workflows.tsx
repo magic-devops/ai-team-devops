@@ -134,7 +134,7 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
     onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
   });
   const opsTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.workflowOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+    mutationFn: (dryRun: boolean) => api.workflowOpsTasks({ dry_run: dryRun, priority: "P1" }),
     onSuccess: (data) => {
       setFlash({ kind: "ok", message: t("page.workflows.opsTasksResult", { planned: data?.summary?.planned ?? 0, created: data?.summary?.created ?? 0 }) });
       invalidate();

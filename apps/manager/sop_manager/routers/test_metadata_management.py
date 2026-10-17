@@ -131,10 +131,10 @@ def test_metadata_governance_tasks_preview_and_create(tmp_path):
         seed_schema_registry()
 
         preview = metadata_management.metadata_governance_tasks(
-            metadata_management.MetadataGovernanceTasksIn(dry_run=True, priority="P2", assigned_to="Metadata Agent", dev_tool="codex")
+            metadata_management.MetadataGovernanceTasksIn(dry_run=True, priority="P2", owner_id="", dev_tool="codex")
         )
         created = metadata_management.metadata_governance_tasks(
-            metadata_management.MetadataGovernanceTasksIn(ids=["asset-tasks"], dry_run=False, priority="P2", assigned_to="Metadata Agent", dev_tool="codex")
+            metadata_management.MetadataGovernanceTasksIn(ids=["asset-tasks"], dry_run=False, priority="P2", owner_id="", dev_tool="codex")
         )
 
     assert preview["dry_run"] is True

@@ -344,6 +344,10 @@
       "a2aProtocol": "A2Aゲートウェイ"
     },
     "sub": {
+      "forecast": "リスク予測",
+      "impact": "影響分析",
+      "reports": "品質レポート",
+      "runs": "実行履歴",
       "knowledge_assets": "知識資産",
       "retrieval_memory": "検索とメモリ",
       "rules_distill": "ルールと蒸留",

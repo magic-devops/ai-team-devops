@@ -19,6 +19,7 @@ from sop_manager.path_config import (
     resolved_tenant_id,
 )
 from sop_manager.task_acceptance import TaskAcceptanceCriteria
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
 from .business_access import require_business_access, validate_business_references
 from .db_sql_compat import now, rows, table
@@ -160,13 +161,13 @@ def _ui_ordered_list(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> List
     return out
 
 
-class TaskCreate(BaseModel):
+class TaskCreate(TaskOwnerInput):
     title: str
     description: Optional[str] = ""
     acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
     priority: str = "P1"
     estimate: str = "M"
-    assigned_to: Optional[str] = "Coder"
+    owner_id: TaskOwnerId = ""
     req_id: Optional[str] = ""
     sprint_id: Optional[str] = ""
     dev_tool: Optional[str] = ""
@@ -179,14 +180,14 @@ class TaskCreate(BaseModel):
     source_report_title: Optional[str] = ""
 
 
-class TaskUpdate(BaseModel):
+class TaskUpdate(TaskOwnerInput):
     title: Optional[str] = None
     description: Optional[str] = None
     acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
     status: Optional[str] = None
     priority: Optional[str] = None
     estimate: Optional[str] = None
-    assigned_to: Optional[str] = None
+    owner_id: TaskOwnerId = ""
     actual_hours: Optional[float] = None
     confidence: Optional[float] = None
     sprint_id: Optional[str] = None
@@ -202,11 +203,11 @@ class ReorderTasksBody(BaseModel):
     groups: Dict[str, List[str]] = Field(default_factory=dict)
 
 
-class TaskBulkUpdate(BaseModel):
+class TaskBulkUpdate(TaskOwnerInput):
     ids: List[str] = Field(default_factory=list, min_length=1, max_length=200)
     status: Optional[str] = None
     priority: Optional[str] = None
-    assigned_to: Optional[str] = None
+    owner_id: TaskOwnerId = ""
 
 
 class TaskDispatchIn(BaseModel):
@@ -217,7 +218,7 @@ class TaskDispatchIn(BaseModel):
     strategy: str = Field("balanced", pattern="^(balanced|ai_first|human_review)$")
 
 
-class TaskSchedulerIn(BaseModel):
+class TaskSchedulerIn(TaskOwnerInput):
     ids: List[str] = Field(default_factory=list, max_length=300)
     dry_run: bool = True
     max_items: int = Field(50, ge=1, le=300)
@@ -225,7 +226,7 @@ class TaskSchedulerIn(BaseModel):
     include_blocked: bool = False
     policy: str = Field("quality_first", pattern="^(balanced|throughput|quality_first|cost_saver)$")
     event: str = ""
-    agent_pool: List[str] = Field(default_factory=list, max_length=50)
+    owner_pool: List[TaskOwnerId] = Field(default_factory=list, max_length=50)
 
 
 class TaskSchedulerActionIn(BaseModel):
@@ -237,14 +238,14 @@ class TaskSchedulerActionIn(BaseModel):
     note: str = Field("", max_length=1000)
 
 
-class TaskSchedulerRunbookIn(BaseModel):
+class TaskSchedulerRunbookIn(TaskOwnerInput):
     dry_run: bool = True
     include_unclaimed: bool = True
     include_stale_claims: bool = True
     include_quality_blocks: bool = True
     include_dependency_blocks: bool = True
     stale_minutes: int = Field(30, ge=5, le=1440)
-    assigned_to: str = Field("Ops", max_length=120)
+    owner_id: TaskOwnerId = ""
     priority: str = Field("P1", pattern="^P[0-3]$")
     limit: int = Field(50, ge=1, le=200)
     note: str = Field("", max_length=1000)
@@ -258,10 +259,10 @@ class TaskSchedulerInsightsIn(BaseModel):
     policies: List[str] = Field(default_factory=lambda: ["quality_first", "balanced", "throughput", "cost_saver"], max_length=8)
 
 
-class TaskSchedulerInsightTasksIn(BaseModel):
+class TaskSchedulerInsightTasksIn(TaskOwnerInput):
     dry_run: bool = True
     limit: int = Field(20, ge=1, le=100)
-    assigned_to: str = Field("Scheduler Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     priority: str = Field("P1", pattern="^P[0-3]$")
 
 
@@ -299,21 +300,21 @@ class QualityEvaluateIn(BaseModel):
     source: str = Field("manual", max_length=80)
 
 
-class QualityTasksIn(BaseModel):
+class QualityTasksIn(TaskOwnerInput):
     dry_run: bool = True
     decisions: List[str] = Field(default_factory=lambda: ["block", "warn"], max_length=10)
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("QA Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     limit: int = Field(50, ge=1, le=200)
 
 
-class TaskDependencyTasksIn(BaseModel):
+class TaskDependencyTasksIn(TaskOwnerInput):
     dry_run: bool = True
     include_cycles: bool = True
     include_blocked: bool = True
     include_bottlenecks: bool = True
     include_missing_map: bool = True
-    assigned_to: str = Field("Dependency Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     priority: str = Field("P1", pattern="^P[0-3]$")
     limit: int = Field(30, ge=1, le=100)
 
@@ -323,26 +324,15 @@ def _task_by_id(task_id: str) -> Dict[str, Any] | None:
 
 
 def _dispatch_actor(task: Dict[str, Any]) -> tuple[str, str, str]:
-    text = " ".join([
-        str(task.get("title") or ""),
-        str(task.get("description") or ""),
-        str(task.get("debug_notes") or ""),
-        str(task.get("source") or ""),
-    ]).lower()
-    source = str(task.get("source") or "")
-    if source == "audit_event" or any(k in text for k in ("security", "audit", "权限", "审计", "安全")):
-        return "SecurityOps", "copilot", "安全/审计治理任务，先由安全运维 Agent 评估风险和补救动作。"
-    if source in {"usage_quota_alert", "notify_inbound"} or any(k in text for k in ("deploy", "ops", "quota", "monitor", "配额", "运维", "监控", "告警")):
-        return "Ops", "copilot", "运维或外部事件任务，优先交给 Ops Agent 处理并沉淀运行证据。"
-    if any(k in text for k in ("frontend", "react", "ui", "页面", "交互", "antd")):
-        return "Frontend Agent", "codex", "前端体验或页面实现任务，适合由前端 Agent 使用 Codex/CLI 落地。"
-    if any(k in text for k in ("backend", "api", "router", "database", "sql", "接口", "后端", "数据库")):
-        return "Backend Agent", "codex", "后端接口或数据任务，适合由后端 Agent 使用 Codex/CLI 实现并补验证。"
-    if any(k in text for k in ("test", "qa", "验证", "测试", "质量")):
-        return "QA Agent", "codex", "质量验证任务，适合由 QA Agent 补测试、回归和验收证据。"
-    if any(k in text for k in ("doc", "spec", "rule", "kb", "文档", "规约", "知识库")):
-        return "Docs Agent", "codex", "规约/知识任务，适合由文档 Agent 维护 spec、规则和知识库。"
-    return "Coder", "codex", "通用研发任务，建议由 Coder Agent 按优先级执行。"
+    owner = task.get("owner") or {}
+    return (str(owner.get("name") or task.get("assigned_to") or ""),
+            str(task.get("dev_tool") or "codex"),
+            "按当前已登记责任人派发；执行身份由原生交付协议单独确认。")
+
+
+def _owner_ready(task):
+    owner = task.get("owner") or {}
+    return bool(task.get("owner_id") and owner.get("available") and owner.get("kind") in {"human", "agent"})
 
 
 def _dispatch_plan(tasks: List[Dict[str, Any]], body: TaskDispatchIn) -> list[Dict[str, Any]]:
@@ -360,11 +350,6 @@ def _dispatch_plan(tasks: List[Dict[str, Any]], body: TaskDispatchIn) -> list[Di
     plan: list[Dict[str, Any]] = []
     for order, task in enumerate(candidates[: body.max_items], start=1):
         assignee, tool, reason = _dispatch_actor(task)
-        if body.strategy == "ai_first" and assignee == "Coder":
-            assignee = "AI Agent"
-        if body.strategy == "human_review":
-            assignee = "Tech Lead"
-            reason = "人工评审优先策略：先由负责人确认范围、依赖和执行工具。"
         blocked_by = task.get("_blocked_by") or []
         plan.append({
             "order": order,
@@ -373,11 +358,13 @@ def _dispatch_plan(tasks: List[Dict[str, Any]], body: TaskDispatchIn) -> list[Di
             "priority": task.get("priority") or "P3",
             "status": task.get("status") or "pending",
             "current_assigned_to": task.get("assigned_to") or "",
+            "owner_id": task.get("owner_id") or "",
+            "owner": task.get("owner"),
             "current_dev_tool": task.get("dev_tool") or "",
             "assigned_to": assignee,
             "dev_tool": tool,
             "blocked_by": blocked_by,
-            "ready": not bool(blocked_by),
+            "ready": not bool(blocked_by) and _owner_ready(task),
             "reason": reason,
         })
     return plan
@@ -793,7 +780,7 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
                 "title": task.get("title") or "",
                 "priority": task.get("priority") or "P3",
                 "status": task.get("status") or "pending",
-                "ready": not bool(blocked_by),
+                "ready": not bool(blocked_by) and _owner_ready(task),
                 "blocked_by": blocked_by,
             })
             for nxt in graph.get(tid, []):
@@ -834,7 +821,7 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
         row = {
             **task,
             "blocked_by": blocked_by,
-            "ready": not bool(blocked_by),
+            "ready": not bool(blocked_by) and _owner_ready(task),
             "blocking_reason": delivery["explicit_blocks"].get(tid, ""),
         }
         if blocked_by:
@@ -891,7 +878,7 @@ def _sort_scheduler_candidates(items: List[Dict[str, Any]], policy: str) -> List
     return sorted(items, key=lambda x: (not x.get("ready"), _priority_rank(x), str(x.get("created_at") or "")))
 
 
-def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, assigned_to: str, dev_tool: str, reason: str) -> Dict[str, Any]:
+def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, dev_tool: str, reason: str) -> Dict[str, Any]:
     gates = _quality_gates(task)
     tid = str(task.get("id") or "")
     blocked_by = [str(x) for x in (task.get("blocked_by") or [])]
@@ -900,13 +887,15 @@ def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, assigned_to: s
         "packet_id": f"pkt-{uuid.uuid4().hex[:12]}",
         "order": order,
         "lane": lane,
-        "ready": not bool(blocked_by),
+        "ready": not bool(blocked_by) and _owner_ready(task),
         "blocked_by": blocked_by,
         "task_id": tid,
         "title": task.get("title") or "",
         "priority": task.get("priority") or "P3",
         "status": task.get("status") or "pending",
-        "assigned_to": assigned_to,
+        "assigned_to": task.get("assigned_to") or "",
+        "owner_id": task.get("owner_id") or "",
+        "owner": task.get("owner"),
         "dev_tool": dev_tool,
         "dispatch_reason": reason,
         "scope": _scope_payload(),
@@ -947,13 +936,11 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
     task = next((row for row in task_rows if str(row.get("id") or "") == tid), None)
     if not task:
         raise HTTPException(404, "任务不存在")
-    fallback_assignee, tool, reason = _dispatch_actor(task)
-    agent_name = agent.strip() or str((claim or {}).get("agent") or "") or fallback_assignee
+    _, tool, reason = _dispatch_actor(task)
     packet = _agent_packet(
         task,
         order=1,
         lane=1,
-        assigned_to=agent_name,
         dev_tool=str((claim or {}).get("dev_tool") or task.get("dev_tool") or tool),
         reason=reason,
     )
@@ -1026,6 +1013,8 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
             "status": task.get("status") or "pending",
             "priority": task.get("priority") or "P3",
             "assigned_to": task.get("assigned_to") or "",
+            "owner_id": task.get("owner_id") or "",
+            "owner": task.get("owner"),
             "req_id": task.get("req_id") or "",
             "sprint_id": task.get("sprint_id") or "",
             "source": task.get("source") or "manual",
@@ -1056,13 +1045,24 @@ def _scheduler_plan(task_rows: List[Dict[str, Any]], body: TaskSchedulerIn) -> D
         candidates += list(snapshot["blocked"])
     candidates = _sort_scheduler_candidates(candidates, body.policy)[: body.max_items]
     packets: List[Dict[str, Any]] = []
+    pool = {}
+    if body.owner_pool:
+        from .delivery_team import validate_task_owner
+        scoped = table("tasks")
+        if scoped is None:
+            raise HTTPException(503, "数据库不可用")
+        for owner_id in body.owner_pool:
+            owner = validate_task_owner(scoped._db, scoped._project(), owner_id)
+            if owner is None:
+                raise HTTPException(422, "owner_pool requires responsible member IDs")
+            pool[owner_id] = owner
     for idx, task in enumerate(candidates, start=1):
-        fallback_assignee, tool, reason = _dispatch_actor(task)
-        assigned_to = fallback_assignee
-        if body.agent_pool:
-            assigned_to = str(body.agent_pool[(idx - 1) % len(body.agent_pool)]).strip() or fallback_assignee
+        _, tool, reason = _dispatch_actor(task)
+        if body.owner_pool:
+            owner_id = body.owner_pool[(idx - 1) % len(body.owner_pool)]
+            task = {**task, "owner_id": owner_id, "owner": pool[owner_id], "assigned_to": pool[owner_id]["name"] or ""}
         lane = ((idx - 1) % body.max_parallel) + 1
-        packets.append(_agent_packet(task, order=idx, lane=lane, assigned_to=assigned_to, dev_tool=tool, reason=reason))
+        packets.append(_agent_packet(task, order=idx, lane=lane, dev_tool=tool, reason=reason))
     event_wakeups = [
         {"event": "task.created", "action": "recompute_ready_queue", "target": "scheduler"},
         {"event": "task.updated", "action": "refresh_priority_and_quality_gates", "target": "scheduler"},
@@ -1070,7 +1070,7 @@ def _scheduler_plan(task_rows: List[Dict[str, Any]], body: TaskSchedulerIn) -> D
         {"event": "task.dependency_deleted", "action": "wake_blocked_task", "target": "scheduler"},
         {"event": "task.agent_reported", "action": "evaluate_quality_gate_and_continue_dag", "target": "scheduler"},
         {"event": "notify.inbound", "action": "convert_message_to_requirement_or_task", "target": "intake"},
-        {"event": "agent.heartbeat", "action": "rebalance_agent_lanes", "target": "agent_pool"},
+        {"event": "agent.heartbeat", "action": "rebalance_agent_lanes", "target": "owner_pool"},
     ]
     return {
         "ok": True,
@@ -1380,7 +1380,7 @@ def _scheduler_runbook(body: TaskSchedulerRunbookIn) -> Dict[str, Any]:
             ]).strip(),
             "priority": "P0" if step.get("severity") == "high" else body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "task_scheduler_runbook",
             "source_report_id": str(step.get("id") or ""),
@@ -1570,7 +1570,7 @@ def _scheduler_insight_tasks(body: TaskSchedulerInsightTasksIn) -> Dict[str, Any
             ]),
             "priority": "P0" if item.get("severity") == "high" else body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "task_scheduler_insights",
             "source_report_id": str(item.get("id") or ""),
@@ -1751,7 +1751,7 @@ def _quality_tasks(body: QualityTasksIn) -> Dict[str, Any]:
             ]),
             "priority": "P0" if decision == "block" else body.priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "task_quality_governance",
             "source_report_id": str(row.get("id") or tid),
@@ -1853,7 +1853,7 @@ def tasks_summary():
         priority = str(task.get("priority") or "P3")
         source = str(task.get("source") or "manual")
         tool = str(task.get("dev_tool") or "manual")
-        assignee = str(task.get("assigned_to") or "")
+        assignee = str(task.get("owner_id") or "")
         by_status[status] = by_status.get(status, 0) + 1
         by_priority[priority] = by_priority.get(priority, 0) + 1
         by_source[source] = by_source.get(source, 0) + 1
@@ -2056,7 +2056,7 @@ def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
             ]),
             "priority": priority,
             "estimate": "S",
-            "assigned_to": body.assigned_to,
+            "owner_id": body.owner_id,
             "dev_tool": "sop-cli",
             "source": "task_dependency_governance",
             "source_report_id": issue_id,
@@ -2191,7 +2191,7 @@ def create_task(body: TaskCreate):
         "status": "pending",
         "priority": body.priority,
         "estimate": body.estimate,
-        "assigned_to": body.assigned_to or "Coder",
+        "owner_id": body.owner_id,
         "actual_hours": 0.0,
         "confidence": 0.0,
         "created_at": now(),
@@ -2289,8 +2289,8 @@ def bulk_update_tasks(body: TaskBulkUpdate):
         if priority not in _PRIOS:
             raise HTTPException(400, "非法任务优先级")
         vals["priority"] = priority
-    if body.assigned_to is not None:
-        vals["assigned_to"] = str(body.assigned_to).strip()[:64]
+    if "owner_id" in body.model_fields_set:
+        vals["owner_id"] = body.owner_id
     if not vals:
         raise HTTPException(400, "未提供可更新字段")
     if vals.get("status") in {"in_progress", "completed"}:
@@ -2338,7 +2338,7 @@ def dispatch_tasks(body: TaskDispatchIn):
         if not item["ready"]:
             continue
         tid = _safe_task_id(str(item.get("task_id") or ""))
-        t.update(where=f"id = '{tid}'", values={"assigned_to": item["assigned_to"], "updated_at": ts})
+        t.update(where=f"id = '{tid}'", values={"owner_id": item["owner_id"], "updated_at": ts})
         task_fields = fld.setdefault(tid, {})
         task_fields["dev_tool"] = item["dev_tool"]
         task_fields["debug_notes"] = (
@@ -2375,7 +2375,7 @@ def task_scheduler_plan(body: TaskSchedulerIn):
         if not packet.get("ready"):
             continue
         tid = _safe_task_id(str(packet.get("task_id") or ""))
-        t.update(where=f"id = '{tid}'", values={"assigned_to": packet["assigned_to"], "updated_at": ts})
+        t.update(where=f"id = '{tid}'", values={"owner_id": packet["owner_id"], "updated_at": ts})
         task_fields = fields.setdefault(tid, {})
         task_fields["dev_tool"] = packet["dev_tool"]
         task_fields["debug_notes"] = (
@@ -2482,7 +2482,7 @@ def task_scheduler_run_action(schedule_id: str, body: TaskSchedulerActionIn):
             if not packet.get("ready"):
                 continue
             tid = _safe_task_id(str(packet.get("task_id") or ""))
-            t.update(where=f"id = '{tid}'", values={"assigned_to": packet["assigned_to"], "updated_at": ts})
+            t.update(where=f"id = '{tid}'", values={"owner_id": packet["owner_id"], "updated_at": ts})
             task_fields = fields.setdefault(tid, {})
             task_fields["dev_tool"] = packet["dev_tool"]
             task_fields["debug_notes"] = f"Hermes 调度重放: parent={schedule_id} policy={body.policy} lane={packet['lane']} order={packet['order']}"[:2000]
@@ -2674,7 +2674,7 @@ def task_agent_feed(limit: int = Query(10, ge=1, le=100), agent: str = "", inclu
         max_parallel=max(1, min(limit, 20)),
         include_blocked=include_blocked,
         policy="quality_first",
-        agent_pool=[agent] if agent.strip() else [],
+        owner_pool=[],
         event="agent.feed.pull",
     )
     plan = _scheduler_plan(task_rows, body)
@@ -2890,4 +2890,6 @@ def get_task(task_id: str, db: Annotated[Session, Depends(get_session)]):
     ).first()
     if not task:
         raise HTTPException(404, "任务不存在")
-    return _ui_merge_row(_to_dict(task), _ui_load())
+    from .delivery_team import TeamContext
+    from .sql_models import Project
+    return _ui_merge_row(_to_dict(task, TeamContext(db, db.get(Project, task.project_id))), _ui_load())

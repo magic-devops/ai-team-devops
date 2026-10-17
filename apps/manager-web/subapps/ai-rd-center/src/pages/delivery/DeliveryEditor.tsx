@@ -12,6 +12,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
 import { normalizeTaskCriteria } from "@/lib/taskAcceptance";
+import type { DeliveryMember } from "@/lib/delivery";
+import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 export type EditorField = {
   key: string;
@@ -21,6 +23,7 @@ export type EditorField = {
   max?: number;
   options?: { label: string; value: string }[];
   multiple?: boolean;
+  members?: DeliveryMember[];
 };
 export type EditorSpec = {
   title: string;
@@ -169,7 +172,7 @@ export function DeliveryEditor({
                 : []
             }
           >
-            {f.type === "criteria" ? <TaskCriteriaEditor disabled={busy} /> : f.options ? (
+            {f.members ? <OwnerSelect members={f.members} label={f.label} disabled={busy} /> : f.type === "criteria" ? <TaskCriteriaEditor disabled={busy} /> : f.options ? (
               <Select
                 mode={f.multiple ? "multiple" : undefined}
                 options={f.options}

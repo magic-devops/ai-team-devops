@@ -338,7 +338,7 @@ export function A2aWorkbench({ focused = false, initialTab = "health" }: { focus
     },
   });
   const trustTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.a2aTrustTasks({ dry_run: dryRun, assigned_to: "Agent Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.a2aTrustTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data, dryRun) => {
       setTrustTaskResult(data);
       if (!dryRun) void qc.invalidateQueries({ queryKey: ["a2aTrust"] });
@@ -564,21 +564,21 @@ export function A2aWorkbench({ focused = false, initialTab = "health" }: { focus
     },
   });
   const governanceTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.a2aGovernanceTasks({ dry_run: dryRun, assigned_to: "Agent Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.a2aGovernanceTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data) => {
       setTaskResult(data);
       if (!data.dry_run) void qc.invalidateQueries({ queryKey: ["a2aHealth"] });
     },
   });
   const slaTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.a2aSlaTasks({ dry_run: dryRun, assigned_to: "Agent Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.a2aSlaTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data, dryRun) => {
       setSlaTaskResult(data);
       if (!dryRun) void qc.invalidateQueries({ queryKey: ["a2aSla"] });
     },
   });
   const windowTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.a2aExecutionWindowTasks({ dry_run: dryRun, assigned_to: "Agent Platform", dev_tool: "codex" }),
+    mutationFn: (dryRun: boolean) => api.a2aExecutionWindowTasks({ dry_run: dryRun, owner_id: "", dev_tool: "codex" }),
     onSuccess: (data, dryRun) => {
       setWindowTaskResult(data);
       if (!dryRun) {

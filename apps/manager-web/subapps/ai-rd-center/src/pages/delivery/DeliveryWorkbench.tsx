@@ -83,6 +83,8 @@ import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
 import { DeliveryScheduling } from "./DeliveryScheduling";
 import { DeliveryTaskDetail, TaskDetailContent } from "./DeliveryTaskDetail";
 import { DeliveryActivityAction } from "./DeliveryActivityAction";
+import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
+import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("sop-session", cb);
@@ -109,6 +111,7 @@ export function DeliveryWorkbench() {
 function ProjectDelivery() {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`delivery.${key}`);
+  const identityLabel = useMemberIdentity();
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const projectId = getProjectId() || "";
   const sessionId = useMemo(() => crypto.randomUUID(), []);
@@ -154,6 +157,8 @@ function ProjectDelivery() {
   const [selectedTaskId, setSelectedTaskId] = useState(
     () => parseDeliveryRoute(location.hash).task,
   );
+  const requestedTaskId = !selectedId && ["team", "timeline"].includes(view) ? selectedTaskId : "";
+  const taskInspector = useDrawerIdentity(`${projectId}:${sessionId}`, requestedTaskId);
   const [selectedIssueId, setSelectedIssueId] = useState(
     () => parseDeliveryRoute(location.hash).issue,
   );
@@ -369,14 +374,13 @@ function ProjectDelivery() {
           day: "numeric",
         }).format(new Date(value.length === 10 ? value + "T12:00:00" : value))
       : tr("unscheduled");
-  const name = (id: string) =>
-    data?.members.find((m) => m.id === id)?.name || tr("unassigned");
+  const name = (id: string) => identityLabel(data?.members || [], id);
   const ownerOptions = [
     { label: tr("unassigned"), value: "" },
     ...(data?.members || [])
       .filter((m) => m.active && m.kind !== "tool")
       .map((m) => ({
-        label: `${m.name} · ${tr(`kinds.${m.kind}`)}`,
+        label: identityLabel(data?.members || [], m.id),
         value: m.id,
       })),
   ];
@@ -385,7 +389,7 @@ function ProjectDelivery() {
     label: string,
     extra: Partial<EditorField> = {},
   ): EditorField => ({ key, label: tr(label), ...extra });
-  const ownerField = field("owner_id", "owner", { options: ownerOptions });
+  const ownerField = field("owner_id", "owner", { members: data?.members || [] });
   const edit = (
     title: string,
     fields: EditorField[],
@@ -451,7 +455,7 @@ function ProjectDelivery() {
           items.push({
             label: f.label,
             value:
-              f.options?.find((o) => o.value === value)?.label ||
+              (f.members ? identityLabel(fresh.members, String(value || "")) : f.options?.find((o) => o.value === value)?.label) ||
               String(value ?? tr("none")),
           });
         }
@@ -1313,24 +1317,23 @@ function ProjectDelivery() {
         </section>
       )}
       <Drawer
-        open={Boolean(
-          selectedTaskId && !selectedId && ["team", "timeline"].includes(view),
-        )}
+        open={Boolean(requestedTaskId)}
+        afterOpenChange={taskInspector.afterOpenChange}
         onClose={() => navigate(view, "", "details", "")}
         title={
-          data.tasks.find((task) => task.id === selectedTaskId)?.title ||
+          data.tasks.find((task) => task.id === taskInspector.displayId)?.title ||
           t("deliveryManualReview.unavailable")
         }
         width={680}
         className="delivery-inspector"
         destroyOnHidden
       >
-        {selectedTaskId && !selectedId && (
+        {taskInspector.displayId && (
           <DeliveryTaskDetail
-            key={`${projectId}:${selectedTaskId}`}
+            key={`${projectId}:${taskInspector.displayId}`}
             projectId={projectId}
             sessionId={sessionId}
-            taskId={selectedTaskId}
+            taskId={taskInspector.displayId}
           />
         )}
       </Drawer>

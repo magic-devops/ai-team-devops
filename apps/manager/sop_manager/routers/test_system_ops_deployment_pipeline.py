@@ -143,7 +143,7 @@ def test_deployment_pipeline_executor_runs_local_safe_command(monkeypatch, tmp_p
         _=object(),
     )
     run = created["run"]
-    run["commands"] = [{"id": "verify", "intent": "verify", "command": f"{sys.executable} -c \"print('executor-ok')\"", "safe_to_copy": True}]
+    run["commands"] = [{"id": "verify", "intent": "verify", "command": f'"{sys.executable}" -c "print(\'executor-ok\')"', "safe_to_copy": True}]
     system_ops._replace_deployment_pipeline_run(run)
 
     executed = system_ops.deployment_pipeline_execute(
@@ -374,7 +374,7 @@ def test_deployment_pipeline_remediation_previews_runbook_and_creates_tasks(monk
     )
     preview = system_ops.deployment_pipeline_remediation(
         run_id,
-        system_ops.DeploymentPipelineRemediationIn(dry_run=True, include_low=True, priority="P1", assigned_to="ReleaseOps", dev_tool="codex"),
+        system_ops.DeploymentPipelineRemediationIn(dry_run=True, include_low=True, priority="P1", owner_id="", dev_tool="codex"),
         _=object(),
     )
 
@@ -389,7 +389,7 @@ def test_deployment_pipeline_remediation_previews_runbook_and_creates_tasks(monk
     monkeypatch.setattr(tasks, "create_task", fake_create_task)
     applied = system_ops.deployment_pipeline_remediation(
         run_id,
-        system_ops.DeploymentPipelineRemediationIn(dry_run=False, include_low=True, priority="P1", assigned_to="ReleaseOps", dev_tool="codex"),
+        system_ops.DeploymentPipelineRemediationIn(dry_run=False, include_low=True, priority="P1", owner_id="", dev_tool="codex"),
         _=object(),
     )
 
@@ -510,7 +510,7 @@ def test_deployment_rollback_runbook_generates_steps_preview_and_tasks(monkeypat
             name="production rollback runbook",
             trigger="canary_gate_failure",
             create_preview_pipeline=True,
-            assigned_to="ReleaseOps",
+            owner_id="",
         ),
         _=object(),
     )
@@ -616,7 +616,7 @@ def test_deployment_execution_audit_task_preview_for_missing_evidence(monkeypatc
     )
     task_preview = system_ops.deployment_execution_audit_tasks(
         audit["item"]["id"],
-        system_ops.DeploymentExecutionAuditTaskIn(dry_run=True, priority="P1", assigned_to="ReleaseOps"),
+        system_ops.DeploymentExecutionAuditTaskIn(dry_run=True, priority="P1", owner_id=""),
         _=object(),
     )
 

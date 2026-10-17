@@ -14,6 +14,7 @@ import {
   type InboxScope,
 } from "@/lib/deliveryProjectInbox";
 import { deliveryBlocker } from "@/lib/deliveryBlockers";
+import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 
 export function DeliveryInbox({
   data,
@@ -43,10 +44,8 @@ export function DeliveryInbox({
   const { t, i18n } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const items = filterDeliveryInbox(data?.items || [], category);
-  const ownerName = (id: string) =>
-    workspace.members.find((member) => member.id === id)?.name ||
-    id ||
-    tp("unassigned");
+  const identity = useMemberIdentity();
+  const ownerName = (id: string) => identity(workspace.members, id);
   const due = (date: string | null) =>
     date
       ? new Intl.DateTimeFormat(i18n.language, {

@@ -253,6 +253,10 @@
     "reflectionDistill": "Distillation review",
     "eventStream": "Event stream",
     "sub": {
+      "forecast": "Risk forecast",
+      "impact": "Impact analysis",
+      "reports": "Quality reports",
+      "runs": "Run history",
       "knowledge_assets": "Knowledge assets",
       "retrieval_memory": "Retrieval & memory",
       "rules_distill": "Rules & distillation",

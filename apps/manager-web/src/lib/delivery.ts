@@ -100,6 +100,7 @@ export type DeliveryTask = {
   priority: string;
   owner_id: string;
   assigned_to: string;
+  owner_active: boolean;
   estimate: string;
   acceptance_criteria: string[];
   acceptance: TaskAcceptance;

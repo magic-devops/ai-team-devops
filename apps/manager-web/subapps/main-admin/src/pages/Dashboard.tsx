@@ -101,7 +101,7 @@ export function Dashboard() {
         ids: selectedGaps,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: (result) => {

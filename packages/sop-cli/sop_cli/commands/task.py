@@ -115,7 +115,7 @@ def _write_task_doc(row: dict[str, Any]) -> None:
         f"status: {row.get('status', 'pending')}",
         f"priority: {row.get('priority', 'P1')}",
         f"estimate: {row.get('estimate', 'M')}",
-        f"assigned_to: {row.get('assigned_to', '')}",
+        f"owner_id: {row.get('owner_id', '')}",
         f"req_id: {row.get('req_id', '')}",
         f"sprint_id: {row.get('sprint_id', '')}",
         f"created_at: {row.get('created_at', '')}",
@@ -212,7 +212,7 @@ def _new_row(
     description: str,
     priority: str,
     estimate: str,
-    assigned_to: str,
+    owner_id: str,
     sprint_id: str,
     req_id: str,
     acceptance_criteria: list[str],
@@ -228,7 +228,7 @@ def _new_row(
         "status": "pending",
         "priority": priority.upper(),
         "estimate": estimate,
-        "assigned_to": assigned_to or "Coder",
+        "owner_id": owner_id,
         "actual_hours": 0.0,
         "confidence": 0.0,
         "human_notes": "",
@@ -274,6 +274,7 @@ def schedule_tasks(
     max_items: int = typer.Option(50, "--max-items", min=1, max=300),
     max_parallel: int = typer.Option(6, "--max-parallel", min=1, max=50),
     include_blocked: bool = typer.Option(False, "--include-blocked", help="包含被依赖/状态阻塞的任务包"),
+    owner_pool: str = typer.Option("", "--owner-pool", help="逗号分隔的项目成员稳定 ID"),
     apply: bool = typer.Option(False, "--apply", help="应用调度分配；默认只预览"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -286,6 +287,7 @@ def schedule_tasks(
         "max_parallel": max_parallel,
         "include_blocked": include_blocked,
         "event": "cli.task.schedule",
+        "owner_pool": _csv_ids(owner_pool),
     }
     try:
         out = get_client().task_scheduler_plan(body)
@@ -429,7 +431,7 @@ def schedule_runbook(
     include_quality_blocks: bool = typer.Option(True, "--include-quality-blocks/--no-include-quality-blocks", help="纳入质量阻断"),
     include_dependency_blocks: bool = typer.Option(True, "--include-dependency-blocks/--no-include-dependency-blocks", help="纳入依赖阻塞"),
     stale_minutes: int = typer.Option(30, "--stale-minutes", min=5, max=1440),
-    assigned_to: str = typer.Option("Ops", "--assigned-to", help="治理任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="任务负责人稳定 ID；留空表示未分配"),
     priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
     limit: int = typer.Option(50, "--limit", min=1, max=200),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -442,7 +444,7 @@ def schedule_runbook(
         "include_quality_blocks": include_quality_blocks,
         "include_dependency_blocks": include_dependency_blocks,
         "stale_minutes": stale_minutes,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "priority": priority,
         "limit": limit,
         "note": "cli.task.schedule-runbook",
@@ -516,13 +518,13 @@ def schedule_insights(
 @app.command(name="schedule-insight-tasks")
 def schedule_insight_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
-    assigned_to: str = typer.Option("Scheduler Agent", "--assigned-to", help="治理任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="任务负责人稳定 ID；留空表示未分配"),
     priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
     limit: int = typer.Option(20, "--limit", min=1, max=100),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
     """将调度洞察建议预览或生成治理任务。"""
-    body = {"dry_run": not apply, "assigned_to": assigned_to, "priority": priority, "limit": limit}
+    body = {"dry_run": not apply, "owner_id": owner_id, "priority": priority, "limit": limit}
     try:
         out = get_client().task_scheduler_insight_tasks(body)
     except Exception as e:
@@ -575,7 +577,7 @@ def dependency_graph(json_out: bool = typer.Option(False, "--json", help="输出
 @app.command(name="dep-tasks")
 def dependency_governance_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
-    assigned_to: str = typer.Option("Dependency Agent", "--assigned-to", help="治理任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="任务负责人稳定 ID；留空表示未分配"),
     priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
     limit: int = typer.Option(30, "--limit", min=1, max=100),
     include_cycles: bool = typer.Option(True, "--include-cycles/--no-include-cycles", help="纳入依赖环路"),
@@ -587,7 +589,7 @@ def dependency_governance_tasks(
     """将任务依赖图风险预览或生成治理任务。"""
     body = {
         "dry_run": not apply,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "priority": priority,
         "limit": limit,
         "include_cycles": include_cycles,
@@ -905,7 +907,7 @@ def quality_policy_set(
 def quality_tasks(
     apply: bool = typer.Option(False, "--apply", help="真正创建质量治理任务；默认仅预览"),
     decision: list[str] | None = typer.Option(None, "--decision", help="筛选决策：block/warn/pass，可重复"),
-    assigned_to: str = typer.Option("QA Agent", "--assigned-to", help="治理任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="任务负责人稳定 ID；留空表示未分配"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
     limit: int = typer.Option(50, "--limit", min=1, max=200),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -914,7 +916,7 @@ def quality_tasks(
     body = {
         "dry_run": not apply,
         "decisions": decision or ["block", "warn"],
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "priority": priority,
         "limit": limit,
     }
@@ -969,7 +971,7 @@ def create_task(
     description: str = typer.Option("", "--desc", help="任务描述"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
     estimate: str = typer.Option("M", "--estimate", help="XS|S|M|L|XL 或团队自定义"),
-    assigned_to: str = typer.Option("Coder", "--assignee", help="负责人/角色"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     sprint_id: str = typer.Option("", "--sprint", help="Sprint ID"),
     req_id: str = typer.Option("", "--requirement", help="需求 ID"),
     criterion: Annotated[list[str] | None, typer.Option("--criterion", help="任务自身验收标准，可重复指定（最多80项，每项2000字）")] = None,
@@ -982,7 +984,7 @@ def create_task(
         "description": description,
         "priority": priority,
         "estimate": estimate,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "sprint_id": sprint_id,
         "req_id": req_id,
         "acceptance_criteria": criteria,
@@ -999,7 +1001,7 @@ def create_task(
         description=description,
         priority=priority,
         estimate=estimate,
-        assigned_to=assigned_to,
+        owner_id=owner_id,
         sprint_id=sprint_id,
         req_id=req_id,
         acceptance_criteria=criteria,
@@ -1082,7 +1084,7 @@ def update_task(
     status: str | None = typer.Option(None, "--status", help="pending|in_progress|completed|blocked"),
     priority: str | None = typer.Option(None, "--priority", help="P0|P1|P2|P3"),
     estimate: str | None = typer.Option(None, "--estimate"),
-    assigned_to: str | None = typer.Option(None, "--assignee"),
+    owner_id: str | None = typer.Option(None, "--owner-id", help="稳定成员 ID；显式空字符串清空负责人"),
     actual_hours: float | None = typer.Option(None, "--hours"),
     confidence: float | None = typer.Option(None, "--confidence"),
     sprint_id: str | None = typer.Option(None, "--sprint"),
@@ -1109,7 +1111,7 @@ def update_task(
         "status": status,
         "priority": priority.upper() if priority else None,
         "estimate": estimate,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "actual_hours": actual_hours,
         "confidence": confidence,
         "sprint_id": sprint_id,

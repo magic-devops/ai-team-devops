@@ -13,6 +13,7 @@ import { linkedTaskRows, taskIdFromHash } from "@/lib/taskDeepLink";
 import { manualTaskHref, taskRecordStatusLabel } from "@/lib/deliveryTaskReview";
 import { safeExecutionReturn } from "@/lib/executionCommands";
 import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
@@ -406,7 +407,7 @@ export function Tasks({
         ids: selectedTaskIds,
         status: bulkStatus || undefined,
         priority: bulkPriority || undefined,
-        assigned_to: bulkAssignee.trim() || undefined,
+        owner_id: bulkAssignee === "__clear__" ? "" : bulkAssignee || undefined,
       }),
     onSuccess: () => {
       setSelectedTaskIds([]);
@@ -510,7 +511,7 @@ export function Tasks({
     mutationFn: (dryRun: boolean) =>
       api.taskSchedulerRunbook({
         dry_run: dryRun,
-        assigned_to: "Ops",
+
         priority: "P1",
         include_unclaimed: true,
         include_stale_claims: true,
@@ -529,7 +530,7 @@ export function Tasks({
     mutationFn: (dryRun: boolean) =>
       api.taskSchedulerInsightTasks({
         dry_run: dryRun,
-        assigned_to: "",
+
         priority: "P1",
         limit: 20,
       }),
@@ -545,7 +546,7 @@ export function Tasks({
       api.sprintOpsTasks({
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "SprintOps Agent",
+
         sprint_id: sprintId || undefined,
         limit: 20,
       }),
@@ -601,7 +602,7 @@ export function Tasks({
       api.taskQualityTasks({
         dry_run: dryRun,
         decisions: ["block", "warn"],
-        assigned_to: "QA Agent",
+
         priority: "P1",
         limit: 50,
       }),
@@ -617,7 +618,7 @@ export function Tasks({
     mutationFn: (dryRun: boolean) =>
       api.taskDependencyTasks({
         dry_run: dryRun,
-        assigned_to: "",
+
         priority: "P1",
         limit: 30,
         include_cycles: true,
@@ -1138,11 +1139,11 @@ export function Tasks({
               onChange={(value) => setBulkPriority(value || "")}
               options={PRIORITIES.map((priority) => ({ value: priority, label: priority }))}
             />
-            <Input
-              className="w-44"
-              allowClear
+            <ProjectOwnerSelect
               value={bulkAssignee}
-              onChange={(e) => setBulkAssignee(e.target.value)}
+              onChange={setBulkAssignee}
+              keepCurrent
+              label={t("page.tasks.bulkAssignee")}
               placeholder={t("page.tasks.bulkAssignee")}
             />
             <Button

@@ -1,6 +1,15 @@
 const zh = {
   standaloneStageBlocked: "请先重新打开任务，再准备派发。",
   reasons: {
+    task_owner_missing: "请为任务分配当前项目的人员或智能体负责人。",
+    task_owner_unavailable: "当前负责人已停用或不可用，请重新分配。",
+    task_owner_invalid: "请选择当前项目中的有效负责人身份。",
+    task_owner_is_tool: "工具不能承担任务验收责任，请分配人员或智能体。",
+    task_owner_outside_project: "负责人已离开当前项目，请重新分配。",
+    task_owner_inactive: "负责人已停用，请重新分配。",
+    task_owner_missing_identity: "原负责人身份已不存在或不可访问，请重新分配。",
+    task_owner_id_required: "请通过负责人选择器分配稳定身份。",
+    task_owner_invalid_scope: "任务项目归属不可用，请先核对任务所在项目。",
     task_acceptance_invalid: "任务自身验收条件无效，请明确填写。",
     task_requirement_criteria_invalid: "选择的需求条件无效，请重新核对。",
     task_requirement_missing: "关联需求已不存在或不在当前项目。",
@@ -63,6 +72,15 @@ const zh = {
 const en: typeof zh = {
   standaloneStageBlocked: "Reopen the task before preparing a dispatch.",
   reasons: {
+    task_owner_missing: "Assign a responsible person or agent from this project.",
+    task_owner_unavailable: "The current owner is inactive or unavailable. Reassign the task.",
+    task_owner_invalid: "Select a valid responsible identity from this project.",
+    task_owner_is_tool: "Tools cannot own task acceptance. Assign a person or agent.",
+    task_owner_outside_project: "The owner has left this project. Reassign the task.",
+    task_owner_inactive: "The owner is inactive. Reassign the task.",
+    task_owner_missing_identity: "The original owner no longer exists or is inaccessible. Reassign the task.",
+    task_owner_id_required: "Use the owner selector to assign a stable identity.",
+    task_owner_invalid_scope: "The task project is unavailable. Check its project scope first.",
     task_acceptance_invalid:
       "Task acceptance criteria are invalid. Define them explicitly.",
     task_requirement_criteria_invalid:
@@ -142,6 +160,15 @@ const en: typeof zh = {
 const ja: typeof zh = {
   standaloneStageBlocked: "タスクを再開してから割り当てを準備してください。",
   reasons: {
+    task_owner_missing: "現在のプロジェクトの担当者またはエージェントを割り当ててください。",
+    task_owner_unavailable: "現在の担当者は無効または利用不可です。再割当してください。",
+    task_owner_invalid: "現在のプロジェクトから有効な担当者を選択してください。",
+    task_owner_is_tool: "ツールはタスクの承認責任者になれません。担当者またはエージェントを選択してください。",
+    task_owner_outside_project: "担当者が現在のプロジェクトを離脱しました。再割当してください。",
+    task_owner_inactive: "担当者が無効です。再割当してください。",
+    task_owner_missing_identity: "元の担当者が存在しないかアクセスできません。再割当してください。",
+    task_owner_id_required: "担当者選択から固定識別情報を割り当ててください。",
+    task_owner_invalid_scope: "タスクのプロジェクトが利用できません。所属プロジェクトを確認してください。",
     task_acceptance_invalid:
       "タスク自身の条件が無効です。明示的に入力してください。",
     task_requirement_criteria_invalid:

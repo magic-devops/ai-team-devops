@@ -1,6 +1,8 @@
 """标签服务：标签目录、规则、画像本体。"""
 from __future__ import annotations
 import json
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -127,11 +129,11 @@ class ProfileBuildIn(BaseModel):
     publish: bool = False
 
 
-class TagGovernanceTasksIn(BaseModel):
+class TagGovernanceTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=100)
     dry_run: bool = True
     priority: str = Field(default="P1", pattern="^P[0-3]$")
-    assigned_to: str = Field(default="TagOps Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     dev_tool: str = Field(default="codex", max_length=80)
     min_coverage: float = Field(default=0.8, ge=0, le=1)
 
@@ -217,7 +219,7 @@ def _tag_governance_task_items(body: TagGovernanceTasksIn) -> list[dict[str, Any
                 "title": title,
                 "description": description,
                 "priority": priority,
-                "assigned_to": body.assigned_to,
+                "owner_id": body.owner_id,
                 "dev_tool": body.dev_tool,
                 "labels": ["tags", category, *labels[:4]],
             }
@@ -503,7 +505,7 @@ def tag_governance_tasks(body: TagGovernanceTasksIn) -> dict[str, Any]:
         return {"ok": True, "scope": _scope(), "dry_run": True, "items": items, "created": [], "planned": len(items)}
     from sop_manager.routers.tasks import TaskCreate, create_task
 
-    created = [create_task(TaskCreate(**item)) for item in items]
+    created = [create_task(TaskCreate(**{key: value for key, value in item.items() if key != "labels"})) for item in items]
     return {"ok": True, "scope": _scope(), "dry_run": False, "items": items, "created": created, "planned": len(items), "created_count": len(created)}
 
 

@@ -1,0 +1,27 @@
+.delivery-team-registry { display: block; min-width: 0; }
+.delivery-team-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.delivery-team-filters > .ant-input-search { flex: 1 1 230px; min-width: 0; }
+.delivery-team-filters > .ant-select { min-width: 135px; }
+.delivery-team-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 14px; color: var(--muted-strong, var(--muted)); font-size: 11px; }
+.delivery-team-member-link { border: 0; padding: 0; background: transparent; color: var(--text); text-align: start; cursor: pointer; font: inherit; }
+.delivery-team-member-link:hover { color: var(--brand); }
+.delivery-team-member-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; border-radius: 2px; }
+.delivery-team-id { display: block; color: var(--muted-strong, var(--muted)); font-size: 10px; overflow-wrap: anywhere; }
+.delivery-team-detail-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.delivery-team-detail-heading h3 { flex-basis: 100%; margin: 0 0 8px; overflow-wrap: anywhere; font-size: 18px; }
+.delivery-team-inspector .ant-drawer-content-wrapper { max-width: 100vw; }
+.delivery-team-facts { display: grid; gap: 16px; margin: 20px 0; }
+.delivery-team-facts dt { color: var(--muted-strong, var(--muted)); font-size: 11px; margin-bottom: 6px; }
+.delivery-team-facts dd { margin: 0; overflow-wrap: anywhere; font-size: 13px; }
+.delivery-team-task-list { border-top: 1px solid var(--border); margin-top: 24px; padding-top: 14px; }
+.delivery-team-task-list > .ant-btn { display: block; max-width: 100%; text-align: start; height: auto; padding: 8px 0; white-space: normal; }
+.delivery-team-task-list small { display: block; color: var(--muted-strong, var(--muted)); font-size: 10px; overflow-wrap: anywhere; }
+.delivery-owner-select { width: 100%; min-width: 0; }
+.delivery-owner-select .ant-select-selection-item { min-width: 0; }
+@media (max-width: 640px) {
+  .delivery-team-filters > .ant-input-search { flex-basis: 100%; }
+  .delivery-team-filters > .ant-select { flex: 1 1 40%; min-width: 0; }
+  .delivery-team-inspector .ant-drawer-body { padding: 20px 16px; }
+  .delivery-team-inspector .delivery-actions { flex-wrap: wrap; }
+  .delivery-team-inspector .ant-btn { max-width: 100%; white-space: normal; height: auto; min-height: 32px; }
+}

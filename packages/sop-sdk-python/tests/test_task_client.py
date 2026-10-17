@@ -72,3 +72,19 @@ def test_task_write_requests_preserve_own_criteria_omission_and_explicit_clear()
         ("PATCH", "/api/v1/tasks/T-independent", {"title": "Renamed"}, "selected"),
         ("PATCH", "/api/v1/tasks/T-independent", {"acceptance_criteria": []}, "selected"),
     ]
+
+
+def test_task_owner_ids_are_never_replaced_by_display_names():
+    seen = []
+
+    def handle(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"id": "T-owned", "owner_id": "user:one", "assigned_to": "Same name"})
+
+    with ManagerClient("https://manager.example", project_id="selected", max_retries=0) as client:
+        client._client.close()
+        client._client = httpx.Client(transport=httpx.MockTransport(handle), base_url=client.base_url)
+        assert client.create_task({"title": "Owned", "owner_id": "user:one"})["owner_id"] == "user:one"
+        client.update_task("T-owned", {"title": "Keep identity"})
+        client.update_task("T-owned", {"owner_id": ""})
+    assert seen == [{"title": "Owned", "owner_id": "user:one"}, {"title": "Keep identity"}, {"owner_id": ""}]

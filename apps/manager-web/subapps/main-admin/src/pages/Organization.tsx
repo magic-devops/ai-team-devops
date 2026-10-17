@@ -254,8 +254,8 @@ export function Organization({ initialTab = "users", focused = false }: { initia
           taskPreview={accessReviewTasks.data}
           taskPending={accessReviewTasks.isPending}
           taskError={accessReviewTasks.error as Error | null}
-          onPreviewTasks={() => accessReviewTasks.mutate({ dry_run: true, limit: 20, assigned_to: "tenant_admin", priority: "P1" })}
-          onCreateTasks={() => accessReviewTasks.mutate({ dry_run: false, limit: 20, assigned_to: "tenant_admin", priority: "P1" })}
+          onPreviewTasks={() => accessReviewTasks.mutate({ dry_run: true, limit: 20, owner_id: "", priority: "P1" })}
+          onCreateTasks={() => accessReviewTasks.mutate({ dry_run: false, limit: 20, owner_id: "", priority: "P1" })}
         />
       ) : null}
     </WorkbenchShell>

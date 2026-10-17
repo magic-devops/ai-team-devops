@@ -23,6 +23,7 @@ from sop_manager.path_config import (
 from sop_manager.routers.sql_models import Issue, Requirement, Sprint, Task, get_session
 from sop_manager.sync_journal import append_event, recent_events
 from sop_manager.task_acceptance import normalize_task_acceptance
+from sop_manager.task_owner import validate_task_owner_values
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
@@ -410,6 +411,12 @@ def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str,
         "sprints": Sprint,
     }
     model = model_map[body.module]
+    if model is Task and body.action != "delete":
+        from .sql_models import Project
+        project = db.get(Project, pid)
+        if not project or project.tenant_id != tid:
+            raise HTTPException(422, "Task project scope does not exist")
+        rec = validate_task_owner_values(db, project, rec)
 
     if body.action == "delete":
         if not rid:

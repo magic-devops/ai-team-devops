@@ -196,4 +196,8 @@ def select_scope(facts, kind="project", scope_id=""):
         "requirements": requirements,
         "task_ids": [t["id"] for t in tasks],
     }
-    return {**value, "basis": fact_basis(value), "metrics": metrics(tasks, requirements)}
+    semantic = {
+        **value,
+        "tasks": [{key: item for key, item in task.items() if key != "assigned_to"} for task in tasks],
+    }
+    return {**value, "basis": fact_basis(semantic), "metrics": metrics(tasks, requirements)}

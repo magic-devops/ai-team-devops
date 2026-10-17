@@ -16,7 +16,8 @@ from sop_sdk import build_default_client
 cli = build_default_client()           # 自动读取 .sop-runtime/agent.toml + 环境变量
 print(cli.health())
 tasks = cli.list_tasks(status="pending")
-cli.update_task("t-123", {"status": "completed", "confidence": 0.92})
+members = cli.delivery_workspace()["members"]  # 当前授权项目中的稳定身份
+cli.update_task("T-example", {"owner_id": members[0]["id"]})  # 选择有效人员或 Agent
 ```
 
 ## 显式构造
@@ -56,7 +57,7 @@ if ipc.available():
 | Schema-First | 公开方法与 `apis/openapi/openapi.yaml` 一一对应 |
 | 失败优雅 | IPC 不可达 / 网络抖动自动降级；不抛骚扰异常 |
 | 安全默认 | HMAC 自带 ts+nonce 防重放；keyring 优先 |
-| 兼容承诺 | 公开方法 v1 内向后兼容 ≥ 12 月 |
+| 明确契约 | Task 写入只使用稳定 owner_id，旧名称分配被拒绝；省略保持，空字符串清空 |
 
 ## 兼容旧脚本
 

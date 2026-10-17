@@ -253,7 +253,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   const [actionResult, setActionResult] = useState<any>(null);
   const backlogTasks = useMutation({
     mutationFn: ({ dryRun, ids }: { dryRun: boolean; ids: string[] }) =>
-      api.systemPagesBacklogTasks({ ids, dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+      api.systemPagesBacklogTasks({ ids, dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
       setTaskResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -269,7 +269,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_complete: includeCompleteReadiness,
         priority: readinessStatus === "risk" ? "P0" : "P1",
-        assigned_to: "Coder",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -287,7 +287,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_production_ready: false,
         priority: productionStage === "gap" || productionStage === "contract_complete" ? "P0" : "P1",
-        assigned_to: "PlatformOwner",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -305,7 +305,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_simple: false,
         priority: experienceStatus === "complex" ? "P0" : "P1",
-        assigned_to: "Designer",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -323,7 +323,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: String(item?.id || item?.name || "").trim(),
         include_simple: false,
         priority: item?.status === "complex" ? "P0" : "P1",
-        assigned_to: "Designer",
+        owner_id: "",
         max_items: 1,
       }),
     onSuccess: (data) => {
@@ -341,7 +341,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_ready: false,
         priority: "P1",
-        assigned_to: "Designer",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -359,7 +359,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_low: false,
         priority: "P1",
-        assigned_to: "GovernanceOps",
+        owner_id: "",
         max_items: 12,
         idempotency_key: `system-map:${domain}:${keyword.trim()}:tasks`,
       }),
@@ -400,7 +400,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
       api.systemPagesFrontendPerformanceTasks({
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "FrontendAgent",
+        owner_id: "",
         include_watch: true,
         max_items: 8,
       }),
@@ -418,7 +418,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_protected: includeProtectedIsolation,
         priority: "P0",
-        assigned_to: "SecurityAgent",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -435,7 +435,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         q: keyword.trim(),
         include_protected: includeProtectedIsolationScan,
         priority: "P0",
-        assigned_to: "SecurityAgent",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -466,7 +466,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
         status: "all",
         q: keyword.trim(),
         priority: "P0",
-        assigned_to: "SecurityAgent",
+        owner_id: "",
         max_items: 12,
       }),
     onSuccess: (data) => {
@@ -476,7 +476,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
     },
   });
   const governanceTasksBulkUpdate = useMutation({
-    mutationFn: (body: { ids: string[]; dry_run: boolean; status?: string; priority?: string; assigned_to?: string }) =>
+    mutationFn: (body: { ids: string[]; dry_run: boolean; status?: string; priority?: string; owner_id?: string }) =>
       api.systemPagesGovernanceTasksBulkUpdate(body),
     onSuccess: (data) => {
       setGovernanceTaskBulkResult(data);
@@ -491,7 +491,7 @@ export function SystemMap({ focused = false, initialSection = "overview" }: { fo
   });
   const executeAction = useMutation({
     mutationFn: ({ moduleId, actionId }: { moduleId: string; actionId: string }) =>
-      api.systemPagesActionExecute({ module_id: moduleId, action_id: actionId, dry_run: false, priority: "P1", assigned_to: "Coder" }),
+      api.systemPagesActionExecute({ module_id: moduleId, action_id: actionId, dry_run: false, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
       setActionResult(data);
       void qc.invalidateQueries({ queryKey: ["systemPagesActionRuns"] });

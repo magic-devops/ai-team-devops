@@ -147,10 +147,10 @@ def test_tag_governance_tasks_preview_and_create(tmp_path):
         )
 
         preview = tag_service.tag_governance_tasks(
-            tag_service.TagGovernanceTasksIn(ids=[tag["id"], entity["id"], low_coverage["id"]], dry_run=True, assigned_to="TagOps")
+            tag_service.TagGovernanceTasksIn(ids=[tag["id"], entity["id"], low_coverage["id"]], dry_run=True, owner_id="")
         )
         created = tag_service.tag_governance_tasks(
-            tag_service.TagGovernanceTasksIn(ids=[tag["id"], entity["id"], low_coverage["id"]], dry_run=False, assigned_to="TagOps")
+            tag_service.TagGovernanceTasksIn(ids=[tag["id"], entity["id"], low_coverage["id"]], dry_run=False, owner_id="")
         )
 
     assert preview["dry_run"] is True

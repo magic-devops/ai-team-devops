@@ -10,6 +10,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from sop_manager.task_acceptance import TaskAcceptanceCriteria
+from sop_manager.task_owner import TaskOwnerId
 
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_scheduling_contract import (
@@ -463,7 +464,7 @@ class TaskDraft(Dated):
     key: str = Field(default="", max_length=64)
     title: str = Field(min_length=1, max_length=256)
     description: str = Field(default="", max_length=10000)
-    owner_id: str = Field(default="", max_length=100)
+    owner_id: TaskOwnerId = ""
     priority: Literal["P0", "P1", "P2", "P3"] = "P1"
     estimate: Literal["XS", "S", "M", "L", "XL"] = "M"
     acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
@@ -495,7 +496,7 @@ class TaskCreate(TaskDraft):
 class TaskEdit(Dated):
     id: str = Field(min_length=1, max_length=64)
     status: Literal["pending", "in_progress", "blocked", "completed"] | None = None
-    owner_id: str | None = Field(default=None, max_length=100)
+    owner_id: TaskOwnerId = ""
     description: str | None = Field(default=None, max_length=10000)
     blocked_reason: str | None = Field(default=None, max_length=2000)
     acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
@@ -519,7 +520,7 @@ class TaskEdit(Dated):
 
     @model_validator(mode="after")
     def references_require_basis(self):
-        definition_fields = {"acceptance_criteria", "requirement_criteria_indices", "depends_on"}
+        definition_fields = {"acceptance_criteria", "requirement_criteria_indices", "depends_on", "owner_id"}
         if definition_fields & self.model_fields_set and self.task_basis is None:
             raise ValueError("Reference edits require the current task basis")
         if {"starts_on", "ends_on", "allocations"} & self.model_fields_set and self.planning_basis is None:
@@ -593,6 +594,7 @@ class TaskReviewTask(BaseModel):
     acceptance_criteria: list[str] | None = None
     req_id: str
     status: str
+    owner_id: str | None = None
     assigned_to: str
     priority: str
     estimate: str
@@ -601,9 +603,11 @@ class TaskReviewTask(BaseModel):
 
 class TaskReviewOwner(BaseModel):
     id: str
-    name: str
-    kind: Literal["human", "agent", "tool"]
+    name: str | None
+    kind: Literal["human", "agent", "tool"] | None
     active: bool
+    available: bool | None = None
+    reasons: list[dict[str, str]] = Field(default_factory=list)
 
 
 class TaskReviewRequirement(BaseModel):
@@ -795,12 +799,12 @@ def stage_gates(requirement, flow, tasks, issues):
                 ),
             }
         )
-    if stage == "planning":
+    if stage in {"planning", "development", "testing", "acceptance", "release"}:
         checks.append(
             {
                 "id": "assignment",
                 "ok": bool(linked)
-                and all(t.get("assigned_to") and t.get("owner_active", True) for t in linked),
+                and all(t.get("owner_id") and t.get("owner_active", False) for t in linked),
             }
         )
     if stage in {"development", "testing", "acceptance", "release"}:

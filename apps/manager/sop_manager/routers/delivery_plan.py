@@ -49,7 +49,7 @@ def _current(db, project, requirement_id):
     state = (
         reconcile(db, project, row.data)
         if row
-        else {"project": {}, "members": [], "milestones": [], "flows": {}, "task_owners": {}}
+        else {"project": {}, "members": [], "milestones": [], "flows": {}}
     )
     requirement = get_record(db, Requirement, project, requirement_id)
     revision = state["flows"].get(requirement.id, default_flow())["revision"]

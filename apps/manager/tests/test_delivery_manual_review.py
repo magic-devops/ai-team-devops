@@ -196,7 +196,7 @@ def test_deleted_and_moved_tasks_keep_original_project_read_only_history(env):  
     assert reviews(client, "unknown-task").status_code == 404
 
 
-def test_review_rejects_reader_agent_missing_owner_pending_and_unsafe_evidence(env):  # noqa: F811
+def test_review_rejects_reader_pending_unsafe_evidence_and_allows_responsible_agent(env):  # noqa: F811
     client, _, actor = env
     task = make_task(client)
     assert review(client, task["id"]).status_code == 409
@@ -211,9 +211,15 @@ def test_review_rejects_reader_agent_missing_owner_pending_and_unsafe_evidence(e
     agent = command(client, "member.save", {"name": "Person-like agent", "kind": "agent"}).json()["members"][
         -1
     ]
-    assert command(client, "task.update", {"id": task["id"], "owner_id": agent["id"]}).status_code == 200
-    assert not reviews(client, task["id"]).json()["current"]["eligible"]
-    assert review(client, task["id"]).status_code == 409
+    basis = reviews(client, task["id"]).json()["current"]["basis"]
+    assert (
+        command(
+            client, "task.update", {"id": task["id"], "owner_id": agent["id"], "task_basis": basis}
+        ).status_code
+        == 200
+    )
+    assert reviews(client, task["id"]).json()["current"]["eligible"]
+    assert review(client, task["id"]).status_code == 200
 
 
 def test_standalone_human_review_and_pagination_are_read_only(env):  # noqa: F811
@@ -226,7 +232,7 @@ def test_standalone_human_review_and_pagination_are_read_only(env):  # noqa: F81
                 project_id="project",
                 title="Independent",
                 acceptance_criteria=["Independent behavior verified"],
-                assigned_to="lead",
+                owner_id="user:lead",
                 status="completed",
             )
         )
@@ -282,7 +288,13 @@ def test_removing_human_membership_invalidates_its_delivery_but_not_reviewer_his
         db.add(models.ProjectMember(project_id="project", user_id="dev", role="developer"))
         db.commit()
     task = completed(client)
-    assert command(client, "task.update", {"id": task["id"], "owner_id": "user:dev"}).status_code == 200
+    basis = reviews(client, task["id"]).json()["current"]["basis"]
+    assert (
+        command(
+            client, "task.update", {"id": task["id"], "owner_id": "user:dev", "task_basis": basis}
+        ).status_code
+        == 200
+    )
     assert review(client, task["id"]).status_code == 200
     with sessions() as db:
         # The old reviewer loses its approval role, but its legitimate decision remains.
@@ -370,7 +382,7 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
                     project_id="project",
                     title="First",
                     acceptance_criteria=["First behavior verified"],
-                    assigned_to="lead",
+                    owner_id="user:lead",
                     status="completed",
                 ),
                 models.Task(
@@ -379,7 +391,7 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
                     project_id="project",
                     title="Second",
                     acceptance_criteria=["Second behavior verified"],
-                    assigned_to="lead",
+                    owner_id="user:lead",
                     status="pending",
                 ),
             ]

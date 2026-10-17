@@ -52,7 +52,7 @@ export function AnalyticsBlueprintWorkbench() {
         ids: selectedGaps.length ? selectedGaps : undefined,
         dry_run: dryRun,
         priority: "P1",
-        assigned_to: "Data Platform Agent",
+        owner_id: "",
         dev_tool: "codex",
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["tasks"] }),

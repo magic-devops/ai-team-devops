@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 import threading
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -49,11 +51,11 @@ class UsageCheckIn(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class UsageAlertTasksIn(BaseModel):
+class UsageAlertTasksIn(TaskOwnerInput):
     ids: list[str] = Field(default_factory=list, max_length=50)
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = "Ops"
+    owner_id: TaskOwnerId = ""
     dev_tool: str = "copilot"
 
 
@@ -208,7 +210,7 @@ def _usage_alert_task_payload(alert: dict[str, Any], body: UsageAlertTasksIn) ->
         + json.dumps(alert, ensure_ascii=False, indent=2),
         "priority": body.priority,
         "estimate": "M",
-        "assigned_to": body.assigned_to or "Ops",
+        "owner_id": body.owner_id,
         "source": "usage_quota_alert",
         "source_report_id": str(alert.get("id") or metric),
         "source_report_title": title,

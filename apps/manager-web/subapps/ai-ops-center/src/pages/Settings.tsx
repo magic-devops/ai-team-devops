@@ -26,7 +26,7 @@ type SsoRiskEscalationDraft = {
   min_severity: string;
   score_threshold: string;
   priority: string;
-  assigned_to: string;
+  owner_id: string;
   dev_tool: string;
   include_low: boolean;
   limit: string;
@@ -141,7 +141,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
     include_low: false,
     limit: "6",
     priority: "P1",
-    assigned_to: "SecurityOps",
+    owner_id: "",
     dev_tool: "codex",
   });
   const [ssoRiskTaskResult, setSsoRiskTaskResult] = useState<any>(null);
@@ -169,7 +169,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
     min_severity: "high",
     score_threshold: "70",
     priority: "P1",
-    assigned_to: "SecurityOps",
+    owner_id: "",
     dev_tool: "codex",
     include_low: false,
     limit: "6",
@@ -181,7 +181,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
   });
   const [ssoRiskEscalationResult, setSsoRiskEscalationResult] = useState<any>(null);
   const [ssoRiskEscalationDrawerOpen, setSsoRiskEscalationDrawerOpen] = useState(false);
-  const [ssoRiskRunbookDraft, setSsoRiskRunbookDraft] = useState({ include_low: false, limit: "6", priority: "P1", assigned_to: "SecurityOps", dev_tool: "codex", owner: "SecurityOps", channels: [] as string[], title: "", notes: "" });
+  const [ssoRiskRunbookDraft, setSsoRiskRunbookDraft] = useState({ include_low: false, limit: "6", priority: "P1", owner_id: "", dev_tool: "codex", owner: "SecurityOps", channels: [] as string[], title: "", notes: "" });
   const [ssoRiskRunbookDetail, setSsoRiskRunbookDetail] = useState<any>(null);
   const [ssoRiskRunbookDrawerOpen, setSsoRiskRunbookDrawerOpen] = useState(false);
   const selectedSsoProvider = ssoDraft.provider.trim();
@@ -215,13 +215,13 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
   const [deploymentPipelineDrawerOpen, setDeploymentPipelineDrawerOpen] = useState(false);
   const [deploymentPipelineExecuteDraft, setDeploymentPipelineExecuteDraft] = useState({ executor_id: "dry-run", command_id: "", stage_id: "", dry_run: true, allow_apply: false, evidence_url: "", timeout_seconds: "30", note: "" });
   const [deploymentPipelineCallbackDraft, setDeploymentPipelineCallbackDraft] = useState({ execution_id: "", status: "succeeded", external_run_id: "", timestamp: "", nonce: "", signature: "", evidence_url: "", stdout: "", stderr: "", exit_code: "0", note: "", metadata: "source=manual-callback" });
-  const [deploymentPipelineRemediationDraft, setDeploymentPipelineRemediationDraft] = useState({ include_low: false, priority: "P1", assigned_to: "ReleaseOps", dev_tool: "codex", note: "" });
+  const [deploymentPipelineRemediationDraft, setDeploymentPipelineRemediationDraft] = useState({ include_low: false, priority: "P1", owner_id: "", dev_tool: "codex", note: "" });
   const [deploymentExecutorTargetDraft, setDeploymentExecutorTargetDraft] = useState({ id: "", name: "production orchestrator", target_type: "webhook", endpoint: "https://deploy.example.com/hooks/hermes", enabled: true, supports: "validate,verify,deploy,rollback", auth_ref: "secret://deploy/orchestrator", callback_secret_ref: "env://SOP_DEPLOY_CALLBACK_SECRET", require_callback_signature: true, callback_skew_seconds: "300", concurrency_limit: "1", timeout_seconds: "120", labels: "owner=ReleaseOps\nenvironment=production", notes: "" });
   const [deploymentRollbackDrillDraft, setDeploymentRollbackDrillDraft] = useState({ package_id: "", name: "release rollback drill", environment: "staging", scenario: "post_deploy_regression", operator: "", approval_required: true, create_pipeline: true, notes: "" });
   const [deploymentRollbackDrillDetail, setDeploymentRollbackDrillDetail] = useState<any>(null);
-  const [deploymentRollbackRunbookDraft, setDeploymentRollbackRunbookDraft] = useState({ package_id: "", drill_id: "", name: "release rollback runbook", environment: "production", trigger: "manual", operator: "", approval_required: true, create_preview_pipeline: true, task_priority: "P1", assigned_to: "ReleaseOps", dev_tool: "codex", notes: "" });
+  const [deploymentRollbackRunbookDraft, setDeploymentRollbackRunbookDraft] = useState({ package_id: "", drill_id: "", name: "release rollback runbook", environment: "production", trigger: "manual", operator: "", approval_required: true, create_preview_pipeline: true, task_priority: "P1", owner_id: "", dev_tool: "codex", notes: "" });
   const [deploymentRollbackRunbookDetail, setDeploymentRollbackRunbookDetail] = useState<any>(null);
-  const [deploymentExecutionAuditDraft, setDeploymentExecutionAuditDraft] = useState({ package_id: "", pipeline_run_id: "", canary_policy_id: "", rollback_drill_id: "", rollback_runbook_id: "", environment: "production", action: "deploy", status: "pending", actor: "", change_ticket: "", evidence_url: "", risk_level: "medium", priority: "P1", assigned_to: "ReleaseOps", dev_tool: "codex", include_low: false, notes: "", metadata: "owner=ReleaseOps\nservice=manager" });
+  const [deploymentExecutionAuditDraft, setDeploymentExecutionAuditDraft] = useState({ package_id: "", pipeline_run_id: "", canary_policy_id: "", rollback_drill_id: "", rollback_runbook_id: "", environment: "production", action: "deploy", status: "pending", actor: "", change_ticket: "", evidence_url: "", risk_level: "medium", priority: "P1", owner_id: "", dev_tool: "codex", include_low: false, notes: "", metadata: "owner=ReleaseOps\nservice=manager" });
   const [deploymentExecutionAuditDetail, setDeploymentExecutionAuditDetail] = useState<any>(null);
   const [storageSmokeResult, setStorageSmokeResult] = useState<any>(null);
   const [traceFilter, setTraceFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100" });
@@ -381,7 +381,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
       min_severity: String(policy.min_severity || "high"),
       score_threshold: String(policy.score_threshold ?? 70),
       priority: String(policy.priority || "P1"),
-      assigned_to: String(policy.assigned_to || "SecurityOps"),
+      owner_id: String(policy.owner_id || ""),
       dev_tool: String(policy.dev_tool || "codex"),
       include_low: Boolean(policy.include_low),
       limit: String(policy.limit ?? 6),
@@ -587,7 +587,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         include_low: ssoRiskTaskDraft.include_low,
         limit: Number(ssoRiskTaskDraft.limit || 6),
         priority: ssoRiskTaskDraft.priority,
-        assigned_to: ssoRiskTaskDraft.assigned_to,
+        owner_id: ssoRiskTaskDraft.owner_id,
         dev_tool: ssoRiskTaskDraft.dev_tool,
       }),
     onSuccess: (data, dryRun) => {
@@ -660,7 +660,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         actions: ssoRiskEscalationDraft.actions,
         channels: ssoRiskEscalationDraft.channels,
         priority: ssoRiskEscalationDraft.priority,
-        assigned_to: ssoRiskEscalationDraft.assigned_to,
+        owner_id: ssoRiskEscalationDraft.owner_id,
         dev_tool: ssoRiskEscalationDraft.dev_tool,
         include_low: ssoRiskEscalationDraft.include_low,
         limit: Number(ssoRiskEscalationDraft.limit || 6),
@@ -701,7 +701,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         include_low: ssoRiskRunbookDraft.include_low,
         limit: Number(ssoRiskRunbookDraft.limit || 6),
         priority: ssoRiskRunbookDraft.priority,
-        assigned_to: ssoRiskRunbookDraft.assigned_to,
+        owner_id: ssoRiskRunbookDraft.owner_id,
         dev_tool: ssoRiskRunbookDraft.dev_tool,
         owner: ssoRiskRunbookDraft.owner || me.data?.username || me.data?.email || "SecurityOps",
         channels: ssoRiskRunbookDraft.channels,
@@ -729,7 +729,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         note: ssoRiskRunbookDraft.notes,
         include_low: ssoRiskRunbookDraft.include_low,
         priority: ssoRiskRunbookDraft.priority,
-        assigned_to: ssoRiskRunbookDraft.assigned_to,
+        owner_id: ssoRiskRunbookDraft.owner_id,
         dev_tool: ssoRiskRunbookDraft.dev_tool,
         channels: ssoRiskRunbookDraft.channels,
         title: ssoRiskRunbookDraft.title,
@@ -1135,7 +1135,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         dry_run: dryRun,
         include_low: deploymentPipelineRemediationDraft.include_low,
         priority: deploymentPipelineRemediationDraft.priority,
-        assigned_to: deploymentPipelineRemediationDraft.assigned_to,
+        owner_id: deploymentPipelineRemediationDraft.owner_id,
         dev_tool: deploymentPipelineRemediationDraft.dev_tool,
         actor: deploymentPipelineDraft.operator || me.data?.username || me.data?.email || "ops-admin",
         note: deploymentPipelineRemediationDraft.note || deploymentPipelineDraft.notes,
@@ -1201,7 +1201,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         approval_required: deploymentRollbackRunbookDraft.approval_required,
         create_preview_pipeline: deploymentRollbackRunbookDraft.create_preview_pipeline,
         task_priority: deploymentRollbackRunbookDraft.task_priority,
-        assigned_to: deploymentRollbackRunbookDraft.assigned_to,
+        owner_id: deploymentRollbackRunbookDraft.owner_id,
         dev_tool: deploymentRollbackRunbookDraft.dev_tool,
         notes: deploymentRollbackRunbookDraft.notes,
       }),
@@ -1225,7 +1225,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
         actor: deploymentRollbackRunbookDraft.operator || me.data?.username || me.data?.email || "ops-admin",
         note: deploymentRollbackRunbookDraft.notes,
         priority: deploymentRollbackRunbookDraft.task_priority,
-        assigned_to: deploymentRollbackRunbookDraft.assigned_to,
+        owner_id: deploymentRollbackRunbookDraft.owner_id,
         dev_tool: deploymentRollbackRunbookDraft.dev_tool,
       }),
     onSuccess: (data, vars) => {
@@ -1271,7 +1271,7 @@ export function Settings({ initialModule, focused: _focused = false }: { initial
       api.opsDeploymentExecutionAuditTasks(deploymentExecutionAuditDetail?.item?.id || "", {
         dry_run: dryRun,
         priority: deploymentExecutionAuditDraft.priority,
-        assigned_to: deploymentExecutionAuditDraft.assigned_to,
+        owner_id: deploymentExecutionAuditDraft.owner_id,
         dev_tool: deploymentExecutionAuditDraft.dev_tool,
         include_low: deploymentExecutionAuditDraft.include_low,
       }),

@@ -76,7 +76,7 @@ def lifecycle(json_out: bool = typer.Option(False, "--json", help="输出机器�
 def ops_tasks(
     apply: bool = typer.Option(False, "--apply", help="实际创建治理任务；默认仅预览"),
     priority: str = typer.Option("P1", "--priority", help="治理任务优先级"),
-    assigned_to: str = typer.Option("FlowOps Agent", "--assigned-to", help="治理任务负责人"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     categories: str = typer.Option("", "--categories", help="逗号分隔过滤 categories，如 requirements,tasks,issues"),
     limit: int = typer.Option(20, "--limit", min=1, max=100),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -85,7 +85,7 @@ def ops_tasks(
     body = {
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "categories": [x.strip() for x in categories.split(",") if x.strip()],
         "limit": limit,
     }
@@ -102,12 +102,12 @@ def ops_tasks(
     kv("planned", summary.get("planned", 0))
     kv("created", summary.get("created", 0))
     tbl = Table(title="dev-flow governance tasks", show_header=True, header_style="bold")
-    for col in ("priority", "assigned_to", "source_report_id", "title"):
+    for col in ("priority", "owner_id", "source_report_id", "title"):
         tbl.add_column(col)
     for item in out.get("items") or []:
         tbl.add_row(
             str(item.get("priority", "")),
-            str(item.get("assigned_to", "")),
+            str(item.get("owner_id", "")),
             str(item.get("source_report_id", "")),
             str(item.get("title", ""))[:84],
         )

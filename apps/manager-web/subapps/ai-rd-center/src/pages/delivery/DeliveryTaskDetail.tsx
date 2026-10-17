@@ -17,6 +17,7 @@ import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
 import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import "./task-acceptance.css";
+import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 type TaskContentProps = {
   workspace?: DeliveryWorkspace;
@@ -55,6 +56,8 @@ export function TaskDetailContent({
       />
     );
   const requirement = data.requirements.find((item) => item.id === task.req_id);
+  const owner = data.members.find((member) => member.id === task.owner_id);
+  const unavailableOwner = Boolean(task.owner_id && (!owner?.active || owner.kind === "tool"));
   const native = Boolean(
     task.execution_id ||
     data.executions?.some((entry) => entry.task_id === task.id),
@@ -108,15 +111,13 @@ export function TaskDetailContent({
       <div className="task-delivery-properties">
         <label>
           {tr("owner")}
-          <Select
-            aria-label={`${tr("owner")} ${task.title}`}
+          <OwnerSelect
+            label={`${tr("owner")} ${task.title}`}
             value={task.owner_id}
-            options={data.members
-              .filter((member) => member.active && member.kind !== "tool")
-              .map((member) => ({ value: member.id, label: member.name }))}
-            disabled={!canEdit || !onCommand || stageLocked}
+            members={data.members}
+            disabled={!canEdit || !onCommand || stageLocked || !task.basis}
             onChange={(owner_id) =>
-              void command("task.update", { id: task.id, owner_id }).catch(
+              void command("task.update", { id: task.id, owner_id, task_basis: task.basis }).catch(
                 () => {},
               )
             }
@@ -150,6 +151,7 @@ export function TaskDetailContent({
           />
         </label>
       </div>
+      {unavailableOwner && <p className="runtime-help" role="status">{t("deliveryTeam.unavailableOwner")}</p>}
       <p className="runtime-help">{tr("executionOwner")}</p>
       <TaskAcceptanceFacts acceptance={task.acceptance} />
       <DeliveryTaskPlanMaintenance

@@ -144,7 +144,7 @@ def test_agent_tool_slots_are_integer_and_kind_is_immutable_with_no_capacity_fie
     assert planned(client, work["id"], [allocation(member["id"], 1.5)]).status_code == 422
     assert planned(client, work["id"], [allocation(member["id"], 2)]).status_code == 200
     assert calendar(client, member["id"], [2] * 7).status_code == 200
-    changed = command(client, "member.save", {**member, "kind": "agent"})
+    changed = command(client, "member.save", {"id": member["id"], "name": member["name"], "kind": "agent"})
     assert changed.status_code == 409
 
 

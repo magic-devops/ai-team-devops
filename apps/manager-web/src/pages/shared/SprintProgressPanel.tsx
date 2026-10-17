@@ -14,7 +14,7 @@ export type SprintProgressData = {
   pending?: number;
   completion_rate?: number;
   avg_confidence?: number;
-  blocked?: Array<{ id: string; title?: string; assigned_to?: string }>;
+  blocked?: Array<{ id: string; title?: string; owner_id?: string }>;
   open_issues?: Array<{ id: string; title?: string; severity?: string }>;
   sprint?: { id?: string; goal?: string; status?: string };
 };

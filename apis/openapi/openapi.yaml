@@ -1947,96 +1947,170 @@ paths:
   /api/v1/tasks:
     get:
       operationId: listTasks
-      tags: [tasks]
+      tags:
+      - tasks
       description: 项目成员可读取；必须使用有效 Bearer 或完整验证的 HMAC 签名。
-      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
       parameters:
-        - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
-        - { name: status, in: query, schema: { $ref: "#/components/schemas/TaskStatus" } }
-        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
-        - { name: sprint_id, in: query, schema: { type: string } }
-        - { name: source, in: query, schema: { type: string } }
-        - { name: q, in: query, schema: { type: string } }
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/TaskStatus'
+      - name: priority
+        in: query
+        schema:
+          $ref: '#/components/schemas/Priority'
+      - name: sprint_id
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          type: string
+      - name: q
+        in: query
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: ok
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: "#/components/schemas/Task" }
-        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
-        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
-        '403': { $ref: '#/components/responses/BusinessForbidden' }
-        '404': { $ref: '#/components/responses/BusinessNotFound' }
+                items:
+                  $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
     post:
-      operationId: createTask
-      tags: [tasks]
-      description: 需要项目写权限（project_admin/developer/devops/product_manager，或有权管理该项目的租户管理员、超级管理员）。
-      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
-      parameters: [ { $ref: "#/components/parameters/RequiredBusinessProjectId" } ]
+      tags:
+      - tasks
+      summary: Create Task
+      operationId: create_task_api_v1_tasks_post
+      security:
+      - HTTPBearer: []
       requestBody:
         required: true
         content:
-          application/json: { schema: { $ref: "#/components/schemas/TaskCreate" } }
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
       responses:
-        "200":
-          description: created
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
           content:
             application/json:
               schema:
-                type: object
-                required: [ok, id]
-                properties:
-                  ok: { type: boolean }
-                  id: { type: string }
-        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
-        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
-        '403': { $ref: '#/components/responses/BusinessForbidden' }
-        '404': { $ref: '#/components/responses/BusinessNotFound' }
-
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/tasks/{task_id}:
     parameters:
-      - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
-      - { name: task_id, in: path, required: true, schema: { type: string } }
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
     get:
       operationId: getTask
-      tags: [tasks]
-      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
       responses:
-        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
-        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
-        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
-        '403': { $ref: '#/components/responses/BusinessForbidden' }
-        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
     patch:
-      operationId: updateTask
-      tags: [tasks]
-      description: 需要项目写权限；交付执行和依赖校验仍由业务状态约束执行。
-      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      tags:
+      - tasks
+      summary: Update Task
+      operationId: update_task_api_v1_tasks__task_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
       requestBody:
         required: true
         content:
-          application/json: { schema: { $ref: "#/components/schemas/TaskUpdate" } }
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
       responses:
-        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/BusinessOk" } } } }
-        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
-        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
-        '403': { $ref: '#/components/responses/BusinessForbidden' }
-        '404': { $ref: '#/components/responses/BusinessNotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     delete:
       operationId: deleteTask
-      tags: [tasks]
+      tags:
+      - tasks
       description: 需要项目写权限。
-      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
       responses:
-        "200": { description: deleted, content: { application/json: { schema: { $ref: "#/components/schemas/BusinessOk" } } } }
-        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
-        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
-        '403': { $ref: '#/components/responses/BusinessForbidden' }
-        '404': { $ref: '#/components/responses/BusinessNotFound' }
-
+        '200':
+          description: deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessOk'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
   /api/v1/tasks/{task_id}:pull:
     parameters:
       - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
@@ -2439,6 +2513,2236 @@ paths:
           description: ok
           content: { application/json: { schema: { $ref: "#/components/schemas/ConsoleOverview" } } }
 
+  /api/v1/analytics/development/runbook:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Dev Runbook
+      operationId: analytics_dev_runbook_api_v1_analytics_development_runbook_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataDevRunbookIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Dev Runbook Api V1 Analytics Development Runbook Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/development/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Dev Template Tasks
+      operationId: analytics_dev_template_tasks_api_v1_analytics_development_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataDevTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Dev Template Tasks Api V1 Analytics Development Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/development/schedule:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Dev Schedule
+      operationId: analytics_dev_schedule_api_v1_analytics_development_schedule_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataDevScheduleIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Dev Schedule Api V1 Analytics Development Schedule Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/development/schedules/{schedule_id}/action:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Dev Schedule Action
+      operationId: analytics_dev_schedule_action_api_v1_analytics_development_schedules__schedule_id__action_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: schedule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Schedule Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataDevScheduleActionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Analytics Dev Schedule Action Api V1 Analytics Development Schedules  Schedule Id  Action Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/analytics/development/evidence/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Dev Evidence Tasks
+      operationId: analytics_dev_evidence_tasks_api_v1_analytics_development_evidence_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataDevEvidenceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Dev Evidence Tasks Api V1 Analytics Development Evidence Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/governance/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Governance Tasks
+      operationId: analytics_governance_tasks_api_v1_analytics_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataGovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Governance Tasks Api V1 Analytics Governance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/quality/alerts/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Quality Alert Tasks
+      operationId: analytics_quality_alert_tasks_api_v1_analytics_quality_alerts_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataGovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Quality Alert Tasks Api V1 Analytics Quality Alerts Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/blueprint/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Blueprint Tasks
+      operationId: analytics_blueprint_tasks_api_v1_analytics_blueprint_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataBlueprintTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Blueprint Tasks Api V1 Analytics Blueprint Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/decision/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Analytics Decision Tasks
+      operationId: analytics_decision_tasks_api_v1_analytics_decision_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Analytics Decision Tasks Api V1 Analytics Decision Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/reports/intelligence/tasks:
+    post:
+      tags:
+      - analytics
+      summary: Create Reports Intelligence Tasks
+      operationId: create_reports_intelligence_tasks_api_v1_analytics_reports_intelligence_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportIntelligenceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Create Reports Intelligence Tasks Api V1 Analytics Reports Intelligence Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/analytics/reports/{report_id}/attribution-tasks:
+    post:
+      tags:
+      - analytics
+      summary: Create Report Attribution Tasks
+      operationId: create_report_attribution_tasks_api_v1_analytics_reports__report_id__attribution_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttributionTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Report Attribution Tasks Api V1 Analytics Reports  Report Id  Attribution Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/analytics/reports/{report_id}/action-tasks:
+    post:
+      tags:
+      - analytics
+      summary: Create Analytics Report Action Tasks
+      operationId: create_analytics_report_action_tasks_api_v1_analytics_reports__report_id__action_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: report_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Report Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportActionTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Analytics Report Action Tasks Api V1 Analytics Reports  Report Id  Action Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/platforms/ops-tasks:
+    post:
+      tags:
+      - platforms
+      summary: Platforms Ops Tasks
+      description: 把 Agent 与工具链治理候选项预览或落成任务。
+      operationId: platforms_ops_tasks_api_v1_platforms_ops_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformOpsTasksBody'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Platforms Ops Tasks Api V1 Platforms Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/hermes/blueprint/tasks:
+    post:
+      tags:
+      - hermes
+      summary: Hermes Blueprint Tasks
+      operationId: hermes_blueprint_tasks_api_v1_hermes_blueprint_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlueprintTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Hermes Blueprint Tasks Api V1 Hermes Blueprint Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/usage/alerts/tasks:
+    post:
+      tags:
+      - usage
+      summary: Usage Alert Tasks
+      operationId: usage_alert_tasks_api_v1_usage_alerts_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsageAlertTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Usage Alert Tasks Api V1 Usage Alerts Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/actions/execute:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Action Execute
+      operationId: system_page_action_execute_api_v1_system_pages_actions_execute_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleActionExecuteIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Action Execute Api V1 System Pages Actions Execute Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/system/pages/production-readiness/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Pages Production Readiness Tasks
+      operationId: system_pages_production_readiness_tasks_api_v1_system_pages_production_readiness_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductionReadinessTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Pages Production Readiness Tasks Api V1 System Pages Production Readiness Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/frontend-performance/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Pages Frontend Performance Tasks
+      operationId: system_pages_frontend_performance_tasks_api_v1_system_pages_frontend_performance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FrontendPerformanceTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Pages Frontend Performance Tasks Api V1 System Pages Frontend Performance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/experience-review/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Experience Tasks
+      operationId: system_page_experience_tasks_api_v1_system_pages_experience_review_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperienceTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Experience Tasks Api V1 System Pages Experience Review Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/readiness/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Readiness Tasks
+      operationId: system_page_readiness_tasks_api_v1_system_pages_readiness_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadinessTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Readiness Tasks Api V1 System Pages Readiness Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/governance-tasks/bulk-update:
+    post:
+      tags:
+      - system-pages
+      summary: System Pages Governance Tasks Bulk Update
+      operationId: system_pages_governance_tasks_bulk_update_api_v1_system_pages_governance_tasks_bulk_update_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceTaskBulkUpdateIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Pages Governance Tasks Bulk Update Api V1 System Pages Governance Tasks Bulk Update Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/isolation-audit/scan/runs/compare/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Isolation Scan Compare Tasks
+      operationId: system_page_isolation_scan_compare_tasks_api_v1_system_pages_isolation_audit_scan_runs_compare_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IsolationScanCompareTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Isolation Scan Compare Tasks Api V1 System Pages Isolation Audit Scan Runs Compare
+                  Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/isolation-audit/scan/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Isolation Scan Tasks
+      operationId: system_page_isolation_scan_tasks_api_v1_system_pages_isolation_audit_scan_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IsolationScanTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Isolation Scan Tasks Api V1 System Pages Isolation Audit Scan Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/isolation-audit/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Isolation Tasks
+      operationId: system_page_isolation_tasks_api_v1_system_pages_isolation_audit_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IsolationTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Isolation Tasks Api V1 System Pages Isolation Audit Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/pages/backlog/tasks:
+    post:
+      tags:
+      - system-pages
+      summary: System Page Backlog Tasks
+      operationId: system_page_backlog_tasks_api_v1_system_pages_backlog_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacklogTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response System Page Backlog Tasks Api V1 System Pages Backlog Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/ops/deployment-rollback-runbooks:
+    post:
+      tags:
+      - system-ops
+      summary: Create Deployment Rollback Runbook
+      operationId: create_deployment_rollback_runbook_api_v1_system_ops_deployment_rollback_runbooks_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentRollbackRunbookIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Deployment Rollback Runbook Api V1 System Ops Deployment Rollback Runbooks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/ops/deployment-rollback-runbooks/{runbook_id}/action:
+    post:
+      tags:
+      - system-ops
+      summary: Deployment Rollback Runbook Action
+      operationId: deployment_rollback_runbook_action_api_v1_system_ops_deployment_rollback_runbooks__runbook_id__action_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: runbook_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runbook Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentRollbackRunbookActionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Deployment Rollback Runbook Action Api V1 System Ops Deployment Rollback Runbooks  Runbook Id  Action
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/ops/deployment-execution-audits/{audit_id}/tasks:
+    post:
+      tags:
+      - system-ops
+      summary: Deployment Execution Audit Tasks
+      operationId: deployment_execution_audit_tasks_api_v1_system_ops_deployment_execution_audits__audit_id__tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: audit_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Audit Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentExecutionAuditTaskIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Deployment Execution Audit Tasks Api V1 System Ops Deployment Execution Audits  Audit Id  Tasks
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/system/ops/deployment-pipelines/{run_id}/remediation:
+    post:
+      tags:
+      - system-ops
+      summary: Deployment Pipeline Remediation
+      operationId: deployment_pipeline_remediation_api_v1_system_ops_deployment_pipelines__run_id__remediation_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeploymentPipelineRemediationIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Deployment Pipeline Remediation Api V1 System Ops Deployment Pipelines  Run Id  Remediation
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/requirements/ops-tasks:
+    post:
+      tags:
+      - requirements
+      summary: Requirements Ops Tasks
+      operationId: requirements_ops_tasks_api_v1_requirements_ops_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementOpsTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Requirements Ops Tasks Api V1 Requirements Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/requirements/{req_id}/generate-tasks:
+    post:
+      tags:
+      - requirements
+      summary: Generate Tasks From Requirement
+      operationId: generate_tasks_from_requirement_api_v1_requirements__req_id__generate_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: req_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Req Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateTasksBody'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/dependencies/tasks:
+    post:
+      tags:
+      - tasks
+      summary: Task Dependency Tasks
+      operationId: task_dependency_tasks_api_v1_tasks_dependencies_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskDependencyTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks/bulk:
+    patch:
+      tags:
+      - tasks
+      summary: Bulk Update Tasks
+      operationId: bulk_update_tasks_api_v1_tasks_bulk_patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskBulkUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks/scheduler/plan:
+    post:
+      tags:
+      - tasks
+      summary: Task Scheduler Plan
+      operationId: task_scheduler_plan_api_v1_tasks_scheduler_plan_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSchedulerIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks/scheduler/runbook:
+    post:
+      tags:
+      - tasks
+      summary: Task Scheduler Runbook
+      operationId: task_scheduler_runbook_api_v1_tasks_scheduler_runbook_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSchedulerRunbookIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks/scheduler/insights/tasks:
+    post:
+      tags:
+      - tasks
+      summary: Task Scheduler Insight Tasks
+      operationId: task_scheduler_insight_tasks_api_v1_tasks_scheduler_insights_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskSchedulerInsightTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks/quality/tasks:
+    post:
+      tags:
+      - tasks
+      summary: Task Quality Tasks
+      operationId: task_quality_tasks_api_v1_tasks_quality_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualityTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/issues/ops-tasks:
+    post:
+      tags:
+      - issues
+      summary: Issues Ops Tasks
+      operationId: issues_ops_tasks_api_v1_issues_ops_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueOpsTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Issues Ops Tasks Api V1 Issues Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agents/runs/rebalance-tasks:
+    post:
+      tags:
+      - agents
+      summary: Agent Runs Rebalance Tasks
+      operationId: agent_runs_rebalance_tasks_api_v1_agents_runs_rebalance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRebalanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Agent Runs Rebalance Tasks Api V1 Agents Runs Rebalance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/pages/interaction-analysis/tasks:
+    post:
+      tags:
+      - pages-productization
+      summary: Pages Interaction Tasks
+      operationId: pages_interaction_tasks_api_v1_pages_interaction_analysis_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InteractionTaskIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Pages Interaction Tasks Api V1 Pages Interaction Analysis Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/pages/interaction-ops/tasks:
+    post:
+      tags:
+      - pages-productization
+      summary: Pages Interaction Ops Tasks
+      operationId: pages_interaction_ops_tasks_api_v1_pages_interaction_ops_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InteractionOpsActionIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Pages Interaction Ops Tasks Api V1 Pages Interaction Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/dev-flow/ops-tasks:
+    post:
+      tags:
+      - dev-flow
+      summary: Dev Flow Ops Tasks
+      operationId: dev_flow_ops_tasks_api_v1_dev_flow_ops_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevFlowOpsTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Dev Flow Ops Tasks Api V1 Dev Flow Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notify/inbound/{message_id}/action:
+    post:
+      tags:
+      - notify
+      summary: Inbound Action
+      operationId: inbound_action_api_v1_notify_inbound__message_id__action_post
+      parameters:
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundAction'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/organization/access-review/tasks:
+    post:
+      tags:
+      - organization
+      summary: Organization Access Review Tasks
+      operationId: organization_access_review_tasks_api_v1_organization_access_review_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessReviewTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Organization Access Review Tasks Api V1 Organization Access Review Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/audit/events/{audit_id}/task:
+    post:
+      tags:
+      - audit
+      summary: Audit Event Task
+      operationId: audit_event_task_api_v1_audit_events__audit_id__task_post
+      parameters:
+      - name: audit_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Audit Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditTaskIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Audit Event Task Api V1 Audit Events  Audit Id  Task Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sprints/ops-tasks:
+    post:
+      tags:
+      - sprints
+      summary: Sprints Ops Tasks
+      operationId: sprints_ops_tasks_api_v1_sprints_ops_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: project_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SprintOpsTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sprints Ops Tasks Api V1 Sprints Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/projects/{project_id}/bootstrap-tasks:
+    post:
+      tags:
+      - projects
+      summary: Create Project Bootstrap Tasks
+      description: 把项目体检建议落成可执行任务，进入任务看板。
+      operationId: create_project_bootstrap_tasks_api_v1_projects__project_id__bootstrap_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectBootstrapTasksBody'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/projects/{project_id}/ops-tasks:
+    post:
+      tags:
+      - projects
+      summary: Create Project Ops Tasks
+      description: 把项目治理操作包中的候选项落成任务。
+      operationId: create_project_ops_tasks_api_v1_projects__project_id__ops_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectOpsTasksBody'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/copilot/plan/tasks:
+    post:
+      tags:
+      - copilot
+      summary: Copilot Plan Tasks
+      description: 将 Copilot 工具调用计划转换为任务中心可跟进的执行任务。
+      operationId: copilot_plan_tasks_api_v1_copilot_plan_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Copilot Plan Tasks Api V1 Copilot Plan Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/workflows/ops-tasks:
+    post:
+      tags:
+      - workflow
+      summary: Workflow Ops Tasks
+      description: 将 WorkflowOps 操作包候选项预览或生成任务。
+      operationId: workflow_ops_tasks_api_v1_workflows_ops_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowOpsTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Workflow Ops Tasks Api V1 Workflows Ops Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/sso/providers/{provider}/risk-tasks:
+    post:
+      tags:
+      - security
+      summary: Sso Risk Tasks
+      operationId: sso_risk_tasks_api_v1_sso_providers__provider__risk_tasks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRiskTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sso Risk Tasks Api V1 Sso Providers  Provider  Risk Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sso/providers/{provider}/risk-escalation:
+    put:
+      tags:
+      - security
+      summary: Upsert Sso Risk Escalation
+      operationId: upsert_sso_risk_escalation_api_v1_sso_providers__provider__risk_escalation_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRiskEscalationPolicyIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Upsert Sso Risk Escalation Api V1 Sso Providers  Provider  Risk Escalation Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sso/providers/{provider}/risk-runbooks:
+    post:
+      tags:
+      - security
+      summary: Create Sso Risk Runbook
+      operationId: create_sso_risk_runbook_api_v1_sso_providers__provider__risk_runbooks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRiskRunbookIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Sso Risk Runbook Api V1 Sso Providers  Provider  Risk Runbooks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sso/providers/{provider}/risk-runbooks/{runbook_id}/action:
+    post:
+      tags:
+      - security
+      summary: Sso Risk Runbook Action
+      operationId: sso_risk_runbook_action_api_v1_sso_providers__provider__risk_runbooks__runbook_id__action_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Provider
+      - name: runbook_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Runbook Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SsoRiskRunbookActionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sso Risk Runbook Action Api V1 Sso Providers  Provider  Risk Runbooks  Runbook Id  Action Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/data-quality/alerts/tasks:
+    post:
+      tags:
+      - data-quality
+      summary: Alert Tasks
+      operationId: alert_tasks_api_v1_data_quality_alerts_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/data-quality/impact/tasks:
+    post:
+      tags:
+      - data-quality
+      summary: Quality Impact Tasks
+      operationId: quality_impact_tasks_api_v1_data_quality_impact_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualityImpactTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/data-quality/rca/tasks:
+    post:
+      tags:
+      - data-quality
+      summary: Quality Rca Tasks
+      operationId: quality_rca_tasks_api_v1_data_quality_rca_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualityRcaTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/data-quality/forecast/tasks:
+    post:
+      tags:
+      - data-quality
+      summary: Quality Forecast Tasks
+      operationId: quality_forecast_tasks_api_v1_data_quality_forecast_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QualityForecastTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/metrics-service/governance/tasks:
+    post:
+      tags:
+      - metrics-service
+      summary: Metrics Governance Tasks
+      operationId: metrics_governance_tasks_api_v1_metrics_service_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricsGovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Metrics Governance Tasks Api V1 Metrics Service Governance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tag-service/governance/tasks:
+    post:
+      tags:
+      - tag-service
+      summary: Tag Governance Tasks
+      operationId: tag_governance_tasks_api_v1_tag_service_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagGovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Tag Governance Tasks Api V1 Tag Service Governance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/metadata/governance/tasks:
+    post:
+      tags:
+      - metadata-management
+      summary: Metadata Governance Tasks
+      operationId: metadata_governance_tasks_api_v1_metadata_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetadataGovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Metadata Governance Tasks Api V1 Metadata Governance Tasks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/a2a/trust/tasks:
+    post:
+      tags:
+      - a2a
+      summary: Trust Tasks
+      operationId: trust_tasks_api_v1_a2a_trust_tasks_post
+      parameters:
+      - name: now
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Now
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrustTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/a2a/sla/tasks:
+    post:
+      tags:
+      - a2a
+      summary: Sla Tasks
+      operationId: sla_tasks_api_v1_a2a_sla_tasks_post
+      parameters:
+      - name: now
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Now
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlaTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/a2a/execution-windows/tasks:
+    post:
+      tags:
+      - a2a
+      summary: Execution Window Tasks
+      operationId: execution_window_tasks_api_v1_a2a_execution_windows_tasks_post
+      parameters:
+      - name: now
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Now
+      - name: stale_after_minutes
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Stale After Minutes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionWindowTasksIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/a2a/governance-tasks:
+    post:
+      tags:
+      - a2a
+      summary: Governance Tasks
+      operationId: governance_tasks_api_v1_a2a_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/governance-tasks:
+    post:
+      tags:
+      - llm-gateway
+      summary: Governance Tasks
+      operationId: governance_tasks_api_v1_llm_gateway_governance_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/cost-anomalies/tasks:
+    post:
+      tags:
+      - llm-gateway
+      summary: Cost Anomaly Tasks
+      operationId: cost_anomaly_tasks_api_v1_llm_gateway_cost_anomalies_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernanceTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/cost-attribution/run:
+    post:
+      tags:
+      - llm-gateway
+      summary: Cost Attribution Run
+      operationId: cost_attribution_run_api_v1_llm_gateway_cost_attribution_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostAttributionIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/cost-attribution/tasks:
+    post:
+      tags:
+      - llm-gateway
+      summary: Cost Attribution Tasks
+      operationId: cost_attribution_tasks_api_v1_llm_gateway_cost_attribution_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostAttributionIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/model-evals/run:
+    post:
+      tags:
+      - llm-gateway
+      summary: Model Eval Run
+      operationId: model_eval_run_api_v1_llm_gateway_model_evals_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelEvalIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/model-evals/tasks:
+    post:
+      tags:
+      - llm-gateway
+      summary: Model Eval Tasks
+      operationId: model_eval_tasks_api_v1_llm_gateway_model_evals_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelEvalIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/prompt-audit/run:
+    post:
+      tags:
+      - llm-gateway
+      summary: Prompt Audit Run
+      operationId: prompt_audit_run_api_v1_llm_gateway_prompt_audit_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptAuditIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/llm-gateway/prompt-audit/tasks:
+    post:
+      tags:
+      - llm-gateway
+      summary: Prompt Audit Tasks
+      operationId: prompt_audit_tasks_api_v1_llm_gateway_prompt_audit_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromptAuditIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ops-center/alert-noise/slo-escalation/run:
+    post:
+      tags:
+      - ops-center
+      summary: Run Alert Slo Escalation
+      operationId: run_alert_slo_escalation_api_v1_ops_center_alert_noise_slo_escalation_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertSloEscalationRunIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ops-center/strategy-linkage/run:
+    post:
+      tags:
+      - ops-center
+      summary: Run Ops Strategy Linkage
+      operationId: run_ops_strategy_linkage_api_v1_ops_center_strategy_linkage_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpsStrategyLinkageRunIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ops-center/rca/insights/tasks:
+    post:
+      tags:
+      - ops-center
+      summary: Rca Insight Tasks
+      operationId: rca_insight_tasks_api_v1_ops_center_rca_insights_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RcaInsightTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/ops-center/self-heal/tasks:
+    post:
+      tags:
+      - ops-center
+      summary: Self Heal Tasks
+      operationId: self_heal_tasks_api_v1_ops_center_self_heal_tasks_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelfHealTasksIn'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -5770,18 +8074,35 @@ components:
           title: Id
           type: string
         name:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Name
-          type: string
         kind:
-          enum:
-          - human
-          - agent
-          - tool
+          anyOf:
+          - enum:
+            - human
+            - agent
+            - tool
+            type: string
+          - type: 'null'
           title: Kind
-          type: string
         active:
           title: Active
           type: boolean
+        available:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          title: Available
+        reasons:
+          items:
+            additionalProperties:
+              type: string
+            type: object
+          title: Reasons
+          type: array
       required:
       - id
       - name
@@ -5814,6 +8135,12 @@ components:
         status:
           title: Status
           type: string
+        owner_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Owner Id
         assigned_to:
           title: Assigned To
           type: string
@@ -6926,12 +9253,10 @@ components:
           default: null
           title: Status
         owner_id:
-          anyOf:
-          - maxLength: 100
-            type: string
-          - type: 'null'
-          default: null
+          default: ''
+          maxLength: 100
           title: Owner Id
+          type: string
         description:
           anyOf:
           - maxLength: 10000
@@ -7294,6 +9619,8 @@ components:
           type: string
         assigned_to:
           type: string
+          readOnly: true
+          description: Current display name projected from owner_id; never accepted by write requests.
         planning:
           $ref: '#/components/schemas/DeliveryTaskPlanning'
         dependency_blocked:
@@ -7347,6 +9674,17 @@ components:
         verified:
           type: boolean
           description: Current effective delivery proof; recorded completion alone is insufficient.
+        owner_id:
+          type: string
+          maxLength: 100
+          default: ''
+          description: Canonical stable project responsibility ID. Empty means unassigned; never resolved by display name.
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryTaskOwner'
+          - type: 'null'
+        owner_active:
+          type: boolean
     DeliveryWorkspace:
       type: object
       required:
@@ -7559,6 +9897,8 @@ components:
           - XL
         assigned_to:
           type: string
+          readOnly: true
+          description: Current display name projected from owner_id; never accepted by write requests.
         confidence:
           type: number
           format: float
@@ -7580,211 +9920,207 @@ components:
           maxItems: 80
           title: Acceptance Criteria
           type: array
+        owner_id:
+          type: string
+          maxLength: 100
+          default: ''
+          description: Canonical stable project responsibility ID. Empty means unassigned; never resolved by display name.
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryTaskOwner'
+          - type: 'null'
+        owner_active:
+          type: boolean
     TaskCreate:
       properties:
         title:
-          title: Title
           type: string
+          title: Title
         description:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Description
+          default: ''
         acceptance_criteria:
           items:
+            type: string
             maxLength: 2000
             minLength: 1
-            type: string
+          type: array
           maxItems: 80
           title: Acceptance Criteria
-          type: array
         priority:
-          default: P1
+          type: string
           title: Priority
-          type: string
+          default: P1
         estimate:
-          default: M
-          title: Estimate
           type: string
-        assigned_to:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: Coder
-          title: Assigned To
+          title: Estimate
+          default: M
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
         req_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Req Id
+          default: ''
         sprint_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Sprint Id
+          default: ''
         dev_tool:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Dev Tool
+          default: ''
         artifact_url:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Artifact Url
+          default: ''
         artifact_path:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Artifact Path
+          default: ''
         debug_notes:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Debug Notes
+          default: ''
         branch:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Branch
+          default: ''
         source:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Source
+          default: ''
         source_report_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Source Report Id
+          default: ''
         source_report_title:
           anyOf:
           - type: string
           - type: 'null'
-          default: ''
           title: Source Report Title
+          default: ''
+      additionalProperties: false
+      type: object
       required:
       - title
       title: TaskCreate
-      type: object
     TaskUpdate:
       properties:
         title:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Title
         description:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Description
         acceptance_criteria:
           items:
+            type: string
             maxLength: 2000
             minLength: 1
-            type: string
+          type: array
           maxItems: 80
           title: Acceptance Criteria
-          type: array
         status:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Status
         priority:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Priority
         estimate:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Estimate
-        assigned_to:
-          anyOf:
-          - type: string
-          - type: 'null'
-          default: null
-          title: Assigned To
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
         actual_hours:
           anyOf:
           - type: number
           - type: 'null'
-          default: null
           title: Actual Hours
         confidence:
           anyOf:
           - type: number
           - type: 'null'
-          default: null
           title: Confidence
         sprint_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Sprint Id
         human_notes:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Human Notes
         req_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Req Id
         dev_tool:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Dev Tool
         artifact_url:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Artifact Url
         artifact_path:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Artifact Path
         debug_notes:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Debug Notes
         branch:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Branch
-      title: TaskUpdate
+      additionalProperties: false
       type: object
+      title: TaskUpdate
     LlmChatIn:
       type: object
       required: [messages]
@@ -8313,8 +10649,6 @@ components:
       - requirement
       title: ExecutionSnapshot
       type: object
-      description: Immutable task delivery definition. requirement is a real scoped requirement or null for an independent task.
-        Only task criteria and explicitly selected requirement criteria are effective; status, dates and reservations are excluded.
     ExecutionPreviewResponse:
       additionalProperties: false
       properties:
@@ -8738,8 +11072,6 @@ components:
       - requirement_revision
       title: TaskAcceptance
       type: object
-      description: Server-resolved task-local and explicitly selected requirement criteria with provenance. available=false means
-        the source is invalid or unavailable; empty criteria require configuration before dispatch or acceptance.
     TaskAcceptanceSource:
       properties:
         source:
@@ -8767,23 +11099,39 @@ components:
           title: Id
           type: string
         name:
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Name
-          type: string
         kind:
-          enum:
-          - human
-          - agent
-          - tool
+          anyOf:
+          - enum:
+            - human
+            - agent
+            - tool
+            type: string
+          - type: 'null'
           title: Kind
-          type: string
         active:
           title: Active
           type: boolean
+        available:
+          title: Available
+          type: boolean
+        reasons:
+          items:
+            additionalProperties:
+              type: string
+            type: object
+          title: Reasons
+          type: array
       required:
       - id
       - name
       - kind
       - active
+      - available
+      - reasons
       title: ExecutionOwnerSnapshot
       type: object
     ExecutionRequirementSnapshot:
@@ -8911,3 +11259,2634 @@ components:
       - title
       title: DeliveryTaskCreate
       type: object
+    TaskSchedulerInsightTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+      additionalProperties: false
+      type: object
+      title: TaskSchedulerInsightTasksIn
+    DataDevRunbookIn:
+      properties:
+        schedule_id:
+          type: string
+          maxLength: 120
+          title: Schedule Id
+          default: ''
+        packet_id:
+          type: string
+          maxLength: 120
+          title: Packet Id
+          default: ''
+        decisions:
+          items:
+            type: string
+          type: array
+          maxItems: 5
+          title: Decisions
+        include_unclaimed:
+          type: boolean
+          title: Include Unclaimed
+          default: true
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: DataDevRunbookIn
+    OpsStrategyLinkageRunIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        actions:
+          items:
+            type: string
+          type: array
+          title: Actions
+        max_items:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Max Items
+          default: 8
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        channels:
+          items:
+            type: string
+          type: array
+          title: Channels
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: OpsStrategyLinkageRunIn
+    DataGovernanceTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: DataGovernanceTasksIn
+    GovernanceTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: GovernanceTasksIn
+    InteractionOpsActionIn:
+      properties:
+        domain:
+          type: string
+          title: Domain
+          default: all
+        status:
+          type: string
+          pattern: ^(all|ready|watch|risk|blocked|failed|interrupted)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        limit:
+          type: integer
+          maximum: 200.0
+          minimum: 1.0
+          title: Limit
+          default: 80
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        actor:
+          type: string
+          maxLength: 120
+          title: Actor
+          default: InteractionOps Operator
+        idempotency_key:
+          type: string
+          maxLength: 160
+          title: Idempotency Key
+          default: ''
+      additionalProperties: false
+      type: object
+      title: InteractionOpsActionIn
+    SprintOpsTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        sprint_id:
+          type: string
+          title: Sprint Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Categories
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: SprintOpsTasksIn
+    PlanTasksIn:
+      properties:
+        query:
+          type: string
+          title: Query
+          default: ''
+        plan:
+          additionalProperties: true
+          type: object
+          title: Plan
+        commands:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Commands
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: copilot
+      additionalProperties: false
+      type: object
+      title: PlanTasksIn
+    AlertSloEscalationRunIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        channels:
+          items:
+            type: string
+          type: array
+          title: Channels
+        window_hours:
+          type: integer
+          maximum: 168.0
+          minimum: 1.0
+          title: Window Hours
+          default: 24
+        force:
+          type: boolean
+          title: Force
+          default: false
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: AlertSloEscalationRunIn
+    PlatformOpsTasksBody:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+          default: []
+      additionalProperties: false
+      type: object
+      title: PlatformOpsTasksBody
+    DataDevScheduleActionIn:
+      properties:
+        action:
+          type: string
+          pattern: ^(rerun|cancel|archive|restore)$
+          title: Action
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        max_parallel:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Max Parallel
+          default: 4
+        policy:
+          type: string
+          pattern: ^(quality_first|balanced|throughput|cost_saver)$
+          title: Policy
+          default: quality_first
+        priority:
+          type: string
+          maxLength: 2
+          title: Priority
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: ''
+        note:
+          type: string
+          maxLength: 1000
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - action
+      title: DataDevScheduleActionIn
+    PromptAuditIn:
+      properties:
+        prompt:
+          type: string
+          maxLength: 120000
+          title: Prompt
+          default: ''
+        task_type:
+          type: string
+          title: Task Type
+          default: general
+        model_id:
+          type: string
+          title: Model Id
+          default: ''
+        user_role:
+          type: string
+          title: User Role
+          default: agent
+        max_prompt_tokens:
+          type: integer
+          maximum: 200000.0
+          minimum: 100.0
+          title: Max Prompt Tokens
+          default: 8000
+        allow_pii:
+          type: boolean
+          title: Allow Pii
+          default: false
+        allow_secrets:
+          type: boolean
+          title: Allow Secrets
+          default: false
+        actions:
+          items:
+            type: string
+          type: array
+          title: Actions
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        persist:
+          type: boolean
+          title: Persist
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: PromptAuditIn
+    ExecutionWindowTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: ExecutionWindowTasksIn
+    DataBlueprintTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 80
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: DataBlueprintTasksIn
+    SsoRiskRunbookActionIn:
+      properties:
+        action:
+          type: string
+          pattern: ^(preview_tasks|create_tasks|send_im|verify|mark_step_done|mark_step_failed|archive)$
+          title: Action
+        actor:
+          type: string
+          title: Actor
+          default: security-admin
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        step_id:
+          type: string
+          title: Step Id
+          default: ''
+        note:
+          type: string
+          title: Note
+          default: ''
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        channels:
+          items:
+            type: string
+          type: array
+          title: Channels
+        title:
+          type: string
+          title: Title
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - action
+      title: SsoRiskRunbookActionIn
+    AccessReviewTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+      additionalProperties: false
+      type: object
+      title: AccessReviewTasksIn
+    BlueprintTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: BlueprintTaskIn
+    IsolationScanCompareTaskIn:
+      properties:
+        base_id:
+          type: string
+          title: Base Id
+          default: ''
+        target_id:
+          type: string
+          title: Target Id
+          default: ''
+        status:
+          type: string
+          pattern: ^(all|protected|watch|risk)$
+          title: Status
+          default: all
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P0
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_resolved:
+          type: boolean
+          title: Include Resolved
+          default: false
+      additionalProperties: false
+      type: object
+      title: IsolationScanCompareTaskIn
+    ModelEvalIn:
+      properties:
+        model_ids:
+          items:
+            type: string
+          type: array
+          title: Model Ids
+        cases:
+          items:
+            $ref: '#/components/schemas/ModelEvalCaseIn'
+          type: array
+          title: Cases
+        actual_outputs:
+          additionalProperties: true
+          type: object
+          title: Actual Outputs
+        min_score:
+          type: number
+          maximum: 100.0
+          minimum: 0.0
+          title: Min Score
+          default: 75.0
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        persist:
+          type: boolean
+          title: Persist
+          default: true
+        create_tasks:
+          type: boolean
+          title: Create Tasks
+          default: false
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: ModelEvalIn
+    GenerateTasksBody:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        mode:
+          type: string
+          pattern: ^(standard|frontend|backend|fullstack|test)$
+          title: Mode
+          default: standard
+        max_tasks:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Max Tasks
+          default: 6
+        sprint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sprint Id
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dev Tool
+          default: ''
+        create_dependencies:
+          type: boolean
+          title: Create Dependencies
+          default: true
+      additionalProperties: false
+      type: object
+      title: GenerateTasksBody
+    ProjectOpsTasksBody:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+          default: []
+      additionalProperties: false
+      type: object
+      title: ProjectOpsTasksBody
+    DataDevScheduleIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        max_parallel:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Max Parallel
+          default: 4
+        policy:
+          type: string
+          pattern: ^(quality_first|balanced|throughput|cost_saver)$
+          title: Policy
+          default: quality_first
+        priority:
+          type: string
+          maxLength: 2
+          title: Priority
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: ''
+        event:
+          type: string
+          maxLength: 80
+          title: Event
+          default: manual
+      additionalProperties: false
+      type: object
+      title: DataDevScheduleIn
+    RequirementOpsTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Categories
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: RequirementOpsTasksIn
+    MetricsGovernanceTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: MetricsGovernanceTasksIn
+    AgentRebalanceTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+      additionalProperties: false
+      type: object
+      title: AgentRebalanceTasksIn
+    SsoRiskRunbookIn:
+      properties:
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        limit:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Limit
+          default: 6
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        owner:
+          type: string
+          title: Owner
+          default: SecurityOps
+        channels:
+          items:
+            type: string
+          type: array
+          title: Channels
+        title:
+          type: string
+          title: Title
+          default: ''
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      additionalProperties: false
+      type: object
+      title: SsoRiskRunbookIn
+    RcaInsightTasksIn:
+      properties:
+        run_id:
+          type: string
+          title: Run Id
+          default: ''
+        trace_id:
+          type: string
+          title: Trace Id
+          default: ''
+        correlation_id:
+          type: string
+          title: Correlation Id
+          default: ''
+        limit:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Limit
+          default: 100
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: RcaInsightTasksIn
+    ReportIntelligenceTasksIn:
+      properties:
+        preview:
+          type: boolean
+          title: Preview
+          default: true
+        priority:
+          type: string
+          pattern: ^(|P[0-3])$
+          title: Priority
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: ReportIntelligenceTasksIn
+    QualityRcaTasksIn:
+      properties:
+        rca_id:
+          type: string
+          maxLength: 120
+          title: Rca Id
+          default: ''
+        alert_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Alert Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: QualityRcaTasksIn
+    SlaTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: SlaTasksIn
+    ReadinessTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        domain:
+          type: string
+          title: Domain
+          default: all
+        status:
+          type: string
+          pattern: ^(all|complete|watch|risk)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_complete:
+          type: boolean
+          title: Include Complete
+          default: false
+      additionalProperties: false
+      type: object
+      title: ReadinessTaskIn
+    BacklogTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: BacklogTaskIn
+    QualityTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        decisions:
+          items:
+            type: string
+          type: array
+          maxItems: 10
+          title: Decisions
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        limit:
+          type: integer
+          maximum: 200.0
+          minimum: 1.0
+          title: Limit
+          default: 50
+      additionalProperties: false
+      type: object
+      title: QualityTasksIn
+    InboundAction:
+      properties:
+        action:
+          type: string
+          pattern: ^(task|requirement)$
+          title: Action
+          default: task
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        assigned_agent:
+          type: string
+          title: Assigned Agent
+          default: PM
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: copilot
+      additionalProperties: false
+      type: object
+      title: InboundAction
+    IsolationScanTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        status:
+          type: string
+          pattern: ^(all|protected|watch|risk)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P0
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_protected:
+          type: boolean
+          title: Include Protected
+          default: false
+      additionalProperties: false
+      type: object
+      title: IsolationScanTaskIn
+    ProjectBootstrapTasksBody:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: ProjectBootstrapTasksBody
+    DeploymentPipelineRemediationIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        actor:
+          type: string
+          title: Actor
+          default: ops-admin
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: DeploymentPipelineRemediationIn
+    ModuleActionExecuteIn:
+      properties:
+        module_id:
+          type: string
+          title: Module Id
+        action_id:
+          type: string
+          title: Action Id
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: false
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+      additionalProperties: false
+      type: object
+      required:
+      - module_id
+      - action_id
+      title: ModuleActionExecuteIn
+    DeploymentRollbackRunbookActionIn:
+      properties:
+        action:
+          type: string
+          pattern: ^(mark_ready|create_tasks|create_pipeline|archive)$
+          title: Action
+        actor:
+          type: string
+          title: Actor
+          default: ops-admin
+        note:
+          type: string
+          title: Note
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      required:
+      - action
+      title: DeploymentRollbackRunbookActionIn
+    ProductionReadinessTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        domain:
+          type: string
+          title: Domain
+          default: all
+        stage:
+          type: string
+          pattern: ^(all|gap|contract_complete|runtime_ready|production_ready)$
+          title: Stage
+          default: all
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_production_ready:
+          type: boolean
+          title: Include Production Ready
+          default: false
+      additionalProperties: false
+      type: object
+      title: ProductionReadinessTaskIn
+    TaskSchedulerRunbookIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        include_unclaimed:
+          type: boolean
+          title: Include Unclaimed
+          default: true
+        include_stale_claims:
+          type: boolean
+          title: Include Stale Claims
+          default: true
+        include_quality_blocks:
+          type: boolean
+          title: Include Quality Blocks
+          default: true
+        include_dependency_blocks:
+          type: boolean
+          title: Include Dependency Blocks
+          default: true
+        stale_minutes:
+          type: integer
+          maximum: 1440.0
+          minimum: 5.0
+          title: Stale Minutes
+          default: 30
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        limit:
+          type: integer
+          maximum: 200.0
+          minimum: 1.0
+          title: Limit
+          default: 50
+        note:
+          type: string
+          maxLength: 1000
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: TaskSchedulerRunbookIn
+    WorkflowOpsTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: WorkflowOpsTasksIn
+    SsoRiskEscalationPolicyIn:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+          default: true
+        min_severity:
+          type: string
+          pattern: ^(high|medium|low)$
+          title: Min Severity
+          default: high
+        score_threshold:
+          type: integer
+          maximum: 100.0
+          minimum: 0.0
+          title: Score Threshold
+          default: 70
+        actions:
+          items:
+            type: string
+          type: array
+          title: Actions
+        channels:
+          items:
+            type: string
+          type: array
+          title: Channels
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        limit:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Limit
+          default: 6
+        cooldown_minutes:
+          type: integer
+          maximum: 10080.0
+          minimum: 0.0
+          title: Cooldown Minutes
+          default: 60
+        title:
+          type: string
+          title: Title
+          default: ''
+        owner:
+          type: string
+          title: Owner
+          default: SecurityOps
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      additionalProperties: false
+      type: object
+      title: SsoRiskEscalationPolicyIn
+    AlertTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: AlertTasksIn
+    DataDevTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          maxLength: 2
+          title: Priority
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: ''
+      additionalProperties: false
+      type: object
+      title: DataDevTasksIn
+    MetadataGovernanceTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: MetadataGovernanceTasksIn
+    ReportActionTasksIn:
+      properties:
+        preview:
+          type: boolean
+          title: Preview
+          default: true
+        max_tasks:
+          type: integer
+          maximum: 8.0
+          minimum: 1.0
+          title: Max Tasks
+          default: 3
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P2
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: sop
+      additionalProperties: false
+      type: object
+      title: ReportActionTasksIn
+    DeploymentRollbackRunbookIn:
+      properties:
+        package_id:
+          type: string
+          title: Package Id
+          default: ''
+        profile:
+          type: string
+          title: Profile
+          default: ''
+        drill_id:
+          type: string
+          title: Drill Id
+          default: ''
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+          default: release rollback runbook
+        environment:
+          type: string
+          pattern: ^(dev|staging|production|rollback)$
+          title: Environment
+          default: production
+        trigger:
+          type: string
+          pattern: ^(manual|canary_gate_failure|post_deploy_regression|dependency_outage|slo_breach)$
+          title: Trigger
+          default: manual
+        operator:
+          type: string
+          title: Operator
+          default: release-manager
+        approval_required:
+          type: boolean
+          title: Approval Required
+          default: true
+        create_preview_pipeline:
+          type: boolean
+          title: Create Preview Pipeline
+          default: true
+        task_priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Task Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        notes:
+          type: string
+          title: Notes
+          default: ''
+      additionalProperties: false
+      type: object
+      title: DeploymentRollbackRunbookIn
+    TaskBulkUpdate:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Ids
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        priority:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Priority
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: TaskBulkUpdate
+    SsoRiskTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+        limit:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Limit
+          default: 6
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: SsoRiskTasksIn
+    CostAttributionIn:
+      properties:
+        min_cost_usd:
+          type: number
+          title: Min Cost Usd
+          default: 0.0
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        persist:
+          type: boolean
+          title: Persist
+          default: true
+        create_tasks:
+          type: boolean
+          title: Create Tasks
+          default: false
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        note:
+          type: string
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      title: CostAttributionIn
+    QualityForecastTasksIn:
+      properties:
+        forecast_id:
+          type: string
+          maxLength: 120
+          title: Forecast Id
+          default: ''
+        window_days:
+          type: integer
+          maximum: 180.0
+          minimum: 3.0
+          title: Window Days
+          default: 30
+        horizon_days:
+          type: integer
+          maximum: 60.0
+          minimum: 1.0
+          title: Horizon Days
+          default: 7
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: QualityForecastTasksIn
+    ModelEvalCaseIn:
+      properties:
+        id:
+          type: string
+          title: Id
+          default: ''
+        name:
+          type: string
+          title: Name
+          default: ''
+        task_type:
+          type: string
+          title: Task Type
+          default: general
+        prompt:
+          type: string
+          maxLength: 120000
+          title: Prompt
+          default: ''
+        expected_keywords:
+          items:
+            type: string
+          type: array
+          title: Expected Keywords
+        expected_output:
+          type: string
+          title: Expected Output
+          default: ''
+        actual_output:
+          type: string
+          title: Actual Output
+          default: ''
+        weight:
+          type: number
+          title: Weight
+          default: 1.0
+        max_prompt_tokens:
+          type: integer
+          title: Max Prompt Tokens
+          default: 8000
+        completion_tokens:
+          type: integer
+          title: Completion Tokens
+          default: 600
+        latency_slo_ms:
+          type: integer
+          title: Latency Slo Ms
+          default: 3000
+        budget_usd:
+          type: number
+          title: Budget Usd
+          default: 0.05
+        allow_pii:
+          type: boolean
+          title: Allow Pii
+          default: false
+        allow_secrets:
+          type: boolean
+          title: Allow Secrets
+          default: false
+      type: object
+      title: ModelEvalCaseIn
+    GovernanceTaskBulkUpdateIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 200
+          minItems: 1
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        status:
+          anyOf:
+          - type: string
+            pattern: ^(pending|in_progress|blocked|completed)$
+          - type: 'null'
+          title: Status
+        priority:
+          anyOf:
+          - type: string
+            pattern: ^P[0-3]$
+          - type: 'null'
+          title: Priority
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: GovernanceTaskBulkUpdateIn
+    TaskSchedulerIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 300
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        max_items:
+          type: integer
+          maximum: 300.0
+          minimum: 1.0
+          title: Max Items
+          default: 50
+        max_parallel:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Max Parallel
+          default: 6
+        include_blocked:
+          type: boolean
+          title: Include Blocked
+          default: false
+        policy:
+          type: string
+          pattern: ^(balanced|throughput|quality_first|cost_saver)$
+          title: Policy
+          default: quality_first
+        event:
+          type: string
+          title: Event
+          default: ''
+        owner_pool:
+          items:
+            type: string
+            maxLength: 100
+          type: array
+          maxItems: 50
+          title: Owner Pool
+      additionalProperties: false
+      type: object
+      title: TaskSchedulerIn
+    FrontendPerformanceTaskIn:
+      properties:
+        names:
+          items:
+            type: string
+          type: array
+          title: Names
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Max Items
+          default: 8
+        include_watch:
+          type: boolean
+          title: Include Watch
+          default: true
+      additionalProperties: false
+      type: object
+      title: FrontendPerformanceTaskIn
+    AttributionTasksIn:
+      properties:
+        preview:
+          type: boolean
+          title: Preview
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: AttributionTasksIn
+    DeploymentExecutionAuditTaskIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+        include_low:
+          type: boolean
+          title: Include Low
+          default: false
+      additionalProperties: false
+      type: object
+      title: DeploymentExecutionAuditTaskIn
+    InteractionTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        domain:
+          type: string
+          title: Domain
+          default: all
+        status:
+          type: string
+          pattern: ^(all|ready|watch|risk)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_ready:
+          type: boolean
+          title: Include Ready
+          default: false
+      additionalProperties: false
+      type: object
+      title: InteractionTaskIn
+    DevFlowOpsTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Categories
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: DevFlowOpsTasksIn
+    QualityImpactTasksIn:
+      properties:
+        alert_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Alert Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: QualityImpactTasksIn
+    TrustTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: TrustTasksIn
+    TagGovernanceTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+        min_coverage:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Min Coverage
+          default: 0.8
+      additionalProperties: false
+      type: object
+      title: TagGovernanceTasksIn
+    DecisionTasksIn:
+      properties:
+        question:
+          type: string
+          maxLength: 1000
+          title: Question
+          default: ''
+        report_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Report Ids
+        include_evidence:
+          type: boolean
+          title: Include Evidence
+          default: true
+        max_reports:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Max Reports
+          default: 10
+        preview:
+          type: boolean
+          title: Preview
+          default: true
+        priority:
+          type: string
+          pattern: ^(|P[0-3])$
+          title: Priority
+          default: ''
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+        max_tasks:
+          type: integer
+          maximum: 10.0
+          minimum: 1.0
+          title: Max Tasks
+          default: 5
+      additionalProperties: false
+      type: object
+      title: DecisionTasksIn
+    ExperienceTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        domain:
+          type: string
+          title: Domain
+          default: all
+        status:
+          type: string
+          pattern: ^(all|simple|watch|complex)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_simple:
+          type: boolean
+          title: Include Simple
+          default: false
+      additionalProperties: false
+      type: object
+      title: ExperienceTaskIn
+    IssueOpsTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        categories:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Categories
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 20
+      additionalProperties: false
+      type: object
+      title: IssueOpsTasksIn
+    DataDevEvidenceTasksIn:
+      properties:
+        schedule_id:
+          type: string
+          maxLength: 120
+          title: Schedule Id
+          default: ''
+        packet_id:
+          type: string
+          maxLength: 120
+          title: Packet Id
+          default: ''
+        decisions:
+          items:
+            type: string
+          type: array
+          maxItems: 5
+          title: Decisions
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          maxLength: 80
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: DataDevEvidenceTasksIn
+    SelfHealTasksIn:
+      properties:
+        signals:
+          additionalProperties: true
+          type: object
+          title: Signals
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: codex
+      additionalProperties: false
+      type: object
+      title: SelfHealTasksIn
+    IsolationTaskIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          title: Ids
+        status:
+          type: string
+          pattern: ^(all|protected|watch|risk)$
+          title: Status
+          default: watch
+        q:
+          type: string
+          title: Q
+          default: ''
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P0
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        max_items:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Max Items
+          default: 12
+        include_protected:
+          type: boolean
+          title: Include Protected
+          default: false
+      additionalProperties: false
+      type: object
+      title: IsolationTaskIn
+    AuditTaskIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: copilot
+      additionalProperties: false
+      type: object
+      title: AuditTaskIn
+    UsageAlertTasksIn:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Ids
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        dev_tool:
+          type: string
+          title: Dev Tool
+          default: copilot
+      additionalProperties: false
+      type: object
+      title: UsageAlertTasksIn
+    TaskDependencyTasksIn:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+          default: true
+        include_cycles:
+          type: boolean
+          title: Include Cycles
+          default: true
+        include_blocked:
+          type: boolean
+          title: Include Blocked
+          default: true
+        include_bottlenecks:
+          type: boolean
+          title: Include Bottlenecks
+          default: true
+        include_missing_map:
+          type: boolean
+          title: Include Missing Map
+          default: true
+        owner_id:
+          type: string
+          maxLength: 100
+          title: Owner Id
+          default: ''
+        priority:
+          type: string
+          pattern: ^P[0-3]$
+          title: Priority
+          default: P1
+        limit:
+          type: integer
+          maximum: 100.0
+          minimum: 1.0
+          title: Limit
+          default: 30
+      additionalProperties: false
+      type: object
+      title: TaskDependencyTasksIn
+    DeliveryTaskOwner:
+      type: object
+      required:
+      - id
+      - name
+      - kind
+      - active
+      - available
+      - reasons
+      properties:
+        id:
+          type: string
+          maxLength: 100
+        name:
+          type:
+          - string
+          - 'null'
+        kind:
+          type:
+          - string
+          - 'null'
+          enum:
+          - human
+          - agent
+          - tool
+          - null
+        active:
+          type: boolean
+        available:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskReviewReason'
+      description: Current scoped responsibility identity. Unavailable IDs remain identifiable; labels never select or authorize
+        owners.

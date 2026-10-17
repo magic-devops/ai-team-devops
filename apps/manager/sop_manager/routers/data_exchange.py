@@ -14,6 +14,8 @@ from sqlalchemy import JSON, Integer, Float
 from sqlalchemy.orm import Session
 
 from sop_manager.path_config import resolved_project_id, resolved_runtime_dir, resolved_tenant_id
+from sop_manager.task_owner import validate_task_owner_values
+from sop_manager.task_acceptance import normalize_task_acceptance
 from .auth_sql import User, current_user, require_data_hub_import
 from .db_sql_compat import rows
 from .sql_models import get_session, Requirement, Task, Sprint, Issue
@@ -167,6 +169,8 @@ def export_data(
                 data["agent_reflections"] = []
             continue
         raw = rows(name, 1000)
+        if name == "tasks":
+            raw = [{k: v for k, v in row.items() if k not in {"assigned_to", "owner"}} for row in raw]
         data[name] = _serialize_rows(raw)
     fname = "export.json"
     return JSONResponse(
@@ -235,6 +239,18 @@ def _merge_table(db: Session, name: str, items: List[dict], tenant_id: str, proj
     model = _MODEL_MAP.get(name)
     if not model or not isinstance(items, list):
         return 0
+    if model is Task:
+        from .sql_models import Project
+        project = db.get(Project, project_id)
+        if not project or project.tenant_id != tenant_id:
+            raise HTTPException(422, "Task project scope does not exist")
+        items = [validate_task_owner_values(db, project, row) for row in items]
+        for row in items:
+            if "acceptance_criteria" in row:
+                try:
+                    row["acceptance_criteria"] = normalize_task_acceptance(row["acceptance_criteria"])
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc)) from exc
     n = 0
     for row in items:
         rid = row.get("id")

@@ -336,7 +336,7 @@ export function Projects({
   });
 
   const bootstrapTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.projectBootstrapTasks(selectedProjectId, { dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+    mutationFn: (dryRun: boolean) => api.projectBootstrapTasks(selectedProjectId, { dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
       setBootstrapResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -345,7 +345,7 @@ export function Projects({
     },
   });
   const opsTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.projectOpsTasks(selectedProjectId, { dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+    mutationFn: (dryRun: boolean) => api.projectOpsTasks(selectedProjectId, { dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
       setBootstrapResult(data);
       void qc.invalidateQueries({ queryKey: ["tasks"] });

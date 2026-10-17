@@ -120,9 +120,11 @@ class ExecutionRequirementSnapshot(ExecutionInput):
 
 class ExecutionOwnerSnapshot(ExecutionInput):
     id: str
-    name: str
-    kind: Literal["human", "agent", "tool"]
+    name: str | None
+    kind: Literal["human", "agent", "tool"] | None
     active: bool
+    available: bool
+    reasons: list[dict[str, str]]
 
 
 class ExecutionSnapshot(ExecutionInput):

@@ -1,3 +1,4 @@
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import { Activity, CloudCog, FileText, ListChecks, MessageSquare, Network, PackageCheck, PlayCircle, Rocket, Search, Send, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button, Drawer, Form, Input, Select, Space, Steps, Switch } from "antd";
@@ -634,7 +635,7 @@ export function SettingsProfilesPanel({
                       <select className={inputClass} value={deploymentRollbackRunbookDraft.task_priority} onChange={(e) => setDeploymentRollbackRunbookDraft({ ...deploymentRollbackRunbookDraft, task_priority: e.target.value })}>
                         {["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{priority}</option>)}
                       </select>
-                      <input className={inputClass} value={deploymentRollbackRunbookDraft.assigned_to} onChange={(e) => setDeploymentRollbackRunbookDraft({ ...deploymentRollbackRunbookDraft, assigned_to: e.target.value })} placeholder={t("page.settings.rollbackRunbookAssignee")} />
+                      <ProjectOwnerSelect value={deploymentRollbackRunbookDraft.owner_id} onChange={(owner_id) => setDeploymentRollbackRunbookDraft({ ...deploymentRollbackRunbookDraft, owner_id: owner_id })} placeholder={t("page.settings.rollbackRunbookAssignee")} />
                       <input className={inputClass} value={deploymentRollbackRunbookDraft.dev_tool} onChange={(e) => setDeploymentRollbackRunbookDraft({ ...deploymentRollbackRunbookDraft, dev_tool: e.target.value })} placeholder={t("page.settings.rollbackRunbookDevTool")} />
                     </div>
                     <textarea
@@ -840,7 +841,7 @@ export function SettingsProfilesPanel({
                     </div>
                     <div className="grid gap-3 md:grid-cols-[1fr_1fr_12rem_12rem]">
                       <input className={inputClass} value={deploymentExecutionAuditDraft.evidence_url} onChange={(e) => setDeploymentExecutionAuditDraft({ ...deploymentExecutionAuditDraft, evidence_url: e.target.value })} placeholder={t("page.settings.executionAuditEvidenceUrl")} />
-                      <input className={inputClass} value={deploymentExecutionAuditDraft.assigned_to} onChange={(e) => setDeploymentExecutionAuditDraft({ ...deploymentExecutionAuditDraft, assigned_to: e.target.value })} placeholder={t("page.settings.executionAuditAssignee")} />
+                      <ProjectOwnerSelect value={deploymentExecutionAuditDraft.owner_id} onChange={(owner_id) => setDeploymentExecutionAuditDraft({ ...deploymentExecutionAuditDraft, owner_id: owner_id })} placeholder={t("page.settings.executionAuditAssignee")} />
                       <select className={inputClass} value={deploymentExecutionAuditDraft.priority} onChange={(e) => setDeploymentExecutionAuditDraft({ ...deploymentExecutionAuditDraft, priority: e.target.value })}>
                         {["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{priority}</option>)}
                       </select>
@@ -1748,7 +1749,7 @@ export function SettingsProfilesPanel({
                           <select className={inputClass} value={deploymentPipelineRemediationDraft.priority} onChange={(e) => setDeploymentPipelineRemediationDraft({ ...deploymentPipelineRemediationDraft, priority: e.target.value })}>
                             {["P0", "P1", "P2", "P3"].map((priority) => <option key={priority} value={priority}>{`${t("page.settings.pipelineRemediationPriority")} ${priority}`}</option>)}
                           </select>
-                          <input className={inputClass} value={deploymentPipelineRemediationDraft.assigned_to} onChange={(e) => setDeploymentPipelineRemediationDraft({ ...deploymentPipelineRemediationDraft, assigned_to: e.target.value })} placeholder={t("page.settings.pipelineRemediationAssignee")} />
+                          <ProjectOwnerSelect value={deploymentPipelineRemediationDraft.owner_id} onChange={(owner_id) => setDeploymentPipelineRemediationDraft({ ...deploymentPipelineRemediationDraft, owner_id: owner_id })} placeholder={t("page.settings.pipelineRemediationAssignee")} />
                           <input className={inputClass} value={deploymentPipelineRemediationDraft.dev_tool} onChange={(e) => setDeploymentPipelineRemediationDraft({ ...deploymentPipelineRemediationDraft, dev_tool: e.target.value })} placeholder={t("page.settings.pipelineRemediationDevTool")} />
                           <label className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs text-[var(--muted-strong)]">
                             <input type="checkbox" checked={deploymentPipelineRemediationDraft.include_low} onChange={(e) => setDeploymentPipelineRemediationDraft({ ...deploymentPipelineRemediationDraft, include_low: e.target.checked })} />

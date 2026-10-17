@@ -111,7 +111,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
   const [pForm, setPForm] = useState({ name: "", environment: "staging", steps: "" });
   const [rcaForm, setRcaForm] = useState({ incident_id: "", root_cause: "", impact: "", resolution: "" });
   const [rcaCreateDrawerOpen, setRcaCreateDrawerOpen] = useState(false);
-  const [rcaInsightFilter, setRcaInsightFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100", priority: "P1", assigned_to: "Ops Agent", dev_tool: "codex" });
+  const [rcaInsightFilter, setRcaInsightFilter] = useState({ run_id: "", trace_id: "", correlation_id: "", limit: "100", priority: "P1", owner_id: "", dev_tool: "codex" });
   const [rcaInsightDrawerOpen, setRcaInsightDrawerOpen] = useState(false);
   const [rcaInsightResult, setRcaInsightResult] = useState<any>(null);
   const [rcaInsightTasksResult, setRcaInsightTasksResult] = useState<any>(null);
@@ -160,7 +160,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     cooldown_minutes: "60",
     actions: "create_task,im_notify",
     priority: "P1",
-    assigned_to: "Ops Agent",
+    owner_id: "",
     dev_tool: "codex",
     owner: "Ops Lead",
     note: "高风险 SLO 预测自动升级为任务和 IM 风险简报。",
@@ -181,7 +181,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     actions: "create_task,im_notify",
     max_items: "8",
     priority: "P1",
-    assigned_to: "Ops Agent",
+    owner_id: "",
     dev_tool: "codex",
     note: "联动策略灰度审计、SLO 升级、Runbook、自愈、任务和 IM 通知。",
   });
@@ -327,7 +327,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       limit: Number(rcaInsightFilter.limit || 100),
       dry_run: dryRun,
       priority: rcaInsightFilter.priority,
-      assigned_to: rcaInsightFilter.assigned_to,
+      owner_id: rcaInsightFilter.owner_id,
       dev_tool: rcaInsightFilter.dev_tool,
     }),
     onSuccess: (data, dryRun) => {
@@ -344,7 +344,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       correlation_id: rcaInsightFilter.correlation_id,
       limit: Number(rcaInsightFilter.limit || 100),
       candidate_id: candidate.id,
-      owner: rcaInsightFilter.assigned_to,
+      owner: rcaInsightFilter.owner_id,
       selected_runbook_ids: (candidate.recommended_runbooks ?? []).slice(0, 3).map((runbook: any) => runbook.id).filter(Boolean),
       note: `created from ${candidate.kind}`,
     }),
@@ -526,7 +526,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
     mutationFn: (dryRun: boolean) => api.opsAlertSloEscalationRun({
       dry_run: dryRun,
       priority: alertSloEscalationForm.priority,
-      assigned_to: alertSloEscalationForm.assigned_to,
+      owner_id: alertSloEscalationForm.owner_id,
       dev_tool: alertSloEscalationForm.dev_tool,
       channels: imChannels,
       window_hours: 24,
@@ -572,7 +572,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       actions: opsStrategyLinkageForm.actions.split(",").map(item => item.trim()).filter(Boolean),
       max_items: Number(opsStrategyLinkageForm.max_items) || 8,
       priority: opsStrategyLinkageForm.priority,
-      assigned_to: opsStrategyLinkageForm.assigned_to,
+      owner_id: opsStrategyLinkageForm.owner_id,
       dev_tool: opsStrategyLinkageForm.dev_tool,
       channels: imChannels,
       note: opsStrategyLinkageForm.note,
@@ -710,7 +710,7 @@ export function OpsCenterWorkbench({ focused = false, initialTab = "pipelines" }
       signals: parseSignals(signalText),
       dry_run: dryRun,
       priority: "P1",
-      assigned_to: "Ops Agent",
+      owner_id: "",
       dev_tool: "codex",
     }),
     onSuccess: (data) => {

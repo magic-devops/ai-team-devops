@@ -119,10 +119,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   sprint_id VARCHAR(64) NOT NULL DEFAULT '',
   title VARCHAR(256) NOT NULL,
   description TEXT NULL,
+  acceptance_criteria JSON NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'pending',
   priority VARCHAR(8) NOT NULL DEFAULT 'P1',
   estimate VARCHAR(8) NOT NULL DEFAULT 'M',
-  assigned_to VARCHAR(64) NOT NULL DEFAULT '',
+  owner_id VARCHAR(100) NOT NULL DEFAULT '',
   actual_hours DOUBLE NOT NULL DEFAULT 0,
   confidence DOUBLE NOT NULL DEFAULT 0,
   human_notes TEXT NULL,
@@ -130,7 +131,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
   KEY idx_tasks_scope_status (tenant_code, business_code, project_id, status),
-  KEY idx_tasks_scope_assignee (tenant_code, business_code, project_id, assigned_to),
+  KEY idx_tasks_scope_owner (tenant_code, business_code, project_id, owner_id),
   KEY idx_tasks_scope_sprint (tenant_code, business_code, project_id, sprint_id)
 ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 

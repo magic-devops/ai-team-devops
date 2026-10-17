@@ -173,10 +173,10 @@ def test_metrics_governance_tasks_preview_and_create(tmp_path):
         )
 
         preview = metrics_service.metrics_governance_tasks(
-            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=True, assigned_to="MetricsOps")
+            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=True, owner_id="")
         )
         created = metrics_service.metrics_governance_tasks(
-            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=False, assigned_to="MetricsOps")
+            metrics_service.MetricsGovernanceTasksIn(ids=[metric["id"]], dry_run=False, owner_id="")
         )
 
     assert preview["dry_run"] is True

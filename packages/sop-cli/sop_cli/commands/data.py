@@ -87,7 +87,7 @@ def blueprint_tasks(
     ids: str = typer.Option("", "--ids", help="逗号分隔 data-gap ID；为空则处理全部缺口"),
     apply: bool = typer.Option(False, "--apply", help="落库生成任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("Data Platform Agent", "--assignee", help="负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("codex", "--tool", help="推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -96,7 +96,7 @@ def blueprint_tasks(
         "ids": _csv_ids(ids),
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -236,7 +236,7 @@ def governance_tasks(
     ids: str = typer.Option("", "--ids", help="逗号分隔资产 ID；为空则处理未通过质量评估的资产"),
     apply: bool = typer.Option(False, "--apply", help="落库生成任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("Data Governance Agent", "--assignee", help="负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("codex", "--tool", help="推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -245,7 +245,7 @@ def governance_tasks(
         "ids": _csv_ids(ids),
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -260,7 +260,7 @@ def governance_tasks(
         kv("preview", len(out.get("items") or []))
     else:
         ok(f"created {out.get('created', 0)} data governance tasks")
-    _render_simple("data governance tasks", list(out.get("items") or []), ("source_report_id", "priority", "assigned_to", "title"))
+    _render_simple("data governance tasks", list(out.get("items") or []), ("source_report_id", "priority", "owner_id", "title"))
 
 
 @app.command(name="services")
@@ -333,7 +333,7 @@ def alert_tasks(
     ids: str = typer.Option("", "--ids", help="逗号分隔告警/资产/服务 ID；为空处理全部告警"),
     apply: bool = typer.Option(False, "--apply", help="落库生成任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("Data Governance Agent", "--assignee", help="负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("codex", "--tool", help="推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -342,7 +342,7 @@ def alert_tasks(
         "ids": _csv_ids(ids),
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -357,7 +357,7 @@ def alert_tasks(
         kv("preview", len(out.get("items") or []))
     else:
         ok(f"created {out.get('created', 0)} data alert tasks")
-    _render_simple("data alert tasks", list(out.get("items") or []), ("source_report_id", "priority", "assigned_to", "title"))
+    _render_simple("data alert tasks", list(out.get("items") or []), ("source_report_id", "priority", "owner_id", "title"))
 
 
 @app.command(name="dev-templates")
@@ -383,7 +383,7 @@ def dev_tasks(
     ids: str = typer.Option("", "--ids", help="逗号分隔模板 ID；为空处理全部模板"),
     apply: bool = typer.Option(False, "--apply", help="落库生成任务；默认只预览"),
     priority: str = typer.Option("", "--priority", help="覆盖 P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("", "--assignee", help="覆盖负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("", "--tool", help="覆盖推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -392,7 +392,7 @@ def dev_tasks(
         "ids": _csv_ids(ids),
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -407,7 +407,7 @@ def dev_tasks(
         kv("preview", len(out.get("items") or []))
     else:
         ok(f"created {out.get('created', 0)} data development tasks")
-    _render_simple("data development tasks", list(out.get("items") or []), ("source_report_id", "priority", "assigned_to", "title"))
+    _render_simple("data development tasks", list(out.get("items") or []), ("source_report_id", "priority", "owner_id", "title"))
 
 
 @app.command(name="dev-schedule")
@@ -417,7 +417,7 @@ def dev_schedule(
     max_parallel: int = typer.Option(4, "--max-parallel", min=1, max=20, help="最大并发泳道"),
     policy: str = typer.Option("quality_first", "--policy", help="quality_first|balanced|throughput|cost_saver"),
     priority: str = typer.Option("", "--priority", help="覆盖 P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("", "--assignee", help="覆盖负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("", "--tool", help="覆盖推荐开发工具"),
     event: str = typer.Option("cli", "--event", help="触发事件来源"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -429,7 +429,7 @@ def dev_schedule(
         "max_parallel": max_parallel,
         "policy": policy,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
         "event": event,
     }
@@ -450,7 +450,7 @@ def dev_schedule(
         kv("mode", "preview")
     else:
         ok(f"applied schedule and created {out.get('created', 0)} data development tasks")
-    _render_simple("data development agent packets", list(out.get("agent_packets") or []), ("template_id", "priority", "lane", "assigned_to", "dev_tool"))
+    _render_simple("data development agent packets", list(out.get("agent_packets") or []), ("template_id", "priority", "lane", "owner_id", "dev_tool"))
 
 
 @app.command(name="dev-ops")
@@ -482,7 +482,7 @@ def dev_runbook(
     include_unclaimed: bool = typer.Option(True, "--include-unclaimed/--no-include-unclaimed", help="纳入未领取的 ready packet"),
     apply: bool = typer.Option(False, "--apply", help="落库生成 Runbook 任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("Data Automation Agent", "--assignee", help="默认负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("codex", "--tool", help="推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -494,7 +494,7 @@ def dev_runbook(
         "include_unclaimed": include_unclaimed,
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -556,7 +556,7 @@ def dev_schedule_action(
     max_parallel: int = typer.Option(4, "--max-parallel", min=1, max=20, help="最大并发泳道"),
     policy: str = typer.Option("quality_first", "--policy", help="quality_first|balanced|throughput|cost_saver"),
     priority: str = typer.Option("", "--priority", help="覆盖 P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("", "--assignee", help="覆盖负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("", "--tool", help="覆盖推荐开发工具"),
     note: str = typer.Option("cli", "--note", help="动作备注"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
@@ -568,7 +568,7 @@ def dev_schedule_action(
         "max_parallel": max_parallel,
         "policy": policy,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
         "note": note,
     }
@@ -589,7 +589,7 @@ def dev_schedule_action(
             kv("mode", "preview")
         else:
             ok(f"rerun applied and created {out.get('created', 0)} data development tasks")
-        _render_simple("data development rerun packets", list(out.get("agent_packets") or []), ("template_id", "priority", "lane", "assigned_to", "dev_tool"))
+        _render_simple("data development rerun packets", list(out.get("agent_packets") or []), ("template_id", "priority", "lane", "owner_id", "dev_tool"))
         return
     item = out.get("item") or {}
     ok(f"schedule {schedule_id} {action}: {item.get('status', '')}")
@@ -701,7 +701,7 @@ def dev_evidence_tasks(
     decisions: str = typer.Option("block,warn", "--decisions", help="逗号分隔 pass|warn|block"),
     apply: bool = typer.Option(False, "--apply", help="落库生成任务；默认只预览"),
     priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    assigned_to: str = typer.Option("Data Quality Agent", "--assignee", help="负责人/Agent"),
+    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
     dev_tool: str = typer.Option("codex", "--tool", help="推荐开发工具"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
@@ -712,7 +712,7 @@ def dev_evidence_tasks(
         "decisions": _csv_ids(decisions),
         "dry_run": not apply,
         "priority": priority,
-        "assigned_to": assigned_to,
+        "owner_id": owner_id,
         "dev_tool": dev_tool,
     }
     try:
@@ -727,7 +727,7 @@ def dev_evidence_tasks(
         kv("preview", len(out.get("items") or []))
     else:
         ok(f"created {out.get('created', 0)} data evidence fix tasks")
-    _render_simple("data evidence fix tasks", list(out.get("items") or []), ("source_report_id", "priority", "assigned_to", "title"))
+    _render_simple("data evidence fix tasks", list(out.get("items") or []), ("source_report_id", "priority", "owner_id", "title"))
 
 
 @app.command(name="dev-evidence-notify")

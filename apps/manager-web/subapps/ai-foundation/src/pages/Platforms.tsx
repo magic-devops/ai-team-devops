@@ -210,7 +210,7 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
     void qc.invalidateQueries({ queryKey: ["agent-slo"] });
   };
   const agentRebalanceTasks = useMutation({
-    mutationFn: (dryRun: boolean) => api.agentRunsRebalanceTasks({ dry_run: dryRun, priority: "P1", assigned_to: "Coder" }),
+    mutationFn: (dryRun: boolean) => api.agentRunsRebalanceTasks({ dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data, dryRun) => {
       setFlash({
         kind: "ok",
@@ -317,7 +317,7 @@ export function Platforms({ initialModule = "tools" }: { initialModule?: Platfor
   });
   const platformOpsTasks = useMutation({
     mutationFn: (dryRun: boolean) =>
-      api.platformsOpsTasks({ dry_run: dryRun, priority: "P1", assigned_to: "DevOps" }),
+      api.platformsOpsTasks({ dry_run: dryRun, priority: "P1", owner_id: "" }),
     onSuccess: (data) => {
       setOpsResult(data);
       setFlash({

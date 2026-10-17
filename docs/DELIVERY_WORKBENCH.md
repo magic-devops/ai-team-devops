@@ -11,7 +11,7 @@
 | 项目 | 真实 Project 名称、简介及交付目标、负责人、起止日期；按字段保存，项目选择沿用现有控制台 |
 | 项目资料 | 仓库、文档、设计及其他链接；编辑、分类筛选、可恢复归档；配置权限、版本冲突与来源记录 |
 | 交付待办 | 本人/团队的工作、可评审阶段、当前有效待验收执行及阻塞事项；分类去重、实际日期、准确跳转 |
-| 团队 | 读取实际项目人员及租户管理员；登记智能体与工具；分配责任人与查看未完成任务负载 |
+| 团队 | 实际人员与Agent/工具登记、稳定身份归属、成员筛选/详情/任务深链、明确失效与重新分配，运行配置独立表达 |
 | 需求 | 创建、编辑、验收标准、优先级、负责人、截止日期、里程碑、阻塞原因、问题来源 |
 | 需求辅助 | 明确选择 AI 或规则；采集、评审和原型先预览、编辑、选择后确认；保存生成来源、实际用量与历史，旧建议基准变化后不能直接采用 |
 | 设计 | 产品设计、UED 原型、架构设计、代码变更、测试报告、运维手册的内容与链接登记；按修订保留历史 |
@@ -62,7 +62,7 @@
 
 SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_command(body)`；CLI 提供 `sop delivery workspace`、`sop delivery targets`、`sop delivery command --file <json>`，均沿用相同作用域、版本与幂等命令。API 契约位于 `apis/openapi/openapi.yaml`。
 
-新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。Task 增加正式 `acceptance_criteria` 文本列，旧库使用显式 `sop-manager schema verify|apply`，不在正常启动时隐式 ALTER。SQLite 升级已实测，PostgreSQL 仅编译验证；旧 MySQL/OceanBase 自动升级明确拒绝，需单独验证迁移。
+新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。Task 使用正式 `acceptance_criteria` 文本列与唯一 `owner_id` 身份列，旧库使用显式 `sop-manager schema verify|apply`，不在正常启动时隐式 ALTER。SQLite 升级已实测，PostgreSQL 仅编译验证；旧 MySQL/OceanBase 自动升级明确拒绝，需单独验证迁移。
 
 ## 需求拆解与任务计划
 
@@ -263,3 +263,21 @@ root核验Web全量339项/57文件、SDKCLI相关85项、TypeScript构建及最�
 证据 `.sop-runtime/delivery-evidence/task-acceptance/` 包含validation-proof、actual-loop-proof、actual-stale-completed-recovery、final-http-proof、ui-proof、contract-proof、唯一审查及定点复验、三语/桌面截图、源码与证据散列、scratch清理和commit回执。scratch清点哈希并保存重要源码后清理，活跃预览数据库和凭据保持忽略。按用户要求全部阶段非忽略更改commit，不push；.pnpm-store零跟踪。
 
 完整目标仍active，production_integration_complete=false。继续团队成员与runtime稳定身份绑定、项目组合与归档治理、完整节点内日志/干预恢复、生产账户/模型与干净锁定安装、可信CI提交级证据、版本/质量发布、真实部署灰度回滚、问题智能处理与运维闭环及规模验证。参考平台按具体能力选择吸收/接入，不以本阶段子集缩减用户全链路目标。
+
+## 团队稳定身份与协作工作台增量（2026-10-17）
+
+设计 `docs/DELIVERY_TEAM_IDENTITY_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-team-identity.md`。SQL `Task.owner_id` 是唯一任务归属源，删除名称存储列和 `DeliveryWorkspace.task_owners` 旧 map。`assigned_to` 仅为当前名称只读投影，普通 CRUD、批量、计划、调度、同步、导入、74 个治理 DTO 及 Web/CLI 写入都使用稳定 ID。默认角色标签不再制造负责人；缺少明确身份时保存未分配草稿，派发和验收必须有有效人员或 Agent，工具不能担责。
+
+新规范下改名不改变 Task basis、原生或人工验收、集体需求审批与进度基线；原审计名称保留。停用、移出项目、重新分配在原事务永久作废旧证明，恢复旧值不能复活。人工审批人仍需真实 approve 权限，责任 Agent 的人工验收明确标记 manual，不冒充真实 Agent 运行，也不能绕过已有 native 意图。普通及 Core/批量绑定 SQL 共用范围校验与生命周期观察。
+
+显式 schema verify/apply 仅迁移同租户、同项目真实任务的明确旧 ID，不按名字推断；缺失成员 ID 保留为不可用。冲突、非法 ID、DDL 失败的 SQLite 事务回滚已实测。旧无版本 tested_work/dependency_basis 不改绑为新依据，须重新评审；原审计不改。PostgreSQL 仅 DDL 编译，现有 MySQL/OceanBase 升级仍拒绝。预览实际迁移31个明确负责人；捕获的数据库快照核验为升级后，已如实标注，未冒称升级前回滚备份。
+
+团队列表、成员详情、共用负责人选择和任务派发表达统一：搜索/类型/登记状态筛选与 team_member 深链，姓名+类型+稳定ID区分同名，停用/缺失选择有明确提示，角色说明不授予权限，真实执行者/设备独立选择。本次不虚构运行绑定或已连接状态。负责人变更带当前所见 task_basis，409不自动采用新依据。关闭动画保留原可见内容到退场结束，未知非空ID不回退，跨项目不保留；修复旧grid样式冲突与负责人原因三语遗漏。
+
+root最终核验：Manager完整850项通过（412.67秒），Web完整360项/63文件通过（28.99秒），SDK/CLI相关24项、额外路由定点3项通过，TypeScript noEmit和最终生产构建通过（57.52秒）。此前完整833通过/1处旧改名断言已修复，并在最终完整运行消除。唯一独立增量审查的1个P2空值协议问题已修复并独立定点复验；没有第二轮宽审。旧代码E9/F债对比无新增，弃用与大包警告留档。
+
+真实公开HTTP证明：Agent同名不转移归属、改名保留basis/验收/原审计、停用恢复不复活、普通编辑省略保持/空串清空/重分配、工具/未知/跨项目拒绝、未分配草稿阻止派发。原真实native成功任务在人类用户名实际ORM改名及恢复后仍verified，原执行快照与运行/检查点不变。最终37任务/30需求、项目version229；纯GET前后28张表完全相同。非法写入按原审计机制追加4条审计，业务/进度/运行无变化；未关闭审计以制造零写结论。厂商模型调用0，未声称生产认证。
+
+实际浏览器：团队搜索与成员深链、键盘进入成员和关联Task、停用保存、不可用负责人提示、稳定ID搜索并Enter重新分配成功，刷新仍为新owner，返回保留成员/筛选；关闭两类详情不再闪missing。390px中英日document390/390、drawer390/390，最终桌面1280/1280、详情560/560，恢复中文和默认视口。证据 `.sop-runtime/delivery-evidence/team-identity/` 包含验证、HTTP、UI、严格契约711引用、审查复验、截图、源码散列、清理与commit回执。
+
+本阶段全部非忽略源码、测试、契约、文档和记忆统一commit，不push；`.pnpm-store/`仍忽略且0跟踪。完整目标继续active，production_integration_complete=false。紧接着完成团队成员与真实AgentProfile可选绑定的预览/派发/重检闭环，再推进项目组合/归档、质量与版本发布、真实部署灰度回滚、问题智能处理与运维闭环、生产账户/模型、可信CI与规模验证；不以本阶段子集缩减全流程目标。

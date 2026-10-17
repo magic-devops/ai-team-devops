@@ -1,6 +1,8 @@
 """Sprint CRUD — SQLAlchemy，支持租户/项目隔离"""
 from __future__ import annotations
 import uuid
+from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
+
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -54,7 +56,7 @@ def _task_stats(tasks: List[Task]) -> Dict[str, Any]:
         "in_progress": sum(1 for t in tasks if t.status == "in_progress"),
         "pending": sum(1 for t in tasks if t.status == "pending"),
         "blocked": [
-            {"id": t.id, "title": t.title, "assigned_to": t.assigned_to or ""}
+            {"id": t.id, "title": t.title, "owner_id": t.owner_id}
             for t in tasks
             if t.status == "blocked"
         ],
@@ -79,10 +81,10 @@ def _burndown_payload(sprint: Sprint, tasks: List[Task], db: Optional[Session] =
     }
 
 
-class SprintOpsTasksIn(BaseModel):
+class SprintOpsTasksIn(TaskOwnerInput):
     dry_run: bool = True
     priority: str = Field("P1", pattern="^P[0-3]$")
-    assigned_to: str = Field("SprintOps Agent", max_length=120)
+    owner_id: TaskOwnerId = ""
     sprint_id: str = ""
     categories: List[str] = Field(default_factory=list, max_length=20)
     limit: int = Field(20, ge=1, le=100)
@@ -192,7 +194,7 @@ def _sprint_ops_payload(sprints: List[Sprint], tasks: List[Task], issues: List[I
             ]),
             "priority": "P0" if risk.get("severity") == "P0" else "P1" if risk.get("severity") == "P1" else "P2",
             "estimate": "M",
-            "assigned_to": "SprintOps Agent",
+            "owner_id": "",
             "dev_tool": "codex-cli",
             "source": "sprint_ops",
             "source_report_id": str(risk.get("id") or ""),
@@ -218,7 +220,7 @@ def _sprint_ops_payload(sprints: List[Sprint], tasks: List[Task], issues: List[I
         "commands": [
             {"label": "查看迭代治理计划", "command": "sop sprint ops-plan --json"},
             {"label": "预览迭代治理任务", "command": "sop sprint ops-tasks --limit 20 --json"},
-            {"label": "生成迭代治理任务", "command": "sop sprint ops-tasks --apply --assigned-to \"SprintOps Agent\""},
+            {"label": "生成迭代治理任务", "command": "sop sprint ops-tasks --apply"},
         ],
         "agent_packet": {
             "purpose": "SprintOps: keep iteration scope executable, unblock delivery, and preserve retrospective knowledge for future planning.",
@@ -286,7 +288,7 @@ def sprints_ops_tasks(
         for item in candidates:
             payload = dict(item)
             payload["priority"] = body.priority or payload.get("priority") or "P1"
-            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "SprintOps Agent"
+            payload["owner_id"] = body.owner_id
             out = create_task(TaskCreate(**payload))
             task_id = str(out.get("id") or "")
             created.append(task_id)
@@ -296,7 +298,7 @@ def sprints_ops_tasks(
         for item in candidates:
             payload = dict(item)
             payload["priority"] = body.priority or payload.get("priority") or "P1"
-            payload["assigned_to"] = body.assigned_to or payload.get("assigned_to") or "SprintOps Agent"
+            payload["owner_id"] = body.owner_id
             items.append(payload)
     return {
         "ok": True,
