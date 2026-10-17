@@ -52,6 +52,10 @@ except Exception as _e:
 from sop_manager.routers.sql_models import create_all as _sql_create_all
 _sql_create_all()
 
+# Progress observations remain available when execution providers are disabled.
+from sop_manager.routers.delivery_progress_capture import mount_progress_observer
+mount_progress_observer(app)
+
 # ── 审计中间件 + 访问日志 ─────────────────────────────────────────
 from sop_manager.routers.audit import audit_middleware
 app.middleware("http")(audit_middleware)

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from datetime import date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -11,7 +12,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth_sql import _norm_role, check_project_access, current_user
-from .delivery_contract import PAYLOADS, STAGES, Command, TaskPlanPreview
+from .delivery_contract import (
+    PAYLOADS,
+    STAGES,
+    Command,
+    ProgressBaselineResponse,
+    ProgressObservationResponse,
+    ProgressResponse,
+    TaskPlanPreview,
+)
 from .delivery_service import (
     apply_action,
     identifier,
@@ -98,6 +107,58 @@ def delivery_inbox(
     return build_inbox(_snapshot(db, project, user), user, scope=scope)
 
 
+@router.get("/progress", response_model=ProgressResponse)
+def delivery_progress(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    starts_on: date | None = None,
+    ends_on: date | None = None,
+    scope: Annotated[Literal["project", "milestone", "sprint"], Query()] = "project",
+    scope_id: Annotated[str, Query(max_length=100)] = "",
+    baseline_id: Annotated[str, Query(max_length=64)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_query import progress
+
+    return progress(
+        db,
+        _project(db, user, project_id),
+        starts_on=starts_on,
+        ends_on=ends_on,
+        scope=scope,
+        scope_id=scope_id,
+        baseline_id=baseline_id,
+    )
+
+
+@router.get("/progress/observations/{observation_id}", response_model=ProgressObservationResponse)
+def delivery_progress_observation(
+    observation_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Annotated[Literal["project", "milestone", "sprint"], Query()] = "project",
+    scope_id: Annotated[str, Query(max_length=100)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_query import observation_detail
+
+    return observation_detail(
+        db, _project(db, user, project_id), observation_id, scope=scope, scope_id=scope_id
+    )
+
+
+@router.get("/progress/baselines/{baseline_id}", response_model=ProgressBaselineResponse)
+def delivery_progress_baseline(
+    baseline_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_query import baseline_detail
+
+    return baseline_detail(db, _project(db, user, project_id), baseline_id)
+
+
 @router.get("/execution-targets")
 def execution_targets(
     request: Request,
@@ -132,7 +193,7 @@ def _command_permission(action, payload):
         action == "project.update" and {"name", "description"} & payload.keys()
     ):
         return "configure"
-    if action in {"stage.advance", "stage.reopen", "release.save", "execution.review"}:
+    if action in {"stage.advance", "stage.reopen", "release.save", "execution.review", "baseline.create"}:
         return "approve"
     return "write"
 
@@ -241,6 +302,10 @@ def execute(
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action in {"progress.record", "baseline.create"}:
+        from .delivery_progress_baseline import apply_progress
+
+        return apply_progress(db, project, user, action, payload)
     if action.startswith("execution."):
         from .delivery_execution import apply_execution
 

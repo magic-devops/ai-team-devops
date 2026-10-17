@@ -13,6 +13,7 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Mapping
+from datetime import date
 from typing import Any
 from urllib.parse import quote
 
@@ -48,6 +49,25 @@ def _resource_segment(value: str) -> str:
     return quote(value, safe="")
 
 
+def _progress_scope_params(scope: str, scope_id: str) -> dict[str, str]:
+    if scope not in {"project", "milestone", "sprint"}:
+        raise ValueError("scope must be project, milestone or sprint")
+    if (scope == "project" and scope_id) or (scope != "project" and not scope_id):
+        raise ValueError("scope_id is required only for milestone or sprint scope")
+    params = {"scope": scope}
+    if scope_id:
+        if len(scope_id) > 64 or any(ord(char) < 32 for char in scope_id):
+            raise ValueError("scope_id must be a valid resource ID of at most 64 characters")
+        params["scope_id"] = scope_id
+    return params
+
+
+def _progress_date(value: str) -> date:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+        raise ValueError("progress dates must use YYYY-MM-DD")
+    return date.fromisoformat(value)
+
+
 class ManagerClient:
     """同步 HTTP 客户端；如需异步用 AsyncManagerClient（M3+ 提供）。"""
 
@@ -59,6 +79,45 @@ class ManagerClient:
         if scope not in {"mine", "team"}:
             raise ValueError("scope must be mine or team")
         return self._request("GET", "/api/v1/delivery/inbox", params={"scope": scope})
+
+    def delivery_progress(
+        self,
+        *,
+        starts_on: str | None = None,
+        ends_on: str | None = None,
+        scope: str = "project",
+        scope_id: str = "",
+        baseline_id: str = "",
+    ) -> dict[str, Any]:
+        """Read persisted observations and live scope; missing dates remain null."""
+        params = _progress_scope_params(scope, scope_id)
+        start = _progress_date(starts_on) if starts_on is not None else None
+        end = _progress_date(ends_on) if ends_on is not None else None
+        if start and end and not 0 <= (end - start).days < 366:
+            raise ValueError("progress date range must contain between 1 and 366 days")
+        if starts_on is not None:
+            params["starts_on"] = starts_on
+        if ends_on is not None:
+            params["ends_on"] = ends_on
+        if baseline_id:
+            _resource_segment(baseline_id)
+            params["baseline_id"] = baseline_id
+        return self._request("GET", "/api/v1/delivery/progress", params=params)
+
+    def delivery_progress_observation(
+        self, observation_id: str, *, scope: str = "project", scope_id: str = ""
+    ) -> dict[str, Any]:
+        """Read an original historical snapshot without treating it as current work."""
+        params = _progress_scope_params(scope, scope_id)
+        resource = _resource_segment(observation_id)
+        return self._request(
+            "GET", f"/api/v1/delivery/progress/observations/{resource}", params=params
+        )
+
+    def delivery_baseline(self, baseline_id: str) -> dict[str, Any]:
+        """Read an immutable plan and its actual current scope comparison."""
+        resource = _resource_segment(baseline_id)
+        return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}")
 
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")

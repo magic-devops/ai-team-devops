@@ -18,7 +18,7 @@ from sop_manager.path_config import (
     resolved_tenant_code,
 )
 from .webhook import notify_webhook
-from .delivery_progress import burndown_observation
+from .delivery_progress import burndown_observation, sprint_burndown_history
 
 router = APIRouter(prefix="/api/v1/sprints", tags=["sprints"],
                    dependencies=[Depends(require_business_access)])
@@ -29,7 +29,7 @@ def _row(s: Sprint) -> dict:
             "goal": s.goal, "status": s.status, "planned_points": s.planned_points,
             "velocity": s.velocity, "completion_rate": s.completion_rate,
             "retrospective": s.retrospective,
-            "started_at": s.started_at.isoformat() + "Z",
+            "started_at": s.started_at.isoformat() + "Z" if s.started_at else None,
             "ends_at": s.ends_at.isoformat() + "Z" if s.ends_at else None}
 
 
@@ -64,7 +64,7 @@ def _task_stats(tasks: List[Task]) -> Dict[str, Any]:
     }
 
 
-def _burndown_payload(sprint: Sprint, tasks: List[Task]) -> Dict[str, Any]:
+def _burndown_payload(sprint: Sprint, tasks: List[Task], db: Optional[Session] = None, now: Optional[datetime] = None) -> Dict[str, Any]:
     stats = _task_stats(tasks)
     total = int(stats["total_tasks"])
     remaining = int(stats["remaining"])
@@ -74,7 +74,8 @@ def _burndown_payload(sprint: Sprint, tasks: List[Task]) -> Dict[str, Any]:
         "ok": True,
         "sprint": _row(sprint),
         "stats": stats,
-        **burndown_observation(total, remaining, started, ends),
+        **(sprint_burndown_history(db, sprint, started, ends, now=now) if db is not None
+           else burndown_observation(total, remaining, started, ends, now=now)),
     }
 
 
@@ -467,7 +468,7 @@ def sprint_burndown(
     if not s:
         raise HTTPException(404, "Sprint 不存在")
     tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
-    return _burndown_payload(s, tasks)
+    return _burndown_payload(s, tasks, db=db)
 
 
 @router.delete("/{sprint_id}")

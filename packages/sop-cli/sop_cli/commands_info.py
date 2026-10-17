@@ -15,7 +15,7 @@ class CmdEntry(TypedDict, total=False):
 
 # 顶层与子命令说明（与 __main__.py add_typer 保持同步）
 COMMAND_TREE: dict[str, CmdEntry] = {
-    "delivery": {"help": "项目交付与执行验收", "subs": {"workspace": "业务快照", "inbox": "个人/团队交付待办（--scope mine|team，--json）", "targets": "执行目标", "preview": "任务计划预览（--file JSON，显式 generator）", "command": "版本与幂等命令（--file JSON）"}},
+    "delivery": {"help": "项目交付与执行验收", "subs": {"workspace": "业务快照", "inbox": "个人/团队交付待办（--scope mine|team，--json）", "progress": "真实进度历史与基线比较（--from/--to/--scope/--baseline/--json）", "observation": "历史任务观测（ID，--scope，--json）", "baseline": "不可变计划与当前范围变化（ID，--json）", "targets": "执行目标", "preview": "任务计划预览（--file JSON，显式 generator）", "command": "版本与幂等命令（--file JSON）"}},
     "help": {"help": "帮助总览/命令摘要", "subs": {"--examples": "附带示例", "--group": "按场景过滤示例"}},
     "init": {"help": "初始化项目（memory / .ai-memory / agent.toml）"},
     "register": {

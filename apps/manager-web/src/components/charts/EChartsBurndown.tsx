@@ -4,6 +4,7 @@ import type { EChartsOption } from "echarts";
 import { chartPalette, readCssVar } from "../../lib/charts/cssVars";
 import type { BurndownData } from "../../pages/shared/SprintBurndownChart";
 import { EChartsPanel } from "./EChartsPanel";
+import { burndownChartObservations } from "../../lib/burndownHistory";
 
 export function EChartsBurndown({
   data,
@@ -18,7 +19,7 @@ export function EChartsBurndown({
   const option = useMemo<EChartsOption | null>(() => {
     if (!data?.ideal?.length) return null;
     const ideal = data.ideal.map((p) => [p.day, p.remaining]);
-    const actual = data.actual.map((p) => [p.day, p.remaining]);
+    const actual = burndownChartObservations(data.actual);
     const muted = readCssVar("--muted", "#94a3b8");
     const brand = chartPalette()[0]!;
 

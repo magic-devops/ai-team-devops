@@ -38,7 +38,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { getProjectId, getToken, getWorkspaceScope } from "@/lib/authStorage";
 import {
-  dailyDeliveryHistory,
   deliveryStages,
   fetchDelivery,
   fetchDeliveryInbox,
@@ -82,6 +81,9 @@ import {
 import { DeliveryProjectResources } from "./DeliveryProjectResources";
 import { DeliveryInbox } from "./DeliveryInbox";
 import { DeliveryProjectOverview } from "./DeliveryProjectOverview";
+import { DeliveryProgress, DeliveryProgressSummary } from "./DeliveryProgress";
+import { preserveProgressRoute } from "@/lib/deliveryProgress";
+import { DeliveryActivityAction } from "./DeliveryActivityAction";
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("sop-session", cb);
@@ -274,8 +276,10 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${hash}`,
+      `${location.pathname}${location.search}${nextView === "progress" ? preserveProgressRoute(hash, location.hash) : hash}`,
     );
+    if (nextView === "progress")
+      window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const data = query.data;
   const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
@@ -330,7 +334,6 @@ function ProjectDelivery() {
     const frame = requestAnimationFrame(locateTask);
     return () => cancelAnimationFrame(frame);
   }, [selectedId, selectedTaskId, detailTab]);
-  const observedHistory = dailyDeliveryHistory(data?.history || []);
   const visible = filterRequirements(
     data?.requirements || [],
     search,
@@ -815,13 +818,7 @@ function ProjectDelivery() {
           <li key={e.id}>
             <span className="delivery-activity-dot" />
             <div>
-              <strong>
-                {t(`delivery.actions.${e.action}`, {
-                  defaultValue: t(`deliveryProject.actions.${e.action}`, {
-                    defaultValue: e.action,
-                  }),
-                })}
-              </strong>
+              <DeliveryActivityAction action={e.action} />
               <small>
                 {e.actor} ·{" "}
                 {new Date(e.created_at).toLocaleString(i18n.language)}
@@ -1023,7 +1020,12 @@ function ProjectDelivery() {
         onChange={(v) => navigate(v)}
         items={views.map((key) => ({
           key,
-          label: ["resources", "inbox"].includes(key) ? tp(key) : tr(key),
+          label:
+            key === "progress"
+              ? t("deliveryProgress.title")
+              : ["resources", "inbox"].includes(key)
+                ? tp(key)
+                : tr(key),
           icon:
             key === "list" ? (
               <List size={15} />
@@ -1101,46 +1103,11 @@ function ProjectDelivery() {
             ))}
           </div>
           <div className="delivery-overview-grid">
-            <section className="delivery-panel">
-              <div className="delivery-section-heading">
-                <h2>{tr("history")}</h2>
-                <Tag>{tr("manual")}</Tag>
-              </div>
-              <p className="delivery-hint">{tr("historyHint")}</p>
-              {data.history.length ? (
-                <div className="delivery-history">
-                  {observedHistory.map((h, i) => (
-                    <div
-                      key={`${h.at}-${i}`}
-                      title={`${new Date(h.at).toLocaleString(i18n.language)} · ${tr("accepted")}: ${h.accepted} · ${tr("requirements")}: ${h.requirements}`}
-                    >
-                      <div className="delivery-history-column">
-                        <span
-                          style={{
-                            height: `${Math.max(2, (h.requirements / Math.max(1, ...observedHistory.map((x) => x.requirements))) * 100)}%`,
-                          }}
-                        >
-                          <i
-                            style={{
-                              height: `${h.requirements ? (h.accepted / h.requirements) * 100 : 0}%`,
-                            }}
-                          />
-                        </span>
-                      </div>
-                      <small>{date(h.at)}</small>
-                      <b>
-                        {h.accepted}/{h.requirements}
-                      </b>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description={tr("noHistory")}
-                />
-              )}
-            </section>
+            <DeliveryProgressSummary
+              projectId={projectId}
+              sessionId={sessionId}
+              onOpen={() => navigate("progress", "")}
+            />
             <section className="delivery-panel">
               <h2>{tr("activity")}</h2>
               {activityView()}
@@ -1163,6 +1130,15 @@ function ProjectDelivery() {
               showArchived: archived,
             });
           }}
+        />
+      )}
+      {view === "progress" && (
+        <DeliveryProgress
+          projectId={projectId}
+          sessionId={sessionId}
+          workspace={data}
+          onWorkspace={saveWorkspace}
+          onOpenTask={openTarget}
         />
       )}
       {view === "inbox" && (

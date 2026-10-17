@@ -5,6 +5,7 @@ const zh = {
   latestValues: "服务器当前内容",
   keepDraft: "已核对，保留草稿并采用此版本",
   burndownDates: "请填写有效的迭代起止日期；当前没有可定位到日期的燃尽记录。",
+  burndownVerified: "按已验证完成统计未验证任务",
   burndownSnapshot:
     "仅有当前观测点，尚无历史快照。虚线为按当前任务范围计算的理想参考。",
   title: "项目交付工作台",
@@ -173,6 +174,8 @@ const zh = {
   },
   actions: {
     "project.update": "更新项目目标",
+    "baseline.create": "冻结计划基线",
+    "progress.record": "记录当前进度",
     "member.save": "更新团队成员",
     "milestone.save": "更新里程碑",
     "requirement.create": "创建需求",
@@ -192,6 +195,7 @@ const en: typeof zh = {
   latestValues: "Current server content",
   keepDraft: "Reviewed: keep my draft with this version",
   burndownDates: "Set valid sprint dates to position the current observation.",
+  burndownVerified: "Remaining tasks use verified completion",
   burndownSnapshot:
     "Current observation only; no historical snapshots. The ideal line uses the current task scope.",
   title: "Project delivery",
@@ -368,6 +372,8 @@ const en: typeof zh = {
   },
   actions: {
     "project.update": "Updated project goals",
+    "baseline.create": "Froze plan baseline",
+    "progress.record": "Recorded current progress",
     "member.save": "Updated member",
     "milestone.save": "Updated milestone",
     "requirement.create": "Created requirement",
@@ -388,6 +394,7 @@ const ja: typeof zh = {
   latestValues: "サーバー上の現在の内容",
   keepDraft: "確認済み：この版で下書きを保持",
   burndownDates: "有効な開始日と終了日を設定してください。",
+  burndownVerified: "未検証タスクを検証済み完了に基づき集計",
   burndownSnapshot:
     "現在の観測値のみです。履歴はありません。理想線は現在のタスク範囲に基づきます。",
   title: "プロジェクトデリバリー",
@@ -559,6 +566,8 @@ const ja: typeof zh = {
   },
   actions: {
     "project.update": "目標を更新",
+    "baseline.create": "計画基準を凍結",
+    "progress.record": "現在の進捗を記録",
     "member.save": "メンバーを更新",
     "milestone.save": "マイルストーンを更新",
     "requirement.create": "要件を作成",

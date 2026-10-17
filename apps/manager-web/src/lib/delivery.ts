@@ -260,6 +260,8 @@ export type DeliveryWorkspace = {
 };
 export type DeliveryAction =
   | "project.update"
+  | "progress.record"
+  | "baseline.create"
   | "resource.save"
   | "resource.archive"
   | "member.save"

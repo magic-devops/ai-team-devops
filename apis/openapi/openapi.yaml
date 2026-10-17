@@ -1275,6 +1275,231 @@ paths:
           $ref: '#/components/responses/BusinessNotFound'
         '422':
           description: scope must be mine or team
+  /api/v1/delivery/progress:
+    get:
+      tags:
+      - delivery
+      summary: Read actual UTC delivery progress with gaps and an optional frozen plan
+      operationId: delivery_progress_api_v1_delivery_progress_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: starts_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Starts On
+      - name: ends_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Ends On
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - name: baseline_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Baseline Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
+        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
+        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
+        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
+        or baseline.'
+  /api/v1/delivery/progress/observations/{observation_id}:
+    get:
+      tags:
+      - delivery
+      summary: Read one immutable historical progress observation
+      operationId: delivery_progress_observation_api_v1_delivery_progress_observations__observation_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: observation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Observation Id
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - milestone
+          - sprint
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Scope Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressObservationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
+        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
+        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
+        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
+        or baseline.'
+  /api/v1/delivery/progress/baselines/{baseline_id}:
+    get:
+      tags:
+      - delivery
+      summary: Read a frozen delivery baseline and current scope changes
+      operationId: delivery_progress_baseline_api_v1_delivery_progress_baselines__baseline_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: baseline_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Baseline Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressBaselineResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: 'Requires an explicitly selected authorized project. Pure read: no observations, defaults or business
+        state are written and no runtime/model is invoked. IDs from other projects are not accessible. Project scope
+        requires empty scope_id; milestone/sprint require a real scope ID. Progress ranges default to the last 30
+        UTC dates and are limited to 366 ordered dates. Deleted scopes remain readable through their historical observation
+        or baseline.'
+  /api/v1/sprints/{sprint_id}/burndown:
+    get:
+      tags:
+      - sprints
+      summary: Read durable Sprint observations with compatible numeric UTC days
+      operationId: sprint_burndown_api_v1_sprints__sprint_id__burndown_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: sprint_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sprint Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Legacy stats and actual verified-completion observations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegacySprintBurndown'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: Legacy numeric-day adapter for the same durable UTC facts. Actual contains only recorded dates,
+        maximum 366 selected days; consumers must preserve gaps rather than connect sparse observations. current_observation
+        is live and is not appended as history. Missing valid plan dates produces no ideal/actual time curve. Ideal
+        uses current scope, not an immutable baseline; use delivery/progress to compare a frozen plan.
   /api/v1/delivery/workspace:
     get:
       tags: [delivery]
@@ -1370,7 +1595,11 @@ paths:
         project.update changes only explicitly supplied fields, retaining untouched owner/goal/dates. name/description
         edit the canonical Project and require configure; other project metadata keeps write. resource.save/archive
         require configure and share workspace CAS, receipts and audit events. Archiving retains the record; saving
-        the same id with archived=false restores it. Resources never fetch links.'
+        the same id with archived=false restores it. Resources never fetch links.
+
+        progress.record requires write and records current UTC facts. baseline.create requires approve and freezes
+        an immutable plan after checking complete task IDs and content basis. Both use the same CAS, idempotency receipts
+        and atomic business transaction; failures retain no successful observation.'
       security:
       - bearerAuth: []
       parameters:
@@ -4092,6 +4321,1019 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryInboxItem'
+    ProgressBaseline:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        basis:
+          type: string
+          title: Basis
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        created_at:
+          type: string
+          title: Created At
+        created_by:
+          type: string
+          title: Created By
+        source_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Version
+        note:
+          type: string
+          title: Note
+        task_ids:
+          items:
+            type: string
+          type: array
+          title: Task Ids
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        tasks:
+          items:
+            $ref: '#/components/schemas/ProgressTaskFact'
+          type: array
+          title: Tasks
+        requirements:
+          items:
+            $ref: '#/components/schemas/ProgressRequirementFact'
+          type: array
+          title: Requirements
+      type: object
+      required:
+      - id
+      - title
+      - scope
+      - basis
+      - starts_on
+      - ends_on
+      - created_at
+      - created_by
+      - source_version
+      - note
+      - task_ids
+      - metrics
+      - tasks
+      - requirements
+      title: ProgressBaseline
+    ProgressBaselineResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        as_of:
+          type: string
+          title: As Of
+        baseline:
+          $ref: '#/components/schemas/ProgressBaseline'
+        current:
+          $ref: '#/components/schemas/ProgressCurrent'
+        comparison:
+          $ref: '#/components/schemas/ProgressComparison'
+      type: object
+      required:
+      - project_id
+      - version
+      - as_of
+      - baseline
+      - current
+      - comparison
+      title: ProgressBaselineResponse
+    ProgressBaselineSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        basis:
+          type: string
+          title: Basis
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        created_at:
+          type: string
+          title: Created At
+        created_by:
+          type: string
+          title: Created By
+        source_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Version
+        note:
+          type: string
+          title: Note
+        task_ids:
+          items:
+            type: string
+          type: array
+          title: Task Ids
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+      type: object
+      required:
+      - id
+      - title
+      - scope
+      - basis
+      - starts_on
+      - ends_on
+      - created_at
+      - created_by
+      - source_version
+      - note
+      - task_ids
+      - metrics
+      title: ProgressBaselineSummary
+    ProgressComparison:
+      properties:
+        added:
+          items:
+            $ref: '#/components/schemas/ProgressTaskFact'
+          type: array
+          title: Added
+        removed:
+          items:
+            $ref: '#/components/schemas/ProgressTaskFact'
+          type: array
+          title: Removed
+        changed:
+          items:
+            $ref: '#/components/schemas/ProgressTaskChange'
+          type: array
+          title: Changed
+        unchanged_count:
+          type: integer
+          title: Unchanged Count
+      type: object
+      required:
+      - added
+      - removed
+      - changed
+      - unchanged_count
+      title: ProgressComparison
+      description: Current scope compared with frozen tasks. changed compares plan/scope fields and content basis; ordinary
+        status advancement alone is not a scope change. removed retains the frozen task, even after deletion.
+    ProgressCoverage:
+      properties:
+        first_observed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: First Observed At
+        last_observed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Observed At
+        observed_days:
+          items:
+            type: string
+          type: array
+          title: Observed Days
+        missing_days:
+          items:
+            type: string
+          type: array
+          title: Missing Days
+        future_days:
+          items:
+            type: string
+          type: array
+          title: Future Days
+      type: object
+      required:
+      - first_observed_at
+      - last_observed_at
+      - observed_days
+      - missing_days
+      - future_days
+      title: ProgressCoverage
+      description: Real coverage for this scope; all day collections are UTC ISO dates. Future dates are separate from
+        missing historical dates. first/last identify the available observations rather than invented coverage.
+    ProgressCurrent:
+      properties:
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        tasks:
+          items:
+            $ref: '#/components/schemas/ProgressTaskFact'
+          type: array
+          title: Tasks
+        requirements:
+          items:
+            $ref: '#/components/schemas/ProgressRequirementFact'
+          type: array
+          title: Requirements
+        task_ids:
+          items:
+            type: string
+          type: array
+          title: Task Ids
+        basis:
+          type: string
+          title: Basis
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+      type: object
+      required:
+      - scope
+      - tasks
+      - requirements
+      - task_ids
+      - basis
+      - metrics
+      title: ProgressCurrent
+      description: Minimal selected facts and counts. In ProgressObservationResponse this is the historical observed
+        state; in ProgressResponse and ProgressBaselineResponse this is current live state. Task sizes are categories,
+        never converted to hours. No credentials, runtime logs or authority are copied into these facts.
+    ProgressDay:
+      properties:
+        date:
+          type: string
+          title: Date
+        observation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Observation Id
+        observed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Observed At
+        source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source
+        metrics:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressMetrics'
+          - type: 'null'
+        baseline_remaining:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Baseline Remaining
+      type: object
+      required:
+      - date
+      - observation_id
+      - observed_at
+      - source
+      - metrics
+      - baseline_remaining
+      title: ProgressDay
+      description: Last actual observation for this UTC day, ordered by observed_at and internal sequence. Missing days
+        have null observation_id, observed_at, source, metrics and baseline_remaining; never interpolate or fill with
+        zero. baseline_remaining counts unverified task IDs in the frozen plan, including removed tasks.
+    ProgressIdealPoint:
+      properties:
+        date:
+          type: string
+          title: Date
+        remaining:
+          type: number
+          title: Remaining
+      type: object
+      required:
+      - date
+      - remaining
+      title: ProgressIdealPoint
+      description: Reference plan only, using the fixed baseline task total and explicit plan dates. It is not measured
+        history or a capacity forecast. Missing plan dates produce no ideal points.
+    ProgressMetrics:
+      properties:
+        tasks_total:
+          type: integer
+          title: Tasks Total
+        recorded_completed:
+          type: integer
+          title: Recorded Completed
+        verified_completed:
+          type: integer
+          title: Verified Completed
+        awaiting_review:
+          type: integer
+          title: Awaiting Review
+        remaining:
+          type: integer
+          title: Remaining
+        requirements_total:
+          type: integer
+          title: Requirements Total
+        requirements_accepted:
+          type: integer
+          title: Requirements Accepted
+        requirements_released:
+          type: integer
+          title: Requirements Released
+        status_counts:
+          $ref: '#/components/schemas/ProgressStatusCounts'
+      type: object
+      required:
+      - tasks_total
+      - recorded_completed
+      - verified_completed
+      - awaiting_review
+      - remaining
+      - requirements_total
+      - requirements_accepted
+      - requirements_released
+      - status_counts
+      title: ProgressMetrics
+      description: Unit is task count. status_counts contains six mutually exclusive states. remaining is unverified
+        task count; legacy recorded completion and runtime success do not imply verified delivery. Requirement acceptance
+        and release are independent counts. Only current valid acceptance evidence verifies a task.
+    ProgressObservationResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        project_id:
+          type: string
+          title: Project Id
+        observed_at:
+          type: string
+          title: Observed At
+        observed_day:
+          type: string
+          title: Observed Day
+        source:
+          type: string
+          title: Source
+        actor:
+          type: string
+          title: Actor
+        source_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Version
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        current:
+          $ref: '#/components/schemas/ProgressCurrent'
+      type: object
+      required:
+      - id
+      - project_id
+      - observed_at
+      - observed_day
+      - source
+      - actor
+      - source_version
+      - scope
+      - current
+      title: ProgressObservationResponse
+    ProgressRange:
+      properties:
+        starts_on:
+          type: string
+          title: Starts On
+        ends_on:
+          type: string
+          title: Ends On
+      type: object
+      required:
+      - starts_on
+      - ends_on
+      title: ProgressRange
+    ProgressRequirementFact:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        milestone_id:
+          type: string
+          title: Milestone Id
+        sprint_id:
+          type: string
+          title: Sprint Id
+        stage:
+          type: string
+          title: Stage
+        revision:
+          type: integer
+          title: Revision
+        basis:
+          type: string
+          title: Basis
+        accepted:
+          type: boolean
+          title: Accepted
+        released:
+          type: boolean
+          title: Released
+      type: object
+      required:
+      - id
+      - title
+      - milestone_id
+      - sprint_id
+      - stage
+      - revision
+      - basis
+      - accepted
+      - released
+      title: ProgressRequirementFact
+    ProgressResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        as_of:
+          type: string
+          title: As Of
+        timezone:
+          type: string
+          const: UTC
+          title: Timezone
+        scope:
+          $ref: '#/components/schemas/ProgressScope'
+        range:
+          $ref: '#/components/schemas/ProgressRange'
+        scopes:
+          $ref: '#/components/schemas/ProgressScopes'
+        current:
+          $ref: '#/components/schemas/ProgressCurrent'
+        coverage:
+          $ref: '#/components/schemas/ProgressCoverage'
+        days:
+          items:
+            $ref: '#/components/schemas/ProgressDay'
+          type: array
+          title: Days
+        baselines:
+          items:
+            $ref: '#/components/schemas/ProgressBaselineSummary'
+          type: array
+          title: Baselines
+        baseline:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressBaseline'
+          - type: 'null'
+        comparison:
+          anyOf:
+          - $ref: '#/components/schemas/ProgressComparison'
+          - type: 'null'
+        ideal:
+          items:
+            $ref: '#/components/schemas/ProgressIdealPoint'
+          type: array
+          title: Ideal
+      type: object
+      required:
+      - project_id
+      - version
+      - as_of
+      - timezone
+      - scope
+      - range
+      - scopes
+      - current
+      - coverage
+      - days
+      - baselines
+      - baseline
+      - comparison
+      - ideal
+      title: ProgressResponse
+    ProgressScope:
+      properties:
+        kind:
+          type: string
+          enum:
+          - project
+          - milestone
+          - sprint
+          title: Kind
+        id:
+          type: string
+          title: Id
+        label:
+          type: string
+          title: Label
+      type: object
+      required:
+      - kind
+      - id
+      - label
+      title: ProgressScope
+    ProgressScopeOption:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+      type: object
+      required:
+      - id
+      - title
+      title: ProgressScopeOption
+    ProgressScopes:
+      properties:
+        milestones:
+          items:
+            $ref: '#/components/schemas/ProgressScopeOption'
+          type: array
+          title: Milestones
+        sprints:
+          items:
+            $ref: '#/components/schemas/ProgressScopeOption'
+          type: array
+          title: Sprints
+      type: object
+      required:
+      - milestones
+      - sprints
+      title: ProgressScopes
+    ProgressStatusCounts:
+      properties:
+        pending:
+          type: integer
+          title: Pending
+        in_progress:
+          type: integer
+          title: In Progress
+        blocked:
+          type: integer
+          title: Blocked
+        awaiting_review:
+          type: integer
+          title: Awaiting Review
+        recorded_completed:
+          type: integer
+          title: Recorded Completed
+        verified_completed:
+          type: integer
+          title: Verified Completed
+      type: object
+      required:
+      - pending
+      - in_progress
+      - blocked
+      - awaiting_review
+      - recorded_completed
+      - verified_completed
+      title: ProgressStatusCounts
+    ProgressTaskChange:
+      properties:
+        id:
+          type: string
+          title: Id
+        before:
+          $ref: '#/components/schemas/ProgressTaskFact'
+        after:
+          $ref: '#/components/schemas/ProgressTaskFact'
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+      type: object
+      required:
+      - id
+      - before
+      - after
+      - fields
+      title: ProgressTaskChange
+    ProgressTaskFact:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        req_id:
+          type: string
+          title: Req Id
+        sprint_id:
+          type: string
+          title: Sprint Id
+        milestone_id:
+          type: string
+          title: Milestone Id
+        owner_id:
+          type: string
+          title: Owner Id
+        assigned_to:
+          type: string
+          title: Assigned To
+        estimate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Estimate
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        basis:
+          type: string
+          title: Basis
+        status:
+          type: string
+          enum:
+          - pending
+          - in_progress
+          - blocked
+          - awaiting_review
+          - recorded_completed
+          - verified_completed
+          title: Status
+        recorded_status:
+          type: string
+          title: Recorded Status
+      type: object
+      required:
+      - id
+      - title
+      - req_id
+      - sprint_id
+      - milestone_id
+      - owner_id
+      - assigned_to
+      - estimate
+      - starts_on
+      - ends_on
+      - basis
+      - status
+      - recorded_status
+      title: ProgressTaskFact
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    ProgressRecord:
+      additionalProperties: false
+      properties: {}
+      title: ProgressRecord
+      type: object
+      description: 'Requires write permission. Explicitly append the current actual UTC facts atomically with the command.
+        Empty payload only: clients cannot backdate observations, alter measured facts or complete tasks.'
+    BaselineCreate:
+      additionalProperties: false
+      properties:
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Ends On
+        title:
+          maxLength: 200
+          minLength: 1
+          title: Title
+          type: string
+        scope:
+          default: project
+          enum:
+          - project
+          - milestone
+          - sprint
+          title: Scope
+          type: string
+        scope_id:
+          default: ''
+          maxLength: 100
+          title: Scope Id
+          type: string
+        task_ids:
+          items:
+            type: string
+          maxItems: 10000
+          title: Task Ids
+          type: array
+        basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Basis
+          type: string
+        note:
+          default: ''
+          maxLength: 4000
+          title: Note
+          type: string
+      required:
+      - title
+      - task_ids
+      - basis
+      title: BaselineCreate
+      type: object
+      description: Requires approve permission. Freeze a new immutable plan for the complete selected scope, checked
+        against the explicit current task_ids and basis as well as workspace CAS. Legacy changes also invalidate basis.
+        Omitted plan dates remain absent; only complete ordered dates produce an ideal reference line. A revised plan
+        creates another baseline; the existing frozen facts and deleted-task titles are retained.
+    LegacyBurndownSprint:
+      type: object
+      required:
+      - id
+      - tenant_id
+      - project_id
+      - goal
+      - status
+      - retrospective
+      - planned_points
+      - velocity
+      - completion_rate
+      - started_at
+      - ends_at
+      properties:
+        id:
+          type: string
+        tenant_id:
+          type: string
+        project_id:
+          type: string
+        goal:
+          type: string
+        status:
+          type: string
+        retrospective:
+          type: string
+        planned_points:
+          type: integer
+        velocity:
+          type: number
+        completion_rate:
+          type: number
+        started_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        ends_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    LegacyBurndownStats:
+      type: object
+      required:
+      - total_tasks
+      - completed
+      - in_progress
+      - pending
+      - remaining
+      - completion_rate
+      - avg_confidence
+      - blocked
+      properties:
+        total_tasks:
+          type: integer
+        completed:
+          type: integer
+        in_progress:
+          type: integer
+        pending:
+          type: integer
+        remaining:
+          type: integer
+        completion_rate:
+          type: number
+        avg_confidence:
+          type: number
+        blocked:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - title
+            - assigned_to
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              assigned_to:
+                type: string
+      description: Legacy canonical status counts are preserved; remaining here is total minus recorded completed. Use
+        current_metrics.remaining for unverified work.
+    LegacySprintBurndown:
+      type: object
+      required:
+      - ok
+      - sprint
+      - stats
+      - span_days
+      - elapsed_days
+      - ideal
+      - actual
+      - history_available
+      - observed_at
+      - basis
+      - unit
+      - remaining_basis
+      - actual_basis
+      - current_metrics
+      - current_observation
+      - coverage
+      properties:
+        ok:
+          const: true
+        sprint:
+          $ref: '#/components/schemas/LegacyBurndownSprint'
+        stats:
+          $ref: '#/components/schemas/LegacyBurndownStats'
+        span_days:
+          type: integer
+        elapsed_days:
+          type: integer
+        ideal:
+          type: array
+          items:
+            type: object
+            required:
+            - day
+            - remaining
+            properties:
+              day:
+                type: integer
+              remaining:
+                type: number
+        actual:
+          type: array
+          items:
+            type: object
+            required:
+            - day
+            - remaining
+            - date
+            - observation_id
+            - observed_at
+            - source
+            - metrics
+            properties:
+              day:
+                type: integer
+              remaining:
+                type: number
+              date:
+                type: string
+                format: date
+              observation_id:
+                type: string
+              observed_at:
+                type: string
+                format: date-time
+              source:
+                type: string
+              metrics:
+                $ref: '#/components/schemas/ProgressMetrics'
+        history_available:
+          type: boolean
+        observed_at:
+          type: string
+          format: date-time
+        basis:
+          const: current_scope
+        unit:
+          const: tasks
+        remaining_basis:
+          const: verified_completion
+        actual_basis:
+          const: persisted_observations
+        current_metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        current_observation:
+          type: object
+          required:
+          - day
+          - remaining
+          - observed_at
+          - observation_id
+          - source
+          - metrics
+          properties:
+            day:
+              type:
+              - integer
+              - 'null'
+            remaining:
+              type: number
+            observed_at:
+              type: string
+              format: date-time
+            observation_id:
+              type: 'null'
+            source:
+              const: live
+            metrics:
+              $ref: '#/components/schemas/ProgressMetrics'
+        coverage:
+          allOf:
+          - $ref: '#/components/schemas/ProgressCoverage'
+          - type: object
+            required:
+            - range
+            - window_truncated
+            properties:
+              range:
+                $ref: '#/components/schemas/ProgressRange'
+              window_truncated:
+                type: boolean
+      description: Legacy numeric-day adapter for the same durable UTC facts. Actual contains only recorded dates, maximum
+        366 selected days; consumers must preserve gaps rather than connect sparse observations. current_observation
+        is live and is not appended as history. Missing valid plan dates produces no ideal/actual time curve. Ideal
+        uses current scope, not an immutable baseline; use delivery/progress to compare a frozen plan.
     DeliveryCommand:
       type: object
       additionalProperties: false
@@ -4123,6 +5365,8 @@ components:
           - execution.sync
           - execution.review
           - execution.cancel
+          - progress.record
+          - baseline.create
         payload:
           type: object
           description: 'Validated per action. execution.queue requires task_id and workspace_id,
@@ -4192,6 +5436,26 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/ResourceArchive'
+      - if:
+          properties:
+            action:
+              const: progress.record
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ProgressRecord'
+      - if:
+          properties:
+            action:
+              const: baseline.create
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/BaselineCreate'
     TaskEdit:
       type: object
       additionalProperties: false

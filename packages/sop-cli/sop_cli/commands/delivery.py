@@ -1,6 +1,7 @@
 """Versioned project delivery commands shared by people, agents and tools."""
 
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
@@ -8,7 +9,91 @@ import typer
 
 from .._util import console, get_client, warn
 
-app = typer.Typer(help="项目交付：workspace / inbox / targets / preview / command")
+app = typer.Typer(
+    help="项目交付：workspace / inbox / progress / observation / baseline / targets / preview / command"
+)
+
+
+class ProgressScope(str, Enum):
+    project = "project"
+    milestone = "milestone"
+    sprint = "sprint"
+
+
+def _show_progress_record(result: dict, json_out: bool, label: str):
+    if json_out:
+        console.print_json(data=result)
+        return
+    console.print(f"{label} · 项目 {result.get('project_id', '')}", markup=False)
+    if "days" in result:
+        coverage = result.get("coverage", {})
+        metrics = result.get("current", {}).get("metrics", {})
+        console.print(
+            f"真实观测 {len(coverage.get('observed_days', []))} 天 · "
+            f"缺失 {len(coverage.get('missing_days', []))} 天 · "
+            f"任务 {metrics.get('tasks_total', '—')} · 已验证 {metrics.get('verified_completed', '—')}",
+            markup=False,
+        )
+    else:
+        console.print_json(data=result)
+
+
+@app.command("progress")
+def progress(
+    starts_on: Annotated[str | None, typer.Option("--from", help="UTC 开始日期 YYYY-MM-DD")] = None,
+    ends_on: Annotated[str | None, typer.Option("--to", help="UTC 结束日期 YYYY-MM-DD，最多366天")] = None,
+    scope: Annotated[
+        ProgressScope, typer.Option("--scope", help="项目、里程碑或迭代范围")
+    ] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id", help="里程碑或迭代的真实 ID")] = "",
+    baseline_id: Annotated[str, typer.Option("--baseline", help="比较不可变计划基线")] = "",
+    json_out: Annotated[bool, typer.Option("--json", help="保留历史缺口、范围变化和来源")] = False,
+):
+    """读取真实历史与当前状态，不创建观测或填补缺失日期。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_progress(
+                starts_on=starts_on,
+                ends_on=ends_on,
+                scope=scope.value,
+                scope_id=scope_id,
+                baseline_id=baseline_id,
+            )
+        _show_progress_record(result, json_out, "进度历史")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("observation")
+def observation(
+    observation_id: str,
+    scope: Annotated[ProgressScope, typer.Option("--scope")] = ProgressScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    json_out: Annotated[bool, typer.Option("--json")] = False,
+):
+    """查看当时的真实任务快照；历史状态不替代当前任务。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_progress_observation(
+                observation_id, scope=scope.value, scope_id=scope_id
+            )
+        _show_progress_record(result, json_out, "历史观测")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("baseline")
+def baseline(baseline_id: str, json_out: Annotated[bool, typer.Option("--json")] = False):
+    """查看不可变基线；冻结新计划使用 command --file 提交显式范围。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_baseline(baseline_id)
+        _show_progress_record(result, json_out, "计划基线")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("workspace")

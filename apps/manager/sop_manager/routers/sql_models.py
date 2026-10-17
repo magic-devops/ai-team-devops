@@ -266,6 +266,51 @@ class DeliveryReceipt(Base):
     version = Column(Integer, nullable=False)
 
 
+class DeliveryProgressObservation(Base):
+    """Append-only facts, independent of the bounded delivery activity feed."""
+    __tablename__ = "delivery_progress_observations"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(String(64), nullable=False)
+    observed_day = Column(String(10), nullable=False)
+    observed_at = Column(DateTime, nullable=False)
+    source = Column(String(32), nullable=False)
+    actor = Column(String(128), nullable=False, default="")
+    source_version = Column(Integer, nullable=True)
+    fingerprint = Column(String(64), nullable=False)
+    data = Column(JSON, nullable=False)
+    __table_args__ = (Index("ix_progress_project_day", "tenant_id", "project_id", "observed_day", "seq"),)
+
+
+class DeliveryProgressCheckpoint(Base):
+    """One successful daily scan per actual tenant, project and UTC date."""
+    __tablename__ = "delivery_progress_checkpoints"
+    tenant_id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    observed_day = Column(String(10), primary_key=True)
+
+
+class DeliveryProgressBaseline(Base):
+    """Immutable approved scope; replanning always appends a new baseline."""
+    __tablename__ = "delivery_progress_baselines"
+    id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(String(64), nullable=False)
+    title = Column(String(200), nullable=False)
+    scope_kind = Column(String(16), nullable=False)
+    scope_id = Column(String(64), nullable=False, default="")
+    basis = Column(String(64), nullable=False)
+    starts_on = Column(String(10), nullable=True)
+    ends_on = Column(String(10), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_by = Column(String(128), nullable=False)
+    source_version = Column(Integer, nullable=False)
+    data = Column(JSON, nullable=False)
+    note = Column(Text, nullable=False, default="")
+    __table_args__ = (Index("ix_baseline_project_scope", "tenant_id", "project_id", "scope_kind", "scope_id"),)
+
+
 class DeliveryPlanPreview(Base):
     """Committed generation intent; provider retries never happen implicitly."""
     __tablename__ = "delivery_plan_previews"
@@ -347,3 +392,10 @@ class ApiKey(Base):
 
 def create_all():
     Base.metadata.create_all(engine)
+
+
+# Install once for every Manager Session, including the compatibility/CLI writers.
+# Imports are late because hook handlers lazily use the complete model registry.
+from .delivery_progress_hooks import install_progress_hooks
+
+install_progress_hooks()

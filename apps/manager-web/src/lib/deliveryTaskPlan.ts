@@ -161,7 +161,7 @@ export function planError(error: unknown): {
   const raw = (error as Error).message || String(error);
   const plainConflict =
     raw.startsWith("HTTP 409") &&
-    /Project changed|Concurrent edit|Concurrent command|Concurrent update|Concurrent.*Reload/i.test(
+    /Project changed|Progress scope changed|Concurrent edit|Concurrent command|Concurrent update|Concurrent.*Reload/i.test(
       raw,
     );
   try {

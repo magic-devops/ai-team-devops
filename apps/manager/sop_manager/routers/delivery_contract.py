@@ -61,6 +61,8 @@ class Command(Input):
         "execution.sync",
         "execution.review",
         "execution.cancel",
+        "progress.record",
+        "baseline.create",
     ]
     expected_version: int = Field(ge=0)
     idempotency_key: str = Field(min_length=8, max_length=100)
@@ -162,6 +164,215 @@ class ResourceSave(Input):
 class ResourceArchive(Input):
     id: str = Field(min_length=1, max_length=64)
     comment: str = Field(default="", max_length=4000)
+
+
+class ProgressRecord(Input):
+    pass
+
+
+class BaselineCreate(Dated):
+    title: str = Field(min_length=1, max_length=200)
+    scope: Literal["project", "milestone", "sprint"] = "project"
+    scope_id: str = Field(default="", max_length=100)
+    task_ids: list[str] = Field(max_length=10000)
+    basis: str = Field(pattern=r"^[0-9a-f]{64}$")
+    note: str = Field(default="", max_length=4000)
+
+    @field_validator("task_ids")
+    @classmethod
+    def explicit_task_ids(cls, values):
+        if len(values) != len(set(values)) or any(
+            not value or value != value.strip() or len(value) > 64 for value in values
+        ):
+            raise ValueError("Task IDs must be unique, nonempty IDs")
+        return values
+
+    @model_validator(mode="after")
+    def explicit_scope(self):
+        if (self.scope == "project" and self.scope_id) or (self.scope != "project" and not self.scope_id):
+            raise ValueError("Choose a project scope without scope_id or a named milestone/sprint scope")
+        return self
+
+
+ProgressScopeKind = Literal["project", "milestone", "sprint"]
+ProgressTaskStatus = Literal[
+    "pending", "in_progress", "blocked", "awaiting_review", "recorded_completed", "verified_completed"
+]
+
+
+class ProgressScope(BaseModel):
+    kind: ProgressScopeKind
+    id: str
+    label: str
+
+
+class ProgressScopeOption(BaseModel):
+    id: str
+    title: str
+    starts_on: str | None = None
+    ends_on: str | None = None
+
+
+class ProgressScopes(BaseModel):
+    milestones: list[ProgressScopeOption]
+    sprints: list[ProgressScopeOption]
+
+
+class ProgressTaskFact(BaseModel):
+    id: str
+    title: str
+    req_id: str
+    sprint_id: str
+    milestone_id: str
+    owner_id: str
+    assigned_to: str
+    estimate: str | None
+    starts_on: str | None
+    ends_on: str | None
+    basis: str
+    status: ProgressTaskStatus
+    recorded_status: str
+
+
+class ProgressRequirementFact(BaseModel):
+    id: str
+    title: str
+    milestone_id: str
+    sprint_id: str
+    stage: str
+    revision: int
+    basis: str
+    accepted: bool
+    released: bool
+
+
+class ProgressStatusCounts(BaseModel):
+    pending: int
+    in_progress: int
+    blocked: int
+    awaiting_review: int
+    recorded_completed: int
+    verified_completed: int
+
+
+class ProgressMetrics(BaseModel):
+    tasks_total: int
+    recorded_completed: int
+    verified_completed: int
+    awaiting_review: int
+    remaining: int
+    requirements_total: int
+    requirements_accepted: int
+    requirements_released: int
+    status_counts: ProgressStatusCounts
+
+
+class ProgressCurrent(BaseModel):
+    scope: ProgressScope
+    tasks: list[ProgressTaskFact]
+    requirements: list[ProgressRequirementFact]
+    task_ids: list[str]
+    basis: str
+    metrics: ProgressMetrics
+
+
+class ProgressRange(BaseModel):
+    starts_on: str
+    ends_on: str
+
+
+class ProgressCoverage(BaseModel):
+    first_observed_at: str | None
+    last_observed_at: str | None
+    observed_days: list[str]
+    missing_days: list[str]
+    future_days: list[str]
+
+
+class ProgressDay(BaseModel):
+    date: str
+    observation_id: str | None
+    observed_at: str | None
+    source: str | None
+    metrics: ProgressMetrics | None
+    baseline_remaining: int | None
+
+
+class ProgressBaselineSummary(BaseModel):
+    id: str
+    title: str
+    scope: ProgressScope
+    basis: str
+    starts_on: str | None
+    ends_on: str | None
+    created_at: str
+    created_by: str
+    source_version: int | None
+    note: str
+    task_ids: list[str]
+    metrics: ProgressMetrics
+
+
+class ProgressBaseline(ProgressBaselineSummary):
+    tasks: list[ProgressTaskFact]
+    requirements: list[ProgressRequirementFact]
+
+
+class ProgressTaskChange(BaseModel):
+    id: str
+    before: ProgressTaskFact
+    after: ProgressTaskFact
+    fields: list[str]
+
+
+class ProgressComparison(BaseModel):
+    added: list[ProgressTaskFact]
+    removed: list[ProgressTaskFact]
+    changed: list[ProgressTaskChange]
+    unchanged_count: int
+
+
+class ProgressIdealPoint(BaseModel):
+    date: str
+    remaining: float
+
+
+class ProgressResponse(BaseModel):
+    project_id: str
+    version: int
+    as_of: str
+    timezone: Literal["UTC"]
+    scope: ProgressScope
+    range: ProgressRange
+    scopes: ProgressScopes
+    current: ProgressCurrent
+    coverage: ProgressCoverage
+    days: list[ProgressDay]
+    baselines: list[ProgressBaselineSummary]
+    baseline: ProgressBaseline | None
+    comparison: ProgressComparison | None
+    ideal: list[ProgressIdealPoint]
+
+
+class ProgressObservationResponse(BaseModel):
+    id: str
+    project_id: str
+    observed_at: str
+    observed_day: str
+    source: str
+    actor: str
+    source_version: int | None
+    scope: ProgressScope
+    current: ProgressCurrent
+
+
+class ProgressBaselineResponse(BaseModel):
+    project_id: str
+    version: int
+    as_of: str
+    baseline: ProgressBaseline
+    current: ProgressCurrent
+    comparison: ProgressComparison
 
 
 class MemberEdit(Input):
@@ -376,6 +587,8 @@ class ExecutionReview(ExecutionSync):
 
 
 PAYLOADS = {
+    "progress.record": ProgressRecord,
+    "baseline.create": BaselineCreate,
     "execution.queue": ExecutionQueue,
     "execution.sync": ExecutionSync,
     "execution.review": ExecutionReview,

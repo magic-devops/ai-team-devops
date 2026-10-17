@@ -9,6 +9,7 @@ import { collaborationTranslations } from "./i18n/collaboration";
 import { deliveryTranslations } from "./i18n/delivery";
 import { assistanceTranslations } from "./i18n/assistance";
 import { projectInboxTranslations } from "./i18n/delivery-project-inbox";
+import { progressTranslations } from "./i18n/delivery-progress";
 
 function getStoredLanguage() {
   try {
@@ -33,6 +34,7 @@ i18n
           delivery: deliveryTranslations["zh-CN"],
           assistance: assistanceTranslations["zh-CN"],
           deliveryProject: projectInboxTranslations["zh-CN"],
+          deliveryProgress: progressTranslations["zh-CN"],
         },
       },
       "en-US": {
@@ -42,6 +44,7 @@ i18n
           delivery: deliveryTranslations["en-US"],
           assistance: assistanceTranslations["en-US"],
           deliveryProject: projectInboxTranslations["en-US"],
+          deliveryProgress: progressTranslations["en-US"],
         },
       },
       "ja-JP": {
@@ -51,6 +54,7 @@ i18n
           delivery: deliveryTranslations["ja-JP"],
           assistance: assistanceTranslations["ja-JP"],
           deliveryProject: projectInboxTranslations["ja-JP"],
+          deliveryProgress: progressTranslations["ja-JP"],
         },
       },
     },

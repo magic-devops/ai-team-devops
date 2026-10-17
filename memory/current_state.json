@@ -6,7 +6,7 @@
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "project_resources_and_inbox_verified",
+    "status": "progress_history_and_baselines_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,11 +15,20 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/project-inbox/",
-    "verification_status": "verified",
-    "next_step": "continuous_progress_baselines_capacity_and_portfolio_governance",
+    "evidence": ".sop-runtime/delivery-evidence/progress-baselines/",
+    "verification_status": "verified_local_stage",
+    "next_step": "team_capacity_dependency_timeline_and_project_portfolio",
     "production_integration_complete": false,
-    "commit_after_verified_stage": true
+    "commit_after_verified_stage": true,
+    "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
+    "verification": {
+      "manager": 440,
+      "web": 263,
+      "sdk_cli_targeted": 55,
+      "typescript": "passed",
+      "production_build": "passed",
+      "actual_http_browser": "passed"
+    }
   },
   "tasks": {
     "completed": [

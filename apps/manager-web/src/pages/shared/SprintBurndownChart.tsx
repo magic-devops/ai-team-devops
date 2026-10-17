@@ -1,5 +1,6 @@
 import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { splitBurndownObservations } from "../../lib/burndownHistory";
 
 const EChartsBurndownLazy = lazy(() =>
   import("../../components/charts/EChartsBurndown").then((m) => ({
@@ -21,6 +22,9 @@ export type BurndownData = {
   span_days?: number;
   elapsed_days?: number;
   history_available?: boolean;
+  current_metrics?: { remaining: number; tasks_total: number };
+  remaining_basis?: string;
+  unit?: string;
 };
 
 /** 燃尽图：默认 ECharts，失败时回退 SVG 轻量版 */
@@ -42,6 +46,8 @@ export function SprintBurndownChart({ data }: { data?: BurndownData | null }) {
           {data.history_available === false
             ? t("delivery.burndownSnapshot")
             : ""}
+          {data.remaining_basis === "verified_completion" &&
+            ` ${t("delivery.burndownVerified")}`}
         </p>
         <Suspense fallback={<BurndownLite data={data} />}>
           <EChartsBurndownLazy data={data} onFailed={() => setLite(true)} />
@@ -75,10 +81,15 @@ function BurndownLite({ data }: { data: BurndownData }) {
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-strong)]">
-        <span>{t("page.devFlow.burndownLegend")}</span>
+        <span>
+          {t("page.devFlow.burndownLegend")}
+          {data.remaining_basis === "verified_completion" &&
+            ` · ${t("delivery.burndownVerified")}`}
+        </span>
         <span className="tabular-nums">
-          {t("page.devFlow.burndownRemaining")}: {data.stats?.remaining ?? "—"}{" "}
-          / {data.stats?.total_tasks ?? "—"}
+          {t("page.devFlow.burndownRemaining")}:{" "}
+          {data.current_metrics?.remaining ?? data.stats?.remaining ?? "—"} /{" "}
+          {data.current_metrics?.tasks_total ?? data.stats?.total_tasks ?? "—"}
         </span>
       </div>
       <div className="relative h-36 w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
@@ -99,17 +110,22 @@ function BurndownLite({ data }: { data: BurndownData }) {
               )
               .join(" ")}
           />
-          <polyline
-            fill="none"
-            stroke="var(--brand)"
-            strokeWidth="1.2"
-            points={data.actual
-              .map(
-                (p) =>
-                  `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`,
-              )
-              .join(" ")}
-          />
+          {splitBurndownObservations(data.actual)
+            .filter((segment) => segment.length > 1)
+            .map((segment, index) => (
+              <polyline
+                key={index}
+                fill="none"
+                stroke="var(--brand)"
+                strokeWidth="1.2"
+                points={segment
+                  .map(
+                    (p) =>
+                      `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`,
+                  )
+                  .join(" ")}
+              />
+            ))}
         </svg>
         {data.actual.map((p, i) => (
           <span

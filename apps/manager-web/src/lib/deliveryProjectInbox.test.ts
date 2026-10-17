@@ -18,6 +18,13 @@ import { taskIdFromHash } from "./taskDeepLink";
 vi.mock("./http", () => ({ request: vi.fn() }));
 
 describe("project resources and delivery inbox", () => {
+  it("keeps the durable progress page selected when its deep link is restored", () => {
+    expect(
+      parseDeliveryRoute(
+        "#/dev-flow?view=progress&baseline_id=B1&observation_id=O1",
+      ).view,
+    ).toBe("progress");
+  });
   it("pins project and scope in the actual request and supports cancellation", async () => {
     const signal = new AbortController().signal;
     await fetchDeliveryInbox("p-one", "team", signal);

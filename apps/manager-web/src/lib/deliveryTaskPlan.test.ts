@@ -38,6 +38,26 @@ const row = (
 });
 
 describe("editable task plans", () => {
+  it("offers explicit review after a stale progress scope without retrying unrelated conflicts", () => {
+    const detail =
+      "Progress scope changed. Reload and review the current task scope before freezing.";
+    expect(
+      planError(new Error(`HTTP 409: ${JSON.stringify({ detail })}`)),
+    ).toMatchObject({
+      conflict: true,
+      message: detail,
+    });
+    expect(
+      planError(
+        new Error(
+          'HTTP 409: {"detail":"Idempotency key reused with different input"}',
+        ),
+      ).conflict,
+    ).toBe(false);
+    expect(
+      planError(new Error(`HTTP 422: ${JSON.stringify({ detail })}`)).conflict,
+    ).toBe(false);
+  });
   it("distinguishes changed plan bases from blocked dependencies and in-flight generation", () => {
     const failure = (code: string) =>
       new Error(
