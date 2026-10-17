@@ -422,17 +422,12 @@ def test_full_delivery_keeps_test_acceptance_release_separate(env):
                 "verification": "Smoke passed",
             },
         ).status_code
-        == 200
-    )
-    released = command(client, "stage.advance", {"requirement_id": rid, "comment": "Deployment verified"})
-    assert released.status_code == 200
-    assert released.json()["summary"]["released"] == 1
-    assert (
-        command(
-            client, "stage.advance", {"requirement_id": rid, "comment": "Handover without runbook"}
-        ).status_code
         == 422
     )
+    released = command(client, "stage.advance", {"requirement_id": rid, "comment": "Deployment verified"})
+    assert released.status_code == 422
+    assert "deployment_verified" in released.json()["detail"]["missing"]
+    assert client.get("/api/v1/delivery/workspace").json()["summary"]["released"] == 0
     assert (
         command(
             client,
@@ -446,9 +441,9 @@ def test_full_delivery_keeps_test_acceptance_release_separate(env):
         ).status_code
         == 200
     )
-    assert command(client, "stage.advance", {"requirement_id": rid, "comment": "Operations verified"}).json()[
-        "requirements"
-    ][0]["flow"]["closed"]
+    # A runbook and a hand-written success description still cannot establish
+    # deployment. Signed CI/candidate review is covered by the release suite.
+    assert command(client, "stage.advance", {"requirement_id": rid, "comment": "Operations verified"}).status_code == 422
     with sessions() as db:
         db.get(Task, tid).description = "Changed through legacy task API"
         db.commit()

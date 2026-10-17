@@ -29,15 +29,19 @@ from .delivery_execution_contract import (
     ExecutionQueue,
     ExecutionTargetsResponse,
 )
+from .delivery_release_contract import (
+    DeliveryQualityResponse,
+    DeliveryReleaseDetail,
+    DeliveryReleasesResponse,
+    ReleasePreviewInput,
+    ReleasePreviewResponse,
+)
 from .delivery_scheduling_contract import (
     CivilDate,
     ScheduleChanges,
     SchedulePreviewResponse,
     ScheduleResponse,
 )
-from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
-from .project_lifecycle_contract import ProjectLifecyclePreviewInput
-from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .delivery_service import (
     apply_action,
     identifier,
@@ -48,6 +52,9 @@ from .delivery_service import (
     remember_basis,
     serialize,
 )
+from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
+from .project_lifecycle_contract import ProjectLifecyclePreviewInput
+from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .sql_models import (
     DeliveryEvent,
     DeliveryReceipt,
@@ -150,6 +157,69 @@ def workspace(
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     return _snapshot(db, _project(db, user, project_id), user)
+
+
+@router.get("/quality", response_model=DeliveryQualityResponse)
+def delivery_quality(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    requirement_ids: Annotated[list[str] | None, Query(max_length=200)] = None,
+    task_ids: Annotated[list[str] | None, Query(max_length=200)] = None,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release import quality
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    data = reconcile(db, project, row.data) if row else initial_state()
+    return quality(db, project, data, requirement_ids=requirement_ids, task_ids=task_ids)
+
+
+@router.get("/releases", response_model=DeliveryReleasesResponse)
+def delivery_releases(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release import release_index
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    data = reconcile(db, project, row.data) if row else initial_state()
+    return release_index(db, project, data, user, version=row.version if row else 0)
+
+
+@router.get("/releases/{release_id}", response_model=DeliveryReleaseDetail)
+def delivery_release_detail(
+    release_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release import release_detail
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    data = reconcile(db, project, row.data) if row else initial_state()
+    return release_detail(db, project, data, user, release_id, version=row.version if row else 0)
+
+
+@router.post("/release-preview", response_model=ReleasePreviewResponse)
+def delivery_release_preview(
+    body: ReleasePreviewInput,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release import preview
+
+    project = _project(db, user, project_id)
+    if not _role_permissions(db, user, project)["write"]:
+        raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
+    row = db.get(DeliveryWorkspace, project.id)
+    data = reconcile(db, project, row.data) if row else initial_state()
+    return preview(db, project, data, user, body, version=row.version if row else 0)
 
 
 @router.get("/inbox")
@@ -368,7 +438,7 @@ def task_plan_preview(
 def _command_permission(action, payload):
     if action == "project.lifecycle":
         return "lifecycle"
-    if action in {"member.runtime.bind", "member.runtime.unbind"}:
+    if action in {"member.runtime.bind", "member.runtime.unbind", "release.policy.save"}:
         return "configure"
     if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
         action == "project.update" and {
@@ -379,7 +449,8 @@ def _command_permission(action, payload):
     if action in {
         "stage.advance",
         "stage.reopen",
-        "release.save",
+        "release.candidate.review",
+        "release.candidate.revoke",
         "execution.review",
         "baseline.create",
         "task.manual_review",
@@ -503,7 +574,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request)
         if len(applied) == 3:
             event_data["result"] = applied[2]
         db.flush()
-        if body.action != "project.lifecycle":
+        if body.action != "project.lifecycle" and not body.action.startswith("release."):
             remember_basis(db, project, data)
         updated = db.execute(
             update(DeliveryWorkspace)
@@ -559,6 +630,10 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request)
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action.startswith("release."):
+        from .delivery_release import apply_release
+
+        return apply_release(db, project, user, data, action, payload)
     if action == "project.lifecycle":
         from .project_lifecycle import apply_lifecycle
 

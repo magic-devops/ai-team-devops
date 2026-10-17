@@ -86,7 +86,7 @@ def capture_facts(db, project):
                 "revision": flow["revision"],
                 "basis": requirement["basis"],
                 "accepted": accepted[requirement["id"]],
-                "released": accepted[requirement["id"]] and flow["stage"] == "operations",
+                "released": False,
             }
         )
     by_requirement = {r["id"]: r for r in snapshot["requirements"]}

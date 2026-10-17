@@ -226,3 +226,11 @@ sop --show-completion       # 打印当前 shell 的补全脚本
 | `sop sync` 提示 agentd 未运行 | `sop agentd start` |
 
 失败时 `sop doctor` 会列出修复建议。完整说明：**[`docs/TOOLS_AND_SCRIPTS.md`](../../docs/TOOLS_AND_SCRIPTS.md)**。
+
+## 质量与固定发布候选
+
+`sop delivery quality` 读取当前项目质量；重复 `--requirement-id` 与 `--task-id` 明确选择完整需求及独立任务，取得CI所需的固定 `scope_basis`。`sop delivery releases` 读取目录，`sop delivery releases --id <id>` 只读取该候选；未知ID不回落首项。
+
+`sop delivery release-preview --file candidate.json` 仅预览当前文件。保存使用现有 `sop delivery command --file command.json`，显式提供原 `expected_version`、`preview_basis` 和 `idempotency_key`；网络结果未知重试原文件，冲突后核对再重新预览。新命令为 `release.policy.save`、`release.ci.import`、`release.candidate.create`、`release.candidate.review`、`release.candidate.revoke`；旧人工 `release.save` 已退出。
+
+CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/测试新制品，再签DSSE证明。导入命令的 `payload.envelope` 保留文件原始JSON文本，私钥不进入API或命令文件。批准候选不等于已部署；详见 `docs/DELIVERY_RELEASE_DESIGN.md`。

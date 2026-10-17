@@ -88,6 +88,12 @@ import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
 import { DeliveryExecutionInspector } from "./DeliveryExecutionInspector";
+import { DeliveryReleaseWorkbench } from "./DeliveryReleaseWorkbench";
+import {
+  parseReleaseRoute,
+  releaseHash,
+  releaseReturnFromHash,
+} from "@/lib/deliveryReleaseRoute";
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("sop-session", cb);
@@ -108,7 +114,11 @@ const dateValue = (value: unknown) => value || null;
 
 export function DeliveryWorkbench() {
   const scope = useSyncExternalStore(subscribe, sessionSnapshot);
-  return <ProjectContextGate><ProjectDelivery key={scope} /></ProjectContextGate>;
+  return (
+    <ProjectContextGate>
+      <ProjectDelivery key={scope} />
+    </ProjectContextGate>
+  );
 }
 
 function ProjectDelivery() {
@@ -160,12 +170,20 @@ function ProjectDelivery() {
   const [selectedTaskId, setSelectedTaskId] = useState(
     () => parseDeliveryRoute(location.hash).task,
   );
-  const requestedTaskId = !selectedId && ["team", "timeline"].includes(view) ? selectedTaskId : "";
-  const taskInspector = useDrawerIdentity(`${projectId}:${sessionId}`, requestedTaskId);
+  const requestedTaskId =
+    !selectedId && ["team", "timeline"].includes(view) ? selectedTaskId : "";
+  const taskInspector = useDrawerIdentity(
+    `${projectId}:${sessionId}`,
+    requestedTaskId,
+  );
   const [selectedIssueId, setSelectedIssueId] = useState(
     () => parseDeliveryRoute(location.hash).issue,
   );
-  const [selectedExecutionId, setSelectedExecutionId] = useState(() => new URLSearchParams(location.hash.split("?")[1]).get("execution_id") || "");
+  const [selectedExecutionId, setSelectedExecutionId] = useState(
+    () =>
+      new URLSearchParams(location.hash.split("?")[1]).get("execution_id") ||
+      "",
+  );
   const [inboxScope, setInboxScope] = useState<InboxScope>(
     () => parseDeliveryRoute(location.hash).inboxScope,
   );
@@ -183,7 +201,10 @@ function ProjectDelivery() {
   useEffect(() => {
     const syncRoute = () => {
       const route = parseDeliveryRoute(location.hash);
-      setSelectedExecutionId(new URLSearchParams(location.hash.split("?")[1]).get("execution_id") || "");
+      setSelectedExecutionId(
+        new URLSearchParams(location.hash.split("?")[1]).get("execution_id") ||
+          "",
+      );
       setView(route.view);
       setSelectedId(route.requirement);
       setDetailTab(route.detail);
@@ -285,6 +306,11 @@ function ProjectDelivery() {
     push = false,
     filters: Partial<DeliveryRoute> = {},
   ) => {
+    if (["quality", "releases"].includes(nextView)) {
+      id = "";
+      detail = "details";
+      taskId = "";
+    }
     setView(nextView);
     setSelectedId(id);
     setDetailTab(detail);
@@ -303,9 +329,11 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash)}`,
+      `${location.pathname}${location.search}${["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash)}`,
     );
-    if (["progress", "team", "timeline"].includes(nextView))
+    if (
+      ["progress", "team", "timeline", "quality", "releases"].includes(nextView)
+    )
       window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const data = taskPinnedWorkspace || query.data;
@@ -333,7 +361,10 @@ function ProjectDelivery() {
       !target.requirement_id &&
       !["team", "timeline"].includes(target.view)
     ) {
-      location.hash = preserveProjectContext(deliveryInboxHref(target), location.hash);
+      location.hash = preserveProjectContext(
+        deliveryInboxHref(target),
+        location.hash,
+      );
       return;
     }
     navigate(
@@ -372,6 +403,7 @@ function ProjectDelivery() {
     owner,
   );
   const selected = data?.requirements.find((r) => r.id === selectedId);
+  const releaseReturn = releaseReturnFromHash(location.hash);
   const date = (value?: string | null) =>
     value
       ? new Intl.DateTimeFormat(i18n.language, {
@@ -394,7 +426,9 @@ function ProjectDelivery() {
     label: string,
     extra: Partial<EditorField> = {},
   ): EditorField => ({ key, label: tr(label), ...extra });
-  const ownerField = field("owner_id", "owner", { members: data?.members || [] });
+  const ownerField = field("owner_id", "owner", {
+    members: data?.members || [],
+  });
   const edit = (
     title: string,
     fields: EditorField[],
@@ -460,7 +494,9 @@ function ProjectDelivery() {
           items.push({
             label: f.label,
             value:
-              (f.members ? identityLabel(fresh.members, String(value || "")) : f.options?.find((o) => o.value === value)?.label) ||
+              (f.members
+                ? identityLabel(fresh.members, String(value || ""))
+                : f.options?.find((o) => o.value === value)?.label) ||
               String(value ?? tr("none")),
           });
         }
@@ -664,30 +700,6 @@ function ProjectDelivery() {
         });
       },
     );
-  const releaseEditor = (r: DeliveryRequirement) =>
-    edit(
-      "addRelease",
-      [
-        field("version", "version", { required: true, max: 80 }),
-        field("environment", "environment", { required: true, max: 80 }),
-        field("artifact_url", "url", { required: true, max: 2000 }),
-        field("rollback_plan", "rollback", {
-          required: true,
-          type: "area",
-          max: 10000,
-        }),
-        field("verification", "verification", {
-          required: true,
-          type: "area",
-          max: 10000,
-        }),
-      ],
-      {},
-      async (v) => {
-        await commit("release.save", { ...v, requirement_id: r.id });
-      },
-      "releaseHint",
-    );
 
   if (!projectId || !getToken())
     return (
@@ -848,8 +860,23 @@ function ProjectDelivery() {
   ];
   return (
     <section className="delivery-workbench" aria-label={tr("title")}>
-      {data.project.status === "archived" && <Alert type="info" title={t("projectPortfolio.archivedReadOnly")} description={t("projectPortfolio.archivedHint")} action={<Button href={`#/projects/portfolio?project_id=${encodeURIComponent(projectId)}`}>{t("projectPortfolio.inspect")}</Button>} />}
-      {["planning", "paused"].includes(data.project.status || "") && <Alert type="info" title={t("projectPortfolio.pausedHint")} />}
+      {data.project.status === "archived" && (
+        <Alert
+          type="info"
+          title={t("projectPortfolio.archivedReadOnly")}
+          description={t("projectPortfolio.archivedHint")}
+          action={
+            <Button
+              href={`#/projects/portfolio?project_id=${encodeURIComponent(projectId)}`}
+            >
+              {t("projectPortfolio.inspect")}
+            </Button>
+          }
+        />
+      )}
+      {["planning", "paused"].includes(data.project.status || "") && (
+        <Alert type="info" title={t("projectPortfolio.pausedHint")} />
+      )}
       <header className="delivery-header">
         <div>
           <div className="delivery-eyebrow">
@@ -933,6 +960,15 @@ function ProjectDelivery() {
           </div>
         ))}
       </div>
+      {releaseReturn && (
+        <Button href={releaseReturn}>
+          {t(
+            parseReleaseRoute(releaseReturn).view === "quality"
+              ? "deliveryRelease.backQuality"
+              : "deliveryRelease.releases",
+          )}
+        </Button>
+      )}
       <Tabs
         className="delivery-tabs"
         activeKey={view}
@@ -940,11 +976,13 @@ function ProjectDelivery() {
         items={views.map((key) => ({
           key,
           label:
-            key === "progress"
-              ? t("deliveryProgress.title")
-              : ["resources", "inbox"].includes(key)
-                ? tp(key)
-                : tr(key),
+            key === "quality" || key === "releases"
+              ? t(`deliveryRelease.${key}`)
+              : key === "progress"
+                ? t("deliveryProgress.title")
+                : ["resources", "inbox"].includes(key)
+                  ? tp(key)
+                  : tr(key),
           icon:
             key === "list" ? (
               <List size={15} />
@@ -994,7 +1032,12 @@ function ProjectDelivery() {
       {view === "overview" && (
         <>
           <DeliveryProjectOverview
-            onMilestone={(id) => { location.hash = preserveProjectContext(`#/dev-flow?view=timeline&milestone_id=${encodeURIComponent(id)}`, location.hash); }}
+            onMilestone={(id) => {
+              location.hash = preserveProjectContext(
+                `#/dev-flow?view=timeline&milestone_id=${encodeURIComponent(id)}`,
+                location.hash,
+              );
+            }}
             data={data}
             inbox={inboxQuery.data}
             onView={(nextView) => navigate(nextView, "")}
@@ -1034,6 +1077,14 @@ function ProjectDelivery() {
             </section>
           </div>
         </>
+      )}
+      {(view === "quality" || view === "releases") && (
+        <DeliveryReleaseWorkbench
+          view={view}
+          workspace={data}
+          sessionId={sessionId}
+          onSaved={saveWorkspace}
+        />
       )}
       {view === "resources" && (
         <DeliveryProjectResources
@@ -1329,8 +1380,8 @@ function ProjectDelivery() {
         afterOpenChange={taskInspector.afterOpenChange}
         onClose={() => navigate(view, "", "details", "")}
         title={
-          data.tasks.find((task) => task.id === taskInspector.displayId)?.title ||
-          t("deliveryManualReview.unavailable")
+          data.tasks.find((task) => task.id === taskInspector.displayId)
+            ?.title || t("deliveryManualReview.unavailable")
         }
         width={680}
         className="delivery-inspector"
@@ -1345,10 +1396,22 @@ function ProjectDelivery() {
           />
         )}
       </Drawer>
-      <DeliveryExecutionInspector executionId={selectedExecutionId} sessionId={sessionId} workspace={data} onCommand={(action, payload) => commit(action, payload, false)} onClose={() => { const params = new URLSearchParams(location.hash.split("?")[1]); params.delete("execution_id"); location.hash = `#/dev-flow?${params}`; }} />
+      <DeliveryExecutionInspector
+        executionId={selectedExecutionId}
+        sessionId={sessionId}
+        workspace={data}
+        onCommand={(action, payload) => commit(action, payload, false)}
+        onClose={() => {
+          const params = new URLSearchParams(location.hash.split("?")[1]);
+          params.delete("execution_id");
+          location.hash = `#/dev-flow?${params}`;
+        }}
+      />
       <Drawer
         open={Boolean(selected)}
-        onClose={() => navigate(view, "")}
+        onClose={() =>
+          releaseReturn ? (location.hash = releaseReturn) : navigate(view, "")
+        }
         size="min(680px, 100vw)"
         title={selected?.title}
         className="delivery-inspector"
@@ -1624,16 +1687,14 @@ function ProjectDelivery() {
                   label: tr("release"),
                   children: (
                     <>
-                      <p className="delivery-hint">{tr("releaseHint")}</p>
-                      <Button
-                        disabled={
-                          !data.permissions.approve ||
-                          selected.flow.closed ||
-                          selected.flow.stage === "operations"
-                        }
-                        onClick={() => releaseEditor(selected)}
-                      >
-                        {tr("addRelease")}
+                      <Alert
+                        type="info"
+                        showIcon
+                        title={t("deliveryRelease.historicalManual")}
+                        description={t("deliveryRelease.historicalHint")}
+                      />
+                      <Button onClick={() => navigate("releases", "")}>
+                        {t("deliveryRelease.releases")}
                       </Button>
                       {!selected.flow.releases.length && (
                         <Empty

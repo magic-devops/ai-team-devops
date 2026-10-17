@@ -1,3 +1,5 @@
+import { safePortfolioReturn } from "./projectPortfolioRoute";
+
 export type ExecutionCommandDraft = {
   id: string;
   title: string;
@@ -75,7 +77,9 @@ export function safeExecutionReturn(value: string, depth = 0): string | null {
     return null;
   const params = new URLSearchParams(value.split("?")[1]);
   const parent = params.get("return_to");
-  return parent !== null && !safeExecutionReturn(parent, depth + 1)
+  return parent !== null &&
+    !safeExecutionReturn(parent, depth + 1) &&
+    !safePortfolioReturn(parent)
     ? null
     : value;
 }

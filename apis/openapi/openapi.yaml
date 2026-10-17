@@ -1815,7 +1815,13 @@ paths:
         run sync/review/cancel, but reject new queue/dispatch. Receipt recovery precedes the fresh-dispatch gate; a committed
         Hermes receipt or run, including planned, is the handoff boundary. Only active allows a new execution handoff. Every
         archive stores its complete result in event data; current portfolio evidence stays live. Project status has a single
-        SQL source; project.update configuration fields require configure and retain omitted values.'
+        SQL source; project.update configuration fields require configure and retain omitted values.
+
+
+        Release policy configuration requires configure; CI import and candidate creation require write; review/revoke require
+        approve. Import takes raw DSSE JSON text, verifies configured Ed25519 keys and fixed scope/repository/workflow/policy
+        generation, and retains failures. Current candidate validity never rewrites its original snapshot. Policy, scope, CI
+        attempt or approval-authority invalidation latches permanently. Existing manual release records cannot satisfy deployment_verified.'
       security:
       - bearerAuth: []
       parameters:
@@ -4991,6 +4997,164 @@ paths:
         and transient as_of clock. Archive returns every unclosed Manager intent as a blocker, including missing-task and pending
         intents. Unfinished work is a warning, not an archive blocker. No workspace or preview row is created. Archive does
         not revoke independent Hermes authority or stop external processes.
+  /api/v1/delivery/quality:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Quality
+      operationId: deliveryQuality
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: requirement_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+            maxItems: 200
+          - type: 'null'
+          title: Requirement Ids
+      - name: task_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+            maxItems: 200
+          - type: 'null'
+          title: Task Ids
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryQualityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Pure current quality. Repeated requirement_ids/task_ids select complete requirements and independent tasks.
+        Empty selection has no scope basis; no implicit first item.
+  /api/v1/delivery/releases:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Releases
+      operationId: deliveryReleases
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReleasesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Pure project release trust policy, signed evidence, immutable candidates and explicitly unverified manual
+        history.
+  /api/v1/delivery/releases/{release_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Release Detail
+      operationId: deliveryReleaseDetail
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: release_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Release Id
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryReleaseDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Read the exact candidate, original signed envelope and current validity. Missing IDs never fall back to the
+        first release.
+  /api/v1/delivery/release-preview:
+    post:
+      tags:
+      - delivery
+      summary: Delivery Release Preview
+      operationId: deliveryReleasePreview
+      security:
+      - BearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleasePreviewInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleasePreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Pure fixed candidate preview. Requires current project write authority and writable project state. Candidate
+        creation additionally requires the exact preview_basis and outer version/idempotency identity.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -9345,9 +9509,12 @@ components:
           type: string
           enum:
           - project.update
+          - project.lifecycle
           - resource.save
           - resource.archive
           - member.save
+          - member.runtime.bind
+          - member.runtime.unbind
           - milestone.save
           - requirement.create
           - requirement.update
@@ -9361,16 +9528,17 @@ components:
           - stage.advance
           - stage.reopen
           - issue.promote
-          - release.save
+          - release.policy.save
+          - release.ci.import
+          - release.candidate.create
+          - release.candidate.review
+          - release.candidate.revoke
           - execution.queue
           - execution.sync
           - execution.review
           - execution.cancel
           - progress.record
           - baseline.create
-          - member.runtime.bind
-          - member.runtime.unbind
-          - project.lifecycle
         payload:
           type: object
           description: "Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.\
@@ -9549,6 +9717,58 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/ProjectLifecycleCommand'
+      - if:
+          properties:
+            action:
+              const: release.policy.save
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ReleasePolicySave'
+      - if:
+          properties:
+            action:
+              const: release.ci.import
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ReleaseCiImport'
+      - if:
+          properties:
+            action:
+              const: release.candidate.create
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ReleaseCandidateCreate'
+      - if:
+          properties:
+            action:
+              const: release.candidate.review
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ReleaseCandidateReview'
+      - if:
+          properties:
+            action:
+              const: release.candidate.revoke
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ReleaseCandidateRevoke'
+      description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
+        Candidate approval never proves deployment.
     TaskEdit:
       additionalProperties: false
       properties:
@@ -10025,6 +10245,7 @@ components:
       - executions
       - permissions
       - resources
+      - summary
       properties:
         version:
           type: integer
@@ -10104,6 +10325,49 @@ components:
           items:
             $ref: '#/components/schemas/DeliveryResource'
           description: Includes archived resources. Legacy absent metadata returns an empty collection without read-side writes.
+        summary:
+          type: object
+          properties:
+            requirements:
+              type: integer
+              minimum: 0
+            tasks:
+              type: integer
+              minimum: 0
+            tasks_done:
+              type: integer
+              minimum: 0
+            blocked:
+              type: integer
+              minimum: 0
+            accepted:
+              type: integer
+              minimum: 0
+            released:
+              type: integer
+              minimum: 0
+              description: Verified deployment count. No deployment receipt adapter is integrated in this release-preparation
+                phase.
+            recorded_released:
+              type: integer
+              minimum: 0
+              description: Historical operations-stage records, not verified deployment.
+            open_issues:
+              type: integer
+              minimum: 0
+            acceptance_rate:
+              type: integer
+              minimum: 0
+          required:
+          - requirements
+          - tasks
+          - tasks_done
+          - blocked
+          - accepted
+          - released
+          - recorded_released
+          - open_issues
+          - acceptance_rate
     Problem:
       type: object
       description: RFC 9457 Problem Details
@@ -15296,4 +15560,1388 @@ components:
       - risks
       - lifecycle
       title: ProjectPortfolioDetail
+      type: object
+    CiSignature:
+      additionalProperties: false
+      properties:
+        keyid:
+          pattern: ^[0-9a-f]{64}$
+          title: Keyid
+          type: string
+        sig:
+          maxLength: 88
+          minLength: 1
+          title: Sig
+          type: string
+      required:
+      - keyid
+      - sig
+      title: CiSignature
+      type: object
+    CiEnvelope:
+      additionalProperties: false
+      properties:
+        payloadType:
+          const: application/vnd.in-toto+json
+          title: Payloadtype
+          type: string
+        payload:
+          maxLength: 87384
+          minLength: 1
+          title: Payload
+          type: string
+        signatures:
+          items:
+            $ref: '#/components/schemas/CiSignature'
+          maxItems: 8
+          minItems: 1
+          title: Signatures
+          type: array
+      required:
+      - payloadType
+      - payload
+      - signatures
+      title: CiEnvelope
+      type: object
+    CiDigest:
+      additionalProperties: false
+      properties:
+        sha256:
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+          type: string
+      required:
+      - sha256
+      title: CiDigest
+      type: object
+    CiPredicate:
+      additionalProperties: false
+      properties:
+        tenant_id:
+          maxLength: 200
+          minLength: 1
+          title: Tenant Id
+          type: string
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        policy_generation:
+          minimum: 1
+          title: Policy Generation
+          type: integer
+        repository:
+          maxLength: 2000
+          minLength: 1
+          title: Repository
+          type: string
+        workflow:
+          maxLength: 200
+          minLength: 1
+          title: Workflow
+          type: string
+        commit_sha:
+          pattern: ^(?:[0-9a-f]{40}|[0-9a-f]{64})$
+          title: Commit Sha
+          type: string
+        run_uri:
+          maxLength: 2000
+          minLength: 1
+          title: Run Uri
+          type: string
+        run_number:
+          minimum: 1
+          title: Run Number
+          type: integer
+        run_attempt:
+          minimum: 1
+          title: Run Attempt
+          type: integer
+        scope_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Scope Basis
+          type: string
+        build_result:
+          enum:
+          - passed
+          - failed
+          title: Build Result
+          type: string
+        tests:
+          $ref: '#/components/schemas/CiTests'
+        finished_at:
+          maxLength: 100
+          minLength: 1
+          title: Finished At
+          type: string
+      required:
+      - tenant_id
+      - project_id
+      - policy_generation
+      - repository
+      - workflow
+      - commit_sha
+      - run_uri
+      - run_number
+      - run_attempt
+      - scope_basis
+      - build_result
+      - tests
+      - finished_at
+      title: CiPredicate
+      type: object
+    CiSubject:
+      additionalProperties: false
+      properties:
+        name:
+          maxLength: 200
+          minLength: 1
+          title: Name
+          type: string
+        digest:
+          $ref: '#/components/schemas/CiDigest'
+      required:
+      - name
+      - digest
+      title: CiSubject
+      type: object
+    CiTests:
+      additionalProperties: false
+      properties:
+        total:
+          maximum: 10000000
+          minimum: 0
+          title: Total
+          type: integer
+        failed:
+          maximum: 10000000
+          minimum: 0
+          title: Failed
+          type: integer
+        errors:
+          maximum: 10000000
+          minimum: 0
+          title: Errors
+          type: integer
+        skipped:
+          maximum: 10000000
+          minimum: 0
+          title: Skipped
+          type: integer
+      required:
+      - total
+      - failed
+      - errors
+      - skipped
+      title: CiTests
+      type: object
+    CiStatement:
+      additionalProperties: false
+      properties:
+        _type:
+          const: https://in-toto.io/Statement/v1
+          title: Type
+          type: string
+        subject:
+          items:
+            $ref: '#/components/schemas/CiSubject'
+          maxItems: 1
+          minItems: 1
+          title: Subject
+          type: array
+        predicateType:
+          const: urn:sop:delivery:ci-evidence:v1
+          title: Predicatetype
+          type: string
+        predicate:
+          $ref: '#/components/schemas/CiPredicate'
+      required:
+      - _type
+      - subject
+      - predicateType
+      - predicate
+      title: CiStatement
+      type: object
+    ReleaseCiImport:
+      additionalProperties: false
+      properties:
+        envelope:
+          maxLength: 131072
+          minLength: 1
+          title: Envelope
+          type: string
+        requirement_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Requirement Ids
+          type: array
+        task_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Task Ids
+          type: array
+      required:
+      - envelope
+      title: ReleaseCiImport
+      type: object
+    ReleasePolicySave:
+      additionalProperties: false
+      properties:
+        repository:
+          maxLength: 2000
+          minLength: 1
+          title: Repository
+          type: string
+        workflow:
+          maxLength: 200
+          minLength: 1
+          title: Workflow
+          type: string
+        public_keys:
+          items:
+            type: string
+          maxItems: 8
+          minItems: 1
+          title: Public Keys
+          type: array
+      required:
+      - repository
+      - workflow
+      - public_keys
+      title: ReleasePolicySave
+      type: object
+    QualityIssue:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        severity:
+          title: Severity
+          type: string
+        status:
+          title: Status
+          type: string
+        task_id:
+          title: Task Id
+          type: string
+        target:
+          $ref: '#/components/schemas/ReleaseTarget'
+      required:
+      - id
+      - title
+      - severity
+      - status
+      - task_id
+      - target
+      title: QualityIssue
+      type: object
+    QualityOwner:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        kind:
+          anyOf:
+          - enum:
+            - human
+            - agent
+            - tool
+            type: string
+          - type: 'null'
+          title: Kind
+        active:
+          title: Active
+          type: boolean
+        available:
+          title: Available
+          type: boolean
+      required:
+      - id
+      - name
+      - kind
+      - active
+      - available
+      title: QualityOwner
+      type: object
+    QualityProof:
+      additionalProperties: false
+      properties:
+        source:
+          enum:
+          - native
+          - manual
+          - requirement
+          - none
+          title: Source
+          type: string
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Basis
+        execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Execution Id
+        run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Run Id
+        run_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Run Version
+        evidence_sha256:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Evidence Sha256
+        reviewer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reviewer Id
+        at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: At
+      required:
+      - source
+      - id
+      - basis
+      - execution_id
+      - run_id
+      - run_version
+      - evidence_sha256
+      - reviewer_id
+      - at
+      title: QualityProof
+      type: object
+    QualityRequirement:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        revision:
+          title: Revision
+          type: integer
+        basis:
+          title: Basis
+          type: string
+        stage:
+          title: Stage
+          type: string
+        accepted:
+          title: Accepted
+          type: boolean
+        acceptance_criteria:
+          items:
+            type: string
+          title: Acceptance Criteria
+          type: array
+        task_ids:
+          items:
+            type: string
+          title: Task Ids
+          type: array
+        issues:
+          items:
+            $ref: '#/components/schemas/QualityIssue'
+          title: Issues
+          type: array
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        target:
+          $ref: '#/components/schemas/ReleaseTarget'
+      required:
+      - id
+      - title
+      - revision
+      - basis
+      - stage
+      - accepted
+      - acceptance_criteria
+      - task_ids
+      - issues
+      - reasons
+      - target
+      title: QualityRequirement
+      type: object
+    QualitySummary:
+      additionalProperties: false
+      properties:
+        requirements_total:
+          title: Requirements Total
+          type: integer
+        tasks_total:
+          title: Tasks Total
+          type: integer
+        verified_tasks:
+          title: Verified Tasks
+          type: integer
+        unverified_tasks:
+          title: Unverified Tasks
+          type: integer
+        accepted_requirements:
+          title: Accepted Requirements
+          type: integer
+        critical_issues:
+          title: Critical Issues
+          type: integer
+      required:
+      - requirements_total
+      - tasks_total
+      - verified_tasks
+      - unverified_tasks
+      - accepted_requirements
+      - critical_issues
+      title: QualitySummary
+      type: object
+    QualityTask:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Id
+        recorded_status:
+          title: Recorded Status
+          type: string
+        delivery_status:
+          enum:
+          - pending
+          - in_progress
+          - blocked
+          - awaiting_review
+          - recorded_completed
+          - verified_completed
+          title: Delivery Status
+          type: string
+        verified:
+          title: Verified
+          type: boolean
+        basis:
+          title: Basis
+          type: string
+        acceptance_criteria:
+          items:
+            type: string
+          title: Acceptance Criteria
+          type: array
+        acceptance_available:
+          title: Acceptance Available
+          type: boolean
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/QualityOwner'
+          - type: 'null'
+        proof:
+          $ref: '#/components/schemas/QualityProof'
+        issues:
+          items:
+            $ref: '#/components/schemas/QualityIssue'
+          title: Issues
+          type: array
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        target:
+          $ref: '#/components/schemas/ReleaseTarget'
+      required:
+      - id
+      - title
+      - requirement_id
+      - recorded_status
+      - delivery_status
+      - verified
+      - basis
+      - acceptance_criteria
+      - acceptance_available
+      - owner
+      - proof
+      - issues
+      - reasons
+      - target
+      title: QualityTask
+      type: object
+    ReleaseReason:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+        target:
+          anyOf:
+          - $ref: '#/components/schemas/ReleaseTarget'
+          - type: 'null'
+          default: null
+      required:
+      - code
+      - message
+      title: ReleaseReason
+      type: object
+    ReleaseTarget:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        kind:
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Kind
+          type: string
+        view:
+          enum:
+          - requirements
+          - tasks
+          - issues
+          title: View
+          type: string
+        detail:
+          default: details
+          title: Detail
+          type: string
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Requirement Id
+        task_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Task Id
+        issue_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Issue Id
+      required:
+      - project_id
+      - kind
+      - view
+      title: ReleaseTarget
+      type: object
+    SelectedReleaseScope:
+      additionalProperties: false
+      properties:
+        requirement_ids:
+          items:
+            type: string
+          title: Requirement Ids
+          type: array
+        task_ids:
+          items:
+            type: string
+          title: Task Ids
+          type: array
+      required:
+      - requirement_ids
+      - task_ids
+      title: SelectedReleaseScope
+      type: object
+    DeliveryQualityResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        as_of:
+          title: As Of
+          type: string
+        requirements:
+          items:
+            $ref: '#/components/schemas/QualityRequirement'
+          title: Requirements
+          type: array
+        tasks:
+          items:
+            $ref: '#/components/schemas/QualityTask'
+          title: Tasks
+          type: array
+        independent_tasks:
+          items:
+            $ref: '#/components/schemas/QualityTask'
+          title: Independent Tasks
+          type: array
+        selected:
+          $ref: '#/components/schemas/SelectedReleaseScope'
+        scope_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Scope Basis
+        eligible:
+          title: Eligible
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        summary:
+          $ref: '#/components/schemas/QualitySummary'
+      required:
+      - project_id
+      - as_of
+      - requirements
+      - tasks
+      - independent_tasks
+      - selected
+      - scope_basis
+      - eligible
+      - reasons
+      - summary
+      title: DeliveryQualityResponse
+      type: object
+    LegacyReleaseRecord:
+      additionalProperties: false
+      properties:
+        requirement_id:
+          title: Requirement Id
+          type: string
+        requirement_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Title
+        record:
+          additionalProperties: true
+          title: Record
+          type: object
+        source:
+          const: manual_history
+          default: manual_history
+          title: Source
+          type: string
+        deployment_verified:
+          const: false
+          default: false
+          title: Deployment Verified
+          type: boolean
+      required:
+      - requirement_id
+      - requirement_title
+      - record
+      title: LegacyReleaseRecord
+      type: object
+    ReleaseActor:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      title: ReleaseActor
+      type: object
+    ReleaseCandidate:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        created_at:
+          title: Created At
+          type: string
+        created_by:
+          $ref: '#/components/schemas/ReleaseActor'
+        status:
+          enum:
+          - pending
+          - approved
+          - rejected
+          - revoked
+          - stale
+          title: Status
+          type: string
+        decision:
+          enum:
+          - pending
+          - approved
+          - rejected
+          - revoked
+          title: Decision
+          type: string
+        snapshot:
+          $ref: '#/components/schemas/ReleaseSnapshot'
+        reviews:
+          items:
+            $ref: '#/components/schemas/ReleaseDecision'
+          title: Reviews
+          type: array
+        invalidated:
+          title: Invalidated
+          type: boolean
+        invalidated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invalidated At
+        invalidated_reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Invalidated Reasons
+          type: array
+        valid:
+          title: Valid
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        review_basis:
+          title: Review Basis
+          type: string
+        permissions:
+          $ref: '#/components/schemas/ReleaseCandidatePermissions'
+        deployment:
+          $ref: '#/components/schemas/ReleaseDeployment'
+      required:
+      - id
+      - created_at
+      - created_by
+      - status
+      - decision
+      - snapshot
+      - reviews
+      - invalidated
+      - invalidated_at
+      - invalidated_reasons
+      - valid
+      - reasons
+      - review_basis
+      - permissions
+      - deployment
+      title: ReleaseCandidate
+      type: object
+    ReleaseCandidatePermissions:
+      additionalProperties: false
+      properties:
+        can_approve:
+          title: Can Approve
+          type: boolean
+        can_reject:
+          title: Can Reject
+          type: boolean
+        can_revoke:
+          title: Can Revoke
+          type: boolean
+      required:
+      - can_approve
+      - can_reject
+      - can_revoke
+      title: ReleaseCandidatePermissions
+      type: object
+    ReleaseCiEvidence:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        imported_at:
+          title: Imported At
+          type: string
+        imported_by:
+          $ref: '#/components/schemas/ReleaseActor'
+        envelope_digest:
+          title: Envelope Digest
+          type: string
+        key_id:
+          title: Key Id
+          type: string
+        passed:
+          title: Passed
+          type: boolean
+        current:
+          title: Current
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        selected:
+          $ref: '#/components/schemas/SelectedReleaseScope'
+        statement:
+          $ref: '#/components/schemas/CiStatement'
+      required:
+      - id
+      - imported_at
+      - imported_by
+      - envelope_digest
+      - key_id
+      - passed
+      - current
+      - reasons
+      - selected
+      - statement
+      title: ReleaseCiEvidence
+      type: object
+    ReleaseCiEvidenceSnapshot:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        envelope_digest:
+          title: Envelope Digest
+          type: string
+        key_id:
+          title: Key Id
+          type: string
+        policy_generation:
+          title: Policy Generation
+          type: integer
+        repository:
+          title: Repository
+          type: string
+        workflow:
+          title: Workflow
+          type: string
+        commit_sha:
+          title: Commit Sha
+          type: string
+        run_uri:
+          title: Run Uri
+          type: string
+        run_number:
+          title: Run Number
+          type: integer
+        run_attempt:
+          title: Run Attempt
+          type: integer
+        artifact_name:
+          title: Artifact Name
+          type: string
+        artifact_sha256:
+          title: Artifact Sha256
+          type: string
+      required:
+      - id
+      - envelope_digest
+      - key_id
+      - policy_generation
+      - repository
+      - workflow
+      - commit_sha
+      - run_uri
+      - run_number
+      - run_attempt
+      - artifact_name
+      - artifact_sha256
+      title: ReleaseCiEvidenceSnapshot
+      type: object
+    ReleaseDecision:
+      additionalProperties: false
+      properties:
+        decision:
+          enum:
+          - approve
+          - reject
+          - revoke
+          title: Decision
+          type: string
+        comment:
+          title: Comment
+          type: string
+        actor:
+          $ref: '#/components/schemas/ReleaseActor'
+        at:
+          title: At
+          type: string
+        review_basis:
+          title: Review Basis
+          type: string
+      required:
+      - decision
+      - comment
+      - actor
+      - at
+      - review_basis
+      title: ReleaseDecision
+      type: object
+    ReleaseDeployment:
+      additionalProperties: false
+      properties:
+        status:
+          const: not_handed_off
+          default: not_handed_off
+          title: Status
+          type: string
+        verified:
+          const: false
+          default: false
+          title: Verified
+          type: boolean
+      title: ReleaseDeployment
+      type: object
+    ReleaseKey:
+      additionalProperties: false
+      properties:
+        key_id:
+          title: Key Id
+          type: string
+        public_key:
+          title: Public Key
+          type: string
+      required:
+      - key_id
+      - public_key
+      title: ReleaseKey
+      type: object
+    ReleasePermissions:
+      additionalProperties: false
+      properties:
+        can_configure:
+          title: Can Configure
+          type: boolean
+        can_import:
+          title: Can Import
+          type: boolean
+        can_create:
+          title: Can Create
+          type: boolean
+        can_review:
+          title: Can Review
+          type: boolean
+      required:
+      - can_configure
+      - can_import
+      - can_create
+      - can_review
+      title: ReleasePermissions
+      type: object
+    ReleasePolicy:
+      additionalProperties: false
+      properties:
+        generation:
+          title: Generation
+          type: integer
+        repository:
+          title: Repository
+          type: string
+        workflow:
+          title: Workflow
+          type: string
+        keys:
+          items:
+            $ref: '#/components/schemas/ReleaseKey'
+          title: Keys
+          type: array
+        updated_at:
+          title: Updated At
+          type: string
+        updated_by:
+          $ref: '#/components/schemas/ReleaseActor'
+      required:
+      - generation
+      - repository
+      - workflow
+      - keys
+      - updated_at
+      - updated_by
+      title: ReleasePolicy
+      type: object
+    ReleaseQualitySnapshot:
+      additionalProperties: false
+      properties:
+        scope_basis:
+          title: Scope Basis
+          type: string
+        requirements:
+          items:
+            $ref: '#/components/schemas/QualityRequirement'
+          title: Requirements
+          type: array
+        tasks:
+          items:
+            $ref: '#/components/schemas/QualityTask'
+          title: Tasks
+          type: array
+      required:
+      - scope_basis
+      - requirements
+      - tasks
+      title: ReleaseQualitySnapshot
+      type: object
+    ReleaseSnapshot:
+      additionalProperties: false
+      properties:
+        version:
+          title: Version
+          type: string
+        environment:
+          title: Environment
+          type: string
+        selected:
+          $ref: '#/components/schemas/SelectedReleaseScope'
+        artifact_url:
+          title: Artifact Url
+          type: string
+        release_notes:
+          title: Release Notes
+          type: string
+        rollback_plan:
+          title: Rollback Plan
+          type: string
+        ci:
+          $ref: '#/components/schemas/ReleaseCiEvidenceSnapshot'
+        quality:
+          $ref: '#/components/schemas/ReleaseQualitySnapshot'
+      required:
+      - version
+      - environment
+      - selected
+      - artifact_url
+      - release_notes
+      - rollback_plan
+      - ci
+      - quality
+      title: ReleaseSnapshot
+      type: object
+    DeliveryReleasesResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        policy:
+          anyOf:
+          - $ref: '#/components/schemas/ReleasePolicy'
+          - type: 'null'
+        evidence:
+          items:
+            $ref: '#/components/schemas/ReleaseCiEvidence'
+          title: Evidence
+          type: array
+        candidates:
+          items:
+            $ref: '#/components/schemas/ReleaseCandidate'
+          title: Candidates
+          type: array
+        legacy_history:
+          items:
+            $ref: '#/components/schemas/LegacyReleaseRecord'
+          title: Legacy History
+          type: array
+        permissions:
+          $ref: '#/components/schemas/ReleasePermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - policy
+      - evidence
+      - candidates
+      - legacy_history
+      - permissions
+      title: DeliveryReleasesResponse
+      type: object
+    DeliveryReleaseDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        candidate:
+          $ref: '#/components/schemas/ReleaseCandidate'
+        evidence:
+          $ref: '#/components/schemas/ReleaseCiEvidence'
+        envelope:
+          title: Envelope
+          type: string
+        permissions:
+          $ref: '#/components/schemas/ReleasePermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - candidate
+      - evidence
+      - envelope
+      - permissions
+      title: DeliveryReleaseDetail
+      type: object
+    ReleasePreviewInput:
+      additionalProperties: false
+      properties:
+        requirement_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Requirement Ids
+          type: array
+        task_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Task Ids
+          type: array
+        version:
+          maxLength: 80
+          minLength: 1
+          title: Version
+          type: string
+        environment:
+          maxLength: 80
+          minLength: 1
+          title: Environment
+          type: string
+        ci_evidence_id:
+          maxLength: 64
+          minLength: 1
+          title: Ci Evidence Id
+          type: string
+        artifact_url:
+          maxLength: 2000
+          minLength: 1
+          title: Artifact Url
+          type: string
+        release_notes:
+          maxLength: 10000
+          minLength: 1
+          title: Release Notes
+          type: string
+        rollback_plan:
+          maxLength: 10000
+          minLength: 1
+          title: Rollback Plan
+          type: string
+      required:
+      - version
+      - environment
+      - ci_evidence_id
+      - artifact_url
+      - release_notes
+      - rollback_plan
+      title: ReleasePreviewInput
+      type: object
+    ReleasePreviewResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        preview_basis:
+          title: Preview Basis
+          type: string
+        allowed:
+          title: Allowed
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          title: Reasons
+          type: array
+        snapshot:
+          anyOf:
+          - $ref: '#/components/schemas/ReleaseSnapshot'
+          - type: 'null'
+        permissions:
+          $ref: '#/components/schemas/ReleasePermissions'
+      required:
+      - project_id
+      - version
+      - as_of
+      - preview_basis
+      - allowed
+      - reasons
+      - snapshot
+      - permissions
+      title: ReleasePreviewResponse
+      type: object
+    ReleaseCandidateCreate:
+      additionalProperties: false
+      properties:
+        requirement_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Requirement Ids
+          type: array
+        task_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 200
+          title: Task Ids
+          type: array
+        version:
+          maxLength: 80
+          minLength: 1
+          title: Version
+          type: string
+        environment:
+          maxLength: 80
+          minLength: 1
+          title: Environment
+          type: string
+        ci_evidence_id:
+          maxLength: 64
+          minLength: 1
+          title: Ci Evidence Id
+          type: string
+        artifact_url:
+          maxLength: 2000
+          minLength: 1
+          title: Artifact Url
+          type: string
+        release_notes:
+          maxLength: 10000
+          minLength: 1
+          title: Release Notes
+          type: string
+        rollback_plan:
+          maxLength: 10000
+          minLength: 1
+          title: Rollback Plan
+          type: string
+        preview_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Preview Basis
+          type: string
+      required:
+      - version
+      - environment
+      - ci_evidence_id
+      - artifact_url
+      - release_notes
+      - rollback_plan
+      - preview_basis
+      title: ReleaseCandidateCreate
+      type: object
+    ReleaseCandidateReview:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        decision:
+          enum:
+          - approve
+          - reject
+          title: Decision
+          type: string
+        comment:
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+          type: string
+        review_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Review Basis
+          type: string
+      required:
+      - id
+      - decision
+      - comment
+      - review_basis
+      title: ReleaseCandidateReview
+      type: object
+    ReleaseCandidateRevoke:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        comment:
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+          type: string
+        review_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Review Basis
+          type: string
+      required:
+      - id
+      - comment
+      - review_basis
+      title: ReleaseCandidateRevoke
       type: object

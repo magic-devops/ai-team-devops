@@ -14,7 +14,7 @@ import logging
 import re
 from collections.abc import Iterable, Mapping
 from datetime import date
-from typing import Any
+from typing import Any, Sequence
 from urllib.parse import quote
 
 import httpx
@@ -101,6 +101,28 @@ class ManagerClient:
 
     def delivery_workspace(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/workspace")
+
+    def delivery_quality(self, *, requirement_ids: Sequence[str] = (), task_ids: Sequence[str] = ()) -> dict[str, Any]:
+        """Inspect current quality or an explicitly selected release scope, without writing."""
+        if isinstance(requirement_ids, (str, bytes)) or isinstance(task_ids, (str, bytes)):
+            raise ValueError("Scope IDs must be explicit sequences, not one string")
+        selection = {"requirement_ids": list(requirement_ids), "task_ids": list(task_ids)}
+        for ids in selection.values():
+            if len(ids) > 200 or any(
+                not isinstance(item, str) or not item or item != item.strip() or len(item) > 200 for item in ids
+            ) or len(ids) != len(set(ids)):
+                raise ValueError("Choose at most 200 distinct nonempty IDs per scope")
+        return self._request("GET", "/api/v1/delivery/quality", params=selection)
+
+    def delivery_releases(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/delivery/releases")
+
+    def delivery_release(self, release_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/releases/{_resource_segment(release_id)}")
+
+    def delivery_release_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Preview a fixed candidate; this never approves or deploys it."""
+        return self._request("POST", "/api/v1/delivery/release-preview", json_body=dict(body))
 
     def delivery_inbox(self, *, scope: str = "mine") -> dict[str, Any]:
         """Read actual personal or team delivery work in the selected project."""

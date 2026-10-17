@@ -30,7 +30,7 @@ def _models():
 
 def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=False):
     """Actual stable responsibility scopes affected by account or membership changes."""
-    from .sql_models import DeliveryTaskReview, Project, ProjectMember, Task
+    from .sql_models import DeliveryTaskReview, DeliveryWorkspace, Project, ProjectMember, Task
 
     affected = set()
 
@@ -58,6 +58,20 @@ def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=
                 select(Project.tenant_id, Project.id).join(ProjectMember, ProjectMember.project_id == Project.id)
                 .where(Project.tenant_id.in_(tenant_ids), ProjectMember.user_id.in_(user_ids))
             ).all())
+            # Tenant administrators may approve without a ProjectMember row.
+            # Follow the actual immutable approval identity in scoped workspaces.
+            for tenant_id, project_id, data in db.connection().execute(
+                select(DeliveryWorkspace.tenant_id, DeliveryWorkspace.project_id, DeliveryWorkspace.data)
+                .where(DeliveryWorkspace.tenant_id.in_(tenant_ids))
+            ):
+                candidates = (data or {}).get("release_candidates", [])
+                if any(
+                    not candidate.get("invalidated") and candidate.get("decision") == "approved"
+                    and any(review.get("decision") == "approve" and (review.get("actor") or {}).get("id") in user_ids
+                            for review in candidate.get("reviews", []))
+                    for candidate in candidates
+                ):
+                    affected.add((tenant_id, project_id))
     if project_ids:
         for tenant_id, project_id in db.connection().execute(
             select(Project.tenant_id, Project.id).where(Project.id.in_(project_ids))

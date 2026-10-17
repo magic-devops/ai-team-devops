@@ -267,6 +267,10 @@ def _workspace_invalidation(old, new, *, lifecycle=False):
     if lifecycle:
         before.pop("lifecycle", None)
         after.pop("lifecycle", None)
+    if not _release_candidates_invalidation(
+        before.pop("release_candidates", []), after.pop("release_candidates", [])
+    ):
+        return False
     old_entries, new_entries = before.pop("executions", []), after.pop("executions", [])
     if (not isinstance(old_entries, list) or not isinstance(new_entries, list)
             or len(old_entries) != len(new_entries)
@@ -287,6 +291,37 @@ def _workspace_invalidation(old, new, *, lifecycle=False):
             or any(not isinstance(flow, dict) for flow in [*old_flows.values(), *new_flows.values()])):
         return False
     return all(_flow_invalidation(original, new_flows[rid]) for rid, original in old_flows.items())
+
+
+def _release_candidates_invalidation(originals, changes):
+    """Identity capture may add terminal invalidation facts, never approve or rewrite."""
+    from .routers.delivery_release import INVALIDATION_CODES
+
+    if not isinstance(originals, list) or not isinstance(changes, list) or len(originals) != len(changes):
+        return False
+    for original, changed in zip(originals, changes, strict=True):
+        if not isinstance(original, dict) or not isinstance(changed, dict):
+            return False
+        if original == changed:
+            continue
+        if original.get("invalidated", False) is not False or changed.get("invalidated") is not True:
+            return False
+        reasons = changed.get("invalidated_reasons")
+        if (not isinstance(changed.get("invalidated_at"), str) or not changed["invalidated_at"]
+                or not isinstance(reasons, list) or not reasons):
+            return False
+        for reason in reasons:
+            if (not isinstance(reason, dict) or set(reason) != {"code", "message", "target"}
+                    or reason["code"] not in INVALIDATION_CODES or reason["target"] is not None
+                    or not isinstance(reason["message"], str) or not reason["message"]
+                    or len(reason["message"]) > 4000):
+                return False
+        fields = {"invalidated", "invalidated_at", "invalidated_reasons"}
+        if {k: v for k, v in original.items() if k not in fields} != {
+            k: v for k, v in changed.items() if k not in fields
+        }:
+            return False
+    return True
 
 
 def _flow_invalidation(original, changed):

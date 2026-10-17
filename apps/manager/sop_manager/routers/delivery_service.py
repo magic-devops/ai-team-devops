@@ -137,6 +137,9 @@ def reconcile(db, project, state):
             invalidate(flow)
         flow["definition"] = definition
     _reconcile_execution_evidence(db, project, data)
+    from .delivery_release import reconcile_releases
+
+    reconcile_releases(db, project, data)
     return data
 
 
@@ -239,8 +242,9 @@ def materialize(db, project, data, user):
         "tasks_done": sum(t["status"] == "completed" for t in tasks),
         "blocked": sum(bool(r["flow"].get("blocked_reason")) for r in reqs)
         + sum(t["status"] == "blocked" for t in tasks),
-        "accepted": sum(STAGE_IDS.index(r["flow"]["stage"]) >= STAGE_IDS.index("release") for r in reqs),
-        "released": sum(r["flow"]["stage"] == "operations" for r in reqs),
+        "accepted": sum(verification.requirement_accepted(r["id"]) for r in reqs),
+        "released": 0,
+        "recorded_released": sum(r["flow"]["stage"] == "operations" for r in reqs),
         "open_issues": sum(i["status"] not in {"resolved", "closed"} for i in issues),
     }
     summary["acceptance_rate"] = round(summary["accepted"] / len(reqs) * 100) if reqs else 0
@@ -522,9 +526,9 @@ def _promote_issue(db, project, data, body):
 
 
 def _add_evidence(row, flow, user, action, body, values):
-    if flow["closed"] or flow["stage"] == "operations" and action == "release.save":
+    if flow["closed"]:
         raise HTTPException(409, "Reopen before modifying a completed delivery")
-    collection = "artifacts" if action == "artifact.add" else "releases"
+    collection = "artifacts"
     if action == "artifact.add" and body.kind != "test" and body.result == "failed":
         target = {
             "prd": "product",
@@ -575,7 +579,7 @@ def _apply_lifecycle(db, project, user, data, action, body, values):
         )
         invalidate(flow)
         row.status = "pending"
-    elif action in {"artifact.add", "release.save"}:
+    elif action == "artifact.add":
         _add_evidence(row, flow, user, action, body, values)
     elif action == "stage.advance":
         if flow["closed"]:

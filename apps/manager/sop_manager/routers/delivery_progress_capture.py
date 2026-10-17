@@ -71,6 +71,7 @@ def record_observation(
     if workspace:
         effective = reconcile(db, project, workspace.data)
         changed = effective["flows"] != workspace.data["flows"]
+        changed = changed or effective.get("release_candidates", []) != workspace.data.get("release_candidates", [])
         original_entries = {entry["id"]: entry for entry in workspace.data.get("executions", [])}
         for entry in effective.get("executions", []):
             if entry.get("executor_binding_invalidated") and not original_entries[entry["id"]].get(
@@ -86,6 +87,8 @@ def record_observation(
                 "flows": effective["flows"],
                 "executions": effective.get("executions", []),
             }
+            if "release_candidates" in effective:
+                value["release_candidates"] = effective["release_candidates"]
             transaction = db.get_nested_transaction() or db.get_transaction()
             reserved = db.info.get(_RESERVED, {}).get(transaction, {}).get((project.tenant_id, project.id))
             version = workspace.version if reserved == workspace.version else workspace.version + 1

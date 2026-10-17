@@ -125,6 +125,10 @@ from sop_tools.manager_client import report_task_status  # 现状写法不变
 
 ## 相关文档
 
+质量与发布候选使用当前项目作用域：`delivery_quality(requirement_ids=[...], task_ids=[...])` 返回明确范围的 `scope_basis`（空范围不自动选择）；关联任务须选择整个需求，`task_ids` 仅指独立任务。`delivery_releases()` 读取策略/签名证明/候选；`delivery_release(id)` 读取精确详情；`delivery_release_preview(body)` 只预览。所有写入继续使用 `delivery_command(body)` 的固定版本和幂等键，不自动采用冲突后的最新依据。
+
+CI导入的 `payload.envelope` 必须是原始DSSE JSON文本，不能预先解析后丢失重复字段。CI保管Ed25519私钥，Manager只配置可信公钥。`scripts/delivery-ci-attest.py --help` 提供真实干净Git checkout、构建/测试子进程、JUnit及新制品的签名入口；先读取明确质量范围再固定传入依据。人工记录、候选已批准与实际部署分别表达，当前候选审批不触发基础设施操作。协议与权限见 `docs/DELIVERY_RELEASE_DESIGN.md`。
+
 - CLI 命令：`packages/sop-cli/README.md`
 - 安装与环境：`docs/TOOLS_AND_SCRIPTS.md`
 - 同步与 IPC：`ai-sop-ops/SYNC_AND_PLATFORMS.md`

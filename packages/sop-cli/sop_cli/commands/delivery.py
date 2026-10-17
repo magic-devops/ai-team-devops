@@ -27,6 +27,46 @@ class ProjectState(str, Enum):
     archived = "archived"
 
 
+@app.command("quality")
+def quality(
+    requirement_ids: Annotated[list[str] | None, typer.Option("--requirement-id")] = None,
+    task_ids: Annotated[list[str] | None, typer.Option("--task-id")] = None,
+):
+    """读取当前项目质量；可明确选择需求及独立任务取得固定范围依据。"""
+    try:
+        with get_client() as client:
+            console.print_json(data=client.delivery_quality(requirement_ids=requirement_ids or [], task_ids=task_ids or []))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("releases")
+def releases(release_id: Annotated[str, typer.Option("--id")] = ""):
+    """读取发布候选或明确ID详情；批准候选不代表部署完成。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_release(release_id) if release_id else client.delivery_releases()
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("release-preview")
+def release_preview(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)]):
+    """读取当前文件的固定发布候选预览；写入沿用通用command及原key。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Expected a JSON object")
+        with get_client() as client:
+            console.print_json(data=client.delivery_release_preview(body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 @app.command("lifecycle-preview")
 def lifecycle_preview(
     target: Annotated[ProjectState, typer.Option("--target")],

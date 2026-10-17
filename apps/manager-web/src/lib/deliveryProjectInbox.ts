@@ -7,6 +7,8 @@ import {
 export const deliveryViews = [
   "overview",
   "progress",
+  "quality",
+  "releases",
   "inbox",
   "list",
   "board",

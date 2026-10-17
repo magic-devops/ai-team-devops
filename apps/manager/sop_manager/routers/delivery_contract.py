@@ -12,9 +12,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sop_manager.task_acceptance import TaskAcceptanceCriteria
 from sop_manager.task_owner import TaskOwnerId
 
+from .delivery_ci_contract import ReleaseCiImport, ReleasePolicySave
 from .delivery_execution_contract import ExecutionQueue
-from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
-from .project_lifecycle_contract import ProjectLifecycleCommand
+from .delivery_release_contract import ReleaseCandidateCreate, ReleaseCandidateReview, ReleaseCandidateRevoke
 from .delivery_scheduling_contract import (
     AllocationInput,
     CalendarSave,
@@ -22,6 +22,8 @@ from .delivery_scheduling_contract import (
     StoredAllocation,
     civil_date,
 )
+from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
+from .project_lifecycle_contract import ProjectLifecycleCommand
 
 STAGES = [
     {"id": "intake", "artifact": "", "route": "#/requirements/intake"},
@@ -32,7 +34,7 @@ STAGES = [
     {"id": "development", "artifact": "", "route": "#/tasks/execution"},
     {"id": "testing", "artifact": "test", "route": "#/tasks/quality-governance"},
     {"id": "acceptance", "artifact": "", "route": "#/tasks/quality-governance"},
-    {"id": "release", "artifact": "", "route": "#/ops-center"},
+    {"id": "release", "artifact": "", "route": "#/dev-flow?view=releases"},
     {"id": "operations", "artifact": "runbook", "route": "#/issues/tracker"},
 ]
 STAGE_IDS = [s["id"] for s in STAGES]
@@ -90,7 +92,11 @@ class Command(Input):
         "stage.advance",
         "stage.reopen",
         "issue.promote",
-        "release.save",
+        "release.policy.save",
+        "release.ci.import",
+        "release.candidate.create",
+        "release.candidate.review",
+        "release.candidate.revoke",
         "execution.queue",
         "execution.sync",
         "execution.review",
@@ -704,16 +710,6 @@ class IssuePromote(Input):
     _criteria = field_validator("acceptance_criteria")(RequirementCreate.nonempty_criteria.__func__)
 
 
-class ReleaseSave(Input):
-    requirement_id: str = Field(min_length=1, max_length=64)
-    version: str = Field(min_length=1, max_length=80)
-    environment: str = Field(min_length=1, max_length=80)
-    artifact_url: str = Field(min_length=1, max_length=2000)
-    rollback_plan: str = Field(min_length=1, max_length=10000)
-    verification: str = Field(min_length=1, max_length=10000)
-    _url = field_validator("artifact_url")(ArtifactAdd.safe_url.__func__)
-
-
 class ExecutionSync(Input):
     id: str = Field(min_length=1, max_length=64)
 
@@ -751,7 +747,11 @@ PAYLOADS = {
     "stage.advance": StageAction,
     "stage.reopen": StageAction,
     "issue.promote": IssuePromote,
-    "release.save": ReleaseSave,
+    "release.policy.save": ReleasePolicySave,
+    "release.ci.import": ReleaseCiImport,
+    "release.candidate.create": ReleaseCandidateCreate,
+    "release.candidate.review": ReleaseCandidateReview,
+    "release.candidate.revoke": ReleaseCandidateRevoke,
 }
 
 
@@ -837,7 +837,7 @@ def stage_gates(requirement, flow, tasks, issues):
             }
         )
     if stage == "release":
-        checks.append(
-            {"id": "release_record", "ok": any(r["revision"] == revision for r in flow["releases"])}
-        )
+        # Candidate approval authorizes preparation. Only a real deployment
+        # adapter can provide this boundary; manual history cannot satisfy it.
+        checks.append({"id": "deployment_verified", "ok": False})
     return checks
