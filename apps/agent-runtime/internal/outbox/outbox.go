@@ -1,5 +1,3 @@
-//go:build cgo
-
 // Package outbox 实现"幂等 + 持久化 + DLQ"事件投递。
 // 存储用 SQLite WAL；事件用 ULID 做幂等键；失败入 DLQ。
 package outbox
@@ -9,12 +7,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
 	"github.com/oklog/ulid/v2"
+	_ "modernc.org/sqlite" // pure Go SQLite driver
 )
 
 // Event 是 outbox 中的最小信息单元（CloudEvents 子集）。
@@ -35,10 +35,26 @@ func Open(path string) (*Outbox, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite3", path+"?_journal=WAL&_busy_timeout=5000")
+	absolutePath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
+	uriPath := filepath.ToSlash(absolutePath)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+	dsn := url.URL{Scheme: "file", Path: uriPath}
+	params := url.Values{
+		"_pragma": {"journal_mode(WAL)", "busy_timeout(5000)", "synchronous(FULL)"},
+		"_txlock": {"immediate"},
+	}
+	dsn.RawQuery = params.Encode()
+	db, err := sql.Open("sqlite", dsn.String())
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS events (
 			id          TEXT PRIMARY KEY,
@@ -117,22 +133,34 @@ func (o *Outbox) Ack(ctx context.Context, id string) error {
 
 // Retry 增加重试计数，按指数退避更新 next_at；超过 maxRetries 则进 DLQ（这里删除并由调用方处理）。
 func (o *Outbox) Retry(ctx context.Context, id string, maxRetries int) (bool, error) {
-	var retries int
-	if err := o.db.QueryRowContext(ctx, `SELECT retries FROM events WHERE id=?`, id).Scan(&retries); err != nil {
+	tx, err := o.db.BeginTx(ctx, nil)
+	if err != nil {
 		return false, err
 	}
-	retries++
-	if retries > maxRetries {
-		_, _ = o.db.ExecContext(ctx, `DELETE FROM events WHERE id=?`, id)
+	defer tx.Rollback()
+	var retries int
+	if err := tx.QueryRowContext(ctx, `SELECT retries FROM events WHERE id=?`, id).Scan(&retries); err != nil {
+		return false, err
+	}
+	if retries >= maxRetries {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM events WHERE id=?`, id); err != nil {
+			return false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
 		return true, nil
 	}
-	delay := time.Duration(1<<retries) * time.Second
-	if delay > 5*time.Minute {
-		delay = 5 * time.Minute
+	retries++
+	delay := 5 * time.Minute
+	if retries < 9 {
+		delay = time.Duration(1<<retries) * time.Second
 	}
-	_, err := o.db.ExecContext(ctx, `UPDATE events SET retries=?, next_at=? WHERE id=?`,
-		retries, time.Now().Add(delay).Unix(), id)
-	return false, err
+	if _, err := tx.ExecContext(ctx, `UPDATE events SET retries=?, next_at=? WHERE id=?`,
+		retries, time.Now().Add(delay).Unix(), id); err != nil {
+		return false, err
+	}
+	return false, tx.Commit()
 }
 
 // Depth 当前积压事件数（用于心跳上报）。

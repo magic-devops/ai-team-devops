@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,7 @@ func TestRunRejectsEmptyArgvAndInvalidRoot(t *testing.T) {
 
 func TestRunExecutesWithinRoot(t *testing.T) {
 	root := t.TempDir()
-	resp := Run(context.Background(), root, Request{Argv: []string{"pwd"}, TimeoutSeconds: 5})
+	resp := Run(context.Background(), root, Request{Argv: nativeProcessArgv(t, "cwd"), TimeoutSeconds: 5})
 	if !resp.OK {
 		t.Fatalf("expected success: %#v", resp)
 	}
@@ -191,7 +192,7 @@ func TestWorkspaceReadTooLargeReturnsFullHash(t *testing.T) {
 }
 
 func TestNonzeroExitIsStructuredResult(t *testing.T) {
-	resp := Run(context.Background(), t.TempDir(), Request{Argv: []string{"/bin/sh", "-c", "printf no && exit 1"}, TimeoutSeconds: 5})
+	resp := Run(context.Background(), t.TempDir(), Request{Argv: nativeProcessArgv(t, "nonzero"), TimeoutSeconds: 5})
 	if resp.OK {
 		t.Fatalf("expected ok false for nonzero exit: %#v", resp)
 	}
@@ -204,4 +205,30 @@ func TestNonzeroExitIsStructuredResult(t *testing.T) {
 	if resp.Error != "" {
 		t.Fatalf("ordinary nonzero exit must not be infrastructure error: %#v", resp)
 	}
+}
+
+// The same test executable is a real native process on every supported platform.
+func TestRunToolNativeProcess(t *testing.T) {
+	switch os.Getenv("SOP_RUNTOOL_NATIVE_PROCESS") {
+	case "cwd":
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprint(os.Stdout, cwd)
+		os.Exit(0)
+	case "nonzero":
+		fmt.Fprint(os.Stdout, "no")
+		os.Exit(1)
+	}
+}
+
+func nativeProcessArgv(t *testing.T, mode string) []string {
+	t.Helper()
+	t.Setenv("SOP_RUNTOOL_NATIVE_PROCESS", mode)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []string{executable, "-test.run=^TestRunToolNativeProcess$"}
 }

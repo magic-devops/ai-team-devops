@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -70,12 +69,10 @@ func (c *Client) Do(ctx context.Context, method, path string, in any, out any) e
 	}
 	parsed, _ := url.Parse(c.baseURL + urlPath)
 
-	var lastErr error
-	attempts := c.maxRetries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
-	for i := 0; i < attempts; i++ {
+	for i := 0; ; i++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		req, err := http.NewRequestWithContext(ctx, method, parsed.String(), bytes.NewReader(body))
 		if err != nil {
 			return err
@@ -96,40 +93,57 @@ func (c *Client) Do(ctx context.Context, method, path string, in any, out any) e
 		}
 
 		resp, err := c.hc.Do(req)
-		if err != nil {
-			lastErr = err
-			time.Sleep(backoff(i))
-			continue
-		}
-		raw, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if resp.StatusCode >= 500 {
-			lastErr = fmt.Errorf("manager %d: %s", resp.StatusCode, truncate(raw, 200))
-			time.Sleep(backoff(i))
-			continue
-		}
-		if resp.StatusCode >= 400 {
-			return fmt.Errorf("manager %d: %s", resp.StatusCode, truncate(raw, 400))
-		}
-		if out != nil && len(raw) > 0 {
-			if err := json.Unmarshal(raw, out); err != nil {
-				return fmt.Errorf("unmarshal response: %w", err)
+		lastErr := err
+		if err == nil {
+			raw, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err := ctx.Err(); err != nil {
+				return err
 			}
+			if resp.StatusCode < 500 {
+				if resp.StatusCode >= 400 {
+					return fmt.Errorf("manager %d: %s", resp.StatusCode, truncate(raw, 400))
+				}
+				if out != nil && len(raw) > 0 {
+					if err := json.Unmarshal(raw, out); err != nil {
+						return fmt.Errorf("unmarshal response: %w", err)
+					}
+				}
+				return nil
+			}
+			lastErr = fmt.Errorf("manager %d: %s", resp.StatusCode, truncate(raw, 200))
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if i >= c.maxRetries {
+			return lastErr
+		}
+		if err := waitBackoff(ctx, i); err != nil {
+			return err
+		}
+	}
+}
+
+func waitBackoff(ctx context.Context, attempt int) error {
+	timer := time.NewTimer(backoff(attempt))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
 		return nil
 	}
-	if lastErr == nil {
-		lastErr = errors.New("unknown transport error")
-	}
-	return lastErr
 }
 
 func backoff(attempt int) time.Duration {
-	base := time.Duration(1<<attempt) * 500 * time.Millisecond
-	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond)))
-	if base > 30*time.Second {
-		base = 30 * time.Second
+	base := 30 * time.Second
+	if attempt <= 0 {
+		base = 500 * time.Millisecond
+	} else if attempt < 6 {
+		base = time.Duration(1<<attempt) * 500 * time.Millisecond
 	}
+	jitter := time.Duration(rand.Int63n(int64(500 * time.Millisecond)))
 	return base + jitter
 }
 

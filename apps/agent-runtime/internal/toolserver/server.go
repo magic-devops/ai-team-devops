@@ -196,6 +196,9 @@ func (s *Server) spawnTerminal(ctx context.Context, req Request, emit func(Event
 	go streamOutput(req.ID, session, emit)
 	go func() {
 		code, err := session.Wait(ctx)
+		if closeErr := ts.close(); err == nil {
+			err = closeErr
+		}
 		s.deleteSessionIfSame(data.SessionID, ts)
 		emit(Event{ID: req.ID, OK: err == nil && code == 0, Op: req.Op, Event: "terminal.exited", Data: map[string]any{"session_id": data.SessionID, "exit_code": code}, Error: errorString(err)})
 	}()
@@ -272,12 +275,18 @@ func (s *Server) closeTerminal(req Request, emit func(Event)) {
 		SessionID string `json:"session_id"`
 	}
 	_ = json.Unmarshal(req.Data, &data)
-	session, ok := s.session(data.SessionID)
+	s.mu.Lock()
+	session, ok := s.sessions[data.SessionID]
+	ok = ok && session.ready && session.session != nil
+	if ok {
+		delete(s.sessions, data.SessionID)
+	}
+	s.mu.Unlock()
 	if !ok {
 		emit(Event{ID: req.ID, OK: false, Op: req.Op, Error: "terminal session not found"})
 		return
 	}
-	err := session.session.Close()
+	err := session.close()
 	if err != nil && errors.Is(err, os.ErrClosed) {
 		err = nil
 	}
@@ -296,19 +305,32 @@ func (s *Server) session(id string) (*terminalSession, bool) {
 
 func (s *Server) closeAll() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	sessions := make([]*terminalSession, 0, len(s.sessions))
 	for id, session := range s.sessions {
-		if session.session != nil {
-			_ = session.session.Close()
-		}
+		sessions = append(sessions, session)
 		delete(s.sessions, id)
+	}
+	s.mu.Unlock()
+	for _, session := range sessions {
+		if session.session != nil {
+			_ = session.close()
+		}
 	}
 }
 
 type terminalSession struct {
-	id      string
-	session ptybackend.Session
-	ready   bool
+	id        string
+	session   ptybackend.Session
+	ready     bool
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func (session *terminalSession) close() error {
+	session.closeOnce.Do(func() {
+		session.closeErr = session.session.Close()
+	})
+	return session.closeErr
 }
 
 func streamOutput(id string, reader io.Reader, emit func(Event)) {

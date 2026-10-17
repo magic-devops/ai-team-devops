@@ -7,15 +7,26 @@
 - 心跳 + 主动上报状态到 Manager
 - **双向同步**：`GET /api/v1/sync/pull` 增量拉取 + `POST /api/v1/sync/push` 推送本地变更
 - 持久化 outbox（SQLite WAL）+ 退避重试 + DLQ
-- 暴露本地 Unix socket：AI hooks / CLI 通过 IPC 发事件（< 5ms）
+- 暴露项目内原生 IPC：macOS/Linux Unix socket、Windows named pipe，供 AI hooks / CLI 发事件
 - 本地物化：`.sop-runtime/sync/entities/*.json` 供离线读取
 
 ## 构建
+
+使用 Go >=1.26，模块 toolchain 固定为 Go1.26.9。持久化使用单一纯 Go SQLite 后端，`CGO_ENABLED=0` 也提供真实 WAL 队列，不需要安装 C 编译器。
 
 ```bash
 cd apps/agent-runtime
 make build           # bin/sop-agentd
 make cross           # 多平台交叉编译
+```
+
+Windows PowerShell 可直接构建：
+
+```powershell
+cd apps/agent-runtime
+$env:CGO_ENABLED = '0'
+go build -trimpath -o bin/sop-agentd.exe ./cmd/sop-agentd
+go test ./...
 ```
 
 ## 运行
@@ -49,7 +60,8 @@ sop sync status       # 本地游标与队列深度
 
 | op | 说明 |
 |----|------|
-| `health` | agent_id、outbox_depth |
+| `health` | agent_id、pid、project_path、instance_id、outbox_depth |
+| `daemon.stop` | 匹配当前 instance_id/project_path，写出 ACK 后有序退出 |
 | `sync.trigger` | 完整同步周期 |
 | `sync.pull` | 仅拉取 |
 | `sync.push` | 入队并尝试立即推送 |
@@ -91,6 +103,10 @@ sop doctor              # 含 sync API + agentd IPC
 | 开机自启 | `sop agentd install`（macOS launchd / Linux systemd） |
 
 **环境变量：** `PROJECT_PATH` 指向业务项目根；Bearer / `project_id` 来自 `sop login --pair` 写入的 `.sop-runtime/agent.toml`。
+
+SDK 与 Go 按同一项目 locator 派生 Windows 管道；`SOP_AGENTD_SOCK` 覆盖 locator，`SOP_AGENTD_PIPE` 覆盖本机管道。CLI `start/status/stop/logs --project <目录>` 支持从其他目录操作；`PROJECT_PATH` 为默认项目。`start/status/stop --json` 返回实际健康结果，未确认健康或未确认停止返回非零状态。停止必须经过实例绑定 IPC，PID 文件仅辅助诊断。后台启动 Windows 进程不弹窗口。
+
+SQLite 重试和持久化已统一；跨数据库删除和 DLQ 文件追加的旧交接尚需后续原子化，不能把达到重试上限等同于已可靠写出 DLQ。详细边界见 [原生生命周期设计](../../docs/NATIVE_AGENTD_LIFECYCLE_DESIGN.md)。
 
 **doctor IPC 失败：** socket 不存在 → 先 `make build-agentd`，再 `sop agentd start`。详见 [`docs/TOOLS_AND_SCRIPTS.md`](../../docs/TOOLS_AND_SCRIPTS.md)。
 

@@ -1,0 +1,47 @@
+{
+  "namespace": "absolute-clean-backslash/Windows-invariant-lower/UTF8/SHA1-first8bytes",
+  "vectors": [
+    {
+      "name": "ascii",
+      "socket_path": "D:\\Projects\\Alpha\\.sop-runtime\\agentd.sock",
+      "canonical": "D:\\Projects\\Alpha\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\projects\\alpha\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-1683e768fce35ec3"
+    },
+    {
+      "name": "slash-case",
+      "socket_path": "d:/projects/ALPHA/.sop-runtime/agentd.sock",
+      "canonical": "d:\\projects\\ALPHA\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\projects\\alpha\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-1683e768fce35ec3"
+    },
+    {
+      "name": "dot",
+      "socket_path": "D:\\Projects\\Unused\\..\\Alpha\\.sop-runtime\\.\\agentd.sock",
+      "canonical": "D:\\Projects\\Alpha\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\projects\\alpha\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-1683e768fce35ec3"
+    },
+    {
+      "name": "second-project",
+      "socket_path": "D:\\Projects\\Beta\\.sop-runtime\\agentd.sock",
+      "canonical": "D:\\Projects\\Beta\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\projects\\beta\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-5b85eaf4d64e56f8"
+    },
+    {
+      "name": "unicode",
+      "socket_path": "D:\\工作\\ΟΣ\\İ\\ẞ\\É\\.sop-runtime\\agentd.sock",
+      "canonical": "D:\\工作\\ΟΣ\\İ\\ẞ\\É\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\工作\\οσ\\İ\\ẞ\\é\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-74bfbae4b9ac4413"
+    },
+    {
+      "name": "unicode-case",
+      "socket_path": "d:\\工作\\οσ\\İ\\ẞ\\é\\.sop-runtime\\agentd.sock",
+      "canonical": "d:\\工作\\οσ\\İ\\ẞ\\é\\.sop-runtime\\agentd.sock",
+      "invariant_lower": "d:\\工作\\οσ\\İ\\ẞ\\é\\.sop-runtime\\agentd.sock",
+      "pipe": "\\\\.\\pipe\\sop-agentd-74bfbae4b9ac4413"
+    }
+  ]
+}

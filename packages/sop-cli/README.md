@@ -118,6 +118,12 @@ sop ops health              # health-check.sh
 sop ops stack doctor        # 本地栈 + sop doctor
 ```
 
+## 原生执行器控制
+
+从其他目录操作时用 `sop agentd start --project <项目目录> --json`；`status/stop/logs` 使用相同项目参数，默认依次读取 `PROJECT_PATH`、当前目录。Windows 自动寻找 `sop-agentd.exe` 并使用项目 named pipe。`start` 等待新进程健康，`status` 读取真实 IPC，`stop` 核对项目与实例并等待其离开；后两者不会凭 PID 文件宣告成功。启动/停止期限可用 `--timeout` 设置，失败返回非零状态。Windows IPC 要求 CPython >=3.10，构建 daemon 需要 Go >=1.26，详见 [运行时说明](../../apps/agent-runtime/README.md)。
+
+`stop_accepted` 表示服务端已接受请求，`stopped` 表示原 IPC 实例已离开；两者分别记录。`--timeout` 限定状态确认等待，单次 IPC 和启动失败后的自有进程清理各有独立预算，迟到的健康或停止响应不会作为期限内成功。
+
 ## 项目组合、归档与恢复
 
 ```bash

@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
-	"path/filepath"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,37 +28,42 @@ type IPCRequest struct {
 }
 
 type IPCResponse struct {
-	OK     bool           `json:"ok"`
-	Op     string         `json:"op,omitempty"`
-	ID     string         `json:"id,omitempty"`
-	Error  string         `json:"error,omitempty"`
-	Result map[string]any `json:"result,omitempty"`
+	OK             bool           `json:"ok"`
+	Op             string         `json:"op,omitempty"`
+	ID             string         `json:"id,omitempty"`
+	Error          string         `json:"error,omitempty"`
+	Result         map[string]any `json:"result,omitempty"`
+	stopAfterReply bool
 }
 
-func (d *Daemon) serveIPC(ctx context.Context) error {
-	if err := os.MkdirAll(filepath.Dir(d.cfg.SocketPath), 0o755); err != nil {
-		return err
-	}
-	ln, err := listenIPC(d.cfg.SocketPath)
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-	_ = os.Chmod(d.cfg.SocketPath, 0o600)
+func (d *Daemon) serveIPC(ctx context.Context, ln net.Listener) error {
+	serveContext, cancel := context.WithCancel(ctx)
+	var handlers sync.WaitGroup
+	closeListener := context.AfterFunc(serveContext, func() { _ = ln.Close() })
+	defer func() {
+		cancel()
+		_ = ln.Close()
+		closeListener()
+		handlers.Wait()
+	}()
 	d.log.Info("ipc listening", zap.String("socket", d.cfg.SocketPath))
-
-	go func() { <-ctx.Done(); _ = ln.Close() }()
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) || ctx.Err() != nil {
+			if errors.Is(err, net.ErrClosed) || serveContext.Err() != nil {
 				return nil
 			}
 			d.log.Warn("ipc accept", zap.Error(err))
 			continue
 		}
-		go d.handleIPCConn(ctx, conn)
+		handlers.Add(1)
+		go func() {
+			defer handlers.Done()
+			closeConnection := context.AfterFunc(serveContext, func() { _ = conn.Close() })
+			defer closeConnection()
+			d.handleIPCConn(serveContext, conn)
+		}()
 	}
 }
 
@@ -75,23 +81,50 @@ func (d *Daemon) handleIPCConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 	resp := d.dispatchIPC(ctx, req)
-	writeIPC(conn, resp)
+	if err := writeIPC(conn, resp); err == nil && resp.stopAfterReply && d.cancelRun != nil {
+		d.cancelRun()
+	}
 }
 
-func writeIPC(conn net.Conn, r IPCResponse) {
-	b, _ := json.Marshal(r)
-	_, _ = conn.Write(append(b, '\n'))
+func writeIPC(conn net.Conn, r IPCResponse) error {
+	frame, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	frame = append(frame, '\n')
+	for len(frame) > 0 {
+		count, err := conn.Write(frame)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return io.ErrShortWrite
+		}
+		frame = frame[count:]
+	}
+	return nil
 }
 
 func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 	d.refreshAuthFromDisk()
 	switch req.Op {
+	case "daemon.stop":
+		if d.agentID == "" || stringOr(req.Data, "instance_id", "") != d.agentID ||
+			stringOr(req.Data, "project_path", "") != d.cfg.ProjectPath {
+			return IPCResponse{OK: false, Error: "daemon.stop requires the current instance_id and project_path"}
+		}
+		return IPCResponse{OK: true, Op: req.Op, Result: map[string]any{
+			"stopping": true, "instance_id": d.agentID, "project_path": d.cfg.ProjectPath,
+		}, stopAfterReply: true}
 	case "health":
 		depth, _ := d.outbox.Depth(ctx)
 		hasBearer := d.cfg.Auth.Bearer != ""
 		hasKey := d.cfg.Auth.APIKey != ""
 		return IPCResponse{OK: true, Result: map[string]any{
 			"agent_id":     d.agentID,
+			"instance_id":  d.agentID,
+			"pid":          os.Getpid(),
+			"project_path": d.cfg.ProjectPath,
 			"version":      d.version,
 			"outbox_depth": depth,
 			"project_id":   d.cfg.Manager.ProjectID,

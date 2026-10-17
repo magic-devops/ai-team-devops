@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-17T17:17:58.979133+00:00",
+  "updated_at": "2026-10-17T18:00:37.799994+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-17T17:17:58.979133+00:00",
-    "status": "bounded_attention_and_manual_acceptance_verified_with_documented_limits",
+    "updated_at": "2026-10-17T18:00:37.799994+00:00",
+    "status": "native_ipc_lifecycle_portable_queue_and_terminal_shutdown_verified_with_limits",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,57 +15,42 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/delivery-attention/",
+    "evidence": ".sop-runtime/delivery-evidence/native-ipc/",
     "verification_status": "passed_with_documented_limits",
-    "next_step": "windows_native_transport_consistency_object_discussions_and_traceable_adoption_specialized_bounded_reads",
+    "next_step": "transactional_event_dead_letter_handoff_then_object_discussion_and_explicit_adoption",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "stage": "bounded_attention_inbox_manual_acceptance_and_lightweight_overview",
-      "base": "7bd27cd",
-      "verified_at": "2026-10-17T17:17:58.979133+00:00",
-      "manager_full_passed": 1415,
-      "manager_full_failed": 0,
-      "web_full_passed": 603,
-      "sdk_cli_related_passed": 140,
-      "sdk_cli_full_passed": 241,
-      "sdk_cli_full_failed": 2,
-      "sdk_cli_full_failure_names": [
-        "test_agentd_ipc_missing_socket_returns_structured_error",
-        "test_pages_cli_exposes_interaction_analysis_command"
-      ],
-      "typescript_build": "passed",
-      "production_build": "passed",
-      "verification_wall_seconds": {
-        "manager-1": 495.747,
-        "web-final": 50.357,
-        "tsc-final": 61.628,
-        "vite-final": 69.852,
-        "clients-related-final": 7.383
+      "stage": "native_project_ipc_verified_lifecycle_portable_queue_and_terminal_shutdown",
+      "base": "590ca69",
+      "verified_at": "2026-10-17T18:00:37.799994+00:00",
+      "sdk_cli_full_passed": 299,
+      "sdk_cli_full_failed": 0,
+      "go_top_level_passed": 49,
+      "go_existing_platform_skips": 3,
+      "go_failed": 0,
+      "go_vet": "passed",
+      "CGO_ENABLED": "0",
+      "go_toolchain": "1.26.9",
+      "sqlite_driver": "modernc.org/sqlite v1.60.1",
+      "core_native_related_passed": 95,
+      "core_existing_posix_skips": 2,
+      "core_related_binary_before_terminal_fix": true,
+      "core_related_only_source_drift": "unexecuted Go toolserver test fixture; artifact stayed unchanged",
+      "actual_native_processes_normal_exit": 5,
+      "actual_native_forced_cleanup": 0,
+      "actual_native_junction_target_preserved": true,
+      "actual_native_final_binary_sha256": "cac80fce73e40f7efe81366ae27f9ff76ba3c94d127b0f72aa4cca9bfe3606ad",
+      "native_sdk_cli_source_unchanged": true,
+      "go_sources_unchanged_during_final_test_build_vet": true,
+      "cross_compilation": {
+        "linux_amd64": "compiled",
+        "darwin_arm64": "compiled",
+        "receipt": ".sop-runtime/delivery-evidence/native-ipc/cross/receipt.json",
+        "target_os_execution": false
       },
-      "backend_targeted_passed": 56,
-      "backend_independent_probes_passed": 4,
-      "backend_independent_existing_passed": 15,
-      "frontend_targeted_passed": 61,
-      "independent_frontend_validated_p2_fixed": 2,
-      "independent_unresolved_p1_p2": 0,
-      "actual_http_passed": true,
-      "actual_http_initial_assertion_correction": "helper expected recorded_completed=3 after one acceptance; effective six-state metric correctly returns 2; production unchanged",
-      "actual_sdk_methods": 2,
-      "actual_cli_selections": 2,
-      "pure_get_databases": 3,
-      "pure_get_unchanged_tables": 33,
-      "benchmark_requirements": 10000,
-      "benchmark_tasks": 10001,
-      "benchmark_trials": 12,
-      "benchmark_manager_source_files": 206,
-      "benchmark_loaded_source_modules": 51,
-      "benchmark_sql_functions_not_http_or_production": true,
-      "query_schema_version": 2,
-      "openapi_models": 7,
-      "openapi_resolved_refs": 964,
-      "python_lint_new_or_worsened_diagnostics": 0,
+      "python_lint_new_or_worsened": 0,
       "external_model_calls": 0,
       "actual_390px_zh_en_ja_visual_verified": false,
       "production_integration_complete": false,
@@ -76,27 +61,26 @@
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/delivery-attention/commit-receipt.json",
+    "commit_receipt": ".sop-runtime/delivery-evidence/native-ipc/commit-receipt.json",
     "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md",
     "team_identity_design": "docs/DELIVERY_TEAM_IDENTITY_DESIGN.md",
     "team_runtime_design": "docs/DELIVERY_TEAM_RUNTIME_DESIGN.md",
     "last_verified_stage": {
+      "stage": "native_project_ipc_verified_lifecycle_portable_queue_and_terminal_shutdown",
+      "verified_at": "2026-10-17T18:00:37.799994+00:00",
+      "commit_receipt": ".sop-runtime/delivery-evidence/native-ipc/commit-receipt.json",
+      "sdk_cli_full_passed": 299,
+      "go_top_level_passed": 49
+    },
+    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
+    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
+    "previous_verified_stage": {
       "stage": "bounded_attention_inbox_manual_acceptance_and_lightweight_overview",
       "verified_at": "2026-10-17T17:17:58.979133+00:00",
       "commit_receipt": ".sop-runtime/delivery-evidence/delivery-attention/commit-receipt.json",
       "manager_passed": 1415,
       "web_passed": 603,
       "sdk_cli_related_passed": 140
-    },
-    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
-    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
-    "previous_verified_stage": {
-      "stage": "bounded_delivery_queries_exact_workspaces_and_consistent_interactions",
-      "verified_at": "2026-10-17T16:49:37.017353+00:00",
-      "commit_receipt": ".sop-runtime/delivery-evidence/delivery-query/commit-receipt.json",
-      "manager_passed": 1400,
-      "web_passed": 587,
-      "sdk_cli_related_passed": 105
     },
     "deployment_design": "docs/DELIVERY_DEPLOYMENT_DESIGN.md",
     "deployment_guide": "docs/CONTROLLED_DEPLOYMENT_GUIDE.md",
@@ -105,14 +89,16 @@
     "execution_runtime_design": "docs/DELIVERY_EXECUTION_RUNTIME_DESIGN.md",
     "collaboration_design": "docs/DELIVERY_COLLABORATION_DESIGN.md",
     "current_stage": {
-      "id": "T-delivery-attention",
-      "base": "7bd27cd",
-      "status": "verified",
-      "evidence": ".sop-runtime/delivery-evidence/delivery-attention/",
+      "id": "T-native-ipc",
+      "base": "590ca69",
+      "status": "verified_with_documented_limits",
+      "evidence": ".sop-runtime/delivery-evidence/native-ipc/",
       "goal_complete": false
     },
     "query_design": "docs/DELIVERY_QUERY_DESIGN.md",
-    "attention_design": "docs/DELIVERY_ATTENTION_DESIGN.md"
+    "attention_design": "docs/DELIVERY_ATTENTION_DESIGN.md",
+    "native_lifecycle_design": "docs/NATIVE_AGENTD_LIFECYCLE_DESIGN.md",
+    "next_collaboration_design_draft": ".sop-runtime/delivery-evidence/native-ipc/next-collaboration-draft/DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -542,17 +528,18 @@
       "问题真实证据、固定AI/规则诊断与人工唯一需求回流：生产会话、中断恢复、三项独立审查修复及完整回归；实机视觉和生产验证继续。",
       "安全活动/精确导航、需求真实观测版本与固定变更影响、Sprint有效验收统计；两项真实HTTP缺陷原症状修复、最终回归及客户端验证。",
       "需求/任务/引用SQL分页、精确详情、共享验收计算及全部交付UI读取切换；修复刷新/混代/会话/详情失败与权限问题，完整回归、万级及真实HTTP验证。",
-      "有界个人/团队待办、人工验收遗漏修复、首页轻量指标及覆盖、当前任务读取和三语分页交互；完整相关回归和万级/真实HTTP验证。"
+      "有界个人/团队待办、人工验收遗漏修复、首页轻量指标及覆盖、当前任务读取和三语分页交互；完整相关回归和万级/真实HTTP验证。",
+      "Windows SDK/CLI/Go项目原生IPC、真实实例安全停止、纯Go持久队列和终端单次关闭；完整客户端/Go、原生双项目与异常恢复验证。"
     ],
     "in_progress": [
-      "Windows SDK与agentd默认pipe地址统一、两项已确认旧客户端断言迁移",
+      "持久事件跨SQLite/DLQ原子交接及通用上报确认；业务对象讨论/结论明确采纳继续实现",
       "业务对象讨论/结论明确采纳与问题诊断来源摘要、通用活动统一",
       "主动打开的人工评审、历史影响、完整进度/质量等专属读取有界化",
       "当前390px三语实际视觉和生产身份/模型/数据库/基础设施及长期验证，遵守既有策略限制"
     ],
     "blocked": [],
     "pending": [],
-    "current": "有界待办与首页轻量进度已验证；人工完成未验收保持可见、当前任务导航及分页交互闭环。全产品目标继续active。"
+    "current": "原生IPC与生命周期阶段已验证，全部本地提交；继续事件可靠交接及对象讨论/结论采纳，当前390px视觉和生产实测仍未完成，完整目标active。"
   },
   "metrics": {
     "completion_rate": null,
@@ -560,5 +547,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "有界待办与首页轻量进度已验证；人工完成未验收保持可见、当前任务导航及分页交互闭环。全产品目标继续active。"
+  "current": "原生IPC与生命周期阶段已验证，全部本地提交；继续事件可靠交接及对象讨论/结论采纳，当前390px视觉和生产实测仍未完成，完整目标active。"
 }

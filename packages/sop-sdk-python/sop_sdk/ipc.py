@@ -4,16 +4,16 @@
 @stable: send() 协议帧格式稳定（NDJSON + v=1）
 @ai_safe_edit: 新增 op 类型 → 不破坏旧客户端（agentd 端忽略未知）
 """
+
 from __future__ import annotations
 
 import errno
 import json
 import os
-import sys
 import socket
+import sys
 from pathlib import Path
 from typing import Any, Protocol
-
 
 MAX_FRAME_BYTES = 65536
 
@@ -27,16 +27,42 @@ class IpcTransport(Protocol):
     def request(self, frame: bytes, timeout: float, max_bytes: int) -> bytes: ...
 
 
-def _default_unix_socket_path() -> Path:
-    return (
-        Path(os.getenv("SOP_AGENTD_SOCK", "")).expanduser()
-        if os.getenv("SOP_AGENTD_SOCK")
-        else Path(os.getenv("PROJECT_PATH", ".")).expanduser() / ".sop-runtime" / "agentd.sock"
-    )
+def _socket_path(socket_path: Path | str | None, project_path: Path | str | None) -> tuple[Path, Path]:
+    project = Path(project_path if project_path is not None else os.getenv("PROJECT_PATH") or Path.cwd()).expanduser()
+    project = Path(os.path.abspath(project))
+    locator = Path(
+        socket_path
+        if socket_path is not None
+        else os.getenv("SOP_AGENTD_SOCK") or project / ".sop-runtime" / "agentd.sock"
+    ).expanduser()
+    if not locator.is_absolute():
+        locator = project / locator
+    return project, Path(os.path.abspath(locator))
 
 
-def _default_pipe_name() -> str:
-    return os.getenv("SOP_AGENTD_PIPE", r"\\.\pipe\sop-agentd")
+def _local_pipe_name(value: str) -> str:
+    import unicodedata
+
+    prefix = "\\\\.\\pipe\\"
+    name = value[len(prefix) :]
+    if (
+        not value[: len(prefix)].lower() == prefix
+        or not name
+        or "\\" in name
+        or "/" in name
+        or any(unicodedata.category(char) == "Cc" for char in value)
+    ):
+        raise ValueError("Use a local named pipe of the form \\\\.\\pipe\\name")
+    return value
+
+
+def _default_pipe_name(socket_path: Path) -> str:
+    override = os.getenv("SOP_AGENTD_PIPE")
+    if override:
+        return _local_pipe_name(override)
+    from ._ipc_windows import pipe_name
+
+    return pipe_name(str(socket_path))
 
 
 class UnixSocketTransport:
@@ -61,26 +87,21 @@ class WindowsNamedPipeTransport:
     name = "named_pipe"
 
     def __init__(self, pipe_name: str) -> None:
-        self.endpoint = pipe_name
+        self.endpoint = _local_pipe_name(pipe_name)
 
     def available(self) -> bool:
         if os.name != "nt":
             return False
-        try:
-            with open(self.endpoint, "r+b", buffering=0):
-                return True
-        except OSError:
-            return False
+        from ._ipc_windows import available
+
+        return available(self.endpoint)
 
     def request(self, frame: bytes, timeout: float, max_bytes: int) -> bytes:
         if os.name != "nt":
             raise OSError(errno.ENOTSUP, "Windows named pipe transport requires Windows")
-        # Windows named pipes are exposed as file handles. The server side is responsible
-        # for request/response framing; this client keeps the same NDJSON contract.
-        with open(self.endpoint, "r+b", buffering=0) as pipe:
-            pipe.write(frame)
-            pipe.flush()
-            return _read_until_newline(lambda n: pipe.read(n), max_bytes)
+        from ._ipc_windows import request
+
+        return request(self.endpoint, frame, timeout, max_bytes)
 
 
 def _read_until_newline(reader, max_bytes: int) -> bytes:
@@ -117,12 +138,20 @@ class AgentdIpcClient:
         timeout: float = 1.0,
         transport: IpcTransport | None = None,
         max_response_bytes: int = MAX_FRAME_BYTES,
+        *,
+        project_path: Path | str | None = None,
     ) -> None:
-        self.socket_path = Path(socket_path).expanduser() if socket_path is not None else _default_unix_socket_path()
+        self.project_path, self.socket_path = _socket_path(socket_path, project_path)
         self.timeout = timeout
         self.max_response_bytes = max_response_bytes
-        self.transport = transport or (
-            WindowsNamedPipeTransport(_default_pipe_name()) if sys.platform.startswith("win") else UnixSocketTransport(self.socket_path)
+        self.transport = (
+            transport
+            if transport is not None
+            else (
+                WindowsNamedPipeTransport(_default_pipe_name(self.socket_path))
+                if sys.platform.startswith("win")
+                else UnixSocketTransport(self.socket_path)
+            )
         )
 
     def available(self) -> bool:
@@ -142,7 +171,12 @@ class AgentdIpcClient:
         frame = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
         try:
             if not self.available():
-                return _ipc_error("unavailable", f"agentd IPC endpoint 不存在或不可连接: {self.transport.endpoint}", transport=self.transport, op=op)
+                return _ipc_error(
+                    "unavailable",
+                    f"agentd IPC endpoint 不存在或不可连接: {self.transport.endpoint}",
+                    transport=self.transport,
+                    op=op,
+                )
             buf = self.transport.request(frame, self.timeout, self.max_response_bytes)
             if not buf.strip():
                 return _ipc_error("empty_response", "agentd IPC 返回空响应", transport=self.transport, op=op)
@@ -153,7 +187,11 @@ class AgentdIpcClient:
             if isinstance(out, dict):
                 return out
             return _ipc_error("invalid_response", "agentd IPC 返回不是 JSON object", transport=self.transport, op=op)
-        except (FileNotFoundError, ConnectionError, TimeoutError, OSError) as e:
+        except TimeoutError as e:
+            return _ipc_error("timeout", str(e), transport=self.transport, op=op)
+        except FileNotFoundError as e:
+            return _ipc_error("unavailable", str(e), transport=self.transport, op=op)
+        except (ConnectionError, OSError) as e:
             return _ipc_error("transport_error", str(e), transport=self.transport, op=op)
 
     # 便捷方法
@@ -164,9 +202,15 @@ class AgentdIpcClient:
         return self.send("health")
 
     def task_done(self, task_id: str, notes: str = "", confidence: float = 0.0) -> dict[str, Any]:
-        return self.send("task.update", name=task_id, data={
-            "status": "completed", "notes": notes, "confidence": confidence,
-        })
+        return self.send(
+            "task.update",
+            name=task_id,
+            data={
+                "status": "completed",
+                "notes": notes,
+                "confidence": confidence,
+            },
+        )
 
     def task_fail(self, task_id: str, notes: str = "") -> dict[str, Any]:
         return self.send("task.update", name=task_id, data={"status": "blocked", "notes": notes})

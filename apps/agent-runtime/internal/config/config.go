@@ -4,6 +4,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,11 +19,11 @@ type Manager struct {
 }
 
 type Auth struct {
-	Method     string `toml:"method"`       // apikey | bearer | mtls
-	APIKeyRef  string `toml:"api_key_ref"`  // keyring://... / env://... / file://...
-	APIKey     string // 运行时解析
-	Bearer     string // 运行时解析（SOP_BEARER_TOKEN / ~/.sop/credentials）
-	VerifySSL  bool   `toml:"verify_ssl"`
+	Method    string `toml:"method"`      // apikey | bearer | mtls
+	APIKeyRef string `toml:"api_key_ref"` // keyring://... / env://... / file://...
+	APIKey    string // 运行时解析
+	Bearer    string // 运行时解析（SOP_BEARER_TOKEN / ~/.sop/credentials）
+	VerifySSL bool   `toml:"verify_ssl"`
 }
 
 type Transport struct {
@@ -33,11 +34,11 @@ type Transport struct {
 }
 
 type Reliability struct {
-	OutboxPath      string `toml:"outbox_path"`
-	BatchSize       int    `toml:"batch_size"`
-	MaxRetries      int    `toml:"max_retries"`
-	DLQPath         string `toml:"dlq_path"`
-	TimeoutSeconds  int    `toml:"timeout_seconds"`
+	OutboxPath     string `toml:"outbox_path"`
+	BatchSize      int    `toml:"batch_size"`
+	MaxRetries     int    `toml:"max_retries"`
+	DLQPath        string `toml:"dlq_path"`
+	TimeoutSeconds int    `toml:"timeout_seconds"`
 }
 
 type Security struct {
@@ -87,7 +88,11 @@ func Load() (*Config, error) {
 		wd, _ := os.Getwd()
 		projectPath = wd
 	}
-	absPath, _ := filepath.Abs(projectPath)
+	projectPath = expandHome(projectPath)
+	absPath, err := filepath.Abs(projectPath)
+	if err != nil {
+		return nil, fmt.Errorf("project path: %w", err)
+	}
 	cfg.ProjectPath = absPath
 
 	_ = mergeFromFile(cfg, filepath.Join(absPath, ".sop-runtime", "agent.toml"))
@@ -121,6 +126,16 @@ func Load() (*Config, error) {
 
 	// 运行时路径
 	cfg.SocketPath = filepath.Join(absPath, ".sop-runtime", "agentd.sock")
+	if locator := os.Getenv("SOP_AGENTD_SOCK"); locator != "" {
+		locator = expandHome(locator)
+		if !filepath.IsAbs(locator) {
+			locator = filepath.Join(absPath, locator)
+		}
+		cfg.SocketPath, err = filepath.Abs(locator)
+		if err != nil {
+			return nil, fmt.Errorf("socket path: %w", err)
+		}
+	}
 	cfg.PIDFile = filepath.Join(absPath, ".sop-runtime", "agentd.pid")
 	cfg.LogDir = filepath.Join(absPath, ".sop-runtime", "logs")
 
@@ -171,4 +186,16 @@ func resolveAPIKey(ref string) string {
 		return os.Getenv("MANAGER_API_KEY")
 	}
 	return ""
+}
+
+func expandHome(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, "~\\") {
+		if home, err := os.UserHomeDir(); err == nil {
+			if path == "~" {
+				return home
+			}
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
 }

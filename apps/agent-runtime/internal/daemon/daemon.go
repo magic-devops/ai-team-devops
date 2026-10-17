@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -23,20 +25,19 @@ import (
 )
 
 type Daemon struct {
-	log     *zap.Logger
-	cfg     *config.Config
-	http    *httpx.Client
-	outbox  *outbox.Outbox
-	puller  *puller.Puller
-	pusher  *pusher.Pusher
-	agentID string
-	version string
+	log       *zap.Logger
+	cfg       *config.Config
+	http      *httpx.Client
+	outbox    *outbox.Outbox
+	puller    *puller.Puller
+	pusher    *pusher.Pusher
+	agentID   string
+	version   string
+	cancelRun context.CancelFunc
+	pidOwned  bool
 }
 
 func New(log *zap.Logger, cfg *config.Config, version string) (*Daemon, error) {
-	if err := writePID(cfg.PIDFile); err != nil {
-		return nil, fmt.Errorf("write pid: %w", err)
-	}
 	ob, err := outbox.Open(filepath.Join(cfg.ProjectPath, cfg.Reliability.OutboxPath))
 	if err != nil {
 		return nil, fmt.Errorf("open outbox: %w", err)
@@ -62,16 +63,32 @@ func (d *Daemon) Run(ctx context.Context) error {
 		zap.String("project_id", d.cfg.Manager.ProjectID),
 	)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return d.serveIPC(ctx) })
-	g.Go(func() error { return d.heartbeatLoop(ctx) })
-	g.Go(func() error { return d.outboxSenderLoop(ctx) })
-	g.Go(func() error { return d.pullerLoop(ctx) })
-	g.Go(func() error { return d.pusherLoop(ctx) })
-	// 后续：g.Go(d.watcherLoop) / d.wsLoop / d.mcpHub / d.a2aNode
-
 	defer d.shutdown()
-	if err := g.Wait(); err != nil && ctx.Err() == nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(d.cfg.SocketPath), 0755); err != nil {
+		return err
+	}
+	listener, err := listenIPC(d.cfg.SocketPath)
+	if err != nil {
+		return fmt.Errorf("listen IPC: %w", err)
+	}
+	if err := writePID(d.cfg.PIDFile); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("write pid: %w", err)
+	}
+	d.pidOwned = true
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	d.cancelRun = cancel
+	g, groupContext := errgroup.WithContext(runContext)
+	g.Go(func() error { return d.serveIPC(groupContext, listener) })
+	g.Go(func() error { return d.heartbeatLoop(groupContext) })
+	g.Go(func() error { return d.outboxSenderLoop(groupContext) })
+	g.Go(func() error { return d.pullerLoop(groupContext) })
+	g.Go(func() error { return d.pusherLoop(groupContext) })
+	if err := g.Wait(); err != nil && runContext.Err() == nil {
 		d.log.Error("daemon error", zap.Error(err))
 		return err
 	}
@@ -80,8 +97,15 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 func (d *Daemon) shutdown() {
 	d.log.Info("sop-agentd stopping")
-	_ = d.outbox.Close()
-	_ = os.Remove(d.cfg.PIDFile)
+	if d.outbox != nil {
+		_ = d.outbox.Close()
+	}
+	if d.pidOwned {
+		content, err := os.ReadFile(d.cfg.PIDFile)
+		if err == nil && strings.TrimSpace(string(content)) == strconv.Itoa(os.Getpid()) {
+			_ = os.Remove(d.cfg.PIDFile)
+		}
+	}
 }
 
 func (d *Daemon) heartbeatLoop(ctx context.Context) error {

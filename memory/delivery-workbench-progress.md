@@ -435,3 +435,21 @@ context、需求/任务/问题分页、精确需求/任务/执行、引用目录
 - 独立后端4探针及15原行为用例通过，无新增可复现P1/P2；前端独立发现非Task空ID匹配busy及分类A→B→A无替代点击残留busy两项P2，均按原症状RED→GREEN修复。实际390px三语与生产验证未完成；完整progress、人工评审、历史影响、quality/release等显式详情仍有全项目成本。对象讨论及结论/来源集中展示仍未实现。
 
 证据 `.sop-runtime/delivery-evidence/delivery-attention/`，包含原审计、RED/GREEN、完整回归、HTTP/SQL和契约检查。所有已验证修改阶段性提交，不推送；不提交.pnpm-store缓存。
+
+## 原生执行器与可靠生命周期增量（2026-10-18）
+
+阶段T-native-ipc，基线590ca69，设计见 `docs/NATIVE_AGENTD_LIFECYCLE_DESIGN.md`。SDK/CLI/Go按相同项目及locator选择原生端点，Windows invariant大小写API与共同向量避免Unicode分歧；相对路径、非默认CWD、PIPE/SOCK覆盖和目录junction均真实验证。不保留旧固定pipe回退。Windows SDK使用CPython>=3.10原生overlapped I/O，总请求期限覆盖连接/写入/分片读取；超时取消并回收句柄，available不消费服务端连接。
+
+health返回真实pid/project_path/instance_id，PID文件仅诊断；停止必须匹配当前实例及项目并在写完ACK后取消。绑定成功后才登记PID，重复启动不覆盖/删除其他实例PID，退出等待已接收连接再关闭队列。CLI固定发现时的可执行绝对路径，健康/停止响应须在确认预算内到达，失败只清理自有Popen。stop_accepted与stopped分别表示接受请求与原IPC实例离开，不替代操作系统进程退出证据。
+
+原CGO0 binary只能执行部分工具，真实daemon因队列不可用退出。改为单一modernc SQLite1.60.1与Go1.26.9，移除CGO驱动及不可用替身。WAL/FULL/单连接/immediate事务下验证重开、幂等、并发重试、取消、旧表互读与异常进程退出恢复；修复删除失败谎报成功和退避溢出。锁等待取消可能到5秒busy timeout，跨SQLite删除与JSONL DLQ追加仍需后续原子化。
+
+真实联调发现旧HTTP退避忽略取消：IPC已离开而进程仍存活，修为可取消timer及末次不等待，原失败和最终退出证据分别保留。旧终端显式close后EOF重复关闭ConPTY导致0xc0000374；单次关闭控制探针确认根因后，按会话唯一资源归属和closeOnce修复，真实原例exit0，旧Wait不删除替代ID，独立并发/归属探针通过。
+
+最终Go完整49项通过、3项原有Windows符号链接跳过，vet及CGO0构建通过；Linux/amd64和macOS/arm64交叉编译通过，仅编译、未在目标系统运行；SDK/CLI完整299项通过，原两旧断言已改为实际平台和owner_id契约，未恢复旧姓名写入。Python配置lint无新增或恶化诊断。Core原生相关7文件95通过/2原有POSIX跳过，使用终端修复前binary；运行期间仅未执行的Go测试夹具变动，binary不变，未冒充完整Core复验。最终终端修改另经完整Go、真实ConPTY及独立审查验证。
+
+最终binary真实启动A/B、CLI新建、自定义locator/pipe、Unicode与junction，停止后5个原Popen全部exit0，无强制清理；错项目/旧实例停止被拒绝，队列重启事件保留，stale PID指向的无关自有sentinel存活且文件不变。实际SDK/CLI及binary验证前后hash一致。先前一轮客户端298pass/1fail的2秒进程看门狗没有阶段观测，原个案原因未确定；后续压力观测证明启动/import可超过2秒而实际请求均正确超时。测试分开有界准备和请求，保留严格实际请求耗时断言，最终全量通过。
+
+证据 `.sop-runtime/delivery-evidence/native-ipc/` 含原失败、精确RED/GREEN、独立复核、工具链与模块校验、最终回归与真实进程。缓存只在保留源码/唯一证据/最终binary及来源散列后精确清理；不全量复制可重取第三方工具链/模块缓存。全部阶段非忽略改动本地commit，不推送，依赖store零跟踪。
+
+完整目标继续active。对象讨论/明确采纳仍为设计草案，未冒充实现；事件可靠交接、来源/诊断集中展示、通用跨存储活动、专属详情有界化、当前390px三语视觉和生产身份/模型/数据库/基础设施及长期验证继续保留。遵守既有浏览器协议及12ui安装/上传审批限制，不绕过。

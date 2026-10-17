@@ -151,17 +151,21 @@ result = cli.delivery_command(adoption)
 
 ## 本地 agentd IPC
 
-无需走 Manager，hook / 脚本里直接用。SDK 默认在 macOS/Linux 使用项目内 `.sop-runtime/agentd.sock`，Windows 使用 `SOP_AGENTD_PIPE` 指定的 named pipe；也可以用 `SOP_AGENTD_SOCK` 覆盖 Unix Socket 路径。连接失败会返回结构化错误，不会打断调用方的离线降级逻辑。
+无需走 Manager，hook / 脚本里直接用。项目按显式 `project_path`、`PROJECT_PATH`、当前目录选择；默认 locator 为该项目的 `.sop-runtime/agentd.sock`。macOS/Linux 使用 Unix socket，Windows 自动派生该项目的本机 named pipe，与 Go daemon 使用同一地址规范。`SOP_AGENTD_SOCK` 可覆盖逻辑 locator，相对路径基于所选项目；Windows 的 `SOP_AGENTD_PIPE` 可显式覆盖为本机 `\\\\.\\pipe\\...`。无需手工设置默认管道名。
+
+Windows 要求 CPython >=3.10，原生 overlapped I/O 共用连接/写入/读取期限，超时取消并回收句柄。`available` 是端点探测，实际健康须读取 `health()`；缺失、超时、I/O 错误分别返回 `unavailable`、`timeout`、`transport_error`。健康响应包含 `pid/project_path/instance_id`，PID 文件不能代替该响应。
 
 ```python
 from sop_sdk import AgentdIpcClient
 
-ipc = AgentdIpcClient()
+ipc = AgentdIpcClient(project_path="/path/to/project", timeout=1.0)
 print(ipc.diagnose())  # transport / endpoint / available / timeout
 if ipc.available():
     ipc.event("tool.pre", tool="Bash", command="git status")
     ipc.task_done("t-123", "完成实现 + 测试通过", confidence=0.85)
 ```
+
+停止由 CLI `sop agentd stop --project <目录>` 核对项目后执行。直接调用 `daemon.stop` 必须携带该次健康响应的 `instance_id` 和 `project_path`，成功 ACK 仅表示接受停止请求；仍需等待原实例离开。地址、期限和生命周期约定见 [原生执行器设计](../../docs/NATIVE_AGENTD_LIFECYCLE_DESIGN.md)。
 
 ## 设计原则
 
