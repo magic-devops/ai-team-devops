@@ -6,7 +6,6 @@ import { Send } from "lucide-react";
 import {
   fetchDeliveryTargets,
   type DeliveryAction,
-  type DeliveryRequirement,
   type DeliveryTask,
   type DeliveryWorkspace,
 } from "@/lib/delivery";
@@ -22,24 +21,24 @@ type Props = {
   sessionId: string;
   data: DeliveryWorkspace;
   task: DeliveryTask;
-  requirement: DeliveryRequirement;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) => Promise<void>;
   onSaved: (data: DeliveryWorkspace) => void;
   onEditingChange?: (editing: boolean) => void;
+  disabled?: boolean;
 };
 const closed = ["accepted", "changes_requested", "cancelled"];
 
 export function DeliveryExecutionPanel({
   data,
   task,
-  requirement,
   onCommand,
   onSaved,
   sessionId,
   onEditingChange,
+  disabled = false,
 }: Props) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
@@ -55,17 +54,27 @@ export function DeliveryExecutionPanel({
     .slice()
     .reverse();
   const current = executions[0];
+  const gateReasons = task.execution_gate.reasons.map((reason) =>
+    !task.req_id && reason.code === "task_dispatch_stage_blocked"
+      ? t("deliveryTaskAcceptance.standaloneStageBlocked")
+      : t(`deliveryTaskAcceptance.reasons.${reason.code}`, {
+          defaultValue: reason.message,
+        }),
+  );
+  const compactGate =
+    (task.status === "completed" || current?.status === "accepted") &&
+    !current?.stale &&
+    task.acceptance.available &&
+    task.execution_gate.reasons.length > 0 &&
+    task.execution_gate.reasons.every(
+      (reason) => reason.code === "task_dispatch_stage_blocked",
+    );
   const canDispatch =
+    !disabled &&
     data.permissions.write &&
     targets.data?.can_execute &&
     !targets.isError &&
-    task.status !== "completed" &&
-    !task.dependency_blocked?.length &&
-    !task.planning?.blocked_reason &&
-    !requirement.flow.blocked_reason &&
-    !["testing", "acceptance", "release", "operations"].includes(
-      requirement.flow.stage,
-    ) &&
+    task.execution_gate.eligible &&
     (!current || closed.includes(current.status));
   useEffect(() => {
     if (!draft) return;
@@ -117,6 +126,19 @@ export function DeliveryExecutionPanel({
         </p>
       )}
       {!current && <p className="runtime-help">{tr("empty")}</p>}
+      {!task.execution_gate.eligible && !compactGate && (
+        <Alert
+          type="info"
+          title={t("deliveryTaskAcceptance.blocked")}
+          description={
+            <ul>
+              {gateReasons.map((reason, index) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       {current && (
         <>
           <h4>{tr("current")}</h4>
@@ -128,6 +150,11 @@ export function DeliveryExecutionPanel({
             onCommand={onCommand}
           />
         </>
+      )}
+      {!task.execution_gate.eligible && compactGate && (
+        <p className="runtime-help task-redispatch-help">
+          {gateReasons.join(" ")}
+        </p>
       )}
       {executions.length > 1 && (
         <Collapse
@@ -157,7 +184,9 @@ export function DeliveryExecutionPanel({
           initial={draft}
           initialTargets={structuredClone(targets.data)}
           canConfigure={
-            data.permissions.configure && targets.data.can_configure_policy
+            !disabled &&
+            data.permissions.configure &&
+            targets.data.can_configure_policy
           }
           onClose={() => setDraft(undefined)}
           onSaved={onSaved}

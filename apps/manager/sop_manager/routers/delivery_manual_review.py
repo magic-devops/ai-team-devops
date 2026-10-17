@@ -45,13 +45,14 @@ def current_review(context, task_id, *, can_approve):
     blocked = context.blocked(task_id)
     if blocked:
         codes.append("manual_review_dependencies_blocked")
+    definition_reasons = context.definition(task_id)["execution_gate"]["reasons"]
     return {
         **snapshot,
         "basis": context.basis(task_id),
         "eligible": eligible,
         "can_review": can_review,
-        "can_accept": not codes,
-        "reasons": [{"code": code, "message": REASONS[code]} for code in codes],
+        "can_accept": not codes and not definition_reasons,
+        "reasons": [{"code": code, "message": REASONS[code]} for code in codes] + definition_reasons,
         "dependency_blocked": blocked,
         "verified": context.verified(task_id),
     }
@@ -68,9 +69,9 @@ def apply_review(db, project, user, data, body):
             "Task scope changed. Review and explicitly adopt the latest task basis.",
         )
     if not current["eligible"]:
-        _fail(current["reasons"][0]["code"])
+        _fail(current["reasons"][0]["code"], current["reasons"][0]["message"])
     if body.decision == "accept" and not current["can_accept"]:
-        _fail(current["reasons"][0]["code"])
+        _fail(current["reasons"][0]["code"], current["reasons"][0]["message"])
     review = DeliveryTaskReview(
         id=identifier("task-review"),
         tenant_id=project.tenant_id,

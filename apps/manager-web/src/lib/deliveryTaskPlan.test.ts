@@ -29,7 +29,8 @@ const row = (
   owner_id: "user:lead",
   priority: "P1",
   estimate: "M",
-  acceptance_criteria: [0],
+  acceptance_criteria: [],
+  requirement_criteria_indices: [0],
   depends_on: [],
   starts_on: null,
   ends_on: null,
@@ -118,7 +119,8 @@ describe("editable task plans", () => {
         owner_id: "user:lead",
         priority: "P1",
         estimate: "L",
-        acceptance_criteria: [0],
+        acceptance_criteria: [],
+  requirement_criteria_indices: [0],
         depends_on: [],
         starts_on: null,
         ends_on: null,
@@ -153,7 +155,7 @@ describe("editable task plans", () => {
         row("a", {
           starts_on: "2026-10-20",
           ends_on: "2026-10-19",
-          acceptance_criteria: [2],
+          requirement_criteria_indices: [2],
         }),
       ],
       1,
@@ -163,12 +165,12 @@ describe("editable task plans", () => {
     expect(codes).toContain("criteria");
   });
   it("remaps criterion identity by exact text and occurrence, never by old index", () => {
-    const rows = [row("a", { acceptance_criteria: [0, 1, 2] })];
+    const rows = [row("a", { requirement_criteria_indices: [0, 1, 2] })];
     expect(
       remapPlanCriteria(rows, ["A", "Removed", "A"], ["New", "A", "A"])[0]
-        .acceptance_criteria,
+        .requirement_criteria_indices,
     ).toEqual([1, 2]);
-    expect(rows[0].acceptance_criteria).toEqual([0, 1, 2]);
+    expect(rows[0].requirement_criteria_indices).toEqual([0, 1, 2]);
   });
   it("sends the fixed preview version and retry key to the authenticated delivery endpoint", async () => {
     const body = {

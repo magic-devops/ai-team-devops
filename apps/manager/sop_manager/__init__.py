@@ -21,7 +21,12 @@ def _default_project_path() -> None:
 
 _default_project_path()
 
-from sop_manager.main import app  # noqa: E402
+def __getattr__(name):
+    if name == "app":
+        from sop_manager.main import app
+
+        return app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_app():

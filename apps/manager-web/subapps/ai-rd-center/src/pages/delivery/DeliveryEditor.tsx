@@ -10,11 +10,13 @@ import {
 } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
+import { normalizeTaskCriteria } from "@/lib/taskAcceptance";
 
 export type EditorField = {
   key: string;
   label: string;
-  type?: "text" | "area" | "date" | "number" | "boolean";
+  type?: "text" | "area" | "date" | "number" | "boolean" | "criteria";
   required?: boolean;
   max?: number;
   options?: { label: string; value: string }[];
@@ -155,7 +157,7 @@ export function DeliveryEditor({
             name={f.key}
             label={f.label}
             valuePropName={f.type === "boolean" ? "checked" : "value"}
-            rules={
+            rules={f.type === "criteria" ? [{ validator: async (_rule, value) => { try { normalizeTaskCriteria(value || []); } catch (failure) { throw new Error(t(`deliveryTaskAcceptance.${(failure as Error).message}`)); } } }] :
               f.required
                 ? [
                     {
@@ -167,7 +169,7 @@ export function DeliveryEditor({
                 : []
             }
           >
-            {f.options ? (
+            {f.type === "criteria" ? <TaskCriteriaEditor disabled={busy} /> : f.options ? (
               <Select
                 mode={f.multiple ? "multiple" : undefined}
                 options={f.options}

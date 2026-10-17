@@ -123,6 +123,13 @@ const progress = {
 } as unknown as DeliveryProgress;
 
 describe("real progress presentation", () => {
+  it("shows acceptance changes as readable criteria and sources rather than object serialization", () => {
+    language = "en-US";
+    const html = renderToStaticMarkup(createElement(DeliveryProgressComparison, {
+      comparison: { added: [], removed: [], changed: [{ id: "present", before: { ...task, acceptance: { criteria: ["Original criterion"], sources: [{ source: "task", index: 0, text: "Original criterion" }], available: true, requirement_id: null, requirement_revision: null } }, after: { ...task, acceptance: { criteria: ["Updated criterion"], sources: [{ source: "task", index: 0, text: "Updated criterion" }], available: true, requirement_id: null, requirement_revision: null } }, fields: ["acceptance"] }], unchanged_count: 0, incomplete_plan_fields: [], incomplete_task_ids: [] }, currentTasks: [], onOpenTask: () => {},
+    }));
+    expect(html).toContain("Original criterion"); expect(html).toContain("Updated criterion"); expect(html).not.toContain("[object Object]");
+  });
   it("renders frozen reservation changes with units and reports uncaptured baseline fields", () => {
     language = "en-US";
     const allocation = {

@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from rich.table import Table
@@ -23,6 +23,12 @@ app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v1", help="Hermes �
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _acceptance_criteria(values: list[str]) -> list[str]:
+    if len(values) > 80 or any(not value.strip() or len(value.strip()) > 2000 for value in values):
+        raise typer.BadParameter("Use at most 80 nonblank criteria of at most 2000 characters", param_hint="--criterion")
+    return [value.strip() for value in values]
 
 
 def _slug(s: str) -> str:
@@ -119,6 +125,9 @@ def _write_task_doc(row: dict[str, Any]) -> None:
         "",
         str(row.get("description") or "").strip(),
         "",
+        "## Acceptance criteria",
+        *[f"- {criterion}" for criterion in row.get("acceptance_criteria", [])],
+        "",
         "## Notes",
         str(row.get("human_notes") or "待补充").strip(),
         "",
@@ -206,6 +215,7 @@ def _new_row(
     assigned_to: str,
     sprint_id: str,
     req_id: str,
+    acceptance_criteria: list[str],
 ) -> dict[str, Any]:
     ts = _now()
     return {
@@ -214,6 +224,7 @@ def _new_row(
         "sprint_id": sprint_id,
         "title": title,
         "description": description,
+        "acceptance_criteria": acceptance_criteria,
         "status": "pending",
         "priority": priority.upper(),
         "estimate": estimate,
@@ -961,9 +972,11 @@ def create_task(
     assigned_to: str = typer.Option("Coder", "--assignee", help="负责人/角色"),
     sprint_id: str = typer.Option("", "--sprint", help="Sprint ID"),
     req_id: str = typer.Option("", "--requirement", help="需求 ID"),
+    criterion: Annotated[list[str] | None, typer.Option("--criterion", help="任务自身验收标准，可重复指定（最多80项，每项2000字）")] = None,
     local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
 ) -> None:
     """创建任务；离线时写 .sop-runtime/local 并追加 push_queue。"""
+    criteria = _acceptance_criteria(criterion or [])
     body = {
         "title": title,
         "description": description,
@@ -972,6 +985,7 @@ def create_task(
         "assigned_to": assigned_to,
         "sprint_id": sprint_id,
         "req_id": req_id,
+        "acceptance_criteria": criteria,
     }
     if not local:
         try:
@@ -988,6 +1002,7 @@ def create_task(
         assigned_to=assigned_to,
         sprint_id=sprint_id,
         req_id=req_id,
+        acceptance_criteria=criteria,
     )
     _save_and_queue(row)
     ok(f"local task queued {row['id']}")
@@ -1078,10 +1093,16 @@ def update_task(
     artifact_path: str | None = typer.Option(None, "--artifact-path"),
     debug_notes: str | None = typer.Option(None, "--debug-notes"),
     branch: str | None = typer.Option(None, "--branch"),
+    criterion: Annotated[list[str] | None, typer.Option("--criterion", help="完整替换任务自身验收标准，可重复指定")] = None,
+    clear_criteria: bool = typer.Option(False, "--clear-criteria", help="明确清空任务自身验收标准"),
     local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
 ) -> None:
     """更新任务；离线时对本地副本打补丁并追加 upsert 队列。"""
+    if criterion is not None and clear_criteria:
+        raise typer.BadParameter("--criterion and --clear-criteria cannot be used together")
     patch: dict[str, Any] = {}
+    if criterion is not None or clear_criteria:
+        patch["acceptance_criteria"] = _acceptance_criteria(criterion or [])
     for k, v in {
         "title": title,
         "description": description,

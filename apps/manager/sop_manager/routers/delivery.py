@@ -374,6 +374,7 @@ def execute(
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
         return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
+    reservation = None
     try:
         row = db.get(DeliveryWorkspace, project.id)
         if not row:
@@ -399,6 +400,9 @@ def execute(
         )
         if reserved.rowcount != 1:
             raise HTTPException(409, "Concurrent edit. Reload the project.")
+        from .delivery_progress_capture import reserve_workspace_version
+
+        reservation = reserve_workspace_version(db, project, next_version)
         data = reconcile(db, project, row.data)
         resource_id, before = _apply(db, project, user, data, body.action, payload, request)
         db.flush()
@@ -449,6 +453,11 @@ def execute(
     except Exception:
         db.rollback()
         raise
+    finally:
+        if reservation:
+            from .delivery_progress_capture import release_workspace_version
+
+            release_workspace_version(db, reservation)
 
 
 def _apply(db, project, user, data, action, payload, request):

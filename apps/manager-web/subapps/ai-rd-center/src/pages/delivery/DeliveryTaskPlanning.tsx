@@ -93,7 +93,7 @@ export function DeliveryTaskPlanning({
               )}
               {requirement && (
                 <ul>
-                  {(plan.acceptance_criteria || []).map((index) => (
+                  {(plan.requirement_criteria_indices || []).map((index) => (
                     <li key={index}>
                       {plan.requirement_snapshot?.acceptance_criteria[index] ||
                         (plan.requirement_revision === requirement.flow.revision

@@ -135,7 +135,7 @@ function renderObservedCard(
     stale: entryStale,
     snapshot: {
       title: "Original task",
-      revision: 1,
+      task_id: "T-one", description: "", assigned_to: "", task_acceptance_criteria: ["Human checks the result"], requirement: null, owner: null, dependency_basis: {},
       acceptance_criteria: ["Human checks the result"],
     },
     results: {},

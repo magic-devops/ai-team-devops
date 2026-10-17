@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from datetime import date, datetime, timezone
 
 from .delivery_contract import STAGE_IDS, default_flow, stage_gates
+from .delivery_task_contract import delivery_task_definition
 
 CATEGORIES = ("work", "approval", "acceptance", "blocked")
 FINISHED = {"completed", "cancelled", "closed"}
@@ -81,7 +82,7 @@ def _issue_reason(issue):
 
 
 def _awaiting(task, requirement, entry, latest):
-    if not requirement or not entry:
+    if not entry:
         return False
     if (
         entry.get("status") != "awaiting_review"
@@ -96,19 +97,18 @@ def _awaiting(task, requirement, entry, latest):
         or task.get("status") in FINISHED
     ):
         return False
-    expected = {
-        "task_id": task["id"],
-        "title": task.get("title"),
-        "description": task.get("description"),
-        "assigned_to": task.get("assigned_to"),
-        "requirement_id": requirement["id"],
-        "requirement_title": requirement.get("title"),
-        "requirement_description": requirement.get("description"),
-        "acceptance_criteria": requirement.get("acceptance_criteria"),
-        "revision": _flow(requirement)["revision"],
-    }
+    # materialize derives this from the shared current task definition. Inbox
+    # neither reconstructs a weaker snapshot nor requires a parent requirement.
     evidence = entry.get("snapshot") or {}
-    return all(key in evidence and evidence[key] == value for key, value in expected.items())
+    definition = delivery_task_definition(
+        task,
+        requirement,
+        task.get("planning") or {},
+        evidence.get("owner"),
+        evidence.get("dependency_basis", {}),
+        requirement_revision=_flow(requirement)["revision"] if requirement else 0,
+    )
+    return task.get("delivery_status") == "awaiting_review" and definition["snapshot"] == evidence
 
 
 def _item(kind, record, requirement, owner_id, categories, reasons, today, *, task=None, status=None):

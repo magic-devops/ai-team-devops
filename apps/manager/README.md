@@ -18,6 +18,20 @@ cd apps/manager-web && pnpm i && pnpm dev
 
 等价：`sop-manager start --reload`（须在含 `apps/manager` 的仓库中安装 editable，或设置 `PYTHONPATH` 指向 `apps/manager`）。
 
+## 数据库结构升级
+
+任务自身验收条件使用 `Task.acceptance_criteria` 文本数组。已有 SQLite 数据库需先停止 Manager，在与服务相同的 `DATABASE_URL` 环境中执行：
+
+```bash
+sop-manager schema verify
+sop-manager schema apply
+sop-manager schema verify
+```
+
+升级保留任务原数据，自身条件初始为 `[]`；不会从需求复制条件或补造验收通过。重复执行为幂等操作，正常启动不隐式执行 ALTER。新数据库直接建立当前结构。
+
+SQLite 升级已经实测；PostgreSQL 路径仅验证 DDL 编译，部署前需在目标库演练。现有 MySQL/OceanBase 数据库的自动升级明确拒绝，需另行验证迁移；新库仍使用当前 SQL 模型。`sop_manager.migrate` 是 LanceDB 数据导入，与结构升级不同。
+
 ## 部署
 
 ```bash

@@ -18,23 +18,9 @@ from .auth_sql import check_project_access
 from .delivery_contract import default_flow
 from .delivery_service import get_record, identifier, stamp
 from .hermes_workspace import runtime_identity
-from .sql_models import Issue, Requirement, Task, User
+from .sql_models import Issue, Task, User
 
 CLOSED = {"accepted", "changes_requested", "cancelled"}
-
-
-def basis(task, requirement, revision):
-    return {
-        "task_id": task.id,
-        "title": task.title,
-        "description": task.description,
-        "assigned_to": task.assigned_to,
-        "requirement_id": task.req_id,
-        "requirement_title": requirement.title,
-        "requirement_description": requirement.description,
-        "acceptance_criteria": requirement.acceptance_criteria,
-        "revision": revision,
-    }
 
 
 def context(store, user, workspace, permission="read"):
@@ -109,21 +95,16 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
 
     principal, workspace = context(store, user, body.workspace_id, "execute")
     task = get_record(db, Task, project, body.task_id)
-    if VerificationContext(db, project, state).basis(task.id) != body.task_basis:
+    verification = VerificationContext(db, project, state)
+    if verification.basis(task.id) != body.task_basis:
         raise HTTPException(
             409,
             {"code": "task_basis_changed", "message": "Task changed; review the latest task before dispatch"},
         )
     require_dependencies(db, project, state, task.id)
-    requirement = get_record(db, Requirement, project, task.req_id)
-    flow = state["flows"].get(requirement.id, default_flow())
-    if task.status == "completed" or flow["stage"] in {"testing", "acceptance", "release", "operations"}:
-        raise HTTPException(409, "Reopen the requirement and task before dispatch")
-    if not requirement.acceptance_criteria:
-        raise HTTPException(422, "Define acceptance criteria before dispatch")
-    entries = state.get("executions", [])
-    if any(e["task_id"] == task.id and e["status"] not in CLOSED for e in entries):
-        raise HTTPException(409, "Review or cancel the current execution before redispatch")
+    gate = verification.execution_gate(task.id)
+    if not gate["eligible"]:
+        raise HTTPException(409, gate["reasons"][0])
     agent = None
     if body.agent_id:
         agent = store.get(principal, workspace["id"], "agents", body.agent_id)
@@ -148,7 +129,7 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
         raise HTTPException(
             409, {"code": "target_unavailable", "message": "Target cannot execute every planned node"}
         )
-    snapshot = basis(task, requirement, flow["revision"])
+    snapshot = verification.definition(task.id)["snapshot"]
     nodes = body.nodes
     if agent:
         from hermes_core.agents import single_agent_nodes
@@ -208,7 +189,11 @@ def _envelope_data(entry):
     snapshot = entry["snapshot"]
     return {
         "title": snapshot["title"],
-        "description": snapshot["requirement_description"] + "\n\n" + snapshot["description"],
+        "description": "\n\n".join(
+            text
+            for text in ((snapshot["requirement"] or {}).get("description"), snapshot["description"])
+            if text
+        ),
         "acceptance_criteria": "\n".join(snapshot["acceptance_criteria"]),
         "source": {"kind": "manager.delivery", "execution_id": entry["id"], "snapshot": snapshot},
     }
@@ -297,17 +282,32 @@ def _dispatch(store, principal, entry, execution=None):
     entry["run_id"] = result["run"]["id"]
 
 
-def _cancel(db, project, entry, store, principal):
+def _cancel(db, project, state, entry, store, principal):
+    from .delivery_verification import VerificationContext
+
     if entry["status"] in CLOSED:
         raise HTTPException(409, "Execution already closed")
+    verification = VerificationContext(db, project, state)
+    definition = verification.definition(entry["task_id"])
+    current = bool(
+        definition
+        and definition["execution_gate"]["eligible"]
+        and not entry.get("planning_invalidated")
+        and definition["snapshot"] == entry["snapshot"]
+    )
     if not entry["run_id"]:
+        if "requirement" not in entry.get("snapshot", {}):
+            raise HTTPException(
+                409, "Historical dispatch definition is unavailable; its external receipt cannot be verified"
+            )
         receipt_actor = replace(principal, actor=entry["requested_by"])
         _recover_dispatch(store, receipt_actor, entry)
     if entry["run_id"]:
         run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
-        if run["status"] == "completed":
+        if run["status"] == "completed" and current:
             raise HTTPException(409, "Review completed execution instead of cancelling")
-        if run["status"] not in {"failed", "cancelled"}:
+        # Closing an obsolete business intent retains its terminal runtime proof.
+        if run["status"] not in {"completed", "failed", "cancelled"}:
 
             def cancel(current):
                 if current["status"] == "completed":
@@ -332,19 +332,26 @@ def _cancel(db, project, entry, store, principal):
         entry["run_version"] = run["version"]
     entry["status"] = "cancelled"
     entry["cancelled_at"] = stamp()
-    get_record(db, Task, project, entry["task_id"]).status = "blocked"
+    entry["stale"] = not current
+    if current:
+        verification.tasks[entry["task_id"]].status = "blocked"
 
 
 def _observe(db, project, state, entry, store, principal):
     from .delivery_execution_observations import project_result
+    from .delivery_verification import VerificationContext
 
     run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
-    task = get_record(db, Task, project, entry["task_id"])
-    requirement = get_record(db, Requirement, project, entry["snapshot"]["requirement_id"])
-    flow = state["flows"].setdefault(requirement.id, default_flow())
+    verification = VerificationContext(db, project, state)
+    task = verification.tasks.get(entry["task_id"])
+    definition = verification.definition(entry["task_id"])
+    requirement = verification.requirements.get(task.req_id) if task else None
+    flow = state["flows"].setdefault(requirement.id, default_flow()) if requirement else None
     entry["stale"] = (
         bool(entry.get("planning_invalidated"))
-        or basis(task, requirement, flow["revision"]) != entry["snapshot"]
+        or not definition
+        or not definition["execution_gate"]["eligible"]
+        or definition["snapshot"] != entry["snapshot"]
     )
     results = run["data"].get("node_results", {})
     entry.update(
@@ -360,8 +367,11 @@ def _observe(db, project, state, entry, store, principal):
     )
     if entry["status"] not in CLOSED:
         entry["status"] = "awaiting_review" if run["status"] == "completed" else run["status"]
-        task.status = "blocked" if run["status"] in {"failed", "cancelled", "interrupted"} else "in_progress"
-    if run["status"] == "failed" and not entry.get("issue_id"):
+        if not entry["stale"]:
+            task.status = (
+                "blocked" if run["status"] in {"failed", "cancelled", "interrupted"} else "in_progress"
+            )
+    if not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
         issue = Issue(
             id=identifier("ISS"),
             tenant_id=project.tenant_id,
@@ -372,7 +382,7 @@ def _observe(db, project, state, entry, store, principal):
             severity="P1",
             status="open",
             reported_by="execution-runtime",
-            description=f"Execution {entry['id']} / run {run['id']} / revision {entry['snapshot']['revision']}\n"
+            description=f"Execution {entry['id']} / run {run['id']} / task {entry['task_id']}\n"
             + str(run["data"].get("error") or "Review the execution node results."),
         )
         db.add(issue)
@@ -385,7 +395,7 @@ def _review(entry, run, task, flow, body, user, store, principal):
         raise HTTPException(409, "This execution has already been reviewed or cancelled")
     if body.run_version != run["version"]:
         raise HTTPException(409, "Execution evidence changed; reload before review")
-    if body.decision == "accept" and entry["stale"]:
+    if entry["stale"]:
         raise HTTPException(409, "Requirement or task changed; old execution cannot be accepted")
     runtime_task = store.get(principal, entry["workspace_id"], "tasks", entry["runtime_task_id"])
     # Use the runtime's evidence/code checks, but Manager remains the review authority.
@@ -417,6 +427,7 @@ def _review(entry, run, task, flow, body, user, store, principal):
     test_ids = entry["test_node_ids"]
     if (
         body.decision == "accept"
+        and flow is not None
         and test_ids
         and all(entry["results"].get(i, {}).get("succeeded") is True for i in test_ids)
     ):
@@ -453,7 +464,7 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         permission = {"execution.review": "approve", "execution.cancel": "execute"}.get(action, "read")
         principal, workspace = context(store, user, entry["workspace_id"], permission)
         if action == "execution.cancel":
-            _cancel(db, project, entry, store, principal)
+            _cancel(db, project, state, entry, store, principal)
             return entry["id"], before
         if not entry["run_id"]:
             originator = db.get(User, entry["requested_by"])
@@ -463,12 +474,14 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
                 )
             check_project_access(originator, project.id, db)
             dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
-            task = get_record(db, Task, project, entry["task_id"])
-            req = get_record(db, Requirement, project, entry["snapshot"]["requirement_id"])
-            revision = state["flows"][req.id]["revision"]
+            from .delivery_verification import VerificationContext
+
+            definition = VerificationContext(db, project, state).definition(entry["task_id"])
             if (
                 entry.get("planning_invalidated")
-                or basis(task, req, revision) != entry["snapshot"]
+                or not definition
+                or not definition["execution_gate"]["eligible"]
+                or definition["snapshot"] != entry["snapshot"]
                 or workspace["version"] != entry["workspace_version"]
             ):
                 raise HTTPException(
@@ -477,6 +490,8 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
             _dispatch(store, dispatcher, entry, execution)
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":
+            if entry["stale"]:
+                raise HTTPException(409, "Task scope changed; this execution is read-only history")
             if body.decision == "accept":
                 from .delivery_plan import require_dependencies
 

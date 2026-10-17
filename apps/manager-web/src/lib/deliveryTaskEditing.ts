@@ -1,5 +1,6 @@
 import type { DeliveryTask, DeliveryWorkspace } from "./delivery";
 import { remapCriterionIndexes } from "./deliveryTaskPlan";
+import { normalizeTaskCriteria } from "./taskAcceptance";
 export type TaskEditSession = {
   projectId: string;
   version: number;
@@ -35,8 +36,11 @@ export function taskEditPayload(
     task_basis: session.task.basis,
     planning_basis: session.planningBasis,
     description: values.description || "",
-    acceptance_criteria: session.task.req_id
-      ? ((values.acceptance_criteria || []) as string[]).map(Number)
+    acceptance_criteria: normalizeTaskCriteria(
+      values.acceptance_criteria || [],
+    ),
+    requirement_criteria_indices: session.task.req_id
+      ? ((values.requirement_criteria_indices || []) as string[]).map(Number)
       : [],
     depends_on: values.depends_on || [],
     starts_on: values.starts_on || null,
@@ -53,12 +57,16 @@ export function adoptTaskEdit(
     throw new Error("Task edit scope changed");
   const latest = openTaskEdit(workspace, session.task.id);
   const criteria = remapCriterionIndexes(
-    ((values.acceptance_criteria || []) as string[]).map(Number),
+    ((values.requirement_criteria_indices || []) as string[]).map(Number),
     session.criteria,
     latest.criteria,
   );
   return {
     session: latest,
-    values: { ...values, acceptance_criteria: criteria.map(String) },
+    values: {
+      ...values,
+      requirement_criteria_indices:
+        session.task.req_id === latest.task.req_id ? criteria.map(String) : [],
+    },
   };
 }

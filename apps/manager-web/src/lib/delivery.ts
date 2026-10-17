@@ -1,5 +1,7 @@
 import { request } from "./http";
 import type { TaskPlanning } from "./deliveryTaskPlan";
+import type { TaskAcceptance } from "./taskAcceptance";
+import type { ProgressState } from "./deliveryProgress";
 import type {
   ExecutionAgent,
   ExecutionTarget,
@@ -92,10 +94,19 @@ export type DeliveryTask = {
   title: string;
   description: string;
   status: string;
+  recorded_status: string;
+  delivery_status: ProgressState;
+  verified: boolean;
   priority: string;
   owner_id: string;
   assigned_to: string;
   estimate: string;
+  acceptance_criteria: string[];
+  acceptance: TaskAcceptance;
+  execution_gate: {
+    eligible: boolean;
+    reasons: { code: string; message: string }[];
+  };
   execution_id?: string;
   planning?: TaskPlanning;
   dependency_blocked?: string[];
@@ -124,7 +135,7 @@ export type DeliveryExecution = {
   plan_nodes?: ExecutionPreview["nodes"];
   plan_basis?: string;
   test_node_ids: string[];
-  snapshot: { title: string; revision: number; acceptance_criteria: string[] };
+  snapshot: Partial<ExecutionPreview["snapshot"]>;
   results: Record<
     string,
     {

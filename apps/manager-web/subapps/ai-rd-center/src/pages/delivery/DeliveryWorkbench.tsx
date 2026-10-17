@@ -26,6 +26,7 @@ import {
   Users,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -58,10 +59,7 @@ import {
 } from "./DeliveryEditor";
 import "./delivery-workbench.css";
 import { safeExecutionReturn } from "@/lib/executionCommands";
-import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
-import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
-import { DeliveryManualReviewPanel } from "./DeliveryManualReviewPanel";
 import { planError } from "@/lib/deliveryTaskPlan";
 import {
   deliveryInboxHash,
@@ -83,7 +81,7 @@ import { DeliveryProgress, DeliveryProgressSummary } from "./DeliveryProgress";
 import { preserveProgressRoute } from "@/lib/deliveryProgress";
 import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
 import { DeliveryScheduling } from "./DeliveryScheduling";
-import { DeliveryTaskDetail } from "./DeliveryTaskDetail";
+import { DeliveryTaskDetail, TaskDetailContent } from "./DeliveryTaskDetail";
 import { DeliveryActivityAction } from "./DeliveryActivityAction";
 
 const subscribe = (cb: () => void) => {
@@ -118,6 +116,25 @@ function ProjectDelivery() {
   const qc = useQueryClient();
   const queryKey = ["delivery", projectId, sessionId];
   const [taskEditing, setTaskEditing] = useState(false);
+  const [taskPinnedWorkspace, setTaskPinnedWorkspace] =
+    useState<DeliveryWorkspace>();
+  const taskEditingChanged = useCallback(
+    (editing: boolean) => {
+      setTaskEditing(editing);
+      if (editing) {
+        const current = qc.getQueryData<DeliveryWorkspace>([
+          "delivery",
+          projectId,
+          sessionId,
+        ]);
+        if (current)
+          setTaskPinnedWorkspace(
+            (previous) => previous || structuredClone(current),
+          );
+      } else setTaskPinnedWorkspace(undefined);
+    },
+    [projectId, sessionId, qc],
+  );
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => fetchDelivery(projectId, signal),
@@ -250,8 +267,6 @@ function ProjectDelivery() {
       throw error;
     }
   };
-  const quick = (action: DeliveryAction, payload: Record<string, unknown>) =>
-    void commit(action, payload, false).catch((e) => setActionError(e.message));
   const navigate = (
     nextView: string,
     id = selectedId,
@@ -283,7 +298,7 @@ function ProjectDelivery() {
     if (["progress", "team", "timeline"].includes(nextView))
       window.dispatchEvent(new PopStateEvent("popstate"));
   };
-  const data = query.data;
+  const data = taskPinnedWorkspace || query.data;
   const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
   const inboxQuery = useQuery({
     queryKey: ["delivery-inbox", projectId, sessionId, inboxQueryScope],
@@ -1412,7 +1427,14 @@ function ProjectDelivery() {
                             ) : (
                               <Circle size={16} />
                             )}
-                            <span>{tr(`gates.${g.id}`)}</span>
+                            <span>
+                              {tr(`gates.${g.id}`)}
+                              {!g.ok && g.id === "task_acceptance" && (
+                                <small className="runtime-help">
+                                  {t("deliveryTaskAcceptance.gateHint")}
+                                </small>
+                              )}
+                            </span>
                           </div>
                         ))}
                       </section>
@@ -1505,104 +1527,16 @@ function ProjectDelivery() {
                                 : undefined
                             }
                           >
-                            <h3>{task.title}</h3>
-                            <small>
-                              {task.id} · {task.estimate}
-                            </small>
-                            <div className="delivery-task-controls">
-                              <Select
-                                aria-label={`${tr("owner")} ${task.title}`}
-                                value={task.owner_id}
-                                options={ownerOptions}
-                                disabled={
-                                  !canWrite ||
-                                  actionsDisabled ||
-                                  ["release", "operations"].includes(
-                                    selected.flow.stage,
-                                  )
-                                }
-                                onChange={(owner_id) =>
-                                  quick("task.update", {
-                                    id: task.id,
-                                    owner_id,
-                                  })
-                                }
-                              />
-                              <Select
-                                aria-label={`${tr("current")} ${task.title}`}
-                                value={task.status}
-                                options={[
-                                  "pending",
-                                  "in_progress",
-                                  "blocked",
-                                  "completed",
-                                ].map((value) => ({
-                                  value,
-                                  label: tr(`statuses.${value}`),
-                                  disabled:
-                                    (value === "completed" &&
-                                      Boolean(task.execution_id)) ||
-                                    (["in_progress", "completed"].includes(
-                                      value,
-                                    ) &&
-                                      Boolean(
-                                        task.dependency_blocked?.length ||
-                                        task.planning?.blocked_reason,
-                                      )),
-                                }))}
-                                disabled={
-                                  !canWrite ||
-                                  actionsDisabled ||
-                                  ["release", "operations"].includes(
-                                    selected.flow.stage,
-                                  )
-                                }
-                                onChange={(status) =>
-                                  quick("task.update", { id: task.id, status })
-                                }
-                              />
-                            </div>
-                            <DeliveryTaskPlanMaintenance
-                              key={`plan:${projectId}:${task.id}`}
-                              task={task}
-                              data={data}
-                              onTask={(dependency) =>
-                                navigate(
-                                  "list",
-                                  dependency.req_id,
-                                  "tasks",
-                                  dependency.id,
-                                  true,
-                                )
-                              }
-                              onSaved={saveWorkspace}
-                              onEditingChange={setTaskEditing}
-                              canEdit={
-                                canWrite &&
-                                !actionsDisabled &&
-                                !["release", "operations"].includes(
-                                  selected.flow.stage,
-                                )
-                              }
-                            />
-                            <DeliveryManualReviewPanel
-                              key={`review:${projectId}:${task.id}`}
-                              projectId={projectId}
-                              sessionId={sessionId}
+                            <TaskDetailContent
+                              workspace={data}
                               taskId={task.id}
-                              onSaved={saveWorkspace}
-                              onEditingChange={setTaskEditing}
-                            />
-                            <DeliveryExecutionPanel
-                              data={data}
-                              task={task}
-                              requirement={selected}
                               sessionId={sessionId}
+                              canEdit={canWrite && !actionsDisabled}
+                              onSaved={saveWorkspace}
+                              onEditingChange={taskEditingChanged}
                               onCommand={(action, payload) =>
                                 commit(action, payload, false)
                               }
-                              onSaved={saveWorkspace}
-                              onEditingChange={setTaskEditing}
                             />
                           </article>
                         ))}

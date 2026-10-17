@@ -9,6 +9,8 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from sop_manager.task_acceptance import TaskAcceptanceCriteria
+
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_scheduling_contract import (
     AllocationInput,
@@ -24,7 +26,7 @@ STAGES = [
     {"id": "ux", "artifact": "prototype", "route": "#/requirements"},
     {"id": "architecture", "artifact": "architecture", "route": "#/intelligence/design-docs"},
     {"id": "planning", "artifact": "", "route": "#/tasks"},
-    {"id": "development", "artifact": "", "route": "#/tasks/agent-feed"},
+    {"id": "development", "artifact": "", "route": "#/tasks/execution"},
     {"id": "testing", "artifact": "test", "route": "#/tasks/quality-governance"},
     {"id": "acceptance", "artifact": "", "route": "#/tasks/quality-governance"},
     {"id": "release", "artifact": "", "route": "#/ops-center"},
@@ -47,6 +49,20 @@ Stage = Literal[
 
 class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class TaskAcceptanceSource(BaseModel):
+    source: Literal["task", "requirement"]
+    index: int
+    text: str
+
+
+class TaskAcceptance(BaseModel):
+    criteria: list[str]
+    sources: list[TaskAcceptanceSource]
+    available: bool
+    requirement_id: str | None
+    requirement_revision: int | None
 
 
 class Command(Input):
@@ -246,6 +262,9 @@ class ProgressTaskFact(BaseModel):
     status: ProgressTaskStatus
     recorded_status: str
     allocations: list[StoredAllocation] | None = None
+    acceptance_criteria: list[str] | None = None
+    requirement_criteria_indices: list[int] | None = None
+    acceptance: TaskAcceptance | None = None
 
 
 class ProgressRequirementFact(BaseModel):
@@ -447,13 +466,14 @@ class TaskDraft(Dated):
     owner_id: str = Field(default="", max_length=100)
     priority: Literal["P0", "P1", "P2", "P3"] = "P1"
     estimate: Literal["XS", "S", "M", "L", "XL"] = "M"
-    acceptance_criteria: list[Annotated[int, Field(strict=True, ge=0)]] = Field(
+    acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
+    requirement_criteria_indices: list[Annotated[int, Field(strict=True, ge=0)]] = Field(
         default_factory=list, max_length=80
     )
     depends_on: list[str] = Field(default_factory=list, max_length=40)
     blocked_reason: str = Field(default="", max_length=2000)
 
-    @field_validator("acceptance_criteria", "depends_on")
+    @field_validator("requirement_criteria_indices", "depends_on")
     @classmethod
     def unique_references(cls, values):
         if len(set(values)) != len(values):
@@ -469,7 +489,7 @@ class TaskDraft(Dated):
 
 
 class TaskCreate(TaskDraft):
-    requirement_id: str = Field(min_length=1, max_length=64)
+    requirement_id: str = Field(default="", max_length=64)
 
 
 class TaskEdit(Dated):
@@ -478,7 +498,8 @@ class TaskEdit(Dated):
     owner_id: str | None = Field(default=None, max_length=100)
     description: str | None = Field(default=None, max_length=10000)
     blocked_reason: str | None = Field(default=None, max_length=2000)
-    acceptance_criteria: list[Annotated[int, Field(strict=True, ge=0)]] | None = Field(
+    acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
+    requirement_criteria_indices: list[Annotated[int, Field(strict=True, ge=0)]] | None = Field(
         default=None, max_length=80
     )
     depends_on: list[str] | None = Field(default=None, max_length=40)
@@ -486,7 +507,7 @@ class TaskEdit(Dated):
     planning_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     allocations: list[AllocationInput] | None = Field(default=None, max_length=80)
 
-    @field_validator("acceptance_criteria", "depends_on")
+    @field_validator("requirement_criteria_indices", "depends_on")
     @classmethod
     def explicit_references(cls, values, info):
         if values is None:
@@ -498,7 +519,8 @@ class TaskEdit(Dated):
 
     @model_validator(mode="after")
     def references_require_basis(self):
-        if {"acceptance_criteria", "depends_on"} & self.model_fields_set and self.task_basis is None:
+        definition_fields = {"acceptance_criteria", "requirement_criteria_indices", "depends_on"}
+        if definition_fields & self.model_fields_set and self.task_basis is None:
             raise ValueError("Reference edits require the current task basis")
         if {"starts_on", "ends_on", "allocations"} & self.model_fields_set and self.planning_basis is None:
             raise ValueError("Date and reservation edits require the current project planning basis")
@@ -568,6 +590,7 @@ class TaskReviewTask(BaseModel):
     id: str
     title: str
     description: str
+    acceptance_criteria: list[str] | None = None
     req_id: str
     status: str
     assigned_to: str
@@ -593,7 +616,7 @@ class TaskReviewRequirement(BaseModel):
 
 
 class TaskReviewPlanning(BaseModel):
-    acceptance_criteria: list[int]
+    requirement_criteria_indices: list[int] | None = None
     depends_on: list[str]
 
 
@@ -601,6 +624,7 @@ class TaskReviewSnapshot(BaseModel):
     task: TaskReviewTask
     owner: TaskReviewOwner | None
     requirement: TaskReviewRequirement | None
+    acceptance: TaskAcceptance | None = None
     planning: TaskReviewPlanning
     dependency_basis: dict[str, str]
 
@@ -760,6 +784,17 @@ def stage_gates(requirement, flow, tasks, issues):
         )
     if stage in {"planning", "development", "testing", "acceptance", "release"}:
         checks.append({"id": "tasks", "ok": bool(linked)})
+        checks.append(
+            {
+                "id": "task_acceptance",
+                "ok": bool(linked)
+                and all(
+                    (t.get("acceptance") or {}).get("available")
+                    and bool((t.get("acceptance") or {}).get("criteria"))
+                    for t in linked
+                ),
+            }
+        )
     if stage == "planning":
         checks.append(
             {

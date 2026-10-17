@@ -30,6 +30,8 @@ import {
   type TaskReviewPage,
 } from "@/lib/deliveryTaskReview";
 import "./delivery-manual-review.css";
+import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
+import type { TaskAcceptance } from "@/lib/taskAcceptance";
 
 function reviewTime(value: string | null, language: string) {
   if (!value) return "—";
@@ -44,7 +46,10 @@ function ManualTaskFacts({
   owner,
   requirement,
   planning,
-}: Pick<ManualReviewCurrent, "task" | "owner" | "requirement" | "planning">) {
+  acceptance,
+}: Pick<ManualReviewCurrent, "task" | "owner" | "requirement" | "planning"> & {
+  acceptance: TaskAcceptance | null;
+}) {
   const { t } = useTranslation();
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryManualReview.${key}`, options);
@@ -93,30 +98,9 @@ function ManualTaskFacts({
           {requirement.blocked_reason && (
             <Alert type="warning" title={requirement.blocked_reason} />
           )}
-          <strong>{tr("criteria")}</strong>
-          {requirement.acceptance_criteria.length ? (
-            <ol>
-              {requirement.acceptance_criteria.map((text, index) => (
-                <li key={index}>{text}</li>
-              ))}
-            </ol>
-          ) : (
-            <p>{tr("noCriteria")}</p>
-          )}
-          {planning.acceptance_criteria.length > 0 && (
-            <p>
-              {tr("taskCriteria")}:{" "}
-              {planning.acceptance_criteria
-                .map(
-                  (index) =>
-                    requirement.acceptance_criteria[index] ||
-                    tr("missingCriterion"),
-                )
-                .join(" · ")}
-            </p>
-          )}
         </div>
       )}
+      <TaskAcceptanceFacts acceptance={acceptance} />
       <p className="delivery-manual-dependencies">
         <b>{tr("dependencies")}</b>:{" "}
         {planning.depends_on.length
@@ -173,7 +157,13 @@ export function ManualReviewFacts({
         <ul className="delivery-manual-reasons">
           {current.reasons.map((reason, index) => (
             <li key={`${reason.code}:${index}`}>
-              {tr(`reasons.${reason.code}`, { defaultValue: reason.message })}
+              {reason.code.startsWith("task_")
+                ? t(`deliveryTaskAcceptance.reasons.${reason.code}`, {
+                    defaultValue: reason.message,
+                  })
+                : tr(`reasons.${reason.code}`, {
+                    defaultValue: reason.message,
+                  })}
             </li>
           ))}
         </ul>

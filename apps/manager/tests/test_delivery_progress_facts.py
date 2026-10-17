@@ -99,7 +99,14 @@ def test_manual_requirement_acceptance_requires_real_review_and_current_scope(en
             == 200
         )
     response = command(
-        client, "task.create", {"requirement_id": rid, "title": "Implement", "owner_id": "user:lead"}
+        client,
+        "task.create",
+        {
+            "requirement_id": rid,
+            "title": "Implement",
+            "owner_id": "user:lead",
+            "requirement_criteria_indices": [0],
+        },
     )
     task_id = response.json()["tasks"][0]["id"]
     assert (

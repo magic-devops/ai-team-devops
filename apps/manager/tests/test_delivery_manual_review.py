@@ -17,7 +17,12 @@ def make_task(client):
     state = command(
         client,
         "task.create",
-        {"requirement_id": rid, "title": "Human delivery", "owner_id": "user:lead"},
+        {
+            "requirement_id": rid,
+            "title": "Human delivery",
+            "owner_id": "user:lead",
+            "requirement_criteria_indices": [0],
+        },
     ).json()
     return next(t for t in state["tasks"] if t["req_id"] == rid)
 
@@ -220,6 +225,7 @@ def test_standalone_human_review_and_pagination_are_read_only(env):  # noqa: F81
                 tenant_id="tenant",
                 project_id="project",
                 title="Independent",
+                acceptance_criteria=["Independent behavior verified"],
                 assigned_to="lead",
                 status="completed",
             )
@@ -302,6 +308,7 @@ def test_predecessor_content_change_invalidates_entire_accepted_chain_permanentl
         {
             "requirement_id": first["req_id"],
             "title": "Dependent",
+            "requirement_criteria_indices": [0],
             "owner_id": "user:lead",
             "depends_on": [first["id"]],
         },
@@ -362,6 +369,7 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
                     tenant_id="tenant",
                     project_id="project",
                     title="First",
+                    acceptance_criteria=["First behavior verified"],
                     assigned_to="lead",
                     status="completed",
                 ),
@@ -370,6 +378,7 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
                     tenant_id="tenant",
                     project_id="project",
                     title="Second",
+                    acceptance_criteria=["Second behavior verified"],
                     assigned_to="lead",
                     status="pending",
                 ),
@@ -382,7 +391,7 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
         "id": "second",
         "task_basis": tasks["second"]["basis"],
         "depends_on": ["first"],
-        "acceptance_criteria": [],
+        "requirement_criteria_indices": [],
     }
     saved = command(client, "task.update", payload)
     assert saved.status_code == 200, saved.text
@@ -394,7 +403,9 @@ def test_independent_task_dependencies_use_fixed_task_basis_and_no_requirement_p
     latest = next(t for t in client.get("/api/v1/delivery/workspace").json()["tasks"] if t["id"] == "second")
     assert (
         command(
-            client, "task.update", {"id": "second", "task_basis": latest["basis"], "acceptance_criteria": [0]}
+            client,
+            "task.update",
+            {"id": "second", "task_basis": latest["basis"], "requirement_criteria_indices": [0]},
         ).status_code
         == 422
     )

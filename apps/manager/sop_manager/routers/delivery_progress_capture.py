@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from fastapi import HTTPException
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from .delivery_progress_facts import capture_facts, fact_basis
@@ -22,6 +24,21 @@ from .sql_models import (
 
 logger = logging.getLogger(__name__)
 _RECORDED = "delivery_progress_recorded"
+_RESERVED = "delivery_reserved_workspace_versions"
+
+
+def reserve_workspace_version(db, project, version):
+    transaction = db.get_nested_transaction() or db.get_transaction()
+    scope = (project.tenant_id, project.id)
+    db.info.setdefault(_RESERVED, {}).setdefault(transaction, {})[scope] = version
+    return transaction, scope, version
+
+
+def release_workspace_version(db, token):
+    transaction, scope, version = token
+    group = db.info.get(_RESERVED, {}).get(transaction, {})
+    if group.get(scope) == version:
+        group.pop(scope, None)
 
 
 def _utc(now=None):
@@ -38,7 +55,43 @@ def record_observation(
     # database state, after flushing all pending ORM edits, not a cached workspace.
     db.expire_all()
     from .delivery_manual_review import invalidate_reviews
+    from .delivery_service import reconcile
 
+    workspace = db.scalar(
+        select(DeliveryWorkspace)
+        .where(DeliveryWorkspace.project_id == project.id, DeliveryWorkspace.tenant_id == project.tenant_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if workspace:
+        effective = reconcile(db, project, workspace.data)
+        changed = effective["flows"] != workspace.data["flows"]
+        for entry in effective.get("executions", []):
+            if entry.get("stale") and not entry.get("planning_invalidated"):
+                entry["planning_invalidated"] = True
+                changed = True
+        if changed:
+            value = {
+                **workspace.data,
+                "flows": effective["flows"],
+                "executions": effective.get("executions", []),
+            }
+            transaction = db.get_nested_transaction() or db.get_transaction()
+            reserved = db.info.get(_RESERVED, {}).get(transaction, {}).get((project.tenant_id, project.id))
+            version = workspace.version if reserved == workspace.version else workspace.version + 1
+            applied = db.execute(
+                update(DeliveryWorkspace)
+                .where(
+                    DeliveryWorkspace.project_id == project.id,
+                    DeliveryWorkspace.tenant_id == project.tenant_id,
+                    DeliveryWorkspace.version == workspace.version,
+                )
+                .values(data=value, version=version),
+                execution_options={"synchronize_session": False},
+            )
+            if applied.rowcount != 1:
+                raise HTTPException(409, "Concurrent delivery definition change; reload and retry")
+            db.expire(workspace)
     invalidate_reviews(db, project)
     facts = capture_facts(db, project)
     fingerprint = fact_basis(facts)

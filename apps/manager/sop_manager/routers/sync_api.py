@@ -14,9 +14,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 
-from sop_manager.path_config import request_scope_active, resolved_project_id, resolved_project_path, resolved_tenant_id
+from sop_manager.path_config import (
+    request_scope_active,
+    resolved_project_id,
+    resolved_project_path,
+    resolved_tenant_id,
+)
 from sop_manager.routers.sql_models import Issue, Requirement, Sprint, Task, get_session
 from sop_manager.sync_journal import append_event, recent_events
+from sop_manager.task_acceptance import normalize_task_acceptance
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
@@ -429,6 +435,11 @@ def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str,
         for k, v in rec.items()
         if k in allowed and k not in ("id", "tenant_id", "project_id")
     }
+    if model is Task and "acceptance_criteria" in patch:
+        try:
+            patch["acceptance_criteria"] = normalize_task_acceptance(patch["acceptance_criteria"])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if row is None:
         row = model(id=rid, tenant_id=tid, project_id=pid)
         db.add(row)

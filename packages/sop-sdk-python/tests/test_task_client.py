@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 from sop_sdk.client import ManagerClient
@@ -50,3 +52,23 @@ def test_missing_task_is_explicit_and_does_not_retry_or_fall_back_to_list():
         with pytest.raises(SopNotFoundError, match="Task not found"):
             client.get_task("T-absent")
     assert len(seen) == 1
+
+
+def test_task_write_requests_preserve_own_criteria_omission_and_explicit_clear():
+    seen = []
+
+    def handle(request):
+        seen.append((request.method, request.url.path, json.loads(request.content), request.headers["X-Project-Id"]))
+        return httpx.Response(200, json={"ok": True, "id": "T-independent"})
+
+    with ManagerClient("https://manager.example", project_id="selected", max_retries=0) as client:
+        client._client.close()
+        client._client = httpx.Client(transport=httpx.MockTransport(handle), base_url=client.base_url)
+        client.create_task({"title": "Independent", "req_id": "", "acceptance_criteria": ["测试通过", "Review evidence"]})
+        client.update_task("T-independent", {"title": "Renamed"})
+        client.update_task("T-independent", {"acceptance_criteria": []})
+    assert seen == [
+        ("POST", "/api/v1/tasks", {"title": "Independent", "req_id": "", "acceptance_criteria": ["测试通过", "Review evidence"]}, "selected"),
+        ("PATCH", "/api/v1/tasks/T-independent", {"title": "Renamed"}, "selected"),
+        ("PATCH", "/api/v1/tasks/T-independent", {"acceptance_criteria": []}, "selected"),
+    ]

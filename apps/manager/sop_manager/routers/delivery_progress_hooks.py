@@ -8,6 +8,8 @@ _RECORDED = "delivery_progress_recorded"
 _BUSY = "delivery_progress_capturing"
 _ACTORS = "delivery_progress_actors"
 _CORE_ROWS = "delivery_progress_core_rows"
+_IDENTITY_USERS = "delivery_progress_identity_users"
+_RESERVED_VERSIONS = "delivery_reserved_workspace_versions"
 
 
 def _models():
@@ -25,11 +27,53 @@ def _models():
     return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent, DeliveryTaskReview
 
 
-def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
+def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), usernames=()):
     """Actual review scopes affected by membership, name or account status changes."""
-    from .sql_models import DeliveryTaskReview, Project
+    from .sql_models import DeliveryTaskReview, DeliveryWorkspace, Project, Task, User
 
     if tenant_ids and user_ids:
+        names = set(usernames)
+        names.update(
+            db.connection()
+            .execute(select(User.username).where(User.id.in_(user_ids), User.tenant_id.in_(tenant_ids)))
+            .scalars()
+        )
+        if names:
+            for tenant_id, project_id in db.connection().execute(
+                select(Task.tenant_id, Task.project_id)
+                .where(Task.tenant_id.in_(tenant_ids), Task.assigned_to.in_(names))
+                .distinct()
+            ):
+                mark_progress(db, tenant_id, project_id)
+        # Project only stable owner maps, never lifetime execution/evidence JSON.
+        owner_ids = {"user:" + value for value in user_ids}
+        for tenant_id, project_id, owners in (
+            db.connection()
+            .execute(
+                select(
+                    DeliveryWorkspace.tenant_id,
+                    DeliveryWorkspace.project_id,
+                    DeliveryWorkspace.data["task_owners"],
+                ).where(DeliveryWorkspace.tenant_id.in_(tenant_ids))
+            )
+            .yield_per(128)
+        ):
+            task_ids = (
+                [key for key, value in owners.items() if value in owner_ids]
+                if isinstance(owners, dict)
+                else []
+            )
+            if (
+                task_ids
+                and db.connection()
+                .execute(
+                    select(Task.id)
+                    .where(Task.id.in_(task_ids), Task.tenant_id == tenant_id, Task.project_id == project_id)
+                    .limit(1)
+                )
+                .first()
+            ):
+                mark_progress(db, tenant_id, project_id)
         for tenant_id, project_id in db.connection().execute(
             select(DeliveryTaskReview.tenant_id, DeliveryTaskReview.project_id)
             .where(
@@ -62,7 +106,9 @@ def _identity_object_scopes(db, obj):
             )
             if original:
                 tenants.add(original)
-        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id})
+        _identity_scopes(
+            db, tenant_ids=tenants, user_ids={obj.id}, usernames={obj.username} if obj.username else ()
+        )
     elif isinstance(obj, ProjectMember):
         projects = {obj.project_id}
         if state.persistent:
@@ -130,32 +176,78 @@ def _before_flush(db, flush_context, instances):
             )
 
 
+def _parameter_rows(state):
+    if isinstance(state.parameters, (list, tuple)):
+        return state.parameters
+    return [state.parameters or {}]
+
+
+def _insert_rows(state):
+    """Resolve literal/bound identity fields without compiling ORM bulk INSERT."""
+    from sqlalchemy.sql.elements import BindParameter, ClauseElement
+
+    groups = getattr(state.statement, "_multi_values", ())
+    static_rows = (
+        [row for group in groups for row in group]
+        if groups
+        else [getattr(state.statement, "_values", None) or {}]
+    )
+    for parameters in _parameter_rows(state):
+        for static in static_rows:
+            values = dict(parameters)
+            for column, value in static.items():
+                key = column if isinstance(column, str) else column.key
+                if isinstance(value, BindParameter):
+                    value = parameters.get(value.key, value.value)
+                if not isinstance(value, ClauseElement):
+                    values.setdefault(key, value)
+            yield values
+
+
+def _selected_rows(state, columns, primary_columns):
+    """Bind each actual write separately; ORM bulk adds its primary-key filter."""
+    rows = set()
+    for parameters in _parameter_rows(state):
+        query = select(*columns)
+        if state.statement.whereclause is not None:
+            query = query.where(state.statement.whereclause)
+        # ORM columns in a Core WHERE also set is_orm_statement. Only an ORM
+        # entity as the UPDATE target causes SQLAlchemy to add a PK predicate.
+        orm_target = getattr(state.statement.table, "_annotations", {}).get("parentmapper")
+        if isinstance(state.parameters, (list, tuple)) and state.is_update and orm_target is not None:
+            if any(column.key not in parameters for column in primary_columns):
+                continue  # The ORM rejects a bulk row without its primary key.
+            query = query.where(*(column == parameters[column.key] for column in primary_columns))
+        rows.update(tuple(row) for row in state.session.connection().execute(query, parameters).all())
+    return rows
+
+
 def _core_identity_write(state, table):
-    from sqlalchemy import tuple_
 
     from .sql_models import ProjectMember, User
 
     if table is None or table.name not in {User.__tablename__, ProjectMember.__tablename__}:
         return False
-    if state.is_insert:
-        return True
     is_user = table.name == User.__tablename__
+    if state.is_insert:
+        for value in _insert_rows(state):
+            if is_user and value.get("id") and value.get("tenant_id"):
+                _identity_scopes(
+                    state.session,
+                    tenant_ids={value["tenant_id"]},
+                    user_ids={value["id"]},
+                    usernames={value["username"]} if value.get("username") else (),
+                )
+            elif not is_user and value.get("project_id"):
+                _identity_scopes(state.session, project_ids={value["project_id"]})
+        return True
     columns = [table.c.id, table.c.tenant_id] if is_user else [table.c.project_id, table.c.user_id]
-    query = select(*columns)
-    if state.statement.whereclause is not None:
-        query = query.where(state.statement.whereclause)
-    elif isinstance(state.parameters, list):
-        keys = [
-            tuple(row.get(column.key) for column in columns[: 1 if is_user else 2])
-            for row in state.parameters
-        ]
-        query = query.where(tuple_(*columns[: 1 if is_user else 2]).in_(keys))
-    rows = (
-        state.session.connection()
-        .execute(query, state.parameters if isinstance(state.parameters, dict) else {})
-        .all()
-    )
+    rows = _selected_rows(state, columns, columns[: 1 if is_user else 2])
     if is_user:
+        transaction = state.session.get_nested_transaction() or state.session.get_transaction()
+        state.session.info.setdefault(_IDENTITY_USERS, {}).setdefault(transaction, set()).update(
+            row[0] for row in rows
+        )
         for user_id, tenant_id in rows:
             _identity_scopes(state.session, tenant_ids={tenant_id}, user_ids={user_id})
     else:
@@ -175,12 +267,7 @@ def _core_write(state):
     if table is None or table.name not in {m.__tablename__ for m in _models()}:
         return
     if state.is_insert:
-        values = (
-            state.parameters
-            if isinstance(state.parameters, list)
-            else [state.parameters or statement.compile().params]
-        )
-        for row in values:
+        for row in _insert_rows(state):
             if isinstance(row, dict):
                 mark_progress(
                     state.session,
@@ -190,19 +277,7 @@ def _core_write(state):
         return
     project_column = table.c.id if table.name == Project.__tablename__ else table.c.project_id
     primary_column = next(iter(table.primary_key.columns))
-    query = select(primary_column, table.c.tenant_id, project_column)
-    if statement.whereclause is not None:
-        query = query.where(statement.whereclause)
-    if isinstance(state.parameters, list) and statement.whereclause is None:
-        # ORM bulk UPDATE by primary key adds its PK predicate after this hook.
-        # Select only those IDs, rather than treating it as an unscoped update.
-        query = query.where(
-            primary_column.in_(
-                [row[primary_column.key] for row in state.parameters if primary_column.key in row]
-            )
-        )
-    parameters = state.parameters if isinstance(state.parameters, dict) else None
-    affected = state.session.connection().execute(query, parameters or {}).all()
+    affected = _selected_rows(state, [primary_column, table.c.tenant_id, project_column], [primary_column])
     for _row_id, tenant_id, project_id in affected:
         mark_progress(state.session, tenant_id, project_id)
     if state.is_update and affected:
@@ -214,11 +289,19 @@ def _core_write(state):
 
 def _before_commit(db):
     from .delivery_progress_capture import record_observation
-    from .sql_models import Project
+    from .sql_models import Project, User
 
     if db.in_nested_transaction() or db.info.get(_BUSY):
         return
     db.flush()
+    changed_users = (
+        set().union(*db.info.get(_IDENTITY_USERS, {}).values()) if db.info.get(_IDENTITY_USERS) else set()
+    )
+    if changed_users:
+        for user_id, tenant_id in db.connection().execute(
+            select(User.id, User.tenant_id).where(User.id.in_(changed_users))
+        ):
+            _identity_scopes(db, tenant_ids={tenant_id}, user_ids={user_id})
     # Core UPDATE may move rows across projects/tenants without any dirty ORM
     # object. Resolve the same actual primary keys after all writes finish,
     # rather than guessing destinations from literal UPDATE parameters.
@@ -260,7 +343,7 @@ def _after_commit(db):
         values = scopes.pop(nested, set())
         if values:
             scopes.setdefault(nested.parent, set()).update(values)
-        for key in (_RECORDED, _ACTORS):
+        for key in (_RECORDED, _ACTORS, _RESERVED_VERSIONS):
             groups = db.info.get(key, {})
             group = groups.pop(nested, {})
             if group:
@@ -268,18 +351,20 @@ def _after_commit(db):
         core_groups = db.info.get(_CORE_ROWS, {})
         for table_name, ids in core_groups.pop(nested, {}).items():
             core_groups.setdefault(nested.parent, {}).setdefault(table_name, set()).update(ids)
+        identity_groups = db.info.get(_IDENTITY_USERS, {})
+        identity_groups.setdefault(nested.parent, set()).update(identity_groups.pop(nested, set()))
 
 
 def _after_soft_rollback(db, previous):
     if previous.nested:
         db.info.get(_SCOPES, {}).pop(previous, None)
-        for key in (_RECORDED, _ACTORS, _CORE_ROWS):
+        for key in (_RECORDED, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _RESERVED_VERSIONS):
             db.info.get(key, {}).pop(previous, None)
 
 
 def _after_transaction_end(db, transaction):
     if transaction.parent is None:
-        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS):
+        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _RESERVED_VERSIONS):
             db.info.pop(key, None)
 
 

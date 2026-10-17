@@ -28,12 +28,16 @@ def fail(status, code, message):
 
 
 def requirement_snapshot(requirement):
-    return {
-        "id": requirement.id,
-        "title": requirement.title,
-        "description": requirement.description,
-        "acceptance_criteria": requirement.acceptance_criteria or [],
-    }
+    from .delivery_task_contract import requirement_definition
+
+    return requirement_definition(
+        {
+            "id": requirement.id,
+            "title": requirement.title,
+            "description": requirement.description,
+            "acceptance_criteria": requirement.acceptance_criteria or [],
+        }
+    )
 
 
 def requirement_basis(requirement):
@@ -79,25 +83,25 @@ def _template(requirement, body):
         "key": "design",
         "title": f"Design: {title}",
         "description": requirement.description,
-        "acceptance_criteria": criteria,
+        "requirement_criteria_indices": criteria,
         "estimate": "S",
     }
     backend = {
         "key": "backend",
         "title": f"Backend: {title}",
         "depends_on": ["design"],
-        "acceptance_criteria": criteria,
+        "requirement_criteria_indices": criteria,
     }
     frontend = {
         "key": "frontend",
         "title": f"Frontend: {title}",
         "depends_on": ["design"],
-        "acceptance_criteria": criteria,
+        "requirement_criteria_indices": criteria,
     }
     verify = {
         "key": "verify",
         "title": f"Verify: {title}",
-        "acceptance_criteria": criteria,
+        "requirement_criteria_indices": criteria,
         "description": "Verify the linked acceptance criteria and retain the test evidence.",
     }
     if body.mode == "testing":
@@ -130,7 +134,8 @@ def _generate(requirement, body, request, existing):
     instructions = (
         "Create an editable development task plan. Return only a JSON object with items and optional warnings. "
         "Each item has a unique key, title, description, owner_id (leave empty), priority P0/P1/P2/P3, "
-        "estimate XS/S/M/L/XL, acceptance_criteria (zero-based integer indices into the supplied requirement), "
+        "estimate XS/S/M/L/XL, acceptance_criteria (task-specific condition strings), "
+        "requirement_criteria_indices (explicit zero-based integer indices into the supplied requirement), "
         "depends_on (plan keys or supplied existing task IDs), starts_on/ends_on (ISO dates or null), "
         "blocked_reason. Do not invent members, dates, existing task IDs, command lines or completed results. "
         f"Produce 1 to {body.max_items} tasks for mode {body.mode}. "
@@ -291,12 +296,12 @@ def validate_plan(db, project, data, requirement, items, roster):
     keys = [item.key or f"item-{i + 1}" for i, item in enumerate(items)]
     if len(set(keys)) != len(keys) or any(key in existing for key in keys):
         fail(422, "plan_keys_invalid", "Plan task keys must be unique and distinct from existing task IDs")
-    count = len(requirement.acceptance_criteria or [])
+    count = len(requirement.acceptance_criteria or []) if requirement else 0
     graph = {tid: details.get("depends_on", []) for tid, details in data.get("task_details", {}).items()}
     dates = {tid: details for tid, details in data.get("task_details", {}).items()}
     for key, item in zip(keys, items, strict=True):
         validate_owner(item.owner_id, roster)
-        if any(index >= count for index in item.acceptance_criteria):
+        if any(index >= count for index in item.requirement_criteria_indices):
             fail(
                 422, "plan_criteria_invalid", "Acceptance criteria index is not in this requirement revision"
             )
@@ -388,7 +393,7 @@ def confirmed_source(db, project, user, data, requirement, body):
 
 def edit_task_links(db, project, data, task, body):
     """Maintain selected links against an explicitly adopted requirement snapshot."""
-    fields = {"acceptance_criteria", "depends_on"} & body.model_fields_set
+    fields = {"requirement_criteria_indices", "depends_on"} & body.model_fields_set
     if not fields:
         if {"starts_on", "ends_on"} & body.model_fields_set:
             validate_schedule(data.get("task_details", {}), [task.id])
@@ -404,7 +409,7 @@ def edit_task_links(db, project, data, task, body):
         fail(422, "plan_dependency_missing", "Choose existing predecessor tasks from this project")
     if any(
         index >= len(requirement.acceptance_criteria or []) if requirement else True
-        for index in details.get("acceptance_criteria", [])
+        for index in details.get("requirement_criteria_indices", [])
     ):
         fail(422, "plan_criteria_invalid", "Acceptance criteria index is not in this requirement revision")
     planning = data["task_details"]
@@ -415,7 +420,7 @@ def edit_task_links(db, project, data, task, body):
     changed = any(before.get(field, []) != details.get(field, []) for field in fields) or (
         bool(before.get("requirement_basis")) and before["requirement_basis"] != basis
     )
-    if requirement:
+    if requirement and "requirement_criteria_indices" in fields:
         details.update(
             requirement_snapshot=requirement_snapshot(requirement),
             requirement_basis=basis,

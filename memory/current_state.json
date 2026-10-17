@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-17T07:01:40.788197+00:00",
+  "updated_at": "2026-10-17T08:18:06.007067+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "external_agent_delivery_verified",
+    "status": "task_acceptance_delivery_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,35 +15,50 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/external-delivery/",
+    "evidence": ".sop-runtime/delivery-evidence/task-acceptance/",
     "verification_status": "verified",
-    "next_step": "standalone_task_native_acceptance_and_stable_team_runtime_identity_then_portfolio_quality_operations",
+    "next_step": "stable_team_runtime_identity_then_portfolio_archival_quality_release_and_operations",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "manager": 576,
-      "hermes_full": 170,
-      "hermes_full_skipped": 15,
-      "hermes_native": 84,
-      "hermes_native_platform_skipped": 2,
-      "web": 322,
-      "web_files": 53,
-      "sdk_cli_targeted": 114,
-      "generator": 1,
-      "typescript": "passed",
+      "manager_full": {
+        "passed": 653,
+        "failed": 2,
+        "seconds": 485.02,
+        "resolution": "Two obsolete fixtures/permission assertions corrected and rechecked with 49 passing related tests; no production gates weakened."
+      },
+      "manager_full_failure_files_rechecked": 49,
+      "manager_final_cross_domain": 139,
+      "manager_final_sql_scope": 69,
+      "counts_overlap": true,
+      "web": 339,
+      "web_files": 57,
+      "web_seconds": 82.87,
+      "mobile_shell_targeted": 4,
+      "sdk_cli_targeted": 85,
+      "typescript_build": "passed",
       "production_build": "passed",
-      "actual_http_browser": "passed",
-      "actual_worker_agentd_post_tests": "passed",
-      "outbox_network_retry": "passed",
-      "review_p2_fixed": 3
+      "production_build_after_mobile_css_seconds": 73,
+      "independent_reviews": 1,
+      "review_p1_fixed": 1,
+      "review_p2_fixed": 1,
+      "unresolved_known_failures": 0,
+      "actual_worker_agentd_python_test_human_review": "passed",
+      "actual_stale_completed_recovery": "passed",
+      "actual_read_only_tables": 28,
+      "sqlite_schema_upgrade": "verified",
+      "postgres_upgrade": "ddl_compile_only",
+      "existing_mysql_oceanbase_auto_upgrade": "explicitly_unsupported",
+      "external_model_calls": 0
     },
     "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
     "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/external-delivery/commit-receipt.json"
+    "commit_receipt": ".sop-runtime/delivery-evidence/task-acceptance/commit-receipt.json",
+    "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -470,7 +485,7 @@
     "in_progress": [],
     "blocked": [],
     "pending": [],
-    "current": "外部智能体、后置测试、人审与问题回流阶段已验证；继续独立任务原生交付、团队执行身份与完整项目/质量/发布运维待办。"
+    "current": "独立任务自身验收、原生执行与问题回流阶段已验证；继续团队执行身份、项目组合/归档、质量发布及部署运维完整待办。"
   },
   "metrics": {
     "completion_rate": null,
@@ -478,5 +493,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "外部智能体、后置测试、人审与问题回流阶段已验证；继续独立任务原生交付、团队执行身份与完整项目/质量/发布运维待办。"
+  "current": "独立任务自身验收、原生执行与问题回流阶段已验证；继续团队执行身份、项目组合/归档、质量发布及部署运维完整待办。"
 }

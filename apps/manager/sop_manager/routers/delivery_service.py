@@ -122,7 +122,10 @@ def reconcile(db, project, state):
         definition = _fingerprint([req.title, req.description, req.acceptance_criteria])
         work = _fingerprint(
             [
-                {k: t[k] for k in ("id", "title", "description", "status", "assigned_to")}
+                {
+                    k: t[k]
+                    for k in ("id", "title", "description", "acceptance_criteria", "status", "assigned_to")
+                }
                 for t in tasks
                 if t["req_id"] == req.id
             ]
@@ -149,22 +152,19 @@ def reconcile(db, project, state):
 
 
 def _reconcile_execution_evidence(db, project, data):
-    from .delivery_execution import basis
+    from .delivery_verification import VerificationContext
 
-    tasks = {t.id: t for t in records(db, Task, project).all()}
-    requirements = {r.id: r for r in records(db, Requirement, project).all()}
+    context = VerificationContext(db, project, data)
     executions = data.get("executions", [])
     latest = {entry["task_id"]: entry for entry in executions}
     runs = {entry["run_id"]: entry for entry in executions if entry.get("run_id")}
     for entry in executions:
-        task = tasks.get(entry["task_id"])
-        req = requirements.get(entry["snapshot"]["requirement_id"])
-        revision = data["flows"].get(req.id, default_flow())["revision"] if req else 0
+        definition = context.definition(entry["task_id"])
         entry["stale"] = (
             bool(entry.get("planning_invalidated"))
-            or not task
-            or not req
-            or basis(task, req, revision) != entry["snapshot"]
+            or not definition
+            or not definition["execution_gate"]["eligible"]
+            or definition["snapshot"] != entry["snapshot"]
         )
     for flow in data["flows"].values():
         for artifact in flow["artifacts"]:
@@ -188,7 +188,17 @@ def remember_basis(db, project, data):
         if flow["stage"] in {"testing", "acceptance", "release", "operations"}:
             flow["tested_work"] = _fingerprint(
                 [
-                    {k: t[k] for k in ("id", "title", "description", "status", "assigned_to")}
+                    {
+                        k: t[k]
+                        for k in (
+                            "id",
+                            "title",
+                            "description",
+                            "acceptance_criteria",
+                            "status",
+                            "assigned_to",
+                        )
+                    }
                     for t in tasks
                     if t["req_id"] == req.id
                 ]
@@ -202,7 +212,12 @@ def materialize(db, project, data, user):
     roster = verification.roster
     tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.created_at, Task.id).all()]
     for task in tasks:
+        task["recorded_status"] = task["status"]
         task["basis"] = verification.basis(task["id"])
+        task["acceptance"] = verification.definition(task["id"])["acceptance"]
+        task["execution_gate"] = verification.execution_gate(task["id"])
+        task["delivery_status"] = verification.delivery_status(task["id"])
+        task["verified"] = verification.verified(task["id"])
         latest = next((e for e in reversed(data.get("executions", [])) if e["task_id"] == task["id"]), None)
         task["execution_id"] = latest["id"] if latest else ""
         if (
@@ -277,22 +292,37 @@ def materialize(db, project, data, user):
 
 
 def _create_task(db, project, data, requirement, draft, roster, task_id=None):
-    if data["flows"].get(requirement.id, {}).get("stage") in {"release", "operations"}:
+    if requirement and data["flows"].get(requirement.id, {}).get("stage") in {"release", "operations"}:
         raise HTTPException(409, "Reopen the requirement before changing accepted scope")
-    planning_fields = {"key", "acceptance_criteria", "depends_on", "starts_on", "ends_on", "blocked_reason"}
+    planning_fields = {
+        "key",
+        "requirement_criteria_indices",
+        "depends_on",
+        "starts_on",
+        "ends_on",
+        "blocked_reason",
+    }
     values = draft.model_dump(exclude={"requirement_id", "owner_id", *planning_fields})
     row = Task(
         id=task_id or identifier("T"),
         tenant_id=project.tenant_id,
         project_id=project.id,
-        req_id=requirement.id,
+        req_id=requirement.id if requirement else "",
         assigned_to=validate_owner(draft.owner_id, roster),
         status="blocked" if draft.blocked_reason else "pending",
         **values,
     )
     data["task_owners"][row.id] = draft.owner_id
     data.setdefault("task_details", {})[row.id] = draft.model_dump(mode="json", include=planning_fields)
-    flow = data["flows"].get(requirement.id, {})
+    if requirement:
+        from .delivery_plan import requirement_basis, requirement_snapshot
+
+        data["task_details"][row.id].update(
+            requirement_basis=requirement_basis(requirement),
+            requirement_snapshot=requirement_snapshot(requirement),
+            requirement_revision=data["flows"].get(requirement.id, default_flow())["revision"],
+        )
+    flow = data["flows"].get(requirement.id, {}) if requirement else {}
     if flow.get("stage") in {"testing", "acceptance"}:
         invalidate(flow)
         requirement.status = "pending"
@@ -340,7 +370,7 @@ def apply_action(db, project, user, data, action, body):
     elif action in {"task.create", "tasks.plan"}:
         from .delivery_plan import apply_plan, validate_plan
 
-        req = get_record(db, Requirement, project, body.requirement_id)
+        req = get_record(db, Requirement, project, body.requirement_id) if body.requirement_id else None
         if action == "tasks.plan":
             return apply_plan(db, project, user, data, req, body, roster)
         validate_plan(db, project, data, req, [body], roster)
@@ -456,7 +486,9 @@ def _update_task(db, project, data, body, roster):
     resource_id = row.id
     flow = data["flows"].get(row.req_id, {})
     business_change = links_changed or (
-        body.owner_id is not None
+        "acceptance_criteria" in body.model_fields_set
+        and body.acceptance_criteria != row.acceptance_criteria
+        or body.owner_id is not None
         and body.owner_id != data.get("task_owners", {}).get(row.id, "")
         or body.status is not None
         and body.status != before["status"]
@@ -474,11 +506,16 @@ def _update_task(db, project, data, body, roster):
         row.status = body.status
     if body.description is not None:
         row.description = body.description
+    if "acceptance_criteria" in body.model_fields_set:
+        row.acceptance_criteria = body.acceptance_criteria
     if planning.get("blocked_reason"):
         row.status = "blocked"
     if flow.get("stage") in {"testing", "acceptance"} and (
         links_changed
-        or any(before[key] != getattr(row, key) for key in ("description", "status", "assigned_to"))
+        or any(
+            before[key] != getattr(row, key)
+            for key in ("description", "status", "assigned_to", "acceptance_criteria")
+        )
     ):
         invalidate(flow)
         get_record(db, Requirement, project, row.req_id).status = "pending"

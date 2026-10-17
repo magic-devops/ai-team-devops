@@ -16,6 +16,7 @@ describe("standalone task edit retention", () => {
       version: 7,
       permissions: { write: true },
       requirements: [],
+      members: [],
       tasks: [
         {
           id: "T-alone",
@@ -23,6 +24,15 @@ describe("standalone task edit retention", () => {
           basis: "original",
           title: "Original task being edited",
           description: "Pinned scope",
+          acceptance_criteria: [],
+          acceptance: {
+            criteria: [],
+            sources: [],
+            available: true,
+            requirement_id: null,
+            requirement_revision: null,
+          },
+          execution_gate: { eligible: false, reasons: [] },
           planning: { starts_on: "2026-10-17", depends_on: [] },
         },
       ],

@@ -1,5 +1,6 @@
 import { request } from "./http";
 import type { ScheduleAllocation } from "./deliveryScheduling";
+import { normalizeTaskCriteria } from "./taskAcceptance";
 
 export type TaskPlanItem = {
   key: string;
@@ -8,7 +9,8 @@ export type TaskPlanItem = {
   owner_id: string;
   priority: "P0" | "P1" | "P2" | "P3";
   estimate: "XS" | "S" | "M" | "L" | "XL";
-  acceptance_criteria: number[];
+  acceptance_criteria: string[];
+  requirement_criteria_indices: number[];
   depends_on: string[];
   starts_on: string | null;
   ends_on: string | null;
@@ -21,7 +23,7 @@ export type PlanUsage = {
   total_tokens: number;
   cost_usd: number;
 };
-export type TaskPlanning = Partial<TaskPlanItem> &
+export type TaskPlanning = Partial<Omit<TaskPlanItem, "acceptance_criteria">> &
   Partial<{
     requirement_revision: number;
     requirement_basis: string;
@@ -89,10 +91,17 @@ export function taskPlanProblems(
   const byKey = new Map(selected.map((row) => [row.key, row]));
   const allowed = new Set([...byKey.keys(), ...existingIds]);
   for (const row of selected) {
+    try {
+      normalizeTaskCriteria(row.acceptance_criteria);
+    } catch {
+      problems.push({ code: "criteria", key: row.key });
+    }
     if (!row.title.trim()) problems.push({ code: "title", key: row.key });
     if (row.starts_on && row.ends_on && row.starts_on > row.ends_on)
       problems.push({ code: "dates", key: row.key });
-    if (row.acceptance_criteria.some((i) => i < 0 || i >= criteriaCount))
+    if (
+      row.requirement_criteria_indices.some((i) => i < 0 || i >= criteriaCount)
+    )
       problems.push({ code: "criteria", key: row.key });
     if (row.depends_on.some((id) => !allowed.has(id)))
       problems.push({ code: "missingDependency", key: row.key });
@@ -119,8 +128,8 @@ export function remapPlanCriteria(
 ): TaskPlanRow[] {
   return rows.map((row) => ({
     ...row,
-    acceptance_criteria: remapCriterionIndexes(
-      row.acceptance_criteria,
+    requirement_criteria_indices: remapCriterionIndexes(
+      row.requirement_criteria_indices,
       previous,
       next,
     ),

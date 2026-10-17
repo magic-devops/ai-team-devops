@@ -85,11 +85,18 @@ export type ExecutionPreview = {
     title: string;
     description: string;
     assigned_to: string;
-    requirement_id: string;
-    requirement_title: string;
-    requirement_description: string;
+    task_acceptance_criteria: string[];
+    requirement: null | {
+      id: string;
+      title: string;
+      description: string;
+      revision: number;
+      acceptance_criteria: string[];
+      criteria_indices: number[];
+    };
+    owner: null | { id: string; name: string; kind: string; active: boolean };
+    dependency_basis: Record<string, string>;
     acceptance_criteria: string[];
-    revision: number;
   };
   target: ExecutionTarget;
   agent: ExecutionAgent | null;
@@ -344,6 +351,7 @@ export function adoptExecutionDraft(
   const agent = workspace?.agents.find((item) => item.id === session.agentId);
   if (
     !task ||
+    !task.execution_gate.eligible ||
     !workspace ||
     !target ||
     !target.can_execute ||

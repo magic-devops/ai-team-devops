@@ -19,9 +19,10 @@ const task = {
   title: "Standalone work",
   description: "Scope",
   basis: "basis-old",
+  acceptance_criteria: ["Own criterion"],
   planning: {
     depends_on: ["T-first"],
-    acceptance_criteria: [],
+    requirement_criteria_indices: [],
     starts_on: "2026-10-17",
   },
 } as unknown as DeliveryTask;
@@ -38,7 +39,8 @@ describe("one task plan editor", () => {
     task.basis = "mutated";
     const payload = taskEditPayload(session, {
       description: "Edited scope",
-      acceptance_criteria: ["0"],
+      acceptance_criteria: ["Own criterion"],
+      requirement_criteria_indices: ["0"],
       depends_on: ["T-another"],
       starts_on: "2026-10-17",
       ends_on: "",
@@ -49,7 +51,8 @@ describe("one task plan editor", () => {
       task_basis: "basis-old",
       planning_basis: "planning-old",
       description: "Edited scope",
-      acceptance_criteria: [],
+      acceptance_criteria: ["Own criterion"],
+      requirement_criteria_indices: [],
       depends_on: ["T-another"],
       starts_on: "2026-10-17",
       ends_on: null,
@@ -63,7 +66,7 @@ describe("one task plan editor", () => {
       ...task,
       req_id: "REQ-one",
       basis: "first",
-      planning: { acceptance_criteria: [0], depends_on: [] },
+      planning: { requirement_criteria_indices: [0], depends_on: [] },
     };
     const first = {
       ...workspace,
@@ -79,12 +82,14 @@ describe("one task plan editor", () => {
     } as unknown as DeliveryWorkspace;
     const adopted = adoptTaskEdit(session, fresh, {
       description: "My draft",
-      acceptance_criteria: ["0"],
+      acceptance_criteria: ["Own criterion"],
+      requirement_criteria_indices: ["0"],
       depends_on: ["T-draft"],
     });
     expect(adopted.values).toEqual({
       description: "My draft",
-      acceptance_criteria: ["1"],
+      acceptance_criteria: ["Own criterion"],
+      requirement_criteria_indices: ["1"],
       depends_on: ["T-draft"],
     });
     expect(adopted.session).toMatchObject({
@@ -125,7 +130,7 @@ describe("one task plan editor", () => {
             ...task.planning,
             source: "manual",
             requirement_revision: 1,
-            acceptance_criteria: [0],
+            requirement_criteria_indices: [0],
           },
         },
         data: workspace,

@@ -1583,8 +1583,8 @@ export function App() {
       </aside>
 
       <main className="hermes-scrollbar min-w-0 flex-1 overflow-x-hidden px-3 pb-24 pt-4 sm:px-6 lg:h-screen lg:overflow-y-auto lg:px-6 lg:py-5 xl:px-8 2xl:px-10">
-        <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4 lg:mb-6">
-          <div className="min-w-0 flex-1">
+        <header className="sop-main-header mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4 lg:mb-6">
+          <div className="sop-main-heading min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1620,7 +1620,7 @@ export function App() {
                 </>
               ) : null}
             </div>
-            <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]">
+            <p className="sop-main-breadcrumb mt-1 flex flex-wrap items-center gap-1 text-xs text-[var(--muted)]">
               <span>{t(breadcrumb.group.i18nKey)}</span>
               {breadcrumb.category ? (
                 <>
@@ -1644,7 +1644,7 @@ export function App() {
               ) : null}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <div className="sop-main-actions ml-auto flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               className="hidden h-9 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--control-bg)] px-3 text-sm text-[var(--muted-strong)] shadow-sm hover:bg-[var(--surface-muted)] lg:inline-flex"

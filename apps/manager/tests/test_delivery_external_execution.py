@@ -429,7 +429,14 @@ def test_observation_cursor_cannot_be_reused_for_a_different_execution(bridge):
     first = sync(bridge, command(client, "execution.queue", proposal(bridge)).json()["executions"][-1])
     cursor = client.get(f"/api/v1/delivery/executions/{first['id']}/observations").json()["next_cursor"]
     state = command(
-        client, "task.create", {"requirement_id": rid, "title": "Another delivery", "owner_id": "user:lead"}
+        client,
+        "task.create",
+        {
+            "requirement_id": rid,
+            "title": "Another delivery",
+            "owner_id": "user:lead",
+            "requirement_criteria_indices": [0],
+        },
     ).json()
     second_task = next(row for row in state["tasks"] if row["id"] != task["id"])
     second_bridge = (*bridge[:-1], second_task)
@@ -455,7 +462,9 @@ def test_deleted_task_keeps_original_execution_history_readable_and_stale(bridge
     assert response.status_code == 200, response.text
     read = response.json()
     assert read["stale"] is True and read["events"] and read["run_id"] == entry["run_id"]
-    assert not any(read["permissions"].values())
+    assert read["permissions"] == {
+        "can_start": False, "can_cancel": True, "can_review": False, "can_sync": False,
+    }
     assert all_counts(bridge) == before
 
 

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { linkedTaskRows, taskIdFromHash } from "./taskDeepLink";
+import { manualTaskHref } from "./deliveryTaskReview";
 
 describe("legacy tasks linked from the delivery inbox", () => {
+  it("retains a safe filtered task background while opening a standalone task", () => {
+    const background = "#/tasks/execution?q=verify&status=pending&priority=P1&source=manual";
+    const href = manualTaskHref({ id: "T-one", req_id: "" }, background);
+    expect(new URLSearchParams(href.split("?")[1]).get("return_to")).toBe(background);
+    expect(manualTaskHref({ id: "T-one", req_id: "" }, "https://example.test")).not.toContain("return_to");
+  });
   it("decodes an explicit task identity while rejecting malformed references", () => {
     expect(taskIdFromHash("#/tasks?task_id=T-one")).toBe("T-one");
     expect(taskIdFromHash("#/tasks?task_id=%E4%BB%BB%E5%8A%A1-1")).toBe("任务-1");

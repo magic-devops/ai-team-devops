@@ -9,6 +9,7 @@ from copy import deepcopy
 from sqlalchemy import func
 
 from .delivery_contract import default_flow, stage_gates
+from .delivery_task_contract import delivery_task_definition
 from .sql_models import DeliveryTaskReview, Issue, Requirement, Task
 
 
@@ -44,7 +45,8 @@ class VerificationContext:
             row.task_id: row
             for row in db.query(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq)
         }
-        self._snapshots, self._verified, self._accepted = {}, {}, {}
+        self._snapshots, self._definitions, self._verified, self._accepted = {}, {}, {}, {}
+        self._accepting = set()
 
     def owner(self, task):
         explicit = task.id in self.data.get("task_owners", {})
@@ -89,6 +91,7 @@ class VerificationContext:
                 "id": task.id,
                 "title": task.title,
                 "description": task.description or "",
+                "acceptance_criteria": task.acceptance_criteria,
                 "req_id": task.req_id or "",
                 "status": task.status,
                 "assigned_to": task.assigned_to or "",
@@ -108,13 +111,93 @@ class VerificationContext:
                 "blocked_reason": flow.get("blocked_reason") or "",
             },
             "planning": {
-                "acceptance_criteria": planning.get("acceptance_criteria", []),
+                "requirement_criteria_indices": planning.get("requirement_criteria_indices", []),
                 "depends_on": planning.get("depends_on", []),
             },
             "dependency_basis": dependencies,
         }
+        definition = delivery_task_definition(
+            value["task"],
+            value["requirement"],
+            planning,
+            value["owner"],
+            dependencies,
+            requirement_revision=flow["revision"],
+        )
+        value["acceptance"] = definition["acceptance"]
+        self._definitions[task_id] = definition
         self._snapshots[task_id] = value
         return deepcopy(value)
+
+    def definition(self, task_id):
+        if self.snapshot(task_id) is None:
+            return None
+        return deepcopy(self._definitions[task_id])
+
+    def acceptance(self, task_id):
+        """Conditions do not recurse into predecessor proof or collective review."""
+        task = self.tasks[task_id]
+        requirement = self.requirements.get(task.req_id)
+        value = {
+            key: getattr(task, key)
+            for key in ("id", "req_id", "title", "description", "assigned_to", "acceptance_criteria")
+        }
+        parent = (
+            None
+            if not requirement
+            else {
+                key: getattr(requirement, key)
+                for key in ("id", "title", "description", "acceptance_criteria")
+            }
+        )
+        return delivery_task_definition(
+            value,
+            parent,
+            self.data.get("task_details", {}).get(task_id, {}),
+            None,
+            {},
+            requirement_revision=self.data.get("flows", {}).get(task.req_id, default_flow())["revision"],
+        )["acceptance"]
+
+    def execution_gate(self, task_id):
+        definition = self.definition(task_id)
+        if definition is None:
+            return {
+                "eligible": False,
+                "reasons": [{"code": "task_missing", "message": "Task is no longer in this project."}],
+            }
+        reasons = definition["execution_gate"]["reasons"]
+        task = self.tasks[task_id]
+        planning = self.data.get("task_details", {}).get(task_id, {})
+        flow = self.data.get("flows", {}).get(task.req_id, {})
+        if task.status == "completed" or flow.get("stage") in {
+            "testing",
+            "acceptance",
+            "release",
+            "operations",
+        }:
+            reasons.append(
+                {
+                    "code": "task_dispatch_stage_blocked",
+                    "message": "Reopen the task and requirement before dispatch.",
+                }
+            )
+        if planning.get("blocked_reason") or flow.get("blocked_reason") or self.blocked(task_id):
+            reasons.append(
+                {
+                    "code": "task_dependencies_blocked",
+                    "message": "Resolve blocking reasons and verify predecessor delivery before dispatch.",
+                }
+            )
+        entry = self.executions.get(task_id)
+        if entry and entry["status"] not in {"accepted", "changes_requested", "cancelled"}:
+            reasons.append(
+                {
+                    "code": "task_execution_active",
+                    "message": "Review or cancel the current execution before redispatch.",
+                }
+            )
+        return {"eligible": not reasons, "reasons": reasons}
 
     def basis(self, task_id):
         return fingerprint(self.snapshot(task_id))
@@ -123,14 +206,7 @@ class VerificationContext:
         """Validate one current execution snapshot before assigning any review state."""
         task = self.tasks.get(task_id)
         entry = self.executions.get(task_id)
-        requirement = self.requirements.get(task.req_id) if task else None
-        if (
-            not entry
-            or not task
-            or not requirement
-            or entry.get("stale") is not False
-            or entry.get("planning_invalidated")
-        ):
+        if not entry or not task or entry.get("stale") is not False or entry.get("planning_invalidated"):
             return False
         if (
             not entry.get("run_id")
@@ -138,20 +214,8 @@ class VerificationContext:
             or entry["run_version"] < 1
         ):
             return False
-        flow = self.data.get("flows", {}).get(requirement.id, default_flow())
-        expected = {
-            "task_id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "assigned_to": task.assigned_to,
-            "requirement_id": task.req_id,
-            "requirement_title": requirement.title,
-            "requirement_description": requirement.description,
-            "acceptance_criteria": requirement.acceptance_criteria,
-            "revision": flow["revision"],
-        }
-        snapshot = entry.get("snapshot") or {}
-        return all(key in snapshot and snapshot[key] == value for key, value in expected.items())
+        definition = self.definition(task_id)
+        return definition["execution_gate"]["eligible"] and entry.get("snapshot") == definition["snapshot"]
 
     def native_accepted(self, task_id):
         if not self.execution_valid(task_id):
@@ -187,10 +251,13 @@ class VerificationContext:
     def requirement_accepted(self, requirement_id):
         if requirement_id in self._accepted:
             return self._accepted[requirement_id]
+        if requirement_id in self._accepting:
+            return False
         requirement = self.requirements.get(requirement_id)
         flow = self.data.get("flows", {}).get(requirement_id)
         if not requirement or not flow or flow["stage"] not in {"release", "operations"}:
             return False
+        self._accepting.add(requirement_id)
         reviewed = any(
             r.get("stage") == "acceptance"
             and r.get("revision") == flow["revision"]
@@ -204,7 +271,14 @@ class VerificationContext:
                 status = "blocked"
             elif task.id in self.executions and not self.native_accepted(task.id) and status == "completed":
                 status = "in_progress"
-            tasks.append({"id": task.id, "req_id": task.req_id, "status": status})
+            tasks.append(
+                {
+                    "id": task.id,
+                    "req_id": task.req_id,
+                    "status": status,
+                    "acceptance": self.acceptance(task.id),
+                }
+            )
         issues = [
             {"task_id": issue.task_id, "status": issue.status, "severity": issue.severity}
             for issue in self.issues
@@ -214,6 +288,7 @@ class VerificationContext:
             for gate in stage_gates({"id": requirement.id}, {**flow, "stage": "acceptance"}, tasks, issues)
         )
         self._accepted[requirement_id] = accepted
+        self._accepting.remove(requirement_id)
         return accepted
 
     def verified(self, task_id, trail=frozenset()):
@@ -232,6 +307,8 @@ class VerificationContext:
         ):
             return False
         if any(not self.verified(dep, trail | {task_id}) for dep in planning.get("depends_on", [])):
+            return False
+        if not self.definition(task_id)["execution_gate"]["eligible"]:
             return False
         review = self.reviews.get(task_id)
         manual = (

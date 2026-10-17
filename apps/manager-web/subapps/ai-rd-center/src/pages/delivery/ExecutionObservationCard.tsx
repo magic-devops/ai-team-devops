@@ -20,6 +20,7 @@ import {
 } from "@/lib/deliveryExecution";
 import { executionIssueHref } from "@/lib/executionCommands";
 import { ExecutionTargetFacts } from "./ExecutionTargetFacts";
+import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
 
 export function ExecutionStageFacts({
   observation,
@@ -197,7 +198,13 @@ export function ExecutionObservationCard({
           {t(`delivery.execution.states.${status}`, { defaultValue: status })}
         </Tag>
         <small>
-          {tr("version")} {entry.snapshot.revision}
+          {!Array.isArray(entry.snapshot.task_acceptance_criteria)
+            ? t("deliveryTaskAcceptance.unrecordedCriteria")
+            : entry.snapshot.requirement
+              ? t("deliveryTaskAcceptance.requirementSnapshot", {
+                  revision: entry.snapshot.requirement.revision,
+                })
+              : t("deliveryTaskAcceptance.ownSnapshot")}
         </small>
       </div>
       <code className="runtime-identity">
@@ -248,6 +255,11 @@ export function ExecutionObservationCard({
           : tr("noContact")}
         {paused && ` · ${tr("paused")}`}
       </p>
+      {stale && permissions?.can_cancel && (
+        <p className="runtime-help">
+          {t("deliveryTaskAcceptance.cancelHistorical")}
+        </p>
+      )}
       <Space wrap className="runtime-actions">
         <Button
           size="small"
@@ -466,13 +478,7 @@ export function ExecutionObservationCard({
             children: (
               <>
                 <strong>{entry.snapshot.title}</strong>
-                <ul>
-                  {entry.snapshot.acceptance_criteria.map(
-                    (criterion, index) => (
-                      <li key={index}>{criterion}</li>
-                    ),
-                  )}
-                </ul>
+                <ExecutionAcceptanceSnapshot snapshot={entry.snapshot} />
                 {entry.agent_snapshot && (
                   <p>
                     {entry.agent_snapshot.title} ·{" "}

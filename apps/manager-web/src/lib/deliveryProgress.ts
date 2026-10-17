@@ -1,6 +1,7 @@
 import { request } from "./http";
 import type { DeliveryInboxTarget } from "./delivery";
 import type { ScheduleAllocation } from "./deliveryScheduling";
+import type { TaskAcceptance } from "./taskAcceptance";
 
 export const progressStates = [
   "pending",
@@ -32,6 +33,9 @@ export type ProgressMetrics = {
   status_counts: Record<ProgressState, number>;
 };
 export type ProgressTask = {
+  acceptance_criteria?: string[] | null;
+  requirement_criteria_indices?: number[] | null;
+  acceptance?: TaskAcceptance | null;
   allocations: ScheduleAllocation[] | null;
   id: string;
   title: string;

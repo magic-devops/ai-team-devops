@@ -20,8 +20,11 @@ from sqlalchemy import (
     event,
 )
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker, validates
 from sqlalchemy.pool import NullPool, StaticPool
+
+from sop_manager.task_acceptance import normalize_task_acceptance
+from sop_manager.task_sql_guard import TaskAcceptanceJSON, install_task_sql_guard
 
 _DB_TYPE = os.getenv("DB_TYPE", "sqlite")
 _DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sop.db")
@@ -180,6 +183,7 @@ class Task(Base):
     sprint_id   = Column(String(64), default="")
     title       = Column(String(256), nullable=False)
     description = Column(Text, default="")
+    acceptance_criteria = Column(TaskAcceptanceJSON(), default=list, nullable=False)
     status      = Column(String(32), default="pending")
     priority    = Column(String(8), default="P1")
     estimate    = Column(String(8), default="M")
@@ -192,6 +196,10 @@ class Task(Base):
 
     project = relationship("Project", back_populates="tasks")
     __table_args__ = (Index("ix_task_project_status", "project_id", "status"),)
+
+    @validates("acceptance_criteria")
+    def validate_acceptance_criteria(self, _key, value):
+        return normalize_task_acceptance(value)
 
 
 # ── 问题 ──────────────────────────────────────────────────────────
@@ -414,6 +422,9 @@ class ApiKey(Base):
 
 
 def create_all():
+    from sop_manager.schema_upgrade import require_current_schema
+
+    require_current_schema(engine)
     Base.metadata.create_all(engine)
 
 
@@ -421,4 +432,5 @@ def create_all():
 # Imports are late because hook handlers lazily use the complete model registry.
 from .delivery_progress_hooks import install_progress_hooks
 
+install_task_sql_guard()
 install_progress_hooks()

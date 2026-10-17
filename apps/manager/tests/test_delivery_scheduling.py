@@ -360,7 +360,12 @@ def test_uncaptured_historical_reservations_are_unknown_instead_of_scope_changes
 
     result = compare_scope({"tasks": [{"id": "task"}]}, {"tasks": [{"id": "task", "allocations": []}]})
     assert result["changed"] == []
-    assert result["incomplete_plan_fields"] == ["allocations"]
+    assert result["incomplete_plan_fields"] == [
+        "acceptance",
+        "acceptance_criteria",
+        "allocations",
+        "requirement_criteria_indices",
+    ]
     assert result["unchanged_count"] == 0
 
 
@@ -387,8 +392,11 @@ def test_schedule_preview_stays_read_only_through_global_audit_middleware(env, m
     }
     assert client.post("/api/v1/delivery/schedule-preview", json=body).status_code == 200
     assert client.post("/api/v1/delivery/schedule-preview", json={}).status_code == 422
-    assert client.post(
-        "/api/v1/delivery/schedule-preview",
-        json={**body, "planning_basis": "a" * 64},
-    ).status_code == 409
+    assert (
+        client.post(
+            "/api/v1/delivery/schedule-preview",
+            json={**body, "planning_basis": "a" * 64},
+        ).status_code
+        == 409
+    )
     assert len(opened_audit_sessions) == before

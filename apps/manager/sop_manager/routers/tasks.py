@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -18,8 +18,10 @@ from sop_manager.path_config import (
     resolved_tenant_code,
     resolved_tenant_id,
 )
-from .db_sql_compat import rows, table, now
+from sop_manager.task_acceptance import TaskAcceptanceCriteria
+
 from .business_access import require_business_access, validate_business_references
+from .db_sql_compat import now, rows, table
 from .scope_guard import attach_scope, current_scope, scope_matches
 from .sql_models import get_session
 from .webhook import notify_webhook
@@ -161,6 +163,7 @@ def _ui_ordered_list(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> List
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = ""
+    acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
     priority: str = "P1"
     estimate: str = "M"
     assigned_to: Optional[str] = "Coder"
@@ -179,6 +182,7 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    acceptance_criteria: TaskAcceptanceCriteria = Field(default_factory=list)
     status: Optional[str] = None
     priority: Optional[str] = None
     estimate: Optional[str] = None
@@ -193,7 +197,6 @@ class TaskUpdate(BaseModel):
     artifact_path: Optional[str] = None
     debug_notes: Optional[str] = None
     branch: Optional[str] = None
-
 
 class ReorderTasksBody(BaseModel):
     groups: Dict[str, List[str]] = Field(default_factory=dict)
@@ -910,6 +913,7 @@ def _agent_packet(task: Dict[str, Any], *, order: int, lane: int, assigned_to: s
         "contract": {
             "objective": task.get("title") or tid,
             "description": task.get("description") or "",
+            "acceptance_criteria": task.get("acceptance_criteria", []),
             "req_id": task.get("req_id") or "",
             "sprint_id": task.get("sprint_id") or "",
             "source": task.get("source") or "manual",
@@ -1018,6 +1022,7 @@ def _agent_execution_plan(task_id: str, *, claim: Dict[str, Any] | None = None, 
             "id": tid,
             "title": task.get("title") or "",
             "description": task.get("description") or "",
+            "acceptance_criteria": task.get("acceptance_criteria", []),
             "status": task.get("status") or "pending",
             "priority": task.get("priority") or "P3",
             "assigned_to": task.get("assigned_to") or "",
@@ -2182,6 +2187,7 @@ def create_task(body: TaskCreate):
         "sprint_id": body.sprint_id or "",
         "title": body.title,
         "description": body.description or "",
+        "acceptance_criteria": body.acceptance_criteria,
         "status": "pending",
         "priority": body.priority,
         "estimate": body.estimate,

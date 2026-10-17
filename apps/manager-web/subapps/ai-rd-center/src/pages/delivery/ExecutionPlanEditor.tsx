@@ -19,6 +19,8 @@ import {
 import { commandDraft } from "@/lib/executionCommands";
 import { ExecutionCommandEditor } from "./ExecutionCommandEditor";
 import { ExecutionTargetFacts } from "./ExecutionTargetFacts";
+import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
+import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
 import { ExecutionPolicyEditor } from "./ExecutionPolicyEditor";
 
 export function ExecutionPlanEditor({
@@ -341,16 +343,15 @@ export function ExecutionPlanEditor({
           <section className="runtime-plan-preview">
             <Alert type="success" title={tr("planReady")} />
             <strong>
-              {tr("pinned")} · {tr("version")} {draft.preview.snapshot.revision}
+              {tr("pinned")} ·{" "}
+              {draft.preview.snapshot.requirement
+                ? t("deliveryTaskAcceptance.requirementSnapshot", {
+                    revision: draft.preview.snapshot.requirement.revision,
+                  })
+                : t("deliveryTaskAcceptance.ownSnapshot")}
             </strong>
             <h4>{draft.preview.snapshot.title}</h4>
-            <ul>
-              {draft.preview.snapshot.acceptance_criteria.map(
-                (criterion, index) => (
-                  <li key={index}>{criterion}</li>
-                ),
-              )}
-            </ul>
+            <ExecutionAcceptanceSnapshot snapshot={draft.preview.snapshot} />
             <div className="runtime-node-chips">
               {draft.preview.nodes.map((node) => (
                 <Tag
@@ -379,6 +380,9 @@ export function ExecutionPlanEditor({
                 </p>
                 <strong>{latestTask?.title}</strong>
                 <p className="runtime-help">{latestTask?.description}</p>
+                {latestTask && (
+                  <TaskAcceptanceFacts acceptance={latestTask.acceptance} />
+                )}
                 {latestRequirement && (
                   <>
                     <p>

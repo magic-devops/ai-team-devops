@@ -62,7 +62,7 @@ def test_template_preview_does_not_create_tasks_and_confirmation_uses_edits(env)
             "owner_id": "user:lead",
             "starts_on": "2026-10-16",
             "ends_on": "2026-10-17",
-            "acceptance_criteria": [0],
+            "requirement_criteria_indices": [0],
         }
     ]
     saved = confirm(client, rid, result, items)
@@ -72,7 +72,7 @@ def test_template_preview_does_not_create_tasks_and_confirmation_uses_edits(env)
     assert tasks[0]["planning"]["source"] == "template"
     assert tasks[0]["planning"]["preview_id"] == result["id"]
     assert tasks[0]["planning"]["starts_on"] == "2026-10-16"
-    assert tasks[0]["planning"]["acceptance_criteria"] == [0]
+    assert tasks[0]["planning"]["requirement_criteria_indices"] == [0]
     again = confirm(client, rid, result, items)
     assert again.status_code == 200 and again.json()["replayed"]
     with sessions() as db:
@@ -85,7 +85,7 @@ class StubProvider(llm_gateway.Provider):
     def __init__(self, content=None, error=None, during=None):
         self.calls = []
         self.content = content or json.dumps(
-            {"items": [{"key": "build", "title": "AI suggestion", "acceptance_criteria": [0]}]}
+            {"items": [{"key": "build", "title": "AI suggestion", "requirement_criteria_indices": [0]}]}
         )
         self.error = error
         self.during = during
@@ -228,7 +228,7 @@ def test_stale_or_forged_preview_cannot_create_tasks_even_with_fresh_project_ver
         [{"key": "a", "title": "A", "depends_on": ["b"]}, {"key": "b", "title": "B", "depends_on": ["a"]}],
         [{"key": "a", "title": "A"}, {"key": "a", "title": "Duplicate"}],
         [{"title": "Wrong date", "starts_on": "2026-10-17", "ends_on": "2026-10-16"}],
-        [{"title": "Wrong criterion", "acceptance_criteria": [1]}],
+        [{"title": "Wrong criterion", "requirement_criteria_indices": [1]}],
         [{"title": "Wrong member", "owner_id": "user:missing"}],
     ],
 )
@@ -250,13 +250,18 @@ def test_plan_dependencies_resolve_ids_and_block_completion_until_predecessor_de
         {
             "requirement_id": rid,
             "items": [
-                {"key": "build", "title": "Build", "owner_id": "user:lead", "acceptance_criteria": [0]},
+                {
+                    "key": "build",
+                    "title": "Build",
+                    "owner_id": "user:lead",
+                    "requirement_criteria_indices": [0],
+                },
                 {
                     "key": "verify",
                     "title": "Verify",
                     "owner_id": "user:lead",
                     "depends_on": ["build"],
-                    "acceptance_criteria": [0],
+                    "requirement_criteria_indices": [0],
                 },
             ],
         },
@@ -422,7 +427,7 @@ def test_legacy_requirement_basis_pins_manual_plan_even_when_revision_is_unchang
             "requirement_id": "legacy",
             "requirement_revision": 1,
             "requirement_basis": original["basis"],
-            "items": [{"title": "Against original criterion A", "acceptance_criteria": [0]}],
+            "items": [{"title": "Against original criterion A", "requirement_criteria_indices": [0]}],
         },
     )
     assert rejected.status_code == 409, rejected.text
@@ -434,7 +439,7 @@ def test_legacy_requirement_basis_pins_manual_plan_even_when_revision_is_unchang
         "tasks.plan",
         {
             "requirement_id": "legacy",
-            "items": [{"title": "Legacy caller without a basis", "acceptance_criteria": [0]}],
+            "items": [{"title": "Legacy caller without a basis", "requirement_criteria_indices": [0]}],
         },
     )
     assert compatible.status_code == 200, compatible.text
@@ -518,11 +523,11 @@ def test_removed_predecessor_can_be_explicitly_unlinked_and_mapping_rebased(env)
         db.commit()
     tid = tasks["Second"]["id"]
     assert command(client, "task.update", {"id": tid, "status": "in_progress"}).status_code == 409
-    repaired = edit_links(client, tid, depends_on=[], acceptance_criteria=[0], status="in_progress")
+    repaired = edit_links(client, tid, depends_on=[], requirement_criteria_indices=[0], status="in_progress")
     assert repaired.status_code == 200, repaired.text
     task = repaired.json()["tasks"][0]
     assert task["status"] == "in_progress" and not task["dependency_blocked"]
-    assert task["planning"]["depends_on"] == [] and task["planning"]["acceptance_criteria"] == [0]
+    assert task["planning"]["depends_on"] == [] and task["planning"]["requirement_criteria_indices"] == [0]
     assert task["planning"]["requirement_snapshot"]["acceptance_criteria"] == ["Find a requirement by title"]
     assert task["planning"]["requirement_revision"] == 1
     assert task["planning"]["requirement_basis"] == repaired.json()["requirements"][0]["basis"]
@@ -559,7 +564,7 @@ def test_task_link_edits_validate_graph_criteria_scope_and_schedule_atomically(e
         "self": {"depends_on": [first]},
         "missing": {"depends_on": ["missing"]},
         "foreign": {"depends_on": ["private"]},
-        "criterion": {"acceptance_criteria": [1]},
+        "criterion": {"requirement_criteria_indices": [1]},
         "date": {"depends_on": [second]},
     }[invalid]
     if invalid == "date":
@@ -595,7 +600,7 @@ def test_task_link_edits_require_explicit_current_task_basis(env, invalid):
     saved = command(client, "task.create", {"requirement_id": rid, "title": "Original"}).json()
     payload = {
         "id": saved["tasks"][0]["id"],
-        "acceptance_criteria": [0],
+        "requirement_criteria_indices": [0],
         "task_basis": saved["tasks"][0]["basis"],
     }
     if invalid == "no_basis":
@@ -605,7 +610,7 @@ def test_task_link_edits_require_explicit_current_task_basis(env, invalid):
     elif invalid == "null_dependencies":
         payload["depends_on"] = None
     elif invalid == "null_criteria":
-        payload["acceptance_criteria"] = None
+        payload["requirement_criteria_indices"] = None
     else:
         with sessions() as db:
             db.get(Requirement, rid).acceptance_criteria = ["New meaning at same index"]
@@ -613,7 +618,10 @@ def test_task_link_edits_require_explicit_current_task_basis(env, invalid):
     failed = command(client, "task.update", payload)
     assert failed.status_code == (409 if invalid == "stale" else 422), failed.text
     assert (
-        client.get("/api/v1/delivery/workspace").json()["tasks"][0]["planning"]["acceptance_criteria"] == []
+        client.get("/api/v1/delivery/workspace").json()["tasks"][0]["planning"][
+            "requirement_criteria_indices"
+        ]
+        == []
     )
 
 
@@ -632,14 +640,14 @@ def test_changed_task_mapping_permanently_invalidates_previous_execution(bridge,
     }
     if accepted:
         assert command(client, "execution.review", review).status_code == 200
-    edited = edit_links(client, task["id"], acceptance_criteria=[0])
+    edited = edit_links(client, task["id"], requirement_criteria_indices=[0])
     assert edited.status_code == 200, edited.text
     entry = edited.json()["executions"][0]
     assert entry["stale"] is True and entry["planning_invalidated"] is True
     assert edited.json()["summary"]["tasks_done"] == 0
     if accepted:
         assert edited.json()["requirements"][0]["flow"]["artifacts"][0]["stale"] is True
-    restored = edit_links(client, task["id"], acceptance_criteria=[])
+    restored = edit_links(client, task["id"], requirement_criteria_indices=[])
     assert restored.status_code == 200, restored.text
     observed = sync(bridge, intent)
     assert observed["stale"] is True
@@ -666,7 +674,9 @@ def test_resaving_unchanged_task_links_preserves_verified_execution(bridge):
         },
     )
     assert accepted.status_code == 200, accepted.text
-    saved = edit_links(client, task["id"], acceptance_criteria=[], depends_on=[], starts_on="2026-10-16")
+    saved = edit_links(
+        client, task["id"], requirement_criteria_indices=[], depends_on=[], starts_on="2026-10-16"
+    )
     assert saved.status_code == 200, saved.text
     assert saved.json()["summary"]["tasks_done"] == 1
     assert saved.json()["executions"][0]["stale"] is False
@@ -688,7 +698,7 @@ def test_mapping_edit_reopening_testing_stores_the_new_revision_basis(env):
         state["flows"][rid]["stage"] = "testing"
         workspace.data = state
         db.commit()
-    updated = edit_links(client, task_id, acceptance_criteria=[0])
+    updated = edit_links(client, task_id, requirement_criteria_indices=[0])
     assert updated.status_code == 200, updated.text
     assert updated.json()["requirements"][0]["flow"]["revision"] == 2
     assert updated.json()["tasks"][0]["planning"]["requirement_revision"] == 2

@@ -35,7 +35,14 @@ def bridge(env, tmp_path, monkeypatch):  # noqa: F811 - pytest fixture injection
     )
     rid = requirement(client)
     state = command(
-        client, "task.create", {"requirement_id": rid, "title": "Implement", "owner_id": "user:lead"}
+        client,
+        "task.create",
+        {
+            "requirement_id": rid,
+            "title": "Implement",
+            "owner_id": "user:lead",
+            "acceptance_criteria": ["Find a requirement by title"],
+        },
     ).json()
     task = state["tasks"][0]
     yield client, sessions, store, p, ws, rid, task

@@ -11,6 +11,7 @@ import { assistanceTranslations } from "./i18n/assistance";
 import { projectInboxTranslations } from "./i18n/delivery-project-inbox";
 import { progressTranslations } from "./i18n/delivery-progress";
 import { manualReviewTranslations } from "./i18n/delivery-manual-review";
+import { taskAcceptanceTranslations } from "./i18n/task-acceptance";
 import { runtimeTranslations } from "./i18n/delivery-runtime";
 import { schedulingTranslations } from "./i18n/delivery-scheduling";
 
@@ -46,6 +47,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["zh-CN"],
           deliverySchedule: schedulingTranslations["zh-CN"],
           deliveryRuntime: runtimeTranslations["zh-CN"],
+          deliveryTaskAcceptance: taskAcceptanceTranslations["zh-CN"],
         },
       },
       "en-US": {
@@ -59,6 +61,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["en-US"],
           deliverySchedule: schedulingTranslations["en-US"],
           deliveryRuntime: runtimeTranslations["en-US"],
+          deliveryTaskAcceptance: taskAcceptanceTranslations["en-US"],
         },
       },
       "ja-JP": {
@@ -72,6 +75,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["ja-JP"],
           deliverySchedule: schedulingTranslations["ja-JP"],
           deliveryRuntime: runtimeTranslations["ja-JP"],
+          deliveryTaskAcceptance: taskAcceptanceTranslations["ja-JP"],
         },
       },
     },

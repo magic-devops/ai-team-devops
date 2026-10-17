@@ -67,7 +67,6 @@ export function DeliveryTaskPlanMaintenance({
       version: data.version,
       key: crypto.randomUUID(),
     };
-    onEditingChange?.(true);
     const fields = (workspace: DeliveryWorkspace): EditorField[] => [
       {
         key: "description",
@@ -75,11 +74,16 @@ export function DeliveryTaskPlanMaintenance({
         type: "area",
         max: 10000,
       },
+      {
+        key: "acceptance_criteria",
+        label: t("deliveryTaskAcceptance.ownCriteria"),
+        type: "criteria",
+      },
       ...(pinned.task.req_id
         ? [
             {
-              key: "acceptance_criteria",
-              label: tr("taskPlan.criteria"),
+              key: "requirement_criteria_indices",
+              label: t("deliveryTaskAcceptance.requirementCriteria"),
               multiple: true,
               options: pinned.criteria.map((text, index) => ({
                 value: String(index),
@@ -111,8 +115,9 @@ export function DeliveryTaskPlanMaintenance({
       fields: fields(data),
       values: {
         description: task.description,
-        acceptance_criteria: remapCriterionIndexes(
-          task.planning?.acceptance_criteria || [],
+        acceptance_criteria: [...task.acceptance_criteria],
+        requirement_criteria_indices: remapCriterionIndexes(
+          task.planning?.requirement_criteria_indices || [],
           task.planning?.requirement_snapshot?.acceptance_criteria ||
             pinned.criteria,
           pinned.criteria,
@@ -181,6 +186,10 @@ export function DeliveryTaskPlanMaintenance({
                 )?.title || t("deliveryManualReview.standalone"),
             },
             { label: tr("description"), value: current.task.description },
+            {
+              label: t("deliveryTaskAcceptance.ownCriteria"),
+              value: current.task.acceptance_criteria.join("\n") || tr("none"),
+            },
             {
               label: tr("taskPlan.criteria"),
               value: current.criteria.join("\n") || tr("none"),

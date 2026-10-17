@@ -6,9 +6,7 @@ import json
 from fastapi import HTTPException
 from hermes_core.models import CoreError
 
-from .delivery_contract import default_flow
-from .delivery_service import records, stamp
-from .sql_models import Requirement, Task
+from .delivery_service import stamp
 
 
 def _integer(value):
@@ -90,7 +88,8 @@ def _after(cursor, project_id, execution_id, run_id):
 def observations(db, project, user, state, entry, store, execution, permissions, *, limit, cursor):
     from hermes_core.execution_targets import validate_execution_target_snapshot
 
-    from .delivery_execution import CLOSED, basis, context
+    from .delivery_execution import CLOSED, context
+    from .delivery_verification import VerificationContext
 
     principal, _ = context(store, user, entry["workspace_id"])
     run_id = entry.get("run_id") or ""
@@ -102,14 +101,15 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         else []
     )
     more, rows = len(rows) > limit, rows[:limit]
-    task = records(db, Task, project).filter_by(id=entry["task_id"]).first()
-    requirement = records(db, Requirement, project).filter_by(id=entry["snapshot"]["requirement_id"]).first()
-    actionable = task is not None and requirement is not None and task.req_id == requirement.id
-    revision = state["flows"].get(requirement.id, default_flow())["revision"] if requirement else None
+    definition = VerificationContext(db, project, state).definition(entry["task_id"])
+    actionable = bool(
+        definition
+        and definition["execution_gate"]["eligible"]
+        and definition["snapshot"] == entry["snapshot"]
+        and not entry.get("planning_invalidated")
+    )
     stale = bool(
-        not actionable
-        or entry.get("planning_invalidated")
-        or basis(task, requirement, revision) != entry["snapshot"]
+        not actionable or entry.get("planning_invalidated") or definition["snapshot"] != entry["snapshot"]
     )
     run_data = run["data"] if run else {}
     attempt = run_data.get("attempt", 1)
@@ -224,11 +224,11 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         },
         "permissions": {
             "can_start": permissions["write"] and "execute" in principal.permissions and target_ready,
-            "can_cancel": actionable
-            and permissions["write"]
+            "can_cancel": permissions["write"]
             and "execute" in principal.permissions
+            and bool(run_id or "requirement" in entry.get("snapshot", {}))
             and entry["status"] not in CLOSED
-            and (not run or run["status"] != "completed"),
+            and (not run or run["status"] != "completed" or stale),
             "can_review": actionable
             and permissions["approve"]
             and "approve" in principal.permissions

@@ -4531,16 +4531,16 @@ components:
     ProgressBaseline:
       properties:
         id:
-          type: string
           title: Id
-        title:
           type: string
+        title:
           title: Title
+          type: string
         scope:
           $ref: '#/components/schemas/ProgressScope'
         basis:
-          type: string
           title: Basis
+          type: string
         starts_on:
           anyOf:
           - type: string
@@ -4552,37 +4552,36 @@ components:
           - type: 'null'
           title: Ends On
         created_at:
-          type: string
           title: Created At
-        created_by:
           type: string
+        created_by:
           title: Created By
+          type: string
         source_version:
           anyOf:
           - type: integer
           - type: 'null'
           title: Source Version
         note:
-          type: string
           title: Note
+          type: string
         task_ids:
           items:
             type: string
-          type: array
           title: Task Ids
+          type: array
         metrics:
           $ref: '#/components/schemas/ProgressMetrics'
         tasks:
           items:
             $ref: '#/components/schemas/ProgressTaskFact'
-          type: array
           title: Tasks
+          type: array
         requirements:
           items:
             $ref: '#/components/schemas/ProgressRequirementFact'
-          type: array
           title: Requirements
-      type: object
+          type: array
       required:
       - id
       - title
@@ -4599,24 +4598,24 @@ components:
       - tasks
       - requirements
       title: ProgressBaseline
+      type: object
     ProgressBaselineResponse:
       properties:
         project_id:
-          type: string
           title: Project Id
-        version:
-          type: integer
-          title: Version
-        as_of:
           type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
           title: As Of
+          type: string
         baseline:
           $ref: '#/components/schemas/ProgressBaseline'
         current:
           $ref: '#/components/schemas/ProgressCurrent'
         comparison:
           $ref: '#/components/schemas/ProgressComparison'
-      type: object
       required:
       - project_id
       - version
@@ -4625,19 +4624,20 @@ components:
       - current
       - comparison
       title: ProgressBaselineResponse
+      type: object
     ProgressBaselineSummary:
       properties:
         id:
-          type: string
           title: Id
-        title:
           type: string
+        title:
           title: Title
+          type: string
         scope:
           $ref: '#/components/schemas/ProgressScope'
         basis:
-          type: string
           title: Basis
+          type: string
         starts_on:
           anyOf:
           - type: string
@@ -4649,27 +4649,26 @@ components:
           - type: 'null'
           title: Ends On
         created_at:
-          type: string
           title: Created At
-        created_by:
           type: string
+        created_by:
           title: Created By
+          type: string
         source_version:
           anyOf:
           - type: integer
           - type: 'null'
           title: Source Version
         note:
-          type: string
           title: Note
+          type: string
         task_ids:
           items:
             type: string
-          type: array
           title: Task Ids
+          type: array
         metrics:
           $ref: '#/components/schemas/ProgressMetrics'
-      type: object
       required:
       - id
       - title
@@ -4684,6 +4683,7 @@ components:
       - task_ids
       - metrics
       title: ProgressBaselineSummary
+      type: object
     ProgressComparison:
       properties:
         added:
@@ -4721,9 +4721,6 @@ components:
       - unchanged_count
       title: ProgressComparison
       type: object
-      description: Compare recorded frozen task plan fields with current facts. A field unknown in an original snapshot
-        cannot be asserted to have changed; incomplete_plan_fields states unavailable comparison coverage. Known reservation
-        changes use actual before/after segments. Resource availability budgets are separate.
     ProgressCoverage:
       properties:
         first_observed_at:
@@ -4739,19 +4736,18 @@ components:
         observed_days:
           items:
             type: string
-          type: array
           title: Observed Days
+          type: array
         missing_days:
           items:
             type: string
-          type: array
           title: Missing Days
+          type: array
         future_days:
           items:
             type: string
-          type: array
           title: Future Days
-      type: object
+          type: array
       required:
       - first_observed_at
       - last_observed_at
@@ -4759,8 +4755,7 @@ components:
       - missing_days
       - future_days
       title: ProgressCoverage
-      description: Real coverage for this scope; all day collections are UTC ISO dates. Future dates are separate from
-        missing historical dates. first/last identify the available observations rather than invented coverage.
+      type: object
     ProgressCurrent:
       properties:
         scope:
@@ -4768,24 +4763,23 @@ components:
         tasks:
           items:
             $ref: '#/components/schemas/ProgressTaskFact'
-          type: array
           title: Tasks
+          type: array
         requirements:
           items:
             $ref: '#/components/schemas/ProgressRequirementFact'
-          type: array
           title: Requirements
+          type: array
         task_ids:
           items:
             type: string
-          type: array
           title: Task Ids
+          type: array
         basis:
-          type: string
           title: Basis
+          type: string
         metrics:
           $ref: '#/components/schemas/ProgressMetrics'
-      type: object
       required:
       - scope
       - tasks
@@ -4794,14 +4788,12 @@ components:
       - basis
       - metrics
       title: ProgressCurrent
-      description: Minimal selected facts and counts. In ProgressObservationResponse this is the historical observed
-        state; in ProgressResponse and ProgressBaselineResponse this is current live state. Task sizes are categories,
-        never converted to hours. No credentials, runtime logs or authority are copied into these facts.
+      type: object
     ProgressDay:
       properties:
         date:
-          type: string
           title: Date
+          type: string
         observation_id:
           anyOf:
           - type: string
@@ -4826,7 +4818,6 @@ components:
           - type: integer
           - type: 'null'
           title: Baseline Remaining
-      type: object
       required:
       - date
       - observation_id
@@ -4835,53 +4826,48 @@ components:
       - metrics
       - baseline_remaining
       title: ProgressDay
-      description: Last actual observation for this UTC day, ordered by observed_at and internal sequence. Missing days
-        have null observation_id, observed_at, source, metrics and baseline_remaining; never interpolate or fill with
-        zero. baseline_remaining counts unverified task IDs in the frozen plan, including removed tasks.
+      type: object
     ProgressIdealPoint:
       properties:
         date:
-          type: string
           title: Date
+          type: string
         remaining:
-          type: number
           title: Remaining
-      type: object
+          type: number
       required:
       - date
       - remaining
       title: ProgressIdealPoint
-      description: Reference plan only, using the fixed baseline task total and explicit plan dates. It is not measured
-        history or a capacity forecast. Missing plan dates produce no ideal points.
+      type: object
     ProgressMetrics:
       properties:
         tasks_total:
-          type: integer
           title: Tasks Total
+          type: integer
         recorded_completed:
-          type: integer
           title: Recorded Completed
+          type: integer
         verified_completed:
-          type: integer
           title: Verified Completed
+          type: integer
         awaiting_review:
-          type: integer
           title: Awaiting Review
+          type: integer
         remaining:
-          type: integer
           title: Remaining
+          type: integer
         requirements_total:
-          type: integer
           title: Requirements Total
+          type: integer
         requirements_accepted:
-          type: integer
           title: Requirements Accepted
-        requirements_released:
           type: integer
+        requirements_released:
           title: Requirements Released
+          type: integer
         status_counts:
           $ref: '#/components/schemas/ProgressStatusCounts'
-      type: object
       required:
       - tasks_total
       - recorded_completed
@@ -4893,29 +4879,27 @@ components:
       - requirements_released
       - status_counts
       title: ProgressMetrics
-      description: Unit is task count. status_counts contains six mutually exclusive states. remaining is unverified
-        task count; legacy recorded completion and runtime success do not imply verified delivery. Requirement acceptance
-        and release are independent counts. Only current valid acceptance evidence verifies a task.
+      type: object
     ProgressObservationResponse:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         project_id:
-          type: string
           title: Project Id
+          type: string
         observed_at:
-          type: string
           title: Observed At
+          type: string
         observed_day:
-          type: string
           title: Observed Day
+          type: string
         source:
-          type: string
           title: Source
-        actor:
           type: string
+        actor:
           title: Actor
+          type: string
         source_version:
           anyOf:
           - type: integer
@@ -4925,7 +4909,6 @@ components:
           $ref: '#/components/schemas/ProgressScope'
         current:
           $ref: '#/components/schemas/ProgressCurrent'
-      type: object
       required:
       - id
       - project_id
@@ -4937,49 +4920,49 @@ components:
       - scope
       - current
       title: ProgressObservationResponse
+      type: object
     ProgressRange:
       properties:
         starts_on:
-          type: string
           title: Starts On
-        ends_on:
           type: string
+        ends_on:
           title: Ends On
-      type: object
+          type: string
       required:
       - starts_on
       - ends_on
       title: ProgressRange
+      type: object
     ProgressRequirementFact:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         title:
-          type: string
           title: Title
+          type: string
         milestone_id:
-          type: string
           title: Milestone Id
+          type: string
         sprint_id:
-          type: string
           title: Sprint Id
+          type: string
         stage:
-          type: string
           title: Stage
-        revision:
-          type: integer
-          title: Revision
-        basis:
           type: string
+        revision:
+          title: Revision
+          type: integer
+        basis:
           title: Basis
+          type: string
         accepted:
-          type: boolean
           title: Accepted
-        released:
           type: boolean
+        released:
           title: Released
-      type: object
+          type: boolean
       required:
       - id
       - title
@@ -4991,21 +4974,22 @@ components:
       - accepted
       - released
       title: ProgressRequirementFact
+      type: object
     ProgressResponse:
       properties:
         project_id:
-          type: string
           title: Project Id
+          type: string
         version:
-          type: integer
           title: Version
+          type: integer
         as_of:
-          type: string
           title: As Of
-        timezone:
           type: string
+        timezone:
           const: UTC
           title: Timezone
+          type: string
         scope:
           $ref: '#/components/schemas/ProgressScope'
         range:
@@ -5019,13 +5003,13 @@ components:
         days:
           items:
             $ref: '#/components/schemas/ProgressDay'
-          type: array
           title: Days
+          type: array
         baselines:
           items:
             $ref: '#/components/schemas/ProgressBaselineSummary'
-          type: array
           title: Baselines
+          type: array
         baseline:
           anyOf:
           - $ref: '#/components/schemas/ProgressBaseline'
@@ -5037,9 +5021,8 @@ components:
         ideal:
           items:
             $ref: '#/components/schemas/ProgressIdealPoint'
-          type: array
           title: Ideal
-      type: object
+          type: array
       required:
       - project_id
       - version
@@ -5056,88 +5039,90 @@ components:
       - comparison
       - ideal
       title: ProgressResponse
+      type: object
     ProgressScope:
       properties:
         kind:
-          type: string
           enum:
           - project
           - milestone
           - sprint
           title: Kind
+          type: string
         id:
-          type: string
           title: Id
-        label:
           type: string
+        label:
           title: Label
-      type: object
+          type: string
       required:
       - kind
       - id
       - label
       title: ProgressScope
+      type: object
     ProgressScopeOption:
       properties:
         id:
-          type: string
           title: Id
-        title:
           type: string
+        title:
           title: Title
+          type: string
         starts_on:
           anyOf:
           - type: string
           - type: 'null'
+          default: null
           title: Starts On
         ends_on:
           anyOf:
           - type: string
           - type: 'null'
+          default: null
           title: Ends On
-      type: object
       required:
       - id
       - title
       title: ProgressScopeOption
+      type: object
     ProgressScopes:
       properties:
         milestones:
           items:
             $ref: '#/components/schemas/ProgressScopeOption'
-          type: array
           title: Milestones
+          type: array
         sprints:
           items:
             $ref: '#/components/schemas/ProgressScopeOption'
-          type: array
           title: Sprints
-      type: object
+          type: array
       required:
       - milestones
       - sprints
       title: ProgressScopes
+      type: object
     ProgressStatusCounts:
       properties:
         pending:
-          type: integer
           title: Pending
+          type: integer
         in_progress:
-          type: integer
           title: In Progress
+          type: integer
         blocked:
-          type: integer
           title: Blocked
+          type: integer
         awaiting_review:
-          type: integer
           title: Awaiting Review
+          type: integer
         recorded_completed:
-          type: integer
           title: Recorded Completed
-        verified_completed:
           type: integer
+        verified_completed:
           title: Verified Completed
-      type: object
+          type: integer
       required:
       - pending
       - in_progress
@@ -5146,11 +5131,12 @@ components:
       - recorded_completed
       - verified_completed
       title: ProgressStatusCounts
+      type: object
     ProgressTaskChange:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         before:
           $ref: '#/components/schemas/ProgressTaskFact'
         after:
@@ -5158,15 +5144,15 @@ components:
         fields:
           items:
             type: string
-          type: array
           title: Fields
-      type: object
+          type: array
       required:
       - id
       - before
       - after
       - fields
       title: ProgressTaskChange
+      type: object
     ProgressTaskFact:
       properties:
         id:
@@ -5229,6 +5215,27 @@ components:
           - type: 'null'
           default: null
           title: Allocations
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
+        requirement_criteria_indices:
+          anyOf:
+          - items:
+              type: integer
+            type: array
+          - type: 'null'
+          default: null
+          title: Requirement Criteria Indices
+        acceptance:
+          anyOf:
+          - $ref: '#/components/schemas/TaskAcceptance'
+          - type: 'null'
+          default: null
       required:
       - id
       - title
@@ -5245,9 +5252,6 @@ components:
       - recorded_status
       title: ProgressTaskFact
       type: object
-      description: Minimal observed task and scope facts. allocations contains explicitly recorded reservation segments;
-        null means the original observation did not collect this fact, not zero. [] records no reservation. Frozen task
-        baselines preserve reservations; resource availability budgets are separate.
     HTTPValidationError:
       properties:
         detail:
@@ -5566,17 +5570,17 @@ components:
     TaskReviewsResponse:
       properties:
         project_id:
-          type: string
           title: Project Id
+          type: string
         task_id:
-          type: string
           title: Task Id
-        version:
-          type: integer
-          title: Version
-        as_of:
           type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
           title: As Of
+          type: string
         current:
           anyOf:
           - $ref: '#/components/schemas/TaskReviewCurrent'
@@ -5584,20 +5588,19 @@ components:
         reviews:
           items:
             $ref: '#/components/schemas/TaskReviewRecord'
-          type: array
           title: Reviews
+          type: array
         total:
-          type: integer
           title: Total
+          type: integer
         next_cursor:
           anyOf:
           - type: string
           - type: 'null'
           title: Next Cursor
         limit:
-          type: integer
           title: Limit
-      type: object
+          type: integer
       required:
       - project_id
       - task_id
@@ -5609,58 +5612,58 @@ components:
       - next_cursor
       - limit
       title: TaskReviewsResponse
+      type: object
     TaskReviewRecord:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         task_id:
-          type: string
           title: Task Id
-        decision:
           type: string
+        decision:
           enum:
           - accept
           - request_changes
           title: Decision
-        created_at:
           type: string
+        created_at:
           title: Created At
+          type: string
         reviewer:
           $ref: '#/components/schemas/TaskReviewReviewer'
         task_basis:
-          type: string
           title: Task Basis
+          type: string
         snapshot:
           $ref: '#/components/schemas/TaskReviewSnapshot'
         comment:
-          type: string
           title: Comment
+          type: string
         evidence_content:
-          type: string
           title: Evidence Content
+          type: string
         evidence_url:
-          type: string
           title: Evidence Url
-        source:
           type: string
+        source:
           const: manual
           title: Source
+          type: string
         invalidated:
-          type: boolean
           title: Invalidated
+          type: boolean
         invalidated_at:
           anyOf:
           - type: string
           - type: 'null'
           title: Invalidated At
         invalidated_reason:
-          type: string
           title: Invalidated Reason
+          type: string
         valid:
-          type: boolean
           title: Valid
-      type: object
+          type: boolean
       required:
       - id
       - task_id
@@ -5678,6 +5681,7 @@ components:
       - invalidated_reason
       - valid
       title: TaskReviewRecord
+      type: object
     TaskReviewSnapshot:
       properties:
         task:
@@ -5690,14 +5694,18 @@ components:
           anyOf:
           - $ref: '#/components/schemas/TaskReviewRequirement'
           - type: 'null'
+        acceptance:
+          anyOf:
+          - $ref: '#/components/schemas/TaskAcceptance'
+          - type: 'null'
+          default: null
         planning:
           $ref: '#/components/schemas/TaskReviewPlanning'
         dependency_basis:
           additionalProperties:
             type: string
-          type: object
           title: Dependency Basis
-      type: object
+          type: object
       required:
       - task
       - owner
@@ -5705,46 +5713,48 @@ components:
       - planning
       - dependency_basis
       title: TaskReviewSnapshot
+      type: object
     TaskReviewPlanning:
       properties:
-        acceptance_criteria:
-          items:
-            type: integer
-          type: array
-          title: Acceptance Criteria
+        requirement_criteria_indices:
+          anyOf:
+          - items:
+              type: integer
+            type: array
+          - type: 'null'
+          default: null
+          title: Requirement Criteria Indices
         depends_on:
           items:
             type: string
-          type: array
           title: Depends On
-      type: object
+          type: array
       required:
-      - acceptance_criteria
       - depends_on
       title: TaskReviewPlanning
+      type: object
     TaskReviewRequirement:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         title:
-          type: string
           title: Title
-        description:
           type: string
+        description:
           title: Description
+          type: string
         revision:
-          type: integer
           title: Revision
+          type: integer
         acceptance_criteria:
           items:
             type: string
-          type: array
           title: Acceptance Criteria
+          type: array
         blocked_reason:
-          type: string
           title: Blocked Reason
-      type: object
+          type: string
       required:
       - id
       - title
@@ -5753,61 +5763,69 @@ components:
       - acceptance_criteria
       - blocked_reason
       title: TaskReviewRequirement
+      type: object
     TaskReviewOwner:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         name:
-          type: string
           title: Name
-        kind:
           type: string
+        kind:
           enum:
           - human
           - agent
           - tool
           title: Kind
+          type: string
         active:
-          type: boolean
           title: Active
-      type: object
+          type: boolean
       required:
       - id
       - name
       - kind
       - active
       title: TaskReviewOwner
+      type: object
     TaskReviewTask:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         title:
-          type: string
           title: Title
+          type: string
         description:
-          type: string
           title: Description
+          type: string
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
         req_id:
-          type: string
           title: Req Id
+          type: string
         status:
-          type: string
           title: Status
+          type: string
         assigned_to:
-          type: string
           title: Assigned To
+          type: string
         priority:
-          type: string
           title: Priority
+          type: string
         estimate:
-          type: string
           title: Estimate
-        blocked_reason:
           type: string
+        blocked_reason:
           title: Blocked Reason
-      type: object
+          type: string
       required:
       - id
       - title
@@ -5819,19 +5837,20 @@ components:
       - estimate
       - blocked_reason
       title: TaskReviewTask
+      type: object
     TaskReviewReviewer:
       properties:
         id:
-          type: string
           title: Id
-        name:
           type: string
+        name:
           title: Name
-      type: object
+          type: string
       required:
       - id
       - name
       title: TaskReviewReviewer
+      type: object
     TaskReviewCurrent:
       properties:
         task:
@@ -5844,39 +5863,43 @@ components:
           anyOf:
           - $ref: '#/components/schemas/TaskReviewRequirement'
           - type: 'null'
+        acceptance:
+          anyOf:
+          - $ref: '#/components/schemas/TaskAcceptance'
+          - type: 'null'
+          default: null
         planning:
           $ref: '#/components/schemas/TaskReviewPlanning'
         dependency_basis:
           additionalProperties:
             type: string
-          type: object
           title: Dependency Basis
+          type: object
         basis:
-          type: string
           title: Basis
+          type: string
         eligible:
-          type: boolean
           title: Eligible
+          type: boolean
         can_review:
-          type: boolean
           title: Can Review
-        can_accept:
           type: boolean
+        can_accept:
           title: Can Accept
+          type: boolean
         reasons:
           items:
             $ref: '#/components/schemas/TaskReviewReason'
-          type: array
           title: Reasons
+          type: array
         dependency_blocked:
           items:
             type: string
-          type: array
           title: Dependency Blocked
+          type: array
         verified:
-          type: boolean
           title: Verified
-      type: object
+          type: boolean
       required:
       - task
       - owner
@@ -5891,19 +5914,20 @@ components:
       - dependency_blocked
       - verified
       title: TaskReviewCurrent
+      type: object
     TaskReviewReason:
       properties:
         code:
-          type: string
           title: Code
-        message:
           type: string
+        message:
           title: Message
-      type: object
+          type: string
       required:
       - code
       - message
       title: TaskReviewReason
+      type: object
     TaskManualReview:
       additionalProperties: false
       properties:
@@ -6722,11 +6746,10 @@ components:
           - baseline.create
         payload:
           type: object
-          description: 'Validated per action. execution.queue requires task_id, task_basis, workspace_id,
-            target_kind and target_basis. device requires target_device_id; local requires it empty.
-            Select agent_id + fixed agent_version with optional explicit test_nodes,
-            or command nodes with test_node_ids. Agent test IDs are server-derived.
-            No implicit local fallback. sync/cancel require id.
+          description: 'Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.
+            device requires target_device_id; local requires it empty. Select agent_id + fixed agent_version with optional explicit
+            test_nodes, or command nodes with test_node_ids. Agent test IDs are server-derived. No implicit local fallback. sync/cancel
+            require id.
 
             review requires id, decision (accept/request_changes), comment and run_version.
 
@@ -6859,6 +6882,16 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/ScheduleChanges'
+      - if:
+          properties:
+            action:
+              const: task.create
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeliveryTaskCreate'
     TaskEdit:
       additionalProperties: false
       properties:
@@ -6914,6 +6947,14 @@ components:
           default: null
           title: Blocked Reason
         acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        requirement_criteria_indices:
           anyOf:
           - items:
               minimum: 0
@@ -6922,7 +6963,7 @@ components:
             type: array
           - type: 'null'
           default: null
-          title: Acceptance Criteria
+          title: Requirement Criteria Indices
         depends_on:
           anyOf:
           - items:
@@ -6959,107 +7000,135 @@ components:
       - id
       title: TaskEdit
       type: object
-      allOf:
-      - if:
-          anyOf:
-          - required:
-            - acceptance_criteria
-          - required:
-            - depends_on
-        then:
-          required:
-          - task_basis
-          properties:
-            task_basis:
-              type: string
-              pattern: ^[0-9a-f]{64}$
-            acceptance_criteria:
-              type: array
-              uniqueItems: true
-            depends_on:
-              type: array
-              uniqueItems: true
-      - if:
-          anyOf:
-          - required:
-            - starts_on
-          - required:
-            - ends_on
-          - required:
-            - allocations
-        then:
-          required:
-          - planning_basis
-          properties:
-            planning_basis:
-              type: string
-              pattern: ^[0-9a-f]{64}$
-            allocations:
-              type: array
-      description: Single task plan maintenance shares the final schedule validator with tasks.schedule. Reference edits
-        require task_basis; any explicit date/reservation field requires full project planning_basis. Empty arrays clear
-        links/reservations. Dates may be null, reservations may not. Pure planning does not invalidate delivery acceptance,
-        while changed scope/owner/requirements/dependencies still do.
     TaskDraft:
-      type: object
       additionalProperties: false
-      required: [title]
       properties:
-        title: { type: string, minLength: 1, maxLength: 256 }
-        description: { type: string, maxLength: 10000, default: '' }
-        owner_id: { type: string, maxLength: 100, default: '' }
-        priority: { type: string, enum: [P0, P1, P2, P3], default: P1 }
-        estimate: { type: string, enum: [XS, S, M, L, XL], default: M }
-        key:
-          type: string
-          maxLength: 64
-          default: ''
-          description: Unique draft key referenced by other items in this plan
-        acceptance_criteria:
-          type: array
-          maxItems: 80
-          uniqueItems: true
-          default: []
-          items: { type: integer, minimum: 0 }
-          description: Zero-based indexes into the fixed requirement acceptance criteria
-        depends_on:
-          type: array
-          maxItems: 40
-          uniqueItems: true
-          default: []
-          items: { type: string, minLength: 1, maxLength: 64 }
-          description: Other selected draft keys or existing task IDs in the current project; strings are trimmed and empty IDs, duplicates and cycles are rejected
-        starts_on: { type: [string, 'null'], format: date, default: null }
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
         ends_on:
-          type: [string, 'null']
-          format: date
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
           default: null
-          description: Must be on or after starts_on when both dates are set
-        blocked_reason: { type: string, maxLength: 2000, default: '' }
-    TaskPlan:
-      type: object
-      additionalProperties: false
-      required: [requirement_id, items]
-      properties:
-        requirement_id: { type: string, minLength: 1, maxLength: 64 }
-        items:
-          type: array
-          minItems: 1
-          maxItems: 40
-          items: { $ref: '#/components/schemas/TaskDraft' }
-        requirement_revision: { type: [integer, 'null'], minimum: 1, default: null }
-        requirement_basis:
-          type: [string, 'null']
-          minLength: 64
+          title: Ends On
+        key:
+          default: ''
           maxLength: 64
-          default: null
-          description: SHA-256 of the fixed requirement basis; changed requirements require explicit rebase
-        preview_id:
-          type: [string, 'null']
+          title: Key
+          type: string
+        title:
+          maxLength: 256
           minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 10000
+          title: Description
+          type: string
+        owner_id:
+          default: ''
+          maxLength: 100
+          title: Owner Id
+          type: string
+        priority:
+          default: P1
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        estimate:
+          default: M
+          enum:
+          - XS
+          - S
+          - M
+          - L
+          - XL
+          title: Estimate
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        requirement_criteria_indices:
+          items:
+            minimum: 0
+            type: integer
+          maxItems: 80
+          title: Requirement Criteria Indices
+          type: array
+        depends_on:
+          items:
+            type: string
+          maxItems: 40
+          title: Depends On
+          type: array
+        blocked_reason:
+          default: ''
+          maxLength: 2000
+          title: Blocked Reason
+          type: string
+      required:
+      - title
+      title: TaskDraft
+      type: object
+    TaskPlan:
+      additionalProperties: false
+      properties:
+        requirement_id:
           maxLength: 64
+          minLength: 1
+          title: Requirement Id
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/TaskDraft'
+          maxItems: 40
+          minItems: 1
+          title: Items
+          type: array
+        requirement_revision:
+          anyOf:
+          - minimum: 1
+            type: integer
+          - type: 'null'
           default: null
-          description: Optional same-project preview whose server-recorded source is carried into task planning
+          title: Requirement Revision
+        requirement_basis:
+          anyOf:
+          - maxLength: 64
+            minLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Requirement Basis
+        preview_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Preview Id
+      required:
+      - requirement_id
+      - items
+      title: TaskPlan
+      type: object
     TaskPlanPreviewRequest:
       type: object
       additionalProperties: false
@@ -7088,46 +7157,111 @@ components:
         total_tokens: { type: integer, minimum: 0 }
         cost_usd: { type: number, minimum: 0 }
     TaskPlanPreview:
-      type: object
-      required: [id, version, requirement_revision, requirement_basis, requirement_snapshot, items, source, model, provider, usage, warnings]
+      additionalProperties: false
       properties:
-        id: { type: string }
-        version: { type: integer, minimum: 0, description: Fixed workspace version supplied in the original preview request }
-        requirement_revision: { type: integer, minimum: 1 }
-        requirement_basis: { type: string, minLength: 64, maxLength: 64 }
-        requirement_snapshot: { $ref: '#/components/schemas/TaskPlanRequirementSnapshot' }
-        items: { type: array, minItems: 1, maxItems: 40, items: { $ref: '#/components/schemas/TaskDraft' } }
-        source: { type: string, enum: [template, ai] }
-        model: { type: string, description: Empty for template previews }
-        provider: { type: string, description: Empty for template previews }
-        usage: { $ref: '#/components/schemas/TaskPlanUsage' }
-        warnings: { type: array, items: { type: string } }
+        requirement_id:
+          maxLength: 64
+          minLength: 1
+          title: Requirement Id
+          type: string
+        expected_version:
+          minimum: 0
+          title: Expected Version
+          type: integer
+        idempotency_key:
+          maxLength: 100
+          minLength: 8
+          title: Idempotency Key
+          type: string
+        generator:
+          default: template
+          enum:
+          - template
+          - ai
+          title: Generator
+          type: string
+        mode:
+          default: fullstack
+          enum:
+          - frontend
+          - backend
+          - fullstack
+          - testing
+          title: Mode
+          type: string
+        max_items:
+          default: 8
+          maximum: 40
+          minimum: 1
+          title: Max Items
+          type: integer
+      required:
+      - requirement_id
+      - expected_version
+      - idempotency_key
+      title: TaskPlanPreview
+      type: object
     DeliveryTaskPlanning:
       type: object
-      description: |
-        Optional, additive task planning metadata. Legacy tasks may omit this object
-        or return an empty/partial object. A missing source must not be presented as
-        a generated or manually confirmed plan. Requirement snapshots preserve the
-        acceptance criteria that the saved zero-based indexes originally referenced.
+      description: Task planning metadata and explicit requirement references. Task-local text conditions belong to Task.acceptance_criteria.
+        Missing historical provenance remains unknown.
       properties:
-        key: { type: string }
-        acceptance_criteria: { type: array, items: { type: integer, minimum: 0 } }
-        depends_on: { type: array, items: { type: string }, description: Resolved canonical task IDs }
-        starts_on: { type: [string, 'null'], format: date }
-        ends_on: { type: [string, 'null'], format: date }
-        blocked_reason: { type: string }
-        requirement_revision: { type: integer, minimum: 1 }
-        requirement_basis: { type: string, minLength: 64, maxLength: 64 }
-        requirement_snapshot: { $ref: '#/components/schemas/TaskPlanRequirementSnapshot' }
-        preview_id: { type: [string, 'null'] }
-        source: { type: string, enum: [manual, template, ai] }
-        model: { type: string }
-        provider: { type: string }
+        key:
+          type: string
+        depends_on:
+          type: array
+          items:
+            type: string
+          description: Resolved canonical task IDs
+        starts_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        blocked_reason:
+          type: string
+        requirement_revision:
+          type: integer
+          minimum: 1
+        requirement_basis:
+          type: string
+          minLength: 64
+          maxLength: 64
+        requirement_snapshot:
+          $ref: '#/components/schemas/TaskPlanRequirementSnapshot'
+        preview_id:
+          type:
+          - string
+          - 'null'
+        source:
+          type: string
+          enum:
+          - manual
+          - template
+          - ai
+        model:
+          type: string
+        provider:
+          type: string
         usage:
           oneOf:
-            - { $ref: '#/components/schemas/TaskPlanUsage' }
-            - { type: object, maxProperties: 0 }
+          - $ref: '#/components/schemas/TaskPlanUsage'
+          - type: object
+            maxProperties: 0
           description: Model usage when recorded; empty for a manually confirmed plan without model work
+        requirement_criteria_indices:
+          type: array
+          maxItems: 80
+          uniqueItems: true
+          items:
+            type: integer
+            minimum: 0
+          description: Explicit references fixed to requirement_basis; never silently rebound after source changes.
     DeliveryRequirement:
       type: object
       required: [id, basis]
@@ -7169,8 +7303,50 @@ components:
           description: Prerequisite task IDs whose effective delivery is incomplete
         owner_explicit:
           type: boolean
-          description: True only if delivery task_owners records this task ID. Legacy inferred names require independent
-            roster uniqueness checks before personal attribution.
+          description: True only if delivery task_owners records this task ID. Legacy inferred names require independent roster
+            uniqueness checks before personal attribution.
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        acceptance:
+          $ref: '#/components/schemas/TaskAcceptance'
+        execution_gate:
+          type: object
+          required:
+          - eligible
+          - reasons
+          properties:
+            eligible:
+              type: boolean
+            reasons:
+              type: array
+              items:
+                $ref: '#/components/schemas/TaskReviewReason'
+        delivery_status:
+          type: string
+          enum:
+          - pending
+          - in_progress
+          - blocked
+          - awaiting_review
+          - recorded_completed
+          - verified_completed
+        recorded_status:
+          type: string
+          enum:
+          - pending
+          - in_progress
+          - blocked
+          - completed
+          description: Canonical recorded Task status before evidence-based delivery projection.
+        verified:
+          type: boolean
+          description: Current effective delivery proof; recorded completion alone is insufficient.
     DeliveryWorkspace:
       type: object
       required:
@@ -7350,48 +7526,265 @@ components:
 
     Task:
       type: object
-      required: [id, project_id, title, status, priority]
+      required:
+      - id
+      - project_id
+      - title
+      - status
+      - priority
       properties:
-        id: { type: string }
-        project_id: { type: string }
-        req_id: { type: string }
-        sprint_id: { type: string }
-        title: { type: string }
-        description: { type: string }
-        status: { $ref: "#/components/schemas/TaskStatus" }
-        priority: { $ref: "#/components/schemas/Priority" }
-        estimate: { type: string, enum: [XS, S, M, L, XL] }
-        assigned_to: { type: string }
-        confidence: { type: number, format: float, minimum: 0, maximum: 1 }
-        human_notes: { type: string }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-
+        id:
+          type: string
+        project_id:
+          type: string
+        req_id:
+          type: string
+        sprint_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        estimate:
+          type: string
+          enum:
+          - XS
+          - S
+          - M
+          - L
+          - XL
+        assigned_to:
+          type: string
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        human_notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
     TaskCreate:
-      type: object
-      required: [title]
       properties:
-        title: { type: string }
-        description: { type: string }
-        priority: { $ref: "#/components/schemas/Priority" }
-        estimate: { type: string }
-        req_id: { type: string }
-        sprint_id: { type: string }
-        assigned_to: { type: string }
-
+        title:
+          title: Title
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Description
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        priority:
+          default: P1
+          title: Priority
+          type: string
+        estimate:
+          default: M
+          title: Estimate
+          type: string
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: Coder
+          title: Assigned To
+        req_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Req Id
+        sprint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Sprint Id
+        dev_tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Dev Tool
+        artifact_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Artifact Url
+        artifact_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Artifact Path
+        debug_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Debug Notes
+        branch:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Branch
+        source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Source
+        source_report_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Source Report Id
+        source_report_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Source Report Title
+      required:
+      - title
+      title: TaskCreate
+      type: object
     TaskUpdate:
-      type: object
       properties:
-        title: { type: string }
-        description: { type: string }
-        status: { $ref: "#/components/schemas/TaskStatus" }
-        priority: { $ref: "#/components/schemas/Priority" }
-        estimate: { type: string }
-        sprint_id: { type: string }
-        assigned_to: { type: string }
-        confidence: { type: number }
-        human_notes: { type: string }
-
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Description
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Status
+        priority:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Priority
+        estimate:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Estimate
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Assigned To
+        actual_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Actual Hours
+        confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          title: Confidence
+        sprint_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Sprint Id
+        human_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Human Notes
+        req_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Req Id
+        dev_tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Dev Tool
+        artifact_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Artifact Url
+        artifact_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Artifact Path
+        debug_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Debug Notes
+        branch:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Branch
+      title: TaskUpdate
+      type: object
     LlmChatIn:
       type: object
       required: [messages]
@@ -7634,9 +8027,6 @@ components:
       - target_basis
       title: ExecutionQueue
       type: object
-      description: Explicit task_basis and target_basis; local forbids device ID, device requires it. Choose command nodes or
-        fixed agent_id/version with command-only post-test nodes. Unique IDs; test IDs derive server-side for Agent; no reserved
-        agent_* IDs for tests. All rules rechecked on queue/sync/start/claim.
     ExecutionAgent:
       additionalProperties: false
       properties:
@@ -7888,35 +8278,43 @@ components:
         assigned_to:
           title: Assigned To
           type: string
-        requirement_id:
-          title: Requirement Id
-          type: string
-        requirement_title:
-          title: Requirement Title
-          type: string
-        requirement_description:
-          title: Requirement Description
-          type: string
+        task_acceptance_criteria:
+          items:
+            type: string
+          title: Task Acceptance Criteria
+          type: array
         acceptance_criteria:
           items:
             type: string
           title: Acceptance Criteria
           type: array
-        revision:
-          title: Revision
-          type: integer
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionOwnerSnapshot'
+          - type: 'null'
+        dependency_basis:
+          additionalProperties:
+            type: string
+          title: Dependency Basis
+          type: object
+        requirement:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionRequirementSnapshot'
+          - type: 'null'
       required:
       - task_id
       - title
       - description
       - assigned_to
-      - requirement_id
-      - requirement_title
-      - requirement_description
+      - task_acceptance_criteria
       - acceptance_criteria
-      - revision
+      - owner
+      - dependency_basis
+      - requirement
       title: ExecutionSnapshot
       type: object
+      description: Immutable task delivery definition. requirement is a real scoped requirement or null for an independent task.
+        Only task criteria and explicitly selected requirement criteria are effective; status, dates and reservations are excluded.
     ExecutionPreviewResponse:
       additionalProperties: false
       properties:
@@ -8306,4 +8704,210 @@ components:
       - tests
       - permissions
       title: ExecutionObservationsResponse
+      type: object
+    TaskAcceptance:
+      properties:
+        criteria:
+          items:
+            type: string
+          title: Criteria
+          type: array
+        sources:
+          items:
+            $ref: '#/components/schemas/TaskAcceptanceSource'
+          title: Sources
+          type: array
+        available:
+          title: Available
+          type: boolean
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Id
+        requirement_revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requirement Revision
+      required:
+      - criteria
+      - sources
+      - available
+      - requirement_id
+      - requirement_revision
+      title: TaskAcceptance
+      type: object
+      description: Server-resolved task-local and explicitly selected requirement criteria with provenance. available=false means
+        the source is invalid or unavailable; empty criteria require configuration before dispatch or acceptance.
+    TaskAcceptanceSource:
+      properties:
+        source:
+          enum:
+          - task
+          - requirement
+          title: Source
+          type: string
+        index:
+          title: Index
+          type: integer
+        text:
+          title: Text
+          type: string
+      required:
+      - source
+      - index
+      - text
+      title: TaskAcceptanceSource
+      type: object
+    ExecutionOwnerSnapshot:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        kind:
+          enum:
+          - human
+          - agent
+          - tool
+          title: Kind
+          type: string
+        active:
+          title: Active
+          type: boolean
+      required:
+      - id
+      - name
+      - kind
+      - active
+      title: ExecutionOwnerSnapshot
+      type: object
+    ExecutionRequirementSnapshot:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        description:
+          title: Description
+          type: string
+        revision:
+          title: Revision
+          type: integer
+        acceptance_criteria:
+          items:
+            type: string
+          title: Acceptance Criteria
+          type: array
+        criteria_indices:
+          items:
+            type: integer
+          title: Criteria Indices
+          type: array
+      required:
+      - id
+      - title
+      - description
+      - revision
+      - acceptance_criteria
+      - criteria_indices
+      title: ExecutionRequirementSnapshot
+      type: object
+    DeliveryTaskCreate:
+      additionalProperties: false
+      properties:
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Ends On
+        key:
+          default: ''
+          maxLength: 64
+          title: Key
+          type: string
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 10000
+          title: Description
+          type: string
+        owner_id:
+          default: ''
+          maxLength: 100
+          title: Owner Id
+          type: string
+        priority:
+          default: P1
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        estimate:
+          default: M
+          enum:
+          - XS
+          - S
+          - M
+          - L
+          - XL
+          title: Estimate
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        requirement_criteria_indices:
+          items:
+            minimum: 0
+            type: integer
+          maxItems: 80
+          title: Requirement Criteria Indices
+          type: array
+        depends_on:
+          items:
+            type: string
+          maxItems: 40
+          title: Depends On
+          type: array
+        blocked_reason:
+          default: ''
+          maxLength: 2000
+          title: Blocked Reason
+          type: string
+        requirement_id:
+          default: ''
+          maxLength: 64
+          title: Requirement Id
+          type: string
+      required:
+      - title
+      title: DeliveryTaskCreate
       type: object

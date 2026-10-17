@@ -76,19 +76,23 @@ def compare_scope(baseline, current):
         "starts_on",
         "ends_on",
         "allocations",
+        "acceptance_criteria",
+        "requirement_criteria_indices",
+        "acceptance",
     }
     for task_id in sorted(before.keys() & after.keys()):
-        unknown_allocations = (
-            before[task_id].get("allocations") is None or after[task_id].get("allocations") is None
-        )
-        if unknown_allocations:
-            incomplete_fields.add("allocations")
+        unknown = {
+            key
+            for key in ("allocations", "acceptance_criteria", "requirement_criteria_indices", "acceptance")
+            if before[task_id].get(key) is None or after[task_id].get(key) is None
+        }
+        if unknown:
+            incomplete_fields.update(unknown)
             incomplete_tasks.append(task_id)
         fields = sorted(
             key
             for key in planned_fields
-            if not (key == "allocations" and unknown_allocations)
-            and before[task_id].get(key) != after[task_id].get(key)
+            if key not in unknown and before[task_id].get(key) != after[task_id].get(key)
         )
         if fields:
             changed.append(
@@ -99,7 +103,7 @@ def compare_scope(baseline, current):
                     "fields": fields,
                 }
             )
-        elif not unknown_allocations:
+        elif not unknown:
             unchanged += 1
     return {
         "added": [deepcopy(after[key]) for key in sorted(after.keys() - before.keys())],

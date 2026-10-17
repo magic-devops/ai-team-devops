@@ -40,8 +40,14 @@ const target: ExecutionTarget = {
 const workspace = {
   project: { id: "project" },
   version: 7,
-  tasks: [{ id: "T-one", basis: "task-fixed" }],
-} as DeliveryWorkspace;
+  tasks: [
+    {
+      id: "T-one",
+      basis: "task-fixed",
+      execution_gate: { eligible: true, reasons: [] },
+    },
+  ],
+} as unknown as DeliveryWorkspace;
 const targets: DeliveryTargets = {
   project_id: "project",
   as_of: "",
@@ -76,6 +82,32 @@ const session = () => ({
   commands: [commandDraft("tests", "python")],
 });
 describe("dispatch basis and observation transport", () => {
+  it("does not adopt a latest task that the server marks ineligible for dispatch", () => {
+    expect(() =>
+      adoptExecutionDraft(
+        session(),
+        {
+          ...workspace,
+          tasks: [
+            {
+              ...workspace.tasks[0],
+              execution_gate: {
+                eligible: false,
+                reasons: [
+                  {
+                    code: "task_acceptance_missing",
+                    message: "Missing criteria",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        targets,
+        "key",
+      ),
+    ).toThrow();
+  });
   it("does not choose a local fallback and preserves exact command identity across retry", () => {
     expect(openExecutionDraft(workspace, "T-one", "key").target).toBeNull();
     expect(() =>

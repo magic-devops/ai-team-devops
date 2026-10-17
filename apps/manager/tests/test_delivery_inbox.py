@@ -330,7 +330,7 @@ def test_only_matching_latest_nonstale_execution_can_be_pending_acceptance(bridg
     elif change == "task_id":
         entry["snapshot"]["task_id"] = "different-task"
     elif change == "revision":
-        entry["snapshot"]["revision"] += 1
+        entry["snapshot"]["requirement"]["revision"] += 1
     elif change == "description":
         entry["snapshot"]["description"] = "different task contract"
     elif change == "stale":

@@ -1,15 +1,26 @@
 """数据迁移工具 — LanceDB → SQL + 反向迁移"""
 from __future__ import annotations
-import os, uuid
+
+import os
+import uuid
 from datetime import datetime
 from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from sop_manager.routers.sql_models import (
-    get_session, create_all, Tenant, User, Project,
-    Requirement, Task, Issue, Sprint
+    Issue,
+    Project,
+    Requirement,
+    Sprint,
+    Task,
+    Tenant,
+    User,
+    create_all,
+    get_session,
 )
 from sop_manager.routers.vector_store import get_vector_store
+from sop_manager.task_acceptance import normalize_task_acceptance
 
 
 def migrate_lance_to_sql(tenant_id: str = "t-default", project_id: str = "proj-default"):
@@ -56,6 +67,8 @@ def migrate_lance_to_sql(tenant_id: str = "t-default", project_id: str = "proj-d
 
     # 迁移 tasks
     tasks = store.rows("tasks", limit=5000)
+    tasks = [{**task, "acceptance_criteria": normalize_task_acceptance(task.get("acceptance_criteria", []))}
+             for task in tasks]
     for t in tasks:
         if db.query(Task).filter_by(id=t.get("id")).first():
             continue
@@ -67,6 +80,7 @@ def migrate_lance_to_sql(tenant_id: str = "t-default", project_id: str = "proj-d
             sprint_id=t.get("sprint_id", ""),
             title=t.get("title", "")[:256],
             description=t.get("description", ""),
+            acceptance_criteria=t["acceptance_criteria"],
             status=t.get("status", "pending"),
             priority=t.get("priority", "P1"),
             estimate=t.get("estimate", "M"),

@@ -5,6 +5,8 @@ import {
 } from "./delivery";
 import { planError } from "./deliveryTaskPlan";
 import { request } from "./http";
+import type { TaskAcceptance } from "./taskAcceptance";
+import { safeExecutionReturn } from "./executionCommands";
 import { deliveryInboxHref } from "./deliveryProjectInbox";
 
 export type ReviewTask = {
@@ -17,6 +19,7 @@ export type ReviewTask = {
   priority: string;
   estimate: string;
   blocked_reason: string;
+  acceptance_criteria: string[] | null;
 };
 export type ReviewOwner = {
   id: string;
@@ -33,7 +36,7 @@ export type ReviewRequirement = {
   blocked_reason: string;
 };
 export type ReviewPlanning = {
-  acceptance_criteria: number[];
+  requirement_criteria_indices: number[] | null;
   depends_on: string[];
 };
 export type ManualReviewCurrent = {
@@ -42,6 +45,7 @@ export type ManualReviewCurrent = {
   owner: ReviewOwner | null;
   requirement: ReviewRequirement | null;
   planning: ReviewPlanning;
+  acceptance: TaskAcceptance;
   eligible: boolean;
   can_review: boolean;
   can_accept: boolean;
@@ -62,6 +66,7 @@ export type ManualTaskReview = {
     owner: ReviewOwner | null;
     requirement: ReviewRequirement | null;
     planning: ReviewPlanning;
+    acceptance: TaskAcceptance | null;
     dependency_basis: Record<string, string>;
   };
   comment: string;
@@ -96,13 +101,18 @@ export type ManualReviewSession = {
   evidenceUrl: string;
 };
 
-export function manualTaskHref(task: { id: string; req_id?: string }) {
-  return deliveryInboxHref({
+export function manualTaskHref(
+  task: { id: string; req_id?: string },
+  background = "",
+) {
+  const href = deliveryInboxHref({
     view: "list",
     requirement_id: task.req_id || "",
     detail: "tasks",
     task_id: task.id,
   });
+  const safe = safeExecutionReturn(background);
+  return safe ? `${href}&return_to=${encodeURIComponent(safe)}` : href;
 }
 
 export function taskRecordStatusLabel(

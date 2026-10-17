@@ -32,6 +32,7 @@ import {
   type TaskPlanPreview,
   type TaskPlanRow,
 } from "@/lib/deliveryTaskPlan";
+import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
 
 type Baseline = {
   version: number;
@@ -80,6 +81,7 @@ export function DeliveryTaskPlanEditor({
     priority: baseline.requirement.priority as TaskPlanRow["priority"],
     estimate: "M",
     acceptance_criteria: [],
+    requirement_criteria_indices: [],
     depends_on: [],
     starts_on: null,
     ends_on: null,
@@ -115,7 +117,9 @@ export function DeliveryTaskPlanEditor({
     criteria.length,
     availableTasks.map((task) => task.id),
   );
-  const coverage = new Set(items.flatMap((item) => item.acceptance_criteria));
+  const coverage = new Set(
+    items.flatMap((item) => item.requirement_criteria_indices),
+  );
   const owners = baseline.workspace.members
     .filter((m) => m.active && m.kind !== "tool")
     .map((m) => ({ value: m.id, label: m.name }));
@@ -578,19 +582,29 @@ export function DeliveryTaskPlanEditor({
                   />
                 </label>
               </div>
+              <div className="task-plan-own-criteria">
+                <strong>{t("deliveryTaskAcceptance.ownCriteria")}</strong>
+                <TaskCriteriaEditor
+                  value={row.acceptance_criteria}
+                  onChange={(acceptance_criteria) =>
+                    update(row.key, { acceptance_criteria })
+                  }
+                  disabled={busy}
+                />
+              </div>
               <div className="delivery-plan-fields is-pair">
                 <label>
-                  {tr("criteria")}
+                  {t("deliveryTaskAcceptance.requirementCriteria")}
                   <Select
                     mode="multiple"
                     aria-label={label(tr("criteria"))}
-                    value={row.acceptance_criteria}
+                    value={row.requirement_criteria_indices}
                     options={criteria.map((text, value) => ({
                       value,
                       label: `${value + 1}. ${text}`,
                     }))}
                     onChange={(value) =>
-                      update(row.key, { acceptance_criteria: value })
+                      update(row.key, { requirement_criteria_indices: value })
                     }
                     disabled={busy}
                   />

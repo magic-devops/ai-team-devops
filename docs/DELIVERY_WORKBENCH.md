@@ -16,7 +16,7 @@
 | 需求辅助 | 明确选择 AI 或规则；采集、评审和原型先预览、编辑、选择后确认；保存生成来源、实际用量与历史，旧建议基准变化后不能直接采用 |
 | 设计 | 产品设计、UED 原型、架构设计、代码变更、测试报告、运维手册的内容与链接登记；按修订保留历史 |
 | 拆解 | 手动/模板/AI 建议共用可编辑计划；逐项选择标题、范围、负责人、优先级、估算、日期、验收关联和依赖；确认当前选中内容后原子创建真实 Task |
-| 执行 | 任务内保存派发计划，选择既有智能体或命令/测试节点、远程设备；同步与启动分离，真实运行证据自动回写 |
+| 执行 | 独立任务与需求任务共用派发、真实执行、测试、人审及问题回流；任务自身条件和明确需求关联分别表达，同步与启动分离 |
 | 测试与验收 | 测试结果与人工验收分离；任务未完成、高优关联问题未解决、最新测试失败时不放行 |
 | 发布 | 登记版本、环境、产物链接、验证结果、回退方案；缺失时不能通过发布阶段 |
 | 运维 | 运维手册与交接评审；保留实际问题记录 |
@@ -45,13 +45,13 @@
 - 项目版本通过条件更新避免丢失修改，操作结果与事件、幂等凭据在同一数据库事务中保存。
 - 表单固定打开时的版本；同一次未确认提交重试时保留原版本与幂等 key。冲突不会静默覆盖最新数据。
 - 需求标题、描述、验收标准变化后开启新修订。测试/验收阶段的任务范围或状态变化会使原验证失效。
-- 旧页面或 API 修改规范业务记录后，读取工作台时会比对内容指纹，显示有效的重新评审状态；下一条工作台命令将该失效状态持久化并纳入事件。读取本身不写数据库。
+- 普通 API、同步、导入及 ORM/Core 修改任务定义后，在原事务中永久作废不匹配的任务证据与需求整体验收；A→B→A 不恢复旧通过。读取只计算当前有效状态，不写数据库。
 - 最新失败的设计/测试产物不满足门禁。链接仅允许不含账户口令的 HTTP(S) 地址；前端再次过滤可执行链接。
 - 执行器测试报告绑定 task、execution、run 与证据摘要。任务内容变化、任务转属其他需求或重新派发后，旧报告保留为历史并标记失效，不能继续满足测试门禁。
 
 ## 任务派发、执行回写与验收
 
-1. 打开需求详情的「任务与分配」，在任务下准备执行计划。选择已有执行工作区、固定版本的智能体，或配置命令节点及显式测试节点；可选远程设备。计划保存时固定需求修订、验收条件和任务内容。
+1. 打开需求详情的「任务与分配」或任务中心的独立交付详情，维护任务自身文本条件及明确承担的需求条目。选择执行工作区、固定版本智能体或命令节点、显式测试及本机/设备目标。保存时固定真实任务与可选需求快照；独立任务不创建假需求。
 2. 保存计划仅写入 Manager。同步操作通过已有运行模块创建执行信封与运行；重复同步复用原派发人和计划 ID，不重复创建运行。必须单独启动才执行进程。
 3. Manager 每 5 秒检查已关联、未关闭运行的真实版本，只有发生变化才写入业务事件；页面定期刷新。后台不会自动派发尚未同步的计划，也不会启动进程。断线后可手动同步恢复。
 4. 运行成功进入「待审查」，业务任务仍是进行中。审核人核对节点退出码、日志和固定快照，填写意见后通过验收，才计入任务完成。仅显式测试节点生成测试证据；普通 Agent 文本不当作测试报告。
@@ -62,7 +62,7 @@
 
 SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_command(body)`；CLI 提供 `sop delivery workspace`、`sop delivery targets`、`sop delivery command --file <json>`，均沿用相同作用域、版本与幂等命令。API 契约位于 `apis/openapi/openapi.yaml`。
 
-新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。通过现有 SQLAlchemy `create_all` 创建，未改变既有业务表列。生产库上线仍应按团队迁移与备份流程执行，并验证 MySQL/OceanBase；本地数据库验证为 SQLite。
+新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。Task 增加正式 `acceptance_criteria` 文本列，旧库使用显式 `sop-manager schema verify|apply`，不在正常启动时隐式 ALTER。SQLite 升级已实测，PostgreSQL 仅编译验证；旧 MySQL/OceanBase 自动升级明确拒绝，需单独验证迁移。
 
 ## 需求拆解与任务计划
 
@@ -243,3 +243,23 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 实际浏览器核验三阶段与 Agent/测试原始输出、未知用量、具体问题定位与 Enter 返回。390px 中英日页面均390/390、抽屉375/375；派发预览表单311/311无横向溢出。任务在预览后被修改，保存409保留全部参数，读取并明确采用后重新预览、保存；未启动计划随后取消，未创建运行。最后恢复已验收示例。证据 ui-proof.json、external-success-desktop.png、external-failure-mobile-*.png、external-plan-preview-mobile.png、final-http-proof.json；最终28张 Manager/运行/检查点表在纯GET前后散列相同，跨运行游标422、跨项目404，原已验证任务保留。最初纯读测量夹带前置负POST的异步审计，校正测量顺序后通过；没有删除应保留的失败请求审计。
 
 生成契约为25个Hermes模型与54个动作，Manager 559/runtime118引用和严格无重复YAML通过。补齐此前锁文件遗漏的Hermes工作区依赖及Windows tzdata，216包锁解析与离线check通过；本机回归使用现有虚拟环境，干净锁定生产环境部署仍需后续核验。Windows启动器PID及Git CRLF问题均只修测试fixture，未削弱生产哈希检查。scratch仅在库存/散列/重要源码保留及无活跃测试进程后清理；提交与清理回执留在同阶段证据目录。
+
+## 任务自身验收与独立交付增量（2026-10-17）
+
+设计 `docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-task-acceptance.md`，统一术语见根 `GLOSSARY.md`。SQL Task 自身文本条件为唯一正式定义；原整数需求关联明确命名 `requirement_criteria_indices`，不保留歧义别名、不隐式继承整份需求或创建假需求。草稿可空，派发/人工通过前必须有当前有效条件。
+
+独立与关联任务共用原生派发、测试、人审、失败 Issue 及转需求。共享纯定义固定自身条件、来源、可选真实需求、负责人及依赖，正常状态/日期不导致执行自行失效。变更、转属、删除和身份失活/改名在原事务永久作废旧证据；A→B→A不能恢复。集体需求验收同样作废，带锁/条件版本写避免覆盖新意图；工作台显式 reservation 保证命令不重复推进版本。
+
+普通 API、同步、导入、CLI/离线队列及智能体任务资料携带自身条件。Task JSON 绑定校验与 Session Core guard覆盖普通/批量/绑定参数，拒绝非法文本和无法验证的表达式；进度观察器按实际参数定位作用域。`recorded_status` 与六态交付状态分别呈现，旧未采集条件明确未知。显式 schema verify/apply 不在正常启动隐式 ALTER；SQLite 升级已实测，PostgreSQL仅DDL编译，旧MySQL/OceanBase自动升级明确拒绝，仍需目标库迁移验证。
+
+统一任务详情复用执行面板：逐条条件增删排序、明确需求条目、真实条件/目标预览、当前与历史证据；成功三阶段优先显示。独立详情聚焦，Issue精确返回原任务。实际390px条件编辑、键盘排序、保存刷新、409保留三条条件及描述→查看最新→Enter明确采用→保存均通过；三语无横向溢出，手机顶部改紧凑标题与工具行。
+
+唯一完整增量独立审查发现P1和P2各一项，均已定点修复复验：失效completed旧运行可安全关闭原意图、保留运行结果及当前Task，并重新派发；Core写入不能提交数字/布尔/null条件。没有新增广泛审查，未解决审查项0。真实最终HTTP也运行本地Python命令到completed后修改条件、关闭旧意图并再次queue，运行结果和当前pending状态保持，未启动的新意图随后关闭。
+
+root核验Web全量339项/57文件、SDKCLI相关85项、TypeScript构建及最终Vite构建通过（移动CSS后73秒）。Manager全量653通过/2处旧fixture断言失败（485.02秒），修正后两文件49项通过；最终跨域139项及最新SQL/作用域69项通过，统计有重叠，不累加冒称全量次数。相关新代码lint与差异检查通过；既有弃用和大包警告保留。最初pnpm自动依赖检查因无TTY终止，未清空依赖；使用现有依赖的直接本地工具完成实际测试和构建。
+
+真实公开Agent回路：两个独立任务均未生成需求；真实worker/agentd与本地协议fixture完成实现、Python成功/失败测试。成功任务经人审为已验证并解锁前置；失败仅创建一个Issue，转需求重复提交保持唯一，Issue仍open。厂商模型调用0，认证仍unknown。最终35任务/30需求、项目version219，28张Manager/运行/检查点表在纯GET前后完全相同，跨项目404、跨运行cursor422，原已验证任务保留有效。
+
+证据 `.sop-runtime/delivery-evidence/task-acceptance/` 包含validation-proof、actual-loop-proof、actual-stale-completed-recovery、final-http-proof、ui-proof、contract-proof、唯一审查及定点复验、三语/桌面截图、源码与证据散列、scratch清理和commit回执。scratch清点哈希并保存重要源码后清理，活跃预览数据库和凭据保持忽略。按用户要求全部阶段非忽略更改commit，不push；.pnpm-store零跟踪。
+
+完整目标仍active，production_integration_complete=false。继续团队成员与runtime稳定身份绑定、项目组合与归档治理、完整节点内日志/干预恢复、生产账户/模型与干净锁定安装、可信CI提交级证据、版本/质量发布、真实部署灰度回滚、问题智能处理与运维闭环及规模验证。参考平台按具体能力选择吸收/接入，不以本阶段子集缩减用户全链路目标。

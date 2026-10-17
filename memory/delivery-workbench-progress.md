@@ -231,3 +231,23 @@ root 已核验 Manager 全量 **576 项/135.14 秒**、Web 全量 **322 项/53 �
 完整目标保持 **active**，`production_integration_complete=false`。下一项与完整剩余范围继续保留：独立任务原生执行及自身验收条件、完整节点内部日志/干预恢复、团队与 runtime 稳定身份绑定、生产账户/模型、可信 CI 与提交级证据、项目组合/项目归档治理、版本和质量发布、真实部署/灰度/回滚、问题智能处理与运维闭环及规模验证。参考平台按具体能力吸收或接入，不成为全平台强制深接条件；不得用本阶段局部通过缩减用户全链路目标。
 
 最终UI与真实HTTP：ui-proof.json记录390px三语页面390/390、抽屉375/375、派发表单311/311；具体Issue/键盘返回、任务变更409保留参数→读取→显式采用→重预览→保存均通过，未启动计划随后取消。最后恢复已验收任务。纯GET对28张Manager/运行/检查点表零写，跨运行cursor422、跨项目404、原验收保留。严格YAML与559/118引用、25运行模型/54动作、216包lock离线check通过。相关lint与既有债分类留档。Windows测试解释器PID/Git CRLF按本机实证修fixture，不改生产检查。生产干净locked安装仍属后续验证边界。
+
+## 任务自身验收与独立交付增量（2026-10-17）
+
+设计 `docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-task-acceptance.md`，统一术语见根 `GLOSSARY.md`。SQL Task 自身文本条件为唯一正式定义；原整数需求关联明确命名 `requirement_criteria_indices`，不保留歧义别名、不隐式继承整份需求或创建假需求。草稿可空，派发/人工通过前必须有当前有效条件。
+
+独立与关联任务共用原生派发、测试、人审、失败 Issue 及转需求。共享纯定义固定自身条件、来源、可选真实需求、负责人及依赖，正常状态/日期不导致执行自行失效。变更、转属、删除和身份失活/改名在原事务永久作废旧证据；A→B→A不能恢复。集体需求验收同样作废，带锁/条件版本写避免覆盖新意图；工作台显式 reservation 保证命令不重复推进版本。
+
+普通 API、同步、导入、CLI/离线队列及智能体任务资料携带自身条件。Task JSON 绑定校验与 Session Core guard覆盖普通/批量/绑定参数，拒绝非法文本和无法验证的表达式；进度观察器按实际参数定位作用域。`recorded_status` 与六态交付状态分别呈现，旧未采集条件明确未知。显式 schema verify/apply 不在正常启动隐式 ALTER；SQLite 升级已实测，PostgreSQL仅DDL编译，旧MySQL/OceanBase自动升级明确拒绝，仍需目标库迁移验证。
+
+统一任务详情复用执行面板：逐条条件增删排序、明确需求条目、真实条件/目标预览、当前与历史证据；成功三阶段优先显示。独立详情聚焦，Issue精确返回原任务。实际390px条件编辑、键盘排序、保存刷新、409保留三条条件及描述→查看最新→Enter明确采用→保存均通过；三语无横向溢出，手机顶部改紧凑标题与工具行。
+
+唯一完整增量独立审查发现P1和P2各一项，均已定点修复复验：失效completed旧运行可安全关闭原意图、保留运行结果及当前Task，并重新派发；Core写入不能提交数字/布尔/null条件。没有新增广泛审查，未解决审查项0。真实最终HTTP也运行本地Python命令到completed后修改条件、关闭旧意图并再次queue，运行结果和当前pending状态保持，未启动的新意图随后关闭。
+
+root核验Web全量339项/57文件、SDKCLI相关85项、TypeScript构建及最终Vite构建通过（移动CSS后73秒）。Manager全量653通过/2处旧fixture断言失败（485.02秒），修正后两文件49项通过；最终跨域139项及最新SQL/作用域69项通过，统计有重叠，不累加冒称全量次数。相关新代码lint与差异检查通过；既有弃用和大包警告保留。最初pnpm自动依赖检查因无TTY终止，未清空依赖；使用现有依赖的直接本地工具完成实际测试和构建。
+
+真实公开Agent回路：两个独立任务均未生成需求；真实worker/agentd与本地协议fixture完成实现、Python成功/失败测试。成功任务经人审为已验证并解锁前置；失败仅创建一个Issue，转需求重复提交保持唯一，Issue仍open。厂商模型调用0，认证仍unknown。最终35任务/30需求、项目version219，28张Manager/运行/检查点表在纯GET前后完全相同，跨项目404、跨运行cursor422，原已验证任务保留有效。
+
+证据 `.sop-runtime/delivery-evidence/task-acceptance/` 包含validation-proof、actual-loop-proof、actual-stale-completed-recovery、final-http-proof、ui-proof、contract-proof、唯一审查及定点复验、三语/桌面截图、源码与证据散列、scratch清理和commit回执。scratch清点哈希并保存重要源码后清理，活跃预览数据库和凭据保持忽略。按用户要求全部阶段非忽略更改commit，不push；.pnpm-store零跟踪。
+
+完整目标仍active，production_integration_complete=false。继续团队成员与runtime稳定身份绑定、项目组合与归档治理、完整节点内日志/干预恢复、生产账户/模型与干净锁定安装、可信CI提交级证据、版本/质量发布、真实部署灰度回滚、问题智能处理与运维闭环及规模验证。参考平台按具体能力选择吸收/接入，不以本阶段子集缩减用户全链路目标。

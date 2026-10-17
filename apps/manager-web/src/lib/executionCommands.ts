@@ -66,14 +66,18 @@ export function commandNodes(
     };
   });
 }
-export function safeExecutionReturn(value: string): string | null {
+export function safeExecutionReturn(value: string, depth = 0): string | null {
   if (
     !/^#\/(dev-flow|tasks\/execution)(?:\?|$)/.test(value) ||
-    value.length > 4000
+    value.length > 4000 ||
+    depth > 2
   )
     return null;
   const params = new URLSearchParams(value.split("?")[1]);
-  return params.has("return_to") ? null : value;
+  const parent = params.get("return_to");
+  return parent !== null && !safeExecutionReturn(parent, depth + 1)
+    ? null
+    : value;
 }
 export function executionIssueHref(issueId: string, background: string) {
   const params = new URLSearchParams({ view: "issues", issue: issueId });

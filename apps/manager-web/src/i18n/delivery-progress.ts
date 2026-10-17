@@ -1,4 +1,8 @@
 const zh = {
+  acceptanceNotCaptured: "原历史未采集验收条件或来源，不能据此判断范围未变化。",
+  criterionReference: "需求条件 {{number}}",
+  taskCriterion: "任务条件",
+  requirementCriterion: "需求条件",
   noComparableChanges: "可比较的字段未发现变化。",
   baselineReservationsUnknown:
     "原基线未采集资源预留，无法比较该字段；这些任务不计入未变化数量。",
@@ -117,6 +121,9 @@ const zh = {
   },
   changeFields: {
     allocations: "资源预留",
+    acceptance_criteria: "任务验收条件",
+    requirement_criteria_indices: "需求条件关联",
+    acceptance: "有效验收条件",
     title: "标题",
     req_id: "关联需求",
     sprint_id: "所属迭代",
@@ -132,6 +139,11 @@ const zh = {
   },
 };
 const en: typeof zh = {
+  acceptanceNotCaptured:
+    "Acceptance criteria or sources were not captured in the original history. Unchanged scope cannot be inferred.",
+  criterionReference: "Requirement criterion {{number}}",
+  taskCriterion: "Task criterion",
+  requirementCriterion: "Requirement criterion",
   noComparableChanges: "No changes were found in the comparable fields.",
   baselineReservationsUnknown:
     "Reservations were not captured in this baseline; this field cannot be compared, and these tasks are not counted as unchanged.",
@@ -261,6 +273,9 @@ const en: typeof zh = {
   },
   changeFields: {
     allocations: "Resource reservations",
+    acceptance_criteria: "Task acceptance criteria",
+    requirement_criteria_indices: "Requirement criteria references",
+    acceptance: "Effective acceptance criteria",
     title: "Title",
     req_id: "Requirement",
     sprint_id: "Sprint",
@@ -276,6 +291,11 @@ const en: typeof zh = {
   },
 };
 const ja: typeof zh = {
+  acceptanceNotCaptured:
+    "元の記録に条件または参照元がありません。範囲が不変とは判断できません。",
+  criterionReference: "要求の条件 {{number}}",
+  taskCriterion: "タスクの条件",
+  requirementCriterion: "要求の条件",
   noComparableChanges: "比較可能な項目には変更がありません。",
   baselineReservationsUnknown:
     "元の基準には予約情報がなく、この項目を比較できません。該当タスクは変更なしの件数に含めません。",
@@ -401,6 +421,9 @@ const ja: typeof zh = {
   },
   changeFields: {
     allocations: "リソース予約",
+    acceptance_criteria: "タスクの受け入れ条件",
+    requirement_criteria_indices: "要求の条件の関連付け",
+    acceptance: "有効な受け入れ条件",
     title: "タイトル",
     req_id: "関連要件",
     sprint_id: "スプリント",

@@ -357,7 +357,14 @@ def test_full_delivery_keeps_test_acceptance_release_separate(env):
             == 200
         )
     task_result = command(
-        client, "task.create", {"requirement_id": rid, "title": "Build", "owner_id": "user:lead"}
+        client,
+        "task.create",
+        {
+            "requirement_id": rid,
+            "title": "Build",
+            "owner_id": "user:lead",
+            "requirement_criteria_indices": [0],
+        },
     )
     tid = task_result.json()["tasks"][0]["id"]
     assert (

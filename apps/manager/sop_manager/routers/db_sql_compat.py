@@ -7,9 +7,11 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from sop_manager.path_config import resolved_project_id, resolved_tenant_id
+from sop_manager.task_acceptance import normalize_task_acceptance
 
 from .sql_models import DeliveryWorkspace, Issue, Requirement, Sprint, Task, get_session
 
@@ -43,6 +45,8 @@ class _SqlTable:
     def add(self, rows_list: list):
         tid = resolved_tenant_id()
         pid = resolved_project_id()
+        if self._model is Task:
+            rows_list = [self._task_values(row) for row in rows_list]
         for row in rows_list:
             obj = self._model(**{k: v for k, v in row.items() if hasattr(self._model, k)})
             obj.tenant_id = tid
@@ -51,14 +55,14 @@ class _SqlTable:
         self._db.commit()
 
     def update(self, where: str, values: dict):
+        if self._model is Task:
+            values = self._task_values(values)
         rid = _parse_id(where)
         if not rid:
             return
         obj = self._base_q().filter_by(id=rid).first()
         if obj:
             if self._model is Task and values.get("status") in {"in_progress", "completed"}:
-                from fastapi import HTTPException
-
                 from .delivery_plan import require_dependencies
                 from .delivery_service import reconcile
                 from .sql_models import Project
@@ -74,6 +78,16 @@ class _SqlTable:
                 if hasattr(obj, k):
                     setattr(obj, k, v)
             self._db.commit()
+
+    @staticmethod
+    def _task_values(values):
+        values = dict(values)
+        if "acceptance_criteria" in values:
+            try:
+                values["acceptance_criteria"] = normalize_task_acceptance(values["acceptance_criteria"])
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+        return values
 
     def delete(self, where: str):
         rid = _parse_id(where)

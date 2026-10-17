@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { getProjectId, getToken, getSessionRevision } from "@/lib/authStorage";
 import { linkedTaskRows, taskIdFromHash } from "@/lib/taskDeepLink";
 import { manualTaskHref, taskRecordStatusLabel } from "@/lib/deliveryTaskReview";
+import { safeExecutionReturn } from "@/lib/executionCommands";
 import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
@@ -100,11 +101,13 @@ function TaskCard({
   onStatus,
   busy,
   draggable,
+  detailHref,
 }: {
   task: any;
   onStatus: (id: string, status: string) => void;
   busy?: boolean;
   draggable?: boolean;
+  detailHref?: string;
 }) {
   const { t } = useTranslation();
   const pr = (task.priority || "P3").toUpperCase();
@@ -122,7 +125,7 @@ function TaskCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{task.title}</p>
+          <a draggable={false} href={detailHref || manualTaskHref(task)} className="block text-sm font-medium text-[var(--brand)]">{task.title}</a>
           <p className="mt-0.5 font-mono text-[10px] text-slate-400">{task.id}</p>
           {task.assigned_to ? (
             <p className="mt-1 text-xs text-slate-500">{task.assigned_to}</p>
@@ -190,10 +193,11 @@ export function Tasks({
   const [depSelectedNode, setDepSelectedNode] = useState<any>(null);
   const [depTasksResult, setDepTasksResult] = useState<any>(null);
   const [linkedTaskId, setLinkedTaskId] = useState(() => taskIdFromHash(typeof window === "undefined" ? "" : window.location.hash));
-  const [taskQuery, setTaskQuery] = useState(linkedTaskId);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
+  const listParams = () => new URLSearchParams(typeof window === "undefined" ? "" : window.location.hash.split("?")[1]);
+  const [taskQuery, setTaskQuery] = useState(() => linkedTaskId || listParams().get("q") || "");
+  const [statusFilter, setStatusFilter] = useState(() => listParams().get("status") || "");
+  const [priorityFilter, setPriorityFilter] = useState(() => listParams().get("priority") || "");
+  const [sourceFilter, setSourceFilter] = useState(() => listParams().get("source") || "");
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState("");
   const [bulkPriority, setBulkPriority] = useState("");
@@ -238,6 +242,9 @@ export function Tasks({
         setStatusFilter("");
         setPriorityFilter("");
         setSourceFilter("");
+      } else {
+        const params = new URLSearchParams(window.location.hash.split("?")[1]);
+        setTaskQuery(params.get("q") || ""); setStatusFilter(params.get("status") || ""); setPriorityFilter(params.get("priority") || ""); setSourceFilter(params.get("source") || "");
       }
     };
     window.addEventListener("hashchange", syncLinkedTask);
@@ -251,18 +258,18 @@ export function Tasks({
   const allTasksQ = useQuery({
     queryKey: ["tasks", taskQuery, statusFilter, priorityFilter, sourceFilter],
     queryFn: () => api.tasks({ q: taskQuery.trim(), status: statusFilter, priority: priorityFilter, source: sourceFilter }),
-    enabled: authed && hasProject && (tab === "list" || tab === "board" || tab === "priority" || tab === "deps"),
+    enabled: authed && hasProject && !linkedTaskId && (tab === "list" || tab === "board" || tab === "priority" || tab === "deps"),
   });
   const interactionOpsQ = useQuery({
     queryKey: ["tasksInteractionOps", taskQuery],
     queryFn: () => api.pagesInteractionOps({ domain: "delivery", q: taskQuery.trim(), status: "watch", limit: 30 }),
-    enabled: authed && hasProject,
+    enabled: authed && hasProject && !linkedTaskId,
   });
 
   const summaryQ = useQuery({
     queryKey: ["tasksSummary"],
     queryFn: api.tasksSummary,
-    enabled: authed && hasProject,
+    enabled: authed && hasProject && !linkedTaskId,
   });
 
   const depsQ = useQuery({
@@ -326,7 +333,7 @@ export function Tasks({
   const sprintsQ = useQuery({
     queryKey: ["sprints"],
     queryFn: api.sprints,
-    enabled: authed && hasProject,
+    enabled: authed && hasProject && !linkedTaskId,
   });
 
   const progressQ = useQuery({
@@ -727,6 +734,14 @@ export function Tasks({
     return <div className="text-sm text-amber-700">{t("projectSelector.hint")}</div>;
   }
 
+  if (linkedTaskId) {
+    const returnTo = safeExecutionReturn(new URLSearchParams(window.location.hash.split("?")[1]).get("return_to") || "");
+    return <div className="task-focused-detail space-y-4"><Space wrap>{returnTo && <Button href={returnTo}>{t("deliveryTaskAcceptance.back")}</Button>}<Button href="#/tasks/execution">{t("deliveryTaskAcceptance.allTasks")}</Button></Space><Card title={t("deliveryTaskAcceptance.details")}><DeliveryTaskDetail key={`${getProjectId()}:${getSessionRevision()}:${linkedTaskId}`} projectId={getProjectId()!} sessionId={getSessionRevision() || ""} taskId={linkedTaskId} /></Card></div>;
+  }
+  const taskBackground = () => {
+    const params = new URLSearchParams(); if (taskQuery) params.set("q", taskQuery); if (statusFilter) params.set("status", statusFilter); if (priorityFilter) params.set("priority", priorityFilter); if (sourceFilter) params.set("source", sourceFilter);
+    return `#/tasks/execution${params.size ? `?${params}` : ""}`;
+  };
   const tabs: { key: Tab; label: string }[] = [
     { key: "list", label: t("page.tasks.tabList") },
     { key: "board", label: t("page.tasks.tabBoard") },
@@ -742,7 +757,7 @@ export function Tasks({
       dataIndex: "title",
       render: (_value, task) => (
         <div className="min-w-0">
-          <a href={manualTaskHref(task)} className="block truncate text-sm font-semibold text-[var(--brand)]">{task.title}</a>
+          <a href={manualTaskHref(task, taskBackground())} className="block truncate text-sm font-semibold text-[var(--brand)]">{task.title}</a>
           <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{task.id}</p>
           {task.debug_notes ? <p className="mt-1 line-clamp-1 text-xs text-[var(--muted-strong)]">{task.debug_notes}</p> : null}
         </div>
@@ -871,12 +886,6 @@ export function Tasks({
           <Button type="primary" onClick={() => setCreateOpen(true)}>{t("page.tasks.create")}</Button>
         </Space>
       </div>
-
-      {linkedTaskId && authed && hasProject && (
-        <Card title={t("deliveryManualReview.currentFacts")}>
-          <DeliveryTaskDetail key={`${getProjectId()}:${getSessionRevision()}:${linkedTaskId}`} projectId={getProjectId()!} sessionId={getSessionRevision() || ""} taskId={linkedTaskId} />
-        </Card>
-      )}
 
       <Card title={t("page.tasks.filters")}>
         <div className="flex flex-wrap items-center gap-2">
@@ -1853,6 +1862,7 @@ export function Tasks({
                 ) : (
                   boardGroups[st].map((task) => (
                     <TaskCard
+                      detailHref={manualTaskHref(task, taskBackground())}
                       key={task.id}
                       task={task}
                       busy={busy}

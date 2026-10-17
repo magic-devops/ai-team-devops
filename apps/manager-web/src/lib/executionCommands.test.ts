@@ -59,4 +59,12 @@ describe("explicit external execution drafts", () => {
     ])
       expect(safeExecutionReturn(unsafe)).toBeNull();
   });
+  it("keeps the standalone task and its safe list return when opening a failure issue", () => {
+    const list = "#/tasks/execution?q=verify&status=pending";
+    const task = `#/tasks/execution?task_id=T-one&return_to=${encodeURIComponent(list)}`;
+    const params = new URLSearchParams(executionIssueHref("ISS-one", task).split("?")[1]);
+    expect(params.get("return_to")).toBe(task);
+    expect(safeExecutionReturn(task)).toBe(task);
+    expect(safeExecutionReturn(`#/tasks/execution?task_id=T-one&return_to=${encodeURIComponent("https://example.test")}`)).toBeNull();
+  });
 });

@@ -228,6 +228,38 @@ export function DeliveryProgressComparison({
   const { t } = useTranslation();
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryProgress.${key}`, options);
+  const fieldValue = (task: ProgressTask, field: string) => {
+    if (field === "allocations")
+      return allocationSummary(task.allocations, members, t);
+    const value = task[field as keyof ProgressTask];
+    if (
+      [
+        "acceptance_criteria",
+        "requirement_criteria_indices",
+        "acceptance",
+      ].includes(field) &&
+      value == null
+    )
+      return tr("acceptanceNotCaptured");
+    if (field === "acceptance_criteria")
+      return task.acceptance_criteria?.join("\n") || "—";
+    if (field === "requirement_criteria_indices")
+      return (
+        task.requirement_criteria_indices
+          ?.map((index) => tr("criterionReference", { number: index + 1 }))
+          .join("\n") || "—"
+      );
+    if (field === "acceptance")
+      return (
+        task.acceptance?.sources
+          .map(
+            (source) =>
+              `${tr(source.source === "task" ? "taskCriterion" : "requirementCriterion")}: ${source.text}`,
+          )
+          .join("\n") || "—"
+      );
+    return String(value || "—");
+  };
   return (
     <div className="delivery-progress-comparison">
       <div className="delivery-section-heading">
@@ -235,7 +267,17 @@ export function DeliveryProgressComparison({
         <small>{tr("unchanged", { count: comparison.unchanged_count })}</small>
       </div>
       {Boolean(comparison.incomplete_plan_fields?.length) && (
-        <Alert type="info" showIcon title={tr("baselineReservationsUnknown")} />
+        <Alert
+          type="info"
+          showIcon
+          title={tr(
+            comparison.incomplete_plan_fields.some(
+              (field) => field !== "allocations",
+            )
+              ? "acceptanceNotCaptured"
+              : "baselineReservationsUnknown",
+          )}
+        />
       )}
       <p className="delivery-hint">{t("deliverySchedule.baselineHint")}</p>
       {!comparison.added.length &&
@@ -322,43 +364,33 @@ export function DeliveryProgressComparison({
                               <dd>
                                 <span
                                   className={
-                                    field === "allocations"
+                                    [
+                                      "allocations",
+                                      "acceptance_criteria",
+                                      "requirement_criteria_indices",
+                                      "acceptance",
+                                    ].includes(field)
                                       ? "delivery-schedule-multiline"
                                       : undefined
                                   }
                                 >
                                   <small>{tr("before")}</small>
-                                  {field === "allocations"
-                                    ? allocationSummary(
-                                        change.before.allocations,
-                                        members,
-                                        t,
-                                      )
-                                    : String(
-                                        change.before[
-                                          field as keyof ProgressTask
-                                        ] || "—",
-                                      )}
+                                  {fieldValue(change.before, field)}
                                 </span>
                                 <span
                                   className={
-                                    field === "allocations"
+                                    [
+                                      "allocations",
+                                      "acceptance_criteria",
+                                      "requirement_criteria_indices",
+                                      "acceptance",
+                                    ].includes(field)
                                       ? "delivery-schedule-multiline"
                                       : undefined
                                   }
                                 >
                                   <small>{tr("after")}</small>
-                                  {field === "allocations"
-                                    ? allocationSummary(
-                                        change.after.allocations,
-                                        members,
-                                        t,
-                                      )
-                                    : String(
-                                        change.after[
-                                          field as keyof ProgressTask
-                                        ] || "—",
-                                      )}
+                                  {fieldValue(change.after, field)}
                                 </span>
                               </dd>
                             )}

@@ -109,16 +109,32 @@ class ExecutionTargetsResponse(ExecutionInput):
     workspaces: list[ExecutionWorkspace]
 
 
+class ExecutionRequirementSnapshot(ExecutionInput):
+    id: str
+    title: str
+    description: str
+    revision: int
+    acceptance_criteria: list[str]
+    criteria_indices: list[int]
+
+
+class ExecutionOwnerSnapshot(ExecutionInput):
+    id: str
+    name: str
+    kind: Literal["human", "agent", "tool"]
+    active: bool
+
+
 class ExecutionSnapshot(ExecutionInput):
     task_id: str
     title: str
     description: str
     assigned_to: str
-    requirement_id: str
-    requirement_title: str
-    requirement_description: str
+    task_acceptance_criteria: list[str]
     acceptance_criteria: list[str]
-    revision: int
+    owner: ExecutionOwnerSnapshot | None
+    dependency_basis: dict[str, str]
+    requirement: ExecutionRequirementSnapshot | None
 
 
 class ExecutionPreviewResponse(ExecutionInput):

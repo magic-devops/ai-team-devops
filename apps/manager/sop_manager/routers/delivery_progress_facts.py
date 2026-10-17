@@ -111,13 +111,18 @@ def capture_facts(db, project):
                 "starts_on": _date(planning.get("starts_on")),
                 "ends_on": _date(planning.get("ends_on")),
                 "allocations": deepcopy(planning.get("allocations", [])),
+                "acceptance_criteria": deepcopy(task["acceptance_criteria"]),
+                "requirement_criteria_indices": deepcopy(planning.get("requirement_criteria_indices", [])),
+                "acceptance": deepcopy(task["acceptance"]),
                 "basis": fact_basis(
                     {
                         "title": task["title"],
                         "description": task["description"],
                         "requirement_basis": requirement["basis"] if requirement else None,
                         "requirement_revision": flow.get("revision"),
-                        "acceptance_criteria": planning.get("acceptance_criteria"),
+                        "acceptance_criteria": task["acceptance_criteria"],
+                        "requirement_criteria_indices": planning.get("requirement_criteria_indices"),
+                        "acceptance": task["acceptance"],
                         "depends_on": planning.get("depends_on"),
                         "blocked_reason": planning.get("blocked_reason"),
                     }
