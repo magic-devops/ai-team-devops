@@ -12,7 +12,7 @@ def test_delivery_inbox_cli_returns_server_projection_without_rewriting_it(monke
     expected = {"project_id": "selected", "scope": "team", "counts": {"total": 1}, "items": [{"id": "task:T-one", "categories": ["blocked"]}]}
 
     class Client:
-        def delivery_inbox(self, *, scope):
+        def delivery_inbox(self, *, scope, **selection):
             seen.append(scope)
             return expected
 
@@ -33,7 +33,7 @@ def test_delivery_inbox_cli_rejects_scope_and_preserves_access_failure(monkeypat
     assert invalid.exit_code != 0 and "scope" in invalid.output
 
     class Client:
-        def delivery_inbox(self, *, scope):
+        def delivery_inbox(self, *, scope, **selection):
             raise SopForbiddenError("Project access denied", status=403)
 
     @contextmanager

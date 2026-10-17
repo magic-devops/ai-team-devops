@@ -1237,44 +1237,85 @@ paths:
     get:
       tags:
       - delivery
+      summary: Delivery Inbox
       operationId: deliveryInbox
-      summary: Read current personal or team delivery attention items
-      description: Requires an explicitly selected authorized project. This read-only projection performs no state
-        writes or runtime calls. mine uses stable user IDs; ambiguous legacy names never become personal assignments.
-        Personal approval requires the current approve permission and satisfied stage gates. Team readers may see
-        available review work without receiving approval authority. Acceptance requires current latest execution evidence.
-        Overdue uses UTC dates from registered plans only. Follow target into the existing detail; all mutation permissions
-        and evidence gates remain there.
       security:
       - bearerAuth: []
       parameters:
-      - $ref: '#/components/parameters/RequiredBusinessProjectId'
       - name: scope
         in: query
         required: false
         schema:
-          type: string
           enum:
           - mine
           - team
+          type: string
           default: mine
+          title: Scope
+      - name: category
+        in: query
+        required: false
+        schema:
+          enum:
+          - all
+          - work
+          - approval
+          - acceptance
+          - blocked
+          - overdue
+          type: string
+          default: all
+          title: Category
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
       responses:
         '200':
-          description: Current deduplicated project delivery inbox
+          description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeliveryInbox'
-        '400':
-          $ref: '#/components/responses/BusinessProjectMissing'
-        '401':
-          $ref: '#/components/responses/BusinessUnauthorized'
-        '403':
-          $ref: '#/components/responses/BusinessForbidden'
-        '404':
-          $ref: '#/components/responses/BusinessNotFound'
+                $ref: '#/components/schemas/DeliveryInboxResponse'
         '422':
-          description: scope must be mine or team
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: SQL-paged current attention. Counts cover the full selected mine/team scope; total covers category. Manual
+        recorded completion remains acceptance work until current verification. Cursor binds actor, current approval role, UTC
+        date, filters and query generation. No GET rebuild or full workspace fallback.
   /api/v1/delivery/progress:
     get:
       tags:
@@ -6545,6 +6586,65 @@ paths:
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
       description: Bounded reference directory or exact selected IDs. Member task counts and milestone requirement/task counts
         are full-scope facts, independent of this page. Cursor binds all selectors and query generation.
+  /api/v1/delivery/progress/summary:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Progress Summary
+      operationId: deliveryProgressSummary
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: starts_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Starts On
+      - name: ends_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Ends On
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressSummaryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Light project overview metrics from the current query generation and UTC coverage from observation date/time
+        metadata. No task bodies, historical fact JSON, baseline lists or full-workspace evaluation.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -21505,7 +21605,7 @@ components:
           title: Status
           type: string
         schema_version:
-          default: 1
+          default: 2
           title: Schema Version
           type: integer
         computed_at:
@@ -21806,4 +21906,290 @@ components:
       - requirement
       - planning_basis
       title: TaskDetail
+      type: object
+    InboxCounts:
+      additionalProperties: false
+      properties:
+        work:
+          minimum: 0
+          title: Work
+          type: integer
+        approval:
+          minimum: 0
+          title: Approval
+          type: integer
+        acceptance:
+          minimum: 0
+          title: Acceptance
+          type: integer
+        blocked:
+          minimum: 0
+          title: Blocked
+          type: integer
+        overdue:
+          minimum: 0
+          title: Overdue
+          type: integer
+        total:
+          minimum: 0
+          title: Total
+          type: integer
+      required:
+      - work
+      - approval
+      - acceptance
+      - blocked
+      - overdue
+      - total
+      title: InboxCounts
+      type: object
+    InboxItem:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        kind:
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Kind
+          type: string
+        resource_id:
+          title: Resource Id
+          type: string
+        title:
+          title: Title
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        task_id:
+          title: Task Id
+          type: string
+        status:
+          title: Status
+          type: string
+        stage:
+          title: Stage
+          type: string
+        owner_id:
+          title: Owner Id
+          type: string
+        due_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Due On
+        priority:
+          title: Priority
+          type: string
+        categories:
+          items:
+            enum:
+            - work
+            - approval
+            - acceptance
+            - blocked
+            type: string
+          title: Categories
+          type: array
+        blocked_reasons:
+          items:
+            type: string
+          maxItems: 5
+          title: Blocked Reasons
+          type: array
+        blocked_reason_count:
+          minimum: 0
+          title: Blocked Reason Count
+          type: integer
+        overdue:
+          title: Overdue
+          type: boolean
+        acceptance_kind:
+          anyOf:
+          - enum:
+            - manual
+            - execution
+            type: string
+          - type: 'null'
+          default: null
+          title: Acceptance Kind
+        target:
+          $ref: '#/components/schemas/InboxTarget'
+      required:
+      - id
+      - kind
+      - resource_id
+      - title
+      - requirement_id
+      - task_id
+      - status
+      - stage
+      - owner_id
+      - due_on
+      - priority
+      - categories
+      - blocked_reasons
+      - blocked_reason_count
+      - overdue
+      - target
+      title: InboxItem
+      type: object
+    InboxTarget:
+      additionalProperties: false
+      properties:
+        view:
+          title: View
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        detail:
+          title: Detail
+          type: string
+        task_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Task Id
+        issue_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Issue Id
+      required:
+      - view
+      - requirement_id
+      - detail
+      title: InboxTarget
+      type: object
+    DeliveryInboxResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        scope:
+          enum:
+          - mine
+          - team
+          title: Scope
+          type: string
+        category:
+          enum:
+          - all
+          - work
+          - approval
+          - acceptance
+          - blocked
+          - overdue
+          title: Category
+          type: string
+        current_user_id:
+          title: Current User Id
+          type: string
+        as_of:
+          title: As Of
+          type: string
+        counts:
+          $ref: '#/components/schemas/InboxCounts'
+        items:
+          items:
+            $ref: '#/components/schemas/InboxItem'
+          title: Items
+          type: array
+        total:
+          minimum: 0
+          title: Total
+          type: integer
+        limit:
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+        has_more:
+          title: Has More
+          type: boolean
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      required:
+      - project_id
+      - version
+      - query_generation
+      - scope
+      - category
+      - current_user_id
+      - as_of
+      - counts
+      - items
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      title: DeliveryInboxResponse
+      type: object
+    SummaryCurrent:
+      additionalProperties: false
+      properties:
+        metrics:
+          additionalProperties: true
+          title: Metrics
+          type: object
+      required:
+      - metrics
+      title: SummaryCurrent
+      type: object
+    ProgressSummaryResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        as_of:
+          title: As Of
+          type: string
+        timezone:
+          const: UTC
+          title: Timezone
+          type: string
+        range:
+          $ref: '#/components/schemas/ProgressRange'
+        current:
+          $ref: '#/components/schemas/SummaryCurrent'
+        coverage:
+          $ref: '#/components/schemas/ProgressCoverage'
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - timezone
+      - range
+      - current
+      - coverage
+      title: ProgressSummaryResponse
       type: object

@@ -4,20 +4,44 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryInbox } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryInbox";
 import { DeliveryProjectResources } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProjectResources";
 import { DeliveryProjectOverview } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProjectOverview";
-import type { DeliveryInbox as InboxData, DeliveryDisplayContext, DeliveryResource } from "./delivery";
+import type {
+  DeliveryInbox as InboxData,
+  DeliveryDisplayContext,
+  DeliveryResource,
+} from "./delivery";
 import { projectInboxTranslations } from "../i18n/delivery-project-inbox";
 
 let activeLanguage: keyof typeof projectInboxTranslations = "en-US";
 let resourceRows: DeliveryResource[] = [];
 vi.mock("@tanstack/react-query", async () => ({
-  ...await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query"),
+  ...(await vi.importActual<typeof import("@tanstack/react-query")>(
+    "@tanstack/react-query",
+  )),
   useQuery: ({ queryKey }: { queryKey: string[] }) => {
     const rows = queryKey[0].includes("resource") ? resourceRows : [];
-    return { data: { items: rows.map((data) => ({ id: data.id, data })), total: rows.length, next_cursor: null }, isError: false, isPending: false };
+    return {
+      data: {
+        items: rows.map((data) => ({ id: data.id, data })),
+        total: rows.length,
+        next_cursor: null,
+      },
+      isError: false,
+      isPending: false,
+    };
   },
-  useQueries: ({ queries }: { queries: { queryKey: unknown[] }[] }) => queries.map(({ queryKey }) => ({ data: { items: workspace.members.filter((member) => (queryKey.at(-1) as string[]).includes(member.id)).map((data) => ({ id: data.id, data })) } })),
+  useQueries: ({ queries }: { queries: { queryKey: unknown[] }[] }) =>
+    queries.map(({ queryKey }) => ({
+      data: {
+        items: workspace.members
+          .filter((member) => (queryKey.at(-1) as string[]).includes(member.id))
+          .map((data) => ({ id: data.id, data })),
+      },
+    })),
 }));
-beforeEach(() => { resourceRows = []; vi.stubGlobal("location", { hash: "#/dev-flow?view=resources" }); });
+beforeEach(() => {
+  resourceRows = [];
+  vi.stubGlobal("location", { hash: "#/dev-flow?view=resources" });
+});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -161,14 +185,19 @@ describe("project inbox presentation", () => {
     expect(html).not.toContain("execution.review");
     expect((html.match(/class="delivery-inbox-row/g) || []).length).toBe(1);
   });
-  it("shows errors while retaining previously loaded items and uses specific empty states", () => {
+  it("hides previously loaded items after a read failure and uses server-filtered empty states", () => {
     expect(renderInbox({ error: "Connection lost" })).toContain(
       "Connection lost",
     );
-    expect(renderInbox({ error: "Connection lost" })).toContain("Actual task");
-    expect(renderInbox({ category: "approval" })).toContain(
-      "deliveryProject.noCategoryItems",
+    expect(renderInbox({ error: "Connection lost" })).not.toContain(
+      "Actual task",
     );
+    expect(
+      renderInbox({
+        category: "approval",
+        data: { ...inbox, category: "approval", items: [] },
+      }),
+    ).toContain("deliveryProject.noCategoryItems");
     expect(renderInbox({ data: { ...inbox, items: [] } })).toContain(
       "deliveryProject.myEmpty",
     );
@@ -190,8 +219,18 @@ describe("project inbox presentation", () => {
       /disabled=""[^>]*><span[^>]*>.*?<\/span><span>deliveryProject.addResource/s,
     );
     resourceRows = [
-      { id: "safe", kind: "document", title: "Plan", url: "https://example.org/doc" },
-      { id: "unsafe", kind: "repository", title: "Unsafe link", url: "https://example.org/?private_token=secret" },
+      {
+        id: "safe",
+        kind: "document",
+        title: "Plan",
+        url: "https://example.org/doc",
+      },
+      {
+        id: "unsafe",
+        kind: "repository",
+        title: "Unsafe link",
+        url: "https://example.org/?private_token=secret",
+      },
     ] as DeliveryResource[];
     const links = renderToStaticMarkup(
       createElement(DeliveryProjectResources, {

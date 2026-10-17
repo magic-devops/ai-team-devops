@@ -26,6 +26,7 @@ import { planError } from "@/lib/deliveryTaskPlan";
 import {
   defaultProgressRange,
   fetchDeliveryProgress,
+  fetchDeliveryProgressSummary,
   fetchProgressObservation,
   parseProgressRoute,
   progressHash,
@@ -43,6 +44,7 @@ import {
   DeliveryProgressSnapshot,
   progressDateTime,
 } from "./DeliveryProgressDetails";
+import { DeliveryQueryError } from "./DeliveryQueryViews";
 
 function progressQueryKey(
   projectId: string,
@@ -651,27 +653,39 @@ export function DeliveryProgress({
 export function DeliveryProgressSummary({
   projectId,
   sessionId,
+  queryGeneration,
+  onRefreshContext,
   onOpen,
 }: {
   projectId: string;
   sessionId: string;
+  queryGeneration?: number | null;
+  onRefreshContext?: () => unknown;
   onOpen: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [route] = useState<ProgressRoute>(() => ({
-    ...defaultProgressRange(),
-    scope: "project",
-    scopeId: "",
-    baselineId: "",
-    observationId: "",
-  }));
+  const range = defaultProgressRange();
   const query = useQuery({
-    queryKey: progressQueryKey(projectId, sessionId, route),
-    queryFn: ({ signal }) => fetchDeliveryProgress(projectId, route, signal),
+    queryKey: [
+      "delivery-progress-summary",
+      projectId,
+      sessionId,
+      queryGeneration,
+      range.startsOn,
+      range.endsOn,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryProgressSummary(projectId, range, signal, queryGeneration),
+    enabled: queryGeneration != null,
     gcTime: 0,
-    refetchInterval: 10000,
+    retry: false,
   });
-  const data = query.data;
+  const data =
+    !query.error &&
+    query.data?.project_id === projectId &&
+    query.data?.query_generation === queryGeneration
+      ? query.data
+      : undefined;
   return (
     <section className="delivery-panel delivery-progress-summary">
       <div className="delivery-section-heading">
@@ -683,17 +697,13 @@ export function DeliveryProgressSummary({
       </div>
       {query.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
       {query.error && (
-        <Alert
-          type="error"
-          showIcon
-          title={t(
-            data ? "deliveryProgress.stale" : "deliveryProgress.readFailed",
-          )}
-          action={
-            <Button size="small" onClick={() => void query.refetch()}>
-              {t("deliveryProgress.refresh")}
-            </Button>
-          }
+        <DeliveryQueryError
+          error={query.error}
+          onRetry={() => {
+            void Promise.resolve(onRefreshContext?.()).then(() =>
+              query.refetch(),
+            );
+          }}
         />
       )}
       {data && (

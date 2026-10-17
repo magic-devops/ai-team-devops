@@ -21,6 +21,7 @@ from .delivery_activity_contract import (
     RequirementHistory,
     RequirementVersionDetail,
 )
+from .delivery_attention_contract import DeliveryInboxResponse, ProgressSummaryResponse
 from .delivery_contract import (
     PAYLOADS,
     STAGES,
@@ -554,17 +555,34 @@ def delivery_release_preview(
     return preview(db, project, data, user, body, version=row.version if row else 0)
 
 
-@router.get("/inbox")
+@router.get("/inbox", response_model=DeliveryInboxResponse)
 def delivery_inbox(
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     scope: Annotated[Literal["mine", "team"], Query()] = "mine",
+    category: Annotated[Literal["all", "work", "approval", "acceptance", "blocked", "overdue"], Query()] = "all",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_inbox import build_inbox
+    from .delivery_inbox_query import inbox_page
 
     project = _project(db, user, project_id)
-    return build_inbox(_snapshot(db, project, user), user, scope=scope)
+    return inbox_page(db, project, user, can_approve=_permissions(db, user, project)["approve"],
+        scope_kind=scope, category=category, limit=limit, cursor=cursor)
+
+
+@router.get("/progress/summary", response_model=ProgressSummaryResponse)
+def delivery_progress_summary(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    starts_on: date | None = None,
+    ends_on: date | None = None,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_progress_summary import progress_summary
+
+    return progress_summary(db, _project(db, user, project_id), starts_on=starts_on, ends_on=ends_on)
 
 
 @router.get("/progress", response_model=ProgressResponse)

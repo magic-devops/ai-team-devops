@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 FLOW_FIELDS = (
     "stage",
     "revision",
@@ -217,6 +217,36 @@ def _reference_facts(project, evaluation):
     return rows
 
 
+def _inbox_facts(project, evaluation):
+    from .delivery_inbox import build_inbox
+
+    snapshot = evaluation.snapshot
+    roster = {member["id"]: member for member in snapshot["members"]}
+    requirements = {row["id"]: row for row in snapshot["requirements"]}
+
+    def human_owner(owner_id):
+        member = roster.get(owner_id)
+        return owner_id if member and member["kind"] == "human" and member["active"] and member["available"] else ""
+
+    rows = []
+    # Team facts contain every category. Current reader permissions are applied in SQL.
+    evaluated_gates = {row["id"]: row["flow"]["gates"] for row in snapshot["requirements"]}
+    for item in build_inbox(snapshot, {"id": ""}, scope="team", evaluated_gates=evaluated_gates)["items"]:
+        requirement = requirements.get(item["requirement_id"])
+        requirement_owner = (requirement or {}).get("flow", {}).get("owner_id", "")
+        data = {
+            "item": item,
+            "mine_owner_id": human_owner(item["owner_id"]),
+            "mine_requirement_owner_id": human_owner(requirement_owner),
+            "priority_rank": {"P0": "0", "P1": "1", "P2": "2", "P3": "3"}.get(item["priority"], "4"),
+            **{category: category in item["categories"] for category in ("work", "approval", "acceptance", "blocked")},
+        }
+        rows.append(_fact(project, "inbox", item["id"], data,
+            parent_id=item["requirement_id"], owner_id=item["owner_id"],
+            status=item["status"], due_on=item["due_on"]))
+    return rows
+
+
 def replace_from_evaluation(db, project, evaluation):
     """Caller owns Project lock and canonical transaction; no commit or history write."""
     connection = db.connection()
@@ -226,6 +256,7 @@ def replace_from_evaluation(db, project, evaluation):
     generation = (current or 0) + 1
     rows = _requirement_facts(project, evaluation) + _task_facts(project, evaluation)
     rows += _execution_facts(project, evaluation) + _reference_facts(project, evaluation)
+    rows += _inbox_facts(project, evaluation)
     linked_issues = {
         flow["source_issue_id"]: requirement_id
         for requirement_id, flow in evaluation.state.get("flows", {}).items()

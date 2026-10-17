@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / inbox / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 
@@ -450,17 +450,34 @@ def _show_progress_record(result: dict, json_out: bool, label: str):
         console.print_json(data=result)
         return
     console.print(f"{label} · 项目 {result.get('project_id', '')}", markup=False)
-    if "days" in result:
+    if "days" in result or ("coverage" in result and "current" in result):
         coverage = result.get("coverage", {})
         metrics = result.get("current", {}).get("metrics", {})
         console.print(
             f"真实观测 {len(coverage.get('observed_days', []))} 天 · "
             f"缺失 {len(coverage.get('missing_days', []))} 天 · "
+            f"未来 {len(coverage.get('future_days', []))} 天 · "
             f"任务 {metrics.get('tasks_total', '—')} · 已验证 {metrics.get('verified_completed', '—')}",
             markup=False,
         )
     else:
         console.print_json(data=result)
+
+
+@app.command("progress-summary")
+def progress_summary(
+    starts_on: Annotated[str | None, typer.Option("--starts-on", help="UTC 开始日期 YYYY-MM-DD")] = None,
+    ends_on: Annotated[str | None, typer.Option("--ends-on", help="UTC 结束日期 YYYY-MM-DD，最多366天")] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="保留当前指标、观测缺口及查询代次")] = False,
+):
+    """读取轻量进度摘要与真实观测覆盖，不加载任务或历史快照。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_progress_summary(starts_on=starts_on, ends_on=ends_on)
+        _show_progress_record(result, json_out, "进度摘要")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("progress")
@@ -582,26 +599,42 @@ def reviews(
 @app.command("inbox")
 def inbox(
     scope: Annotated[str, typer.Option("--scope", help="mine 或 team，当前项目的个人/团队事项")] = "mine",
-    json_out: Annotated[bool, typer.Option("--json", help="保留服务端分类与定位信息")] = False,
+    category: Annotated[str, typer.Option("--category", help="all/work/approval/acceptance/blocked/overdue")] = "all",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100, help="每页事项数")] = 20,
+    cursor: Annotated[str, typer.Option("--cursor", help="上一页返回的 next_cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json", help="保留服务端分类、全范围计数与分页信息")] = False,
 ):
-    """查看待处理、阶段评审、执行验收及阻塞，不修改业务状态。"""
+    """分页查看待处理、阶段评审、执行验收及阻塞，不修改业务状态。"""
     try:
         if scope not in {"mine", "team"}:
             raise ValueError("scope must be mine or team")
+        if category not in {"all", "work", "approval", "acceptance", "blocked", "overdue"}:
+            raise ValueError("invalid inbox category")
         with get_client() as client:
-            result = client.delivery_inbox(scope=scope)
+            result = client.delivery_inbox(scope=scope, category=category, limit=limit, cursor=cursor)
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
     if json_out:
         console.print_json(data=result)
         return
-    console.print(f"项目 {result.get('project_id', '')} · {scope}", markup=False)
-    for item in result.get("items", []):
+    items = result.get("items", [])
+    has_more = result.get("has_more", False)
+    console.print(f"项目 {result.get('project_id', '')} · {scope} · {category}", markup=False)
+    console.print(
+        f"本页 {len(items)} 项 · 匹配总数 {result.get('total', len(items))} 项 · "
+        f"每页上限 {result.get('limit', limit)} · has_more={str(has_more).lower()}",
+        markup=False,
+    )
+    for item in items:
         categories = ", ".join(item.get("categories", []))
-        console.print(f"[{categories}] {item.get('title', '')} ({item.get('resource_id', '')})", markup=False)
-    if not result.get("items"):
-        console.print("当前没有待处理事项。")
+        status = f" · {item['status']}" if item.get("status") else ""
+        console.print(f"[{categories}] {item.get('title', '')} ({item.get('resource_id', '')}){status}", markup=False)
+    if not items:
+        console.print("本页没有匹配事项。")
+    if has_more and result.get("next_cursor"):
+        console.print(f"next_cursor: {result['next_cursor']}", markup=False, soft_wrap=True)
+        console.print("继续查看：保持 --scope、--category、--limit，并传入 --cursor。", markup=False)
 
 
 @app.command("targets")

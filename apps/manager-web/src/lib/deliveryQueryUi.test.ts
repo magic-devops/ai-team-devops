@@ -85,7 +85,7 @@ describe("bounded delivery UI data ownership", () => {
     );
     expect(
       source.match(/queryGeneration=\{data.query_generation\}/g),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(source).toContain("invalidateDeliveryQueries(qc, projectId)");
     expect(source).toContain(
       "retainedRequirement.current?.requirement.id !== selectedId",

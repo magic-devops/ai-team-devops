@@ -10,17 +10,29 @@ import { getSessionRevision } from "@/lib/authStorage";
 import { ArrowRight, FileText, Inbox } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { DeliveryInbox, DeliveryContext } from "@/lib/delivery";
+import {
+  inboxCategories,
+  type InboxCategory,
+} from "@/lib/deliveryProjectInbox";
 
 export function DeliveryProjectOverview({
   data,
   inbox,
   onView,
   onMilestone,
+  onInboxCategory,
+  inboxError,
+  inboxLoading,
+  onRefreshInbox,
 }: {
   data: DeliveryContext;
   inbox?: DeliveryInbox;
   onView: (view: string) => void;
   onMilestone: (id: string) => void;
+  onInboxCategory?: (category: InboxCategory) => void;
+  inboxError?: string;
+  inboxLoading?: boolean;
+  onRefreshInbox?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
@@ -152,15 +164,36 @@ export function DeliveryProjectOverview({
         <div>
           <h2>{tp("mine")}</h2>
           <p>
-            {inbox
+            {inbox && !inboxError
               ? t("deliveryProject.pendingCount", { count: inbox.counts.total })
               : tp("inbox")}
           </p>
-          {inbox && (
-            <small>
-              {tp("category.acceptance")} {inbox.counts.acceptance} ·{" "}
-              {tp("category.blocked")} {inbox.counts.blocked}
-            </small>
+          {inboxLoading && <Skeleton active paragraph={false} />}
+          {inboxError && (
+            <DeliveryQueryError
+              error={inboxError}
+              onRetry={onRefreshInbox || (() => {})}
+              onReset={onRefreshInbox}
+            />
+          )}
+          {inbox && !inboxError && (
+            <div className="delivery-overview-inbox-counts">
+              {inboxCategories.map((category) => (
+                <button
+                  type="button"
+                  key={category}
+                  aria-label={tp(`category.${category}`)}
+                  onClick={() =>
+                    onInboxCategory
+                      ? onInboxCategory(category)
+                      : onView("inbox")
+                  }
+                >
+                  <span>{tp(`category.${category}`)}</span>
+                  <strong>{inbox.counts[category]}</strong>
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <Button size="small" onClick={() => onView("inbox")}>

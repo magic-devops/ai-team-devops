@@ -27,9 +27,16 @@ describe("project resources and delivery inbox", () => {
   });
   it("pins project and scope in the actual request and supports cancellation", async () => {
     const signal = new AbortController().signal;
+    vi.mocked(request).mockResolvedValue({
+      project_id: "p-one",
+      scope: "team",
+      category: "all",
+      limit: 20,
+      items: [],
+    });
     await fetchDeliveryInbox("p-one", "team", signal);
     expect(vi.mocked(request).mock.calls.at(-1)).toEqual([
-      "/api/v1/delivery/inbox?scope=team",
+      "/api/v1/delivery/inbox?scope=team&category=all&limit=20",
       { headers: { "X-Project-Id": "p-one" }, signal },
     ]);
   });

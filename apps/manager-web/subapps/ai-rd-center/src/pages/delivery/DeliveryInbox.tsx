@@ -9,19 +9,20 @@ import type {
   DeliveryContext,
 } from "@/lib/delivery";
 import {
-  filterDeliveryInbox,
   inboxCategories,
   type InboxCategory,
   type InboxScope,
 } from "@/lib/deliveryProjectInbox";
 import { deliveryBlocker } from "@/lib/deliveryBlockers";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
+import { deliveryQueryFailure } from "@/lib/deliveryQuery";
 
 export function DeliveryInbox({
   data,
   workspace,
   scope,
   category,
+  page = 1,
   loading,
   refreshing,
   error,
@@ -29,11 +30,18 @@ export function DeliveryInbox({
   onCategory,
   onRefresh,
   onOpen,
+  onFirstPage,
+  onNextPage,
+  navigationError,
+  navigationBusy,
+  onRetryOpen,
 }: {
   data?: InboxData;
   workspace: DeliveryContext;
   scope: InboxScope;
   category: InboxCategory;
+  page?: number;
+  cursor?: string;
   loading: boolean;
   refreshing: boolean;
   error?: string;
@@ -41,10 +49,19 @@ export function DeliveryInbox({
   onCategory: (category: InboxCategory) => void;
   onRefresh: () => void;
   onOpen: (target: DeliveryInboxTarget) => void;
+  onFirstPage?: () => void;
+  onNextPage?: (cursor: string) => void;
+  navigationError?: string;
+  navigationBusy?: string;
+  onRetryOpen?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
-  const items = filterDeliveryInbox(data?.items || [], category);
+  const ta = (key: string, values?: Record<string, unknown>) =>
+    t(`deliveryAttention.${key}`, values);
+  const failure = deliveryQueryFailure(error);
+  const current = !error ? data : undefined;
+  const items = current?.items || [];
   const identity = useMemberIdentity();
   const memberRefs = useDeliveryMemberReferences(
     workspace.project.id,
@@ -63,11 +80,15 @@ export function DeliveryInbox({
         }).format(new Date(`${date.slice(0, 10)}T12:00:00Z`))
       : tp("unscheduled");
   const statusLabel = (item: DeliveryInboxItem) =>
-    t(`deliveryProject.status.${item.status}`, {
-      defaultValue: t(`delivery.statuses.${item.status}`, {
-        defaultValue: item.status,
-      }),
-    });
+    item.acceptance_kind === "manual"
+      ? ta("manualAcceptance")
+      : item.acceptance_kind === "execution"
+        ? ta("executionAcceptance")
+        : t(`deliveryProject.status.${item.status}`, {
+            defaultValue: t(`delivery.statuses.${item.status}`, {
+              defaultValue: item.status,
+            }),
+          });
   const openItem = (item: DeliveryInboxItem) =>
     onOpen({
       ...item.target,
@@ -98,10 +119,10 @@ export function DeliveryInbox({
             { label: tp("team"), value: "team" },
           ]}
         />
-        {data && (
+        {current && (
           <small>
             {t("deliveryProject.asOf", {
-              time: new Date(data.as_of).toLocaleString(i18n.language),
+              time: new Date(current.as_of).toLocaleString(i18n.language),
             })}
           </small>
         )}
@@ -110,10 +131,32 @@ export function DeliveryInbox({
         <Alert
           type="error"
           showIcon
-          title={error}
+          title={
+            failure.stale
+              ? ta("changed")
+              : failure.rebuild
+                ? t("deliveryQuery.rebuildRequired")
+                : error
+          }
           action={
-            <Button size="small" onClick={onRefresh}>
-              {t("delivery.refresh")}
+            <Button
+              size="small"
+              onClick={failure.stale && onFirstPage ? onFirstPage : onRefresh}
+            >
+              {failure.stale ? ta("firstPage") : t("delivery.refresh")}
+            </Button>
+          }
+        />
+      )}
+      {navigationError && (
+        <Alert
+          type="error"
+          showIcon
+          title={ta("openFailed")}
+          description={navigationError}
+          action={
+            <Button size="small" onClick={onRetryOpen}>
+              {ta("retryOpen")}
             </Button>
           }
         />
@@ -132,7 +175,7 @@ export function DeliveryInbox({
                 onClick={() => onCategory(category === key ? "all" : key)}
               >
                 <span>{tp(`category.${key}`)}</span>
-                <strong>{data?.counts[key] ?? "—"}</strong>
+                <strong>{current?.counts[key] ?? "—"}</strong>
               </button>
             ))}
           </div>
@@ -143,7 +186,7 @@ export function DeliveryInbox({
               aria-pressed={category === "all"}
               onClick={() => onCategory("all")}
             >
-              {tp("all")} {data?.counts.total ?? "—"}
+              {tp("all")} {current?.counts.total ?? "—"}
             </Button>
             <Button
               size="small"
@@ -153,11 +196,11 @@ export function DeliveryInbox({
                 onCategory(category === "overdue" ? "all" : "overdue")
               }
             >
-              {tp("overdue")} {data?.counts.overdue ?? "—"}
+              {tp("overdue")} {current?.counts.overdue ?? "—"}
             </Button>
             <span>{tp("uniqueHint")}</span>
           </div>
-          {data &&
+          {current &&
             (items.length ? (
               <div className="delivery-inbox-list">
                 {items.map((item) => (
@@ -171,6 +214,7 @@ export function DeliveryInbox({
                         <h3>
                           <button
                             className="delivery-title-link"
+                            disabled={Boolean(navigationBusy)}
                             onClick={() => openItem(item)}
                           >
                             {item.title}
@@ -229,6 +273,16 @@ export function DeliveryInbox({
                           ))}
                         </ul>
                       )}
+                      {item.blocked_reason_count >
+                        item.blocked_reasons.length && (
+                        <small className="delivery-hint">
+                          {ta("moreBlockers", {
+                            count:
+                              item.blocked_reason_count -
+                              item.blocked_reasons.length,
+                          })}
+                        </small>
+                      )}
                     </div>
                     <div className="delivery-inbox-end">
                       <span className={item.overdue ? "delivery-overdue" : ""}>
@@ -237,9 +291,19 @@ export function DeliveryInbox({
                       <Button
                         size="small"
                         icon={<ArrowRight size={13} />}
+                        loading={Boolean(
+                          navigationBusy && navigationBusy === item.task_id,
+                        )}
+                        disabled={Boolean(
+                          navigationBusy && navigationBusy !== item.task_id,
+                        )}
                         onClick={() => openItem(item)}
                       >
-                        {tp("open")}
+                        {item.acceptance_kind === "manual"
+                          ? ta("openManualAcceptance")
+                          : item.acceptance_kind === "execution"
+                            ? ta("openExecutionAcceptance")
+                            : tp("open")}
                       </Button>
                     </div>
                   </article>
@@ -264,6 +328,24 @@ export function DeliveryInbox({
                 }
               />
             ))}
+          {current && (
+            <div className="delivery-query-pagination delivery-attention-pagination">
+              <span role="status">
+                {ta("pageCount", { page, total: current.total })}
+              </span>
+              <Button disabled={page <= 1 || refreshing} onClick={onFirstPage}>
+                {ta("firstPage")}
+              </Button>
+              <Button
+                disabled={
+                  !current.has_more || !current.next_cursor || refreshing
+                }
+                onClick={() => onNextPage?.(current.next_cursor!)}
+              >
+                {ta("nextPage")}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </section>

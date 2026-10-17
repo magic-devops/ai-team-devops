@@ -43,6 +43,8 @@ export type DeliveryRoute = {
   issue: string;
   inboxScope: InboxScope;
   inboxCategory: InboxCategory;
+  inboxPage: number;
+  inboxCursor: string;
   resourceKind: ResourceKindFilter;
   showArchived: boolean;
   search: string;
@@ -89,6 +91,8 @@ export function parseDeliveryRoute(hash: string): DeliveryRoute {
     inboxCategory: ["all", "overdue", ...inboxCategories].includes(category)
       ? (category as InboxCategory)
       : "all",
+    inboxPage: pageNumber("inbox_page"),
+    inboxCursor: params.get("inbox_cursor") || "",
     resourceKind: ["all", ...resourceKinds].includes(kind)
       ? (kind as ResourceKindFilter)
       : "all",
@@ -118,6 +122,15 @@ export function deliveryInboxHash(
 ) {
   target = normalizeInboxTarget(target);
   const params = new URLSearchParams(source.split("?")[1]);
+  if (
+    (filters.inboxScope &&
+      filters.inboxScope !== (params.get("inbox_scope") || "mine")) ||
+    (filters.inboxCategory &&
+      filters.inboxCategory !== (params.get("category") || "all"))
+  ) {
+    params.delete("inbox_cursor");
+    params.delete("inbox_page");
+  }
   if ((params.get("requirement") || "") !== target.requirement_id) {
     params.delete("task_page");
     params.delete("task_cursor");
@@ -158,6 +171,8 @@ export function deliveryInboxHash(
     ["taskPage", "task_page"],
     ["taskCursor", "task_cursor"],
     ["taskSort", "task_sort"],
+    ["inboxPage", "inbox_page"],
+    ["inboxCursor", "inbox_cursor"],
   ] as const) {
     if (field in filters)
       filters[field]

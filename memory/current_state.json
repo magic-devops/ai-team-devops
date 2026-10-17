@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-17T16:49:37.017353+00:00",
+  "updated_at": "2026-10-17T17:17:58.979133+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-17T16:49:37.017353+00:00",
-    "status": "bounded_queries_and_exact_workspaces_verified_with_documented_limits",
+    "updated_at": "2026-10-17T17:17:58.979133+00:00",
+    "status": "bounded_attention_and_manual_acceptance_verified_with_documented_limits",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,275 +15,88 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/delivery-query/",
+    "evidence": ".sop-runtime/delivery-evidence/delivery-attention/",
     "verification_status": "passed_with_documented_limits",
-    "next_step": "bounded_manual_review_and_other_specialized_reads_generic_activity_sources_actual_visual_and_production_validation",
+    "next_step": "windows_native_transport_consistency_object_discussions_and_traceable_adoption_specialized_bounded_reads",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "stage": "bounded_delivery_queries_exact_workspaces_and_consistent_interactions",
-      "base": "1cec3e6",
-      "verified_at": "2026-10-17T16:49:37.017353+00:00",
-      "manager_full_passed": 1400,
+      "stage": "bounded_attention_inbox_manual_acceptance_and_lightweight_overview",
+      "base": "7bd27cd",
+      "verified_at": "2026-10-17T17:17:58.979133+00:00",
+      "manager_full_passed": 1415,
       "manager_full_failed": 0,
-      "manager_full_seconds": 392.8,
-      "manager_full_wall_seconds": 426.564,
-      "manager_initial_passed": 1399,
-      "manager_initial_failed": 1,
-      "manager_initial_failure": "old raw adoption test expected workspace; migrated to original Ack plus exact detail and DB uniqueness",
-      "web_passed": 587,
-      "web_files": 114,
-      "web_seconds": 58.14,
-      "web_wall_seconds": 60.509,
-      "web_initial_passed": 565,
-      "web_initial_failed": 9,
-      "sdk_cli_related_passed": 105,
-      "sdk_cli_related_seconds": 2.98,
-      "sdk_cli_full_passed": 206,
+      "web_full_passed": 603,
+      "sdk_cli_related_passed": 140,
+      "sdk_cli_full_passed": 241,
       "sdk_cli_full_failed": 2,
-      "sdk_cli_full_seconds": 43.6,
-      "sdk_cli_unchanged_baseline_failures": 2,
+      "sdk_cli_full_failure_names": [
+        "test_agentd_ipc_missing_socket_returns_structured_error",
+        "test_pages_cli_exposes_interaction_analysis_command"
+      ],
       "typescript_build": "passed",
-      "typescript_wall_seconds": 65.664,
       "production_build": "passed",
-      "production_build_wall_seconds": 34.018,
+      "verification_wall_seconds": {
+        "manager-1": 495.747,
+        "web-final": 50.357,
+        "tsc-final": 61.628,
+        "vite-final": 69.852,
+        "clients-related-final": 7.383
+      },
+      "backend_targeted_passed": 56,
+      "backend_independent_probes_passed": 4,
+      "backend_independent_existing_passed": 15,
+      "frontend_targeted_passed": 61,
+      "independent_frontend_validated_p2_fixed": 2,
+      "independent_unresolved_p1_p2": 0,
       "actual_http_passed": true,
-      "actual_http_production_sources": 17,
-      "actual_sdk_methods": 9,
-      "actual_cli_selections": 9,
-      "actual_selected_reference_ids": 100,
-      "actual_cursor_chars": 280,
+      "actual_http_initial_assertion_correction": "helper expected recorded_completed=3 after one acceptance; effective six-state metric correctly returns 2; production unchanged",
+      "actual_sdk_methods": 2,
+      "actual_cli_selections": 2,
       "pure_get_databases": 3,
       "pure_get_unchanged_tables": 33,
-      "rebuild_domain_writes": 0,
       "benchmark_requirements": 10000,
-      "benchmark_tasks": 10000,
-      "benchmark_bounded_trials": 15,
-      "benchmark_loaded_dependency_modules": 70,
-      "benchmark_source_files": 427,
-      "benchmark_summary": {
-        "context": {
-          "seconds": [
-            0.012541999996756203,
-            0.010821999996551313,
-            0.009764599992195144
-          ],
-          "response_bytes": [
-            1658,
-            1658,
-            1658
-          ],
-          "queries_including_fixture_lookups": [
-            5,
-            5,
-            5
-          ],
-          "subject_queries": [
-            3,
-            3,
-            3
-          ],
-          "workspace_decodes": [
-            0,
-            0,
-            0
-          ],
-          "orm_business_rows": [
-            {},
-            {},
-            {}
-          ]
-        },
-        "requirements-first": {
-          "seconds": [
-            0.137074099999154,
-            0.13291689999459777,
-            0.1323378000088269
-          ],
-          "response_bytes": [
-            10378,
-            10378,
-            10378
-          ],
-          "queries_including_fixture_lookups": [
-            7,
-            7,
-            7
-          ],
-          "subject_queries": [
-            5,
-            5,
-            5
-          ],
-          "workspace_decodes": [
-            0,
-            0,
-            0
-          ],
-          "orm_business_rows": [
-            {},
-            {},
-            {}
-          ]
-        },
-        "tasks-recorded-first": {
-          "seconds": [
-            0.026852900002268143,
-            0.02669979998609051,
-            0.021052900003269315
-          ],
-          "response_bytes": [
-            11607,
-            11607,
-            11607
-          ],
-          "queries_including_fixture_lookups": [
-            6,
-            6,
-            6
-          ],
-          "subject_queries": [
-            4,
-            4,
-            4
-          ],
-          "workspace_decodes": [
-            0,
-            0,
-            0
-          ],
-          "orm_business_rows": [
-            {},
-            {},
-            {}
-          ]
-        },
-        "requirement-exact": {
-          "seconds": [
-            0.014335100000607781,
-            0.011397199996281415,
-            0.010601999994833022
-          ],
-          "response_bytes": [
-            2894,
-            2894,
-            2894
-          ],
-          "queries_including_fixture_lookups": [
-            7,
-            7,
-            7
-          ],
-          "subject_queries": [
-            5,
-            5,
-            5
-          ],
-          "workspace_decodes": [
-            0,
-            0,
-            0
-          ],
-          "orm_business_rows": [
-            {
-              "requirements": 1
-            },
-            {
-              "requirements": 1
-            },
-            {
-              "requirements": 1
-            }
-          ]
-        },
-        "task-exact": {
-          "seconds": [
-            0.013222800000221469,
-            0.011612799993599765,
-            0.012490499997511506
-          ],
-          "response_bytes": [
-            3335,
-            3335,
-            3335
-          ],
-          "queries_including_fixture_lookups": [
-            9,
-            9,
-            9
-          ],
-          "subject_queries": [
-            7,
-            7,
-            7
-          ],
-          "workspace_decodes": [
-            0,
-            0,
-            0
-          ],
-          "orm_business_rows": [
-            {
-              "tasks": 1,
-              "requirements": 1
-            },
-            {
-              "tasks": 1,
-              "requirements": 1
-            },
-            {
-              "tasks": 1,
-              "requirements": 1
-            }
-          ]
-        }
-      },
+      "benchmark_tasks": 10001,
+      "benchmark_trials": 12,
+      "benchmark_manager_source_files": 206,
+      "benchmark_loaded_source_modules": 51,
       "benchmark_sql_functions_not_http_or_production": true,
-      "independent_validated_p2_fixed": 6,
-      "independent_new_unresolved_p1_p2": 0,
-      "python_lint_files": 32,
-      "python_lint_new_files": 12,
-      "python_lint_baseline_diagnostics": 4,
-      "python_lint_current_diagnostics": 3,
+      "query_schema_version": 2,
+      "openapi_models": 7,
+      "openapi_resolved_refs": 964,
       "python_lint_new_or_worsened_diagnostics": 0,
-      "openapi_models": 12,
-      "openapi_resolved_refs": 960,
-      "openapi_new_operations": 9,
-      "openapi_command_ack_updated": true,
-      "postgresql_ddl_compiled": true,
-      "live_postgresql_verified": false,
       "external_model_calls": 0,
       "actual_390px_zh_en_ja_visual_verified": false,
       "production_integration_complete": false,
-      "complete_goal_still_active": true
+      "goal_complete": false
     },
     "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
     "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/delivery-query/commit-receipt.json",
+    "commit_receipt": ".sop-runtime/delivery-evidence/delivery-attention/commit-receipt.json",
     "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md",
     "team_identity_design": "docs/DELIVERY_TEAM_IDENTITY_DESIGN.md",
     "team_runtime_design": "docs/DELIVERY_TEAM_RUNTIME_DESIGN.md",
     "last_verified_stage": {
+      "stage": "bounded_attention_inbox_manual_acceptance_and_lightweight_overview",
+      "verified_at": "2026-10-17T17:17:58.979133+00:00",
+      "commit_receipt": ".sop-runtime/delivery-evidence/delivery-attention/commit-receipt.json",
+      "manager_passed": 1415,
+      "web_passed": 603,
+      "sdk_cli_related_passed": 140
+    },
+    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
+    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
+    "previous_verified_stage": {
       "stage": "bounded_delivery_queries_exact_workspaces_and_consistent_interactions",
       "verified_at": "2026-10-17T16:49:37.017353+00:00",
       "commit_receipt": ".sop-runtime/delivery-evidence/delivery-query/commit-receipt.json",
       "manager_passed": 1400,
       "web_passed": 587,
       "sdk_cli_related_passed": 105
-    },
-    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
-    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
-    "previous_verified_stage": {
-      "stage": "delivery_activity_observed_requirement_versions_and_change_impact",
-      "commit_receipt": ".sop-runtime/delivery-evidence/delivery-collaboration/commit-receipt.json",
-      "verified_at": "2026-10-17T15:44:45.162404+00:00",
-      "manager_passed": 1374,
-      "web_passed": 560,
-      "sdk_cli_related_passed": 92
     },
     "deployment_design": "docs/DELIVERY_DEPLOYMENT_DESIGN.md",
     "deployment_guide": "docs/CONTROLLED_DEPLOYMENT_GUIDE.md",
@@ -292,13 +105,14 @@
     "execution_runtime_design": "docs/DELIVERY_EXECUTION_RUNTIME_DESIGN.md",
     "collaboration_design": "docs/DELIVERY_COLLABORATION_DESIGN.md",
     "current_stage": {
-      "id": "T-delivery-query",
-      "base": "1cec3e6",
+      "id": "T-delivery-attention",
+      "base": "7bd27cd",
       "status": "verified",
-      "evidence": ".sop-runtime/delivery-evidence/delivery-query/",
+      "evidence": ".sop-runtime/delivery-evidence/delivery-attention/",
       "goal_complete": false
     },
-    "query_design": "docs/DELIVERY_QUERY_DESIGN.md"
+    "query_design": "docs/DELIVERY_QUERY_DESIGN.md",
+    "attention_design": "docs/DELIVERY_ATTENTION_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -727,15 +541,18 @@
       "受控部署全链路：固定环境与候选、真实agentd及配对worker、独立探针和灰度晋级、明确稳定基线回滚、未知副作用只读恢复、唯一Issue及需求回流；退役41个旧假成功入口，完成审查和全量回归",
       "问题真实证据、固定AI/规则诊断与人工唯一需求回流：生产会话、中断恢复、三项独立审查修复及完整回归；实机视觉和生产验证继续。",
       "安全活动/精确导航、需求真实观测版本与固定变更影响、Sprint有效验收统计；两项真实HTTP缺陷原症状修复、最终回归及客户端验证。",
-      "需求/任务/引用SQL分页、精确详情、共享验收计算及全部交付UI读取切换；修复刷新/混代/会话/详情失败与权限问题，完整回归、万级及真实HTTP验证。"
+      "需求/任务/引用SQL分页、精确详情、共享验收计算及全部交付UI读取切换；修复刷新/混代/会话/详情失败与权限问题，完整回归、万级及真实HTTP验证。",
+      "有界个人/团队待办、人工验收遗漏修复、首页轻量指标及覆盖、当前任务读取和三语分页交互；完整相关回归和万级/真实HTTP验证。"
     ],
     "in_progress": [
-      "显式人工评审及其他专属读取的有界化、通用/跨存储统一活动来源",
-      "当前390px中英日实机视觉、生产身份/模型、真实数据库/基础设施与长期复杂规模验证，遵守原策略限制"
+      "Windows SDK与agentd默认pipe地址统一、两项已确认旧客户端断言迁移",
+      "业务对象讨论/结论明确采纳与问题诊断来源摘要、通用活动统一",
+      "主动打开的人工评审、历史影响、完整进度/质量等专属读取有界化",
+      "当前390px三语实际视觉和生产身份/模型/数据库/基础设施及长期验证，遵守既有策略限制"
     ],
     "blocked": [],
     "pending": [],
-    "current": "有界需求/任务/引用目录、精确工作区与统一回执已验证；全流程目标继续active，生产与实机验证未完成。"
+    "current": "有界待办与首页轻量进度已验证；人工完成未验收保持可见、当前任务导航及分页交互闭环。全产品目标继续active。"
   },
   "metrics": {
     "completion_rate": null,
@@ -743,5 +560,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "有界需求/任务/引用目录、精确工作区与统一回执已验证；全流程目标继续active，生产与实机验证未完成。"
+  "current": "有界待办与首页轻量进度已验证；人工完成未验收保持可见、当前任务导航及分页交互闭环。全产品目标继续active。"
 }

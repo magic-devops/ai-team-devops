@@ -108,7 +108,7 @@ def _awaiting(task, requirement, entry, latest):
     )
 
 
-def _item(kind, record, requirement, owner_id, categories, reasons, today, *, task=None, status=None):
+def _item(kind, record, requirement, owner_id, categories, reasons, today, *, task=None, status=None, acceptance_kind=None):
     flow = _flow(requirement) if requirement else default_flow()
     rid = requirement["id"] if requirement else ""
     tid = task["id"] if task else ""
@@ -120,6 +120,8 @@ def _item(kind, record, requirement, owner_id, categories, reasons, today, *, ta
     }
     if tid:
         target["task_id"] = tid
+    if kind == "issue":
+        target["issue_id"] = record["id"]
     return {
         "id": kind + ":" + record["id"],
         "kind": kind,
@@ -133,25 +135,36 @@ def _item(kind, record, requirement, owner_id, categories, reasons, today, *, ta
         "due_on": deadline,
         "priority": record.get("severity" if kind == "issue" else "priority") or "P1",
         "categories": [category for category in CATEGORIES if category in categories],
-        "blocked_reasons": list(dict.fromkeys(reasons)),
+        "blocked_reasons": list(dict.fromkeys(reasons))[:5],
+        "blocked_reason_count": len(set(reasons)),
+        "acceptance_kind": acceptance_kind,
         "overdue": bool(deadline and deadline < today),
         "target": target,
     }
 
 
-def _approval(requirement, tasks, issues, reasons):
+def _approval(requirement, tasks, issues, reasons, evaluated_gates=None):
     flow = _flow(requirement)
     if flow["closed"] or flow.get("legacy_completed") or flow["stage"] not in STAGE_IDS[:-1] or reasons:
         return False
-    checks = stage_gates(
-        requirement, flow, tasks, issues,
-        deployment_verified=requirement.get("deployment_verified") is True,
-    )
+    checks = evaluated_gates
+    if checks is None:
+        checks = stage_gates(
+            requirement, flow, tasks, issues,
+            deployment_verified=requirement.get("deployment_verified") is True,
+        )
     return bool(checks) and all(check.get("ok") is True for check in checks)
 
 
-def _requirement_items(requirements, tasks, issues, reasons, mine, scope, can_approve, today):
+def _requirement_items(requirements, tasks, issues, reasons, mine, scope, can_approve, today, evaluated_gates=None):
     result = []
+    tasks_by_requirement = defaultdict(list)
+    issues_by_requirement = defaultdict(list)
+    requirement_by_task = {task["id"]: task.get("req_id") for task in tasks}
+    for task in tasks:
+        tasks_by_requirement[task.get("req_id")].append(task)
+    for issue in issues:
+        issues_by_requirement[requirement_by_task.get(issue.get("task_id"))].append(issue)
     for requirement in requirements:
         rid = requirement["id"]
         flow = _flow(requirement)
@@ -162,7 +175,10 @@ def _requirement_items(requirements, tasks, issues, reasons, mine, scope, can_ap
                 categories.add("work")
             if blockers:
                 categories.add("blocked")
-        if can_approve and _approval(requirement, tasks, issues, blockers):
+        if can_approve and _approval(
+            requirement, tasks_by_requirement[rid], issues_by_requirement[rid], blockers,
+            (evaluated_gates or {}).get(rid),
+        ):
             categories.add("approval")
         if categories:
             result.append(
@@ -185,7 +201,7 @@ def _sort(item):
     )
 
 
-def build_inbox(snapshot, user, scope="mine", now=None):
+def build_inbox(snapshot, user, scope="mine", now=None, *, evaluated_gates=None):
     """Project authorized current records without changing their state or evidence."""
     if scope not in {"mine", "team"}:
         raise ValueError("scope must be mine or team")
@@ -214,7 +230,8 @@ def build_inbox(snapshot, user, scope="mine", now=None):
     reasons_by_requirement = _requirement_reasons(requirements, tasks, task_reasons)
     can_approve = scope == "team" or snapshot.get("permissions", {}).get("approve") is True
     items = _requirement_items(
-        requirements, tasks, issues, reasons_by_requirement, mine_requirements, scope, can_approve, today
+        requirements, tasks, issues, reasons_by_requirement, mine_requirements, scope, can_approve, today,
+        evaluated_gates,
     )
     items.extend(
         _task_items(
@@ -264,7 +281,13 @@ def _task_items(snapshot, tasks, requirements, reasons, mine, mine_requirements,
     result = []
     for task in tasks:
         requirement = requirements.get(task.get("req_id"))
-        awaiting = _awaiting(task, requirement, by_id.get(task.get("execution_id")), latest)
+        native = _awaiting(task, requirement, by_id.get(task.get("execution_id")), latest)
+        manual = (
+            task["id"] not in latest
+            and task.get("recorded_status", task.get("status")) == "completed"
+            and task.get("verified") is not True
+        )
+        awaiting = native or manual
         personal = task["id"] in mine
         categories = set()
         if awaiting and (
@@ -287,7 +310,8 @@ def _task_items(snapshot, tasks, requirements, reasons, mine, mine_requirements,
                     reasons[task["id"]],
                     today,
                     task=task,
-                    status="awaiting_review" if awaiting else None,
+                    status="recorded_completed" if manual else "awaiting_review" if native else None,
+                    acceptance_kind="manual" if manual else "execution" if native else None,
                 )
             )
     return result

@@ -346,11 +346,31 @@ class ManagerClient:
         """Preview a fixed deploy or rollback; this performs no infrastructure action."""
         return self._request("POST", "/api/v1/delivery/deployment-preview", json_body=dict(body))
 
-    def delivery_inbox(self, *, scope: str = "mine") -> dict[str, Any]:
-        """Read actual personal or team delivery work in the selected project."""
+    def delivery_inbox(
+        self, *, scope: str = "mine", category: str = "all", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one bounded page; counts describe the whole selected scope."""
         if scope not in {"mine", "team"}:
             raise ValueError("scope must be mine or team")
-        return self._request("GET", "/api/v1/delivery/inbox", params={"scope": scope})
+        if category not in {"all", "work", "approval", "acceptance", "blocked", "overdue"}:
+            raise ValueError("invalid inbox category")
+        params = _delivery_query_params(limit=limit, cursor=cursor, scope=scope, category=category)
+        return self._request("GET", "/api/v1/delivery/inbox", params=params)
+
+    def delivery_progress_summary(
+        self, *, starts_on: str | None = None, ends_on: str | None = None
+    ) -> dict[str, Any]:
+        """Read bounded current metrics and actual observation coverage without task snapshots."""
+        start = _progress_date(starts_on) if starts_on is not None else None
+        end = _progress_date(ends_on) if ends_on is not None else None
+        if start and end and not 0 <= (end - start).days < 366:
+            raise ValueError("progress date range must contain between 1 and 366 days")
+        params = {}
+        if starts_on is not None:
+            params["starts_on"] = starts_on
+        if ends_on is not None:
+            params["ends_on"] = ends_on
+        return self._request("GET", "/api/v1/delivery/progress/summary", params=params)
 
     def delivery_progress(
         self,

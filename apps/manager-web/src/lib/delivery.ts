@@ -4,6 +4,7 @@ import type { TaskAcceptance } from "./taskAcceptance";
 import type { ProgressState } from "./deliveryProgress";
 import type { ExecutorSnapshot } from "./deliveryTeamRuntime";
 import type { DeliveryCommandAck } from "./deliveryQuery";
+import { assertDeliveryGeneration } from "./deliveryQuery";
 export type {
   DeliveryCommandAck,
   DeliveryContext,
@@ -205,13 +206,21 @@ export type DeliveryInboxItem = {
   priority: string;
   categories: ("work" | "approval" | "acceptance" | "blocked")[];
   blocked_reasons: string[];
+  blocked_reason_count: number;
+  acceptance_kind: "manual" | "execution" | null;
   overdue: boolean;
   target: DeliveryInboxTarget;
 };
 export type DeliveryInbox = {
   project_id: string;
   version: number;
+  query_generation: number;
   scope: "mine" | "team";
+  category: DeliveryInboxCategory;
+  total: number;
+  limit: number;
+  has_more: boolean;
+  next_cursor: string | null;
   current_user_id: string;
   as_of: string;
   counts: {
@@ -224,14 +233,40 @@ export type DeliveryInbox = {
   };
   items: DeliveryInboxItem[];
 };
+export type DeliveryInboxCategory =
+  | "all"
+  | "work"
+  | "approval"
+  | "acceptance"
+  | "blocked"
+  | "overdue";
 export function fetchDeliveryInbox(
   projectId: string,
   scope: "mine" | "team",
   signal?: AbortSignal,
+  query: {
+    category?: DeliveryInboxCategory;
+    limit?: number;
+    cursor?: string;
+  } = {},
+  queryGeneration?: number | null,
 ) {
-  return request<DeliveryInbox>(`/api/v1/delivery/inbox?scope=${scope}`, {
+  const params = new URLSearchParams({
+    scope,
+    category: query.category || "all",
+    limit: String(query.limit ?? 20),
+  });
+  if (query.cursor) params.set("cursor", query.cursor);
+  return request<DeliveryInbox>(`/api/v1/delivery/inbox?${params}`, {
     signal,
     headers: { "X-Project-Id": projectId },
+  }).then((value) => {
+    if (queryGeneration !== undefined)
+      assertDeliveryGeneration(
+        { project_id: projectId, query_generation: queryGeneration },
+        value,
+      );
+    return value;
   });
 }
 export type DeliveryWorkspace = {

@@ -45,7 +45,6 @@ import { getProjectId, getToken } from "@/lib/authStorage";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   deliveryStages,
-  fetchDeliveryInbox,
   prepareDeliveryIntent,
   safeEvidenceUrl,
   saveDelivery,
@@ -81,6 +80,10 @@ import {
 } from "@/lib/deliveryProjectInbox";
 import { DeliveryProjectResources } from "./DeliveryProjectResources";
 import { DeliveryInbox } from "./DeliveryInbox";
+import {
+  useDeliveryInboxQuery,
+  useDeliveryInboxNavigation,
+} from "@/lib/deliveryAttention";
 import { DeliveryProjectOverview } from "./DeliveryProjectOverview";
 import { DeliveryProgress, DeliveryProgressSummary } from "./DeliveryProgress";
 import { preserveProgressRoute } from "@/lib/deliveryProgress";
@@ -389,16 +392,17 @@ function ProjectDelivery() {
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const data = executionPinnedWorkspace || query.data;
-  const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
-  const inboxQuery = useQuery({
-    queryKey: ["delivery-inbox", projectId, sessionId, inboxQueryScope],
-    queryFn: ({ signal }) =>
-      fetchDeliveryInbox(projectId, inboxQueryScope, signal),
+  const inboxQuery = useDeliveryInboxQuery({
+    projectId,
+    sessionId,
+    queryGeneration: data?.query_generation,
+    view,
+    scope: inboxScope,
+    category: inboxCategory,
+    cursor: route.inboxCursor,
     enabled: Boolean(
-      projectId && getToken() && data && ["overview", "inbox"].includes(view),
+      projectId && getToken() && data?.query_state.status === "ready",
     ),
-    gcTime: 0,
-    refetchInterval: 5000,
   });
   const saveWorkspace = (updated: DeliveryCommandAck) => {
     if (
@@ -512,6 +516,16 @@ function ProjectDelivery() {
       patch,
     );
   };
+  const inboxNavigation = useDeliveryInboxNavigation({
+    projectId,
+    sessionId,
+    view,
+    scope: inboxScope,
+    category: inboxCategory,
+    cursor: route.inboxCursor,
+    canNavigate: executionExit.canNavigate,
+    onOpen: openTarget,
+  });
   const releaseReturn = releaseReturnFromHash(location.hash);
   const collaborationReturn = safeCollaborationReturn(
     new URLSearchParams(location.hash.split("?")[1]).get(
@@ -1037,6 +1051,23 @@ function ProjectDelivery() {
             }}
             data={data}
             inbox={inboxQuery.data}
+            inboxError={inboxQuery.error?.message}
+            inboxLoading={inboxQuery.isPending}
+            onRefreshInbox={() => {
+              void query.refetch();
+              void inboxQuery.refetch();
+            }}
+            onInboxCategory={(category) => {
+              if (!executionExit.canNavigate()) return;
+              setInboxScope("mine");
+              setInboxCategory(category);
+              navigate("inbox", "", "details", "", true, {
+                inboxScope: "mine",
+                inboxCategory: category,
+                inboxPage: 1,
+                inboxCursor: "",
+              });
+            }}
             onView={(nextView) => navigate(nextView, "")}
           />
           <div className="delivery-section-heading">
@@ -1069,6 +1100,8 @@ function ProjectDelivery() {
             <DeliveryProgressSummary
               projectId={projectId}
               sessionId={sessionId}
+              queryGeneration={data.query_generation}
+              onRefreshContext={() => query.refetch()}
               onOpen={() => navigate("progress", "")}
             />
             <section className="delivery-panel">
@@ -1122,6 +1155,8 @@ function ProjectDelivery() {
           workspace={data}
           scope={inboxScope}
           category={inboxCategory}
+          page={route.inboxPage}
+          cursor={route.inboxCursor}
           loading={inboxQuery.isPending}
           refreshing={inboxQuery.isFetching}
           error={inboxQuery.error?.message}
@@ -1130,16 +1165,42 @@ function ProjectDelivery() {
             void inboxQuery.refetch();
           }}
           onScope={(scope) => {
+            if (!executionExit.canNavigate()) return;
             setInboxScope(scope);
-            navigate("inbox", "", "details", "", false, { inboxScope: scope });
-          }}
-          onCategory={(category) => {
-            setInboxCategory(category);
-            navigate("inbox", "", "details", "", false, {
-              inboxCategory: category,
+            navigate("inbox", "", "details", "", true, {
+              inboxScope: scope,
+              inboxPage: 1,
+              inboxCursor: "",
             });
           }}
-          onOpen={openTarget}
+          onCategory={(category) => {
+            if (!executionExit.canNavigate()) return;
+            setInboxCategory(category);
+            navigate("inbox", "", "details", "", true, {
+              inboxCategory: category,
+              inboxPage: 1,
+              inboxCursor: "",
+            });
+          }}
+          onFirstPage={() => {
+            if (!executionExit.canNavigate()) return;
+            navigate("inbox", "", "details", "", true, {
+              inboxPage: 1,
+              inboxCursor: "",
+            });
+            void query.refetch();
+            void inboxQuery.refetch();
+          }}
+          onNextPage={(cursor) =>
+            changeQueryRoute(
+              { inboxPage: route.inboxPage + 1, inboxCursor: cursor },
+              true,
+            )
+          }
+          onOpen={(target) => void inboxNavigation.open(target)}
+          navigationBusy={inboxNavigation.busy}
+          navigationError={inboxNavigation.error}
+          onRetryOpen={() => void inboxNavigation.retry()}
         />
       )}
       {["team", "timeline"].includes(view) && (

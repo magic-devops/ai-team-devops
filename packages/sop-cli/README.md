@@ -288,3 +288,7 @@ sop delivery references --kind task --ids T-example,T-predecessor
 列表的 `total` 为全部匹配数量，下一页使用原参数加 `--cursor <next_cursor>`。变更导致游标过期时回到第一页，不能静默拼接不同代次。详情始终按精确ID读取。`command` 输出原对象的统一回执，无需从完整项目快照猜结果；未知提交仍用原文件和幂等键恢复。
 
 `sop delivery query-rebuild` 是有配置权限时的显式派生索引重建；普通读取不执行修复写入。`workspace` 仅用于明确的完整导出。详见 [查询与详情指南](../../docs/DELIVERY_QUERY_GUIDE.md)。
+
+## 有界交付待办
+
+`sop delivery inbox --scope mine --category acceptance --limit 20 --json` 返回当前页和完整范围分类计数；后续页保留选项并提供 `--cursor <next_cursor>`。文字输出区分本页、匹配总数与是否还有下一页。`sop delivery progress-summary --starts-on 2026-10-01 --ends-on 2026-10-18 --json` 读取轻量项目概览，缺失历史与未来日期分别表达。409 返回首屏，不混合旧页；查询索引 schema 2 缺失时需明确 `sop delivery query-rebuild`，需要配置权限。见 [待办与概览指南](../../docs/DELIVERY_ATTENTION_GUIDE.md)。

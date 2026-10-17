@@ -1,4 +1,5 @@
 import { request } from "./http";
+import { assertDeliveryGeneration } from "./deliveryQuery";
 import type { DeliveryInboxTarget } from "./delivery";
 import type { ScheduleAllocation } from "./deliveryScheduling";
 import type { TaskAcceptance } from "./taskAcceptance";
@@ -144,6 +145,38 @@ export type ProgressObservation = {
   scope: ProgressFacts["scope"];
   current: ProgressFacts;
 };
+export type DeliveryProgressSummary = Pick<
+  DeliveryProgress,
+  "project_id" | "version" | "as_of" | "timezone" | "range" | "coverage"
+> & {
+  query_generation: number;
+  current: { metrics: ProgressMetrics };
+};
+export function fetchDeliveryProgressSummary(
+  projectId: string,
+  range: Pick<ProgressRoute, "startsOn" | "endsOn">,
+  signal?: AbortSignal,
+  queryGeneration?: number | null,
+) {
+  const params = new URLSearchParams({
+    starts_on: range.startsOn,
+    ends_on: range.endsOn,
+  });
+  return request<DeliveryProgressSummary>(
+    `/api/v1/delivery/progress/summary?${params}`,
+    {
+      signal,
+      headers: { "X-Project-Id": projectId },
+    },
+  ).then((value) => {
+    if (queryGeneration !== undefined)
+      assertDeliveryGeneration(
+        { project_id: projectId, query_generation: queryGeneration },
+        value,
+      );
+    return value;
+  });
+}
 export function defaultProgressRange(now = new Date()) {
   const end = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),

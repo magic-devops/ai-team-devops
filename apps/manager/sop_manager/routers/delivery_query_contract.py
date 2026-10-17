@@ -17,7 +17,7 @@ class ReadModel(BaseModel):
 
 class QueryState(ReadModel):
     status: Literal["ready", "rebuild_required"]
-    schema_version: int = 1
+    schema_version: int = 2
     computed_at: str | None = None
 
 

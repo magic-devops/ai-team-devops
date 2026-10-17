@@ -236,3 +236,7 @@ command = {
 `delivery_command(body)` 返回统一回执：`resource` 为原命令的结果对象，`result` 为动作专用结果，`affected_refs` 为需刷新的对象；`applied_version` 固定在原提交，`version/query_generation` 表达当前项目读状态。重放仍返回原对象，即使后来已被删除，不能从当前列表猜测创建结果。旧回执缺少原结果时明确返回 `delivery_receipt_result_unavailable`。
 
 索引缺失时 context 的 summary/metrics 为 null，其余查询明确要求重建；具有配置权限的调用方可显式执行 `delivery_query_rebuild()`。重建只替换派生查询数据，不制造进度或历史。`delivery_workspace()` 保留为明确的完整导出，交互读取不调用它。详见 [查询与详情指南](../../docs/DELIVERY_QUERY_GUIDE.md)。
+
+## 有界待办与概览进度
+
+`delivery_inbox(scope="mine", category="acceptance", limit=20, cursor="")` 先服务端筛选再分页；counts 是完整所选 scope，total 是分类匹配总数，items 仅当前页。下一页保持筛选/limit 并传 next_cursor；generation、审批资格或 UTC 日期变化返回 409，明确重载首屏。人工登记完成未通过当前验收仍为 recorded_completed，acceptance_kind=manual。`delivery_progress_summary(starts_on=None, ends_on=None)` 仅读取当前指标和 UTC 日期覆盖；完整历史使用原 progress。schema 2 缺失需有配置权限者显式重建，GET 无全量回退。见 [交付待办指南](../../docs/DELIVERY_ATTENTION_GUIDE.md)。

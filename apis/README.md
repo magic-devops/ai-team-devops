@@ -54,3 +54,7 @@ buf generate apis/proto
 4. 写 ADR 进 `memory/decisions/`
 5. CHANGELOG 加条目
 6. 如是 break change：双发期开始
+
+## 交付待办和概览进度
+
+`GET /api/v1/delivery/inbox` 使用 scope/category/limit/cursor 的服务端分页，counts 表达完整所选本人/团队范围、total 表达当前分类，返回固定 query_generation 与 UTC 日期绑定游标。人工完成未验证任务为 acceptance_kind=manual；原生执行待审为 execution。`GET /api/v1/delivery/progress/summary` 仅返回项目当前 metrics 与观测日期覆盖。两入口缺少 schema 2 派生索引时明确 409，GET 不写入或全量回退。详细示例见 [交付待办指南](../docs/DELIVERY_ATTENTION_GUIDE.md)。

@@ -134,7 +134,7 @@ def test_canonical_reassignment_moves_the_task_between_stable_owner_inboxes(env)
     assert any(i["resource_id"] == own["id"] for i in inbox(client, scope="team")["items"])
 
 
-def test_finished_tasks_have_no_work_or_overdue_item_and_invalid_legacy_date_is_unknown(env):
+def test_recorded_completion_keeps_manual_acceptance_and_invalid_legacy_date_is_unknown(env):
     client, _, _ = env
     rid = requirement(client)
     done = task(client, rid, "Finished", ends_on="2026-10-16")
@@ -144,9 +144,12 @@ def test_finished_tasks_have_no_work_or_overdue_item_and_invalid_legacy_date_is_
     next(t for t in snapshot["tasks"] if t["id"] == pending["id"])["planning"]["ends_on"] = "2026-19-32"
     result = build_inbox(snapshot, {"id": "lead"}, now=NOW)
     tasks = [i for i in result["items"] if i["kind"] == "task"]
-    assert [i["resource_id"] for i in tasks] == [pending["id"]]
-    assert tasks[0]["due_on"] is None
-    assert result["counts"]["overdue"] == 0
+    by_id = {item["resource_id"]: item for item in tasks}
+    assert set(by_id) == {done["id"], pending["id"]}
+    assert by_id[done["id"]]["categories"] == ["acceptance"]
+    assert by_id[done["id"]]["status"] == "recorded_completed"
+    assert by_id[pending["id"]]["due_on"] is None
+    assert result["counts"]["overdue"] == 1
 
 
 def test_viewer_has_own_work_but_no_team_approval(env):
@@ -215,6 +218,7 @@ def test_blocked_work_and_related_issue_are_deduplicated_by_domain_entity(env):
         "requirement_id": rid,
         "detail": "tasks",
         "task_id": own["id"],
+        "issue_id": "ISS-inbox",
     }
     assert inbox(client, scope="team")["counts"]["blocked"] == 4
 

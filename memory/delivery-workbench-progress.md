@@ -421,3 +421,17 @@ context、需求/任务/问题分页、精确需求/任务/执行、引用目录
 证据 `.sop-runtime/delivery-evidence/delivery-query/` 包含首次失败、审查、RED/GREEN、完整回归、实际HTTP、万级读测、SQL与源散列、清理及commit回执。盘点重要源和唯一证据后清理精确task scratch，不遍历链接，不保存临时密钥；全部非忽略阶段更改commit，不push，依赖store零跟踪。
 
 完整目标保持active、production_integration_complete=false。分页当前首页/下一页，浏览器返回恢复URL窗口；显式人工评审和部分专属接口仍有完整项目计算成本。390px中英日真实视觉仍未验证，遵守先前浏览器协议及12ui安装/上传审批拒绝，不绕过；源码/组件/HTTP与构建不代替实机。通用/跨存储活动来源、复杂依赖与长期规模、生产身份/模型、真实数据库和基础设施继续按实际授权推进。
+
+## 有界待办与概览进度增量（2026-10-18）
+
+设计和使用说明见 `docs/DELIVERY_ATTENTION_DESIGN.md`、`docs/DELIVERY_ATTENTION_GUIDE.md`。基线7bd27cd，阶段T-delivery-attention，完整目标继续active。
+
+- schema2沿用派生查询表，在写事务中生成每对象单行待办；GET按当前身份/角色、scope/category在SQL过滤计数和分页，不回退完整workspace。counts覆盖完整所选scope，total为分类匹配数；游标固定身份/筛选/权限/UTC日期/generation，变化后明确首屏恢复。缺索引需有权限者显式重建，读取不修库。
+- 无执行管理的completed未有效验收任务进入人工待验收，通过后移除、定义变化使原验收失效后重新出现；原生执行保持独立审查。卡片分别显示人工与执行验收，点击任务按当前精确归属进入，删除/403留页重试，切项目/身份/筛选及A→B→A迟到请求不导航。没有新增快速批准。
+- 首页仅取limit1待办以展示全范围计数；进度summary仅读取当前指标和UTC观测日期/时间。跟随context代次/日期刷新，不另起全量定时计算。分类计数可键盘筛选，URL保留页码/游标，错误和空态分开，阻塞最多5条摘要并保留完整计数。
+- Manager完整1415项、Web完整603项、SDK/CLI交付相关140项通过，TypeScript及Vite构建通过；Python变更文件无新增或恶化的配置诊断。广域客户端241通过、2失败，仍为Windows测试固定Unix假设和Pages旧--assigned-to断言，原审计已查证；另确认默认Windows pipe地址不一致的真实P2，后续独立修复。
+- 实际隔离HTTP验证3项人工待审→接受1项剩2→内容变化重现为3，游标跨scope422/数据变化409，SDK2方法及CLI2命令，3库33表纯GET不变，原有效原生验收保持。首轮HTTP辅助断言曾把recorded_completed误计为3，按六态互斥口径应为2，修正辅助断言后原生产代码通过，失败证据保留。
+- 万级内存SQL探针：10,000需求/10,001任务，12次读取均4条subject SQL、0 canonical ORM载入、0完整workspace/观测JSON、0写。首页待办973B，20条人工待审9,838B，summary1,146B；206个Manager源码和51个实际加载模块散列稳定。这是SQL函数fixture测量，非HTTP/生产尾延迟压测；写时全范围evaluation仍存在。
+- 独立后端4探针及15原行为用例通过，无新增可复现P1/P2；前端独立发现非Task空ID匹配busy及分类A→B→A无替代点击残留busy两项P2，均按原症状RED→GREEN修复。实际390px三语与生产验证未完成；完整progress、人工评审、历史影响、quality/release等显式详情仍有全项目成本。对象讨论及结论/来源集中展示仍未实现。
+
+证据 `.sop-runtime/delivery-evidence/delivery-attention/`，包含原审计、RED/GREEN、完整回归、HTTP/SQL和契约检查。所有已验证修改阶段性提交，不推送；不提交.pnpm-store缓存。
