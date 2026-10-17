@@ -26,7 +26,7 @@ export function PortfolioModule(props: {
   businesses: any[];
   createPending: boolean;
   createError: Error | null;
-  onCreate: () => void;
+  onCreate: () => Promise<unknown>;
 }) {
   const { t } = useTranslation();
   const [createOpen, setCreateOpen] = useState(false);
@@ -123,9 +123,13 @@ export function PortfolioModule(props: {
           disabled: !props.draft.name.trim(),
           loading: props.createPending,
         }}
-        onOk={() => {
-          props.onCreate();
-          setCreateOpen(false);
+        onOk={async () => {
+          try {
+            await props.onCreate();
+            setCreateOpen(false);
+          } catch {
+            // Keep the draft and the server error visible for correction.
+          }
         }}
         destroyOnHidden
       >

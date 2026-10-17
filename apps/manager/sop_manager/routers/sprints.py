@@ -8,16 +8,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Sprint, Task, Issue
-from .auth_sql import current_user, User, check_project_access
+from .auth_sql import current_user_or_apikey, User, check_project_access
+from .business_access import business_project_id, require_business_access
 from sop_manager.path_config import (
     resolved_business_code,
     resolved_project_code,
     resolved_project_id as _resolved_project_id,
+    resolved_tenant_id as _resolved_tenant_id,
     resolved_tenant_code,
 )
 from .webhook import notify_webhook
+from .delivery_progress import burndown_observation
 
-router = APIRouter(prefix="/api/v1/sprints", tags=["sprints"])
+router = APIRouter(prefix="/api/v1/sprints", tags=["sprints"],
+                   dependencies=[Depends(require_business_access)])
 
 
 def _row(s: Sprint) -> dict:
@@ -64,32 +68,13 @@ def _burndown_payload(sprint: Sprint, tasks: List[Task]) -> Dict[str, Any]:
     stats = _task_stats(tasks)
     total = int(stats["total_tasks"])
     remaining = int(stats["remaining"])
-    done = int(stats["completed"])
     started = _parse_dt(sprint.started_at)
     ends = _parse_dt(sprint.ends_at)
-    now = datetime.now(timezone.utc)
-    if started and ends and ends > started:
-        span_days = max(1, (ends - started).days)
-        elapsed_days = min(span_days, max(0, (now - started).days))
-    else:
-        span_days = 14
-        elapsed_days = min(span_days, max(0, int(done / max(1, total) * span_days)))
-    ideal: List[Dict[str, Any]] = []
-    actual: List[Dict[str, Any]] = []
-    for d in range(span_days + 1):
-        ideal.append({"day": d, "remaining": round(total * (1 - d / span_days), 1) if span_days else 0})
-    actual.append({"day": 0, "remaining": float(total)})
-    actual.append({"day": elapsed_days, "remaining": float(remaining)})
-    if done >= total and total > 0:
-        actual.append({"day": span_days, "remaining": 0.0})
     return {
         "ok": True,
         "sprint": _row(sprint),
         "stats": stats,
-        "span_days": span_days,
-        "elapsed_days": elapsed_days,
-        "ideal": ideal,
-        "actual": actual,
+        **burndown_observation(total, remaining, started, ends),
     }
 
 
@@ -254,11 +239,11 @@ def _sprint_ops_payload(sprints: List[Sprint], tasks: List[Task], issues: List[I
 def sprints_ops_plan(
     project_id: Optional[str] = None,
     sprint_id: str = "",
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
-    q = db.query(Sprint).filter(Sprint.tenant_id == user.tenant_id)
+    eff_pid = business_project_id(project_id)
+    q = db.query(Sprint).filter(Sprint.tenant_id == _resolved_tenant_id())
     if eff_pid:
         check_project_access(user, eff_pid, db)
         q = q.filter(Sprint.project_id == eff_pid)
@@ -268,8 +253,8 @@ def sprints_ops_plan(
         selected = next((s for s in sprints if s.id == sprint_id), None)
         if selected is None:
             raise HTTPException(404, "Sprint 不存在")
-    tasks = db.query(Task).filter(Task.tenant_id == user.tenant_id)
-    issues = db.query(Issue).filter(Issue.tenant_id == user.tenant_id)
+    tasks = db.query(Task).filter(Task.tenant_id == _resolved_tenant_id())
+    issues = db.query(Issue).filter(Issue.tenant_id == _resolved_tenant_id())
     if eff_pid:
         tasks = tasks.filter(Task.project_id == eff_pid)
         issues = issues.filter(Issue.project_id == eff_pid)
@@ -280,7 +265,7 @@ def sprints_ops_plan(
 def sprints_ops_tasks(
     body: SprintOpsTasksIn,
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
     plan = sprints_ops_plan(project_id=project_id, sprint_id=body.sprint_id, user=user, db=db)
@@ -329,11 +314,11 @@ def sprints_ops_tasks(
 @router.get("/summary")
 def sprints_summary(
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
-    q = db.query(Sprint).filter(Sprint.tenant_id == user.tenant_id)
+    eff_pid = business_project_id(project_id)
+    q = db.query(Sprint).filter(Sprint.tenant_id == _resolved_tenant_id())
     if eff_pid:
         check_project_access(user, eff_pid, db)
         q = q.filter(Sprint.project_id == eff_pid)
@@ -345,7 +330,7 @@ def sprints_summary(
     active = next((s for s in items if s.status == "active"), None)
     active_progress = None
     if active:
-        tasks = db.query(Task).filter_by(sprint_id=active.id, tenant_id=user.tenant_id).all()
+        tasks = db.query(Task).filter_by(sprint_id=active.id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
         active_progress = _task_stats(tasks)
     return {
         "ok": True,
@@ -358,9 +343,9 @@ def sprints_summary(
 
 @router.get("")
 def list_sprints(project_id: Optional[str] = None, page: int = 1, size: int = 20,
-                 user: User = Depends(current_user), db: Session = Depends(get_session)):
-    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
-    q = db.query(Sprint).filter(Sprint.tenant_id == user.tenant_id)
+                 user: User = Depends(current_user_or_apikey), db: Session = Depends(get_session)):
+    eff_pid = business_project_id(project_id)
+    q = db.query(Sprint).filter(Sprint.tenant_id == _resolved_tenant_id())
     if eff_pid:
         check_project_access(user, eff_pid, db)
         q = q.filter(Sprint.project_id == eff_pid)
@@ -377,28 +362,28 @@ class SprintCreate(BaseModel):
 
 
 @router.post("")
-def create_sprint(body: SprintCreate, user: User = Depends(current_user),
+def create_sprint(body: SprintCreate, user: User = Depends(current_user_or_apikey),
                   db: Session = Depends(get_session)):
-    project_id = (body.project_id or "").strip() or _resolved_project_id().strip()
+    project_id = business_project_id(body.project_id)
     if project_id:
-        # analyst 及以下可参与迭代规划；viewer(40) 不可写
-        check_project_access(user, project_id, db, "analyst")
+        # 与交付工作台保持一致：产品经理及开发/运维角色可参与迭代规划。
+        check_project_access(user, project_id, db, "product_manager")
     prev = db.query(Sprint).filter_by(
-        tenant_id=user.tenant_id, project_id=project_id, status="active"
+        tenant_id=_resolved_tenant_id(), project_id=project_id, status="active"
     ).all()
     # 关闭当前活跃 Sprint
     db.query(Sprint).filter_by(
-        tenant_id=user.tenant_id, project_id=project_id, status="active"
+        tenant_id=_resolved_tenant_id(), project_id=project_id, status="active"
     ).update({"status": "completed"})
     for old in prev:
         notify_webhook(
             "sprint.completed",
             {"sprint_id": old.id, "goal": old.goal or ""},
-            tenant_id=user.tenant_id,
+            tenant_id=_resolved_tenant_id(),
             project_id=project_id,
         )
     s = Sprint(
-        id=f"SPRINT-{uuid.uuid4().hex[:8]}", tenant_id=user.tenant_id,
+        id=f"SPRINT-{uuid.uuid4().hex[:8]}", tenant_id=_resolved_tenant_id(),
         project_id=project_id, goal=body.goal, status="active",
         planned_points=body.planned_points,
         ends_at=datetime.fromisoformat(body.ends_at) if body.ends_at else None,
@@ -407,7 +392,7 @@ def create_sprint(body: SprintCreate, user: User = Depends(current_user),
     notify_webhook(
         "sprint.started",
         {"sprint_id": s.id, "goal": body.goal, "planned_points": body.planned_points},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=project_id,
     )
     return {"ok": True, "id": s.id}
@@ -424,9 +409,9 @@ class SprintUpdate(BaseModel):
 
 
 @router.patch("/{sprint_id}")
-def update_sprint(sprint_id: str, body: SprintUpdate, user: User = Depends(current_user),
+def update_sprint(sprint_id: str, body: SprintUpdate, user: User = Depends(current_user_or_apikey),
                   db: Session = Depends(get_session)):
-    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=user.tenant_id).first()
+    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not s: raise HTTPException(404, "Sprint 不存在")
     patch = body.dict(exclude_none=True)
     if not patch:
@@ -443,26 +428,26 @@ def update_sprint(sprint_id: str, body: SprintUpdate, user: User = Depends(curre
         notify_webhook(
             "sprint.completed",
             {"sprint_id": sprint_id, "goal": s.goal or ""},
-            tenant_id=user.tenant_id,
+            tenant_id=_resolved_tenant_id(),
             project_id=s.project_id or "",
         )
     else:
         notify_webhook(
             "sprint.updated",
             {"sprint_id": sprint_id, "fields": list(patch.keys())},
-            tenant_id=user.tenant_id,
+            tenant_id=_resolved_tenant_id(),
             project_id=s.project_id or "",
         )
     return {"ok": True}
 
 
 @router.get("/{sprint_id}/progress")
-def sprint_progress(sprint_id: str, user: User = Depends(current_user),
+def sprint_progress(sprint_id: str, user: User = Depends(current_user_or_apikey),
                     db: Session = Depends(get_session)):
-    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=user.tenant_id).first()
+    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not s: raise HTTPException(404, "Sprint 不存在")
-    tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
-    issues = db.query(Issue).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
+    tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
+    issues = db.query(Issue).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
     stats = _task_stats(tasks)
     return {
         "sprint": _row(s),
@@ -475,27 +460,27 @@ def sprint_progress(sprint_id: str, user: User = Depends(current_user),
 @router.get("/{sprint_id}/burndown")
 def sprint_burndown(
     sprint_id: str,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> Dict[str, Any]:
-    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=user.tenant_id).first()
+    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not s:
         raise HTTPException(404, "Sprint 不存在")
-    tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=user.tenant_id).all()
+    tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
     return _burndown_payload(s, tasks)
 
 
 @router.delete("/{sprint_id}")
-def delete_sprint(sprint_id: str, user: User = Depends(current_user),
+def delete_sprint(sprint_id: str, user: User = Depends(current_user_or_apikey),
                   db: Session = Depends(get_session)):
-    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=user.tenant_id).first()
+    s = db.query(Sprint).filter_by(id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not s: raise HTTPException(404, "Sprint 不存在")
     pid = s.project_id or ""
     db.delete(s); db.commit()
     notify_webhook(
         "sprint.deleted",
         {"sprint_id": sprint_id},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=pid,
     )
     return {"ok": True}

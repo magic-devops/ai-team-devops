@@ -22,6 +22,7 @@ from .commands import (
     data as data_cmd,
     db_config as db_config_cmd,
     dev_flow as dev_flow_cmd,
+    delivery as delivery_cmd,
     doctor as doctor_cmd,
     event as event_cmd,
     graph_loop as graph_loop_cmd,
@@ -78,6 +79,7 @@ app.add_typer(kb_cmd.app,       name="kb",       help="知识库：search / rag 
 app.add_typer(copilot_cmd.app, name="copilot", help="AI Copilot：ask / sessions / show / classify / summarize / suggest")
 app.add_typer(data_cmd.app, name="data", help="数据智能：blueprint / nlq / tasks")
 app.add_typer(dev_flow_cmd.app, name="dev-flow", help="研发全流程：ops-plan/ops-tasks")
+app.add_typer(delivery_cmd.app, name="delivery", help="项目交付：workspace/targets/command")
 app.add_typer(system_cmd.app, name="system", help="系统全域 readiness")
 app.add_typer(graph_loop_cmd.app, name="graph-loop", help="Graph Loop：runs/detail/events/transition/interrupt/replay/export/doctor/slo")
 app.add_typer(db_config_cmd.app, name="db-config", help="数据库配置：OceanBase/PG/MySQL")

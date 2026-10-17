@@ -17,10 +17,8 @@ export function EChartsBurndown({
   const { t } = useTranslation();
   const option = useMemo<EChartsOption | null>(() => {
     if (!data?.ideal?.length) return null;
-    const days = data.ideal.map((p) => String(p.day));
-    const ideal = data.ideal.map((p) => p.remaining);
-    const actualMap = new Map(data.actual.map((p) => [p.day, p.remaining]));
-    const actual = data.ideal.map((p) => (actualMap.has(p.day) ? actualMap.get(p.day)! : "-"));
+    const ideal = data.ideal.map((p) => [p.day, p.remaining]);
+    const actual = data.actual.map((p) => [p.day, p.remaining]);
     const muted = readCssVar("--muted", "#94a3b8");
     const brand = chartPalette()[0]!;
 
@@ -34,8 +32,14 @@ export function EChartsBurndown({
       },
       grid: { left: 48, right: 16, top: 24, bottom: 48 },
       xAxis: {
-        type: "category",
-        data: days,
+        type: "value",
+        min: 0,
+        max: Math.max(
+          1,
+          ...data.ideal.map((p) => p.day),
+          ...data.actual.map((p) => p.day),
+        ),
+        minInterval: 1,
         name: t("page.devFlow.burndownDay"),
         axisLine: { lineStyle: { color: muted } },
       },
@@ -49,7 +53,7 @@ export function EChartsBurndown({
         {
           name: t("page.charts.burndownIdeal"),
           type: "line",
-          smooth: true,
+          smooth: false,
           showSymbol: false,
           lineStyle: { type: "dashed", width: 2 },
           data: ideal,

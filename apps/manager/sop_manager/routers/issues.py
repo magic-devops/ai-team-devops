@@ -8,16 +8,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Issue
-from .auth_sql import current_user, User, check_project_access
+from .auth_sql import current_user_or_apikey, User, check_project_access
+from .business_access import business_project_id, require_business_access, validate_business_references
 from sop_manager.path_config import (
     resolved_business_code,
     resolved_project_code,
     resolved_project_id as _resolved_project_id,
+    resolved_tenant_id as _resolved_tenant_id,
     resolved_tenant_code,
 )
 from .webhook import notify_webhook
 
-router = APIRouter(prefix="/api/v1/issues", tags=["issues"])
+router = APIRouter(prefix="/api/v1/issues", tags=["issues"],
+                   dependencies=[Depends(require_business_access)])
 
 
 def _row(i: Issue) -> dict:
@@ -37,11 +40,11 @@ def list_issues(
     severity: Optional[str] = None,
     q: Optional[str] = Query(None, description="标题/描述/ID 关键词"),
     page: int = 1, size: int = 50,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ):
-    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
-    query = db.query(Issue).filter(Issue.tenant_id == user.tenant_id)
+    eff_pid = business_project_id(project_id)
+    query = db.query(Issue).filter(Issue.tenant_id == _resolved_tenant_id())
     if eff_pid:
         check_project_access(user, eff_pid, db)
         query = query.filter(Issue.project_id == eff_pid)
@@ -67,8 +70,8 @@ def _issues_query(
     db: Session,
     project_id: Optional[str] = None,
 ):
-    eff_pid = (project_id or "").strip() or _resolved_project_id().strip()
-    query = db.query(Issue).filter(Issue.tenant_id == user.tenant_id)
+    eff_pid = business_project_id(project_id)
+    query = db.query(Issue).filter(Issue.tenant_id == _resolved_tenant_id())
     if eff_pid:
         check_project_access(user, eff_pid, db)
         query = query.filter(Issue.project_id == eff_pid)
@@ -82,7 +85,7 @@ def _pie_items(counter: dict[str, int]) -> list[dict[str, Any]]:
 @router.get("/summary")
 def issues_summary(
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     items = _issues_query(user, db, project_id).all()
@@ -122,7 +125,7 @@ def issues_summary(
 @router.get("/charts")
 def issues_charts(
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     payload = issues_summary(project_id=project_id, user=user, db=db)
@@ -138,7 +141,7 @@ def issues_charts(
 @router.get("/hub")
 def issues_hub(
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     payload = issues_summary(project_id=project_id, user=user, db=db)
@@ -313,7 +316,7 @@ def _issue_ops_plan_payload(items: list[Issue]) -> dict[str, Any]:
 @router.get("/ops-plan")
 def issues_ops_plan(
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     items = _issues_query(user, db, project_id).all()
@@ -324,7 +327,7 @@ def issues_ops_plan(
 def issues_ops_tasks(
     body: IssueOpsTasksIn,
     project_id: Optional[str] = None,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ) -> dict[str, Any]:
     plan = issues_ops_plan(project_id=project_id, user=user, db=db)
@@ -381,13 +384,14 @@ class IssueCreate(BaseModel):
 
 
 @router.post("")
-def create_issue(body: IssueCreate, user: User = Depends(current_user),
+def create_issue(body: IssueCreate, user: User = Depends(current_user_or_apikey),
                  db: Session = Depends(get_session)):
-    project_id = (body.project_id or "").strip() or _resolved_project_id().strip()
+    project_id = business_project_id(body.project_id)
+    validate_business_references(db, task_id=body.task_id, sprint_id=body.sprint_id)
     if project_id:
-        check_project_access(user, project_id, db, "analyst")
+        check_project_access(user, project_id, db, "product_manager")
     i = Issue(
-        id=f"ISSUE-{uuid.uuid4().hex[:10]}", tenant_id=user.tenant_id,
+        id=f"ISSUE-{uuid.uuid4().hex[:10]}", tenant_id=_resolved_tenant_id(),
         project_id=project_id, sprint_id=body.sprint_id, task_id=body.task_id,
         title=body.title, description=body.description, type=body.type,
         severity=body.severity, status="open", reported_by=user.username,
@@ -396,7 +400,7 @@ def create_issue(body: IssueCreate, user: User = Depends(current_user),
     notify_webhook(
         "issue.opened",
         {"issue_id": i.id, "title": i.title, "severity": i.severity, "type": i.type},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=i.project_id or "",
     )
     return {"ok": True, "id": i.id}
@@ -412,11 +416,12 @@ class IssueUpdate(BaseModel):
 
 
 @router.patch("/{issue_id}")
-def update_issue(issue_id: str, body: IssueUpdate, user: User = Depends(current_user),
+def update_issue(issue_id: str, body: IssueUpdate, user: User = Depends(current_user_or_apikey),
                  db: Session = Depends(get_session)):
-    i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
+    i = db.query(Issue).filter_by(id=issue_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not i: raise HTTPException(404, "问题不存在")
     patch = body.dict(exclude_none=True)
+    validate_business_references(db, sprint_id=body.sprint_id)
     if not patch:
         return {"ok": True}
     for k, v in patch.items():
@@ -425,7 +430,7 @@ def update_issue(issue_id: str, body: IssueUpdate, user: User = Depends(current_
     notify_webhook(
         "issue.updated",
         {"issue_id": issue_id, "fields": list(patch.keys())},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=i.project_id or "",
     )
     return {"ok": True}
@@ -439,10 +444,10 @@ class IssueResolveBody(BaseModel):
 def resolve_issue(
     issue_id: str,
     body: IssueResolveBody,
-    user: User = Depends(current_user),
+    user: User = Depends(current_user_or_apikey),
     db: Session = Depends(get_session),
 ):
-    i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
+    i = db.query(Issue).filter_by(id=issue_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not i:
         raise HTTPException(404, "问题不存在")
     i.status = "resolved"
@@ -453,23 +458,23 @@ def resolve_issue(
     notify_webhook(
         "issue.resolved",
         {"issue_id": issue_id, "resolution": body.resolution or "", "resolved_by": user.username},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=i.project_id or "",
     )
     return {"ok": True}
 
 
 @router.delete("/{issue_id}")
-def delete_issue(issue_id: str, user: User = Depends(current_user),
+def delete_issue(issue_id: str, user: User = Depends(current_user_or_apikey),
                  db: Session = Depends(get_session)):
-    i = db.query(Issue).filter_by(id=issue_id, tenant_id=user.tenant_id).first()
+    i = db.query(Issue).filter_by(id=issue_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).first()
     if not i: raise HTTPException(404, "问题不存在")
     pid = i.project_id or ""
     db.delete(i); db.commit()
     notify_webhook(
         "issue.deleted",
         {"issue_id": issue_id},
-        tenant_id=user.tenant_id,
+        tenant_id=_resolved_tenant_id(),
         project_id=pid,
     )
     return {"ok": True}

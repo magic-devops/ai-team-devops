@@ -1,36 +1,54 @@
 """
 @module: routers.workflow
-@purpose: Temporal 工作流管理 —— Sprint / Code Review / Bug Triage 长流程持久化
+@purpose: 项目作用域工作流 —— Sprint / Code Review / Bug Triage 本地状态与人工审查
 @stable: /api/v1/workflows/* 路径稳定
 @ai_safe_edit:
   - 新增工作流：在 workflows/ 目录下加文件 + 注册到 _WORKFLOWS
   - 改 Temporal 地址：TEMPORAL_HOST + TEMPORAL_NAMESPACE 环境变量
-@deps_in: temporalio（可选）；不装也能用 _InMemoryEngine 退化跑流程（dev）
+@deps_in: 统一模型网关；本地 journal 引擎。Temporal worker 合约尚未实现，不能启动。
 
 最佳实践：
   1. 工作流幂等：用 workflow_id = `<type>-<resource_id>`，重复启动返回已存在
-  2. 长流程拆 Activity：每个 Activity 必须幂等
-  3. 信号驱动：人工 review、bug 升级用 Signal 而非轮询
-  4. 工作流版本化：用 Workflow.get_version 兼容老实例
+  2. 信号明确携带人工意见，身份由授权请求解析；超时永不批准
+  3. journal 保留等待、决定及信号；重启不自动重放模型请求
+  4. 本地引擎不替代 CI 验收、业务任务完成或自动合并
 """
 from __future__ import annotations
 
-import logging
-import os
+import asyncio
+import hashlib
 import json
+import logging
+import math
+import os
+import re
 import time
 import uuid
+from collections.abc import Awaitable, Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from threading import RLock
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sop_manager.path_config import resolved_ai_memory_root
+from sqlalchemy.orm import Session
+
+from sop_manager.path_config import resolved_ai_memory_root, resolved_project_id, resolved_tenant_id
+
+from .auth_sql import current_user_or_apikey
+from .business_access import require_business_access
+from .sql_models import Project, User, get_session
 
 _log = logging.getLogger("sop.workflow")
 
-router = APIRouter(prefix="/api/v1/workflows", tags=["workflow"])
+router = APIRouter(prefix="/api/v1/workflows", tags=["workflow"], dependencies=[Depends(require_business_access)])
+_JOURNAL_LOCK = RLock()
+_TERMINAL = {"completed", "failed", "cancelled"}
+_RESERVED = {"actor_id", "user_id", "created_by", "tenant_id", "project_id", "project_path", "scope", "workflow_id"}
+UserDependency = Annotated[User, Depends(current_user_or_apikey)]
+SessionDependency = Annotated[Session, Depends(get_session)]
 
 
 # ── 抽象：Engine 接口 ───────────────────────────────────────────
@@ -44,6 +62,11 @@ class WorkflowHandle:
     error: str = ""
     started_at: float = field(default_factory=time.time)
     temporal: dict[str, Any] = field(default_factory=dict)
+    tenant_id: str = ""
+    project_id: str = ""
+    created_by: str = ""
+    args: dict[str, Any] = field(default_factory=dict)
+    signals: list[dict[str, Any]] = field(default_factory=list)
 
 
 _WORKFLOW_STEP_DEFS: dict[str, list[dict[str, str]]] = {
@@ -75,6 +98,10 @@ def _build_workflow_dag(wf_type: str, status: str, result: Any) -> dict[str, Any
     if isinstance(result, dict):
         phase = str(result.get("phase") or "")
     order = [s["id"] for s in steps_def]
+    if phase == "timeout_pending":
+        phase = str(result.get("pending_phase") or "") if isinstance(result, dict) else ""
+        if not phase:
+            phase = "awaiting_human" if wf_type == "code_review" else "in_progress" if wf_type == "sprint_lifecycle" else "assigned"
     if phase in order:
         current_idx = order.index(phase)
     elif status == "completed":
@@ -86,20 +113,7 @@ def _build_workflow_dag(wf_type: str, status: str, result: Any) -> dict[str, Any
 
     steps: list[dict[str, Any]] = []
     for i, sdef in enumerate(steps_def):
-        if status == "completed":
-            st = "completed"
-        elif status == "cancelled":
-            st = "cancelled" if i <= current_idx else "pending"
-        elif status == "failed" and i == current_idx:
-            st = "failed"
-        elif i < current_idx:
-            st = "completed"
-        elif i == current_idx and status == "running":
-            st = "running"
-        elif i == current_idx:
-            st = "running" if status == "running" else "completed"
-        else:
-            st = "pending"
+        st = _dag_review_status(wf_type, sdef["id"], result, _dag_step_status(status, i, current_idx))
         steps.append({"id": sdef["id"], "name": sdef["name"], "status": st})
 
     dag_edges: list[dict[str, str]] = []
@@ -114,6 +128,26 @@ def _build_workflow_dag(wf_type: str, status: str, result: Any) -> dict[str, Any
     }
 
 
+def _dag_step_status(status: str, index: int, current: int) -> str:
+    if status == "completed":
+        return "completed"
+    if status == "cancelled":
+        return "cancelled" if index <= current else "pending"
+    if status == "failed" and index == current:
+        return "failed"
+    if index < current:
+        return "completed"
+    if index > current:
+        return "pending"
+    return {"running": "running", "awaiting_human": "awaiting_human", "timeout_pending": "awaiting_human", "paused": "paused"}.get(status, "pending")
+
+
+def _dag_review_status(workflow_type: str, step_id: str, result: Any, default: str) -> str:
+    if workflow_type != "code_review" or step_id != "ai_reviewing" or not isinstance(result, dict):
+        return default
+    return {"missing_diff": "skipped", "failed": "failed", "interrupted": "failed"}.get((result.get("review") or {}).get("status"), default)
+
+
 async def _temporal_snapshot(workflow_id: str) -> dict[str, Any]:
     eng = get_engine()
     configured = os.getenv("WORKFLOW_ENGINE", "memory").lower() == "temporal"
@@ -126,7 +160,7 @@ async def _temporal_snapshot(workflow_id: str) -> dict[str, Any]:
         return {
             **base,
             "available": False,
-            "reason": "当前为内存引擎；设置 WORKFLOW_ENGINE=temporal 并启动 Temporal 以获取运行态",
+            "reason": "当前为本地 journal 引擎；Temporal worker 与作用域审查合约尚未实现",
         }
     try:
         cli = await eng._client()  # type: ignore[attr-defined]
@@ -177,6 +211,7 @@ class WorkflowDef:
     description: str
     handler: Callable[[dict], Awaitable[dict]]
     signals: list[str] = field(default_factory=list)
+    signal_handler: Callable[[dict, str, dict], dict] | None = None
 
 
 _WORKFLOWS: dict[str, WorkflowDef] = {}
@@ -202,30 +237,55 @@ def _load_runs() -> list[dict[str, Any]]:
         return []
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        return [row for row in data if isinstance(row, dict) and _in_scope(row)] if isinstance(data, list) else []
     except Exception:
         return []
 
 
 def _save_runs(rows: list[dict[str, Any]]) -> None:
-    _runs_file().write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    with _JOURNAL_LOCK:
+        path = _runs_file()
+        # Shared project paths still require explicit tenant/project row isolation.
+        existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+        foreign = [row for row in existing if isinstance(row, dict) and not _in_scope(row)] if isinstance(existing, list) else []
+        temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+        temporary.write_text(json.dumps(foreign + rows, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, path)
+
+
+def _in_scope(row: dict[str, Any]) -> bool:
+    return row.get("tenant_id") == resolved_tenant_id() and row.get("project_id") == resolved_project_id()
+
+
+def _identifier(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}", value):
+        raise HTTPException(400, "Invalid workflow identifier")
+    return value
+
+
+def _validate_context_payload(value: dict[str, Any]) -> None:
+    if any(key in _RESERVED or key.startswith("_") for key in value):
+        raise HTTPException(400, "Workflow scope and actor are resolved from authentication")
 
 
 def _record_event(row: dict[str, Any]) -> dict[str, Any]:
+    row.update(tenant_id=resolved_tenant_id(), project_id=resolved_project_id())
     row.setdefault("id", f"wf-evt-{uuid.uuid4().hex[:12]}")
     row.setdefault("ts", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
-    with _events_file().open("a", encoding="utf-8") as f:
+    with _JOURNAL_LOCK, _events_file().open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row
 
 
 def _upsert_run(row: dict[str, Any]) -> dict[str, Any]:
-    rows = _load_runs()
-    row["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    rows = [r for r in rows if r.get("workflow_id") != row.get("workflow_id")] + [row]
-    rows = sorted(rows, key=lambda r: str(r.get("updated_at", "")), reverse=True)[:500]
-    _save_runs(rows)
-    return row
+    with _JOURNAL_LOCK:
+        rows = _load_runs()
+        previous = next((r for r in rows if r.get("workflow_id") == row.get("workflow_id")), {})
+        row = {**previous, **row, "tenant_id": resolved_tenant_id(), "project_id": resolved_project_id()}
+        row["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        rows = [r for r in rows if r.get("workflow_id") != row.get("workflow_id")] + [row]
+        _save_runs(sorted(rows, key=lambda r: str(r.get("updated_at", "")), reverse=True))
+        return row
 
 
 def _handle_to_row(h: WorkflowHandle, engine: str) -> dict[str, Any]:
@@ -239,166 +299,296 @@ def _handle_to_row(h: WorkflowHandle, engine: str) -> dict[str, Any]:
         "result": h.result,
         "started_at": h.started_at,
         "duration_s": int(time.time() - h.started_at),
+        "phase": (h.result or {}).get("phase", "") if isinstance(h.result, dict) else "",
+        "decision": (h.result or {}).get("human_decision") if isinstance(h.result, dict) else None,
+        "tenant_id": h.tenant_id,
+        "project_id": h.project_id,
+        "created_by": h.created_by,
+        "args": h.args,
+        "signals": h.signals,
     }
 
 
-def register(workflow_type: str, *, description: str = "", signals: list[str] | None = None):
+def register(workflow_type: str, *, description: str = "", signals: list[str] | None = None, signal_handler=None):
     def deco(fn: Callable[[dict], Awaitable[dict]]) -> Callable[[dict], Awaitable[dict]]:
-        _WORKFLOWS[workflow_type] = WorkflowDef(workflow_type, description, fn, signals or [])
+        _WORKFLOWS[workflow_type] = WorkflowDef(workflow_type, description, fn, signals or [], signal_handler)
         return fn
     return deco
 
 
-# ── 内置工作流：Sprint / Review / Bug ──────────────────────────
-@register("sprint_lifecycle", description="Sprint 生命周期：规划 → 执行 → 评审 → 收尾",
-          signals=["pause", "resume", "complete_task"])
-async def _sprint_lifecycle(args: dict) -> dict:
-    """状态机：planning → in_progress → reviewing → completed
-    用 Temporal 时 Activity 会持久化每步；退化版仅在内存里跑。"""
-    import asyncio
-    state: dict[str, Any] = {
-        "sprint_id": args.get("sprint_id"),
-        "tasks": args.get("tasks", []),
-        "phase": "planning",
-        "completed": [],
-        "started_at": time.time(),
-    }
-    state["phase"] = "in_progress"
-    tasks_list: list[Any] = list(args.get("tasks") or [])
-    # 内存引擎下避免默认 14 天忙等；可用 duration_seconds 覆盖
-    max_wait = float(args.get("duration_seconds", 120.0))
-    if get_engine().name == "memory" and max_wait > 300:
-        max_wait = 300.0
-    deadline = time.time() + max_wait
-    while time.time() < deadline and len(state["completed"]) < len(tasks_list):
-        await asyncio.sleep(0.05)
-    state["phase"] = "reviewing"
-    await asyncio.sleep(0.05)
-    state["phase"] = "completed"
+# ── Local review handlers. Suggestions and receipts never mutate business completion. ──
+def _opinion(payload: dict) -> dict[str, Any]:
+    if not isinstance(payload.get("comment"), str):
+        raise HTTPException(400, "Review comment must be text")
+    comment = payload["comment"].strip()
+    actor = str(payload.get("actor_id") or "").strip()
+    if not comment or not actor or len(comment) > 10000:
+        raise HTTPException(400, "An authenticated reviewer and review comment are required")
+    return {"comment": comment, "actor_id": actor, "at": time.time()}
+
+
+def _review_signal(state: dict, signal: str, payload: dict) -> dict:
+    if state.get("phase") not in {"awaiting_human", "timeout_pending"}:
+        raise HTTPException(409, "Review is not awaiting a human decision")
+    record = {**_opinion(payload), "decision": signal}
+    return {**state, "phase": "completed", "human_decision": signal, "decision_record": record}
+
+
+def _sprint_signal(state: dict, signal: str, payload: dict) -> dict:
+    opinion = _opinion(payload)
+    state = deepcopy(state)
+    if state.get("phase") not in {"in_progress", "reviewing", "timeout_pending", "paused"}:
+        raise HTTPException(409, "Sprint workflow is not ready for a human signal")
+    if signal == "pause":
+        state.update(phase="paused", pause_record=opinion)
+    elif signal == "resume":
+        if state.get("phase") != "paused":
+            raise HTTPException(409, "Sprint workflow is not paused")
+        state["phase"] = "reviewing" if len(state["completed"]) == len(state["tasks"]) else "in_progress"
+    elif signal == "complete_task":
+        task = str(payload.get("task_id") or "")
+        if state.get("phase") == "paused":
+            raise HTTPException(409, "Resume the workflow before reviewing a task")
+        if task not in state["tasks"]:
+            raise HTTPException(400, "Unknown workflow task")
+        if task not in state["completed"]:
+            state["completed"].append(task)
+            state.setdefault("task_reviews", {})[task] = opinion
+        if len(state["completed"]) == len(state["tasks"]):
+            state["phase"] = "reviewing"
+    elif signal == "complete_review":
+        if state.get("phase") not in {"reviewing", "timeout_pending"} or len(state["completed"]) != len(state["tasks"]):
+            raise HTTPException(409, "Review each workflow task before closing the sprint workflow")
+        state.update(phase="completed", human_decision="approve", decision_record={**opinion, "decision": "approve"})
     return state
 
 
-@register("code_review", description="代码审查长流程：自动 AI 审查 → 人工 approve → 合并",
-          signals=["approve", "request_changes", "reject"])
+def _bug_signal(state: dict, signal: str, payload: dict) -> dict:
+    opinion = _opinion(payload)
+    if state.get("phase") not in {"assigned", "timeout_pending"}:
+        raise HTTPException(409, "Triage is not ready for a human decision")
+    if signal == "reassign":
+        assignee = str(payload.get("assignee") or "").strip()
+        if not assignee:
+            raise HTTPException(400, "assignee is required")
+        return {**state, "phase": "assigned", "assignee": assignee, "assignment_record": opinion}
+    return {**state, "phase": "completed", "human_decision": "resolve", "decision_record": {**opinion, "decision": "resolve"}}
+
+
+@register("sprint_lifecycle", description="Sprint 工作流：执行记录 → 人工评审 → 结案（不修改业务任务）",
+          signals=["pause", "resume", "complete_task", "complete_review"], signal_handler=_sprint_signal)
+async def _sprint_lifecycle(args: dict) -> dict:
+    tasks = list(dict.fromkeys(args.get("tasks") or []))
+    return {"sprint_id": args.get("sprint_id"), "tasks": tasks, "phase": "in_progress" if tasks else "reviewing",
+            "completed": [], "human_decision": None, "started_at": time.time()}
+
+
+@register("code_review", description="代码审查：AI 建议 → 授权人工决定（不自动合并）",
+          signals=["approve", "request_changes", "reject"], signal_handler=_review_signal)
 async def _code_review(args: dict) -> dict:
-    import asyncio
-    state: dict[str, Any] = {
-        "pr_id": args.get("pr_id"),
-        "ai_review": None,
-        "human_decision": None,
-        "phase": "ai_reviewing",
-        "started_at": time.time(),
-    }
-    # Step 1: AI 评审（占位；接 LLM Gateway 时调 /api/v1/llm/chat task_type=review）
+    state = args["_state"]
+    diff = str(args.get("diff") or "").strip()
+    state["review"] = {"source": "llm_gateway", "status": "running", "content": "", "error": "", "model": "", "provider": "", "usage": {},
+                       "input_sha256": hashlib.sha256(diff.encode()).hexdigest(), "input_chars": len(diff), "reviewed_chars": min(len(diff), 8000), "truncated": len(diff) > 8000}
+    if not diff:
+        state["review"].update(source="input", status="missing_diff", error="No diff supplied; AI review was not performed")
+    else:
+        try:
+            from sop_manager.routers.llm_gateway import ChatIn, Message, llm_chat
+            out = await asyncio.to_thread(llm_chat, ChatIn(messages=[
+                Message(role="system", content="你是资深 Reviewer，对 diff 提 ≤ 5 条关键意见。仅提供建议，不替代人工验收。"),
+                Message(role="user", content=diff[:8000])], task_type="review", temperature=0.1, cache_ttl=0), None)
+            if not isinstance(out.content, str) or not out.content.strip():
+                raise ValueError("empty_review")
+            state["review"].update(status="succeeded", content=out.content, model=out.model, provider=out.provider,
+                                   usage=out.usage.model_dump())
+            state["ai_review"] = out.content
+        except Exception:
+            # Provider exceptions can contain URLs or credentials. Gateway owns detailed diagnostic logs.
+            state["review"].update(status="failed", error="Model review failed; check the model gateway configuration and retry in a new workflow")
+    state["phase"] = "awaiting_human"
+    return state
+
+
+@register("bug_triage", description="问题分诊：分类建议 → 责任人指派 → 人工结案",
+          signals=["reassign", "resolve"], signal_handler=_bug_signal)
+async def _bug_triage(args: dict) -> dict:
+    state = args["_state"]
+    state.update(issue_id=args.get("issue_id"), severity=None, assignee=args.get("default_assignee") or None)
     try:
         from sop_manager.routers.llm_gateway import ChatIn, Message, llm_chat
-        out = llm_chat(ChatIn(
-            messages=[
-                Message(role="system", content="你是资深 Reviewer，对 diff 提 ≤ 5 条关键意见。"),
-                Message(role="user", content=args.get("diff", "")[:8000] or "（无 diff）"),
-            ],
-            task_type="review", temperature=0.1, cache_ttl=300,
-        ), None)  # type: ignore[arg-type]
-        state["ai_review"] = out.content
-    except Exception as e:
-        state["ai_review"] = f"AI 评审跳过: {e}"
-    state["phase"] = "awaiting_human"
-    tw = float(args.get("timeout_seconds", 30.0))
-    if get_engine().name == "memory" and tw > 120:
-        tw = 120.0
-    deadline = time.time() + tw
-    while time.time() < deadline and state["human_decision"] is None:
-        await asyncio.sleep(0.05)
-    if state["human_decision"] is None:
-        state["human_decision"] = "approve_by_timeout"
-    state["phase"] = "completed"
-    return state
-
-
-@register("bug_triage", description="Bug 分诊：自动分类 → 责任人指派 → SLA 跟踪",
-          signals=["reassign", "resolve"])
-async def _bug_triage(args: dict) -> dict:
-    state: dict[str, Any] = {
-        "issue_id": args.get("issue_id"),
-        "severity": None,
-        "assignee": None,
-        "phase": "classifying",
-    }
-    try:
-        from sop_manager.routers.copilot import _chat, _SYS_CLASSIFY
-        cls = _chat(_SYS_CLASSIFY, args.get("text", "") or "", task_type="classify")
-        import json
-        try:
-            parsed = json.loads(cls["raw"])
-            state["severity"] = parsed.get("priority", "P2")
-            state["category"] = parsed.get("category", "bug")
-        except Exception:
-            state["severity"] = "P2"
+        text = str(args.get("text") or "").strip()
+        if not text:
+            raise ValueError("missing_input")
+        out = await asyncio.to_thread(llm_chat, ChatIn(messages=[Message(role="system", content='Classify the issue as JSON: {"priority":"P0|P1|P2|P3","category":"bug|incident|request"}. Do not resolve it.'),
+            Message(role="user", content=text[:8000])], task_type="classify", cache_ttl=0), None)
+        parsed = json.loads(out.content)
+        if parsed.get("priority") not in {"P0", "P1", "P2", "P3"} or parsed.get("category") not in {"bug", "incident", "request"}:
+            raise ValueError("invalid_classification")
+        state.update(severity=parsed["priority"], category=parsed["category"], classification={"source": "llm_gateway", "status": "succeeded", "model": out.model, "provider": out.provider, "usage": out.usage.model_dump()})
     except Exception:
-        state["severity"] = "P2"
+        state["classification"] = {"source": "llm_gateway" if args.get("text") else "input", "status": "failed" if args.get("text") else "missing_input", "error": "No verified classification; human triage required"}
     state["phase"] = "assigned"
-    state["assignee"] = args.get("default_assignee", "AI")
-    state["phase"] = "completed"
     return state
 
 
-# ── 退化版：内存引擎（dev / 无 Temporal） ──────────────────────
+def _state_status(state: dict) -> str:
+    phase = state.get("phase")
+    if phase in {"completed", "timeout_pending", "paused"}:
+        return phase
+    return "awaiting_human" if phase in {"awaiting_human", "reviewing", "assigned"} else "running"
+
+
+def _timeout(workflow_type: str, args: dict) -> float:
+    value = args.get("duration_seconds", 120) if workflow_type == "sprint_lifecycle" else args.get("timeout_seconds", 30)
+    try:
+        timeout = float(value)
+        if not math.isfinite(timeout) or not 0 <= timeout <= 86400 * 30:
+            raise ValueError()
+        return timeout
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Workflow timeout must be between 0 and 30 days") from None
+
+
 class _InMemoryEngine(Engine):
+    """Local worker with journalled state; not a Temporal worker or process supervisor."""
     name = "memory"
 
     def __init__(self) -> None:
-        self._handles: dict[str, WorkflowHandle] = {}
-        self._signals: dict[str, list[tuple[str, dict]]] = {}
-        import asyncio
-        self._loop_task: dict[str, asyncio.Task] = {}
+        self._handles: dict[tuple[str, str, str], WorkflowHandle] = {}
+        self._loop_task: dict[tuple[str, str, str], asyncio.Task] = {}
+
+    def _key(self, workflow_id: str) -> tuple[str, str, str]:
+        return resolved_tenant_id(), resolved_project_id(), _identifier(workflow_id)
+
+    def _persist(self, h: WorkflowHandle, event: str = "state_changed") -> None:
+        _upsert_run(_handle_to_row(h, self.name))
+        row = {"workflow_id": h.workflow_id, "run_id": h.run_id, "type": h.type, "event": event,
+               "status": h.status, "phase": (h.result or {}).get("phase"), "decision": (h.result or {}).get("human_decision")}
+        if event == "signal_applied" and h.signals:
+            row.update(signal=h.signals[-1]["signal"], payload=h.signals[-1]["payload"])
+        _record_event(row)
+
+    def _expire(self, h: WorkflowHandle) -> None:
+        state = h.result or {}
+        if h.status not in _TERMINAL | {"paused", "timeout_pending"} and state.get("review_deadline", float("inf")) <= time.time():
+            state.update(pending_phase=state.get("phase"), phase="timeout_pending")
+            h.status = "timeout_pending"
+            self._persist(h, "review_timeout")
 
     async def start(self, workflow_type: str, workflow_id: str, args: dict) -> WorkflowHandle:
-        if workflow_id in self._handles:
-            return self._handles[workflow_id]
+        key = self._key(workflow_id)
+        try:
+            previous = await self.describe(workflow_id)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+        else:
+            if previous.type != workflow_type or previous.args != args:
+                raise HTTPException(409, "Workflow identifier already belongs to a different request")
+            return previous
         defn = _WORKFLOWS.get(workflow_type)
         if not defn:
             raise HTTPException(404, f"unknown workflow type: {workflow_type}")
-        h = WorkflowHandle(workflow_id=workflow_id, run_id=str(uuid.uuid4()), type=workflow_type)
-        self._handles[workflow_id] = h
-        self._signals[workflow_id] = []
-        import asyncio
-        async def _run():
+        timeout = _timeout(workflow_type, args)
+        phase = {"code_review": "ai_reviewing", "bug_triage": "classifying", "sprint_lifecycle": "planning"}.get(workflow_type, "running")
+        h = WorkflowHandle(workflow_id=workflow_id, run_id=str(uuid.uuid4()), type=workflow_type,
+                           tenant_id=key[0], project_id=key[1], created_by=str(args.get("_actor_id") or ""), args=deepcopy(args),
+                           result={"phase": phase, "human_decision": None, "ai_review": None})
+        self._handles[key] = h
+        self._persist(h, "started")
+
+        async def run():
             try:
-                h.result = await defn.handler({**args, "workflow_id": workflow_id})
-                h.status = "completed"
-            except Exception as e:
-                h.error = str(e)
+                result = await defn.handler({**deepcopy(args), "workflow_id": workflow_id, "_state": h.result})
+                if h.status in _TERMINAL:
+                    return
+                h.result = result
+                h.status = _state_status(result)
+                h.result["review_deadline"] = time.time() + timeout
+                self._persist(h)
+                await asyncio.sleep(timeout)
+                self._expire(h)
+            except asyncio.CancelledError:
+                # Shutdown never approves; a new engine recovers the persisted waiting state.
+                return
+            except Exception:
+                h.error = "Workflow handler failed; inspect configuration and start a new workflow"
                 h.status = "failed"
-        self._loop_task[workflow_id] = asyncio.create_task(_run())
+                self._persist(h, "failed")
+        self._loop_task[key] = asyncio.create_task(run())
         return h
 
     async def signal(self, workflow_id: str, signal: str, payload: dict) -> None:
-        if workflow_id not in self._handles:
-            raise HTTPException(404)
-        self._signals[workflow_id].append((signal, payload))
-        _log.info("signal posted wf=%s sig=%s", workflow_id, signal)
+        h = await self.describe(workflow_id)
+        defn = _WORKFLOWS[h.type]
+        if signal not in defn.signals or not defn.signal_handler:
+            raise HTTPException(400, "Signal is not supported by this workflow")
+        fingerprint = hashlib.sha256(json.dumps({"signal": signal, "payload": payload}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        signal_id = str(payload.get("signal_id") or fingerprint)
+        if not signal_id or len(signal_id) > 128:
+            raise HTTPException(400, "Invalid signal_id")
+        prior = next((row for row in h.signals if row.get("signal_id") == signal_id), None)
+        if prior:
+            if prior["fingerprint"] != fingerprint:
+                raise HTTPException(409, "signal_id was already used for a different decision")
+            return
+        if h.status in _TERMINAL:
+            raise HTTPException(409, "Workflow is terminal; start a new workflow for a new review")
+        result = defn.signal_handler(deepcopy(h.result), signal, payload)
+        h.result = result
+        h.status = _state_status(result)
+        h.signals.append({"signal": signal, "payload": deepcopy(payload), "signal_id": signal_id, "fingerprint": fingerprint, "at": time.time()})
+        self._persist(h, "signal_applied")
+        self._expire(h)
 
     async def query(self, workflow_id: str, query: str) -> Any:
-        h = self._handles.get(workflow_id)
-        if not h:
-            raise HTTPException(404)
+        h = await self.describe(workflow_id)
         if query == "status":
             return h.status
         if query == "signals":
-            return self._signals.get(workflow_id, [])
-        return h.result
+            return deepcopy(h.signals)
+        if query not in {"progress", "state", "result"}:
+            raise HTTPException(400, "Unknown workflow query")
+        return deepcopy(h.result)
 
     async def cancel(self, workflow_id: str) -> None:
-        t = self._loop_task.get(workflow_id)
-        if t:
-            t.cancel()
-        if workflow_id in self._handles:
-            self._handles[workflow_id].status = "cancelled"
+        h = await self.describe(workflow_id)
+        if h.status == "cancelled":
+            return
+        if h.status in _TERMINAL:
+            raise HTTPException(409, "Terminal workflow cannot be cancelled")
+        h.status = "cancelled"
+        task = self._loop_task.get(self._key(workflow_id))
+        if task:
+            task.cancel()
+        self._persist(h, "cancelled")
 
     async def describe(self, workflow_id: str) -> WorkflowHandle:
-        h = self._handles.get(workflow_id)
-        if not h:
-            raise HTTPException(404)
+        key = self._key(workflow_id)
+        h = self._handles.get(key)
+        if h:
+            self._expire(h)
+            return h
+        row = next((r for r in _load_runs() if r.get("workflow_id") == workflow_id), None)
+        if not row:
+            raise HTTPException(404, "Workflow not found in the selected project")
+        h = WorkflowHandle(workflow_id=workflow_id, run_id=row["run_id"], type=row["type"], status=row["status"],
+                           result=row.get("result"), error=row.get("error", ""), started_at=row.get("started_at", time.time()),
+                           tenant_id=key[0], project_id=key[1], created_by=row.get("created_by", ""),
+                           args=row.get("args", {}), signals=row.get("signals", []))
+        if h.status not in _TERMINAL:
+            state = h.result or {}
+            if state.get("phase") in {"ai_reviewing", "classifying", "planning", "running"}:
+                state.update(pending_phase=state.get("phase"), phase="timeout_pending", recovery="worker_interrupted")
+                if h.type == "code_review":
+                    state["review"] = {"source": "llm_gateway", "status": "interrupted", "error": "Worker stopped before model review completed; human review remains required"}
+                h.status = "timeout_pending"
+            elif state.get("review_deadline", float("inf")) <= time.time() and h.status != "paused":
+                state.update(pending_phase=state.get("phase"), phase="timeout_pending")
+                h.status = "timeout_pending"
+            h.result = state
+        self._handles[key] = h
         return h
 
 
@@ -414,7 +604,7 @@ class TemporalEngine(Engine):  # pragma: no cover - 需要 temporal server
         self._Client = Client
         self._host = os.getenv("TEMPORAL_HOST", "localhost:7233")
         self._ns = os.getenv("TEMPORAL_NAMESPACE", "default")
-        self._cli: Optional[Any] = None
+        self._cli: Any | None = None
 
     async def _client(self):
         if self._cli is None:
@@ -422,54 +612,22 @@ class TemporalEngine(Engine):  # pragma: no cover - 需要 temporal server
         return self._cli
 
     async def start(self, workflow_type, workflow_id, args) -> WorkflowHandle:
-        cli = await self._client()
-        # 注意：真实使用时需要 @workflow.defn 类，这里以 dataclass 调用为占位
-        h = await cli.start_workflow(workflow_type, args, id=workflow_id, task_queue="sop")
-        return WorkflowHandle(workflow_id=workflow_id, run_id=h.first_execution_run_id,
-                              type=workflow_type, status="running")
+        raise HTTPException(503, "Temporal workflow workers and scoped review contracts are not configured; use the local journal engine")
 
     async def signal(self, workflow_id, signal, payload):
-        cli = await self._client()
-        await (await cli.get_workflow_handle(workflow_id)).signal(signal, payload)
+        raise HTTPException(503, "Scoped Temporal workflow signals are not implemented")
 
     async def query(self, workflow_id, query):
-        cli = await self._client()
-        return await (await cli.get_workflow_handle(workflow_id)).query(query)
+        raise HTTPException(503, "Scoped Temporal workflow queries are not implemented")
 
     async def cancel(self, workflow_id):
-        cli = await self._client()
-        await (await cli.get_workflow_handle(workflow_id)).cancel()
+        raise HTTPException(503, "Scoped Temporal workflow cancellation is not implemented")
 
     async def describe(self, workflow_id):
-        cli = await self._client()
-        desc = await (await cli.get_workflow_handle(workflow_id)).describe()
-        status_name = desc.status.name if hasattr(desc.status, "name") else str(desc.status)
-        status_map = {
-            "RUNNING": "running",
-            "COMPLETED": "completed",
-            "FAILED": "failed",
-            "CANCELED": "cancelled",
-            "CANCELLED": "cancelled",
-            "TERMINATED": "failed",
-            "TIMED_OUT": "failed",
-        }
-        norm = status_map.get(status_name.upper(), "running")
-        return WorkflowHandle(
-            workflow_id=workflow_id,
-            run_id=desc.run_id,
-            type=str(desc.workflow_type),
-            status=norm,
-            temporal={
-                "status_name": status_name,
-                "task_queue": getattr(desc, "task_queue", None) or "sop",
-                "history_length": getattr(desc, "history_length", None),
-                "start_time": desc.start_time.isoformat() if desc.start_time else "",
-                "close_time": desc.close_time.isoformat() if desc.close_time else "",
-            },
-        )
+        raise HTTPException(503, "Scoped Temporal workflow state contracts are not implemented")
 
 
-_engine: Optional[Engine] = None
+_engine: Engine | None = None
 
 
 def get_engine() -> Engine:
@@ -490,7 +648,7 @@ def get_engine() -> Engine:
 # ── 路由 ────────────────────────────────────────────────────────
 class StartIn(BaseModel):
     type: str
-    workflow_id: Optional[str] = None
+    workflow_id: str | None = None
     args: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -507,6 +665,25 @@ class WorkflowOpsTasksIn(BaseModel):
     dry_run: bool = True
     priority: str = "P1"
     assigned_to: str = "Coder"
+
+
+def _permissions(user: User, db) -> dict[str, bool]:
+    from .delivery import _permissions as delivery_permissions
+    project = db.get(Project, resolved_project_id())
+    return {"read": True, **delivery_permissions(db, user, project)}
+
+
+def _progress(h: WorkflowHandle) -> dict[str, Any]:
+    result = h.result if isinstance(h.result, dict) else {}
+    return {"status": h.status, "phase": result.get("phase", ""), "decision": result.get("human_decision"),
+            "review": result.get("review"), "decision_record": result.get("decision_record"), "result": deepcopy(h.result)}
+
+
+async def _scoped_handle(workflow_id: str) -> WorkflowHandle:
+    _identifier(workflow_id)
+    if not any(row.get("workflow_id") == workflow_id for row in _load_runs()):
+        raise HTTPException(404, "Workflow not found in the selected project")
+    return await get_engine().describe(workflow_id)
 
 
 @router.get("/types")
@@ -540,6 +717,8 @@ async def workflow_engine_status() -> dict[str, Any]:
         "temporal_connected": connected and probe["ok"],
         "probe": probe,
         "workflow_types": list(_WORKFLOWS.keys()),
+        "worker_supported": eng.name == "memory",
+        "durability": "local_journal" if eng.name == "memory" else "temporal_worker_not_implemented",
     }
 
 
@@ -609,13 +788,13 @@ async def _current_runs(limit: int = 100) -> list[dict[str, Any]]:
             row = {**row, **_handle_to_row(h, eng.name)}
             _upsert_run(row)
         except Exception:
-            pass
+            _log.warning("Workflow snapshot unavailable; retaining the scoped journal record")
         out.append(row)
     return out
 
 
 @router.get("/instances")
-async def workflow_instances(limit: int = 100, status: str = "", type: str = "", q: str = "") -> dict[str, Any]:
+async def workflow_instances(user: UserDependency, db: SessionDependency, limit: int = 100, status: str = "", type: str = "", q: str = "") -> dict[str, Any]:
     rows = await _current_runs(limit)
     if status:
         rows = [r for r in rows if r.get("status") == status]
@@ -633,7 +812,7 @@ async def workflow_instances(limit: int = 100, status: str = "", type: str = "",
                 str(r.get("error") or ""),
             ]).lower()
         ]
-    return {"ok": True, "items": rows[:limit], "total": len(rows)}
+    return {"ok": True, "items": [{**row, "permissions": _permissions(user, db)} for row in rows[:limit]], "total": len(rows), "permissions": _permissions(user, db)}
 
 
 @router.get("/events")
@@ -648,6 +827,9 @@ def workflow_events(limit: int = 100, workflow_id: str = "") -> dict[str, Any]:
         try:
             row = json.loads(line)
         except Exception:
+            _log.warning("Skipping an unreadable workflow event row")
+            continue
+        if not isinstance(row, dict) or not _in_scope(row):
             continue
         if workflow_id and row.get("workflow_id") != workflow_id:
             continue
@@ -775,33 +957,39 @@ async def workflow_ops_tasks(body: WorkflowOpsTasksIn) -> dict[str, Any]:
 
 
 @router.post("/start")
-async def start_wf(body: StartIn) -> dict[str, Any]:
+async def start_wf(body: StartIn, user: UserDependency, db: SessionDependency) -> dict[str, Any]:
     if body.type not in _WORKFLOWS:
         raise HTTPException(404, f"unknown workflow type: {body.type}")
-    wid = body.workflow_id or f"{body.type}-{uuid.uuid4().hex[:12]}"
+    _validate_context_payload(body.args)
+    wid = _identifier(body.workflow_id or f"{body.type}-{uuid.uuid4().hex[:12]}")
+    if body.type == "sprint_lifecycle" and (not isinstance(body.args.get("tasks", []), list) or any(not isinstance(task, str) or not task.strip() for task in body.args.get("tasks", []))):
+        raise HTTPException(400, "tasks must be a list of workflow task identifiers")
     eng = get_engine()
-    h = await eng.start(body.type, wid, body.args)
-    row = _upsert_run({**_handle_to_row(h, eng.name), "args": body.args})
-    _record_event({"workflow_id": h.workflow_id, "run_id": h.run_id, "type": h.type, "event": "started", "status": h.status, "args": body.args})
+    h = await eng.start(body.type, wid, {**body.args, "_actor_id": user.id})
+    row = _handle_to_row(h, eng.name)
     return {
         "workflow_id": h.workflow_id, "run_id": h.run_id, "type": h.type,
-        "status": h.status, "engine": eng.name, "record": row,
+        **_progress(h), "engine": eng.name, "record": row, "permissions": _permissions(user, db),
     }
 
 
 @router.post("/{workflow_id}/signal")
-async def signal_wf(workflow_id: str, body: SignalIn) -> dict[str, str]:
-    await get_engine().signal(workflow_id, body.signal, body.payload)
-    _record_event({"workflow_id": workflow_id, "event": "signal", "signal": body.signal, "payload": body.payload})
-    return {"ok": "true"}
+async def signal_wf(workflow_id: str, body: SignalIn, user: UserDependency, db: SessionDependency) -> dict[str, Any]:
+    _validate_context_payload(body.payload)
+    h = await _scoped_handle(workflow_id)
+    permissions = _permissions(user, db)
+    if body.signal in {"approve", "request_changes", "reject", "complete_task", "complete_review", "resolve"} and not permissions["approve"]:
+        raise HTTPException(403, "Project approval permission required")
+    await get_engine().signal(workflow_id, body.signal, {**body.payload, "actor_id": user.id})
+    return {"ok": True, "workflow_id": workflow_id, **_progress(h), "permissions": permissions}
 
 
 @router.get("/{workflow_id}/detail")
-async def workflow_detail(workflow_id: str, events_limit: int = 80) -> dict[str, Any]:
+async def workflow_detail(workflow_id: str, user: UserDependency, db: SessionDependency, events_limit: int = 80) -> dict[str, Any]:
     """实例详情：运行记录 + 事件时间线 + 已投递信号（内存引擎）。"""
     eng = get_engine()
     try:
-        h = await eng.describe(workflow_id)
+        h = await _scoped_handle(workflow_id)
     except HTTPException:
         raise
     except Exception as err:
@@ -814,9 +1002,7 @@ async def workflow_detail(workflow_id: str, events_limit: int = 80) -> dict[str,
         signals = await eng.query(workflow_id, "signals")
     except Exception:
         signals = []
-    result: Any = None
-    if h.status in ("completed", "failed", "cancelled"):
-        result = h.result
+    result: Any = h.result
     merged_result = result if result is not None else instance.get("result")
     dag = _build_workflow_dag(str(h.type), str(h.status), merged_result)
     temporal = await _temporal_snapshot(workflow_id)
@@ -832,16 +1018,18 @@ async def workflow_detail(workflow_id: str, events_limit: int = 80) -> dict[str,
         "error": h.error or "",
         "dag": dag,
         "temporal": temporal,
+        **_progress(h),
+        "permissions": _permissions(user, db),
     }
 
 
 @router.get("/{workflow_id}/status")
-async def status_wf(workflow_id: str) -> dict[str, Any]:
-    h = await get_engine().describe(workflow_id)
+async def status_wf(workflow_id: str, user: UserDependency, db: SessionDependency) -> dict[str, Any]:
+    h = await _scoped_handle(workflow_id)
     row = _upsert_run(_handle_to_row(h, get_engine().name))
     return {
         "workflow_id": h.workflow_id, "run_id": h.run_id, "type": h.type,
-        "status": h.status, "error": h.error or "",
+        **_progress(h), "error": h.error or "", "permissions": _permissions(user, db),
         "duration_s": int(time.time() - h.started_at),
         "record": row,
     }
@@ -849,7 +1037,7 @@ async def status_wf(workflow_id: str) -> dict[str, Any]:
 
 @router.get("/{workflow_id}/result")
 async def result_wf(workflow_id: str) -> dict[str, Any]:
-    h = await get_engine().describe(workflow_id)
+    h = await _scoped_handle(workflow_id)
     if h.status not in ("completed", "failed", "cancelled"):
         raise HTTPException(409, f"未完成：{h.status}")
     row = _upsert_run(_handle_to_row(h, get_engine().name))
@@ -859,6 +1047,7 @@ async def result_wf(workflow_id: str) -> dict[str, Any]:
 
 @router.post("/{workflow_id}/cancel")
 async def cancel_wf(workflow_id: str) -> dict[str, str]:
+    await _scoped_handle(workflow_id)
     await get_engine().cancel(workflow_id)
     rows = _load_runs()
     for r in rows:
@@ -868,6 +1057,13 @@ async def cancel_wf(workflow_id: str) -> dict[str, str]:
     _save_runs(rows)
     _record_event({"workflow_id": workflow_id, "event": "cancelled", "status": "cancelled"})
     return {"ok": "true"}
+
+
+@router.get("/{workflow_id}/query")
+async def query_wf(workflow_id: str, user: UserDependency, db: SessionDependency, query: str = "progress") -> dict[str, Any]:
+    h = await _scoped_handle(workflow_id)
+    return {"ok": True, "workflow_id": workflow_id, "query": query, "value": await get_engine().query(workflow_id, query),
+            **_progress(h), "permissions": _permissions(user, db)}
 
 
 @router.post("/bulk-cancel")

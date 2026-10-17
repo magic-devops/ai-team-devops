@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
@@ -144,7 +144,7 @@ def _active_user_from_payload(payload: dict, db: Session) -> User:
             username=row.username,
             email=row.email,
             password_hash=row.password_hash,
-            role=row.role,
+            role=_norm_role(row.role),
             status=row.status,
         )
     raise HTTPException(401, "用户不存在或已禁用")
@@ -172,16 +172,24 @@ def require_data_hub_import(user: User = Depends(current_user)) -> User:
 
 
 def current_user_or_apikey(
-    request=None,
+    request: Request,
     creds: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_session),
 ) -> User:
-    """支持 Bearer JWT 和 X-Api-Key 双认证"""
-    from fastapi import Request
+    """Bearer JWT or the owner already verified by HMAC middleware.
+
+    A bare API key header is not proof of authentication. Re-read the owner so
+    disabling a user takes effect immediately for existing keys as for JWTs.
+    """
     # Bearer JWT
     if creds:
         payload = _decode_token(creds.credentials)
         return _active_user_from_payload(payload, db)
+    owner = getattr(request.state, "api_key_owner", None)
+    if isinstance(owner, dict) and owner.get("user_id"):
+        user = _active_user_from_payload({"sub": owner["user_id"]}, db)
+        if owner.get("tenant_id") == user.tenant_id:
+            return user
     raise HTTPException(401, "未提供有效认证")
 
 
@@ -194,17 +202,18 @@ def require_role(min_role: str):
 
 
 def check_project_access(user: User, project_id: str, db: Session, min_role: str = "viewer"):
+    user_role = _norm_role(user.role)
     proj = db.query(Project).filter_by(id=project_id).first()
     if not proj and ADMIN_MODE == "single":
         from sop_manager.project_provision import ensure_project_for_user
         proj = ensure_project_for_user(db, project_id, user)
     if not proj:
         raise HTTPException(404, "项目不存在")
-    if user.role == "super_admin":
+    if user_role == "super_admin":
         return
     if proj.tenant_id != user.tenant_id:
         raise HTTPException(403, "无项目访问权限")
-    if user.role == "tenant_admin":
+    if user_role == "tenant_admin":
         return
     member = db.query(ProjectMember).filter_by(project_id=project_id, user_id=user.id).first()
     if not member:

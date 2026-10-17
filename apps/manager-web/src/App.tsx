@@ -50,7 +50,7 @@ import {
   TENANT_CODE_KEY,
   TOKEN_KEY,
 } from "./lib/authStorage";
-import { useCapabilities } from "./lib/capabilities";
+import { capabilityReadOnly, useCapabilities } from "./lib/capabilities";
 import {
   densityPadding,
   getMenuPrefs,
@@ -716,7 +716,7 @@ export function App() {
   }, [authed, managerAuthOptional]);
 
   useEffect(() => {
-    if (me.data) setUserSession(me.data);
+    if (me.data) setUserSession(me.data, { preserveWorkspace: true });
   }, [me.data]);
 
   const humanizeNavKey = (key: string) =>
@@ -803,7 +803,7 @@ export function App() {
   const currentQuickAccess = quickAccessSet.has(current.key);
   const breadcrumb = useMemo(() => buildNavBreadcrumb(hash, navLabel, visibleNav), [hash, navLabel, visibleNav]);
   const densityCls = densityPadding(menuPrefs.density);
-  const canWriteCurrent = current.capability ? capabilities.can(current.capability, "write") : true;
+  const isReadOnlyCurrent = current.capability ? capabilityReadOnly(capabilities.get(current.capability), capabilities.status, capabilities.role) : false;
   const quickPanelItems = quickPanel === "favorites" ? favoriteItems : quickPanel === "recents" ? recentItems : quickAccessItems;
   const quickPanelTitle = quickPanel === "favorites" ? t("nav.favorites") : quickPanel === "recents" ? t("nav.recents") : t("nav.pinned");
   const mobileCoreActions = useMemo(
@@ -1604,7 +1604,7 @@ export function App() {
                 {t(`page.${current.key}.title`, { defaultValue: navLabel(current.key) })}
               </h1>
               <NavBadgeTag badge={current.badge} />
-              {!canWriteCurrent ? (
+              {isReadOnlyCurrent ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-300"
                   title={t("nav.readOnlyHint")}

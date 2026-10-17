@@ -1,13 +1,27 @@
 """SQLAlchemy ORM 模型 — 支持 SQLite / MySQL 8 / OceanBase MySQL 模式"""
 from __future__ import annotations
+
 import os
 from datetime import datetime
+
 from sqlalchemy import (
-    create_engine, Column, String, Text, Integer, Float, Boolean,
-    DateTime, ForeignKey, JSON, UniqueConstraint, Index, event
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    event,
 )
-from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker, Session
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.pool import NullPool, StaticPool
 
 _DB_TYPE = os.getenv("DB_TYPE", "sqlite")
 _DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sop.db")
@@ -19,10 +33,14 @@ def _configure_sqlite(dbapi_conn, _):
 
 def make_engine():
     if _DB_TYPE == "sqlite":
+        url = make_url(_DATABASE_URL)
+        in_memory = url.database in {None, "", ":memory:"} or url.query.get("mode") == "memory"
         engine = create_engine(
             _DATABASE_URL,
             connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+            # Memory needs one shared connection. File requests use independent
+            # connections without blocking synchronous scope checks on a pool queue.
+            poolclass=StaticPool if in_memory else NullPool,
         )
         event.listen(engine, "connect", _configure_sqlite)
     else:
@@ -217,6 +235,65 @@ class Sprint(Base):
 
 
 # ── 审计日志 ──────────────────────────────────────────────────────
+class DeliveryWorkspace(Base):
+    """Additive project delivery metadata; business requirements/tasks remain canonical."""
+    __tablename__ = "delivery_workspaces"
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=0)
+    data = Column(JSON, nullable=False, default=dict)
+
+
+class DeliveryEvent(Base):
+    __tablename__ = "delivery_events"
+    id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    actor = Column(String(128), nullable=False)
+    action = Column(String(64), nullable=False)
+    resource_id = Column(String(64), default="")
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DeliveryReceipt(Base):
+    __tablename__ = "delivery_receipts"
+    id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(String(64), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    version = Column(Integer, nullable=False)
+
+
+class DeliveryPlanPreview(Base):
+    """Committed generation intent; provider retries never happen implicitly."""
+    __tablename__ = "delivery_plan_previews"
+    id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(String(64), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RequirementAssistance(Base):
+    """Durable generation or adoption intent scoped to one project and actor."""
+    __tablename__ = "requirement_assistance"
+    id = Column(String(64), primary_key=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(64), nullable=False)
+    action = Column(String(32), nullable=False)
+    requirement_id = Column(String(64), nullable=False, default="", index=True)
+    request_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id            = Column(String(64), primary_key=True)

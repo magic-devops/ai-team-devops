@@ -46,21 +46,19 @@ def test_analytics_nlq_returns_rules_fallback_when_llm_provider_fails(monkeypatc
         "issues_by_priority": {},
     }
 
-    class BrokenProvider:
-        def chat(self, body):
-            raise RuntimeError("provider offline")
+    def unavailable_gateway(body, request):
+        raise RuntimeError("provider offline with sensitive upstream context")
 
     from sop_manager.routers import llm_gateway
 
     monkeypatch.setattr(data_analytics, "_require_scope", lambda: "project-a")
     monkeypatch.setattr(data_analytics, "_build_metrics", lambda db, pid: metrics)
-    monkeypatch.setattr(llm_gateway, "_route_model", lambda body: "demo-model")
-    monkeypatch.setattr(llm_gateway, "_provider_chain", lambda model: [BrokenProvider()])
+    monkeypatch.setattr(llm_gateway, "llm_chat", unavailable_gateway)
 
     result = data_analytics.analytics_nlq(NlqIn(question="阻塞任务怎么样？"), db=object())
 
     assert result["ok"] is True
     assert result["engine"] == "rules"
     assert result["fallback_reason"] == "llm_provider_failed"
-    assert result["provider_errors"] == ["provider offline"]
+    assert result["provider_errors"] == ["RuntimeError"]
     assert "阻塞：1" in result["answer"]

@@ -15,6 +15,7 @@ class CmdEntry(TypedDict, total=False):
 
 # 顶层与子命令说明（与 __main__.py add_typer 保持同步）
 COMMAND_TREE: dict[str, CmdEntry] = {
+    "delivery": {"help": "项目交付与执行验收", "subs": {"workspace": "业务快照", "inbox": "个人/团队交付待办（--scope mine|team，--json）", "targets": "执行目标", "preview": "任务计划预览（--file JSON，显式 generator）", "command": "版本与幂等命令（--file JSON）"}},
     "help": {"help": "帮助总览/命令摘要", "subs": {"--examples": "附带示例", "--group": "按场景过滤示例"}},
     "init": {"help": "初始化项目（memory / .ai-memory / agent.toml）"},
     "register": {
@@ -157,12 +158,27 @@ COMMAND_TREE: dict[str, CmdEntry] = {
         "subs": {
             "list": "列表",
             "create": "创建",
-            "parse-doc": "文档转结构化需求",
-            "review": "智能评审",
+            "parse-doc": "文档解析预览（显式 --generator，重试复用 --request-id）",
+            "review": "规则/AI 评审预览；--apply-acceptance 明确采用",
+            "prototype": "原型设计预览（wireframe/user_journey/ia）",
+            "prototype-apply": "采用已编辑 JSON 设计文件，追加交付产物",
+            "assistance-history": "生成来源、失败与采用历史",
             "ops-plan": "治理操作包",
             "ops-tasks": "治理任务化",
             "update": "更新",
             "delete": "删除",
+        },
+    },
+    "workflow": {
+        "help": "工作流运行与人工审查",
+        "subs": {
+            "start": "启动工作流（固定 --id，重试复用）",
+            "detail": "阶段、审查结果和事件详情",
+            "review": "代码审查结论（明确 --comment、--request-id）",
+            "instances": "实例列表与状态筛选",
+            "events": "按 --workflow-id 查询事件",
+            "ops-plan": "运行治理计划",
+            "ops-tasks": "治理任务预览；--apply 确认创建",
         },
     },
     "issue": {
@@ -173,6 +189,7 @@ COMMAND_TREE: dict[str, CmdEntry] = {
         "help": "任务（Manager）",
         "subs": {
             "list": "列表",
+            "show": "读取当前授权项目的任务详情",
             "schedule": "DAG 调度计划",
             "feed": "AI/CLI 任务包",
             "report": "Agent 回写",
@@ -284,7 +301,15 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "交付工作台",
         [
-            ("sop requirement parse-doc --file prd.md --agent \"Product Analyst Agent\" --cli codex --apply", "文档智能拆解并导入需求池"),
+            ("sop requirement parse-doc --file prd.md --generator ai --request-id intake-preview-001 --json", "模型解析预览；重试复用请求标识，编辑选择后再导入"),
+            ("sop requirement parse-doc --file prd.md --generator rules --request-id intake-rules-001 --json", "明确选择本地规则，不调用模型"),
+            ("sop requirement review REQ-EXAMPLE --generator ai --request-id review-preview-001 --json", "AI 评审预览；确认建议后才使用 --apply-acceptance"),
+            ("sop requirement prototype REQ-EXAMPLE --mode wireframe --generator ai --request-id prototype-preview-001 --json", "原型预览；保留生成 ID、基准和版本，编辑采用 JSON 文件"),
+            ("sop requirement prototype-apply REQ-EXAMPLE --file prototype-adoption.json --json", "确认已编辑设计文件，追加交付产物"),
+            ("sop requirement assistance-history REQ-EXAMPLE --json", "查看建议的来源、失败和采用记录"),
+            ("sop workflow start code_review --id review-example-001 --args '{}' --json", "启动固定 ID 的审查；传入真实 diff 后审查，缺少 diff 不会自动通过"),
+            ("sop workflow detail review-example-001 --json", "先核对真实阶段、自动审查结果和权限"),
+            ('sop workflow review review-example-001 --decision request_changes --comment "缺少测试证据，请补齐后重新审查" --request-id review-decision-001 --json', "明确提交人工意见；重试保持相同 ID、结论和意见"),
             ('sop requirement create "统一项目注册流程" --priority P1', "创建需求"),
             ('sop issue create "登录回调异常" --severity P1', "创建问题"),
             ('sop sprint create "MVP 闭环" --points 20', "创建迭代"),
@@ -364,6 +389,14 @@ QUICK_START = """
   sop context prepare --flush     # 刷新上下文、远端 DB 配置并冲刷 sync/memory/kb/event/usage outbox
   sop platforms init all          # 生成各 CLI/IDE/Agent 接入配置
   sop requirement create "统一项目注册流程" --priority P1
+  sop requirement parse-doc --file prd.md --generator ai --request-id intake-preview-001 --json
+  sop requirement review REQ-EXAMPLE --generator rules --request-id review-preview-001 --json
+  sop requirement prototype REQ-EXAMPLE --generator ai --mode wireframe --request-id prototype-preview-001 --json
+  sop requirement prototype-apply REQ-EXAMPLE --file prototype-adoption.json --json  # 先编辑并核对采用文件
+  sop requirement assistance-history REQ-EXAMPLE --json
+  sop workflow start code_review --id review-example-001 --args '{}' --json
+  sop workflow detail review-example-001 --json
+  sop workflow review review-example-001 --decision request_changes --comment "缺少测试证据，请补齐后重新审查" --request-id review-decision-001 --json
   sop issue create "登录回调异常" --severity P1
   sop sprint create "MVP 闭环" --points 20
   sop work next --local

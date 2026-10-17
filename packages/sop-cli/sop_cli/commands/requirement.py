@@ -4,12 +4,13 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from rich.table import Table
@@ -19,6 +20,33 @@ from . import hermes as hermes_cmd
 
 app = typer.Typer(help="需求：list/create/update/delete（本地优先，远端增强）")
 app.add_typer(hermes_cmd.build_resource_app("requirements"), name="v1", help="Hermes 需求：list/get/create/patch")
+
+
+def _generation_options(generator: str, request_id: str) -> dict[str, Any]:
+    if generator not in {"ai", "rules"}:
+        raise ValueError("generator must be ai or rules")
+    result: dict[str, Any] = {"generator": generator}
+    if request_id:
+        if not 8 <= len(request_id) <= 100:
+            raise ValueError("request-id must contain 8-100 characters")
+        result["idempotency_key"] = request_id
+    return result
+
+
+def _adoption_fields(result: dict[str, Any], operation: str, *, requirement: bool = False) -> dict[str, Any]:
+    generation = result.get("generation") or {}
+    generation_id = generation.get("id")
+    version = result.get("expected_version")
+    if not generation_id or not isinstance(version, int) or (requirement and not generation.get("basis")):
+        raise ValueError("Manager did not return a versioned generation; preview again on a compatible server before applying")
+    fields = {
+        "generation_id": generation_id,
+        "expected_version": version,
+        "idempotency_key": hashlib.sha256(f"{operation}:{generation_id}".encode()).hexdigest(),
+    }
+    if requirement:
+        fields["requirement_basis"] = generation["basis"]
+    return fields
 
 
 def _now() -> str:
@@ -285,6 +313,8 @@ def parse_requirement_document(
     no_auto_priority: bool = typer.Option(False, "--no-auto-priority", help="关闭自动优先级评估"),
     no_auto_acceptance: bool = typer.Option(False, "--no-auto-acceptance", help="关闭自动验收标准生成"),
     apply: bool = typer.Option(False, "--apply", help="解析后批量写入 Manager 需求池"),
+    generator: str = typer.Option("ai", "--generator", help="ai | rules；模型失败不会自动使用规则"),
+    request_id: str = typer.Option("", "--request-id", help="8-100字符稳定请求标识；重试保持一致"),
     json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
 ) -> None:
     """将 PRD/会议纪要/想法文本解析为结构化需求，可直接导入需求池。"""
@@ -308,17 +338,19 @@ def parse_requirement_document(
         "dev_tool": dev_tool or cli,
     }
     try:
+        body.update(_generation_options(generator, request_id))
         out = get_client().parse_requirements_document(body)
+        if apply:
+            items = out.get("items") or []
+            if not items:
+                out["warning"] = "没有可导入需求"
+            else:
+                out["created"] = get_client().batch_create_requirements({
+                    "items": items, **_adoption_fields(out, "intake"),
+                })
     except Exception as e:
         err(f"Manager requirement parse-doc 不可用: {e}")
         raise typer.Exit(1) from e
-    if apply:
-        items = out.get("items") or []
-        if not items:
-            warn("没有可导入需求")
-        else:
-            created = get_client().batch_create_requirements(items)
-            out["created"] = created
     if json_out:
         console.print_json(data=out)
         return
@@ -494,11 +526,15 @@ def requirement_ops_tasks(
 def review_requirement(
     req_id: str = typer.Argument(..., help="需求 ID"),
     apply_acceptance: bool = typer.Option(False, "--apply-acceptance", help="将评审建议的验收标准回写到 Manager"),
+    generator: str = typer.Option("rules", "--generator", help="rules | ai；明确选择建议来源"),
+    request_id: str = typer.Option("", "--request-id", help="8-100字符稳定请求标识"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读JSON"),
 ) -> None:
     """智能评审需求质量，并可把建议验收标准回写到远端需求。"""
     try:
-        out = get_client().review_requirement(req_id)
-        _render_review(out)
+        out = get_client().review_requirement(req_id, _generation_options(generator, request_id))
+        if not json_out:
+            _render_review(out)
         criteria = out.get("suggested_acceptance_criteria") or []
         if apply_acceptance and criteria:
             applied = get_client().apply_requirement_review(
@@ -506,14 +542,86 @@ def review_requirement(
                 {
                     "acceptance_criteria": criteria,
                     "human_notes": "已通过 sop requirement review --apply-acceptance 应用智能评审建议。",
+                    **_adoption_fields(out, "review", requirement=True),
                 },
             )
-            ok(f"applied review suggestions: {', '.join(applied.get('updated', [])) or 'none'}")
+            out["applied"] = applied
+            if not json_out:
+                ok(f"applied review suggestions: {', '.join(applied.get('updated', [])) or 'none'}")
         elif apply_acceptance:
-            warn("没有可应用的建议验收标准")
+            out["warning"] = "没有可应用的建议验收标准"
+            if not json_out:
+                warn(out["warning"])
+        if json_out:
+            console.print_json(data=out)
     except Exception as e:
         err(f"Manager requirement review 不可用: {e}")
         raise typer.Exit(1) from e
+
+
+@app.command("prototype")
+def prototype(
+    req_id: str = typer.Argument(..., help="需求 ID"),
+    mode: str = typer.Option("wireframe", "--mode", help="wireframe | user_journey | ia"),
+    context: str = typer.Option("", "--context", help="补充设计背景"),
+    generator: str = typer.Option("ai", "--generator", help="ai | rules"),
+    request_id: str = typer.Option("", "--request-id", help="稳定生成请求标识"),
+    json_out: bool = typer.Option(False, "--json"),
+) -> None:
+    """预览设计建议；不自动覆盖原型或采用交付产物。"""
+    try:
+        out = get_client().generate_requirement_prototype(req_id, {
+            **_generation_options(generator, request_id), "mode": mode,
+            "extra_context": context, "gen_image": False,
+        })
+    except Exception as exc:
+        err(f"Prototype preview failed: {exc}")
+        raise typer.Exit(1) from exc
+    if json_out:
+        console.print_json(data=out)
+    else:
+        generation = out.get("generation") or {}
+        console.print(f"source: {generation.get('source')} model: {generation.get('model', '')}", markup=False)
+        console.print(str(out.get("content") or ""), markup=False)
+
+
+@app.command("prototype-apply")
+def prototype_apply(
+    req_id: Annotated[str, typer.Argument(help="需求 ID")],
+    path: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True, help="已编辑内容、生成ID、基准、版本和幂等键的JSON对象")],
+    json_out: bool = typer.Option(False, "--json"),
+) -> None:
+    """明确采用已核对的设计，追加一条交付产物。"""
+    try:
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Adoption file must contain a JSON object")
+        if any(key not in body for key in ("content", "generation_id", "requirement_basis", "expected_version", "idempotency_key")):
+            raise ValueError("Adoption file must retain content, generation_id, requirement_basis, expected_version and idempotency_key")
+        out = get_client().apply_requirement_prototype(req_id, body)
+    except Exception as exc:
+        err(f"Prototype adoption failed: {exc}")
+        raise typer.Exit(1) from exc
+    if json_out:
+        console.print_json(data=out)
+    else:
+        ok(f"recorded artifact: {out.get('artifact_id', '')}")
+
+
+@app.command("assistance-history")
+def assistance_history(req_id: str = typer.Argument(...), json_out: bool = typer.Option(False, "--json")) -> None:
+    """读取需求建议的来源、失败和采用记录。"""
+    try:
+        out = get_client().requirement_assistance_history(req_id)
+    except Exception as exc:
+        err(f"Assistance history failed: {exc}")
+        raise typer.Exit(1) from exc
+    if json_out:
+        console.print_json(data=out)
+    else:
+        for row in out.get("items") or []:
+            generation = row.get("generation") or {}
+            console.print(f"{generation.get('id')} {generation.get('action')} {row.get('status')} {generation.get('source')} {generation.get('model', '')}", markup=False)
 
 
 @app.command(name="delete")

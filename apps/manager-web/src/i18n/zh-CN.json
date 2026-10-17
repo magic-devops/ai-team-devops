@@ -745,13 +745,35 @@
       "refreshBase": "刷新基线"
     },
     "delivery": {
-      "title": "任务交付", "criteria": "验收条件", "assignee": "负责人 / Agent", "noCriteria": "请先编辑任务，补充验收条件。",
-      "openRun": "查看执行与证据", "node": "执行步骤", "argv": "命令参数（JSON 数组）", "expectedExit": "预期退出码", "actualExit": "实际退出码", "timeout": "超时（秒）",
-      "addNode": "添加步骤", "removeNode": "删除步骤", "invalidArgv": "命令必须为非空字符串数组。",
-      "previewPlan": "预览执行计划", "previewReview": "预览审查结论", "apply": "确认提交", "previewReady": "预览已生成，尚未写入",
-      "decision": "交付决策", "accept": "验收通过", "requestChanges": "要求修改", "comment": "审查结论与依据", "saved": "已提交，证据已记录",
+      "title": "任务交付",
+      "criteria": "验收条件",
+      "assignee": "负责人 / Agent",
+      "noCriteria": "请先编辑任务，补充验收条件。",
+      "openRun": "查看执行与证据",
+      "node": "执行步骤",
+      "argv": "命令参数（JSON 数组）",
+      "expectedExit": "预期退出码",
+      "actualExit": "实际退出码",
+      "timeout": "超时（秒）",
+      "addNode": "添加步骤",
+      "removeNode": "删除步骤",
+      "invalidArgv": "命令必须为非空字符串数组。",
+      "previewPlan": "预览执行计划",
+      "previewReview": "预览审查结论",
+      "apply": "确认提交",
+      "previewReady": "预览已生成，尚未写入",
+      "decision": "交付决策",
+      "accept": "验收通过",
+      "requestChanges": "要求修改",
+      "comment": "审查结论与依据",
+      "saved": "已提交，证据已记录",
       "permissionHint": "当前权限或任务状态不允许此操作。",
-      "phases": { "unplanned": "待派发", "awaiting_review": "待交付审查", "accepted": "已验收", "changes_requested": "待修改" }
+      "phases": {
+        "unplanned": "待派发",
+        "awaiting_review": "待交付审查",
+        "accepted": "已验收",
+        "changes_requested": "待修改"
+      }
     },
     "title": "Hermes 工作空间",
     "subtitle": "Workspace 作用域 Hermes core 控制台。",
@@ -3203,17 +3225,21 @@
       "aiCopilotPrefill": "请基于需求「{{title}}」给出改进建议、验收标准补充与拆任务思路。",
       "aiCopilotPrefillGeneric": "请总结当前项目需求池的风险、优先级建议与下一步行动。",
       "mode": {
+        "pool": {
+          "title": "需求池",
+          "hint": "采集并整理需求，核对范围、优先级和验收条件后导入。"
+        },
         "review": {
-          "title": "智能评审模式",
-          "hint": "在需求卡片上使用「智能评审」，补全验收标准并识别相似需求与风险。"
+          "title": "需求评审",
+          "hint": "明确选择规则检查或 AI 评审，核对建议后采用验收条件与设计产物。"
         },
         "generation": {
-          "title": "需求拆任务模式",
-          "hint": "选择需求后预览/创建开发任务，自动建立依赖并进入任务中心执行。"
+          "title": "需求拆解",
+          "hint": "预览并确认需求任务计划，保留验收关联后派发执行。"
         },
         "batch": {
-          "title": "批量治理模式",
-          "hint": "对筛选结果批量更新状态、优先级、负责 Agent 与开发工具。"
+          "title": "批量治理",
+          "hint": "对已选择的需求更新状态、优先级、负责人和开发工具。"
         }
       },
       "list": "需求列表",

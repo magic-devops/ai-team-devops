@@ -17,7 +17,7 @@ from rich.table import Table
 from .._util import console, get_client, get_config, kv, ok, warn
 from . import hermes as hermes_cmd
 
-app = typer.Typer(help="任务：list/schedule/feed/report/create/pull/done/fail/delete/issue（本地优先，远端增强）")
+app = typer.Typer(help="任务：list/show/schedule/feed/report/create/pull/done/fail/delete/issue（show 读取远端项目详情）")
 app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v1", help="Hermes 任务：list/get/create/patch")
 
 
@@ -235,6 +235,25 @@ def _save_and_queue(row: dict[str, Any]) -> None:
     _save_deleted(deleted)
     _enqueue("tasks", row)
     _write_task_doc(row)
+
+
+@app.command(name="show")
+def show_task(
+    task_id: str = typer.Argument(..., help="当前项目的任务 ID"),
+    json_out: bool = typer.Option(False, "--json", help="输出机器可读 JSON"),
+) -> None:
+    """读取当前授权项目的任务详情；失败时明确退出，不使用本地缓存。"""
+    try:
+        with get_client() as client:
+            detail = client.get_task(task_id)
+    except Exception as exc:
+        warn(f"读取任务详情失败: {exc}")
+        raise typer.Exit(1) from exc
+    if json_out:
+        console.print_json(data=detail)
+        return
+    for key, value in detail.items():
+        console.print(f"{key}: {value}", markup=False)
 
 
 @app.command(name="schedule")

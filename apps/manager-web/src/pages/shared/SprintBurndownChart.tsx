@@ -2,7 +2,9 @@ import { Suspense, lazy, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 const EChartsBurndownLazy = lazy(() =>
-  import("../../components/charts/EChartsBurndown").then((m) => ({ default: m.EChartsBurndown })),
+  import("../../components/charts/EChartsBurndown").then((m) => ({
+    default: m.EChartsBurndown,
+  })),
 );
 
 type Point = { day: number; remaining: number };
@@ -10,21 +12,41 @@ type Point = { day: number; remaining: number };
 export type BurndownData = {
   ideal: Point[];
   actual: Point[];
-  stats?: { total_tasks?: number; completed?: number; remaining?: number; completion_rate?: number };
+  stats?: {
+    total_tasks?: number;
+    completed?: number;
+    remaining?: number;
+    completion_rate?: number;
+  };
   span_days?: number;
   elapsed_days?: number;
+  history_available?: boolean;
 };
 
 /** 燃尽图：默认 ECharts，失败时回退 SVG 轻量版 */
 export function SprintBurndownChart({ data }: { data?: BurndownData | null }) {
+  const { t } = useTranslation();
   const [lite, setLite] = useState(false);
-  if (!data?.ideal?.length) return null;
+  if (!data) return null;
+  if (!data.ideal?.length)
+    return (
+      <p className="text-xs text-[var(--muted)]">
+        {t("delivery.burndownDates")}
+      </p>
+    );
 
   if (!lite) {
     return (
-      <Suspense fallback={<BurndownLite data={data} />}>
-        <EChartsBurndownLazy data={data} onFailed={() => setLite(true)} />
-      </Suspense>
+      <>
+        <p className="mb-3 text-xs text-[var(--muted)]">
+          {data.history_available === false
+            ? t("delivery.burndownSnapshot")
+            : ""}
+        </p>
+        <Suspense fallback={<BurndownLite data={data} />}>
+          <EChartsBurndownLazy data={data} onFailed={() => setLite(true)} />
+        </Suspense>
+      </>
     );
   }
 
@@ -55,23 +77,38 @@ function BurndownLite({ data }: { data: BurndownData }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--muted-strong)]">
         <span>{t("page.devFlow.burndownLegend")}</span>
         <span className="tabular-nums">
-          {t("page.devFlow.burndownRemaining")}: {data.stats?.remaining ?? "—"} / {data.stats?.total_tasks ?? "—"}
+          {t("page.devFlow.burndownRemaining")}: {data.stats?.remaining ?? "—"}{" "}
+          / {data.stats?.total_tasks ?? "—"}
         </span>
       </div>
       <div className="relative h-36 w-full overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)]">
-        <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+        <svg
+          className="absolute inset-0 h-full w-full"
+          preserveAspectRatio="none"
+          viewBox="0 0 100 100"
+        >
           <polyline
             fill="none"
             stroke="var(--muted)"
             strokeWidth="0.6"
             strokeDasharray="2 2"
-            points={data.ideal.map((p) => `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`).join(" ")}
+            points={data.ideal
+              .map(
+                (p) =>
+                  `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`,
+              )
+              .join(" ")}
           />
           <polyline
             fill="none"
             stroke="var(--brand)"
             strokeWidth="1.2"
-            points={data.actual.map((p) => `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`).join(" ")}
+            points={data.actual
+              .map(
+                (p) =>
+                  `${(p.day / maxDay) * 100},${100 - (p.remaining / maxRem) * 100}`,
+              )
+              .join(" ")}
           />
         </svg>
         {data.actual.map((p, i) => (
@@ -86,7 +123,8 @@ function BurndownLite({ data }: { data: BurndownData }) {
       <div className="mt-2 flex justify-between text-[10px] text-[var(--muted)]">
         <span>0</span>
         <span>
-          {t("page.devFlow.burndownDay")} {data.elapsed_days ?? 0} / {data.span_days ?? maxDay}
+          {t("page.devFlow.burndownDay")} {data.elapsed_days ?? 0} /{" "}
+          {data.span_days ?? maxDay}
         </span>
         <span>{maxDay}</span>
       </div>

@@ -38,6 +38,7 @@ from sop_manager.routers.analytics_report_core import (
     summarize_report_intelligence,
 )
 from sop_manager.routers.auth_sql import User, current_user
+from sop_manager.routers.business_access import require_business_access
 from sop_manager.routers.db_sql_compat import now, rows, table
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 from sop_manager.routers.sql_models import Issue, Requirement, Task, get_session
@@ -3221,18 +3222,18 @@ def _report_action_candidates(report: dict[str, Any], body: ReportActionTasksIn)
     return out
 
 
-@router.post("/nlq")
+@router.post("/nlq", dependencies=[Depends(require_business_access)])
 def analytics_nlq(body: NlqIn, db: Session = Depends(get_session)) -> dict[str, Any]:
     pid = _require_scope()
     metrics = _build_metrics(db, pid)
     fallback = _answer_nlq_with_metrics(body.question, metrics)
     try:
-        from sop_manager.routers.llm_gateway import ChatIn, Message, _provider_chain, _route_model
+        from sop_manager.routers.llm_gateway import ChatIn, Message, llm_chat
     except Exception as e:
         return {
             **fallback,
             "fallback_reason": "llm_gateway_unavailable",
-            "provider_errors": [str(e)],
+            "provider_errors": [type(e).__name__],
         }
     prompt = (
         "你是项目数据分析助手。根据以下 JSON 指标摘要，用中文简洁回答用户问题；"
@@ -3240,26 +3241,27 @@ def analytics_nlq(body: NlqIn, db: Session = Depends(get_session)) -> dict[str, 
         f"{metrics}\n\n问题：{body.question}"
     )
     chat_in = ChatIn(messages=[Message(role="user", content=prompt)], task_type="summarize")
-    model = _route_model(chat_in)
-    errors: list[str] = []
-    for provider in _provider_chain(model):
-        try:
-            out = provider.chat(ChatIn(**{**chat_in.model_dump(), "model": model}))
-            return {
-                **fallback,
-                "engine": "llm",
-                "confidence": 0.95,
-                "answer": out.content,
-                "model": out.model,
-                "fallback_answer": fallback["answer"],
-                "provider_errors": [],
-            }
-        except Exception as e:
-            errors.append(str(e))
+    try:
+        out = llm_chat(chat_in, None)
+        return {
+            **fallback,
+            "engine": "llm",
+            "confidence": 0.95,
+            "answer": out.content,
+            "model": out.model,
+            "provider": out.provider,
+            "usage": out.usage.model_dump(),
+            "fallback_answer": fallback["answer"],
+            "provider_errors": [],
+        }
+    except HTTPException as e:
+        error = f"HTTP {e.status_code}"
+    except Exception as e:
+        error = type(e).__name__
     return {
         **fallback,
         "fallback_reason": "llm_provider_failed",
-        "provider_errors": errors[:3],
+        "provider_errors": [error],
     }
 
 

@@ -4,6 +4,23 @@
   "updated_at": "2026-06-19T04:12:21Z",
   "phase": "INIT",
   "sprint": null,
+  "delivery_workbench": {
+    "updated_at": "2026-10-17",
+    "status": "project_resources_and_inbox_verified",
+    "entry": "#/dev-flow",
+    "record": "memory/delivery-workbench-progress.md",
+    "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
+    "execution_design": "docs/DELIVERY_EXECUTION_DESIGN.md",
+    "task_plan_design": "docs/DELIVERY_TASK_PLAN_DESIGN.md",
+    "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
+    "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
+    "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
+    "evidence": ".sop-runtime/delivery-evidence/project-inbox/",
+    "verification_status": "verified",
+    "next_step": "continuous_progress_baselines_capacity_and_portfolio_governance",
+    "production_integration_complete": false,
+    "commit_after_verified_stage": true
+  },
   "tasks": {
     "completed": [
       "补齐 sop requirement 需求 CLI：Manager CRUD + 本地离线队列 + sync push_queue",

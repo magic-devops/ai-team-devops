@@ -1,15 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Descriptions, Drawer, Input, Select, Space, Table, Tag, Timeline, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { Activity, GitBranch, ListChecks, Network, PauseCircle, Play, Radio, RefreshCw, Send, Terminal, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Activity, GitBranch, ListChecks, Network, Play, Radio, RefreshCw, Send, Terminal, XCircle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { FlashMessage } from "@/components/FlashMessage";
 import { EmptyState, ErrorBlock, LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
-import { getProjectId, getToken } from "@/lib/authStorage";
+import { getProjectId, getSessionRevision, getToken } from "@/lib/authStorage";
+import { assistanceIntent, type AssistanceIntent } from "@/lib/requirementsAssistance";
 import { WorkflowsWorkbenchHeader } from "./delivery/WorkflowsWorkbenchHeader";
+import { WorkflowHumanReview } from "./delivery/WorkflowHumanReview";
 import { WorkflowDag } from "@/pages/shared/WorkflowDag";
 
 type WorkflowModule = "catalog" | "instances" | "events" | "signals" | "ops";
@@ -22,11 +24,12 @@ type WorkflowsProps = {
 const inputClass = "rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/20";
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const cls =
     status === "completed" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-200" :
       status === "failed" || status === "cancelled" ? "bg-rose-500/10 text-rose-700 dark:text-rose-200" :
         "bg-sky-500/10 text-sky-700 dark:text-sky-200";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{t(`assistance.${status}`, { defaultValue: status })}</span>;
 }
 
 export function Workflows({ initialModule = "catalog", focused = false }: WorkflowsProps) {
@@ -43,7 +46,9 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
   const [instanceType, setInstanceType] = useState("");
   const [instanceQuery, setInstanceQuery] = useState("");
   const [selectedWorkflowIds, setSelectedWorkflowIds] = useState<string[]>([]);
-  const [signalDraft, setSignalDraft] = useState({ signal: "approve", payload: "{}" });
+  const [signalDraft, setSignalDraft] = useState({ signal: "pause", payload: "{}" });
+  const startIntent = useRef<AssistanceIntent>();
+  const signalIntent = useRef<AssistanceIntent>();
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; message: string } | null>(null);
 
   const types = useQuery({ queryKey: ["wf-types"], queryFn: api.workflowTypes, enabled: authed && hasProject });
@@ -54,13 +59,25 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
     queryKey: ["wf-instances", instanceStatus, instanceType, instanceQuery],
     queryFn: () => api.workflowInstances(300, instanceStatus, instanceType, instanceQuery.trim()),
     enabled: authed && hasProject,
+    refetchInterval: (query) => query.state.data?.items.some((row) => !["completed", "failed", "cancelled"].includes(row.status)) ? 5000 : false,
   });
   const events = useQuery({ queryKey: ["wf-events", selected], queryFn: () => api.workflowEvents(100, selected), enabled: authed && hasProject && (module === "events" || module === "signals") });
   const detailQ = useQuery({
     queryKey: ["wf-detail", detailId],
     queryFn: () => api.workflowDetail(detailId),
     enabled: authed && hasProject && Boolean(detailId),
+    refetchInterval: (query) => query.state.data && !["completed", "failed", "cancelled"].includes(query.state.data.status || "") ? 5000 : false,
   });
+  const selectedDetail = useQuery({
+    queryKey: ["wf-detail", selected],
+    queryFn: () => api.workflowDetail(selected),
+    enabled: authed && hasProject && Boolean(selected) && module === "signals",
+    refetchInterval: (query) => query.state.data && !["completed", "failed", "cancelled"].includes(query.state.data.status || "") ? 5000 : false,
+  });
+  const selectedType = String(selectedDetail.data?.instance?.type || "");
+  const allowedSignals: string[] = (types.data ?? []).find((definition: { type: string }) => definition.type === selectedType)?.signals || [];
+  const advancedSignals = allowedSignals.filter((value) => !["approve", "request_changes", "reject"].includes(value));
+  const selectedAdvancedSignal = advancedSignals.includes(signalDraft.signal) ? signalDraft.signal : advancedSignals[0] || "";
 
   const start = useMutation({
     mutationFn: () => {
@@ -70,24 +87,29 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
       } catch {
         throw new Error(t("page.workflows.invalidJson"));
       }
-      return api.startWorkflow({ type, args: parsed });
+      const body = { type, args: parsed };
+      startIntent.current = assistanceIntent(startIntent.current, `${getSessionRevision()}:${getProjectId()}`, "workflow-start", body);
+      return api.startWorkflow({ ...body, workflow_id: `wf-${startIntent.current.key}` });
     },
     onSuccess: (data) => {
       setSelected(String(data?.workflow_id ?? ""));
       setFlash({ kind: "ok", message: t("page.workflows.started", { id: data?.workflow_id ?? data?.id ?? "-" }) });
       invalidate();
+      startIntent.current = undefined;
     },
     onError: (err) => setFlash({ kind: "err", message: (err as Error).message }),
   });
   const signal = useMutation({
     mutationFn: () => {
+      if (!selectedAdvancedSignal) throw new Error(t("assistance.advancedHint"));
       let payload: Record<string, unknown> = {};
       try {
         payload = JSON.parse(signalDraft.payload || "{}") as Record<string, unknown>;
       } catch {
         throw new Error(t("page.workflows.invalidJson"));
       }
-      return api.signalWorkflow(selected, { signal: signalDraft.signal, payload });
+      signalIntent.current = assistanceIntent(signalIntent.current, `${getSessionRevision()}:${getProjectId()}:${selected}`, selectedAdvancedSignal, payload);
+      return api.signalWorkflow(selected, { signal: selectedAdvancedSignal, payload: { ...payload, signal_id: payload.signal_id || signalIntent.current.key } });
     },
     onSuccess: () => {
       setFlash({ kind: "ok", message: t("page.workflows.signalSent") });
@@ -126,6 +148,7 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
     void qc.invalidateQueries({ queryKey: ["wf-instances"] });
     void qc.invalidateQueries({ queryKey: ["wf-events"] });
     void qc.invalidateQueries({ queryKey: ["wf-ops-plan"] });
+    void qc.invalidateQueries({ queryKey: ["wf-detail"] });
   }
 
   useEffect(() => {
@@ -190,7 +213,7 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
             size="small"
             danger
             icon={<XCircle className="h-3.5 w-3.5" />}
-            disabled={cancel.isPending || ["completed", "failed", "cancelled"].includes(row.status)}
+            disabled={cancel.isPending || !row.permissions?.write || ["completed", "failed", "cancelled"].includes(row.status)}
             onClick={() => cancel.mutate(row.workflow_id)}
           />
         </Space>
@@ -324,7 +347,7 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
                 selectedRowKeys: selectedWorkflowIds,
                 onChange: (keys) => setSelectedWorkflowIds(keys.map(String)),
                 getCheckboxProps: (record) => ({
-                  disabled: ["completed", "failed", "cancelled"].includes(record.status),
+                  disabled: !record.permissions?.write || ["completed", "failed", "cancelled"].includes(record.status),
                 }),
               }}
               pagination={{ pageSize: 10, showSizeChanger: true, pageSizeOptions: [10, 25, 50, 100], showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}` }}
@@ -380,16 +403,16 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
                   <option value="">{t("page.workflows.chooseInstance")}</option>
                   {(instances.data?.items ?? []).map((row: any) => <option key={row.workflow_id} value={row.workflow_id}>{row.workflow_id}</option>)}
                 </select>
-                <input className={`${inputClass} w-full`} value={signalDraft.signal} onChange={(e) => setSignalDraft((v) => ({ ...v, signal: e.target.value }))} />
-                <textarea className={`${inputClass} min-h-32 w-full font-mono text-xs`} value={signalDraft.payload} onChange={(e) => setSignalDraft((v) => ({ ...v, payload: e.target.value }))} />
-                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50" disabled={!selected || !signalDraft.signal.trim() || signal.isPending} onClick={() => signal.mutate()}>
+                {selectedDetail.isLoading && <LoadingBlock />}
+                {selectedDetail.error && <ErrorBlock message={(selectedDetail.error as Error).message} />}
+                {selectedDetail.data && <WorkflowHumanReview key={selected} workflowId={selected} detail={selectedDetail.data} onSaved={invalidate} />}
+                <details className="rounded-lg border border-[var(--border)] p-3"><summary className="cursor-pointer text-sm font-medium">{t("assistance.advancedSignal")}</summary><p className="my-3 text-xs text-[var(--muted)]">{t("assistance.advancedHint")}</p>
+                <label className="grid gap-1 text-xs">{t("page.workflows.signal")}<select className={`${inputClass} w-full`} value={selectedAdvancedSignal} onChange={(e) => setSignalDraft((v) => ({ ...v, signal: e.target.value }))}><option value="">—</option>{advancedSignals.map((value) => <option key={value} value={value}>{t(`assistance.${value}`, { defaultValue: value })}</option>)}</select></label>
+                <label className="mt-2 grid gap-1 text-xs">JSON<textarea className={`${inputClass} min-h-32 w-full font-mono text-xs`} value={signalDraft.payload} onChange={(e) => setSignalDraft((v) => ({ ...v, payload: e.target.value }))} /></label>
+                <button type="button" className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 py-2.5 text-sm font-semibold text-white" disabled={!selectedDetail.data?.permissions?.write || ["completed", "failed", "cancelled"].includes(selectedDetail.data?.status || "") || !selectedAdvancedSignal || signal.isPending} onClick={() => signal.mutate()}>
                   <Send className="h-4 w-4" />
                   {t("page.workflows.sendSignal")}
-                </button>
-                <button type="button" className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" disabled={!selected} onClick={() => setSignalDraft((v) => ({ ...v, signal: "pause" }))}>
-                  <PauseCircle className="h-4 w-4" />
-                  pause
-                </button>
+                </button></details>
               </div>
             </Card>
           </div>
@@ -461,11 +484,13 @@ export function Workflows({ initialModule = "catalog", focused = false }: Workfl
         title={detailId || t("page.workflows.instanceDetail")}
         open={Boolean(detailId)}
         onClose={() => setDetailId("")}
-        width={640}
+        width="min(720px, 100vw)"
       >
         {detailQ.isLoading ? <LoadingBlock /> : null}
+        {detailQ.error ? <ErrorBlock message={(detailQ.error as Error).message} /> : null}
         {detailQ.data ? (
           <div className="space-y-4 text-sm">
+            <WorkflowHumanReview key={detailId} workflowId={detailId} detail={detailQ.data} onSaved={invalidate} />
             <div className="grid gap-2 sm:grid-cols-2">
               <Summary label={t("page.workflows.status")} value={String(detailQ.data.instance?.status ?? "—")} />
               <Summary label={t("page.workflows.type")} value={String(detailQ.data.instance?.type ?? "—")} />

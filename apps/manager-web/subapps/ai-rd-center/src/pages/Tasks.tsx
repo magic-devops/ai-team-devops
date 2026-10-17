@@ -9,6 +9,7 @@ import { SprintBurndownChart } from "@/pages/shared/SprintBurndownChart";
 import { SprintProgressPanel } from "@/pages/shared/SprintProgressPanel";
 import { api } from "@/lib/api";
 import { getProjectId, getToken } from "@/lib/authStorage";
+import { linkedTaskRows, taskIdFromHash } from "@/lib/taskDeepLink";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
@@ -186,7 +187,8 @@ export function Tasks({
   const [depFilter, setDepFilter] = useState("all");
   const [depSelectedNode, setDepSelectedNode] = useState<any>(null);
   const [depTasksResult, setDepTasksResult] = useState<any>(null);
-  const [taskQuery, setTaskQuery] = useState("");
+  const [linkedTaskId, setLinkedTaskId] = useState(() => taskIdFromHash(typeof window === "undefined" ? "" : window.location.hash));
+  const [taskQuery, setTaskQuery] = useState(linkedTaskId);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
@@ -226,6 +228,21 @@ export function Tasks({
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    const syncLinkedTask = () => {
+      const taskId = taskIdFromHash(window.location.hash);
+      setLinkedTaskId(taskId);
+      if (taskId) {
+        setTaskQuery(taskId);
+        setStatusFilter("");
+        setPriorityFilter("");
+        setSourceFilter("");
+      }
+    };
+    window.addEventListener("hashchange", syncLinkedTask);
+    return () => window.removeEventListener("hashchange", syncLinkedTask);
+  }, []);
 
   useEffect(() => {
     setSchedulerPanel(readSchedulerPanelFromHash() ?? normalizeSchedulerPanel(initialSchedulerPanel));
@@ -689,7 +706,7 @@ export function Tasks({
     }
   }, [tab, sprintId, activeSprint?.id]);
 
-  const tasks = tab === "sprint" ? (sprintTasksQ.data ?? []) : (allTasksQ.data ?? []);
+  const tasks = tab === "sprint" ? (sprintTasksQ.data ?? []) : linkedTaskRows(allTasksQ.data ?? [], linkedTaskId, taskQuery);
   const loading = tab === "sprint" ? sprintTasksQ.isLoading : allTasksQ.isLoading;
   const error = tab === "sprint" ? sprintTasksQ.error : allTasksQ.error;
 

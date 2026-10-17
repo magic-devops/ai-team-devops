@@ -286,6 +286,8 @@ app.include_router(skill_repo.router)
 app.include_router(vibe.router)
 app.include_router(design_docs.router)
 app.include_router(dev_flow.router)
+from sop_manager.routers.delivery import router as delivery_router
+app.include_router(delivery_router)
 app.include_router(notify.router)
 app.include_router(organization_router.router)
 app.include_router(cli_wrapper.router)

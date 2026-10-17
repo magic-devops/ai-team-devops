@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from tenacity import (
@@ -40,8 +42,34 @@ _USER_AGENT = "sop-sdk/2.0"
 _DEFAULT_HEADERS = {"Accept": "application/json"}
 
 
+def _resource_segment(value: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}", value):
+        raise ValueError("resource ID must contain only ASCII letters, digits, dots, underscores, colons or hyphens")
+    return quote(value, safe="")
+
+
 class ManagerClient:
     """同步 HTTP 客户端；如需异步用 AsyncManagerClient（M3+ 提供）。"""
+
+    def delivery_workspace(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/delivery/workspace")
+
+    def delivery_inbox(self, *, scope: str = "mine") -> dict[str, Any]:
+        """Read actual personal or team delivery work in the selected project."""
+        if scope not in {"mine", "team"}:
+            raise ValueError("scope must be mine or team")
+        return self._request("GET", "/api/v1/delivery/inbox", params={"scope": scope})
+
+    def delivery_execution_targets(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/delivery/execution-targets")
+
+    def delivery_task_plan_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Preview an explicit generator; preserve version and retry identity verbatim."""
+        return self._request("POST", "/api/v1/delivery/task-plan-preview", json_body=dict(body))
+
+    def delivery_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Caller preserves expected_version and idempotency_key across retries."""
+        return self._request("POST", "/api/v1/delivery/commands", json_body=dict(body))
 
     def __init__(
         self,
@@ -448,6 +476,26 @@ class ManagerClient:
     def workflow_ops_tasks(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/workflows/ops-tasks", json_body=body)
 
+    def start_workflow(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Start a caller-named workflow so retries retain the same execution."""
+        if not body.get("workflow_id"):
+            raise ValueError("workflow_id is required for retry-safe workflow start")
+        _resource_segment(body["workflow_id"])
+        return self._request("POST", "/api/v1/workflows/start", json_body=dict(body))
+
+    def workflow_detail(self, workflow_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/workflows/{_resource_segment(workflow_id)}/detail")
+
+    def signal_workflow(self, workflow_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/workflows/{_resource_segment(workflow_id)}/signal", json_body=dict(body))
+
+    def review_workflow(self, workflow_id: str, decision: str, comment: str, signal_id: str) -> dict[str, Any]:
+        if decision not in {"approve", "request_changes", "reject"} or not comment.strip() or not signal_id.strip():
+            raise ValueError("Review requires an explicit decision, comment and stable signal_id")
+        return self.signal_workflow(workflow_id, {
+            "signal": decision, "payload": {"comment": comment, "signal_id": signal_id},
+        })
+
     # tasks
     def list_tasks(self, *, status: str | None = None, priority: str | None = None,
                    page: int = 1, size: int = 50) -> dict[str, Any]:
@@ -463,6 +511,12 @@ class ManagerClient:
                 items = [x for x in items if isinstance(x, dict) and x.get("priority") == priority]
             return {"total": len(items), "page": page, "size": size, "items": items}
         return out
+
+    def get_task(self, task_id: str) -> dict[str, Any]:
+        """Read one task in the client's authorized project; never switch scope."""
+        if not isinstance(task_id, str) or not re.fullmatch(r"T-[a-zA-Z0-9._-]{2,80}", task_id):
+            raise ValueError("task_id must be T- followed by 2-80 ASCII letters, digits, dots, underscores or hyphens")
+        return self._request("GET", f"/api/v1/tasks/{quote(task_id, safe='')}")
 
     def create_task(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/tasks", json_body=body)
@@ -626,11 +680,21 @@ class ManagerClient:
     def update_requirement(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("PATCH", f"/api/v1/requirements/{req_id}", json_body=body)
 
-    def review_requirement(self, req_id: str) -> dict[str, Any]:
-        return self._request("POST", f"/api/v1/requirements/{req_id}/review")
+    def review_requirement(self, req_id: str, body: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/requirements/{_resource_segment(req_id)}/review",
+                             json_body=dict(body) if body is not None else None)
 
     def apply_requirement_review(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/api/v1/requirements/{req_id}/apply-review", json_body=body)
+
+    def generate_requirement_prototype(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/requirements/{_resource_segment(req_id)}/prototype", json_body=dict(body))
+
+    def apply_requirement_prototype(self, req_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/api/v1/requirements/{_resource_segment(req_id)}/prototype/apply", json_body=dict(body))
+
+    def requirement_assistance_history(self, req_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/requirements/{_resource_segment(req_id)}/assistance-history")
 
     def delete_requirement(self, req_id: str) -> dict[str, Any]:
         return self._request("DELETE", f"/api/v1/requirements/{req_id}")

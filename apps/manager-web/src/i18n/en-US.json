@@ -634,13 +634,35 @@
       "refreshBase": "Refresh baseline"
     },
     "delivery": {
-      "title": "Task Delivery", "criteria": "Acceptance criteria", "assignee": "Assignee / Agent", "noCriteria": "Add acceptance criteria to the task first.",
-      "openRun": "Execution and evidence", "node": "Step", "argv": "Command arguments (JSON array)", "expectedExit": "Expected exit", "actualExit": "Actual exit", "timeout": "Timeout (seconds)",
-      "addNode": "Add step", "removeNode": "Remove step", "invalidArgv": "Command arguments must be a nonempty string array.",
-      "previewPlan": "Preview execution plan", "previewReview": "Preview review", "apply": "Confirm submission", "previewReady": "Preview ready, no changes applied",
-      "decision": "Delivery decision", "accept": "Accept delivery", "requestChanges": "Request changes", "comment": "Review conclusion and rationale", "saved": "Submitted with audit evidence",
+      "title": "Task Delivery",
+      "criteria": "Acceptance criteria",
+      "assignee": "Assignee / Agent",
+      "noCriteria": "Add acceptance criteria to the task first.",
+      "openRun": "Execution and evidence",
+      "node": "Step",
+      "argv": "Command arguments (JSON array)",
+      "expectedExit": "Expected exit",
+      "actualExit": "Actual exit",
+      "timeout": "Timeout (seconds)",
+      "addNode": "Add step",
+      "removeNode": "Remove step",
+      "invalidArgv": "Command arguments must be a nonempty string array.",
+      "previewPlan": "Preview execution plan",
+      "previewReview": "Preview review",
+      "apply": "Confirm submission",
+      "previewReady": "Preview ready, no changes applied",
+      "decision": "Delivery decision",
+      "accept": "Accept delivery",
+      "requestChanges": "Request changes",
+      "comment": "Review conclusion and rationale",
+      "saved": "Submitted with audit evidence",
       "permissionHint": "Current permissions or task state do not allow this action.",
-      "phases": { "unplanned": "Not dispatched", "awaiting_review": "Awaiting review", "accepted": "Accepted", "changes_requested": "Changes requested" }
+      "phases": {
+        "unplanned": "Not dispatched",
+        "awaiting_review": "Awaiting review",
+        "accepted": "Accepted",
+        "changes_requested": "Changes requested"
+      }
     },
     "title": "Hermes Workspace",
     "subtitle": "Workspace-scoped Hermes core console.",
@@ -3208,7 +3230,25 @@
       "intakeDraftPool": "Editable requirement drafts",
       "intakeDraftItem": "Requirement draft",
       "intakeApplyDefaults": "Apply default Agent/tool",
-      "intakeRemove": "Remove draft"
+      "intakeRemove": "Remove draft",
+      "mode": {
+        "pool": {
+          "title": "Requirement pool",
+          "hint": "Collect requirements and confirm scope, priority and acceptance criteria before import."
+        },
+        "review": {
+          "title": "Requirement review",
+          "hint": "Choose local rules or AI review, then explicitly adopt checked acceptance suggestions and design artifacts."
+        },
+        "generation": {
+          "title": "Task planning",
+          "hint": "Preview and confirm a requirement task plan, retaining acceptance links before dispatch."
+        },
+        "batch": {
+          "title": "Batch governance",
+          "hint": "Update status, priority, owners and development tools for selected requirements."
+        }
+      }
     },
     "platforms": {
       "title": "AI development platforms",

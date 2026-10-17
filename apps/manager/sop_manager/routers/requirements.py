@@ -1,15 +1,15 @@
-"""需求 CRUD + 文档 AI 拆解 + 原型说明/配图（原型存 .ai-memory/requirement_prototypes/）"""
+"""需求 CRUD、经模型网关生成的可编辑预览，以及明确确认后的可追踪采用。"""
 from __future__ import annotations
 
 import json
-import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.orm import Session
 
 from sop_manager.path_config import (
     resolved_ai_memory_root,
@@ -19,10 +19,20 @@ from sop_manager.path_config import (
     resolved_tenant_code,
     resolved_tenant_id,
 )
+
+from .auth_sql import current_user_or_apikey
+from .business_access import require_business_access
 from .db_sql_compat import now, rows, table
+from .delivery_contract import Input
+from .requirements_assistance import GenerationInput, PrototypeApply, ReviewInput
+from .sql_models import User, get_session
 from .webhook import notify_webhook
 
-router = APIRouter(prefix="/api/v1/requirements", tags=["requirements"])
+BusinessUser = Annotated[User, Depends(current_user_or_apikey)]
+BusinessSession = Annotated[Session, Depends(get_session)]
+
+router = APIRouter(prefix="/api/v1/requirements", tags=["requirements"],
+                   dependencies=[Depends(require_business_access)])
 
 _DOC_MAX = 120_000
 _PRIOS = ("P0", "P1", "P2", "P3")
@@ -42,19 +52,35 @@ def _ui_default_state() -> Dict[str, Any]:
 
 def _ui_load() -> Dict[str, Any]:
     sp = _ui_state_path()
+    d = _ui_default_state()
     if not sp.exists():
-        return _ui_default_state()
+        return _ui_with_import_assignments(d)
     try:
-        d = json.loads(sp.read_text(encoding="utf-8"))
-        if not isinstance(d, dict):
-            return _ui_default_state()
-        d.setdefault("columns", {p: [] for p in _PRIOS})
-        d.setdefault("fields", {})
-        for p in _PRIOS:
-            d["columns"].setdefault(p, [])
-        return d
-    except Exception:
-        return _ui_default_state()
+        loaded = json.loads(sp.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            d = loaded
+    except (ValueError, OSError):
+        pass
+    d.setdefault("columns", {p: [] for p in _PRIOS})
+    d.setdefault("fields", {})
+    for p in _PRIOS:
+        d["columns"].setdefault(p, [])
+    return _ui_with_import_assignments(d)
+
+
+def _ui_with_import_assignments(state):
+    """Atomic imports keep assignments in SQL; explicit later UI edits still override them."""
+    from .sql_models import DeliveryWorkspace, SessionLocal
+
+    with SessionLocal() as db:
+        workspace = db.query(DeliveryWorkspace).filter_by(project_id=resolved_project_id(), tenant_id=resolved_tenant_id()).first()
+        if workspace:
+            for rid, flow in workspace.data.get("flows", {}).items():
+                source = flow.get("intake_source", {})
+                if source:
+                    state["fields"].setdefault(rid, {"assigned_agent": source.get("assigned_agent", ""),
+                                                   "dev_tool": source.get("dev_tool", "")})
+    return state
 
 
 def _ui_save(d: Dict[str, Any]) -> None:
@@ -187,27 +213,37 @@ class PriorityBody(BaseModel):
     human_notes: Optional[str] = ""
 
 
-class BatchCreateBody(BaseModel):
-    items: List[ReqCreate] = Field(..., min_length=1, max_length=80)
+class BatchCreateBody(Input):
+    items: list[ReqCreate] = Field(..., min_length=1, max_length=80)
+    generation_id: str | None = Field(None, min_length=1, max_length=64)
+    expected_version: int | None = Field(None, ge=0)
+    idempotency_key: str | None = Field(None, min_length=8, max_length=100)
+
+    @model_validator(mode="after")
+    def adoption_fields(self):
+        values = [self.generation_id, self.expected_version, self.idempotency_key]
+        if any(value is not None for value in values) and any(value is None for value in values):
+            raise ValueError("Generation adoption requires generation_id, expected_version and idempotency_key")
+        return self
 
 
-class ParseDocumentBody(BaseModel):
+class ParseDocumentBody(GenerationInput):
     """粘贴 PRD / 需求说明全文，由大模型抽取结构化需求列表（JSON）。"""
     text: str = Field(..., min_length=20, max_length=_DOC_MAX)
-    filename: Optional[str] = None
+    filename: str | None = Field(None, max_length=500)
     mode: str = Field("prd", pattern="^(idea|prd|meeting|feedback|incident|data|mixed)$")
     agent: str = Field("Product Analyst Agent", max_length=120)
     cli: str = Field("codex", max_length=80)
     auto_priority: bool = True
     auto_acceptance: bool = True
-    assigned_agent: Optional[str] = Field("", max_length=120)
-    dev_tool: Optional[str] = Field("", max_length=80)
+    assigned_agent: str | None = Field("", max_length=120)
+    dev_tool: str | None = Field("", max_length=80)
 
 
-class GeneratePrototypeBody(BaseModel):
-    mode: str = "wireframe"  # wireframe | user_journey | ia
-    extra_context: Optional[str] = Field(None, max_length=8000)
-    gen_image: bool = False  # 需要 OPENAI_API_KEY
+class GeneratePrototypeBody(GenerationInput):
+    mode: Literal["wireframe", "user_journey", "ia"] = "wireframe"
+    extra_context: str | None = Field(None, max_length=8000)
+    gen_image: bool = False
 
 
 class GenerateTasksBody(BaseModel):
@@ -220,10 +256,21 @@ class GenerateTasksBody(BaseModel):
     create_dependencies: bool = True
 
 
-class ApplyReviewBody(BaseModel):
-    acceptance_criteria: Optional[List[str]] = None
-    tags: Optional[List[str]] = None
-    human_notes: Optional[str] = ""
+class ApplyReviewBody(Input):
+    acceptance_criteria: list[str] | None = Field(None, max_length=80)
+    tags: list[Annotated[str, Field(min_length=1, max_length=80)]] | None = Field(None, max_length=20)
+    human_notes: str | None = Field("", max_length=10000)
+    generation_id: str | None = Field(None, min_length=1, max_length=64)
+    requirement_basis: str | None = Field(None, min_length=64, max_length=64)
+    expected_version: int | None = Field(None, ge=0)
+    idempotency_key: str | None = Field(None, min_length=8, max_length=100)
+
+    @model_validator(mode="after")
+    def adoption_fields(self):
+        values = [self.generation_id, self.requirement_basis, self.expected_version, self.idempotency_key]
+        if any(value is not None for value in values) and any(value is None for value in values):
+            raise ValueError("Generation adoption requires generation_id, requirement_basis, expected_version and idempotency_key")
+        return self
 
 
 def _prototype_dir() -> Path:
@@ -245,24 +292,13 @@ def _dump_vals(body: ReqUpdate) -> Dict[str, Any]:
     return {k: v for k, v in raw.items() if v is not None}
 
 
-def _llm_text(system: str, user: str, max_tokens: int = 8192) -> str:
-    try:
-        import anthropic
-    except ImportError:
-        raise HTTPException(503, "请安装 anthropic: pip install anthropic")
-    key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not key:
-        raise HTTPException(503, "未配置 ANTHROPIC_API_KEY，无法调用文档解析 / 原型生成")
-    client = anthropic.Anthropic(api_key=key)
-    msg = client.messages.create(
-        model=os.getenv("REQUIREMENTS_AI_MODEL", "claude-3-5-sonnet-20241022"),
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    if not msg.content:
-        return ""
-    return getattr(msg.content[0], "text", "") or ""
+def _llm_text(system: str, user: str, max_tokens: int = 8192, request: Request = None) -> str:
+    """Compatibility helper; all text generation uses the scoped model gateway."""
+    from . import llm_gateway
+
+    return llm_gateway.llm_chat(llm_gateway.ChatIn(task_type="plan", cache_ttl=0,
+        max_tokens=max_tokens, messages=[llm_gateway.Message(role="system", content=system),
+                                       llm_gateway.Message(role="user", content=user)]), request).content
 
 
 def _extract_json_obj(text: str) -> Dict[str, Any]:
@@ -388,7 +424,7 @@ def _enrich_intake_items(items: List[Dict[str, Any]], body: ParseDocumentBody) -
     enriched: List[Dict[str, Any]] = []
     for item in items:
         tags = list(item.get("tags") or [])
-        for tag in ("ai-intake", body.mode):
+        for tag in ("ai-intake" if body.generator == "ai" else "rule-intake", body.mode):
             if tag and tag not in tags:
                 tags.append(tag)
         enriched.append(
@@ -498,7 +534,6 @@ def _work_type_for(mode: str, title: str) -> str:
 
 def _derive_task_specs(req: Dict[str, Any], body: GenerateTasksBody) -> List[Dict[str, Any]]:
     title = str(req.get("title") or "").strip() or req.get("id") or "未命名需求"
-    desc = str(req.get("description") or "").strip()
     acceptance = _as_text_list(req.get("acceptance_criteria"))
     tags = _as_text_list(req.get("tags"))
     owner = (body.assigned_to or "").strip() or "Coder"
@@ -605,8 +640,8 @@ def _generated_acceptance(req: Dict[str, Any]) -> List[str]:
     desc = str(req.get("description") or "").strip()
     candidates = [
         f"用户完成「{title}」主流程时，系统应给出明确成功反馈且数据状态正确更新。",
-        f"当输入缺失、无权限或服务异常时，系统应展示可理解的错误提示，不产生脏数据。",
-        f"该能力应接入项目上下文、审计事件和任务/Agent 协作链路，便于后续追踪。",
+        "当输入缺失、无权限或服务异常时，系统应展示可理解的错误提示，不产生脏数据。",
+        "该能力应接入项目上下文、审计事件和任务/Agent 协作链路，便于后续追踪。",
     ]
     for sentence in re.split(r"[。！？!?；;\n]", desc):
         s = sentence.strip()
@@ -908,37 +943,6 @@ def requirements_ops_tasks(body: RequirementOpsTasksIn) -> Dict[str, Any]:
     }
 
 
-def _openai_image_url(prompt: str) -> Optional[str]:
-    key = os.getenv("OPENAI_API_KEY", "")
-    if not key:
-        return None
-    try:
-        import urllib.request
-    except ImportError:
-        return None
-    body = json.dumps(
-        {
-            "model": "dall-e-3",
-            "prompt": (prompt[:900] + " Minimal high-fidelity UI mockup, clean vector, no text watermark."),
-            "n": 1,
-            "size": "1024x1024",
-            "response_format": "url",
-        }
-    ).encode("utf-8")
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/images/generations",
-        data=body,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    arr = data.get("data") or []
-    if not arr:
-        return None
-    return arr[0].get("url")
-
-
 def _filter_requirements(
     raw: List[Dict[str, Any]],
     *,
@@ -1132,7 +1136,13 @@ def create_req(body: ReqCreate):
 
 
 @router.post("/batch")
-def batch_create(body: BatchCreateBody):
+def batch_create(body: BatchCreateBody, user: BusinessUser,
+                 db: BusinessSession):
+    if body.generation_id:
+        from .delivery import _project
+        from .requirements_assistance import adopt
+
+        return adopt(db, _project(db, user, resolved_project_id()), user, "batch.apply", body)
     t = table("requirements")
     if t is None:
         raise HTTPException(503, "数据库不可用")
@@ -1179,46 +1189,14 @@ def batch_create(body: BatchCreateBody):
 
 
 @router.post("/parse-document")
-def parse_document(body: ParseDocumentBody):
-    text = body.text.strip()
-    if len(text) < 20:
+def parse_document(body: ParseDocumentBody, request: Request,
+                   user: BusinessUser, db: BusinessSession):
+    from .delivery import _project
+    from .requirements_assistance import generate
+
+    if len(body.text.strip()) < 20:
         raise HTTPException(400, "文档内容过短")
-    system = f"""你是资深产品经理，也是 AI 研发平台的需求接入 Agent。
-本次接入模式：{body.mode}
-指定执行 Agent：{body.agent}
-建议 CLI/工具：{body.cli}
-是否自动评估优先级：{body.auto_priority}
-是否自动生成验收标准：{body.auto_acceptance}
-
-用户粘贴的是 PRD / 需求说明 / 会议纪要 / 反馈 / 故障复盘 / 数据需求等文本。
-请从中抽取**可交付的需求条目**，严格只输出一个 JSON 对象（不要 Markdown 围栏），格式：
-{{"requirements":[
-  {{"title":"短标题","description":"详细说明","priority":"P0|P1|P2|P3","acceptance_criteria":["可验收条目1"],"tags":["可选标签"]}}
-]}}
-规则：
-- 5～40 条为宜；合并重复表述；标题简洁中文。
-- priority：核心业务/合规/安全/资损/阻断为 P0；重要功能 P1；一般 P2；优化类 P3。
-- acceptance_criteria：每条需求 1～5 条可测标准；若 auto_acceptance=false 可返回空数组。
-- tags：至少包含业务域、能力域或来源类型，避免无意义标签。
-- 不要编造文本中不存在的功能。"""
-    user = f"文件名参考: {body.filename or '未命名'}\n\n--- 文档正文 ---\n{text[:_DOC_MAX]}"
-    try:
-        raw_txt = _llm_text(system, user, max_tokens=8192)
-        obj = _extract_json_obj(raw_txt)
-        items = _enrich_intake_items(_normalize_items(obj), body)
-        return _intake_response(items, body, source="llm")
-    except Exception as e:
-        items = _enrich_intake_items(_fallback_requirements_from_text(text, body), body)
-        return _intake_response(
-            items,
-            body,
-            source="local_rules",
-            warning=f"AI 模型解析不可用，已使用本地规则拆解: {e}",
-        )
-
-
-class ReorderBoardBody(BaseModel):
-    groups: Dict[str, List[str]] = Field(default_factory=dict)
+    return generate(db, _project(db, user, resolved_project_id()), user, "parse", body, request)
 
 
 @router.post("/reorder-board")
@@ -1415,18 +1393,33 @@ def generate_tasks_from_requirement(req_id: str, body: GenerateTasksBody):
 
 
 @router.post("/{req_id}/review")
-def review_requirement(req_id: str):
-    req_id = _safe_req_id(req_id)
-    reqs = rows("requirements", 1000)
-    found = [x for x in reqs if x.get("id") == req_id]
-    if not found:
-        raise HTTPException(404, "需求不存在")
-    return _review_requirement(found[0], reqs)
+def review_requirement(req_id: str, request: Request, user: BusinessUser, db: BusinessSession,
+                       body: ReviewInput = None):
+    from .delivery import _project
+    from .requirements_assistance import generate
+
+    return generate(db, _project(db, user, resolved_project_id()), user, "review",
+                    body or ReviewInput(), request, _safe_req_id(req_id))
+
+
+@router.get("/{req_id}/assistance-history")
+def assistance_history(req_id: str, user: BusinessUser,
+                       db: BusinessSession):
+    from .delivery import _project
+    from .requirements_assistance import history
+
+    return history(db, _project(db, user, resolved_project_id()), _safe_req_id(req_id))
 
 
 @router.post("/{req_id}/apply-review")
-def apply_requirement_review(req_id: str, body: ApplyReviewBody):
+def apply_requirement_review(req_id: str, body: ApplyReviewBody,
+                             user: BusinessUser, db: BusinessSession):
     req_id = _safe_req_id(req_id)
+    if body.generation_id:
+        from .delivery import _project
+        from .requirements_assistance import adopt
+
+        return adopt(db, _project(db, user, resolved_project_id()), user, "apply-review", body, req_id)
     t = table("requirements")
     if t is None:
         raise HTTPException(503, "数据库不可用")
@@ -1456,7 +1449,7 @@ def apply_requirement_review(req_id: str, body: ApplyReviewBody):
     updated = {**current, **vals}
     notify_webhook(
         "requirement.updated",
-        {"requirement_id": req_id, "fields": [k for k in vals.keys() if k != "updated_at"], "source": "requirement.ai_review"},
+        {"requirement_id": req_id, "fields": [k for k in vals.keys() if k != "updated_at"], "source": "requirement.manual_review"},
         tenant_id=resolved_tenant_id(),
         project_id=resolved_project_id(),
     )
@@ -1464,66 +1457,45 @@ def apply_requirement_review(req_id: str, body: ApplyReviewBody):
 
 
 @router.get("/{req_id}/prototype")
-def get_prototype(req_id: str):
+def get_prototype(req_id: str, user: BusinessUser,
+                  db: BusinessSession):
     req_id = _safe_req_id(req_id)
+    from .delivery import _project
+    from .delivery_plan import _current
+
+    _, state, _, revision = _current(db, _project(db, user, resolved_project_id()), req_id)
+    versions = [entry for entry in state["flows"].get(req_id, {}).get("artifacts", []) if entry["kind"] == "prototype"]
+    if versions:
+        return {"ok": True, "content": versions[-1]["content"], "exists": True, "versions": versions,
+                "artifact_id": versions[-1]["id"], "current_revision": revision,
+                "stale": versions[-1]["revision"] != revision}
     p = _prototype_path(req_id)
     if not p.exists():
-        return {"ok": True, "content": "", "exists": False}
-    return {"ok": True, "content": p.read_text(encoding="utf-8", errors="replace"), "exists": True}
+        return {"ok": True, "content": "", "exists": False, "versions": []}
+    return {"ok": True, "content": p.read_text(encoding="utf-8", errors="replace"), "exists": True,
+            "versions": [], "source": "legacy_file"}
 
 
 @router.post("/{req_id}/prototype")
-def generate_prototype(req_id: str, body: GeneratePrototypeBody):
-    req_id = _safe_req_id(req_id)
-    t = table("requirements")
-    if t is None:
-        raise HTTPException(503, "数据库不可用")
-    found = [x for x in rows("requirements", 500) if x.get("id") == req_id]
-    if not found:
-        raise HTTPException(404, "需求不存在")
-    r = found[0]
-    if body.mode not in ("wireframe", "user_journey", "ia"):
-        raise HTTPException(400, "mode 须为 wireframe | user_journey | ia")
-    mode_hint = {
-        "wireframe": "以「页面线框 + 组件说明」为主，给出关键界面布局（可用 ASCII/表格描述区域占比）。",
-        "user_journey": "以「用户旅程 + 触点」为主，覆盖主流程与异常分支。",
-        "ia": "以「信息架构」为主：模块、导航层级、实体关系简述。",
-    }.get(body.mode, "")
-    extra = (body.extra_context or "").strip()
-    system = f"""你是资深产品设计师。请根据需求生成**中低保真原型说明**（Markdown，简体中文）。
-{mode_hint}
-输出章节建议：概述 / 目标用户与场景 / 关键页面与布局要点 / 组件与交互 / 非功能与边界 / 开放问题。
-不要编造需求正文中没有的功能；可合理推断 UI 结构。不要输出代码仓库路径。"""
-    user = f"""需求 ID: {req_id}
-标题: {r.get('title','')}
-描述:
-{r.get('description','')}
+def generate_prototype(req_id: str, body: GeneratePrototypeBody, request: Request,
+                       user: BusinessUser, db: BusinessSession):
+    from .delivery import _project
+    from .requirements_assistance import generate
 
-验收标准:
-{json.dumps(r.get('acceptance_criteria') or [], ensure_ascii=False)}
+    # Reject unsupported image work before committing or calling any provider.
+    if body.gen_image:
+        raise HTTPException(422, {"code": "prototype_image_unsupported",
+                                 "message": "当前文本模型网关不支持原型配图，请生成可编辑的原型说明"})
+    return generate(db, _project(db, user, resolved_project_id()), user, "prototype", body, request, _safe_req_id(req_id))
 
-人工备注:
-{r.get('human_notes') or ''}
 
-补充说明:
-{extra}
-"""
-    try:
-        md = _llm_text(system, user, max_tokens=8192)
-        if not md.strip():
-            raise HTTPException(502, "模型返回为空")
-        img_url: Optional[str] = None
-        if body.gen_image:
-            img_prompt = f"Software UI mockup for: {r.get('title','')}. {r.get('description','')[:400]}"
-            img_url = _openai_image_url(img_prompt)
-            if img_url:
-                md += f"\n\n---\n## 概念配图（AI）\n\n![prototype]({img_url})\n"
-        _prototype_path(req_id).write_text(md.strip() + "\n", encoding="utf-8")
-        return {"ok": True, "content": md, "image_url": img_url}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(502, f"原型生成失败: {e}") from e
+@router.post("/{req_id}/prototype/apply")
+def apply_prototype(req_id: str, body: PrototypeApply,
+                    user: BusinessUser, db: BusinessSession):
+    from .delivery import _project
+    from .requirements_assistance import adopt
+
+    return adopt(db, _project(db, user, resolved_project_id()), user, "prototype.apply", body, _safe_req_id(req_id))
 
 
 @router.patch("/{req_id}/priority")

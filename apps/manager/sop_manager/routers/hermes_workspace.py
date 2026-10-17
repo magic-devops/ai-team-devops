@@ -17,6 +17,23 @@ from sop_manager.routers.sql_models import SessionLocal, User
 CURRENT_USER_DEPENDENCY = Depends(current_user)
 
 
+def runtime_identity(user, store):
+    tenant = str(user.tenant_id)
+    role = str(user.role)
+    if role == "super_admin":
+        return Principal(str(user.id), tenant=tenant, business="team")
+    permissions = frozenset({"read"})
+    if role in {"tenant_admin", "project_admin", "devops", "developer"}:
+        permissions = PERMISSIONS - {"approve", "config", "execute"}
+    if role in {"tenant_admin", "project_admin", "devops"}:
+        permissions = permissions | {"approve", "config"}
+    principal = Principal(str(user.id), tenant=tenant, business="team", permissions=permissions)
+    workspaces = store.list(principal, "", "workspaces", limit=10000)
+    allowed = frozenset(row["id"] for row in workspaces if row["data"].get("owner") == str(user.id)
+                        or str(user.id) in row["data"].get("members", []))
+    return Principal(str(user.id), tenant=tenant, business="team", permissions=permissions, workspace_ids=allowed)
+
+
 def mount_hermes_workspace(app):
     data_dir = Path(os.getenv("HERMES_DATA_DIR", str(resolved_runtime_dir() / "hermes"))).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -28,26 +45,15 @@ def mount_hermes_workspace(app):
 
     @asynccontextmanager
     async def lifespan(application):
-        async with previous_lifespan(application), execution.lifespan(application):
+        from .delivery_sync import delivery_sync_lifespan
+
+        async with previous_lifespan(application), execution.lifespan(application), delivery_sync_lifespan(application):
             yield
 
     app.router.lifespan_context = lifespan
 
     def identity(user: User = CURRENT_USER_DEPENDENCY):
-        tenant = str(user.tenant_id)
-        role = str(user.role)
-        if role == "super_admin":
-            return Principal(str(user.id), tenant=tenant, business="team")
-        permissions = frozenset({"read"})
-        if role in {"tenant_admin", "project_admin", "devops", "developer"}:
-            permissions = PERMISSIONS - {"approve", "config", "execute"}
-        if role in {"tenant_admin", "project_admin", "devops"}:
-            permissions = permissions | {"approve", "config"}
-        principal = Principal(str(user.id), tenant=tenant, business="team", permissions=permissions)
-        workspaces = store.list(principal, "", "workspaces", limit=10000)
-        allowed = frozenset(row["id"] for row in workspaces if row["data"].get("owner") == str(user.id)
-                            or str(user.id) in row["data"].get("members", []))
-        return Principal(str(user.id), tenant=tenant, business="team", permissions=permissions, workspace_ids=allowed)
+        return runtime_identity(user, store)
 
     def workspace_actor_directory(principal: Principal, workspace: str) -> list[str]:
         row = store.get(principal, "", "workspaces", workspace)

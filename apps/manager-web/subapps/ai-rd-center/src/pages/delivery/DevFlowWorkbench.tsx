@@ -1,8 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, App, Button, Card, Space, Statistic, Steps, Table, Tag, Typography } from "antd";
-import { Suspense, lazy, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { getProjectId, getSessionRevision } from "@/lib/authStorage";
+import { assistanceIntent, type AssistanceIntent } from "@/lib/requirementsAssistance";
 import { SprintBurndownChart } from "@/pages/shared/SprintBurndownChart";
 
 const EChartsDonutLazy = lazy(() =>
@@ -33,12 +35,17 @@ export function DevFlowWorkbench() {
     queryFn: () => api.pagesInteractionOps({ domain: "delivery", status: "watch", limit: 20 }),
   });
   const [interactionOpsTaskResult, setInteractionOpsTaskResult] = useState<any>(null);
+  const workflowIntent = useRef<AssistanceIntent>();
 
   const startWfMut = useMutation({
-    mutationFn: (body: { type: string; args?: Record<string, unknown> }) => api.startWorkflow(body),
+    mutationFn: (body: { type: string; args?: Record<string, unknown> }) => {
+      workflowIntent.current = assistanceIntent(workflowIntent.current, `${getSessionRevision()}:${getProjectId()}`, "workflow-start", body);
+      return api.startWorkflow({ ...body, workflow_id: `wf-${workflowIntent.current.key}` });
+    },
     onSuccess: (data) => {
       message.success(t("page.devFlow.workflowStarted", { id: data?.workflow_id ?? "" }));
       window.location.hash = "#/workflows";
+      workflowIntent.current = undefined;
     },
     onError: (e) => message.error((e as Error).message),
   });

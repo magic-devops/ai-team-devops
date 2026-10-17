@@ -48,6 +48,17 @@ _SKIP_PREFIXES = (
     "/api/v1/data-exchange/export",
 )
 
+_EXISTING_PROJECT_PREFIXES = (
+    "/api/v1/requirements", "/api/v1/tasks", "/api/v1/issues",
+    "/api/v1/sprints", "/api/v1/models", "/api/v1/llm",
+    "/api/v1/delivery", "/api/v1/analytics/nlq", "/api/v1/workflows",
+)
+
+
+def existing_project_required(path: str) -> bool:
+    """Protected business routes must never bootstrap projects from request headers."""
+    return any(path == p or path.startswith(p + "/") for p in _EXISTING_PROJECT_PREFIXES)
+
 
 def skip_scope(path: str) -> bool:
     """无需绑定项目根路径的请求。"""
@@ -118,11 +129,15 @@ def resolve_scope_for_authenticated_user(
     admin_mode: str,
     check_project_access: Callable[..., None],
     http_error_response: Callable[[HTTPException], JSONResponse],
+    allow_provision: bool = True,
 ) -> tuple[Token, Token, Token, Token, Token, Token] | JSONResponse | None:
     """成功返回 ``set_request_scope`` 的 token 元组；错误返回 ``JSONResponse``；无需绑定时返回 ``None``。"""
     from sop_manager.routers.sql_models import Project, ProjectMember
 
     x_pid = (request.headers.get("X-Project-Id") or "").strip()
+    if not x_pid and not allow_provision:
+        # The route dependency supplies the explicit-project error after authentication.
+        return None
     if not x_pid:
         if admin_mode != "saas":
             x_pid = (os.getenv("PROJECT_ID", "default") or "default").strip()
@@ -149,14 +164,14 @@ def resolve_scope_for_authenticated_user(
         return None
 
     proj = db.query(Project).filter_by(id=x_pid).first()
-    if not proj and admin_mode != "saas":
+    if not proj and admin_mode != "saas" and allow_provision:
         from sop_manager.project_provision import ensure_project
 
         proj = ensure_project(db, x_pid, owner_user=user)
         if proj:
             db.flush()
     if not proj:
-        if admin_mode != "saas":
+        if admin_mode != "saas" and allow_provision:
             return None
         return JSONResponse(status_code=404, content={"detail": "项目不存在"})
     if user.role != "super_admin" and proj.tenant_id != user.tenant_id:

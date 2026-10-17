@@ -3,14 +3,15 @@
 租户 / 项目 ID 来自 path_config.resolved_*（JWT + X-Project-Id 中间件注入，或回退环境变量）。
 """
 from __future__ import annotations
+
 import re
 from datetime import datetime
-from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 from sop_manager.path_config import resolved_project_id, resolved_tenant_id
-from .sql_models import get_session, Requirement, Task, Sprint, Issue
+
+from .sql_models import DeliveryWorkspace, Issue, Requirement, Sprint, Task, get_session
 
 
 def _to_dict(obj) -> dict:
@@ -55,6 +56,20 @@ class _SqlTable:
             return
         obj = self._base_q().filter_by(id=rid).first()
         if obj:
+            if self._model is Task and values.get("status") in {"in_progress", "completed"}:
+                from fastapi import HTTPException
+
+                from .delivery_plan import require_dependencies
+                from .delivery_service import reconcile
+                from .sql_models import Project
+
+                workflow = self._db.get(DeliveryWorkspace, obj.project_id)
+                project = self._db.get(Project, obj.project_id)
+                if workflow:
+                    state = reconcile(self._db, project, workflow.data)
+                    require_dependencies(self._db, project, state, rid)
+                if values.get("status") == "completed" and workflow and any(e["task_id"] == rid for e in workflow.data.get("executions", [])):
+                    raise HTTPException(409, "Complete managed executions through delivery evidence review")
             for k, v in values.items():
                 if hasattr(obj, k):
                     setattr(obj, k, v)
@@ -70,7 +85,7 @@ class _SqlTable:
             self._db.commit()
 
 
-def _parse_id(where: str) -> Optional[str]:
+def _parse_id(where: str) -> str | None:
     m = re.search(r"id\s*=\s*'([^']+)'", where)
     return m.group(1) if m else None
 
@@ -83,7 +98,7 @@ _MODEL_MAP = {
 }
 
 
-def table(name: str) -> Optional[_SqlTable]:
+def table(name: str) -> _SqlTable | None:
     model = _MODEL_MAP.get(name)
     if model is None:
         return None

@@ -1,5 +1,5 @@
 import ReactDOM from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { XProvider } from "@ant-design/x";
 import { App as AntdApp, ConfigProvider } from "antd";
 import "antd/dist/reset.css";
@@ -7,6 +7,7 @@ import "../../src/i18n";
 import "../../src/index.css";
 import { MicroAppRuntime } from "./MicroAppRuntime";
 import type { MicroAppId } from "../../src/microApps";
+import { SessionQueryProvider } from "../../src/lib/SessionQueryProvider";
 
 function getOrCreateRoot() {
   const existing = document.getElementById("root");
@@ -28,7 +29,7 @@ export function bootstrapMicroApp(appId: MicroAppId) {
   });
 
   ReactDOM.createRoot(getOrCreateRoot()).render(
-    <QueryClientProvider client={qc}>
+    <SessionQueryProvider client={qc}>
       <ConfigProvider
         theme={{
           token: {
@@ -52,6 +53,6 @@ export function bootstrapMicroApp(appId: MicroAppId) {
           </AntdApp>
         </XProvider>
       </ConfigProvider>
-    </QueryClientProvider>,
+    </SessionQueryProvider>,
   );
 }

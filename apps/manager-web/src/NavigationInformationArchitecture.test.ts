@@ -10,6 +10,15 @@ describe("navigation information architecture", () => {
   const projectsRouteSource = readFileSync(resolve(root, "subapps/main-admin/src/pages/projects/deliveryKitNav.ts"), "utf8");
   const systemMapSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/SystemMap.tsx"), "utf8");
   const systemModuleContractSource = readFileSync(resolve(root, "subapps/ai-ops-center/src/pages/system/SystemModuleContractPanel.tsx"), "utf8");
+  it("maps requirement routes to existing server capability identifiers", () => {
+    const serverSource = readFileSync(resolve(root, "../manager/sop_manager/routers/system_pages.py"), "utf8");
+    for (const [route, submodule] of [["pool", "requirement_pool"], ["review", "smart_review"], ["generation", "task_generation"], ["batch", "batch_governance"]]) {
+      expect(serverSource).toContain(`("requirements", "${submodule}"): "#/requirements/${route}"`);
+      expect(navigationSource).toContain(`path: "#/requirements/${route}", capability: "product.requirements.${submodule}"`);
+    }
+    expect(navigationSource).not.toContain('capability: "product.requirements.workbench"');
+    expect(navigationSource).toMatch(/key: "productRequirementsWorkbench",[\s\S]*?capability: "product.requirements"/);
+  });
 
   it("keeps project portfolio and business-line governance from competing in the main menu", () => {
     expect(navigationSource).toContain('subnav("projects", "portfolio", "tenants", "tenant_users", "project_members", "delivery-kit")');

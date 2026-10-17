@@ -5,6 +5,7 @@ export const TENANT_CODE_KEY = "sop-current-tenant-code";
 export const BUSINESS_CODE_KEY = "sop-current-business-code";
 export const PROJECT_CODE_KEY = "sop-current-project-code";
 export const USER_KEY = "sop-user";
+const SESSION_REVISION_KEY = "sop-session-revision";
 
 export type WorkspaceScope = {
   tenantCode?: string | null;
@@ -77,6 +78,15 @@ function getStoredValue(key: string): string | null {
   }
 }
 
+/** Distinguishes separate logins even when the server reissues the same JWT. */
+export function getSessionRevision(): string | null {
+  return getStoredValue(SESSION_REVISION_KEY);
+}
+
+function renewSessionRevision() {
+  localStorage.setItem(SESSION_REVISION_KEY, globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
+}
+
 export function getProjectId(): string | null {
   return getStoredValue(PROJECT_ID_KEY);
 }
@@ -143,21 +153,26 @@ export function setProjectId(projectId: string | null) {
 export function setSession(token: string, projectId: string | null | undefined, tenantCode?: string | null) {
   try {
     localStorage.setItem(TOKEN_KEY, token);
+    renewSessionRevision();
     const scope: WorkspaceScope = {
       projectId: projectId ? String(projectId) : null,
       projectCode: projectId ? String(projectId) : null,
     };
     if (tenantCode !== undefined) scope.tenantCode = tenantCode;
     setWorkspaceScope(scope);
+    notifySession();
   } catch {
     notifySession();
   }
 }
 
-export function setUserSession(payload: SessionPayload) {
+export function setUserSession(payload: SessionPayload, options: { preserveWorkspace?: boolean } = {}) {
   try {
     const token = payload.token || payload.access_token;
-    if (token) localStorage.setItem(TOKEN_KEY, String(token));
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, String(token));
+      renewSessionRevision();
+    }
     if (payload.user_id || payload.username || payload.role || payload.tenant_id) {
       localStorage.setItem(USER_KEY, JSON.stringify({
         id: payload.user_id || "",
@@ -172,13 +187,16 @@ export function setUserSession(payload: SessionPayload) {
         session_status: payload.session_status || "active",
       }));
     }
-    const ws = payload.workspace_scope || {};
-    setWorkspaceScope({
-      tenantCode: ws.tenant_code || payload.tenant_code || payload.tenant_slug || payload.tenant_id || null,
-      businessCode: ws.business_code || payload.default_business_code || null,
-      projectId: ws.project_id || payload.default_project_id || null,
-      projectCode: ws.project_code || payload.default_project_code || ws.project_id || payload.default_project_id || null,
-    });
+    if (!options.preserveWorkspace || !getProjectId()) {
+      const ws = payload.workspace_scope || {};
+      setWorkspaceScope({
+        tenantCode: ws.tenant_code || payload.tenant_code || payload.tenant_slug || payload.tenant_id || null,
+        businessCode: ws.business_code || payload.default_business_code || null,
+        projectId: ws.project_id || payload.default_project_id || null,
+        projectCode: ws.project_code || payload.default_project_code || ws.project_id || payload.default_project_id || null,
+      });
+    }
+    if (token) notifySession();
   } catch {
     notifySession();
   }
@@ -186,6 +204,7 @@ export function setUserSession(payload: SessionPayload) {
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(SESSION_REVISION_KEY);
   localStorage.removeItem(USER_KEY);
   localStorage.removeItem(PROJECT_ID_KEY);
   localStorage.removeItem(TENANT_CODE_KEY);

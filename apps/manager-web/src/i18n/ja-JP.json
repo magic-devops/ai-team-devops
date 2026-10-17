@@ -606,13 +606,35 @@
       "refreshBase": "基準を更新"
     },
     "delivery": {
-      "title": "タスク納品", "criteria": "受入条件", "assignee": "担当者 / Agent", "noCriteria": "タスクに受入条件を追加してください。",
-      "openRun": "実行とエビデンス", "node": "ステップ", "argv": "コマンド引数（JSON 配列）", "expectedExit": "期待終了コード", "actualExit": "実際の終了コード", "timeout": "タイムアウト（秒）",
-      "addNode": "ステップ追加", "removeNode": "ステップ削除", "invalidArgv": "空でない文字列配列を指定してください。",
-      "previewPlan": "実行計画のプレビュー", "previewReview": "レビューのプレビュー", "apply": "確定して送信", "previewReady": "プレビュー済み、未適用",
-      "decision": "納品判断", "accept": "承認", "requestChanges": "修正依頼", "comment": "レビュー結論と根拠", "saved": "監査証跡とともに送信しました",
+      "title": "タスク納品",
+      "criteria": "受入条件",
+      "assignee": "担当者 / Agent",
+      "noCriteria": "タスクに受入条件を追加してください。",
+      "openRun": "実行とエビデンス",
+      "node": "ステップ",
+      "argv": "コマンド引数（JSON 配列）",
+      "expectedExit": "期待終了コード",
+      "actualExit": "実際の終了コード",
+      "timeout": "タイムアウト（秒）",
+      "addNode": "ステップ追加",
+      "removeNode": "ステップ削除",
+      "invalidArgv": "空でない文字列配列を指定してください。",
+      "previewPlan": "実行計画のプレビュー",
+      "previewReview": "レビューのプレビュー",
+      "apply": "確定して送信",
+      "previewReady": "プレビュー済み、未適用",
+      "decision": "納品判断",
+      "accept": "承認",
+      "requestChanges": "修正依頼",
+      "comment": "レビュー結論と根拠",
+      "saved": "監査証跡とともに送信しました",
       "permissionHint": "現在の権限またはタスク状態では操作できません。",
-      "phases": { "unplanned": "未割当", "awaiting_review": "レビュー待ち", "accepted": "承認済み", "changes_requested": "修正待ち" }
+      "phases": {
+        "unplanned": "未割当",
+        "awaiting_review": "レビュー待ち",
+        "accepted": "承認済み",
+        "changes_requested": "修正待ち"
+      }
     },
     "title": "Hermes ワークスペース",
     "subtitle": "Workspace スコープの Hermes core コンソール。",
@@ -2944,7 +2966,25 @@
       "intakeDraftPool": "編集可能な要件ドラフト",
       "intakeDraftItem": "要件ドラフト",
       "intakeApplyDefaults": "既定 Agent/ツールを適用",
-      "intakeRemove": "ドラフト削除"
+      "intakeRemove": "ドラフト削除",
+      "mode": {
+        "pool": {
+          "title": "要件プール",
+          "hint": "要件を収集し、範囲・優先度・受け入れ条件を確認して取り込みます。"
+        },
+        "review": {
+          "title": "要件レビュー",
+          "hint": "ルールチェックまたは AI レビューを選び、提案と設計成果物を確認して採用します。"
+        },
+        "generation": {
+          "title": "タスク計画",
+          "hint": "要件のタスク計画を確認し、受け入れ条件との関連を保持して実行を依頼します。"
+        },
+        "batch": {
+          "title": "一括管理",
+          "hint": "選択した要件の状態、優先度、担当者、開発ツールを更新します。"
+        }
+      }
     },
     "platforms": {
       "title": "AI 開発プラットフォーム",

@@ -24,6 +24,7 @@ tags:
   - { name: auth,         description: 认证与会话 }
   - { name: tenants,      description: 租户管理（super_admin） }
   - { name: projects,     description: 项目管理 }
+  - { name: delivery,     description: 项目交付、执行证据与验收 }
   - { name: requirements, description: 需求 }
   - { name: tasks,        description: 任务 }
   - { name: issues,       description: 问题 }
@@ -31,6 +32,7 @@ tags:
   - { name: agents,       description: Agent 配置 }
   - { name: skills,       description: 技能库 }
   - { name: llm,          description: LLM 网关 }
+  - { name: models,       description: 项目模型配置与提供商 }
   - { name: rag,          description: 检索 / 知识库 }
   - { name: workflow,     description: 工作流 }
   - { name: vibe,         description: Vibe Coding 会话 }
@@ -47,6 +49,1359 @@ security:
   - apiKeyAuth: []
 
 paths:
+  /api/v1/requirements/parse-document:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    post:
+      operationId: parseRequirementDocument
+      tags:
+      - requirements
+      summary: Preview requirements extracted from a document
+      description: Requires project write permission. Records an independent SQL generation receipt before calling
+        the configured project model gateway. AI failures, quota exhaustion and disabled/unavailable providers return
+        HTTP failures; they never silently become successful rule output. Matching successful/failed/in-progress retries
+        do not start another paid call. An explicit key remains tied to the original request; omitted keys derive
+        from normalized input and the requirement basis. Changed input with the same key conflicts. A returned suggestion
+        is never automatic requirement approval, task completion or stage advancement. generator defaults to ai; explicit
+        rules reports generation.source=rules and legacy source=local_rules. Preview alone imports nothing. Select
+        and edit items, then call batch with generation_id/version/key.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceParseDocumentResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Generation in progress, idempotency input conflict, or requirement basis changed during generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '429':
+          description: Configured project model quota exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '502':
+          description: Provider call or structured model output failed; recorded outcome replays without another model
+            call
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured model/provider/credential/adapter is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistanceParseDocumentInput'
+  /api/v1/requirements/batch:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    post:
+      operationId: importRequirementSelection
+      tags:
+      - requirements
+      summary: Import an explicitly confirmed edited selection
+      description: Requires project write permission and the original generation actor/action/project. Only explicit
+        adoption writes business state. Checks current requirement basis/revision where applicable and the workspace
+        expected_version using SQL CAS. Successful matching receipt replays before checking the basis/version changed
+        by the first application; changed input or target under the same key conflicts. A 409 requires reviewing current
+        state, preserving generation provenance and explicitly reconfirming with a new request key when input changes.
+        Does not approve a delivery stage. Generated selection imports are atomic, including SQL assignment and source
+        metadata. The legacy manual branch with no generation fields remains available and claims no model provenance.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/AssistanceBatchAdoptionResult'
+                - $ref: '#/components/schemas/AssistanceManualBatchResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Idempotency input/target conflict, changed requirement basis/revision, concurrent workspace
+            update or stale expected_version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistanceBatchImportInput'
+  /api/v1/requirements/{req_id}/review:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: req_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    post:
+      operationId: previewRequirementReview
+      tags:
+      - requirements
+      summary: Generate advisory requirement review
+      description: Requires project write permission. Records an independent SQL generation receipt before calling
+        the configured project model gateway. AI failures, quota exhaustion and disabled/unavailable providers return
+        HTTP failures; they never silently become successful rule output. Matching successful/failed/in-progress retries
+        do not start another paid call. An explicit key remains tied to the original request; omitted keys derive
+        from normalized input and the requirement basis. Changed input with the same key conflicts. A returned suggestion
+        is never automatic requirement approval, task completion or stage advancement. No body is compatible with
+        explicit rules mode by default; generator=ai invokes a structured gateway review. Scores and ready labels
+        are advisory. New criteria are not applied until apply-review.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceReviewResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Generation in progress, idempotency input conflict, or requirement basis changed during generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '429':
+          description: Configured project model quota exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '502':
+          description: Provider call or structured model output failed; recorded outcome replays without another model
+            call
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured model/provider/credential/adapter is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistanceReviewInput'
+  /api/v1/requirements/{req_id}/apply-review:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: req_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    post:
+      operationId: adoptRequirementReview
+      tags:
+      - requirements
+      summary: Adopt edited criteria, tags and notes
+      description: Requires project write permission and the original generation actor/action/project. Only explicit
+        adoption writes business state. Checks current requirement basis/revision where applicable and the workspace
+        expected_version using SQL CAS. Successful matching receipt replays before checking the basis/version changed
+        by the first application; changed input or target under the same key conflicts. A 409 requires reviewing current
+        state, preserving generation provenance and explicitly reconfirming with a new request key when input changes.
+        Does not approve a delivery stage. The assistance basis includes design/review input fields and differs from
+        task-plan basis. Legacy requests without generation fields are manual edits and never claim model origin.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/AssistanceReviewAdoptionResult'
+                - $ref: '#/components/schemas/AssistanceManualReviewResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Idempotency input/target conflict, changed requirement basis/revision, concurrent workspace
+            update or stale expected_version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistanceApplyReviewInput'
+  /api/v1/requirements/{req_id}/prototype:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: req_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    get:
+      operationId: getRequirementPrototype
+      tags:
+      - requirements
+      summary: Read recorded prototype revisions
+      description: Project members may read the latest SQL prototype and preserved versions. Old-revision evidence
+        is marked stale; an existing legacy file remains readable if no SQL prototype is recorded.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistancePrototypeCurrent'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+    post:
+      operationId: previewRequirementPrototype
+      tags:
+      - requirements
+      summary: Generate editable product design preview
+      description: Requires project write permission. Records an independent SQL generation receipt before calling
+        the configured project model gateway. AI failures, quota exhaustion and disabled/unavailable providers return
+        HTTP failures; they never silently become successful rule output. Matching successful/failed/in-progress retries
+        do not start another paid call. An explicit key remains tied to the original request; omitted keys derive
+        from normalized input and the requirement basis. Changed input with the same key conflicts. A returned suggestion
+        is never automatic requirement approval, task completion or stage advancement. Modes are wireframe, user_journey
+        and ia. Does not overwrite prototype files or save artifacts. gen_image=true is unsupported and rejected with
+        422 before any provider request.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistancePrototypeResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Generation in progress, idempotency input conflict, or requirement basis changed during generation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '429':
+          description: Configured project model quota exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '502':
+          description: Provider call or structured model output failed; recorded outcome replays without another model
+            call
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured model/provider/credential/adapter is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistancePrototypeGenerateInput'
+  /api/v1/requirements/{req_id}/prototype/apply:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: req_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    post:
+      operationId: adoptRequirementPrototype
+      tags:
+      - requirements
+      summary: Append an explicitly confirmed prototype artifact
+      description: Requires project write permission and the original generation actor/action/project. Only explicit
+        adoption writes business state. Checks current requirement basis/revision where applicable and the workspace
+        expected_version using SQL CAS. Successful matching receipt replays before checking the basis/version changed
+        by the first application; changed input or target under the same key conflicts. A 409 requires reviewing current
+        state, preserving generation provenance and explicitly reconfirming with a new request key when input changes.
+        Does not approve a delivery stage. Saves the edited Markdown as a new recorded prototype artifact; preserves
+        earlier versions and source usage metadata.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistancePrototypeAdoptionResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Idempotency input/target conflict, changed requirement basis/revision, concurrent workspace
+            update or stale expected_version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistancePrototypeApplyInput'
+  /api/v1/requirements/{req_id}/assistance-history:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: req_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    get:
+      operationId: getRequirementAssistanceHistory
+      tags:
+      - requirements
+      summary: Read generation history and current adoption basis
+      description: Project members may read scoped history, model/provider/actual usage, errors and adoption receipts.
+        expected_version/requirement_basis/requirement_revision describe current state; historical result.generation.stale
+        is true for old scope. Only the original generator actor may adopt a successful preview.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceHistoryResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/start:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    post:
+      operationId: startScopedWorkflow
+      tags:
+      - workflow
+      summary: Start or recover a stable scoped workflow
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Matching explicit workflow_id/type/args/actor replays; changed
+        input returns 409. Omitted workflow_id creates a new random ID. code_review and bug_triage record actual model
+        success/failure/missing input and wait for a human; sprint_lifecycle never changes canonical task completion.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSnapshot'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Stable workflow ID/signal ID changed input, invalid current phase, terminal instance or unfinished
+            result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal worker operation is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowStartInput'
+  /api/v1/workflows/types:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    get:
+      operationId: listScopedWorkflowTypes
+      tags:
+      - workflow
+      summary: Discover supported workflow types and signals
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Returns registered types and their supported signals.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTypesResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/engine/status:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    get:
+      operationId: getScopedWorkflowEngineStatus
+      tags:
+      - workflow
+      summary: Inspect actual workflow engine capability
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. worker_supported and durability distinguish local journal operation
+        from unsupported Temporal worker contracts.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEngineStatus'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/instances:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 100
+    - name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        default: ''
+    - name: type
+      in: query
+      required: false
+      schema:
+        type: string
+        default: ''
+    - name: q
+      in: query
+      required: false
+      schema:
+        type: string
+        default: ''
+    get:
+      operationId: listScopedWorkflowInstances
+      tags:
+      - workflow
+      summary: List filtered project workflow instances
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Returns per-instance and aggregate effective permissions.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowInstancesResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/events:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 100
+    - name: workflow_id
+      in: query
+      required: false
+      schema:
+        type: string
+        default: ''
+    get:
+      operationId: listScopedWorkflowEvents
+      tags:
+      - workflow
+      summary: Read actual scoped workflow journal events
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Event order is newest first. Optional workflow_id filters within
+        the current tenant/project.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEventsResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/{workflow_id}/detail:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    - name: events_limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 80
+    get:
+      operationId: getScopedWorkflowDetail
+      tags:
+      - workflow
+      summary: Inspect workflow state, timeline and human decisions
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Shows actual DAG phase, model observations, durable signal receipts,
+        events, Temporal capability and current permissions.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDetail'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal state contract is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/{workflow_id}/status:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    get:
+      operationId: getScopedWorkflowStatus
+      tags:
+      - workflow
+      summary: Read truthful workflow progress and review state
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Model execution success is distinct from awaiting_human and from
+        an authorized human decision.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSnapshot'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal state contract is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/{workflow_id}/result:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    get:
+      operationId: getScopedWorkflowResult
+      tags:
+      - workflow
+      summary: Read a terminal workflow result
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Returns 409 for running, awaiting_human, paused and timeout_pending
+        instances. A completed workflow only records this workflow decision; it does not mark business delivery verified.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowTerminalResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Stable workflow ID/signal ID changed input, invalid current phase, terminal instance or unfinished
+            result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal worker operation is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/{workflow_id}/query:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    - name: query
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+        - progress
+        - state
+        - result
+        - status
+        - signals
+        default: progress
+    get:
+      operationId: queryScopedWorkflow
+      tags:
+      - workflow
+      summary: Query observed progress, state or signal receipts
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowQueryResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal query contract is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/{workflow_id}/signal:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    post:
+      operationId: signalScopedWorkflow
+      tags:
+      - workflow
+      summary: Apply an authorized human workflow signal
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Decision signals approve/request_changes/reject/complete_task/complete_review/resolve
+        additionally require project approval permission. code_review accepts approve/request_changes/reject; sprint_lifecycle
+        accepts pause/resume/complete_task/complete_review; bug_triage accepts reassign/resolve. Every handler needs
+        a nonempty comment. actor_id is injected from authentication. Stable signal_id retries recover a recorded
+        decision; conflicting payload returns 409. Unsupported signal, invalid task/assignee or forged context returns
+        400.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowSignalResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Stable workflow ID/signal ID changed input, invalid current phase, terminal instance or unfinished
+            result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal worker operation is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowSignalInput'
+  /api/v1/workflows/{workflow_id}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    - name: workflow_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identifier in the selected authorized project
+    post:
+      operationId: cancelScopedWorkflow
+      tags:
+      - workflow
+      summary: Cancel one scoped nonterminal workflow
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Repeated cancellation of a cancelled workflow is safe; completed/failed
+        instances return 409. Actual legacy response ok is the string true.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowCancelResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '409':
+          description: Stable workflow ID/signal ID changed input, invalid current phase, terminal instance or unfinished
+            result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal worker operation is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+  /api/v1/workflows/bulk-cancel:
+    parameters:
+    - $ref: '#/components/parameters/RequiredBusinessProjectId'
+    post:
+      operationId: bulkCancelScopedWorkflows
+      tags:
+      - workflow
+      summary: Cancel selected scoped workflows with individual outcomes
+      description: Requires an authenticated explicit project; members may read, while POST operations require project
+        write permission. The local memory engine persists a tenant/project-scoped journal. It does not replace CI
+        verification, delivery acceptance, business task completion or automatic merging. Waiting, paused and timeout_pending
+        phases remain open until a permitted explicit human decision. Restart recovers journalled state and does not
+        silently repeat model calls. Configured Temporal workers and scoped state/signal contracts are not implemented;
+        unsupported Temporal operations return 503. Deduplicates IDs, validates every ID belongs to the selected project
+        before cancellation, then returns cancelled and failed per-instance outcomes. The operation is not atomic.
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+        sopTimestamp: []
+        sopNonce: []
+        sopSignature: []
+      responses:
+        '200':
+          description: Current scoped result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowBulkCancelResult'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: Request schema or selected edited fields are invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+        '503':
+          description: Configured scoped Temporal cancellation contract is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistanceError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowBulkCancelInput'
+
+  /api/v1/delivery/inbox:
+    get:
+      tags:
+      - delivery
+      operationId: deliveryInbox
+      summary: Read current personal or team delivery attention items
+      description: Requires an explicitly selected authorized project. This read-only projection performs no state
+        writes or runtime calls. mine uses stable user IDs; ambiguous legacy names never become personal assignments.
+        Personal approval requires the current approve permission and satisfied stage gates. Team readers may see
+        available review work without receiving approval authority. Acceptance requires current latest execution evidence.
+        Overdue uses UTC dates from registered plans only. Follow target into the existing detail; all mutation permissions
+        and evidence gates remain there.
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - mine
+          - team
+          default: mine
+      responses:
+        '200':
+          description: Current deduplicated project delivery inbox
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryInbox'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+        '422':
+          description: scope must be mine or team
+  /api/v1/delivery/workspace:
+    get:
+      tags: [delivery]
+      operationId: deliveryWorkspace
+      summary: Project delivery, canonical tasks, execution evidence and review snapshot
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: X-Project-Id, in: header, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Effective workflow snapshot; stale evidence is not counted as accepted delivery
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryWorkspace' }
+        '403': { description: Project access denied }
+  /api/v1/delivery/execution-targets:
+    get:
+      tags: [delivery]
+      operationId: deliveryExecutionTargets
+      summary: Accessible runtime workspaces, pinned agents and devices
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: X-Project-Id, in: header, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Execution authorization and available target catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspaces, providers, can_execute]
+                properties:
+                  workspaces: { type: array, items: { type: object } }
+                  providers: { type: array, items: { type: object } }
+                  can_execute: { type: boolean }
+  /api/v1/delivery/task-plan-preview:
+    post:
+      tags: [delivery]
+      operationId: deliveryTaskPlanPreview
+      summary: Preview an editable task plan against a fixed requirement revision
+      description: |
+        Requires project write permission. This creates no business tasks or execution
+        processes. The generator is either an explicit template or the existing model
+        gateway; AI failures never fall back to template success. Persist expected_version
+        and idempotency_key before sending. Replaying the same successful request returns
+        the stored preview, while an in-progress attempt returns a conflict and a failed
+        attempt replays its original error rather than silently repeating model work.
+        The preview version remains the input version.
+        Submit the selected, edited items through tasks.plan to create canonical tasks.
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: X-Project-Id, in: header, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskPlanPreviewRequest' }
+      responses:
+        '200':
+          description: Stored, validated preview with immutable requirement basis and model usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskPlanPreview' }
+        '400': { description: Project context missing }
+        '401': { description: Authentication required }
+        '403': { description: Project write permission denied }
+        '404': { description: Scoped project or requirement not found }
+        '409': { description: Version or requirement basis conflict, changed request identity, or preview already running }
+        '422': { description: Invalid request, task draft, date range or dependency graph }
+        '429': { description: Model gateway quota or provider limit exceeded; failure is explicit }
+        '502': { description: Model provider failure or invalid model output; no template fallback }
+        '503': { description: Model gateway unavailable; no template fallback }
+  /api/v1/delivery/commands:
+    post:
+      tags:
+      - delivery
+      operationId: deliveryCommand
+      summary: Apply a versioned and idempotent delivery command
+      description: 'execution.queue persists an immutable dispatch intent. execution.sync sends it
+
+        through existing adapters, or observes actual run evidence. It never starts a run.
+
+        Start via the existing runtime run action API. execution.review requires project
+
+        approval and runtime workspace access. Successful execution alone never completes
+
+        a business task. Retry the identical command with the same idempotency key.
+
+        task.update can maintain dependency IDs and acceptance criterion indexes; changing
+
+        either association requires the current requirement_basis and requirement_revision.
+
+        Empty arrays explicitly clear associations. Stale requirement bases are rejected.
+
+
+        project.update changes only explicitly supplied fields, retaining untouched owner/goal/dates. name/description
+        edit the canonical Project and require configure; other project metadata keeps write. resource.save/archive
+        require configure and share workspace CAS, receipts and audit events. Archiving retains the record; saving
+        the same id with archived=false restores it. Resources never fetch links.'
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryCommand'
+      responses:
+        '200':
+          description: Updated snapshot with replayed and applied_version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryWorkspace'
+        '403':
+          description: Project or execution permission denied
+        '409':
+          description: Version conflict
+          changed evidence: null
+          active execution or invalid stage transition: null
+        '422':
+          description: Invalid action payload
+        '503':
+          description: Runtime unavailable; durable dispatch intent remains retryable
   /api/v1/health:
     get:
       operationId: getHealth
@@ -157,81 +1512,128 @@ paths:
     get:
       operationId: listTasks
       tags: [tasks]
+      description: 项目成员可读取；必须使用有效 Bearer 或完整验证的 HMAC 签名。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
       parameters:
-        - { $ref: "#/components/parameters/XProjectId" }
+        - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
         - { name: status, in: query, schema: { $ref: "#/components/schemas/TaskStatus" } }
         - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
-        - { $ref: "#/components/parameters/PageParam" }
-        - { $ref: "#/components/parameters/SizeParam" }
+        - { name: sprint_id, in: query, schema: { type: string } }
+        - { name: source, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
       responses:
         "200":
           description: ok
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  items: { type: array, items: { $ref: "#/components/schemas/Task" } }
-                  total: { type: integer }
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
     post:
       operationId: createTask
       tags: [tasks]
-      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      description: 需要项目写权限（project_admin/developer/devops/product_manager，或有权管理该项目的租户管理员、超级管理员）。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      parameters: [ { $ref: "#/components/parameters/RequiredBusinessProjectId" } ]
       requestBody:
         required: true
         content:
           application/json: { schema: { $ref: "#/components/schemas/TaskCreate" } }
       responses:
-        "201":
+        "200":
           description: created
           content:
-            application/json: { schema: { $ref: "#/components/schemas/Task" } }
+            application/json:
+              schema:
+                type: object
+                required: [ok, id]
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
 
   /api/v1/tasks/{task_id}:
     parameters:
-      - { $ref: "#/components/parameters/XProjectId" }
+      - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
       - { name: task_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: getTask
       tags: [tasks]
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
       responses:
         "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
-        "404": { $ref: "#/components/responses/NotFound" }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
     patch:
       operationId: updateTask
       tags: [tasks]
+      description: 需要项目写权限；交付执行和依赖校验仍由业务状态约束执行。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
       requestBody:
         required: true
         content:
           application/json: { schema: { $ref: "#/components/schemas/TaskUpdate" } }
       responses:
-        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/BusinessOk" } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
     delete:
       operationId: deleteTask
       tags: [tasks]
+      description: 需要项目写权限。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
       responses:
-        "204": { description: deleted }
+        "200": { description: deleted, content: { application/json: { schema: { $ref: "#/components/schemas/BusinessOk" } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
 
   /api/v1/tasks/{task_id}:pull:
     parameters:
-      - { $ref: "#/components/parameters/XProjectId" }
+      - { $ref: "#/components/parameters/RequiredBusinessProjectId" }
       - { name: task_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: pullTask
       tags: [tasks]
       summary: Agent 主动拉任务（认领）
+      description: 需要项目写权限；仅有 X-Api-Key 而没有通过完整签名验证的请求不构成身份认证。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
       responses:
         "200":
           description: ok
           content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } }
         "409": { $ref: "#/components/responses/Conflict" }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
 
   /api/v1/llm/chat:
     post:
       operationId: llmChat
       tags: [llm]
       summary: 统一 LLM 入口（路由 + 缓存 + 计费 + 审计）
-      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      description: |
+        需要项目写权限。模型选择依次为显式 model、项目 role_models[task_type]、
+        项目默认模型；只有项目尚未保存模型配置时才使用旧环境变量和默认路由。
+        已保存配置只使用所选提供商，不静默回退到其他提供商。
+        当前项目适配器支持 Anthropic、OpenAI 兼容接口、Ollama；
+        未支持、未配置、禁用或凭证缺失的提供商返回明确的 503。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      parameters: [ { $ref: "#/components/parameters/RequiredBusinessProjectId" } ]
       requestBody:
         required: true
         content:
@@ -241,12 +1643,21 @@ paths:
           description: ok
           content:
             application/json: { schema: { $ref: "#/components/schemas/LlmChatOut" } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '429': { description: 项目模型调用配额不足 }
+        '502': { description: 所选模型提供商调用失败 }
+        '503': { description: 项目配置无效或所选模型适配器、提供商、凭证不可用 }
 
   /api/v1/llm/embeddings:
     post:
       operationId: llmEmbeddings
       tags: [llm]
-      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      description: 需要项目写权限。本地 embedding 可继续使用；云调用及本地失败后的云回退遵守当前项目提供商的启用状态、凭证和地址，自定义云模型保留显式模型 ID。只有未保存项目配置时保留旧环境凭证回退。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      parameters: [ { $ref: "#/components/parameters/RequiredBusinessProjectId" } ]
       requestBody:
         required: true
         content:
@@ -256,6 +1667,190 @@ paths:
           description: ok
           content:
             application/json: { schema: { $ref: "#/components/schemas/EmbeddingsOut" } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '503': { description: 本地 embedding 和环境回退均不可用 }
+
+  /api/v1/models:
+    parameters: [{ $ref: '#/components/parameters/RequiredBusinessProjectId' }]
+    get:
+      operationId: listProjectModels
+      tags: [models]
+      summary: 当前项目模型目录与实际聊天路由配置
+      description: 项目成员可读取。凭证返回掩码和 has_api_key；环境变量引用保留引用文本。adapter_supported 明确当前网关是否具备该提供商适配器。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      responses:
+        '200': { description: 项目配置或尚未保存时的默认展示, content: { application/json: { schema: { $ref: '#/components/schemas/ProjectModelConfiguration' } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '503': { description: 已保存项目配置不可读取 }
+
+  /api/v1/models/default:
+    parameters: [{ $ref: '#/components/parameters/RequiredBusinessProjectId' }]
+    put:
+      operationId: setProjectDefaultModel
+      tags: [models]
+      summary: 保存项目默认聊天模型
+      description: 需要配置权限（项目管理员，或有权管理该项目的租户管理员、超级管理员）。model_id 必须已在内置或当前项目自定义目录注册。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      parameters: [{ name: model_id, in: query, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, default]
+                properties:
+                  ok: { type: boolean }
+                  default: { type: string }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '422': { description: 缺少 model_id }
+
+  /api/v1/models/providers/{name}:
+    parameters:
+      - { $ref: '#/components/parameters/RequiredBusinessProjectId' }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    put:
+      operationId: saveProjectModelProvider
+      tags: [models]
+      summary: 保存提供商凭证、地址及启用状态
+      description: 需要配置权限。路径 name 必须与请求 name 相同。已配置的凭证在提交空值或原掩码时保留；可提交 ${ENV_VAR} 引用。保存配置不代表适配器或远端模型已经验证可用。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/ModelProviderInput' } }
+      responses:
+        '200':
+          description: 已保存，返回凭证掩码
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, provider]
+                properties:
+                  ok: { type: boolean }
+                  provider: { $ref: '#/components/schemas/ModelProviderPublic' }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '422': { description: 提供商标识或地址无效 }
+    delete:
+      operationId: deleteProjectModelProvider
+      tags: [models]
+      summary: 删除提供商配置
+      description: 需要配置权限。引用此提供商的聊天模型随后调用会明确报告未配置。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      responses:
+        '200': { description: 已删除或原本不存在, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessOk' } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+
+  /api/v1/models/providers/{name}/test:
+    parameters:
+      - { $ref: '#/components/parameters/RequiredBusinessProjectId' }
+      - { name: name, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: testProjectModelProvider
+      tags: [models]
+      summary: 检查提供商配置与自定义地址连通性
+      description: 需要配置权限。自定义 base_url 只执行 HEAD 连通性检查；configured、reachable 都不能证明真实模型调用成功。禁用、无凭证或缺少适配器以 200 响应中的 ok=false 和 status 表达。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      responses:
+        '200': { description: 配置或连通性检查结果, content: { application/json: { schema: { $ref: '#/components/schemas/ModelProviderCheck' } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+
+  /api/v1/models/custom:
+    parameters: [{ $ref: '#/components/parameters/RequiredBusinessProjectId' }]
+    post:
+      operationId: addProjectCustomModel
+      tags: [models]
+      summary: 注册项目自定义模型
+      description: 需要配置权限。OpenAI 兼容服务使用 provider=openai 和该项目 openai 提供商的 base_url；模型单独 api_key 优先于提供商凭证。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/CustomModelInput' } }
+      responses:
+        '200':
+          description: 已注册，返回凭证掩码
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, model]
+                properties:
+                  ok: { type: boolean }
+                  model: { $ref: '#/components/schemas/ModelCatalogueItem' }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '409': { description: 模型已存在 }
+        '422': { description: 自定义模型字段无效 }
+
+  /api/v1/models/custom/{model_id}:
+    parameters:
+      - { $ref: '#/components/parameters/RequiredBusinessProjectId' }
+      - { name: model_id, in: path, required: true, schema: { type: string } }
+    delete:
+      operationId: removeProjectCustomModel
+      tags: [models]
+      summary: 删除自定义模型并清理关联路由
+      description: 需要配置权限。删除关联的 role_models 映射；若它是默认模型则恢复到内置目录第一个模型。此操作不会自动配置恢复后模型的提供商。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      responses:
+        '200': { description: 已删除或原本不存在, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessOk' } } } }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+
+  /api/v1/models/role-model:
+    parameters: [{ $ref: '#/components/parameters/RequiredBusinessProjectId' }]
+    put:
+      operationId: setProjectTaskModel
+      tags: [models]
+      summary: 保存按 task_type 使用的模型
+      description: 需要配置权限。role 与聊天请求 task_type 同名；模型必须已经注册。
+      security: [{ bearerAuth: [] }, { apiKeyAuth: [], sopTimestamp: [], sopNonce: [], sopSignature: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/RoleModelInput' } }
+      responses:
+        '200':
+          description: 已保存
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, role, model_id]
+                properties:
+                  ok: { type: boolean }
+                  role: { type: string }
+                  model_id: { type: string }
+        '400': { $ref: '#/components/responses/BusinessProjectMissing' }
+        '401': { $ref: '#/components/responses/BusinessUnauthorized' }
+        '403': { $ref: '#/components/responses/BusinessForbidden' }
+        '404': { $ref: '#/components/responses/BusinessNotFound' }
+        '422': { description: role 或 model_id 无效 }
 
   /api/v1/rag/search:
     post:
@@ -415,9 +2010,18 @@ components:
       type: apiKey
       in: header
       name: X-Api-Key
-      description: 配合 X-Sop-Timestamp / X-Sop-Nonce / X-Sop-Signature 头使用
+      description: 必须配合 X-Sop-Timestamp / X-Sop-Nonce / X-Sop-Signature 完整签名验证；单独传此头不构成有效认证。
+    sopTimestamp: { type: apiKey, in: header, name: X-Sop-Timestamp, description: HMAC 签名时间戳；与其他三个签名头同时验证 }
+    sopNonce: { type: apiKey, in: header, name: X-Sop-Nonce, description: HMAC 唯一 nonce；拒绝重放 }
+    sopSignature: { type: apiKey, in: header, name: X-Sop-Signature, description: 按 HMAC 协议生成的请求签名；仅提供四个头并不代表验证成功 }
 
   parameters:
+    RequiredBusinessProjectId:
+      name: X-Project-Id
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+      description: 必须显式选择已授权项目；不使用服务端环境默认项目。query/body 的 project_id 如存在必须与此头一致。
     XProjectId:
       name: X-Project-Id
       in: header
@@ -434,6 +2038,22 @@ components:
       schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
 
   responses:
+    BusinessProjectMissing:
+      description: 缺少有效项目上下文或 project_id 与授权项目头不一致
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/BusinessAccessError' } }
+    BusinessUnauthorized:
+      description: 身份缺失、过期或无效；必须有效 Bearer 或完整验证的 HMAC 签名
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/BusinessAccessError' } }
+    BusinessForbidden:
+      description: 无当前项目访问、写入或配置权限
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/BusinessAccessError' } }
+    BusinessNotFound:
+      description: 授权项目或当前项目内资源不存在
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/BusinessAccessError' } }
     Unauthorized:
       description: 未认证
       content:
@@ -452,6 +2072,2413 @@ components:
         application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } }
 
   schemas:
+    AssistanceParseDocumentInput:
+      additionalProperties: false
+      description: 粘贴 PRD / 需求说明全文，由大模型抽取结构化需求列表（JSON）。
+      properties:
+        generator:
+          default: ai
+          enum:
+          - ai
+          - rules
+          title: Generator
+          type: string
+        idempotency_key:
+          anyOf:
+          - maxLength: 100
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Idempotency Key
+        text:
+          maxLength: 120000
+          minLength: 20
+          title: Text
+          type: string
+        filename:
+          anyOf:
+          - maxLength: 500
+            type: string
+          - type: 'null'
+          default: null
+          title: Filename
+        mode:
+          default: prd
+          pattern: ^(idea|prd|meeting|feedback|incident|data|mixed)$
+          title: Mode
+          type: string
+        agent:
+          default: Product Analyst Agent
+          maxLength: 120
+          title: Agent
+          type: string
+        cli:
+          default: codex
+          maxLength: 80
+          title: Cli
+          type: string
+        auto_priority:
+          default: true
+          title: Auto Priority
+          type: boolean
+        auto_acceptance:
+          default: true
+          title: Auto Acceptance
+          type: boolean
+        assigned_agent:
+          anyOf:
+          - maxLength: 120
+            type: string
+          - type: 'null'
+          default: ''
+          title: Assigned Agent
+        dev_tool:
+          anyOf:
+          - maxLength: 80
+            type: string
+          - type: 'null'
+          default: ''
+          title: Dev Tool
+      required:
+      - text
+      title: ParseDocumentBody
+      type: object
+    AssistanceReqCreate:
+      properties:
+        title:
+          title: Title
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Description
+        priority:
+          default: P1
+          title: Priority
+          type: string
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          default: []
+          title: Acceptance Criteria
+        tags:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          default: []
+          title: Tags
+        assigned_agent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Assigned Agent
+        dev_tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: ''
+          title: Dev Tool
+      required:
+      - title
+      title: ReqCreate
+      type: object
+    AssistanceBatchImportInput:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AssistanceReqCreate'
+          maxItems: 80
+          minItems: 1
+          title: Items
+          type: array
+        generation_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Generation Id
+        expected_version:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          title: Expected Version
+        idempotency_key:
+          anyOf:
+          - maxLength: 100
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Idempotency Key
+      required:
+      - items
+      title: BatchCreateBody
+      type: object
+      allOf:
+      - if:
+          anyOf:
+          - required:
+            - generation_id
+            properties:
+              generation_id:
+                not:
+                  type: 'null'
+          - required:
+            - expected_version
+            properties:
+              expected_version:
+                not:
+                  type: 'null'
+          - required:
+            - idempotency_key
+            properties:
+              idempotency_key:
+                not:
+                  type: 'null'
+        then:
+          required:
+          - generation_id
+          - expected_version
+          - idempotency_key
+          properties:
+            generation_id:
+              not:
+                type: 'null'
+            expected_version:
+              not:
+                type: 'null'
+            idempotency_key:
+              not:
+                type: 'null'
+            items:
+              type: array
+              items:
+                allOf:
+                - $ref: '#/components/schemas/AssistanceEditedImportItem'
+      description: Legacy manual imports remain supported without generation fields. A generated preview is adopted
+        only with all three nonnull generation_id/expected_version/idempotency_key fields. The whole edited selection
+        is validated and committed in one SQL transaction; stable retries recover the same IDs.
+    AssistanceReviewInput:
+      additionalProperties: false
+      properties:
+        generator:
+          default: rules
+          enum:
+          - ai
+          - rules
+          title: Generator
+          type: string
+        idempotency_key:
+          anyOf:
+          - maxLength: 100
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Idempotency Key
+      title: ReviewInput
+      type: object
+    AssistanceApplyReviewInput:
+      additionalProperties: false
+      properties:
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
+        tags:
+          anyOf:
+          - items:
+              maxLength: 80
+              minLength: 1
+              type: string
+            maxItems: 20
+            type: array
+          - type: 'null'
+          default: null
+          title: Tags
+        human_notes:
+          anyOf:
+          - maxLength: 10000
+            type: string
+          - type: 'null'
+          default: ''
+          title: Human Notes
+        generation_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Generation Id
+        requirement_basis:
+          anyOf:
+          - maxLength: 64
+            minLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Requirement Basis
+        expected_version:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          title: Expected Version
+        idempotency_key:
+          anyOf:
+          - maxLength: 100
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Idempotency Key
+      title: ApplyReviewBody
+      type: object
+      allOf:
+      - if:
+          anyOf:
+          - required:
+            - generation_id
+            properties:
+              generation_id:
+                not:
+                  type: 'null'
+          - required:
+            - requirement_basis
+            properties:
+              requirement_basis:
+                not:
+                  type: 'null'
+          - required:
+            - expected_version
+            properties:
+              expected_version:
+                not:
+                  type: 'null'
+          - required:
+            - idempotency_key
+            properties:
+              idempotency_key:
+                not:
+                  type: 'null'
+        then:
+          required:
+          - generation_id
+          - requirement_basis
+          - expected_version
+          - idempotency_key
+          properties:
+            generation_id:
+              not:
+                type: 'null'
+            requirement_basis:
+              not:
+                type: 'null'
+            expected_version:
+              not:
+                type: 'null'
+            idempotency_key:
+              not:
+                type: 'null'
+            acceptance_criteria:
+              anyOf:
+              - type: array
+                items:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+              - type: 'null'
+      description: Legacy manual notes/criteria/tags edits remain supported without generation fields, with no model
+        provenance claim. Generated suggestions require all four nonnull generation_id/requirement_basis/expected_version/idempotency_key
+        fields. Basis is opaque and must come from this assistance preview/history, not from task-plan basis.
+    AssistancePrototypeGenerateInput:
+      additionalProperties: false
+      properties:
+        generator:
+          default: ai
+          enum:
+          - ai
+          - rules
+          title: Generator
+          type: string
+        idempotency_key:
+          anyOf:
+          - maxLength: 100
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Idempotency Key
+        mode:
+          default: wireframe
+          enum:
+          - wireframe
+          - user_journey
+          - ia
+          title: Mode
+          type: string
+        extra_context:
+          anyOf:
+          - maxLength: 8000
+            type: string
+          - type: 'null'
+          default: null
+          title: Extra Context
+        gen_image:
+          default: false
+          title: Gen Image
+          type: boolean
+          description: true is rejected with 422 before any model call; the text gateway has no prototype image adapter.
+      title: GeneratePrototypeBody
+      type: object
+    AssistancePrototypeApplyInput:
+      additionalProperties: false
+      properties:
+        generation_id:
+          maxLength: 64
+          minLength: 1
+          title: Generation Id
+          type: string
+        requirement_basis:
+          maxLength: 64
+          minLength: 64
+          title: Requirement Basis
+          type: string
+        expected_version:
+          minimum: 0
+          title: Expected Version
+          type: integer
+        idempotency_key:
+          maxLength: 100
+          minLength: 8
+          title: Idempotency Key
+          type: string
+        content:
+          maxLength: 50000
+          minLength: 1
+          title: Content
+          type: string
+        title:
+          default: 原型设计
+          maxLength: 200
+          minLength: 1
+          title: Title
+          type: string
+      required:
+      - generation_id
+      - requirement_basis
+      - expected_version
+      - idempotency_key
+      - content
+      title: PrototypeApply
+      type: object
+    AssistanceGeneratedRequirement:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 20000
+          title: Description
+          type: string
+        priority:
+          default: P2
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        tags:
+          items:
+            maxLength: 80
+            minLength: 1
+            type: string
+          maxItems: 20
+          title: Tags
+          type: array
+      required:
+      - title
+      title: GeneratedRequirement
+      type: object
+    AssistanceReviewDuplicate:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        similarity:
+          maximum: 1
+          minimum: 0
+          title: Similarity
+          type: number
+      required:
+      - id
+      - title
+      - similarity
+      title: ReviewDuplicate
+      type: object
+    AssistanceReviewRisk:
+      additionalProperties: false
+      properties:
+        code:
+          maxLength: 2000
+          minLength: 1
+          title: Code
+          type: string
+        level:
+          enum:
+          - high
+          - medium
+          - low
+          title: Level
+          type: string
+        message:
+          maxLength: 2000
+          minLength: 1
+          title: Message
+          type: string
+      required:
+      - code
+      - level
+      - message
+      title: ReviewRisk
+      type: object
+    AssistanceReviewSuggestion:
+      additionalProperties: false
+      properties:
+        score:
+          maximum: 100
+          minimum: 0
+          title: Score
+          type: integer
+        level:
+          enum:
+          - ready
+          - review
+          - needs_work
+          title: Level
+          type: string
+        risks:
+          items:
+            $ref: '#/components/schemas/AssistanceReviewRisk'
+          maxItems: 40
+          title: Risks
+          type: array
+        suggestions:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          title: Suggestions
+          type: array
+        suggested_acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Suggested Acceptance Criteria
+          type: array
+        duplicates:
+          items:
+            $ref: '#/components/schemas/AssistanceReviewDuplicate'
+          maxItems: 5
+          title: Duplicates
+          type: array
+        next_actions:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          title: Next Actions
+          type: array
+      required:
+      - score
+      - level
+      title: GeneratedReview
+      type: object
+    AssistanceUsage:
+      properties:
+        prompt_tokens:
+          default: 0
+          title: Prompt Tokens
+          type: integer
+        completion_tokens:
+          default: 0
+          title: Completion Tokens
+          type: integer
+        total_tokens:
+          default: 0
+          title: Total Tokens
+          type: integer
+        cost_usd:
+          default: 0.0
+          title: Cost Usd
+          type: number
+      title: ChatUsage
+      type: object
+    WorkflowStartInput:
+      properties:
+        type:
+          title: Type
+          type: string
+        workflow_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Workflow Id
+        args:
+          additionalProperties: true
+          title: Args
+          type: object
+          description: 'sprint_lifecycle: tasks (string array), sprint_id?, duration_seconds? (default 120). code_review:
+            diff?, timeout_seconds? (default 30). bug_triage: issue_id?, text?, default_assignee?, timeout_seconds?
+            (default 30). Timeout is finite, 0..2592000 seconds. This payload cannot set authentication or scope.'
+      required:
+      - type
+      title: StartIn
+      type: object
+      description: Known registered types are sprint_lifecycle, code_review and bug_triage. Optional workflow_id is
+        stable in the current tenant/project; matching actor/type/args replay, changed input conflicts. Args must not
+        supply actor/scope/workflow identifiers or underscore-prefixed keys. Omitted ID creates a new run, so retry
+        with the same explicit ID after an uncertain response.
+    WorkflowSignalInput:
+      properties:
+        signal:
+          title: Signal
+          type: string
+        payload:
+          additionalProperties: true
+          title: Payload
+          type: object
+          description: comment is required by every current handler. complete_task also needs task_id from this workflow;
+            reassign needs nonempty assignee. signal_id is optional. Identity and project scope are server-resolved.
+      required:
+      - signal
+      title: SignalIn
+      type: object
+      description: Send a supported signal for the selected workflow type. Payload needs a nonempty textual comment
+        of at most 10000 characters; actor_id is injected from authentication. Optional signal_id (stringified, at most
+        128 characters) gives stable replay; same signal_id with different signal/payload returns 409. Never send tenant/project/actor/underscore
+        keys.
+    WorkflowBulkCancelInput:
+      properties:
+        workflow_ids:
+          items:
+            type: string
+          maxItems: 100
+          minItems: 1
+          title: Workflow Ids
+          type: array
+      title: BulkCancelIn
+      type: object
+    AssistanceEditedImportItem:
+      additionalProperties: true
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          anyOf:
+          - default: ''
+            maxLength: 20000
+            title: Description
+            type: string
+          - type: 'null'
+        priority:
+          default: P2
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        acceptance_criteria:
+          anyOf:
+          - items:
+              maxLength: 2000
+              minLength: 1
+              type: string
+            maxItems: 80
+            title: Acceptance Criteria
+            type: array
+          - type: 'null'
+        tags:
+          anyOf:
+          - items:
+              maxLength: 80
+              minLength: 1
+              type: string
+            maxItems: 20
+            title: Tags
+            type: array
+          - type: 'null'
+        assigned_agent:
+          anyOf:
+          - &id001
+            type: string
+          - type: 'null'
+        dev_tool:
+          anyOf:
+          - *id001
+          - type: 'null'
+      required:
+      - title
+      title: GeneratedRequirement
+      type: object
+    AssistanceGeneration:
+      type: object
+      required:
+      - id
+      - action
+      - source
+      - model
+      - provider
+      - usage
+      - basis
+      - requirement_revision
+      - created_at
+      properties:
+        id:
+          type: string
+          minLength: 64
+          maxLength: 64
+        action:
+          type: string
+          enum:
+          - parse
+          - review
+          - prototype
+        source:
+          type: string
+          enum:
+          - ai
+          - rules
+        model: *id001
+        provider: *id001
+        usage:
+          $ref: '#/components/schemas/AssistanceUsage'
+        basis:
+          type: string
+          description: Opaque frozen requirement basis; empty for parse. Includes review/design source fields and differs
+            from task-plan basis.
+        requirement_revision:
+          anyOf:
+          - &id002
+            type: integer
+          - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+        stale:
+          type: boolean
+          description: True when replay/history refers to an older requirement basis/revision; it cannot be adopted
+            as current.
+        generation_id:
+          type: string
+          description: Adoption response also links the original generation ID.
+      description: Committed generation receipt. AI metadata records the gateway model/provider and observed use; rules
+        has empty model/provider and empty usage. This is a suggestion, never approval or verified delivery.
+    AssistanceIntakeItem:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 20000
+          title: Description
+          type: string
+        priority:
+          default: P2
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Acceptance Criteria
+          type: array
+        tags:
+          items:
+            maxLength: 80
+            minLength: 1
+            type: string
+          maxItems: 20
+          title: Tags
+          type: array
+        assigned_agent: *id001
+        dev_tool: *id001
+      required:
+      - title
+      title: GeneratedRequirement
+      type: object
+    AssistanceParseDocumentResult:
+      type: object
+      required:
+      - ok
+      - generation
+      - expected_version
+      - source
+      - items
+      - count
+      properties:
+        ok: &id003
+          type: boolean
+        generation: &id004
+          $ref: '#/components/schemas/AssistanceGeneration'
+        expected_version: &id005
+          type: integer
+          minimum: 0
+          description: Workspace version observed when preparing the preview; adoption requires explicit current version.
+        source:
+          type: string
+          enum:
+          - llm
+          - local_rules
+          description: Legacy-compatible source; generation.source is the explicit ai/rules source.
+        warning: *id001
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistanceIntakeItem'
+        count: *id002
+        intake_config:
+          type: object
+        commands:
+          type: array
+          items:
+            type: object
+        agent_packet:
+          type: object
+    AssistanceReviewResult:
+      type: object
+      required:
+      - ok
+      - generation
+      - expected_version
+      - requirement_id
+      - score
+      - level
+      - risks
+      - suggestions
+      - suggested_acceptance_criteria
+      - duplicates
+      - linked_tasks
+      - next_actions
+      - reviewed_at
+      properties:
+        score:
+          maximum: 100
+          minimum: 0
+          title: Score
+          type: integer
+        level:
+          enum:
+          - ready
+          - review
+          - needs_work
+          title: Level
+          type: string
+        risks:
+          items:
+            $ref: '#/components/schemas/AssistanceReviewRisk'
+          maxItems: 40
+          title: Risks
+          type: array
+        suggestions:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          title: Suggestions
+          type: array
+        suggested_acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 80
+          title: Suggested Acceptance Criteria
+          type: array
+        duplicates:
+          items:
+            $ref: '#/components/schemas/AssistanceReviewDuplicate'
+          maxItems: 5
+          title: Duplicates
+          type: array
+        next_actions:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          title: Next Actions
+          type: array
+        ok: *id003
+        generation: *id004
+        expected_version: *id005
+        requirement_id: *id001
+        linked_tasks: *id002
+        reviewed_at: *id001
+      description: Advisory clarity/risk score. ready is a suggestion label and does not approve a requirement or advance
+        its delivery stage.
+    AssistancePrototypeResult:
+      type: object
+      required:
+      - ok
+      - generation
+      - expected_version
+      - content
+      - image_url
+      properties:
+        ok: *id003
+        generation: *id004
+        expected_version: *id005
+        content: *id001
+        image_url:
+          type: 'null'
+      description: Editable Markdown preview. Generation does not overwrite the legacy prototype file or append a delivery
+        artifact; explicit prototype/apply is required.
+    AssistanceReviewAdoptionResult:
+      type: object
+      required:
+      - ok
+      - replayed
+      - applied_version
+      - generation
+      - updated
+      properties:
+        ok: *id003
+        replayed: *id003
+        applied_version: *id002
+        generation: &id006
+          $ref: '#/components/schemas/AssistanceGeneration'
+        workspace: &id007
+          $ref: '#/components/schemas/DeliveryWorkspace'
+        updated:
+          type: array
+          items: *id001
+      description: Confirmed edits and original provider provenance. Matching receipt replays before checking the now-changed
+        basis/version. workspace is included on first application and may be absent on replay.
+    AssistanceBatchAdoptionResult:
+      type: object
+      required:
+      - ok
+      - replayed
+      - applied_version
+      - generation
+      - ids
+      - count
+      properties:
+        ok: *id003
+        replayed: *id003
+        applied_version: *id002
+        generation: *id006
+        workspace: *id007
+        ids:
+          type: array
+          items: *id001
+        count: *id002
+    AssistancePrototypeAdoptionResult:
+      type: object
+      required:
+      - ok
+      - replayed
+      - applied_version
+      - generation
+      - artifact_id
+      - content
+      properties:
+        ok: *id003
+        replayed: *id003
+        applied_version: *id002
+        generation: *id006
+        workspace: *id007
+        artifact_id: *id001
+        content: *id001
+      description: Appends a recorded prototype artifact for the current requirement revision; preserves prior artifacts
+        and does not approve or advance a stage.
+    AssistanceManualReviewResult:
+      type: object
+      required:
+      - ok
+      - updated
+      - review
+      properties:
+        ok: *id003
+        updated:
+          type: array
+          items: *id001
+        review:
+          type: object
+      description: Legacy explicit manual edit; does not claim any model origin.
+    AssistanceManualBatchResult:
+      type: object
+      required:
+      - ok
+      - ids
+      - count
+      properties:
+        ok: *id003
+        ids:
+          type: array
+          items: *id001
+        count: *id002
+      description: Legacy manual import without a generation receipt.
+    AssistancePrototypeArtifact:
+      type: object
+      required:
+      - id
+      - revision
+      - kind
+      - content
+      properties:
+        id: *id001
+        revision: *id002
+        actor: *id001
+        at: *id001
+        kind:
+          const: prototype
+        title: *id001
+        content: *id001
+        url: *id001
+        result:
+          type: string
+          enum:
+          - recorded
+          - passed
+          - failed
+        source: *id001
+        generation_id: *id001
+        model: *id001
+        provider: *id001
+        usage:
+          $ref: '#/components/schemas/AssistanceUsage'
+    AssistancePrototypeCurrent:
+      type: object
+      required:
+      - ok
+      - exists
+      - content
+      - versions
+      properties:
+        ok: *id003
+        exists: *id003
+        content: *id001
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistancePrototypeArtifact'
+        artifact_id: *id001
+        current_revision: *id002
+        stale: *id003
+        source: *id001
+      description: Most recently recorded SQL prototype and all prototype artifact revisions. stale compares its revision
+        with current_revision. If there are no SQL artifacts, an existing legacy Markdown file remains readable as source=legacy_file;
+        an absent prototype returns exists=false.
+    AssistanceError:
+      type: object
+      required:
+      - detail
+      properties:
+        detail: {}
+      description: HTTPException detail is a string or structured code/message. Generated failures are durable and replay
+        without another provider call; schema validation errors may return a validation list.
+    AssistanceHistoryEntry:
+      type: object
+      required:
+      - generation
+      - status
+      - result
+      - error
+      - adoptions
+      properties:
+        generation:
+          $ref: '#/components/schemas/AssistanceGeneration'
+        status:
+          type: string
+          enum:
+          - generating
+          - succeeded
+          - failed
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/AssistanceReviewResult'
+          - $ref: '#/components/schemas/AssistancePrototypeResult'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: object
+            required:
+            - status
+            - detail
+            properties:
+              status: *id002
+              detail: {}
+          - type: 'null'
+        adoptions:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - version
+            - at
+            properties:
+              id: *id001
+              version: *id002
+              at: *id001
+    AssistanceHistoryResult:
+      type: object
+      required:
+      - expected_version
+      - requirement_basis
+      - requirement_revision
+      - items
+      properties:
+        expected_version: *id002
+        requirement_basis: *id001
+        requirement_revision: *id002
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistanceHistoryEntry'
+      description: Up to 100 assistance entries, newest first, from the authorized project. Both entry generation and
+        successful result.generation carry current staleness. A generation may only be adopted by its original actor;
+        history remains readable to project members.
+    WorkflowPermissions:
+      type: object
+      required:
+      - read
+      - write
+      - approve
+      - configure
+      properties:
+        read: *id003
+        write: *id003
+        approve: *id003
+        configure: *id003
+    WorkflowStatus:
+      type: string
+      enum:
+      - running
+      - awaiting_human
+      - timeout_pending
+      - paused
+      - completed
+      - failed
+      - cancelled
+    WorkflowOpinion:
+      type: object
+      required:
+      - comment
+      - actor_id
+      - at
+      properties:
+        comment: *id001
+        actor_id: *id001
+        at:
+          type: number
+        decision: *id001
+    WorkflowModelObservation:
+      type: object
+      required:
+      - source
+      - status
+      properties:
+        source: *id001
+        status:
+          type: string
+          enum:
+          - running
+          - succeeded
+          - failed
+          - missing_diff
+          - missing_input
+          - interrupted
+        content: *id001
+        error: *id001
+        model: *id001
+        provider: *id001
+        usage:
+          $ref: '#/components/schemas/AssistanceUsage'
+        input_sha256: *id001
+        input_chars: *id002
+        reviewed_chars: *id002
+        truncated: *id003
+      description: Actual gateway observation. Missing input, failed and interrupted reviews are visibly different from
+        succeeded; none is automatic human approval.
+    WorkflowSignalReceipt:
+      type: object
+      required:
+      - signal
+      - payload
+      - signal_id
+      - fingerprint
+      - at
+      properties:
+        signal: *id001
+        payload:
+          type: object
+        signal_id: *id001
+        fingerprint: *id001
+        at:
+          type: number
+    WorkflowInstance:
+      type: object
+      required:
+      - workflow_id
+      - run_id
+      - type
+      - status
+      - engine
+      - result
+      - tenant_id
+      - project_id
+      - created_by
+      - signals
+      properties:
+        workflow_id: *id001
+        run_id: *id001
+        type: *id001
+        status:
+          $ref: '#/components/schemas/WorkflowStatus'
+        engine: *id001
+        error: *id001
+        result: {}
+        started_at:
+          type: number
+        duration_s: *id002
+        phase: *id001
+        decision:
+          anyOf:
+          - *id001
+          - type: 'null'
+        tenant_id: *id001
+        project_id: *id001
+        created_by: *id001
+        args:
+          type: object
+          description: Original validated args plus server-injected actor context; clients cannot supply reserved scope
+            or actor fields.
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSignalReceipt'
+        updated_at: *id001
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+    WorkflowSnapshot:
+      type: object
+      required:
+      - workflow_id
+      - run_id
+      - type
+      - status
+      - phase
+      - decision
+      - review
+      - decision_record
+      - result
+      - record
+      - permissions
+      properties:
+        status: &id008
+          $ref: '#/components/schemas/WorkflowStatus'
+        phase: &id009
+          type: string
+          description: 'Actual handler phase: planning/in_progress/reviewing/ai_reviewing/awaiting_human/classifying/assigned/paused/timeout_pending/completed.
+            Timeout never implies approval.'
+        decision: &id010
+          anyOf:
+          - *id001
+          - type: 'null'
+        review: &id011
+          anyOf:
+          - $ref: '#/components/schemas/WorkflowModelObservation'
+          - type: 'null'
+        decision_record: &id012
+          anyOf:
+          - $ref: '#/components/schemas/WorkflowOpinion'
+          - type: 'null'
+        result: &id013 {}
+        workflow_id: *id001
+        run_id: *id001
+        type: *id001
+        engine: *id001
+        record:
+          $ref: '#/components/schemas/WorkflowInstance'
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+        error: *id001
+        duration_s: *id002
+    WorkflowSignalResult:
+      type: object
+      required:
+      - ok
+      - workflow_id
+      - status
+      - phase
+      - decision
+      - review
+      - decision_record
+      - result
+      - permissions
+      properties:
+        status: *id008
+        phase: *id009
+        decision: *id010
+        review: *id011
+        decision_record: *id012
+        result: *id013
+        ok: *id003
+        workflow_id: *id001
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+    WorkflowEvent:
+      type: object
+      required:
+      - id
+      - ts
+      - tenant_id
+      - project_id
+      - workflow_id
+      - event
+      properties:
+        id: *id001
+        ts: *id001
+        tenant_id: *id001
+        project_id: *id001
+        workflow_id: *id001
+        run_id: *id001
+        type: *id001
+        event: *id001
+        status:
+          $ref: '#/components/schemas/WorkflowStatus'
+        phase:
+          anyOf:
+          - *id001
+          - type: 'null'
+        decision:
+          anyOf:
+          - *id001
+          - type: 'null'
+        signal: *id001
+        payload:
+          type: object
+        via: *id001
+    WorkflowEventsResult:
+      type: object
+      required:
+      - ok
+      - items
+      - total
+      properties:
+        ok: *id003
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEvent'
+        total: *id002
+    WorkflowInstancesResult:
+      type: object
+      required:
+      - ok
+      - items
+      - total
+      - permissions
+      properties:
+        ok: *id003
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowInstance'
+        total: *id002
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+    WorkflowTypesResult:
+      type: array
+      items:
+        type: object
+        required:
+        - type
+        - description
+        - signals
+        properties:
+          type: *id001
+          description: *id001
+          signals:
+            type: array
+            items: *id001
+    WorkflowEngineStatus:
+      type: object
+      required:
+      - ok
+      - configured_engine
+      - active_engine
+      - temporal_connected
+      - worker_supported
+      - durability
+      properties:
+        ok: *id003
+        configured_engine: *id001
+        active_engine: *id001
+        temporal_host: *id001
+        temporal_namespace: *id001
+        temporal_connected: *id003
+        probe:
+          type: object
+          required:
+          - ok
+          - reason
+          properties:
+            ok: *id003
+            reason: *id001
+        workflow_types:
+          type: array
+          items: *id001
+        worker_supported: *id003
+        durability:
+          type: string
+          enum:
+          - local_journal
+          - temporal_worker_not_implemented
+      description: The memory engine uses a scoped local journal. A configured Temporal client does not prove working
+        workers; unsupported scoped Temporal start/signal/query/cancel/describe return 503.
+    WorkflowDetail:
+      type: object
+      required:
+      - ok
+      - engine
+      - instance
+      - events
+      - signals
+      - result
+      - error
+      - dag
+      - temporal
+      - status
+      - phase
+      - decision
+      - review
+      - decision_record
+      - permissions
+      properties:
+        status: *id008
+        phase: *id009
+        decision: *id010
+        review: *id011
+        decision_record: *id012
+        result: *id013
+        ok: *id003
+        engine: *id001
+        instance:
+          $ref: '#/components/schemas/WorkflowInstance'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEvent'
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowSignalReceipt'
+        error: *id001
+        dag:
+          type: object
+          description: Observed phase/status graph; skipped or failed AI review steps are not painted as successful.
+        temporal:
+          type: object
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+    WorkflowTerminalResult:
+      type: object
+      required:
+      - workflow_id
+      - status
+      - result
+      - error
+      - record
+      properties:
+        workflow_id: *id001
+        status:
+          $ref: '#/components/schemas/WorkflowStatus'
+        result: {}
+        error: *id001
+        record:
+          $ref: '#/components/schemas/WorkflowInstance'
+    WorkflowQueryResult:
+      type: object
+      required:
+      - ok
+      - workflow_id
+      - query
+      - value
+      - status
+      - phase
+      - decision
+      - review
+      - decision_record
+      - result
+      - permissions
+      properties:
+        status: *id008
+        phase: *id009
+        decision: *id010
+        review: *id011
+        decision_record: *id012
+        result: *id013
+        ok: *id003
+        workflow_id: *id001
+        query: *id001
+        value: {}
+        permissions:
+          $ref: '#/components/schemas/WorkflowPermissions'
+    WorkflowCancelResult:
+      type: object
+      required:
+      - ok
+      properties:
+        ok:
+          type: string
+          const: 'true'
+    WorkflowBulkCancelResult:
+      type: object
+      required:
+      - ok
+      - cancelled
+      - failed
+      - count
+      properties:
+        ok: *id003
+        cancelled:
+          type: array
+          items: *id001
+        failed:
+          type: array
+          items:
+            type: object
+            required:
+            - workflow_id
+            - error
+            properties:
+              workflow_id: *id001
+              error: *id001
+        count: *id002
+      description: A request with missing scoped IDs fails before cancellation. Otherwise each cancellation is recorded
+        and failures are returned per instance; this is not an atomic bulk operation.
+
+    BusinessAccessError:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+    BusinessOk:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+    ModelProviderInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, pattern: '^[a-z][a-z0-9_-]{0,49}$' }
+        api_key: { type: string, maxLength: 8192, default: '', writeOnly: true, description: "凭证或本项目专用环境引用 ${SOP_LLM_CREDENTIAL_<scope SHA256前16位大写>_<NAME>}；不允许引用任意服务端环境变量。空值或原掩码保留已保存凭证" }
+        base_url: { type: [string, 'null'], maxLength: 2048, description: 绝对 HTTP(S) 地址；禁止 URL 凭证、查询串、片段和空白 }
+        enabled: { type: boolean, default: true }
+    ModelProviderPublic:
+      type: object
+      properties:
+        name: { type: string }
+        api_key: { type: string, description: 凭证掩码或环境变量引用 }
+        has_api_key: { type: boolean }
+        base_url: { type: [string, 'null'] }
+        enabled: { type: boolean }
+        updated_at: { type: string }
+    CustomModelInput:
+      type: object
+      required: [id, provider, name]
+      properties:
+        id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$' }
+        provider: { type: string, pattern: '^[a-z][a-z0-9_-]{0,49}$' }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        context: { type: integer, minimum: 1, maximum: 10000000, default: 32000 }
+        api_key: { type: [string, 'null'], maxLength: 8192, writeOnly: true, description: 自定义凭证或本项目专用环境引用；不得读取其他项目或通用服务端环境变量 }
+    RoleModelInput:
+      type: object
+      required: [role, model_id]
+      properties:
+        role: { type: string, pattern: '^[a-z][a-z0-9_-]{0,79}$', description: 对应 ChatIn.task_type }
+        model_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}$' }
+    ModelCatalogueItem:
+      type: object
+      required: [id, provider, name]
+      properties:
+        id: { type: string }
+        provider: { type: string }
+        name: { type: string }
+        context: { type: integer }
+        recommended: { type: boolean }
+        adapter_supported: { type: boolean }
+        api_key: { type: [string, 'null'], description: 自定义模型凭证掩码或环境变量引用 }
+        has_api_key: { type: boolean }
+        created_at: { type: string }
+    ProjectModelConfiguration:
+      type: object
+      required: [builtin, custom, providers, default, role_models, updated_at, routing_source]
+      properties:
+        builtin: { type: array, items: { $ref: '#/components/schemas/ModelCatalogueItem' } }
+        custom: { type: array, items: { $ref: '#/components/schemas/ModelCatalogueItem' } }
+        providers: { type: object, additionalProperties: { $ref: '#/components/schemas/ModelProviderPublic' } }
+        default: { type: [string, 'null'] }
+        role_models: { type: object, additionalProperties: { type: string } }
+        updated_at: { type: string }
+        routing_source: { type: string, enum: [project, legacy_project, environment] }
+    ModelProviderCheck:
+      type: object
+      required: [ok, status, provider]
+      properties:
+        ok: { type: boolean }
+        status: { type: string, enum: [disabled, unsupported_adapter, missing_api_key, invalid_endpoint, configured, reachable, unreachable] }
+        provider: { type: string }
+        base_url: { type: string }
+        http_status: { type: integer }
+        live: { type: boolean, description: 是否尝试了地址连通性检查，不代表真实模型请求 }
+        error: { type: string }
+    DeliveryProjectEdit:
+      additionalProperties: false
+      properties:
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Ends On
+        name:
+          title: Name
+          maxLength: 128
+          minLength: 1
+          type: string
+        description:
+          title: Description
+          maxLength: 20000
+          type: string
+        goal:
+          default: ''
+          maxLength: 10000
+          title: Goal
+          type: string
+        owner_id:
+          default: ''
+          maxLength: 100
+          title: Owner Id
+          type: string
+      title: ProjectEdit
+      type: object
+      description: Patch only supplied fields. name and description change the canonical SQL Project and require configure
+        permission. Goal, owner and planned dates retain their existing write permission. Omitted fields retain stored
+        values; empty description clears it, and explicit null dates clear planned dates. Date validation uses the combined
+        stored and submitted range. No duplicate project entity is created.
+    ResourceSave:
+      additionalProperties: false
+      properties:
+        id:
+          default: ''
+          maxLength: 64
+          title: Id
+          type: string
+        kind:
+          enum:
+          - repository
+          - document
+          - design
+          - other
+          title: Kind
+          type: string
+        title:
+          maxLength: 200
+          minLength: 1
+          title: Title
+          type: string
+        url:
+          maxLength: 2000
+          minLength: 1
+          title: Url
+          type: string
+          description: HTTP(S) URL without userinfo, control characters, malformed host/port or obvious credential query
+            keys (token, password, key, secret, credential and signed credential variants). Ordinary ref/branch query
+            parameters remain valid. Registering a link never fetches or executes it.
+        description:
+          default: ''
+          maxLength: 4000
+          title: Description
+          type: string
+        ref:
+          default: ''
+          maxLength: 200
+          title: Ref
+          type: string
+        archived:
+          default: false
+          title: Archived
+          type: boolean
+      required:
+      - kind
+      - title
+      - url
+      title: ResourceSave
+      type: object
+      description: Requires configure permission. Omit id to create; an id must already belong to this project's resource
+        collection. Save archived=false with the same id to restore, retaining original creation provenance.
+    ResourceArchive:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        comment:
+          default: ''
+          maxLength: 4000
+          title: Comment
+          type: string
+      required:
+      - id
+      title: ResourceArchive
+      type: object
+      description: Requires configure permission. Archives an existing same-project resource without deleting it. The
+        optional comment and complete prior resource are retained in the delivery event.
+    DeliveryResource:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        kind:
+          enum:
+          - repository
+          - document
+          - design
+          - other
+          title: Kind
+          type: string
+        title:
+          maxLength: 200
+          minLength: 1
+          title: Title
+          type: string
+        url:
+          maxLength: 2000
+          minLength: 1
+          title: Url
+          type: string
+          description: HTTP(S) URL without userinfo, control characters, malformed host/port or obvious credential query
+            keys (token, password, key, secret, credential and signed credential variants). Ordinary ref/branch query
+            parameters remain valid. Registering a link never fetches or executes it.
+        description:
+          default: ''
+          maxLength: 4000
+          title: Description
+          type: string
+        ref:
+          default: ''
+          maxLength: 200
+          title: Ref
+          type: string
+        archived:
+          default: false
+          title: Archived
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+          description: Stable authenticated user ID
+        updated_by:
+          type: string
+          description: Stable authenticated user ID
+      required:
+      - id
+      - kind
+      - title
+      - url
+      - description
+      - ref
+      - archived
+      - created_at
+      - updated_at
+      - created_by
+      - updated_by
+      title: DeliveryResource
+      type: object
+    DeliveryProject:
+      type: object
+      required:
+      - id
+      - name
+      - description
+      - status
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+          description: Canonical Project status, e.g. active or archived
+        goal:
+          type: string
+        owner_id:
+          type: string
+        starts_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        ends_on:
+          type:
+          - string
+          - 'null'
+          format: date
+      description: Canonical SQL fields take precedence over historical delivery metadata copies.
+    DeliveryInboxTarget:
+      type: object
+      additionalProperties: false
+      required:
+      - view
+      - requirement_id
+      - detail
+      properties:
+        view:
+          type: string
+          enum:
+          - list
+          - issues
+        requirement_id:
+          type: string
+          description: Empty when the issue/task has no requirement
+        detail:
+          type: string
+          enum:
+          - details
+          - tasks
+        task_id:
+          type: string
+          minLength: 1
+      description: Navigation only. Encode into existing workbench URL state; this never completes or approves work.
+    DeliveryInboxItem:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - resource_id
+      - title
+      - requirement_id
+      - task_id
+      - status
+      - owner_id
+      - priority
+      - kind
+      - stage
+      - due_on
+      - categories
+      - blocked_reasons
+      - overdue
+      - target
+      properties:
+        id:
+          type: string
+        resource_id:
+          type: string
+        title:
+          type: string
+        requirement_id:
+          type: string
+        task_id:
+          type: string
+        status:
+          type: string
+        owner_id:
+          type: string
+        priority:
+          type: string
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+        stage:
+          type: string
+          enum:
+          - intake
+          - product
+          - ux
+          - architecture
+          - planning
+          - development
+          - testing
+          - acceptance
+          - release
+          - operations
+          - ''
+        due_on:
+          type:
+          - string
+          - 'null'
+          format: date
+        categories:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+            - work
+            - approval
+            - acceptance
+            - blocked
+        blocked_reasons:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        overdue:
+          type: boolean
+        target:
+          $ref: '#/components/schemas/DeliveryInboxTarget'
+      description: One stable kind:resource_id record, carrying every applicable category exactly once. Missing relationship
+        IDs are empty strings. Awaiting acceptance requires the latest, current and non-stale execution snapshot.
+    DeliveryInboxCounts:
+      type: object
+      additionalProperties: false
+      required:
+      - work
+      - approval
+      - acceptance
+      - blocked
+      - overdue
+      - total
+      properties:
+        work:
+          type: integer
+          minimum: 0
+        approval:
+          type: integer
+          minimum: 0
+        acceptance:
+          type: integer
+          minimum: 0
+        blocked:
+          type: integer
+          minimum: 0
+        overdue:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+      description: total counts distinct items. Category counts can overlap and must not be added to derive total.
+    DeliveryInbox:
+      type: object
+      additionalProperties: false
+      required:
+      - project_id
+      - version
+      - scope
+      - current_user_id
+      - as_of
+      - counts
+      - items
+      properties:
+        project_id:
+          type: string
+        version:
+          type: integer
+          minimum: 0
+        scope:
+          type: string
+          enum:
+          - mine
+          - team
+        current_user_id:
+          type: string
+          description: Canonical authenticated User.id; owner_id and roster identities use user:ID
+        as_of:
+          type: string
+          format: date-time
+        counts:
+          $ref: '#/components/schemas/DeliveryInboxCounts'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryInboxItem'
+    DeliveryCommand:
+      type: object
+      additionalProperties: false
+      required:
+      - action
+      - payload
+      - expected_version
+      - idempotency_key
+      properties:
+        action:
+          type: string
+          enum:
+          - project.update
+          - resource.save
+          - resource.archive
+          - member.save
+          - milestone.save
+          - requirement.create
+          - requirement.update
+          - task.create
+          - task.update
+          - tasks.plan
+          - artifact.add
+          - stage.advance
+          - stage.reopen
+          - issue.promote
+          - release.save
+          - execution.queue
+          - execution.sync
+          - execution.review
+          - execution.cancel
+        payload:
+          type: object
+          description: 'Validated per action. execution.queue requires task_id and workspace_id,
+
+            either agent_id + agent_version or nodes [{id, argv, timeout_seconds?}],
+
+            optional target_device_id and test_node_ids. sync/cancel require id.
+
+            review requires id, decision (accept/request_changes), comment and run_version.
+
+            '
+        expected_version:
+          type: integer
+          minimum: 0
+        idempotency_key:
+          type: string
+          minLength: 8
+          maxLength: 100
+      allOf:
+      - if:
+          properties:
+            action:
+              const: tasks.plan
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/TaskPlan'
+      - if:
+          properties:
+            action:
+              const: task.update
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/TaskEdit'
+      - if:
+          properties:
+            action:
+              const: project.update
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeliveryProjectEdit'
+      - if:
+          properties:
+            action:
+              const: resource.save
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ResourceSave'
+      - if:
+          properties:
+            action:
+              const: resource.archive
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ResourceArchive'
+    TaskEdit:
+      type: object
+      additionalProperties: false
+      required: [id]
+      description: |
+        Patch only the supplied task fields. Dependency and acceptance associations
+        require both the current requirement basis and revision. Omit these arrays
+        to preserve associations; use an empty array to clear them. Explicit null
+        associations are invalid. Date changes validate the resulting saved range
+        and the planned date order of predecessor and successor tasks atomically.
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64 }
+        status: { type: [string, 'null'], enum: [pending, in_progress, blocked, completed, null], default: null }
+        owner_id: { type: [string, 'null'], maxLength: 100, default: null }
+        description: { type: [string, 'null'], maxLength: 10000, default: null }
+        starts_on: { type: [string, 'null'], format: date, default: null }
+        ends_on: { type: [string, 'null'], format: date, default: null }
+        blocked_reason: { type: [string, 'null'], maxLength: 2000, default: null }
+        depends_on:
+          type: array
+          maxItems: 40
+          uniqueItems: true
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Existing canonical task IDs in this project; strings are trimmed and empty IDs, duplicates, self-dependencies and cycles are rejected
+        acceptance_criteria:
+          type: array
+          maxItems: 80
+          uniqueItems: true
+          items: { type: integer, minimum: 0 }
+          description: Zero-based indexes into the explicitly adopted current requirement acceptance criteria
+        requirement_revision: { type: [integer, 'null'], minimum: 1, default: null }
+        requirement_basis: { type: [string, 'null'], minLength: 64, maxLength: 64, default: null }
+      allOf:
+        - if:
+            anyOf:
+              - required: [depends_on]
+              - required: [acceptance_criteria]
+          then:
+            required: [requirement_basis, requirement_revision]
+            properties:
+              requirement_basis: { type: string, minLength: 64, maxLength: 64 }
+              requirement_revision: { type: integer, minimum: 1 }
+    TaskDraft:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 256 }
+        description: { type: string, maxLength: 10000, default: '' }
+        owner_id: { type: string, maxLength: 100, default: '' }
+        priority: { type: string, enum: [P0, P1, P2, P3], default: P1 }
+        estimate: { type: string, enum: [XS, S, M, L, XL], default: M }
+        key:
+          type: string
+          maxLength: 64
+          default: ''
+          description: Unique draft key referenced by other items in this plan
+        acceptance_criteria:
+          type: array
+          maxItems: 80
+          uniqueItems: true
+          default: []
+          items: { type: integer, minimum: 0 }
+          description: Zero-based indexes into the fixed requirement acceptance criteria
+        depends_on:
+          type: array
+          maxItems: 40
+          uniqueItems: true
+          default: []
+          items: { type: string, minLength: 1, maxLength: 64 }
+          description: Other selected draft keys or existing task IDs in the current project; strings are trimmed and empty IDs, duplicates and cycles are rejected
+        starts_on: { type: [string, 'null'], format: date, default: null }
+        ends_on:
+          type: [string, 'null']
+          format: date
+          default: null
+          description: Must be on or after starts_on when both dates are set
+        blocked_reason: { type: string, maxLength: 2000, default: '' }
+    TaskPlan:
+      type: object
+      additionalProperties: false
+      required: [requirement_id, items]
+      properties:
+        requirement_id: { type: string, minLength: 1, maxLength: 64 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 40
+          items: { $ref: '#/components/schemas/TaskDraft' }
+        requirement_revision: { type: [integer, 'null'], minimum: 1, default: null }
+        requirement_basis:
+          type: [string, 'null']
+          minLength: 64
+          maxLength: 64
+          default: null
+          description: SHA-256 of the fixed requirement basis; changed requirements require explicit rebase
+        preview_id:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 64
+          default: null
+          description: Optional same-project preview whose server-recorded source is carried into task planning
+    TaskPlanPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [requirement_id, expected_version, idempotency_key]
+      properties:
+        requirement_id: { type: string, minLength: 1, maxLength: 64 }
+        expected_version: { type: integer, minimum: 0 }
+        idempotency_key: { type: string, minLength: 8, maxLength: 100 }
+        generator: { type: string, enum: [template, ai], default: template }
+        mode: { type: string, enum: [frontend, backend, fullstack, testing], default: fullstack }
+        max_items: { type: integer, minimum: 1, maximum: 40, default: 8 }
+    TaskPlanRequirementSnapshot:
+      type: object
+      required: [id, title, description, acceptance_criteria]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        acceptance_criteria: { type: array, items: { type: string } }
+    TaskPlanUsage:
+      type: object
+      required: [prompt_tokens, completion_tokens, total_tokens, cost_usd]
+      properties:
+        prompt_tokens: { type: integer, minimum: 0 }
+        completion_tokens: { type: integer, minimum: 0 }
+        total_tokens: { type: integer, minimum: 0 }
+        cost_usd: { type: number, minimum: 0 }
+    TaskPlanPreview:
+      type: object
+      required: [id, version, requirement_revision, requirement_basis, requirement_snapshot, items, source, model, provider, usage, warnings]
+      properties:
+        id: { type: string }
+        version: { type: integer, minimum: 0, description: Fixed workspace version supplied in the original preview request }
+        requirement_revision: { type: integer, minimum: 1 }
+        requirement_basis: { type: string, minLength: 64, maxLength: 64 }
+        requirement_snapshot: { $ref: '#/components/schemas/TaskPlanRequirementSnapshot' }
+        items: { type: array, minItems: 1, maxItems: 40, items: { $ref: '#/components/schemas/TaskDraft' } }
+        source: { type: string, enum: [template, ai] }
+        model: { type: string, description: Empty for template previews }
+        provider: { type: string, description: Empty for template previews }
+        usage: { $ref: '#/components/schemas/TaskPlanUsage' }
+        warnings: { type: array, items: { type: string } }
+    DeliveryTaskPlanning:
+      type: object
+      description: |
+        Optional, additive task planning metadata. Legacy tasks may omit this object
+        or return an empty/partial object. A missing source must not be presented as
+        a generated or manually confirmed plan. Requirement snapshots preserve the
+        acceptance criteria that the saved zero-based indexes originally referenced.
+      properties:
+        key: { type: string }
+        acceptance_criteria: { type: array, items: { type: integer, minimum: 0 } }
+        depends_on: { type: array, items: { type: string }, description: Resolved canonical task IDs }
+        starts_on: { type: [string, 'null'], format: date }
+        ends_on: { type: [string, 'null'], format: date }
+        blocked_reason: { type: string }
+        requirement_revision: { type: integer, minimum: 1 }
+        requirement_basis: { type: string, minLength: 64, maxLength: 64 }
+        requirement_snapshot: { $ref: '#/components/schemas/TaskPlanRequirementSnapshot' }
+        preview_id: { type: [string, 'null'] }
+        source: { type: string, enum: [manual, template, ai] }
+        model: { type: string }
+        provider: { type: string }
+        usage:
+          oneOf:
+            - { $ref: '#/components/schemas/TaskPlanUsage' }
+            - { type: object, maxProperties: 0 }
+          description: Model usage when recorded; empty for a manually confirmed plan without model work
+    DeliveryRequirement:
+      type: object
+      required: [id, basis]
+      properties:
+        id: { type: string }
+        basis:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: Current SHA-256 requirement basis, including legacy requirements without a delivery flow
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        priority: { type: [string, 'null'] }
+        acceptance_criteria: { type: [array, 'null'], items: { type: string } }
+        flow: { type: object }
+        tasks_total: { type: integer, minimum: 0 }
+        tasks_done: { type: integer, minimum: 0 }
+    DeliveryTask:
+      type: object
+      properties:
+        id:
+          type: string
+        req_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        assigned_to:
+          type: string
+        planning:
+          $ref: '#/components/schemas/DeliveryTaskPlanning'
+        dependency_blocked:
+          type: array
+          items:
+            type: string
+          description: Prerequisite task IDs whose effective delivery is incomplete
+        owner_explicit:
+          type: boolean
+          description: True only if delivery task_owners records this task ID. Legacy inferred names require independent
+            roster uniqueness checks before personal attribution.
+    DeliveryWorkspace:
+      type: object
+      required:
+      - version
+      - project
+      - requirements
+      - tasks
+      - executions
+      - permissions
+      - resources
+      properties:
+        version:
+          type: integer
+          minimum: 0
+        project:
+          $ref: '#/components/schemas/DeliveryProject'
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryRequirement'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryTask'
+        executions:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - task_id
+            - workspace_id
+            - status
+            - snapshot
+            - run_id
+            - run_version
+            - stale
+            properties:
+              id:
+                type: string
+              task_id:
+                type: string
+              workspace_id:
+                type: string
+              run_id:
+                type: string
+              run_version:
+                type: integer
+              status:
+                type: string
+              snapshot:
+                type: object
+              stale:
+                type: boolean
+              progress:
+                type: integer
+                minimum: 0
+                maximum: 100
+              results:
+                type: object
+              review:
+                type: object
+        permissions:
+          type: object
+        replayed:
+          type: boolean
+        applied_version:
+          type: integer
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryResource'
+          description: Includes archived resources. Legacy absent metadata returns an empty collection without read-side
+            writes.
     Problem:
       type: object
       description: RFC 9457 Problem Details
@@ -603,8 +4630,8 @@ components:
       type: object
       required: [messages]
       properties:
-        model: { type: string, description: 不传则按 task_type 自动路由 }
-        task_type: { type: string, enum: [plan, code, review, summarize, classify], description: 用于路由 }
+        model: { type: string, description: 显式模型优先；项目保存配置后必须在项目目录注册 }
+        task_type: { type: string, description: 对应项目 role_models 的键，例如 plan/code/review/summarize/classify；无匹配时使用项目默认模型 }
         messages:
           type: array
           items:

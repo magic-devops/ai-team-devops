@@ -555,36 +555,15 @@ def sprint_burndown(sprint_id: str = Query("", description="迭代 ID，空则�
     stats = _sprint_task_stats(sid, tasks)
     total = int(stats["total_tasks"])
     remaining = int(stats["remaining"])
-    done = int(stats["completed"])
-
     started = _parse_dt(sprint.get("started_at"))
     ends = _parse_dt(sprint.get("ends_at"))
-    now = datetime.now(timezone.utc)
-    if started and ends and ends > started:
-        span_days = max(1, (ends - started).days)
-        elapsed_days = min(span_days, max(0, (now - started).days))
-    else:
-        span_days = 14
-        elapsed_days = min(span_days, max(0, int(done / max(1, total) * span_days)))
-
-    ideal: List[Dict[str, Any]] = []
-    actual: List[Dict[str, Any]] = []
-    for d in range(span_days + 1):
-        ideal_remaining = round(total * (1 - d / span_days), 1) if span_days else 0
-        ideal.append({"day": d, "remaining": ideal_remaining})
-    actual.append({"day": 0, "remaining": float(total)})
-    actual.append({"day": elapsed_days, "remaining": float(remaining)})
-    if done >= total and total > 0:
-        actual.append({"day": span_days, "remaining": 0.0})
+    from .delivery_progress import burndown_observation
 
     return {
         "ok": True,
         "sprint": sprint,
         "stats": stats,
-        "span_days": span_days,
-        "elapsed_days": elapsed_days,
-        "ideal": ideal,
-        "actual": actual,
+        **burndown_observation(total, remaining, started, ends),
     }
 
 

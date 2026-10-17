@@ -148,7 +148,7 @@ const SettingsHubPage = lazy(() => import("../subapps/ai-ops-center/src/pages/sy
 const DashboardHubPage = lazy(() =>
   import("../subapps/main-admin/src/pages/overview/DashboardHub").then((m) => ({ default: m.DashboardHub })),
 );
-const DevFlowHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/DevFlowHub").then((m) => ({ default: m.DevFlowHub })));
+const DevFlowHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/DeliveryWorkbench").then((m) => ({ default: m.DeliveryWorkbench })));
 const IssuesHubPage = lazy(() => import("../subapps/ai-rd-center/src/pages/delivery/IssuesHub").then((m) => ({ default: m.IssuesHub })));
 const MarketplaceHubPage = lazy(() =>
   import("../subapps/ai-foundation/src/pages/ecosystem/MarketplaceHub").then((m) => ({ default: m.MarketplaceHub })),
@@ -751,21 +751,21 @@ export const NAV: readonly NavItem[] = [
     group: "product",
     icon: Library,
     category: "requirement-intake",
-    capability: "product.requirements.workbench",
+    capability: "product.requirements",
     badge: "new",
     description: "需求治理工作台：需求池 → 智能评审 → 拆任务 → 批量治理",
     submodules: [
-      { key: "pool", path: "#/requirements/pool", capability: "product.requirements.pool" },
-      { key: "review", path: "#/requirements/review", capability: "product.requirements.review" },
-      { key: "generation", path: "#/requirements/generation", capability: "product.requirements.generation" },
-      { key: "batch", path: "#/requirements/batch", capability: "product.requirements.batch" },
+      { key: "pool", path: "#/requirements/pool", capability: "product.requirements.requirement_pool" },
+      { key: "review", path: "#/requirements/review", capability: "product.requirements.smart_review" },
+      { key: "generation", path: "#/requirements/generation", capability: "product.requirements.task_generation" },
+      { key: "batch", path: "#/requirements/batch", capability: "product.requirements.batch_governance" },
     ],
   },
   { key: "requirements", path: "#/requirements", el: pageElement(RequirementsHubPage), group: "product", icon: Library, category: "requirement-intake", capability: "product.requirements", shortcut: "g r", description: "需求治理中心：需求池、智能评审与拆任务" },
-  { key: "requirementPool", path: "#/requirements/pool", el: pageElement(RequirementsPage, { initialMode: "pool", focused: true }), group: "product", icon: Library, category: "requirement-intake", capability: "product.requirements.pool", hidden: true, parentKey: "productRequirementsWorkbench" },
-  { key: "requirementReview", path: "#/requirements/review", el: pageElement(RequirementsPage, { initialMode: "review", focused: true }), group: "product", icon: SearchCheck, category: "requirement-ai-governance", capability: "product.requirements.review", hidden: true, parentKey: "productRequirementsWorkbench" },
-  { key: "requirementGeneration", path: "#/requirements/generation", el: pageElement(RequirementsPage, { initialMode: "generation", focused: true }), group: "product", icon: SparklesIcon, category: "requirement-ai-governance", capability: "product.requirements.generation", hidden: true, parentKey: "productRequirementsWorkbench" },
-  { key: "requirementBatch", path: "#/requirements/batch", el: pageElement(RequirementsPage, { initialMode: "batch", focused: true }), group: "product", icon: Rows3, category: "requirement-ai-governance", capability: "product.requirements.batch", hidden: true, parentKey: "productRequirementsWorkbench" },
+  { key: "requirementPool", path: "#/requirements/pool", el: pageElement(RequirementsPage, { initialMode: "pool", focused: true }), group: "product", icon: Library, category: "requirement-intake", capability: "product.requirements.requirement_pool", hidden: true, parentKey: "productRequirementsWorkbench" },
+  { key: "requirementReview", path: "#/requirements/review", el: pageElement(RequirementsPage, { initialMode: "review", focused: true }), group: "product", icon: SearchCheck, category: "requirement-ai-governance", capability: "product.requirements.smart_review", hidden: true, parentKey: "productRequirementsWorkbench" },
+  { key: "requirementGeneration", path: "#/requirements/generation", el: pageElement(RequirementsPage, { initialMode: "generation", focused: true }), group: "product", icon: SparklesIcon, category: "requirement-ai-governance", capability: "product.requirements.task_generation", hidden: true, parentKey: "productRequirementsWorkbench" },
+  { key: "requirementBatch", path: "#/requirements/batch", el: pageElement(RequirementsPage, { initialMode: "batch", focused: true }), group: "product", icon: Rows3, category: "requirement-ai-governance", capability: "product.requirements.batch_governance", hidden: true, parentKey: "productRequirementsWorkbench" },
   { key: "tasks", path: "#/tasks", el: pageElement(TasksHubPage), group: "delivery", icon: ClipboardList, category: "delivery-execution", capability: "delivery.tasks", shortcut: "g t", description: "任务执行治理中心：列表、看板、迭代与调度", submodules: subnav("tasks", "execution_table", "kanban", "dag_dependencies", "scheduler_center", "agent_feed", "bulk_governance") },
   { key: "taskExecution", path: "#/tasks/execution", el: pageElement(TasksPage, { initialTab: "list", focused: true }), group: "delivery", icon: ClipboardList, category: "delivery-execution", capability: "delivery.tasks.execution" },
   { key: "taskBoard", path: "#/tasks/board", el: pageElement(TasksPage, { initialTab: "board", focused: true }), group: "delivery", icon: LayoutDashboard, category: "delivery-execution", capability: "delivery.tasks.board" },

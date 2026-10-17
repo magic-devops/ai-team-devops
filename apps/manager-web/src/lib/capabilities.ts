@@ -43,22 +43,49 @@ export type CapabilityGrant = {
   };
 };
 
-export function capabilityAllowed(grant: CapabilityGrant | undefined, action: CapabilityAction, role = ""): boolean {
+export function capabilityAllowed(
+  grant: CapabilityGrant | undefined,
+  action: CapabilityAction,
+  role = "",
+): boolean {
   if (!grant) return false;
-  if (typeof grant.allowed?.[action] === "boolean") return Boolean(grant.allowed[action]);
-  if (grant.source === "action") return Object.values(grant.allowed ?? {}).some(Boolean);
+  if (typeof grant.allowed?.[action] === "boolean")
+    return Boolean(grant.allowed[action]);
+  if (grant.source === "action")
+    return Object.values(grant.allowed ?? {}).some(Boolean);
   return (grant.permission?.[action] ?? []).includes(role);
 }
 
-function actionGrantAllowed(action: CapabilitySubmoduleAction, role: string): Partial<Record<CapabilityAction, boolean>> {
+/** A missing or failed capability lookup is not evidence of a read-only role. */
+export function capabilityReadOnly(
+  grant: CapabilityGrant | undefined,
+  status: "pending" | "error" | "success",
+  role = "",
+): boolean {
+  if (status !== "success" || !grant) return false;
+  if (typeof grant.allowed?.write === "boolean") return !grant.allowed.write;
+  if (Array.isArray(grant.permission?.write))
+    return !grant.permission.write.includes(role);
+  return false;
+}
+
+function actionGrantAllowed(
+  action: CapabilitySubmoduleAction,
+  role: string,
+): Partial<Record<CapabilityAction, boolean>> {
   return { [action.id]: (action.roles ?? []).includes(role) };
 }
 
-function actionGrantPermission(action: CapabilitySubmoduleAction): Partial<Record<CapabilityAction, string[]>> {
+function actionGrantPermission(
+  action: CapabilitySubmoduleAction,
+): Partial<Record<CapabilityAction, string[]>> {
   return { [action.id]: action.roles ?? [] };
 }
 
-export function flattenCapabilityGrants(items: CapabilityGrant[], role: string): CapabilityGrant[] {
+export function flattenCapabilityGrants(
+  items: CapabilityGrant[],
+  role: string,
+): CapabilityGrant[] {
   const grants: CapabilityGrant[] = [];
   for (const item of items) {
     grants.push({ ...item, source: item.source ?? "module" });
@@ -124,14 +151,20 @@ export function useCapabilities() {
   const rawItems = (query.data?.items ?? []) as CapabilityGrant[];
   const role = String(query.data?.role || "");
   const items = flattenCapabilityGrants(rawItems, role);
-  const get = (capability: string) => items.find((item) => item.capability === capability);
-  const can = (capability: string, action: CapabilityAction = "read") => capabilityAllowed(get(capability), action, role);
+  const get = (capability: string) =>
+    items.find((item) => item.capability === capability);
+  const can = (capability: string, action: CapabilityAction = "read") =>
+    capabilityAllowed(get(capability), action, role);
   return {
     ...query,
     role,
     rawItems,
     items,
-    visibleItems: flattenCapabilityGrants((query.data?.visible_items ?? rawItems.filter((item) => item.visible !== false)) as CapabilityGrant[], role),
+    visibleItems: flattenCapabilityGrants(
+      (query.data?.visible_items ??
+        rawItems.filter((item) => item.visible !== false)) as CapabilityGrant[],
+      role,
+    ),
     summary: query.data?.summary ?? {},
     get,
     can,

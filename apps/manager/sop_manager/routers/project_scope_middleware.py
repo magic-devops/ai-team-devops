@@ -57,6 +57,7 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
                                 admin_mode=_admin_mode(),
                                 check_project_access=check_project_access,
                                 http_error_response=_http_error_response,
+                                allow_provision=not psr.existing_project_required(path),
                             )
                             if isinstance(result, JSONResponse):
                                 return result
@@ -85,6 +86,7 @@ async def project_scope_middleware(request: Request, call_next: Callable) -> Res
                         admin_mode=_admin_mode(),
                         check_project_access=check_project_access,
                         http_error_response=_http_error_response,
+                        allow_provision=not psr.existing_project_required(path),
                     )
                     if isinstance(result, JSONResponse):
                         return result

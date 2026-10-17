@@ -1,7 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { flattenCapabilityGrants, type CapabilityGrant } from "./lib/capabilities";
+import {
+  capabilityAllowed,
+  capabilityReadOnly,
+  flattenCapabilityGrants,
+  type CapabilityGrant,
+} from "./lib/capabilities";
 
 describe("flattenCapabilityGrants", () => {
+  it("only labels confirmed write denials as read-only, without relaxing unknown permission gates", () => {
+    const writable: CapabilityGrant = {
+      capability: "delivery.dev-flow",
+      allowed: { read: true, write: true },
+    };
+    const denied: CapabilityGrant = {
+      capability: "delivery.dev-flow",
+      allowed: { read: true, write: false },
+    };
+    expect(capabilityReadOnly(undefined, "pending", "super_admin")).toBe(false);
+    expect(capabilityReadOnly(undefined, "error", "super_admin")).toBe(false);
+    expect(capabilityReadOnly(undefined, "success", "super_admin")).toBe(false);
+    expect(capabilityReadOnly(denied, "error", "super_admin")).toBe(false);
+    expect(capabilityReadOnly(writable, "success", "super_admin")).toBe(false);
+    expect(capabilityReadOnly(denied, "success", "viewer")).toBe(true);
+    expect(
+      capabilityReadOnly(
+        {
+          capability: "delivery.dev-flow",
+          permission: { write: ["super_admin"] },
+        },
+        "success",
+        "viewer",
+      ),
+    ).toBe(true);
+    expect(capabilityAllowed(undefined, "write", "super_admin")).toBe(false);
+    expect(capabilityAllowed(denied, "write", "super_admin")).toBe(false);
+  });
   it("flattens page-level capability actions for permission gates and agents", () => {
     const items: CapabilityGrant[] = [
       {
@@ -22,9 +55,24 @@ describe("flattenCapabilityGrants", () => {
         },
         visible: true,
         actions: [
-          { id: "read", name: "查看", capability: "ai.vibe.read", roles: ["developer"] },
-          { id: "write", name: "编辑", capability: "ai.vibe.write", roles: ["developer"] },
-          { id: "admin", name: "管理", capability: "ai.vibe.admin", roles: ["super_admin"] },
+          {
+            id: "read",
+            name: "查看",
+            capability: "ai.vibe.read",
+            roles: ["developer"],
+          },
+          {
+            id: "write",
+            name: "编辑",
+            capability: "ai.vibe.write",
+            roles: ["developer"],
+          },
+          {
+            id: "admin",
+            name: "管理",
+            capability: "ai.vibe.admin",
+            roles: ["super_admin"],
+          },
         ],
       },
     ];

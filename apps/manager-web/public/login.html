@@ -884,6 +884,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
       try { localStorage.removeItem(key); } catch (e) {}
     });
     localStorage.setItem('sop-token', d.token || d.access_token || '');
+    localStorage.setItem('sop-session-revision', window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : Date.now() + '-' + Math.random());
     localStorage.setItem('sop-user', JSON.stringify({
       id:d.user_id,
       username:d.username,
@@ -929,6 +930,7 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   function clearBrowserSession() {
     [
       'sop-token',
+      'sop-session-revision',
       'sop-user',
       'sop-current-project-id',
       'sop-current-project-code',
@@ -946,13 +948,17 @@ a#forgot-link:hover,a#back-login-link:hover{opacity:.85;text-decoration:underlin
   }
 
   var token = localStorage.getItem('sop-token');
+  var sessionRevision = localStorage.getItem('sop-session-revision');
+  function sameBrowserSession() {
+    return token === localStorage.getItem('sop-token') && sessionRevision === localStorage.getItem('sop-session-revision');
+  }
   if(token){
     loginPublicFetch(API+'/auth/me',{headers:{Authorization:'Bearer '+token}})
       .then(function(r){
-        if(r.ok) window.location.replace(postLoginTarget());
+        if(r.ok && sameBrowserSession()) window.location.replace(postLoginTarget());
         else {
           r.clone().text().then(function (txt) {
-            if (isSessionUnauthorized(r.status, txt)) clearBrowserSession();
+            if (sameBrowserSession() && isSessionUnauthorized(r.status, txt)) clearBrowserSession();
           }).catch(function () {});
         }
       })

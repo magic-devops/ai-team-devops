@@ -1,12 +1,27 @@
-import { clearSession, getToken, getWorkspaceScope, setUserSession, setWorkspaceScope, type SessionPayload } from "./authStorage";
+import { clearSession, getSessionRevision, getToken, getWorkspaceScope, setUserSession, setWorkspaceScope, type SessionPayload } from "./authStorage";
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
-function authHeaders(): Record<string, string> {
+type SessionContext = { token: string | null; revision: string | null; scope: ReturnType<typeof getWorkspaceScope> };
+
+function sessionContext(): SessionContext {
+  return { token: getToken(), revision: getSessionRevision(), scope: getWorkspaceScope() };
+}
+
+function sessionKey(context: SessionContext): string {
+  return JSON.stringify(context);
+}
+
+function assertCurrent(context: SessionContext) {
+  if (sessionKey(context) !== sessionKey(sessionContext())) {
+    throw new Error("账号或项目已切换，请在当前工作区重新操作");
+  }
+}
+
+function authHeaders(context: SessionContext): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  const token = getToken();
+  const { token, scope } = context;
   if (token) h.Authorization = `Bearer ${token}`;
-  const scope = getWorkspaceScope();
   if (scope.tenantCode) h["X-Tenant-Code"] = scope.tenantCode;
   if (scope.businessCode) h["X-Business-Code"] = scope.businessCode;
   if (scope.projectId) h["X-Project-Id"] = scope.projectId;
@@ -36,8 +51,9 @@ function isAuthProbePath(path: string) {
   return path === "/api/v1/auth/me";
 }
 
-function clearStaleSessionOnUnauthorized(path: string, status: number, body: string) {
-  if (isAuthProbePath(path) && isSessionUnauthorized(status, body) && getToken()) clearSession();
+function clearStaleSessionOnUnauthorized(context: SessionContext, path: string, status: number, body: string) {
+  assertCurrent(context);
+  if (isAuthProbePath(path) && isSessionUnauthorized(status, body) && context.token) clearSession();
 }
 
 function redirectToLogin() {
@@ -47,14 +63,12 @@ function redirectToLogin() {
   window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
 }
 
-async function bindDefaultProjectScope(tryHydrate = true): Promise<boolean> {
-  if (getWorkspaceScope().projectId || !getToken()) return false;
-  if (tryHydrate) {
-    const hydrated = await hydrateSessionScope();
-    if (hydrated) return true;
-  }
-  const r = await fetch(API_BASE + "/api/v1/projects", { headers: authHeaders() });
-  if (!r.ok) return false;
+async function bindDefaultProjectScope(context: SessionContext): Promise<SessionContext | null> {
+  assertCurrent(context);
+  if (context.scope.projectId || !context.token) return null;
+  const r = await fetch(API_BASE + "/api/v1/projects", { headers: authHeaders(context) });
+  assertCurrent(context);
+  if (!r.ok) return null;
   const projects = await r.json().catch(() => []) as Array<{
     id?: string;
     tenant_code?: string;
@@ -62,67 +76,85 @@ async function bindDefaultProjectScope(tryHydrate = true): Promise<boolean> {
     business_id?: string;
     project_code?: string;
   }>;
+  assertCurrent(context);
   const first = Array.isArray(projects) ? projects.find((item) => item?.id) : undefined;
-  if (!first?.id) return false;
+  if (!first?.id) return null;
   setWorkspaceScope({
     tenantCode: first.tenant_code || null,
     businessCode: first.business_code || first.business_id || null,
     projectId: first.id,
     projectCode: first.project_code || first.id,
   });
-  return true;
+  return sessionContext();
 }
 
-let sessionHydration: Promise<boolean> | null = null;
+const sessionHydrations = new Map<string, Promise<SessionContext>>();
 
-async function hydrateSessionScope(): Promise<boolean> {
-  if (getWorkspaceScope().projectId || !getToken()) return false;
-  if (!sessionHydration) {
-    sessionHydration = (async () => {
-      const token = getToken();
-      if (!token) return false;
+async function hydrateSessionScope(context: SessionContext): Promise<SessionContext> {
+  assertCurrent(context);
+  if (context.scope.projectId || !context.token) return context;
+  const key = sessionKey(context);
+  let hydration = sessionHydrations.get(key);
+  if (!hydration) {
+    hydration = (async () => {
       const r = await fetch(API_BASE + "/api/v1/auth/me", {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${context.token}`,
         },
       });
+      assertCurrent(context);
       if (!r.ok) {
         const txt = await r.text().catch(() => r.statusText);
-        clearStaleSessionOnUnauthorized("/api/v1/auth/me", r.status, txt);
-        return false;
+        clearStaleSessionOnUnauthorized(context, "/api/v1/auth/me", r.status, txt);
+        if (isSessionUnauthorized(r.status, txt)) throw new Error(`HTTP ${r.status}: ${txt}`);
+        return context;
       }
       const data = await r.json().catch(() => null) as SessionPayload | null;
-      if (!data) return false;
+      assertCurrent(context);
+      if (!data) return context;
       setUserSession(data);
-      return Boolean(data.workspace_scope?.project_id || data.default_project_id);
+      return sessionContext();
     })().finally(() => {
-      sessionHydration = null;
+      if (sessionHydrations.get(key) === hydration) sessionHydrations.delete(key);
     });
+    sessionHydrations.set(key, hydration);
   }
-  return sessionHydration;
+  return hydration;
 }
 
 export async function request<T>(path: string, init?: RequestInit, retriedProjectScope = false): Promise<T> {
-  if (!path.startsWith("/api/v1/auth/") && getToken() && !getWorkspaceScope().projectId) {
-    await hydrateSessionScope();
+  return requestInSession<T>(path, init, sessionContext(), retriedProjectScope);
+}
+
+async function requestInSession<T>(path: string, init: RequestInit | undefined, context: SessionContext, retriedProjectScope: boolean): Promise<T> {
+  if (!path.startsWith("/api/v1/auth/") && context.token && !context.scope.projectId) {
+    context = await hydrateSessionScope(context);
   }
-  const baseHeaders = authHeaders();
-  const extra = (init?.headers || {}) as Record<string, string>;
+  assertCurrent(context);
+  const headers = authHeaders(context);
+  new Headers(init?.headers).forEach((value, name) => {
+    const canonical = Object.keys(headers).find((key) => key.toLowerCase() === name) || name;
+    headers[canonical] = value;
+  });
+  const usesCurrentToken = new Headers(headers).get("Authorization") === `Bearer ${context.token}`;
   const r = await fetch(API_BASE + path, {
     ...init,
-    headers: { ...baseHeaders, ...extra },
+    headers,
   });
   if (!r.ok) {
     const txt = await r.text().catch(() => r.statusText);
-    const shouldRedirectLogin = isAuthProbePath(path) && isSessionUnauthorized(r.status, txt);
-    clearStaleSessionOnUnauthorized(path, r.status, txt);
+    assertCurrent(context);
+    const shouldRedirectLogin = usesCurrentToken && isAuthProbePath(path) && isSessionUnauthorized(r.status, txt);
+    if (usesCurrentToken) clearStaleSessionOnUnauthorized(context, path, r.status, txt);
     if (shouldRedirectLogin) redirectToLogin();
     if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
-      const bound = await bindDefaultProjectScope(false);
-      if (bound) return request<T>(path, init, true);
+      const bound = await bindDefaultProjectScope(context);
+      if (bound) return requestInSession<T>(path, init, bound, true);
     }
     throw new Error(`HTTP ${r.status}: ${txt}`);
   }
-  return r.json() as Promise<T>;
+  const data = await r.json() as T;
+  assertCurrent(context);
+  return data;
 }

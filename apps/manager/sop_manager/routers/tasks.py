@@ -4,10 +4,11 @@ import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from sop_manager.path_config import (
     resolved_ai_memory_root,
@@ -18,10 +19,13 @@ from sop_manager.path_config import (
     resolved_tenant_id,
 )
 from .db_sql_compat import rows, table, now
+from .business_access import require_business_access, validate_business_references
 from .scope_guard import attach_scope, current_scope, scope_matches
+from .sql_models import get_session
 from .webhook import notify_webhook
 
-router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"],
+                   dependencies=[Depends(require_business_access)])
 
 _PRIOS = ("P0", "P1", "P2", "P3")
 
@@ -2285,6 +2289,7 @@ def delete_task_dependency(task_id: str, target_id: str, type: str = Query("")):
 
 @router.post("")
 def create_task(body: TaskCreate):
+    validate_business_references(req_id=body.req_id, sprint_id=body.sprint_id)
     t = table("tasks")
     if t is None:
         raise HTTPException(503, "数据库不可用")
@@ -3128,6 +3133,7 @@ def unblock_task(task_id: str, human_notes: str = Body("", embed=True)):
 @router.patch("/{task_id}")
 def update_task(task_id: str, body: TaskUpdate):
     _safe_task_id(task_id)
+    validate_business_references(req_id=body.req_id, sprint_id=body.sprint_id)
     t = table("tasks")
     if t is None:
         raise HTTPException(503, "数据库不可用")
@@ -3208,3 +3214,18 @@ def delete_task(task_id: str):
         project_id=resolved_project_id(),
     )
     return {"ok": True}
+
+
+@router.get("/{task_id}")
+def get_task(task_id: str, db: Annotated[Session, Depends(get_session)]):
+    """Return the same scoped business row and UI fields as the task list."""
+    from .db_sql_compat import _to_dict
+    from .sql_models import Task
+
+    _safe_task_id(task_id)
+    task = db.query(Task).filter_by(
+        id=task_id, tenant_id=resolved_tenant_id(), project_id=resolved_project_id()
+    ).first()
+    if not task:
+        raise HTTPException(404, "任务不存在")
+    return _ui_merge_row(_to_dict(task), _ui_load())

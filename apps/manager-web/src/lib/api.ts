@@ -4,6 +4,7 @@
  *  - 新接口：在末尾加导出 async 函数；TanStack Query 的 hooks 在 hooks/ 目录
  */
 import type { SessionPayload } from "./authStorage";
+import type { PrototypeMode, WorkflowReviewDetail } from "./requirementsAssistance";
 import { API_BASE, request } from "./http";
 
 export const api = {
@@ -101,12 +102,14 @@ export const api = {
     auto_acceptance?: boolean;
     assigned_agent?: string;
     dev_tool?: string;
+    generator?: "ai" | "rules";
+    idempotency_key?: string;
   }) =>
     request<any>("/api/v1/requirements/parse-document", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  batchCreateRequirements: (body: { items: Array<Record<string, unknown>> }) =>
+  batchCreateRequirements: (body: { items: Array<Record<string, unknown>>; generation_id?: string; expected_version?: number; idempotency_key?: string }) =>
     request<any>("/api/v1/requirements/batch", {
       method: "POST",
       body: JSON.stringify(body),
@@ -152,16 +155,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  reviewRequirement: (id: string) =>
-    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/review`, { method: "POST" }),
+  reviewRequirement: (id: string, body: { generator?: "ai" | "rules"; idempotency_key?: string } = {}) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/review`, { method: "POST", body: JSON.stringify(body) }),
   applyRequirementReview: (
     id: string,
-    body: { acceptance_criteria?: string[]; tags?: string[]; human_notes?: string },
+    body: { acceptance_criteria?: string[]; tags?: string[]; human_notes?: string; generation_id?: string; requirement_basis?: string; expected_version?: number; idempotency_key?: string },
   ) =>
     request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/apply-review`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  previewRequirementPrototype: (id: string, body: { mode?: PrototypeMode; extra_context?: string; gen_image: false; generator: "ai" | "rules"; idempotency_key: string }) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/prototype`, { method: "POST", body: JSON.stringify(body) }),
+  applyRequirementPrototype: (id: string, body: { content: string; title?: string; generation_id: string; requirement_basis?: string; expected_version: number; idempotency_key: string }) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/prototype/apply`, { method: "POST", body: JSON.stringify(body) }),
+  requirementAssistanceHistory: (id: string) =>
+    request<any>(`/api/v1/requirements/${encodeURIComponent(id)}/assistance-history`),
   contextMe: () => request<any>("/api/v1/context/me"),
   tasks: (params: { sprint_id?: string; status?: string; priority?: string; source?: string; q?: string } | string = {}) => {
     const normalized = typeof params === "string" ? { sprint_id: params } : params;
@@ -409,7 +418,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   workflowDetail: (workflowId: string, eventsLimit = 80) =>
-    request<{
+    request<WorkflowReviewDetail & {
       ok: boolean;
       engine?: string;
       instance: Record<string, unknown>;
@@ -425,7 +434,7 @@ export const api = {
       };
       temporal?: Record<string, unknown>;
     }>(`/api/v1/workflows/${encodeURIComponent(workflowId)}/detail?events_limit=${eventsLimit}`),
-  startWorkflow: (body: { type: string; args?: Record<string, unknown> }) =>
+  startWorkflow: (body: { type: string; args?: Record<string, unknown>; workflow_id?: string }) =>
     request<any>("/api/v1/workflows/start", {
       method: "POST",
       body: JSON.stringify(body),

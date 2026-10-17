@@ -483,7 +483,7 @@ export function Projects({
               businesses={businesses.data ?? []}
               createPending={createProject.isPending}
               createError={createProject.error as Error | null}
-              onCreate={() => createProject.mutate()}
+              onCreate={() => createProject.mutateAsync()}
             />
           ) : null}
 

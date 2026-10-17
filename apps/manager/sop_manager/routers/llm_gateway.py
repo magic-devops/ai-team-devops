@@ -24,12 +24,24 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass
 from threading import RLock
-from typing import Any, Iterable, Optional
+from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
+from sop_manager.routers.business_access import require_business_access
+from sop_manager.routers.runtime_model_config import (
+    ModelRoute,
+    legacy_fingerprint,
+    load_saved_config,
+    resolve_provider_route,
+    resolve_saved_route,
+    selected_model,
+)
 
 try:
     from sop_manager.path_config import resolved_project_id, resolved_tenant_id  # type: ignore[import-not-found]
@@ -42,7 +54,7 @@ except Exception:  # pragma: no cover
         return os.getenv("TENANT_ID", "t-default")
 
 
-router = APIRouter(prefix="/api/v1/llm", tags=["llm"])
+router = APIRouter(prefix="/api/v1/llm", tags=["llm"], dependencies=[Depends(require_business_access)])
 _log = logging.getLogger("sop.llm_gateway")
 
 
@@ -53,12 +65,12 @@ class Message(BaseModel):
 
 
 class ChatIn(BaseModel):
-    model: Optional[str] = None
-    task_type: Optional[str] = Field(None, description="plan/code/review/summarize/classify")
+    model: str | None = None
+    task_type: str | None = Field(None, description="plan/code/review/summarize/classify")
     messages: list[Message]
     temperature: float = 0.2
-    max_tokens: Optional[int] = None
-    cache_ttl: Optional[int] = Field(None, description="提示缓存秒数；0 关闭")
+    max_tokens: int | None = None
+    cache_ttl: int | None = Field(None, description="提示缓存秒数；0 关闭")
     stream: bool = False
 
 
@@ -102,6 +114,9 @@ class ModelInfo:
 class Provider(ABC):
     name: str = ""
 
+    def __init__(self, route: ModelRoute | None = None):
+        self.route = route
+
     @abstractmethod
     def supports(self, model: str) -> bool: ...
 
@@ -127,13 +142,16 @@ class AnthropicProvider(Provider):
         try:
             import anthropic
         except ImportError:  # pragma: no cover
-            raise HTTPException(503, "未安装 anthropic 包")
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            raise HTTPException(503, "未安装 anthropic 包") from None
+        api_key = self.route.api_key if self.route else os.getenv("ANTHROPIC_API_KEY", "")
         if not api_key:
             raise HTTPException(503, "未配置 ANTHROPIC_API_KEY")
         sys_msgs = [m.content for m in body.messages if m.role == "system"]
         msgs = [{"role": m.role, "content": m.content} for m in body.messages if m.role != "system"]
-        client = anthropic.Anthropic(api_key=api_key)
+        settings = {"api_key": api_key}
+        if self.route and self.route.base_url:
+            settings["base_url"] = self.route.base_url
+        client = anthropic.Anthropic(**settings)
         resp = client.messages.create(
             model=body.model or "claude-3-5-sonnet-20241022",
             system="\n\n".join(sys_msgs) if sys_msgs else anthropic.NOT_GIVEN,
@@ -171,11 +189,14 @@ class OpenAIProvider(Provider):
         try:
             from openai import OpenAI
         except ImportError:  # pragma: no cover
-            raise HTTPException(503, "未安装 openai 包")
-        key = os.getenv("OPENAI_API_KEY", "")
+            raise HTTPException(503, "未安装 openai 包") from None
+        key = self.route.api_key if self.route else os.getenv("OPENAI_API_KEY", "")
         if not key:
             raise HTTPException(503, "未配置 OPENAI_API_KEY")
-        client = OpenAI(api_key=key)
+        settings = {"api_key": key}
+        if self.route and self.route.base_url:
+            settings["base_url"] = self.route.base_url
+        client = OpenAI(**settings)
         resp = client.chat.completions.create(
             model=body.model or "gpt-4o-mini",
             messages=[{"role": m.role, "content": m.content} for m in body.messages],
@@ -208,8 +229,8 @@ class OllamaProvider(Provider):
         try:
             import httpx
         except ImportError:
-            raise HTTPException(503, "未安装 httpx")
-        base = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            raise HTTPException(503, "未安装 httpx") from None
+        base = self.route.base_url if self.route else os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         r = httpx.post(f"{base}/api/chat", json={
             "model": body.model or "qwen2.5:7b",
             "messages": [m.model_dump() for m in body.messages],
@@ -219,7 +240,11 @@ class OllamaProvider(Provider):
         r.raise_for_status()
         d = r.json()
         text = (d.get("message") or {}).get("content", "")
-        return ChatOut(model=body.model or "ollama", content=text, provider=self.name)
+        used_in, used_out = int(d.get("prompt_eval_count") or 0), int(d.get("eval_count") or 0)
+        return ChatOut(
+            model=d.get("model") or body.model or "ollama", content=text, provider=self.name,
+            usage=ChatUsage(prompt_tokens=used_in, completion_tokens=used_out, total_tokens=used_in + used_out),
+        )
 
 
 PROVIDERS: list[Provider] = [AnthropicProvider(), OpenAIProvider(), OllamaProvider()]
@@ -235,6 +260,13 @@ DEFAULT_ROUTING: dict[str, str] = {
 
 
 def _route_model(body: ChatIn) -> str:
+    config = load_saved_config()
+    if config is not None:
+        return selected_model(config, body.model, body.task_type)
+    return _legacy_route_model(body)
+
+
+def _legacy_route_model(body: ChatIn) -> str:
     if body.model:
         return body.model
     t = (body.task_type or "").lower()
@@ -253,7 +285,7 @@ def _pick_provider(model: str) -> Provider:
 def _estimate_prompt_tokens(body: ChatIn) -> int:
     chars = sum(len(m.content or "") for m in body.messages)
     prompt_tokens = max(1, chars // 4)
-    requested_out = int(body.max_tokens or 1024)
+    requested_out = int(body.max_tokens if body.max_tokens is not None else 1024)
     return prompt_tokens + max(0, requested_out)
 
 
@@ -290,14 +322,16 @@ class _Cache:
         self._max = max_items
 
     @staticmethod
-    def key(body: ChatIn, model: str) -> str:
+    def key(body: ChatIn, model: str, fingerprint: str = "") -> str:
         h = hashlib.sha256()
         payload = {"m": model, "t": body.temperature, "mx": body.max_tokens,
+                   "tenant": resolved_tenant_id(), "project": resolved_project_id(),
+                   "configuration": fingerprint,
                    "msgs": [m.model_dump() for m in body.messages]}
         h.update(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode())
         return h.hexdigest()
 
-    def get(self, key: str) -> Optional[ChatOut]:
+    def get(self, key: str) -> ChatOut | None:
         with self._lock:
             v = self._d.get(key)
             if not v:
@@ -316,7 +350,7 @@ class _Cache:
                 # 粗暴 LRU：随机删 16 条
                 for k in list(self._d.keys())[:16]:
                     self._d.pop(k, None)
-            self._d[key] = (time.time() + ttl, out)
+            self._d[key] = (time.time() + ttl, out.model_copy(deep=True))
 
 
 _cache = _Cache()
@@ -342,8 +376,8 @@ def _audit_call(model: str, usage: ChatUsage, task_type: str | None,
                 "cost_usd": usage.cost_usd,
             },
         )
-    except Exception:
-        pass
+    except Exception as e:
+        _log.warning("llm audit log unavailable: %s", type(e).__name__)
     try:
         from sop_manager.routers.usage import record_usage_event
 
@@ -364,7 +398,7 @@ def _audit_call(model: str, usage: ChatUsage, task_type: str | None,
                     "prompt_tokens": usage.prompt_tokens,
                     "completion_tokens": usage.completion_tokens,
                 },
-                "idempotency_key": f"llm:{model}:{provider}:{cached}:{latency_ms}:{total_tokens}",
+                "idempotency_key": f"llm:{uuid4().hex}",
             }
         )
         if float(usage.cost_usd or 0) > 0:
@@ -378,27 +412,35 @@ def _audit_call(model: str, usage: ChatUsage, task_type: str | None,
                     "metadata": {"model": model, "provider": provider, "task_type": task_type or "", "cached": cached},
                 }
             )
-    except Exception:
-        pass
+    except Exception as e:
+        _log.warning("llm usage ledger unavailable: %s", type(e).__name__)
 
 
 # ── 路由 ────────────────────────────────────────────────────────
 @router.post("/chat", response_model=ChatOut)
 def llm_chat(body: ChatIn, _: Request) -> ChatOut:
-    model = _route_model(body)
-    _enforce_llm_quota(body, model)
+    config = load_saved_config()
+    route = resolve_saved_route(config, body.model, body.task_type) if config is not None else None
+    model = route.model if route else _legacy_route_model(body)
     cache_ttl = body.cache_ttl or 0
-    key = _Cache.key(body, model) if cache_ttl > 0 else ""
+    key = _Cache.key(body, model, route.fingerprint if route else legacy_fingerprint()) if cache_ttl > 0 else ""
     if key:
         if (hit := _cache.get(key)):
-            hit.cached = True
-            _audit_call(model, hit.usage, body.task_type, hit.provider, True, 0)
-            return hit
+            result = hit.model_copy(deep=True, update={"cached": True, "usage": ChatUsage()})
+            _audit_call(result.model, result.usage, body.task_type, result.provider, True, 0)
+            return result
+
+    _enforce_llm_quota(body, model)
 
     # 尝试 + Fallback
     errors: list[str] = []
     started = time.time()
-    for fallback in _provider_chain(model):
+    if route:
+        provider_class = {"anthropic": AnthropicProvider, "openai": OpenAIProvider, "ollama": OllamaProvider}[route.provider]
+        providers = [provider_class(route)]
+    else:
+        providers = _provider_chain(model)
+    for fallback in providers:
         try:
             out = fallback.chat(ChatIn(**{**body.model_dump(), "model": model}))
             latency_ms = int((time.time() - started) * 1000)
@@ -407,9 +449,9 @@ def llm_chat(body: ChatIn, _: Request) -> ChatOut:
                 _cache.set(key, out, cache_ttl)
             return out
         except HTTPException as e:
-            errors.append(f"{fallback.name}:{e.detail}")
+            errors.append(f"{fallback.name}: HTTP {e.status_code}")
         except Exception as e:  # pragma: no cover
-            errors.append(f"{fallback.name}:{type(e).__name__}:{e}")
+            errors.append(f"{fallback.name}: {type(e).__name__}")
             continue
     raise HTTPException(502, f"全部 Provider 失败：{'; '.join(errors)}")
 
@@ -428,8 +470,18 @@ def _provider_chain(model: str) -> Iterable[Provider]:
 
 @router.post("/embeddings", response_model=EmbeddingsOut)
 def llm_embeddings(body: EmbeddingsIn) -> EmbeddingsOut:
-    """优先 sentence-transformers 本地 bge-m3；失败回退 OpenAI text-embedding-3-small。"""
+    """Local embeddings or explicit OpenAI embeddings, sharing project credentials."""
     inputs = body.input if isinstance(body.input, list) else [body.input]
+    config = load_saved_config()
+    custom = next((row for row in (config or {}).get("custom_models", []) if row.get("id") == body.model), None)
+    if custom:
+        route = resolve_saved_route(config, body.model, None)
+        if route.provider != "openai":
+            raise HTTPException(503, "该提供商尚无 embeddings 调用适配器")
+        return _openai_embeddings(inputs, route.model, route)
+    if body.model.startswith("text-embedding-"):
+        route = resolve_provider_route(config, body.model, "openai") if config is not None else None
+        return _openai_embeddings(inputs, body.model, route)
     try:
         from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
         model_name = "BAAI/bge-m3" if body.model == "bge-m3" else body.model
@@ -441,32 +493,61 @@ def llm_embeddings(body: EmbeddingsIn) -> EmbeddingsOut:
         vecs = cache[model_name].encode(inputs, normalize_embeddings=True)
         return EmbeddingsOut(model=body.model, vectors=[v.tolist() for v in vecs])
     except Exception as e:
-        _log.warning("local embeddings unavailable, fallback to OpenAI: %s", e)
+        _log.warning("local embeddings unavailable: %s", type(e).__name__)
 
+    model = "text-embedding-3-small"
+    route = resolve_provider_route(config, model, "openai") if config is not None else None
+    return _openai_embeddings(inputs, model, route)
+
+
+def _openai_embeddings(inputs: list[str], model: str, route: ModelRoute | None) -> EmbeddingsOut:
     try:
         from openai import OpenAI
     except ImportError:  # pragma: no cover
-        raise HTTPException(503, "本地 embedding 不可用，且未安装 openai")
-    key = os.getenv("OPENAI_API_KEY", "")
+        raise HTTPException(503, "本地 embedding 不可用，且未安装 openai") from None
+    key = route.api_key if route else os.getenv("OPENAI_API_KEY", "")
     if not key:
         raise HTTPException(503, "本地 embedding 不可用，且未配置 OPENAI_API_KEY")
-    client = OpenAI(api_key=key)
-    resp = client.embeddings.create(model="text-embedding-3-small", input=inputs)
-    vecs = [d.embedding for d in resp.data]
-    used = resp.usage
-    cost = (used.total_tokens or 0) / 1_000_000 * 0.02
+    _enforce_llm_quota(ChatIn(messages=[Message(role="user", content=text) for text in inputs], max_tokens=0), model)
+    settings = {"api_key": key}
+    if route and route.base_url:
+        settings["base_url"] = route.base_url
+    started = time.time()
+    try:
+        client = OpenAI(**settings)
+        resp = client.embeddings.create(model=model, input=inputs)
+        vecs = [d.embedding for d in resp.data]
+        tokens = resp.usage.total_tokens or 0
+    except Exception as e:
+        raise HTTPException(502, f"openai embeddings 调用失败: {type(e).__name__}") from None
+    actual_model = getattr(resp, "model", None) or model
+    cost = tokens / 1_000_000 * 0.02 if actual_model == "text-embedding-3-small" else 0.0
+    used = ChatUsage(prompt_tokens=tokens, total_tokens=tokens, cost_usd=round(cost, 6))
+    _audit_call(actual_model, used, "embeddings", "openai", False, int((time.time() - started) * 1000))
     return EmbeddingsOut(
-        model="text-embedding-3-small",
+        model=actual_model,
         vectors=vecs,
-        usage=ChatUsage(prompt_tokens=used.total_tokens or 0,
-                        total_tokens=used.total_tokens or 0,
-                        cost_usd=round(cost, 6)),
+        usage=used,
     )
 
 
 @router.get("/models", response_model=list[ModelInfo])
 def list_models() -> list[ModelInfo]:
     """列出可用模型 + 价格（前端选择器用）。"""
+    config = load_saved_config()
+    if config is not None:
+        from sop_manager.routers.models import BUILTIN_MODELS
+
+        out = []
+        for row in [*BUILTIN_MODELS, *config.get("custom_models", [])]:
+            try:
+                route = resolve_saved_route(config, row["id"], None)
+            except HTTPException:
+                continue
+            prices = AnthropicProvider.PRICES if route.provider == "anthropic" else OpenAIProvider.PRICES if route.provider == "openai" else {}
+            ci, co = prices.get(route.model, (0.0, 0.0))
+            out.append(ModelInfo(id=route.model, provider=route.provider, family=route.model.split("-")[0], cost_in=ci, cost_out=co))
+        return out
     out: list[ModelInfo] = []
     for m, (ci, co) in AnthropicProvider.PRICES.items():
         out.append(ModelInfo(id=m, provider="anthropic", family="claude", cost_in=ci, cost_out=co))
@@ -479,6 +560,10 @@ def list_models() -> list[ModelInfo]:
 @router.get("/routing", response_model=dict[str, str])
 def get_routing() -> dict[str, str]:
     """当前 task_type → model 路由表。"""
+    config = load_saved_config()
+    if config is not None:
+        types = set(DEFAULT_ROUTING) | set(config.get("role_models", {}))
+        return {task: selected_model(config, None, task) for task in sorted(types)}
     table = dict(DEFAULT_ROUTING)
     for k in list(table.keys()):
         env = os.getenv(f"SOP_LLM_MODEL_{k.upper()}")
@@ -490,8 +575,23 @@ def get_routing() -> dict[str, str]:
 @router.get("/health")
 def health() -> dict[str, Any]:
     """探活：各 Provider 凭证是否就绪。"""
+    config = load_saved_config()
+    if config is not None:
+        from sop_manager.routers.runtime_model_config import resolve_secret
+
+        providers = config.get("providers", {})
+        return {
+            "ok": True,
+            "routing_source": "project",
+            "anthropic": bool(resolve_secret(providers.get("anthropic", {}).get("api_key"))) and providers.get("anthropic", {}).get("enabled", True),
+            "openai": bool(resolve_secret(providers.get("openai", {}).get("api_key"))) and providers.get("openai", {}).get("enabled", True),
+            "ollama_fallback": False,
+            "default_model": config.get("default_model"),
+            "routing": get_routing(),
+        }
     return {
         "ok": True,
+        "routing_source": "environment",
         "anthropic": bool(os.getenv("ANTHROPIC_API_KEY")),
         "openai": bool(os.getenv("OPENAI_API_KEY")),
         "ollama_fallback": os.getenv("OLLAMA_FALLBACK", "0") == "1",
