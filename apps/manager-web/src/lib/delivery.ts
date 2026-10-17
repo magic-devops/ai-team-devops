@@ -252,6 +252,11 @@ export type DeliveryWorkspace = {
     severity: string;
     status: string;
     task_id: string;
+    description?: string;
+    reported_by?: string;
+    type?: string;
+    created_at?: string;
+    source_kinds?: ("execution" | "deployment")[];
   }[];
   summary: {
     requirements: number;
@@ -303,6 +308,8 @@ export type DeliveryAction =
   | "stage.advance"
   | "stage.reopen"
   | "issue.promote"
+  | "issue.diagnosis.adopt"
+  | "issue.diagnosis.dismiss"
   | "release.policy.save"
   | "release.ci.import"
   | "release.candidate.create"

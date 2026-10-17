@@ -90,6 +90,65 @@ result = cli.delivery_command(body)
 
 元数据统一使用 `project.update`，省略字段保持原值。规范 SQL 配置字段 `name/description/business_id/project_path/vector_db/vector_db_config/is_template` 需要项目配置权限；目标、负责人和日期保留原写权限。状态不属于该 payload；旧项目 PATCH、物理 DELETE 和 set-template 写入口已移除。
 
+## 固定问题证据与人工需求回流
+
+使用明确 `project_id` 的已认证客户端。`delivery_issue(issue_id)` 读取当前问题、已脱敏证据与版本；来源由实际执行/部署关联确定，不从问题正文猜测。只有明确选择的证据进入诊断，`issue:<id>` 必须包含在选择中；受限或缺失证据不可选。发送前应核对截断、脱敏和未知结果标记。
+
+```python
+import json
+from pathlib import Path
+from uuid import uuid4
+
+issue_id = "ISS-example"
+current = cli.delivery_issue(issue_id)
+body = {
+    "expected_version": current["version"],
+    "issue_basis": current["issue_basis"],
+    "selected_evidence_ids": [f"issue:{issue_id}"],  # 审阅后可明确加选实际节点/探针 ID
+    "generator": "ai",  # 明确选择 rules 才使用规则，不自动回退
+    "instructions": "区分已知事实与假设，列出可独立核验的排查步骤。",
+    "idempotency_key": uuid4().hex,
+}
+request_file = Path(".sop-runtime/issue-diagnosis.json")
+request_file.parent.mkdir(parents=True, exist_ok=True)
+request_file.write_bytes(json.dumps(body, ensure_ascii=False, indent=2).encode("utf-8"))
+proposal = cli.delivery_issue_diagnose(issue_id, body)
+print(proposal["id"], proposal["status"], proposal["error"])
+```
+
+请求发出前保存原文件。网络结果未知时读取 `delivery_issue_diagnoses(issue_id, cursor="...")` 的分页历史，按原 `request_key` 定位，或使用 `delivery_issue_diagnosis(issue_id, diagnosis_id)` 精确读取；也可重交同一原文件查询原请求结果，不会再次调用模型。`generating` 仅表示处理中或结果未知；`failed` 返回安全错误，不能当作规则成功或改用新键自动重发。`409` 后保留草稿，明确核对当前版本/依据；真实问题或选中证据变化需要重新生成提案。
+
+诊断只是建议。具备项目 `approve` 权限且仍能读取原选中证据的人工审阅者，核对原提案、当前事实并编辑需求后，使用通用版本命令保存决定：
+
+```python
+# 以下步骤在人工核对后执行；cli 须属于有 approve 权限的当前项目审阅者。
+proposal = cli.delivery_issue_diagnosis(issue_id, proposal["id"])
+current = cli.delivery_issue(issue_id)
+if not proposal["actions"]["can_adopt"]:
+    raise ValueError(proposal["actions"]["reasons"])
+adoption = {
+    "action": "issue.diagnosis.adopt",
+    "expected_version": current["version"],
+    "idempotency_key": uuid4().hex,
+    "payload": {
+        "issue_id": issue_id,
+        "diagnosis_id": proposal["id"],
+        "issue_basis": proposal["issue_basis"],
+        "comment": "已核对原始证据，以下为人工确认的需求范围。",
+        "title": "调查并修复已确认的问题",
+        "description": "先确认原因，再实施修复并保留独立验证证据。",
+        "priority": "P1",
+        "acceptance_criteria": ["问题可复现或未知结果已安全确认", "修复通过关联任务的独立测试和人工验收"],
+    },
+}
+Path(".sop-runtime/issue-adoption.json").write_bytes(
+    json.dumps(adoption, ensure_ascii=False, indent=2).encode("utf-8")
+)
+result = cli.delivery_command(adoption)
+```
+
+采纳沿用 `issue.promote` 的唯一需求关联，不覆盖已有回流需求，也不自动关闭问题、创建执行或证明修复完成。后续拆解、派发、测试及验收仍走既有需求/任务流程。原生成者具有写权限或审阅者具有批准权限时，可用 `issue.diagnosis.dismiss`，payload 为 `issue_id/diagnosis_id/issue_basis/comment`，明确放弃待定提案；取消不表示远端模型已停止。原问题已删除时，精确提案接口仍显示历史且禁止采纳，允许授权取消，避免无法解除归档阻止项。归档项目只读，历史原工作区权限不足时隐藏提案内容。
+
 ## 本地 agentd IPC
 
 无需走 Manager，hook / 脚本里直接用。SDK 默认在 macOS/Linux 使用项目内 `.sop-runtime/agentd.sock`，Windows 使用 `SOP_AGENTD_PIPE` 指定的 named pipe；也可以用 `SOP_AGENTD_SOCK` 覆盖 Unix Socket 路径。连接失败会返回结构化错误，不会打断调用方的离线降级逻辑。

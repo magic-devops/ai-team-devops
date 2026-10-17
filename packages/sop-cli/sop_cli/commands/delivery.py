@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / preview / command"
 )
 
 
@@ -25,6 +25,52 @@ class ProjectState(str, Enum):
     active = "active"
     paused = "paused"
     archived = "archived"
+
+
+@app.command("issue")
+def issue_detail(issue_id: Annotated[str, typer.Option("--id")]):
+    """查看明确问题、实际来源证据及诊断提案；不会默认选择首项。"""
+    try:
+        with get_client() as client:
+            console.print_json(data=client.delivery_issue(issue_id))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("issue-diagnoses")
+def issue_diagnoses(
+    issue_id: Annotated[str, typer.Option("--id")],
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    diagnosis_id: Annotated[str, typer.Option("--diagnosis-id")] = "",
+):
+    """读取明确问题的诊断历史；游标保留原项目和问题范围。"""
+    try:
+        if cursor and diagnosis_id:
+            raise ValueError("Choose history cursor or an exact diagnosis ID")
+        with get_client() as client:
+            result = client.delivery_issue_diagnosis(issue_id, diagnosis_id) if diagnosis_id else client.delivery_issue_diagnoses(issue_id, cursor=cursor)
+            console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("issue-diagnose")
+def issue_diagnose(
+    issue_id: Annotated[str, typer.Option("--id")],
+    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+):
+    """按原文件生成或查询同一诊断请求；不自动采纳、执行或关闭问题。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Expected a JSON object")
+        with get_client() as client:
+            console.print_json(data=client.delivery_issue_diagnose(issue_id, body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("deployments")

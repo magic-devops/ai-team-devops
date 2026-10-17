@@ -153,6 +153,9 @@ def project_facts(db, project, data=None, *, as_of=None):
     from .delivery_deployment import active_deployment_ids
 
     deployment_ids = active_deployment_ids(effective)
+    from .delivery_issue_diagnosis import active_diagnosis_ids
+
+    diagnosis_ids = active_diagnosis_ids(db, project)
     basis = fact_basis(
         {
             "progress_basis": scoped["basis"],
@@ -160,6 +163,7 @@ def project_facts(db, project, data=None, *, as_of=None):
             "risks": risks,
             "intents": intents,
             "active_deployment_ids": deployment_ids,
+            "active_diagnosis_ids": diagnosis_ids,
             "milestones": effective.get("milestones", []),
         }
     )
@@ -168,7 +172,7 @@ def project_facts(db, project, data=None, *, as_of=None):
         "basis": basis,
         "metrics": scoped["metrics"],
         "risk_counts": counts,
-        "unclosed_intents_total": len(intents) + len(deployment_ids),
+        "unclosed_intents_total": len(intents) + len(deployment_ids) + len(diagnosis_ids),
         "nearest_milestone": nearest,
         "risks": risks,
     }

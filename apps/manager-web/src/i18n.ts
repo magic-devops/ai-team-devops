@@ -17,6 +17,7 @@ import { schedulingTranslations } from "./i18n/delivery-scheduling";
 import { teamIdentityTranslations } from "./i18n/delivery-team";
 import { teamRuntimeTranslations } from "./i18n/delivery-team-runtime";
 import { projectPortfolioTranslations } from "./i18n/project-portfolio";
+import { issueTranslations } from "./i18n/delivery-issue";
 import { deploymentTranslations } from "./i18n/delivery-deployment";
 import { deploymentReasonTranslations } from "./i18n/delivery-deployment-reasons";
 import {
@@ -77,6 +78,7 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["zh-CN"],
           projectPortfolio: projectPortfolioTranslations["zh-CN"],
           deliveryRelease: releaseTranslations["zh-CN"],
+          deliveryIssue: issueTranslations["zh-CN"],
           deliveryDeployment: deploymentTranslations["zh-CN"],
           deliveryDeploymentReasons: deploymentReasonTranslations["zh-CN"],
           deliveryReleaseReasons: releaseReasonTranslations["zh-CN"],
@@ -109,6 +111,7 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["en-US"],
           projectPortfolio: projectPortfolioTranslations["en-US"],
           deliveryRelease: releaseTranslations["en-US"],
+          deliveryIssue: issueTranslations["en-US"],
           deliveryDeployment: deploymentTranslations["en-US"],
           deliveryDeploymentReasons: deploymentReasonTranslations["en-US"],
           deliveryReleaseReasons: releaseReasonTranslations["en-US"],
@@ -141,6 +144,7 @@ i18n
           deliveryTeamRuntime: teamRuntimeTranslations["ja-JP"],
           projectPortfolio: projectPortfolioTranslations["ja-JP"],
           deliveryRelease: releaseTranslations["ja-JP"],
+          deliveryIssue: issueTranslations["ja-JP"],
           deliveryDeployment: deploymentTranslations["ja-JP"],
           deliveryDeploymentReasons: deploymentReasonTranslations["ja-JP"],
           deliveryReleaseReasons: releaseReasonTranslations["ja-JP"],

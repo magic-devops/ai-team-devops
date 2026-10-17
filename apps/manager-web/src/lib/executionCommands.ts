@@ -83,8 +83,8 @@ export function safeExecutionReturn(value: string, depth = 0): string | null {
     ? null
     : value;
 }
-export function executionIssueHref(issueId: string, background: string) {
-  const params = new URLSearchParams({ view: "issues", issue: issueId });
+export function executionIssueHref(issueId: string, background: string, projectId: string) {
+  const params = new URLSearchParams({ view: "issues", issue: issueId, project_id: projectId });
   const safe = safeExecutionReturn(background);
   if (safe) params.set("return_to", safe);
   return `#/dev-flow?${params}`;

@@ -59,6 +59,7 @@ from .delivery_service import (
     serialize,
 )
 from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
+from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
 from .project_lifecycle_contract import ProjectLifecyclePreviewInput
 from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .sql_models import (
@@ -163,6 +164,83 @@ def workspace(
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     return _snapshot(db, _project(db, user, project_id), user)
+
+
+@router.get("/issues/{issue_id}", response_model=IssueDetail)
+def delivery_issue_detail(
+    issue_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_diagnosis import issue_detail
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    return issue_detail(
+        db, project, row.data if row else initial_state(), user, issue_id,
+        version=row.version if row else 0,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
+@router.get("/issues/{issue_id}/diagnoses", response_model=DiagnosisHistory)
+def delivery_issue_diagnoses(
+    issue_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    cursor: str = Query(default="", max_length=2000),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_diagnosis import diagnosis_history
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    return diagnosis_history(
+        db, project, row.data if row else initial_state(), user, issue_id,
+        cursor=cursor, store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
+@router.post("/issues/{issue_id}/diagnoses", response_model=DiagnosisView)
+def delivery_issue_diagnose(
+    issue_id: str,
+    body: IssueDiagnosisGenerate,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_diagnosis import generate_diagnosis
+
+    project = _project(db, user, project_id)
+    return generate_diagnosis(
+        db, project, user, issue_id, body, request,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
+
+
+@router.get("/issues/{issue_id}/diagnoses/{diagnosis_id}", response_model=DiagnosisView)
+def delivery_issue_diagnosis_detail(
+    issue_id: str,
+    diagnosis_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_issue_diagnosis import diagnosis_detail
+
+    return diagnosis_detail(
+        db, _project(db, user, project_id), user, issue_id, diagnosis_id,
+        store=getattr(request.app.state, "hermes_store", None),
+        execution=getattr(request.app.state, "hermes_execution", None),
+    )
 
 
 @router.get("/quality", response_model=DeliveryQualityResponse)
@@ -504,6 +582,8 @@ def deployment_preview(
 
 
 def _command_permission(action, payload):
+    if action == "issue.diagnosis.adopt":
+        return "approve"
     if action == "project.lifecycle":
         return "lifecycle"
     if action in {"member.runtime.bind", "member.runtime.unbind", "release.policy.save", "deployment.environment.save"}:
@@ -758,6 +838,14 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action.startswith("issue.diagnosis."):
+        from .delivery_issue_diagnosis import apply_issue_diagnosis
+
+        return apply_issue_diagnosis(
+            db, project, user, data, action, payload,
+            store=getattr(request.app.state, "hermes_store", None) if request else None,
+            execution=getattr(request.app.state, "hermes_execution", None) if request else None,
+        )
     if action.startswith("deployment."):
         from .delivery_deployment import apply_deployment
 

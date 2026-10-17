@@ -227,6 +227,26 @@ sop --show-completion       # 打印当前 shell 的补全脚本
 
 失败时 `sop doctor` 会列出修复建议。完整说明：**[`docs/TOOLS_AND_SCRIPTS.md`](../../docs/TOOLS_AND_SCRIPTS.md)**。
 
+## 问题诊断与需求回流
+
+先在登录/接入配置中明确当前项目（`PROJECT_ID` 或现有项目配置）；以下命令都使用该项目作用域，不会通过问题 ID 自动切换项目。
+
+```bash
+sop delivery issue --id ISS-example
+sop delivery issue-diagnose --id ISS-example --file .sop-runtime/issue-diagnosis.json
+sop delivery issue-diagnoses --id ISS-example
+sop delivery issue-diagnoses --id ISS-example --cursor "原next_cursor"
+sop delivery issue-diagnoses --id ISS-example --diagnosis-id "原diagnosis_id"
+```
+
+生成文件包含 `expected_version`、`issue_basis`、明确的 `selected_evidence_ids`（必须包含 `issue:ISS-example`）、`generator`（`ai` 或明确选择 `rules`）、`instructions` 和一次生成的 `idempotency_key`。先读取问题详情并核对发送范围、脱敏、截断、缺失及受限标记，再保存固定原文件并提交。完整示例见 [SDK 问题诊断说明](../sop-sdk-python/README.md#固定问题证据与人工需求回流)。
+
+网络结果未知时保留原文件和键，先查历史中的原 `request_key`，或按 `--diagnosis-id` 精确读取；历史有 `next_cursor` 时继续原项目/问题分页。重交原文件仅恢复原请求结果，不重复调用模型。`generating` 表示处理中或结果未知，`failed` 是明确失败记录，不自动切换规则或新键重发。`409` 后保留草稿并明确核对新版本；问题或所选证据变化需要重新生成。
+
+人工核对并编辑需求草稿后，通过 `sop delivery command --file .sop-runtime/issue-adoption.json` 提交 `issue.diagnosis.adopt`。外层固定 `expected_version/idempotency_key`，payload 包含 `issue_id/diagnosis_id/issue_basis/comment/title/description/priority/acceptance_criteria`；需要项目批准权限及原证据访问权限。采用只回到该问题的唯一需求，不覆盖已有需求、关闭问题或宣称修复/验收完成；后续任务继续沿既有拆解、派发、测试和人工验收流程。
+
+放弃提案同样使用通用命令，action 为 `issue.diagnosis.dismiss`，payload 为 `issue_id/diagnosis_id/issue_basis/comment`。待定提案会阻止项目归档；明确取消解除该意图，但不声称远端模型已停止。问题已删除仍可按原 `--diagnosis-id` 精确读取历史并授权取消；原证据权限不足时内容隐藏，归档项目保持只读。
+
 ## 质量与固定发布候选
 
 `sop delivery quality` 读取当前项目质量；重复 `--requirement-id` 与 `--task-id` 明确选择完整需求及独立任务，取得CI所需的固定 `scope_basis`。`sop delivery releases` 读取目录，`sop delivery releases --id <id>` 只读取该候选；未知ID不回落首项。

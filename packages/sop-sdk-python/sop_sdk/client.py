@@ -102,6 +102,28 @@ class ManagerClient:
     def delivery_workspace(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/workspace")
 
+    def delivery_issue(self, issue_id: str) -> dict[str, Any]:
+        """Read the exact project issue, fixed evidence and diagnosis history."""
+        return self._request("GET", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}")
+
+    def delivery_issue_diagnoses(self, issue_id: str, *, cursor: str = "") -> dict[str, Any]:
+        return self._request(
+            "GET", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}/diagnoses",
+            params={"cursor": cursor} if cursor else {},
+        )
+
+    def delivery_issue_diagnose(self, issue_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Generate or recover the same durable proposal; never change its request identity."""
+        return self._request(
+            "POST", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}/diagnoses", json_body=dict(body),
+        )
+
+    def delivery_issue_diagnosis(self, issue_id: str, diagnosis_id: str) -> dict[str, Any]:
+        """Read one exact proposal, including when its original issue is missing."""
+        return self._request(
+            "GET", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}/diagnoses/{_resource_segment(diagnosis_id)}",
+        )
+
     def delivery_quality(self, *, requirement_ids: Sequence[str] = (), task_ids: Sequence[str] = ()) -> dict[str, Any]:
         """Inspect current quality or an explicitly selected release scope, without writing."""
         if isinstance(requirement_ids, (str, bytes)) or isinstance(task_ids, (str, bytes)):

@@ -20,6 +20,7 @@ from .delivery_deployment_contract import (
     DeploymentSync,
 )
 from .delivery_execution_contract import ExecutionQueue
+from .delivery_issue_contract import IssueDiagnosisAdopt, IssueDiagnosisDismiss
 from .delivery_release_contract import ReleaseCandidateCreate, ReleaseCandidateReview, ReleaseCandidateRevoke
 from .delivery_scheduling_contract import (
     AllocationInput,
@@ -98,6 +99,8 @@ class Command(Input):
         "stage.advance",
         "stage.reopen",
         "issue.promote",
+        "issue.diagnosis.adopt",
+        "issue.diagnosis.dismiss",
         "release.policy.save",
         "release.ci.import",
         "release.candidate.create",
@@ -761,6 +764,8 @@ PAYLOADS = {
     "stage.advance": StageAction,
     "stage.reopen": StageAction,
     "issue.promote": IssuePromote,
+    "issue.diagnosis.adopt": IssueDiagnosisAdopt,
+    "issue.diagnosis.dismiss": IssueDiagnosisDismiss,
     "release.policy.save": ReleasePolicySave,
     "release.ci.import": ReleaseCiImport,
     "release.candidate.create": ReleaseCandidateCreate,

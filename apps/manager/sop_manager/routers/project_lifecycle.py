@@ -55,6 +55,20 @@ def preview(db, project, user, data, body, *, version):
     )
     blockers = []
     if body.target_status == "archived":
+        from .delivery_issue_diagnosis import active_diagnosis_ids
+        from .sql_models import IssueDiagnosis
+
+        for diagnosis_id in active_diagnosis_ids(db, project):
+            diagnosis = db.get(IssueDiagnosis, diagnosis_id)
+            blockers.append({
+                "code": "project_diagnosis_unclosed",
+                "message": "Review or dismiss the pending diagnosis request before archiving.",
+                "target": {
+                    "project_id": project.id, "kind": "issue", "view": "issues", "detail": "details",
+                    "issue_id": diagnosis.issue_id, "diagnosis_id": diagnosis.id,
+                },
+                "status": diagnosis.status, "run_id": None,
+            })
         active_deployments = set(active_deployment_ids(data))
         for deployment in data.get("deployments", []):
             if deployment["id"] in active_deployments:

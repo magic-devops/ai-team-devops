@@ -58,7 +58,7 @@ import {
   type EditorSpec,
 } from "./DeliveryEditor";
 import "./delivery-workbench.css";
-import { safeExecutionReturn } from "@/lib/executionCommands";
+import { DeliveryIssueWorkbench } from "./DeliveryIssueWorkbench";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
 import { planError } from "@/lib/deliveryTaskPlan";
 import {
@@ -335,6 +335,20 @@ function ProjectDelivery() {
       ["progress", "team", "timeline", "quality", "releases"].includes(nextView)
     )
       window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+  const setIssueRoute = (id: string) => {
+    const params = new URLSearchParams(location.hash.split("?")[1]);
+    params.set("view", "issues");
+    params.set("project_id", projectId);
+    params.delete("diagnosis_id");
+    if (id) params.set("issue", id);
+    else params.delete("issue");
+    history.pushState(
+      null,
+      "",
+      `${location.pathname}${location.search}#/dev-flow?${params}`,
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const data = taskPinnedWorkspace || query.data;
   const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
@@ -1211,169 +1225,17 @@ function ProjectDelivery() {
         />
       )}
       {view === "issues" && (
-        <section>
-          <div className="delivery-section-heading">
-            {safeExecutionReturn(
-              new URLSearchParams(location.hash.split("?")[1]).get(
-                "return_to",
-              ) || "",
-            ) && (
-              <Button
-                href={
-                  safeExecutionReturn(
-                    new URLSearchParams(location.hash.split("?")[1]).get(
-                      "return_to",
-                    ) || "",
-                  )!
-                }
-              >
-                {t("deliveryRuntime.back")}
-              </Button>
-            )}
-            <p className="delivery-hint">{tr("promoteHint")}</p>
-            <Button href="#/issues/tracker">{tr("issuesLink")}</Button>
-          </div>
-          {selectedIssueId && (
-            <Alert
-              type={
-                data.issues.some((issue) => issue.id === selectedIssueId)
-                  ? "info"
-                  : "warning"
-              }
-              title={tp(
-                data.issues.some((issue) => issue.id === selectedIssueId)
-                  ? "issueLocated"
-                  : "issueMissing",
-              )}
-              action={
-                <Button size="small" onClick={() => navigate("issues", "")}>
-                  {tp("clearTarget")}
-                </Button>
-              }
-            />
-          )}
-          <Table
-            rowKey="id"
-            size="middle"
-            dataSource={
-              selectedIssueId
-                ? data.issues.filter((issue) => issue.id === selectedIssueId)
-                : data.issues
-            }
-            pagination={{ pageSize: 20 }}
-            locale={{ emptyText: tr("noIssues") }}
-            columns={[
-              { title: tr("titleField"), dataIndex: "title" },
-              { title: tr("priority"), dataIndex: "severity", width: 100 },
-              {
-                title: tr("current"),
-                dataIndex: "status",
-                render: (s: string) =>
-                  t(`delivery.statuses.${s}`, { defaultValue: s }),
-              },
-              {
-                title: tr("tasks"),
-                key: "linked-work",
-                render: (_, issue) => {
-                  if (!issue.task_id) return tr("none");
-                  const task = data.tasks.find(
-                    (item) => item.id === issue.task_id,
-                  );
-                  const requirement = data.requirements.find(
-                    (item) => item.id === task?.req_id,
-                  );
-                  return (
-                    <div className="delivery-actions">
-                      {task?.req_id ? (
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            navigate(
-                              "list",
-                              task.req_id,
-                              "tasks",
-                              task.id,
-                              true,
-                            )
-                          }
-                        >
-                          {task.title}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="small"
-                          href={deliveryInboxHref({
-                            view: "list",
-                            requirement_id: "",
-                            detail: "tasks",
-                            task_id: issue.task_id,
-                          })}
-                        >
-                          {issue.task_id}
-                        </Button>
-                      )}
-                      {requirement && (
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            navigate(
-                              "list",
-                              requirement.id,
-                              "details",
-                              "",
-                              true,
-                            )
-                          }
-                        >
-                          {requirement.title}
-                        </Button>
-                      )}
-                    </div>
-                  );
-                },
-              },
-              {
-                title: tr("requirements"),
-                key: "promote",
-                render: (_, issue) => {
-                  const req = data.requirements.find(
-                    (r) => r.flow.source_issue_id === issue.id,
-                  );
-                  return req ? (
-                    <Button onClick={() => navigate(view, req.id)}>
-                      {tr("promoted")}
-                    </Button>
-                  ) : (
-                    <Button
-                      disabled={!canWrite}
-                      onClick={() =>
-                        edit(
-                          "promote",
-                          [
-                            field("criteria", "criteria", {
-                              type: "area",
-                              required: true,
-                            }),
-                          ],
-                          {},
-                          async (v) => {
-                            await commit("issue.promote", {
-                              issue_id: issue.id,
-                              acceptance_criteria: lines(v.criteria),
-                            });
-                          },
-                          "promoteHint",
-                        )
-                      }
-                    >
-                      {tr("promote")}
-                    </Button>
-                  );
-                },
-              },
-            ]}
-          />
-        </section>
+        <DeliveryIssueWorkbench
+          workspace={data}
+          projectId={projectId}
+          sessionId={sessionId}
+          issueId={selectedIssueId}
+          background={location.hash}
+          readOnly={data.project.status === "archived"}
+          onSaved={saveWorkspace}
+          onOpenIssue={(id) => setIssueRoute(id)}
+          onCloseIssue={() => setIssueRoute("")}
+        />
       )}
       <Drawer
         open={Boolean(requestedTaskId)}

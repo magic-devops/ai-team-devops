@@ -377,6 +377,20 @@ class RequirementAssistance(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class IssueDiagnosis(Base):
+    """Durable fixed-evidence suggestion, not a second business Issue."""
+    __tablename__ = "issue_diagnoses"
+    id = Column(String(64), primary_key=True)
+    tenant_id = Column(String(64), nullable=False, index=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    issue_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(String(64), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
     id            = Column(String(64), primary_key=True)

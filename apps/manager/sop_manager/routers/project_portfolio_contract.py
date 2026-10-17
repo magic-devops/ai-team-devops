@@ -65,6 +65,7 @@ class PortfolioTarget(PortfolioContract):
     milestone_id: str | None = None
     execution_id: str | None = None
     deployment_id: str | None = None
+    diagnosis_id: str | None = None
 
 
 class PortfolioRisk(PortfolioContract):

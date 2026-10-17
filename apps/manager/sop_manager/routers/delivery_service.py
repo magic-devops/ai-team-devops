@@ -224,6 +224,11 @@ def materialize(db, project, data, user):
         ):
             task["status"] = "blocked"
     issues = [serialize(i) for i in records(db, Issue, project).order_by(Issue.created_at.desc()).all()]
+    for issue in issues:
+        issue["source_kinds"] = [
+            kind for kind, collection in (("execution", "executions"), ("deployment", "deployments"))
+            if any(entry.get("issue_id") == issue["id"] for entry in data.get(collection, []))
+        ]
     reqs = []
     deployed_requirements = current_deployed_requirement_ids(db, project, data)
     for row in (
@@ -505,11 +510,15 @@ def _update_task(db, project, data, body, roster):
 def _promote_issue(db, project, data, body):
     before = None
     issue = get_record(db, Issue, project, body.issue_id)
-    existing = next(
-        (rid for rid, flow in data["flows"].items() if flow.get("source_issue_id") == issue.id), None
+    candidates = [rid for rid, flow in data["flows"].items() if flow.get("source_issue_id") == issue.id]
+    existing = (
+        records(db, Requirement, project)
+        .filter(Requirement.id.in_(candidates))
+        .order_by(Requirement.id)
+        .first()
     )
-    if existing and records(db, Requirement, project).filter_by(id=existing).first():
-        return existing, None
+    if existing:
+        return existing.id, None
     resource_id = identifier("REQ")
     db.add(
         Requirement(

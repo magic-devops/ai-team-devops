@@ -47,7 +47,7 @@ describe("explicit external execution drafts", () => {
   });
   it("links the exact issue and restores a local delivery background only", () => {
     const background = "#/dev-flow?view=team&member_id=lead&task=T-one";
-    const href = executionIssueHref("ISS-one", background);
+    const href = executionIssueHref("ISS-one", background, "project");
     const params = new URLSearchParams(href.split("?")[1]);
     expect(params.get("issue")).toBe("ISS-one");
     expect(safeExecutionReturn(params.get("return_to") || "")).toBe(background);
@@ -62,7 +62,7 @@ describe("explicit external execution drafts", () => {
   it("keeps the standalone task and its safe list return when opening a failure issue", () => {
     const list = "#/tasks/execution?q=verify&status=pending";
     const task = `#/tasks/execution?task_id=T-one&return_to=${encodeURIComponent(list)}`;
-    const params = new URLSearchParams(executionIssueHref("ISS-one", task).split("?")[1]);
+    const params = new URLSearchParams(executionIssueHref("ISS-one", task, "project").split("?")[1]);
     expect(params.get("return_to")).toBe(task);
     expect(safeExecutionReturn(task)).toBe(task);
     expect(safeExecutionReturn(`#/tasks/execution?task_id=T-one&return_to=${encodeURIComponent("https://example.test")}`)).toBeNull();

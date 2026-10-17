@@ -334,7 +334,7 @@ export function ExecutionObservationCard({
         {entry.issue_id && (
           <Button
             size="small"
-            href={executionIssueHref(entry.issue_id, location.hash)}
+            href={executionIssueHref(entry.issue_id, location.hash, projectId)}
           >
             {tr("openIssue")} · {entry.issue_id}
           </Button>

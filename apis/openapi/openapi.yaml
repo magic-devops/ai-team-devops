@@ -1827,7 +1827,13 @@ paths:
         Deployment environment configuration requires configure. Explicit side effects require project approve and separately
         runtime execute for the fixed workspace/target. Sync requires project write/runtime read and only observes actual results.
         No generic retry/replay, manual metrics, or legacy success registration can establish deployment. Every active or unknown
-        intent blocks project archive.'
+        intent blocks project archive.
+
+
+        Issue diagnosis adoption requires approve, original selected evidence access and current issue/evidence basis. It reuses
+        the unique source Issue requirement without overwriting existing work or closing the Issue. Dismissal records an explicit
+        cancellation/rejection; it does not stop a remote provider. Pending diagnosis receipts block archive until an explicit
+        dismissal. Archived projects remain read-only.'
       security:
       - bearerAuth: []
       parameters:
@@ -2046,7 +2052,7 @@ paths:
       summary: Create Task
       operationId: create_task_api_v1_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -2104,7 +2110,7 @@ paths:
       summary: Update Task
       operationId: update_task_api_v1_tasks__task_id__patch
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: task_id
         in: path
@@ -2586,7 +2592,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/development/tasks:
     post:
       tags:
@@ -2615,7 +2621,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/development/schedule:
     post:
       tags:
@@ -2644,7 +2650,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/development/schedules/{schedule_id}/action:
     post:
       tags:
@@ -2652,7 +2658,7 @@ paths:
       summary: Analytics Dev Schedule Action
       operationId: analytics_dev_schedule_action_api_v1_analytics_development_schedules__schedule_id__action_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: schedule_id
         in: path
@@ -2709,7 +2715,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/governance/tasks:
     post:
       tags:
@@ -2738,7 +2744,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/quality/alerts/tasks:
     post:
       tags:
@@ -2767,7 +2773,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/blueprint/tasks:
     post:
       tags:
@@ -2796,7 +2802,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/decision/tasks:
     post:
       tags:
@@ -2825,7 +2831,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/reports/intelligence/tasks:
     post:
       tags:
@@ -2854,7 +2860,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/analytics/reports/{report_id}/attribution-tasks:
     post:
       tags:
@@ -2862,7 +2868,7 @@ paths:
       summary: Create Report Attribution Tasks
       operationId: create_report_attribution_tasks_api_v1_analytics_reports__report_id__attribution_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: report_id
         in: path
@@ -2898,7 +2904,7 @@ paths:
       summary: Create Analytics Report Action Tasks
       operationId: create_analytics_report_action_tasks_api_v1_analytics_reports__report_id__action_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: report_id
         in: path
@@ -2956,7 +2962,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/hermes/blueprint/tasks:
     post:
       tags:
@@ -3039,7 +3045,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/system/pages/production-readiness/tasks:
     post:
       tags:
@@ -3312,7 +3318,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/requirements/{req_id}/generate-tasks:
     post:
       tags:
@@ -3320,7 +3326,7 @@ paths:
       summary: Generate Tasks From Requirement
       operationId: generate_tasks_from_requirement_api_v1_requirements__req_id__generate_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: req_id
         in: path
@@ -3371,7 +3377,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/tasks/bulk:
     patch:
       tags:
@@ -3397,7 +3403,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/tasks/scheduler/plan:
     post:
       tags:
@@ -3423,7 +3429,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/tasks/scheduler/runbook:
     post:
       tags:
@@ -3449,7 +3455,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/tasks/scheduler/insights/tasks:
     post:
       tags:
@@ -3475,7 +3481,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/tasks/quality/tasks:
     post:
       tags:
@@ -3501,7 +3507,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/issues/ops-tasks:
     post:
       tags:
@@ -3509,7 +3515,7 @@ paths:
       summary: Issues Ops Tasks
       operationId: issues_ops_tasks_api_v1_issues_ops_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: project_id
         in: query
@@ -3707,7 +3713,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/audit/events/{audit_id}/task:
     post:
       tags:
@@ -3749,7 +3755,7 @@ paths:
       summary: Sprints Ops Tasks
       operationId: sprints_ops_tasks_api_v1_sprints_ops_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: project_id
         in: query
@@ -3788,7 +3794,7 @@ paths:
       description: 把项目体检建议落成可执行任务，进入任务看板。
       operationId: create_project_bootstrap_tasks_api_v1_projects__project_id__bootstrap_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: project_id
         in: path
@@ -3822,7 +3828,7 @@ paths:
       description: 把项目治理操作包中的候选项落成任务。
       operationId: create_project_ops_tasks_api_v1_projects__project_id__ops_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: project_id
         in: path
@@ -3905,7 +3911,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
   /api/v1/sso/providers/{provider}/risk-tasks:
     post:
       tags:
@@ -3913,7 +3919,7 @@ paths:
       summary: Sso Risk Tasks
       operationId: sso_risk_tasks_api_v1_sso_providers__provider__risk_tasks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: provider
         in: path
@@ -3949,7 +3955,7 @@ paths:
       summary: Upsert Sso Risk Escalation
       operationId: upsert_sso_risk_escalation_api_v1_sso_providers__provider__risk_escalation_put
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: provider
         in: path
@@ -3985,7 +3991,7 @@ paths:
       summary: Create Sso Risk Runbook
       operationId: create_sso_risk_runbook_api_v1_sso_providers__provider__risk_runbooks_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: provider
         in: path
@@ -4021,7 +4027,7 @@ paths:
       summary: Sso Risk Runbook Action
       operationId: sso_risk_runbook_action_api_v1_sso_providers__provider__risk_runbooks__runbook_id__action_post
       security:
-      - HTTPBearer: []
+      - bearerAuth: []
       parameters:
       - name: provider
         in: path
@@ -4870,7 +4876,7 @@ paths:
       summary: Delivery Quality
       operationId: deliveryQuality
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: requirement_ids
         in: query
@@ -4923,7 +4929,7 @@ paths:
       summary: Delivery Releases
       operationId: deliveryReleases
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: X-Project-Id
         in: header
@@ -4954,7 +4960,7 @@ paths:
       summary: Delivery Release Detail
       operationId: deliveryReleaseDetail
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: release_id
         in: path
@@ -4991,7 +4997,7 @@ paths:
       summary: Delivery Release Preview
       operationId: deliveryReleasePreview
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: X-Project-Id
         in: header
@@ -5028,7 +5034,7 @@ paths:
       summary: Deployments
       operationId: deliveryDeployments
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: X-Project-Id
         in: header
@@ -5059,7 +5065,7 @@ paths:
       summary: Deployment Detail
       operationId: deliveryDeploymentDetail
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: deployment_id
         in: path
@@ -5096,7 +5102,7 @@ paths:
       summary: Deployment Preview
       operationId: deliveryDeploymentPreview
       security:
-      - BearerAuth: []
+      - bearerAuth: []
       parameters:
       - name: X-Project-Id
         in: header
@@ -5127,6 +5133,213 @@ paths:
       description: Fixed read-only preview for an approved candidate and explicit environment, or rollback_of with an actually
         verified stable baseline. Creation requires the original preview_basis, expected_version and idempotency key. Normal
         request auditing remains enabled.
+  /api/v1/delivery/issues/{issue_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Detail
+      operationId: deliveryIssueDetail
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Pure scoped read; restricted original evidence content is withheld
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssueDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Scoped project, Issue or exact proposal not found
+      description: Read the exact canonical Issue, sanitized current evidence, source links and proposal history. A missing
+        Issue returns 404; GET never generates a proposal or provisions state.
+  /api/v1/delivery/issues/{issue_id}/diagnoses:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Diagnoses
+      operationId: deliveryIssueDiagnoses
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 2000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Pure scoped read; restricted original evidence content is withheld
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisHistory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Scoped project, Issue or exact proposal not found
+      description: Read twenty stored proposals using a cursor bound to this project and Issue. Recheck current read access
+        to every originally selected runtime workspace; restricted historical content is withheld. GET never resumes a provider
+        request.
+    post:
+      tags:
+      - delivery
+      summary: Delivery Issue Diagnose
+      operationId: deliveryIssueDiagnose
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueDiagnosisGenerate'
+      responses:
+        '200':
+          description: Stored typed diagnosis outcome, including safe failed or pending status; not proof of repair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Scoped project, Issue or exact proposal not found
+        '409':
+          description: Archived project, changed issue basis/workspace version or request identity conflict
+      description: Generate an advisory proposal from explicitly selected sanitized evidence under the original workspace version,
+        issue basis and request key. The server commits its receipt before calling the configured model gateway without holding
+        a business lock. The original request returns the same durable succeeded/failed/generating/cancelled outcome without
+        another model call. A 200 failed outcome contains a safe typed error; provider failures never silently become rule success.
+        Interrupted generating means processing or unknown, not proof of completion. No Issue resolution, task creation, tool
+        execution or automatic repair occurs.
+  /api/v1/delivery/issues/{issue_id}/diagnoses/{diagnosis_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Diagnosis Detail
+      operationId: deliveryIssueDiagnosis
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: issue_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Issue Id
+      - name: diagnosis_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Diagnosis Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Pure scoped read; restricted original evidence content is withheld
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosisView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Scoped project, Issue or exact proposal not found
+      description: Read one exact stored proposal and its original evidence scope. If its Issue was deleted, the historical
+        proposal remains readable with current=false and can_adopt=false; an authorized writer/reviewer may explicitly dismiss
+        a pending proposal. Unknown proposal IDs return 404 and never select another proposal.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -9500,6 +9713,8 @@ components:
           - stage.advance
           - stage.reopen
           - issue.promote
+          - issue.diagnosis.adopt
+          - issue.diagnosis.dismiss
           - release.policy.save
           - release.ci.import
           - release.candidate.create
@@ -9827,9 +10042,32 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/DeploymentSync'
+      - if:
+          properties:
+            action:
+              const: issue.diagnosis.adopt
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/IssueDiagnosisAdopt'
+      - if:
+          properties:
+            action:
+              const: issue.diagnosis.dismiss
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/IssueDiagnosisDismiss'
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
         Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
-        and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay.
+        and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay. Issue
+        diagnosis adoption requires approve, original selected evidence access and current issue/evidence basis. It reuses the
+        unique source Issue requirement without overwriting existing work or closing the Issue. Dismissal records an explicit
+        cancellation/rejection; it does not stop a remote provider.
     TaskEdit:
       additionalProperties: false
       properties:
@@ -10331,6 +10569,7 @@ components:
       - permissions
       - resources
       - summary
+      - issues
       properties:
         version:
           type: integer
@@ -10453,6 +10692,10 @@ components:
           - recorded_released
           - open_issues
           - acceptance_rate
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceIssue'
     Problem:
       type: object
       description: RFC 9457 Problem Details
@@ -15115,6 +15358,12 @@ components:
           - type: 'null'
           default: null
           title: Deployment Id
+        diagnosis_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Diagnosis Id
       required:
       - project_id
       - kind
@@ -17872,4 +18121,888 @@ components:
       required:
       - id
       title: DeploymentSync
+      type: object
+    DiagnosisActions:
+      additionalProperties: false
+      properties:
+        can_adopt:
+          title: Can Adopt
+          type: boolean
+        can_dismiss:
+          title: Can Dismiss
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/DiagnosisReason'
+          title: Reasons
+          type: array
+      required:
+      - can_adopt
+      - can_dismiss
+      - reasons
+      title: DiagnosisActions
+      type: object
+    DiagnosisActor:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      title: DiagnosisActor
+      type: object
+    DiagnosisCheck:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 2000
+          minLength: 1
+          title: Title
+          type: string
+        instructions:
+          maxLength: 2000
+          minLength: 1
+          title: Instructions
+          type: string
+        evidence_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 32
+          minItems: 1
+          title: Evidence Ids
+          type: array
+      required:
+      - title
+      - instructions
+      - evidence_ids
+      title: DiagnosisCheck
+      type: object
+    DiagnosisError:
+      additionalProperties: false
+      properties:
+        code:
+          maxLength: 200
+          minLength: 1
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: DiagnosisError
+      type: object
+    DiagnosisHypothesis:
+      additionalProperties: false
+      properties:
+        hypothesis:
+          maxLength: 2000
+          minLength: 1
+          title: Hypothesis
+          type: string
+        confidence:
+          enum:
+          - low
+          - medium
+          - high
+          title: Confidence
+          type: string
+        evidence_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 32
+          minItems: 1
+          title: Evidence Ids
+          type: array
+        verification_steps:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 12
+          minItems: 1
+          title: Verification Steps
+          type: array
+      required:
+      - hypothesis
+      - confidence
+      - evidence_ids
+      - verification_steps
+      title: DiagnosisHypothesis
+      type: object
+    DiagnosisReason:
+      additionalProperties: false
+      properties:
+        code:
+          maxLength: 200
+          minLength: 1
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: DiagnosisReason
+      type: object
+    DiagnosisRequirement:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 20000
+          title: Description
+          type: string
+        priority:
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          minItems: 1
+          title: Acceptance Criteria
+          type: array
+      required:
+      - title
+      - priority
+      - acceptance_criteria
+      title: DiagnosisRequirement
+      type: object
+    DiagnosisReview:
+      additionalProperties: false
+      properties:
+        decision:
+          enum:
+          - adopted
+          - rejected
+          - cancelled
+          title: Decision
+          type: string
+        actor:
+          $ref: '#/components/schemas/DiagnosisActor'
+        comment:
+          title: Comment
+          type: string
+        at:
+          title: At
+          type: string
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Requirement Id
+      required:
+      - decision
+      - actor
+      - comment
+      - at
+      title: DiagnosisReview
+      type: object
+    DiagnosisSnapshot:
+      additionalProperties: false
+      properties:
+        issue:
+          $ref: '#/components/schemas/IssueRecord'
+        evidence:
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+          maxItems: 32
+          minItems: 1
+          title: Evidence
+          type: array
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Requirement Id
+      required:
+      - issue
+      - evidence
+      title: DiagnosisSnapshot
+      type: object
+    DiagnosisSuggestion:
+      additionalProperties: false
+      properties:
+        summary:
+          maxLength: 2000
+          minLength: 1
+          title: Summary
+          type: string
+        hypotheses:
+          items:
+            $ref: '#/components/schemas/DiagnosisHypothesis'
+          maxItems: 8
+          title: Hypotheses
+          type: array
+        checks:
+          items:
+            $ref: '#/components/schemas/DiagnosisCheck'
+          maxItems: 12
+          title: Checks
+          type: array
+        risks:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 12
+          title: Risks
+          type: array
+        requirement:
+          $ref: '#/components/schemas/DiagnosisRequirement'
+        open_questions:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 12
+          title: Open Questions
+          type: array
+      required:
+      - summary
+      - requirement
+      title: DiagnosisSuggestion
+      type: object
+    DiagnosisView:
+      additionalProperties: false
+      properties:
+        id:
+          pattern: ^[0-9a-f]{64}$
+          title: Id
+          type: string
+        issue_id:
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+          type: string
+        request_key:
+          title: Request Key
+          type: string
+        requested_by:
+          $ref: '#/components/schemas/DiagnosisActor'
+        generator:
+          enum:
+          - ai
+          - rules
+          title: Generator
+          type: string
+        status:
+          enum:
+          - generating
+          - succeeded
+          - failed
+          - cancelled
+          title: Status
+          type: string
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        current:
+          title: Current
+          type: boolean
+        restricted:
+          title: Restricted
+          type: boolean
+        snapshot:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisSnapshot'
+          - type: 'null'
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisSuggestion'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisError'
+          - type: 'null'
+        model:
+          title: Model
+          type: string
+        provider:
+          title: Provider
+          type: string
+        usage:
+          additionalProperties: true
+          title: Usage
+          type: object
+        created_at:
+          title: Created At
+          type: string
+        review:
+          anyOf:
+          - $ref: '#/components/schemas/DiagnosisReview'
+          - type: 'null'
+        actions:
+          $ref: '#/components/schemas/DiagnosisActions'
+      required:
+      - id
+      - issue_id
+      - request_key
+      - requested_by
+      - generator
+      - status
+      - issue_basis
+      - current
+      - restricted
+      - snapshot
+      - result
+      - error
+      - model
+      - provider
+      - usage
+      - created_at
+      - review
+      - actions
+      title: DiagnosisView
+      type: object
+    EvidenceFact:
+      additionalProperties: false
+      properties:
+        label:
+          title: Label
+          type: string
+        value:
+          title: Value
+          type: string
+      required:
+      - label
+      - value
+      title: EvidenceFact
+      type: object
+    EvidenceItem:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+        kind:
+          enum:
+          - issue
+          - task
+          - execution
+          - deployment
+          - node
+          - probe
+          title: Kind
+          type: string
+        label:
+          title: Label
+          type: string
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Status
+        summary:
+          title: Summary
+          type: string
+        facts:
+          items:
+            $ref: '#/components/schemas/EvidenceFact'
+          title: Facts
+          type: array
+        excerpt:
+          default: ''
+          maxLength: 4000
+          title: Excerpt
+          type: string
+        truncated:
+          default: false
+          title: Truncated
+          type: boolean
+        missing:
+          default: false
+          title: Missing
+          type: boolean
+        restricted:
+          default: false
+          title: Restricted
+          type: boolean
+        redacted:
+          default: false
+          title: Redacted
+          type: boolean
+        target:
+          $ref: '#/components/schemas/EvidenceTarget'
+      required:
+      - id
+      - kind
+      - label
+      - summary
+      - target
+      title: EvidenceItem
+      type: object
+    EvidenceTarget:
+      additionalProperties: false
+      properties:
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        view:
+          title: View
+          type: string
+        detail:
+          title: Detail
+          type: string
+        requirement_id:
+          default: ''
+          title: Requirement Id
+          type: string
+        task_id:
+          default: ''
+          title: Task Id
+          type: string
+        execution_id:
+          default: ''
+          title: Execution Id
+          type: string
+        deployment_id:
+          default: ''
+          title: Deployment Id
+          type: string
+        issue_id:
+          default: ''
+          title: Issue Id
+          type: string
+      required:
+      - project_id
+      - view
+      - detail
+      title: EvidenceTarget
+      type: object
+    IssuePermissions:
+      additionalProperties: false
+      properties:
+        can_generate:
+          title: Can Generate
+          type: boolean
+        can_adopt:
+          title: Can Adopt
+          type: boolean
+        can_dismiss:
+          title: Can Dismiss
+          type: boolean
+      required:
+      - can_generate
+      - can_adopt
+      - can_dismiss
+      title: IssuePermissions
+      type: object
+    IssueRecord:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+        tenant_id:
+          title: Tenant Id
+          type: string
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        sprint_id:
+          default: ''
+          title: Sprint Id
+          type: string
+        task_id:
+          default: ''
+          title: Task Id
+          type: string
+        title:
+          title: Title
+          type: string
+        description:
+          default: ''
+          title: Description
+          type: string
+        type:
+          default: bug
+          title: Type
+          type: string
+        severity:
+          default: P2
+          title: Severity
+          type: string
+        status:
+          default: open
+          title: Status
+          type: string
+        reported_by:
+          default: ''
+          title: Reported By
+          type: string
+        resolved_by:
+          default: ''
+          title: Resolved By
+          type: string
+        resolution:
+          default: ''
+          title: Resolution
+          type: string
+        created_at:
+          title: Created At
+          type: string
+        resolved_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Resolved At
+      required:
+      - id
+      - tenant_id
+      - project_id
+      - title
+      - created_at
+      title: IssueRecord
+      type: object
+    IssueDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        as_of:
+          title: As Of
+          type: string
+        issue:
+          $ref: '#/components/schemas/IssueRecord'
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        evidence:
+          items:
+            $ref: '#/components/schemas/EvidenceItem'
+          maxItems: 32
+          title: Evidence
+          type: array
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Id
+        diagnoses:
+          items:
+            $ref: '#/components/schemas/DiagnosisView'
+          maxItems: 20
+          title: Diagnoses
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        permissions:
+          $ref: '#/components/schemas/IssuePermissions'
+        reasons:
+          items:
+            $ref: '#/components/schemas/DiagnosisReason'
+          title: Reasons
+          type: array
+      required:
+      - project_id
+      - version
+      - as_of
+      - issue
+      - issue_basis
+      - evidence
+      - requirement_id
+      - diagnoses
+      - next_cursor
+      - permissions
+      - reasons
+      title: IssueDetail
+      type: object
+    DiagnosisHistory:
+      additionalProperties: false
+      properties:
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        issue_id:
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+          type: string
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/DiagnosisView'
+          maxItems: 20
+          title: Items
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      required:
+      - project_id
+      - issue_id
+      - issue_basis
+      - items
+      - next_cursor
+      title: DiagnosisHistory
+      type: object
+    IssueDiagnosisGenerate:
+      additionalProperties: false
+      properties:
+        expected_version:
+          minimum: 0
+          title: Expected Version
+          type: integer
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        selected_evidence_ids:
+          items:
+            maxLength: 200
+            minLength: 1
+            type: string
+          maxItems: 32
+          minItems: 1
+          title: Selected Evidence Ids
+          type: array
+        generator:
+          default: ai
+          enum:
+          - ai
+          - rules
+          title: Generator
+          type: string
+        instructions:
+          default: ''
+          maxLength: 4000
+          title: Instructions
+          type: string
+        idempotency_key:
+          maxLength: 100
+          minLength: 8
+          title: Idempotency Key
+          type: string
+      required:
+      - expected_version
+      - issue_basis
+      - selected_evidence_ids
+      - idempotency_key
+      title: IssueDiagnosisGenerate
+      type: object
+    IssueDiagnosisAdopt:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 20000
+          title: Description
+          type: string
+        priority:
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Priority
+          type: string
+        acceptance_criteria:
+          items:
+            maxLength: 2000
+            minLength: 1
+            type: string
+          maxItems: 40
+          minItems: 1
+          title: Acceptance Criteria
+          type: array
+        issue_id:
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+          type: string
+        diagnosis_id:
+          pattern: ^[0-9a-f]{64}$
+          title: Diagnosis Id
+          type: string
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        comment:
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+          type: string
+      required:
+      - title
+      - priority
+      - acceptance_criteria
+      - issue_id
+      - diagnosis_id
+      - issue_basis
+      - comment
+      title: IssueDiagnosisAdopt
+      type: object
+    IssueDiagnosisDismiss:
+      additionalProperties: false
+      properties:
+        issue_id:
+          maxLength: 200
+          minLength: 1
+          title: Issue Id
+          type: string
+        diagnosis_id:
+          pattern: ^[0-9a-f]{64}$
+          title: Diagnosis Id
+          type: string
+        issue_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Issue Basis
+          type: string
+        comment:
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+          type: string
+      required:
+      - issue_id
+      - diagnosis_id
+      - issue_basis
+      - comment
+      title: IssueDiagnosisDismiss
+      type: object
+    WorkspaceIssue:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 200
+          minLength: 1
+          title: Id
+          type: string
+        tenant_id:
+          title: Tenant Id
+          type: string
+        project_id:
+          maxLength: 200
+          minLength: 1
+          title: Project Id
+          type: string
+        sprint_id:
+          default: ''
+          title: Sprint Id
+          type: string
+        task_id:
+          default: ''
+          title: Task Id
+          type: string
+        title:
+          title: Title
+          type: string
+        description:
+          default: ''
+          title: Description
+          type: string
+        type:
+          default: bug
+          title: Type
+          type: string
+        severity:
+          default: P2
+          title: Severity
+          type: string
+        status:
+          default: open
+          title: Status
+          type: string
+        reported_by:
+          default: ''
+          title: Reported By
+          type: string
+        resolved_by:
+          default: ''
+          title: Resolved By
+          type: string
+        resolution:
+          default: ''
+          title: Resolution
+          type: string
+        created_at:
+          title: Created At
+          type: string
+        resolved_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Resolved At
+        source_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+            - execution
+            - deployment
+          uniqueItems: true
+          description: Server-derived source kinds from exact Issue associations in current execution and deployment records.
+            Empty means no recorded runtime source; description text never establishes a source.
+      required:
+      - id
+      - tenant_id
+      - project_id
+      - title
+      - created_at
+      - source_kinds
+      title: WorkspaceIssue
       type: object
