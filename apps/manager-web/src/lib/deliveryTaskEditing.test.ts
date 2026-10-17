@@ -28,6 +28,7 @@ const task = {
 const workspace = {
   project: { id: "project" },
   version: 7,
+  planning_basis: "planning-old",
   tasks: [task],
   requirements: [],
 } as unknown as DeliveryWorkspace;
@@ -46,6 +47,7 @@ describe("one task plan editor", () => {
     expect(payload).toEqual({
       id: "T-alone",
       task_basis: "basis-old",
+      planning_basis: "planning-old",
       description: "Edited scope",
       acceptance_criteria: [],
       depends_on: ["T-another"],
@@ -92,6 +94,13 @@ describe("one task plan editor", () => {
     expect(() => adoptTaskEdit(session, { ...fresh, tasks: [] }, {})).toThrow();
   });
   it("treats task basis changes as explicit recoverable conflicts", () => {
+    expect(
+      planError(
+        new Error(
+          'HTTP 409: {"detail":{"code":"planning_basis_changed","message":"Dates or reservations changed"}}',
+        ),
+      ).conflict,
+    ).toBe(true);
     expect(
       planError(
         new Error(

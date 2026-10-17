@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./delivery-scheduling.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -21,6 +22,12 @@ import {
   type EditorSpec,
 } from "./DeliveryEditor";
 import { DeliveryTaskPlanning } from "./DeliveryTaskPlanning";
+import { Button } from "antd";
+import {
+  allocationSummary,
+  parseSchedulingRoute,
+  schedulingHash,
+} from "@/lib/deliveryScheduling";
 
 export function DeliveryTaskPlanMaintenance({
   task,
@@ -226,6 +233,26 @@ export function DeliveryTaskPlanMaintenance({
         onEdit={edit}
         canEdit={canEdit && Boolean(task.basis)}
       />
+      <div className="delivery-task-reservation-link">
+        <Button
+          type="link"
+          size="small"
+          disabled={!canEdit}
+          onClick={() => {
+            location.hash = schedulingHash({
+              ...parseSchedulingRoute(location.hash),
+              view: "timeline",
+              timelineMode: "dependencies",
+              editTaskId: task.id,
+            });
+          }}
+        >
+          {t("deliverySchedule.adjustTask")}
+        </Button>
+        <p className="delivery-schedule-multiline">
+          {allocationSummary(task.planning?.allocations || [], data.members, t)}
+        </p>
+      </div>
       {editor && (
         <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
       )}

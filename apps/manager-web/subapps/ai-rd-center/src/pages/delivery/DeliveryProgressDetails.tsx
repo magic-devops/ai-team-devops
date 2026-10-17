@@ -1,4 +1,5 @@
-import { Button, Empty, Tag } from "antd";
+import { Alert, Button, Empty, Tag } from "antd";
+import { allocationSummary } from "@/lib/deliveryScheduling";
 import { useTranslation } from "react-i18next";
 import {
   currentProgressTaskTarget,
@@ -219,7 +220,11 @@ export function DeliveryProgressComparison({
   comparison,
   currentTasks,
   onOpenTask,
-}: TaskNavigation & { comparison: ProgressComparison }) {
+  members = [],
+}: TaskNavigation & {
+  comparison: ProgressComparison;
+  members?: { id: string; name: string }[];
+}) {
   const { t } = useTranslation();
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryProgress.${key}`, options);
@@ -229,10 +234,20 @@ export function DeliveryProgressComparison({
         <h3>{tr("changes")}</h3>
         <small>{tr("unchanged", { count: comparison.unchanged_count })}</small>
       </div>
+      {Boolean(comparison.incomplete_plan_fields?.length) && (
+        <Alert type="info" showIcon title={tr("baselineReservationsUnknown")} />
+      )}
+      <p className="delivery-hint">{t("deliverySchedule.baselineHint")}</p>
       {!comparison.added.length &&
       !comparison.removed.length &&
       !comparison.changed.length ? (
-        <p className="delivery-hint">{tr("noChanges")}</p>
+        <p className="delivery-hint">
+          {tr(
+            comparison.incomplete_plan_fields.length
+              ? "noComparableChanges"
+              : "noChanges",
+          )}
+        </p>
       ) : (
         <>
           {(["added", "removed"] as const).map(
@@ -305,20 +320,45 @@ export function DeliveryProgressComparison({
                               <dd>{tr("contentBasisChanged")}</dd>
                             ) : (
                               <dd>
-                                <span>
+                                <span
+                                  className={
+                                    field === "allocations"
+                                      ? "delivery-schedule-multiline"
+                                      : undefined
+                                  }
+                                >
                                   <small>{tr("before")}</small>
-                                  {String(
-                                    change.before[
-                                      field as keyof ProgressTask
-                                    ] || "—",
-                                  )}
+                                  {field === "allocations"
+                                    ? allocationSummary(
+                                        change.before.allocations,
+                                        members,
+                                        t,
+                                      )
+                                    : String(
+                                        change.before[
+                                          field as keyof ProgressTask
+                                        ] || "—",
+                                      )}
                                 </span>
-                                <span>
+                                <span
+                                  className={
+                                    field === "allocations"
+                                      ? "delivery-schedule-multiline"
+                                      : undefined
+                                  }
+                                >
                                   <small>{tr("after")}</small>
-                                  {String(
-                                    change.after[field as keyof ProgressTask] ||
-                                      "—",
-                                  )}
+                                  {field === "allocations"
+                                    ? allocationSummary(
+                                        change.after.allocations,
+                                        members,
+                                        t,
+                                      )
+                                    : String(
+                                        change.after[
+                                          field as keyof ProgressTask
+                                        ] || "—",
+                                      )}
                                 </span>
                               </dd>
                             )}

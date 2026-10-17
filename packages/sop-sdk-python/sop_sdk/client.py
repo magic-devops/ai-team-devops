@@ -135,6 +135,25 @@ class ManagerClient:
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")
 
+    def delivery_schedule(
+        self, *, starts_on: str | None = None, ends_on: str | None = None
+    ) -> dict[str, Any]:
+        """Read project calendars and explicit reservations without inferring workload."""
+        start = _progress_date(starts_on) if starts_on is not None else None
+        end = _progress_date(ends_on) if ends_on is not None else None
+        if start and end and not 0 <= (end - start).days < 92:
+            raise ValueError("schedule date range must contain between 1 and 92 days")
+        params: dict[str, str] = {}
+        if starts_on is not None:
+            params["starts_on"] = starts_on
+        if ends_on is not None:
+            params["ends_on"] = ends_on
+        return self._request("GET", "/api/v1/delivery/schedule", params=params)
+
+    def delivery_schedule_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Validate the exact pinned proposal without saving or starting work."""
+        return self._request("POST", "/api/v1/delivery/schedule-preview", json_body=dict(body))
+
     def delivery_task_plan_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Preview an explicit generator; preserve version and retry identity verbatim."""
         return self._request("POST", "/api/v1/delivery/task-plan-preview", json_body=dict(body))

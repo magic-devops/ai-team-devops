@@ -14,8 +14,6 @@ import {
   Tooltip,
 } from "antd";
 import {
-  ArrowRight,
-  Bot,
   CheckCircle2,
   Circle,
   GitBranch,
@@ -26,7 +24,6 @@ import {
   Search,
   Settings2,
   Users,
-  Wrench,
 } from "lucide-react";
 import {
   useEffect,
@@ -83,6 +80,9 @@ import { DeliveryInbox } from "./DeliveryInbox";
 import { DeliveryProjectOverview } from "./DeliveryProjectOverview";
 import { DeliveryProgress, DeliveryProgressSummary } from "./DeliveryProgress";
 import { preserveProgressRoute } from "@/lib/deliveryProgress";
+import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
+import { DeliveryScheduling } from "./DeliveryScheduling";
+import { DeliveryTaskDetail } from "./DeliveryTaskDetail";
 import { DeliveryActivityAction } from "./DeliveryActivityAction";
 
 const subscribe = (cb: () => void) => {
@@ -277,9 +277,9 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${nextView === "progress" ? preserveProgressRoute(hash, location.hash) : hash}`,
+      `${location.pathname}${location.search}${nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash)}`,
     );
-    if (nextView === "progress")
+    if (["progress", "team", "timeline"].includes(nextView))
       window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const data = query.data;
@@ -302,7 +302,11 @@ function ProjectDelivery() {
   };
   const openTarget = (target: DeliveryInboxTarget) => {
     target = normalizeInboxTarget(target);
-    if (target.task_id && !target.requirement_id) {
+    if (
+      target.task_id &&
+      !target.requirement_id &&
+      !["team", "timeline"].includes(target.view)
+    ) {
       location.hash = deliveryInboxHref(target);
       return;
     }
@@ -550,15 +554,18 @@ function ProjectDelivery() {
       m ? "editMember" : "addMember",
       [
         field("name", "name", { required: true, max: 120 }),
-        field("kind", "kind", {
-          options: ["agent", "tool"].map((value) => ({
-            value,
-            label: tr(`kinds.${value}`),
-          })),
-        }),
+        ...(!m
+          ? [
+              field("kind", "kind", {
+                options: ["agent", "tool"].map((value) => ({
+                  value,
+                  label: tr(`kinds.${value}`),
+                })),
+              }),
+            ]
+          : []),
         field("role", "role", { max: 80 }),
         field("tool", "tool", { max: 80 }),
-        field("capacity", "capacity", { type: "number", required: true }),
         field("active", "active", { type: "boolean" }),
       ],
       m
@@ -566,12 +573,14 @@ function ProjectDelivery() {
         : {
             kind: "agent",
             role: "developer",
-            capacity: 5,
             active: true,
             tool: "",
           },
       async (v) => {
-        await commit("member.save", { ...v, ...(m ? { id: m.id } : {}) });
+        await commit("member.save", {
+          ...v,
+          ...(m ? { id: m.id, kind: m.kind } : {}),
+        });
       },
       "toolsHint",
     );
@@ -1110,148 +1119,17 @@ function ProjectDelivery() {
         ) : (
           empty
         ))}
-      {view === "timeline" && (
-        <section>
-          <div className="delivery-section-heading">
-            <p className="delivery-hint">{tr("milestoneHint")}</p>
-            <Button
-              onClick={() => milestoneEditor()}
-              disabled={!canWrite}
-              icon={<Plus size={15} />}
-            >
-              {tr("addMilestone")}
-            </Button>
-          </div>
-          {data.milestones.length ? (
-            <div className="delivery-milestones">
-              {[...data.milestones]
-                .sort((a, b) =>
-                  (a.ends_on || "9999").localeCompare(b.ends_on || "9999"),
-                )
-                .map((m) => {
-                  const linked = data.requirements.filter(
-                    (r) => r.flow.milestone_id === m.id,
-                  );
-                  const total = linked.reduce((n, r) => n + r.tasks_total, 0);
-                  const done = linked.reduce((n, r) => n + r.tasks_done, 0);
-                  return (
-                    <article key={m.id}>
-                      <div className="delivery-date">
-                        <strong>{date(m.ends_on)}</strong>
-                        <small>{date(m.starts_on)} →</small>
-                      </div>
-                      <div className="delivery-milestone-body">
-                        <div className="delivery-section-heading">
-                          <h3>{m.title}</h3>
-                          <Button
-                            size="small"
-                            disabled={!canWrite}
-                            onClick={() => milestoneEditor(m)}
-                          >
-                            {tr("editMilestone")}
-                          </Button>
-                        </div>
-                        <p>
-                          {name(m.owner_id)} · {linked.length}{" "}
-                          {tr("requirements")} · {done}/{total}{" "}
-                          {tr("tasksDone")}
-                        </p>
-                        <Progress
-                          percent={total ? Math.round((done / total) * 100) : 0}
-                          size="small"
-                        />
-                        {linked.map((r) => (
-                          <button
-                            className="delivery-chip"
-                            key={r.id}
-                            onClick={() => navigate(view, r.id)}
-                          >
-                            {r.title} <ArrowRight size={12} />
-                          </button>
-                        ))}
-                      </div>
-                    </article>
-                  );
-                })}
-            </div>
-          ) : (
-            <Empty description={tr("noMilestones")} />
-          )}
-        </section>
-      )}
-      {view === "team" && (
-        <section>
-          <div className="delivery-section-heading">
-            <div>
-              <p className="delivery-hint">{tr("capacityHint")}</p>
-              <p className="delivery-hint">{tr("toolsHint")}</p>
-            </div>
-            <div className="delivery-actions">
-              <Button href="#/projects">{tr("people")}</Button>
-              <Button
-                icon={<Plus size={15} />}
-                disabled={!data.permissions.configure}
-                onClick={() => memberEditor()}
-              >
-                {tr("addMember")}
-              </Button>
-            </div>
-          </div>
-          <div className="delivery-team">
-            {data.members.map((m) => {
-              const tasks = data.tasks.filter(
-                (task) => task.owner_id === m.id && task.status !== "completed",
-              );
-              const Icon =
-                m.kind === "human" ? Users : m.kind === "agent" ? Bot : Wrench;
-              return (
-                <article key={m.id}>
-                  <div className="delivery-member-heading">
-                    <span className="delivery-member-icon">
-                      <Icon size={20} />
-                    </span>
-                    <div>
-                      <h3>{m.name}</h3>
-                      <small>
-                        {tr(`kinds.${m.kind}`)} · {m.role}
-                      </small>
-                    </div>
-                    <Tag color={m.active ? "green" : "default"}>
-                      {m.active ? tr("active") : tr("none")}
-                    </Tag>
-                  </div>
-                  {m.tool && <p>{m.tool}</p>}
-                  {m.kind !== "tool" && (
-                    <>
-                      <Progress
-                        percent={Math.min(
-                          100,
-                          Math.round((tasks.length / m.capacity) * 100),
-                        )}
-                        status={
-                          tasks.length > m.capacity ? "exception" : "normal"
-                        }
-                        showInfo={false}
-                      />
-                      <small>
-                        {tasks.length}/{m.capacity} · {tr("capacity")}
-                      </small>
-                    </>
-                  )}
-                  {m.kind !== "human" && (
-                    <Button
-                      size="small"
-                      disabled={!data.permissions.configure}
-                      onClick={() => memberEditor(m)}
-                    >
-                      {tr("editMember")}
-                    </Button>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        </section>
+      {["team", "timeline"].includes(view) && (
+        <DeliveryScheduling
+          projectId={projectId}
+          sessionId={sessionId}
+          view={view as "team" | "timeline"}
+          workspace={data}
+          onSaved={saveWorkspace}
+          onOpenTask={openTarget}
+          onEditMember={memberEditor}
+          onEditMilestone={milestoneEditor}
+        />
       )}
       {view === "issues" && (
         <section>
@@ -1401,6 +1279,28 @@ function ProjectDelivery() {
           />
         </section>
       )}
+      <Drawer
+        open={Boolean(
+          selectedTaskId && !selectedId && ["team", "timeline"].includes(view),
+        )}
+        onClose={() => navigate(view, "", "details", "")}
+        title={
+          data.tasks.find((task) => task.id === selectedTaskId)?.title ||
+          t("deliveryManualReview.unavailable")
+        }
+        width={680}
+        className="delivery-inspector"
+        destroyOnHidden
+      >
+        {selectedTaskId && !selectedId && (
+          <DeliveryTaskDetail
+            key={`${projectId}:${selectedTaskId}`}
+            projectId={projectId}
+            sessionId={sessionId}
+            taskId={selectedTaskId}
+          />
+        )}
+      </Drawer>
       <Drawer
         open={Boolean(selected)}
         onClose={() => navigate(view, "")}

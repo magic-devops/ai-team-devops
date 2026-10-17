@@ -1,0 +1,457 @@
+.delivery-scheduling {
+  min-width: 0;
+  color: var(--text);
+}
+.delivery-schedule-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}
+.delivery-schedule-section-heading h3,
+.delivery-schedule-section-heading h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.delivery-schedule-section-heading small {
+  font-size: 11px;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-schedule-mode {
+  margin-top: 4px;
+}
+.delivery-schedule-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.delivery-schedule-filters > label {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 150px;
+  max-width: 230px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-schedule-filters .ant-select,
+.delivery-schedule-filters .ant-input {
+  width: 100%;
+  min-width: 0;
+}
+.delivery-schedule-filters > .ant-input-search {
+  flex: 1 1 230px;
+  min-width: 0;
+  max-width: 350px;
+}
+.delivery-schedule-period {
+  align-self: flex-end;
+}
+.delivery-schedule-source {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted-strong, var(--muted));
+  margin: 16px 0;
+}
+.delivery-schedule-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0 16px;
+}
+.delivery-schedule-metrics > div {
+  display: grid;
+  gap: 8px;
+  border-left: 1px solid var(--border);
+  padding-left: 16px;
+}
+.delivery-schedule-metrics > div:first-child {
+  border: 0;
+  padding: 0;
+}
+.delivery-schedule-metrics span {
+  color: var(--muted-strong, var(--muted));
+  font-size: 11px;
+}
+.delivery-schedule-metrics strong {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.delivery-scheduling > .ant-alert {
+  margin: 12px 0;
+}
+.delivery-schedule-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+.delivery-schedule-members > article {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.delivery-schedule-member-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.delivery-schedule-member-heading > span {
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+}
+.delivery-schedule-member-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.delivery-schedule-member-heading h3 {
+  font-size: 13px;
+  margin: 0 0 5px;
+  overflow-wrap: anywhere;
+}
+.delivery-schedule-member-heading small {
+  font-size: 11px;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-schedule-member-heading .ant-tag {
+  margin: 0;
+}
+.delivery-schedule-members article > p {
+  font-size: 12px;
+  color: var(--muted-strong, var(--muted));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.delivery-scheduling-milestones {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+.delivery-scheduling-milestones > article {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--surface);
+}
+.delivery-scheduling-milestones > article > p {
+  font-size: 12px;
+  color: var(--muted-strong, var(--muted));
+  margin: 14px 0;
+}
+.delivery-scheduling-milestones .delivery-schedule-section-heading {
+  margin: 0;
+}
+.delivery-schedule-fixed {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--surface-muted, var(--surface));
+  margin-bottom: 16px;
+}
+.delivery-schedule-fixed code {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-schedule-editor .ant-alert {
+  margin: 12px 0;
+}
+.delivery-calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0 22px;
+}
+.delivery-calendar-week label,
+.delivery-calendar-exceptions label,
+.delivery-reservation-dates label,
+.delivery-reservation-inputs label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+}
+.delivery-calendar-week .ant-input-number,
+.delivery-calendar-exceptions .ant-input-number,
+.delivery-reservation-inputs .ant-input-number,
+.delivery-reservation-inputs .ant-select {
+  width: 100%;
+}
+.delivery-calendar-exceptions {
+  display: grid;
+  gap: 12px;
+}
+.delivery-calendar-exceptions article {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(100px, 0.7fr) minmax(
+      180px,
+      1.4fr
+    ) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.delivery-reservation-task {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 16px 0;
+}
+.delivery-reservation-task > summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 0 10px;
+}
+.delivery-reservation-task summary small {
+  color: var(--muted-strong, var(--muted));
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.delivery-reservation-dates,
+.delivery-reservation-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0;
+}
+.delivery-reservation-segment {
+  padding: 14px;
+  background: var(--surface-muted, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-top: 12px;
+}
+.delivery-reservation-segment .delivery-schedule-section-heading {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.delivery-reservation-weekdays {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  font-size: 12px;
+}
+.delivery-reservation-weekdays .ant-checkbox-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.delivery-schedule-preview-actions {
+  margin: 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.delivery-schedule-preview > article {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.delivery-schedule-preview h4 {
+  font-size: 13px;
+  margin: 0 0 7px;
+}
+.delivery-schedule-preview small {
+  font-size: 11px;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-schedule-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding-top: 14px;
+  font-size: 12px;
+}
+.delivery-schedule-comparison b {
+  color: var(--muted-strong, var(--muted));
+  font-weight: 500;
+}
+.delivery-schedule-multiline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  font-size: 12px;
+}
+.delivery-schedule-conflict {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 16px 0;
+}
+.delivery-schedule-conflict h4 {
+  font-size: 13px;
+}
+.delivery-schedule-conflict article {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  font-size: 12px;
+}
+.delivery-schedule-day-values {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.delivery-schedule-day-values > div {
+  display: grid;
+  gap: 8px;
+}
+.delivery-schedule-day-values span,
+.delivery-schedule-day-values small {
+  color: var(--muted-strong, var(--muted));
+  font-size: 12px;
+}
+.delivery-schedule-day-values strong {
+  font-size: 26px;
+  font-weight: 600;
+}
+.delivery-schedule-day .ant-alert {
+  margin: 14px 0;
+}
+.delivery-schedule-day h3 {
+  font-size: 13px;
+  margin: 24px 0 14px;
+}
+.delivery-schedule-day-tasks {
+  display: grid;
+  gap: 12px;
+}
+.delivery-schedule-day-tasks article {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px;
+}
+.delivery-schedule-day-tasks article > div:first-child {
+  flex: 1 1 230px;
+  min-width: 0;
+}
+.delivery-schedule-day-tasks strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 7px;
+  overflow-wrap: anywhere;
+}
+.delivery-schedule-day-tasks small {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 8px;
+  color: var(--muted-strong, var(--muted));
+  overflow-wrap: anywhere;
+}
+.delivery-schedule-unregistered {
+  margin-top: 16px;
+}
+.delivery-schedule-unregistered .ant-btn {
+  display: block;
+  white-space: normal;
+  height: auto;
+  text-align: left;
+}
+.delivery-scheduling button:focus-visible,
+.delivery-schedule-editor button:focus-visible,
+.delivery-schedule-editor summary:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+@media (max-width: 900px) {
+  .delivery-calendar-week {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .delivery-calendar-exceptions article {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .delivery-schedule-mode > .delivery-actions {
+    width: 100%;
+  }
+  .delivery-schedule-mode .ant-segmented {
+    max-width: 100%;
+  }
+  .delivery-schedule-filters > label {
+    flex-basis: calc(50% - 6px);
+    max-width: none;
+  }
+  .delivery-schedule-filters > .ant-input-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .delivery-schedule-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .delivery-schedule-metrics > div {
+    border: 0;
+    padding-left: 0;
+  }
+  .delivery-schedule-members {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .delivery-calendar-week {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .delivery-calendar-exceptions article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .delivery-reservation-dates,
+  .delivery-reservation-inputs,
+  .delivery-schedule-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .delivery-reservation-task,
+  .delivery-reservation-segment,
+  .delivery-schedule-conflict {
+    padding: 12px;
+  }
+  .delivery-schedule-editor .ant-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .delivery-schedule-editor .ant-modal-footer .ant-btn {
+    margin: 0;
+  }
+  .delivery-schedule-editor .ant-btn {
+    max-width: 100%;
+  }
+  .delivery-schedule-editor .delivery-schedule-conflict .ant-btn {
+    height: auto;
+    white-space: normal;
+    min-height: 32px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .delivery-scheduling *,
+  .delivery-schedule-editor * {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -61,6 +61,8 @@ def compare_scope(baseline, current):
     after = {task["id"]: task for task in current["tasks"]}
     changed = []
     unchanged = 0
+    incomplete_fields = set()
+    incomplete_tasks = []
     # Execution status advances progress; it does not change the frozen work scope.
     planned_fields = {
         "title",
@@ -73,9 +75,21 @@ def compare_scope(baseline, current):
         "estimate",
         "starts_on",
         "ends_on",
+        "allocations",
     }
     for task_id in sorted(before.keys() & after.keys()):
-        fields = sorted(key for key in planned_fields if before[task_id].get(key) != after[task_id].get(key))
+        unknown_allocations = (
+            before[task_id].get("allocations") is None or after[task_id].get("allocations") is None
+        )
+        if unknown_allocations:
+            incomplete_fields.add("allocations")
+            incomplete_tasks.append(task_id)
+        fields = sorted(
+            key
+            for key in planned_fields
+            if not (key == "allocations" and unknown_allocations)
+            and before[task_id].get(key) != after[task_id].get(key)
+        )
         if fields:
             changed.append(
                 {
@@ -85,13 +99,15 @@ def compare_scope(baseline, current):
                     "fields": fields,
                 }
             )
-        else:
+        elif not unknown_allocations:
             unchanged += 1
     return {
         "added": [deepcopy(after[key]) for key in sorted(after.keys() - before.keys())],
         "removed": [deepcopy(before[key]) for key in sorted(before.keys() - after.keys())],
         "changed": changed,
         "unchanged_count": unchanged,
+        "incomplete_plan_fields": sorted(incomplete_fields),
+        "incomplete_task_ids": incomplete_tasks,
     }
 
 

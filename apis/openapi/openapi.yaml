@@ -1558,6 +1558,107 @@ paths:
         progress observations are created. Manual evidence is human registered, not signed CI output. Records are
         ordered by descending sequence; next_cursor identifies the last record in this page. The cursor is restricted
         to this project and task. A deleted task with review evidence has current=null.
+  /api/v1/delivery/schedule:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Schedule
+      operationId: delivery_schedule_api_v1_delivery_schedule_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: starts_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Starts On
+      - name: ends_on
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Ends On
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: 'Requires an explicitly selected authorized project. Pure read: no tasks, calendars, receipts,
+        events or progress observations are written, and no runtime/model is invoked. Planning dates are civil UTC
+        dates. The planning_basis covers the full current project regardless of visible filters. Human hours and agent/tool
+        planning slots are distinct; unknown availability is null and explicit zero is unavailable. A reservation
+        is planning data, never actual work or observed concurrency. Defaults to 14 dates from today; a single supplied
+        endpoint derives the other by 13 days. The inclusive range is at most 92 dates. Calendar exceptions are returned
+        in full, including outside this window. Resource cells include all project load; display filters do not release
+        it.'
+  /api/v1/delivery/schedule-preview:
+    post:
+      tags:
+      - delivery
+      summary: Delivery Schedule Preview
+      operationId: delivery_schedule_preview_api_v1_delivery_schedule_preview_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleChanges'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchedulePreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: 'Requires an explicitly selected authorized project. Pure read: no tasks, calendars, receipts,
+        events or progress observations are written, and no runtime/model is invoked. Planning dates are civil UTC
+        dates. The planning_basis covers the full current project regardless of visible filters. Human hours and agent/tool
+        planning slots are distinct; unknown availability is null and explicit zero is unavailable. A reservation
+        is planning data, never actual work or observed concurrency. Validate the exact selected batch against its
+        pinned planning_basis and the final candidate dependency graph and allocation bounds. Return explicit before/after
+        states; preview does not save. tasks.schedule revalidates basis and CAS before its atomic write.'
   /api/v1/delivery/workspace:
     get:
       tags: [delivery]
@@ -1661,7 +1762,12 @@ paths:
 
         task.manual_review requires approve and fixed task basis, project version and idempotency identity. A changed
         basis returns structured 409 code task_review_basis_changed without saving a decision. Manual acceptance,
-        permanent invalidation and progress observations share the business transaction.'
+        permanent invalidation and progress observations share the business transaction.
+
+        member.calendar.save requires configure and a complete calendar. tasks.schedule requires write and applies
+        an explicit final batch atomically. Both pin planning_basis/CAS/retry identity. task.update dates/reservations
+        share the same validator and require planning_basis. Changed planning returns structured 409 planning_basis_changed.
+        kind is immutable and member.save has no capacity field.'
       security:
       - bearerAuth: []
       parameters:
@@ -4544,30 +4650,41 @@ components:
         added:
           items:
             $ref: '#/components/schemas/ProgressTaskFact'
-          type: array
           title: Added
+          type: array
         removed:
           items:
             $ref: '#/components/schemas/ProgressTaskFact'
-          type: array
           title: Removed
+          type: array
         changed:
           items:
             $ref: '#/components/schemas/ProgressTaskChange'
-          type: array
           title: Changed
+          type: array
         unchanged_count:
-          type: integer
           title: Unchanged Count
-      type: object
+          type: integer
+        incomplete_plan_fields:
+          items:
+            type: string
+          title: Incomplete Plan Fields
+          type: array
+        incomplete_task_ids:
+          items:
+            type: string
+          title: Incomplete Task Ids
+          type: array
       required:
       - added
       - removed
       - changed
       - unchanged_count
       title: ProgressComparison
-      description: Current scope compared with frozen tasks. changed compares plan/scope fields and content basis; ordinary
-        status advancement alone is not a scope change. removed retains the frozen task, even after deletion.
+      type: object
+      description: Compare recorded frozen task plan fields with current facts. A field unknown in an original snapshot
+        cannot be asserted to have changed; incomplete_plan_fields states unavailable comparison coverage. Known reservation
+        changes use actual before/after segments. Resource availability budgets are separate.
     ProgressCoverage:
       properties:
         first_observed_at:
@@ -5014,26 +5131,26 @@ components:
     ProgressTaskFact:
       properties:
         id:
-          type: string
           title: Id
+          type: string
         title:
-          type: string
           title: Title
+          type: string
         req_id:
-          type: string
           title: Req Id
+          type: string
         sprint_id:
-          type: string
           title: Sprint Id
+          type: string
         milestone_id:
-          type: string
           title: Milestone Id
+          type: string
         owner_id:
-          type: string
           title: Owner Id
-        assigned_to:
           type: string
+        assigned_to:
           title: Assigned To
+          type: string
         estimate:
           anyOf:
           - type: string
@@ -5050,10 +5167,9 @@ components:
           - type: 'null'
           title: Ends On
         basis:
-          type: string
           title: Basis
-        status:
           type: string
+        status:
           enum:
           - pending
           - in_progress
@@ -5062,10 +5178,18 @@ components:
           - recorded_completed
           - verified_completed
           title: Status
-        recorded_status:
           type: string
+        recorded_status:
           title: Recorded Status
-      type: object
+          type: string
+        allocations:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/StoredAllocation'
+            type: array
+          - type: 'null'
+          default: null
+          title: Allocations
       required:
       - id
       - title
@@ -5081,6 +5205,10 @@ components:
       - status
       - recorded_status
       title: ProgressTaskFact
+      type: object
+      description: Minimal observed task and scope facts. allocations contains explicitly recorded reservation segments;
+        null means the original observation did not collect this fact, not zero. [] records no reservation. Frozen task
+        baselines preserve reservations; resource availability budgets are separate.
     HTTPValidationError:
       properties:
         detail:
@@ -5802,6 +5930,721 @@ components:
         pinned current basis. Accept requires recorded completion, verified predecessors and manual evidence; request_changes
         reopens the task. Decisions append immutable original scope and evidence. Changed scope permanently invalidates
         prior acceptance; pure date changes preserve it.
+    ScheduleResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        planning_basis:
+          type: string
+          title: Planning Basis
+        as_of:
+          type: string
+          title: As Of
+        timezone:
+          type: string
+          const: UTC
+          title: Timezone
+        range:
+          $ref: '#/components/schemas/ScheduleRange'
+        permissions:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Permissions
+        resources:
+          items:
+            $ref: '#/components/schemas/ScheduleResource'
+          type: array
+          title: Resources
+        tasks:
+          items:
+            $ref: '#/components/schemas/ScheduledTask'
+          type: array
+          title: Tasks
+        milestones:
+          items:
+            $ref: '#/components/schemas/ScheduleScope'
+          type: array
+          title: Milestones
+        sprints:
+          items:
+            $ref: '#/components/schemas/ScheduleScope'
+          type: array
+          title: Sprints
+        summary:
+          $ref: '#/components/schemas/ScheduleSummary'
+      type: object
+      required:
+      - project_id
+      - version
+      - planning_basis
+      - as_of
+      - timezone
+      - range
+      - permissions
+      - resources
+      - tasks
+      - milestones
+      - sprints
+      - summary
+      title: ScheduleResponse
+    ScheduleSummary:
+      properties:
+        tasks_total:
+          type: integer
+          title: Tasks Total
+        active_tasks:
+          type: integer
+          title: Active Tasks
+        verified_tasks:
+          type: integer
+          title: Verified Tasks
+        unscheduled_tasks:
+          type: integer
+          title: Unscheduled Tasks
+        incomplete_tasks:
+          type: integer
+          title: Incomplete Tasks
+        overloaded_cells:
+          type: integer
+          title: Overloaded Cells
+        unavailable_cells:
+          type: integer
+          title: Unavailable Cells
+        unknown_capacity_cells:
+          type: integer
+          title: Unknown Capacity Cells
+        issues_by_code:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Issues By Code
+      type: object
+      required:
+      - tasks_total
+      - active_tasks
+      - verified_tasks
+      - unscheduled_tasks
+      - incomplete_tasks
+      - overloaded_cells
+      - unavailable_cells
+      - unknown_capacity_cells
+      - issues_by_code
+      title: ScheduleSummary
+    ScheduleScope:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+      type: object
+      required:
+      - id
+      - title
+      title: ScheduleScope
+    ScheduledTask:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        req_id:
+          type: string
+          title: Req Id
+        requirement_title:
+          type: string
+          title: Requirement Title
+        owner_id:
+          type: string
+          title: Owner Id
+        owner_name:
+          type: string
+          title: Owner Name
+        owner_active:
+          type: boolean
+          title: Owner Active
+        status:
+          type: string
+          title: Status
+        delivery_status:
+          type: string
+          title: Delivery Status
+        verified:
+          type: boolean
+          title: Verified
+        milestone_id:
+          type: string
+          title: Milestone Id
+        sprint_id:
+          type: string
+          title: Sprint Id
+        task_basis:
+          type: string
+          title: Task Basis
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        depends_on:
+          items:
+            type: string
+          type: array
+          title: Depends On
+        dependency_blocked:
+          items:
+            type: string
+          type: array
+          title: Dependency Blocked
+        allocations:
+          items:
+            $ref: '#/components/schemas/StoredAllocation'
+          type: array
+          title: Allocations
+        issues:
+          items:
+            $ref: '#/components/schemas/ScheduleIssue'
+          type: array
+          title: Issues
+      type: object
+      required:
+      - id
+      - title
+      - req_id
+      - requirement_title
+      - owner_id
+      - owner_name
+      - owner_active
+      - status
+      - delivery_status
+      - verified
+      - milestone_id
+      - sprint_id
+      - task_basis
+      - starts_on
+      - ends_on
+      - depends_on
+      - dependency_blocked
+      - allocations
+      - issues
+      title: ScheduledTask
+    ScheduleIssue:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        member_id:
+          type: string
+          title: Member Id
+          default: ''
+        task_id:
+          type: string
+          title: Task Id
+          default: ''
+      type: object
+      required:
+      - code
+      - message
+      title: ScheduleIssue
+    StoredAllocation:
+      properties:
+        member_id:
+          title: Member Id
+          type: string
+        starts_on:
+          title: Starts On
+          type: string
+        ends_on:
+          title: Ends On
+          type: string
+        quantity_per_day:
+          title: Quantity Per Day
+          type: number
+        weekdays:
+          items:
+            type: integer
+          title: Weekdays
+          type: array
+        unit:
+          anyOf:
+          - enum:
+            - hours
+            - slots
+            type: string
+          - type: 'null'
+          title: Unit
+      required:
+      - member_id
+      - starts_on
+      - ends_on
+      - quantity_per_day
+      - weekdays
+      - unit
+      title: StoredAllocation
+      type: object
+    ScheduleResource:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        kind:
+          anyOf:
+          - type: string
+            enum:
+            - human
+            - agent
+            - tool
+          - type: 'null'
+          title: Kind
+        active:
+          type: boolean
+          title: Active
+        unit:
+          anyOf:
+          - type: string
+            enum:
+            - hours
+            - slots
+          - type: 'null'
+          title: Unit
+        calendar:
+          anyOf:
+          - $ref: '#/components/schemas/ResourceCalendar'
+          - type: 'null'
+        cells:
+          items:
+            $ref: '#/components/schemas/ScheduleCell'
+          type: array
+          title: Cells
+      type: object
+      required:
+      - id
+      - name
+      - kind
+      - active
+      - unit
+      - calendar
+      - cells
+      title: ScheduleResource
+    ScheduleCell:
+      properties:
+        date:
+          type: string
+          title: Date
+        available:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Available
+        active_load:
+          type: number
+          title: Active Load
+        total_reserved:
+          type: number
+          title: Total Reserved
+        overload:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Overload
+        unavailable:
+          type: boolean
+          title: Unavailable
+        unregistered_count:
+          type: integer
+          title: Unregistered Count
+        incomplete:
+          type: boolean
+          title: Incomplete
+        contributions:
+          items:
+            $ref: '#/components/schemas/ScheduleContribution'
+          type: array
+          title: Contributions
+      type: object
+      required:
+      - date
+      - available
+      - active_load
+      - total_reserved
+      - overload
+      - unavailable
+      - unregistered_count
+      - incomplete
+      - contributions
+      title: ScheduleCell
+    ScheduleContribution:
+      properties:
+        task_id:
+          type: string
+          title: Task Id
+        title:
+          type: string
+          title: Title
+        quantity:
+          type: number
+          title: Quantity
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - task_id
+      - title
+      - quantity
+      - active
+      title: ScheduleContribution
+    ResourceCalendar:
+      properties:
+        unit:
+          type: string
+          enum:
+          - hours
+          - slots
+          title: Unit
+        weekly:
+          items:
+            anyOf:
+            - type: number
+            - type: 'null'
+          type: array
+          title: Weekly
+        exceptions:
+          items:
+            $ref: '#/components/schemas/CalendarException'
+          type: array
+          title: Exceptions
+      type: object
+      required:
+      - unit
+      - weekly
+      - exceptions
+      title: ResourceCalendar
+    CalendarException:
+      additionalProperties: false
+      properties:
+        date:
+          format: date
+          title: Date
+          type: string
+        available:
+          anyOf:
+          - maximum: 100
+            minimum: 0
+            type: number
+          - type: 'null'
+          title: Available
+        note:
+          default: ''
+          maxLength: 2000
+          title: Note
+          type: string
+      required:
+      - date
+      - available
+      title: CalendarException
+      type: object
+    ScheduleRange:
+      properties:
+        starts_on:
+          type: string
+          title: Starts On
+        ends_on:
+          type: string
+          title: Ends On
+      type: object
+      required:
+      - starts_on
+      - ends_on
+      title: ScheduleRange
+    SchedulePreviewResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        planning_basis:
+          type: string
+          title: Planning Basis
+        changes:
+          items:
+            $ref: '#/components/schemas/SchedulePreviewChange'
+          type: array
+          title: Changes
+        affected_task_ids:
+          items:
+            type: string
+          type: array
+          title: Affected Task Ids
+      type: object
+      required:
+      - project_id
+      - version
+      - planning_basis
+      - changes
+      - affected_task_ids
+      title: SchedulePreviewResponse
+    SchedulePreviewChange:
+      properties:
+        task_id:
+          type: string
+          title: Task Id
+        title:
+          type: string
+          title: Title
+        before:
+          $ref: '#/components/schemas/TaskScheduleState'
+        after:
+          $ref: '#/components/schemas/TaskScheduleState'
+        fields:
+          items:
+            type: string
+          type: array
+          title: Fields
+      type: object
+      required:
+      - task_id
+      - title
+      - before
+      - after
+      - fields
+      title: SchedulePreviewChange
+    TaskScheduleState:
+      properties:
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ends On
+        allocations:
+          items:
+            $ref: '#/components/schemas/StoredAllocation'
+          type: array
+          title: Allocations
+      type: object
+      required:
+      - starts_on
+      - ends_on
+      - allocations
+      title: TaskScheduleState
+    ScheduleChanges:
+      additionalProperties: false
+      properties:
+        planning_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Planning Basis
+          type: string
+        changes:
+          items:
+            $ref: '#/components/schemas/ScheduleChange'
+          maxItems: 200
+          minItems: 1
+          title: Changes
+          type: array
+      required:
+      - planning_basis
+      - changes
+      title: ScheduleChanges
+      type: object
+      description: Requires write for tasks.schedule. Explicit unique selected tasks only; date/allocation changes are
+        validated together against the final graph before any write. Reservation dates must be inside a complete task
+        range and contain an effective weekday. Same task/resource effective-date overlap is rejected. No automatic
+        redistribution or shifting. Fixed planning_basis, project CAS and retry identity.
+    ScheduleChange:
+      additionalProperties: false
+      properties:
+        task_id:
+          maxLength: 64
+          minLength: 1
+          title: Task Id
+          type: string
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Ends On
+        allocations:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/AllocationInput'
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Allocations
+      required:
+      - task_id
+      title: ScheduleChange
+      type: object
+      anyOf:
+      - required:
+        - starts_on
+      - required:
+        - ends_on
+      - required:
+        - allocations
+      allOf:
+      - if:
+          required:
+          - allocations
+        then:
+          properties:
+            allocations:
+              type: array
+    AllocationInput:
+      additionalProperties: false
+      description: An explicit daily reservation spanning at most 366 inclusive civil dates.
+      properties:
+        member_id:
+          maxLength: 100
+          minLength: 1
+          title: Member Id
+          type: string
+        starts_on:
+          format: date
+          title: Starts On
+          type: string
+        ends_on:
+          format: date
+          title: Ends On
+          type: string
+        quantity_per_day:
+          exclusiveMinimum: 0
+          maximum: 100
+          minimum: 0
+          title: Quantity Per Day
+          type: number
+        weekdays:
+          items:
+            maximum: 6
+            minimum: 0
+            type: integer
+          maxItems: 7
+          minItems: 1
+          title: Weekdays
+          type: array
+      required:
+      - member_id
+      - starts_on
+      - ends_on
+      - quantity_per_day
+      - weekdays
+      title: AllocationInput
+      type: object
+    MemberEdit:
+      additionalProperties: false
+      properties:
+        id:
+          default: ''
+          maxLength: 100
+          title: Id
+          type: string
+        name:
+          maxLength: 120
+          minLength: 1
+          title: Name
+          type: string
+        kind:
+          enum:
+          - agent
+          - tool
+          title: Kind
+          type: string
+        role:
+          default: developer
+          maxLength: 80
+          title: Role
+          type: string
+        tool:
+          default: ''
+          maxLength: 80
+          title: Tool
+          type: string
+        active:
+          default: true
+          title: Active
+          type: boolean
+      required:
+      - name
+      - kind
+      title: MemberEdit
+      type: object
+      description: Registered agent/tool identity. kind is immutable after creation. No inferred capacity field.
+    CalendarSave:
+      additionalProperties: false
+      properties:
+        member_id:
+          maxLength: 100
+          minLength: 1
+          title: Member Id
+          type: string
+        planning_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Planning Basis
+          type: string
+        weekly:
+          items:
+            anyOf:
+            - maximum: 100
+              minimum: 0
+              type: number
+            - type: 'null'
+          maxItems: 7
+          minItems: 7
+          title: Weekly
+          type: array
+        exceptions:
+          items:
+            $ref: '#/components/schemas/CalendarException'
+          maxItems: 366
+          title: Exceptions
+          type: array
+      required:
+      - member_id
+      - planning_basis
+      - weekly
+      - exceptions
+      title: CalendarSave
+      type: object
+      description: Requires configure. Replace this real active resource's full calendar under planning_basis/CAS. weekly
+        has seven Monday=0..Sunday=6 quantities; null unknown, zero unavailable. Human values are half-hours <=24, agent/tool
+        values integer slots <=100, validated against actual kind. All exceptions must be supplied; omitted window-external
+        exceptions must not be silently preserved or discarded.
     DeliveryCommand:
       type: object
       additionalProperties: false
@@ -5824,6 +6667,8 @@ components:
           - task.create
           - task.update
           - task.manual_review
+          - tasks.schedule
+          - member.calendar.save
           - tasks.plan
           - artifact.add
           - stage.advance
@@ -5935,6 +6780,36 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/TaskManualReview'
+      - if:
+          properties:
+            action:
+              const: member.save
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/MemberEdit'
+      - if:
+          properties:
+            action:
+              const: member.calendar.save
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/CalendarSave'
+      - if:
+          properties:
+            action:
+              const: tasks.schedule
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ScheduleChanges'
     TaskEdit:
       additionalProperties: false
       properties:
@@ -6015,13 +6890,26 @@ components:
           - type: 'null'
           default: null
           title: Task Basis
+        planning_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Planning Basis
+        allocations:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/AllocationInput'
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Allocations
       required:
       - id
       title: TaskEdit
       type: object
-      description: The single task plan edit command for requirement and independent tasks. Reference changes require
-        the pinned task_basis; independent tasks have no requirement acceptance indexes. Final dependency graph and
-        dates are validated atomically. No duplicate dependency file writes are supported.
       allOf:
       - if:
           anyOf:
@@ -6042,6 +6930,27 @@ components:
             depends_on:
               type: array
               uniqueItems: true
+      - if:
+          anyOf:
+          - required:
+            - starts_on
+          - required:
+            - ends_on
+          - required:
+            - allocations
+        then:
+          required:
+          - planning_basis
+          properties:
+            planning_basis:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+            allocations:
+              type: array
+      description: Single task plan maintenance shares the final schedule validator with tasks.schedule. Reference edits
+        require task_basis; any explicit date/reservation field requires full project planning_basis. Empty arrays clear
+        links/reservations. Dates may be null, reservations may not. Pure planning does not invalidate delivery acceptance,
+        while changed scope/owner/requirements/dependencies still do.
     TaskDraft:
       type: object
       additionalProperties: false

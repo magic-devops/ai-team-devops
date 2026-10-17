@@ -80,6 +80,12 @@ def env():
 
 def command(client, action, payload, key=None, version=None):
     state = client.get("/api/v1/delivery/workspace").json()
+    if (
+        action == "task.update"
+        and {"starts_on", "ends_on", "allocations"} & payload.keys()
+        and "planning_basis" not in payload
+    ):
+        payload = {**payload, "planning_basis": state["planning_basis"]}
     return client.post(
         "/api/v1/delivery/commands",
         json={

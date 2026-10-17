@@ -244,7 +244,14 @@ def test_normal_status_change_advances_progress_without_scope_change(env):
         db.commit()
     result = client.get(f"/api/v1/delivery/progress/baselines/{baseline_id}")
     assert result.status_code == 200, result.text
-    assert result.json()["comparison"] == {"added": [], "removed": [], "changed": [], "unchanged_count": 1}
+    assert result.json()["comparison"] == {
+        "added": [],
+        "removed": [],
+        "changed": [],
+        "unchanged_count": 1,
+        "incomplete_plan_fields": [],
+        "incomplete_task_ids": [],
+    }
     assert result.json()["current"]["tasks"][0]["status"] == "in_progress"
 
 

@@ -1,4 +1,5 @@
 import { request } from "./http";
+import type { ScheduleAllocation } from "./deliveryScheduling";
 
 export type TaskPlanItem = {
   key: string;
@@ -29,6 +30,7 @@ export type TaskPlanning = Partial<TaskPlanItem> &
     model: string;
     provider: string;
     usage: Partial<PlanUsage>;
+    allocations: ScheduleAllocation[];
     requirement_snapshot?: {
       id: string;
       title: string;
@@ -175,7 +177,12 @@ export function planError(error: unknown): {
         code,
         conflict:
           raw.startsWith("HTTP 409") &&
-          ["project_version_conflict", "plan_basis_changed", "task_basis_changed"].includes(code),
+          [
+            "project_version_conflict",
+            "plan_basis_changed",
+            "task_basis_changed",
+            "planning_basis_changed",
+          ].includes(code),
       };
     }
   } catch {

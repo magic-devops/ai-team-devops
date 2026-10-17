@@ -119,7 +119,8 @@ class VerificationContext:
     def basis(self, task_id):
         return fingerprint(self.snapshot(task_id))
 
-    def native_accepted(self, task_id):
+    def execution_valid(self, task_id):
+        """Validate one current execution snapshot before assigning any review state."""
         task = self.tasks.get(task_id)
         entry = self.executions.get(task_id)
         requirement = self.requirements.get(task.req_id) if task else None
@@ -149,14 +150,39 @@ class VerificationContext:
             "acceptance_criteria": requirement.acceptance_criteria,
             "revision": flow["revision"],
         }
+        snapshot = entry.get("snapshot") or {}
+        return all(key in snapshot and snapshot[key] == value for key, value in expected.items())
+
+    def native_accepted(self, task_id):
+        if not self.execution_valid(task_id):
+            return False
+        entry = self.executions[task_id]
         review = entry.get("review") or {}
         return (
-            all(entry.get("snapshot", {}).get(key) == value for key, value in expected.items())
-            and entry.get("status") == "accepted"
+            entry.get("status") == "accepted"
             and review.get("decision") == "accept"
             and review.get("run_version") == entry["run_version"]
             and bool(review.get("evidence_sha256"))
         )
+
+    def delivery_status(self, task_id):
+        """One six-state delivery vocabulary shared by progress and scheduling."""
+        task = self.tasks[task_id]
+        planned = self.data.get("task_details", {}).get(task_id, {})
+        flow = self.data.get("flows", {}).get(task.req_id, {})
+        if (
+            task.status == "blocked"
+            or planned.get("blocked_reason")
+            or flow.get("blocked_reason")
+            or self.blocked(task_id)
+        ):
+            return "blocked"
+        entry = self.executions.get(task_id)
+        if self.execution_valid(task_id) and entry.get("status") == "awaiting_review":
+            return "awaiting_review"
+        if task.status == "completed":
+            return "verified_completed" if self.verified(task_id) else "recorded_completed"
+        return "in_progress" if task.status == "in_progress" else "pending"
 
     def requirement_accepted(self, requirement_id):
         if requirement_id in self._accepted:

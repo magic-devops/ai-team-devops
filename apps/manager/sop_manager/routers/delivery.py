@@ -22,6 +22,12 @@ from .delivery_contract import (
     TaskPlanPreview,
     TaskReviewsResponse,
 )
+from .delivery_scheduling_contract import (
+    CivilDate,
+    ScheduleChanges,
+    SchedulePreviewResponse,
+    ScheduleResponse,
+)
 from .delivery_service import (
     apply_action,
     identifier,
@@ -83,7 +89,39 @@ def _snapshot(db, project, user):
             if "snapshot" in e.data
         ],
     )
+    from .delivery_scheduling import planning_basis
+
+    result["planning_basis"] = planning_basis(db, project, state)
     return result
+
+
+@router.get("/schedule", response_model=ScheduleResponse)
+def delivery_schedule(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    starts_on: CivilDate | None = None,
+    ends_on: CivilDate | None = None,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_scheduling import get_schedule
+
+    project = _project(db, user, project_id)
+    return get_schedule(db, project, _permissions(db, user, project), starts_on, ends_on)
+
+
+@router.post("/schedule-preview", response_model=SchedulePreviewResponse)
+def delivery_schedule_preview(
+    body: ScheduleChanges,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_scheduling import preview
+
+    project = _project(db, user, project_id)
+    if not _permissions(db, user, project)["write"]:
+        raise HTTPException(403, "Project write permission required")
+    return preview(db, project, body)
 
 
 @router.get("/workspace")
@@ -212,7 +250,7 @@ def task_plan_preview(
 
 
 def _command_permission(action, payload):
-    if action in {"member.save", "resource.save", "resource.archive"} or (
+    if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
         action == "project.update" and {"name", "description"} & payload.keys()
     ):
         return "configure"
@@ -332,6 +370,10 @@ def execute(
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action in {"tasks.schedule", "member.calendar.save"}:
+        from .delivery_scheduling import apply_scheduling
+
+        return apply_scheduling(db, project, data, action, payload)
     if action == "task.manual_review":
         from .delivery_manual_review import apply_review
 

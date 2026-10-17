@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / observation / baseline / reviews / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / schedule / schedule-preview / observation / baseline / reviews / targets / preview / command"
 )
 
 
@@ -79,6 +79,40 @@ def observation(
                 observation_id, scope=scope.value, scope_id=scope_id
             )
         _show_progress_record(result, json_out, "历史观测")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("schedule")
+def schedule(
+    starts_on: Annotated[str | None, typer.Option("--from", help="计划开始日期 YYYY-MM-DD")] = None,
+    ends_on: Annotated[str | None, typer.Option("--to", help="计划结束日期 YYYY-MM-DD，最多92天")] = None,
+    json_out: Annotated[bool, typer.Option("--json", help="保留明确单位、未知容量及规划依据")] = False,
+):
+    """读取当前项目日历、明确预留和依赖排期，不推算或改排任务。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_schedule(starts_on=starts_on, ends_on=ends_on)
+        _show_progress_record(result, json_out, "团队容量与排期")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("schedule-preview")
+def schedule_preview(
+    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+):
+    """校验固定 planning_basis 和显式 changes；预览不保存，提交使用 command。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict) or set(body) != {"planning_basis", "changes"}:
+            raise ValueError("需要 planning_basis 和 changes")
+        if not isinstance(body["changes"], list) or not 1 <= len(body["changes"]) <= 200:
+            raise ValueError("changes 必须包含1至200项明确任务编辑")
+        with get_client() as client:
+            console.print_json(data=client.delivery_schedule_preview(body))
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc

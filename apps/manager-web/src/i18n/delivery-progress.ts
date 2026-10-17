@@ -1,4 +1,7 @@
 const zh = {
+  noComparableChanges: "可比较的字段未发现变化。",
+  baselineReservationsUnknown:
+    "原基线未采集资源预留，无法比较该字段；这些任务不计入未变化数量。",
   title: "进度",
   subtitle: "以真实观测跟踪交付，保留计划与范围变化。",
   scope: "统计范围",
@@ -113,6 +116,7 @@ const zh = {
     "baseline.create": "冻结计划",
   },
   changeFields: {
+    allocations: "资源预留",
     title: "标题",
     req_id: "关联需求",
     sprint_id: "所属迭代",
@@ -128,6 +132,9 @@ const zh = {
   },
 };
 const en: typeof zh = {
+  noComparableChanges: "No changes were found in the comparable fields.",
+  baselineReservationsUnknown:
+    "Reservations were not captured in this baseline; this field cannot be compared, and these tasks are not counted as unchanged.",
   title: "Progress",
   subtitle: "Track observed delivery and preserve plan and scope changes.",
   scope: "Scope",
@@ -253,6 +260,7 @@ const en: typeof zh = {
     "baseline.create": "Frozen plan",
   },
   changeFields: {
+    allocations: "Resource reservations",
     title: "Title",
     req_id: "Requirement",
     sprint_id: "Sprint",
@@ -268,6 +276,9 @@ const en: typeof zh = {
   },
 };
 const ja: typeof zh = {
+  noComparableChanges: "比較可能な項目には変更がありません。",
+  baselineReservationsUnknown:
+    "元の基準には予約情報がなく、この項目を比較できません。該当タスクは変更なしの件数に含めません。",
   title: "進捗",
   subtitle: "実際の観測で納品を追跡し、計画と範囲の変更を残します。",
   scope: "集計範囲",
@@ -389,6 +400,7 @@ const ja: typeof zh = {
     "baseline.create": "計画凍結",
   },
   changeFields: {
+    allocations: "リソース予約",
     title: "タイトル",
     req_id: "関連要件",
     sprint_id: "スプリント",

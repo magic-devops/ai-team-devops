@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
@@ -42,26 +43,6 @@ def _date(value):
         except ValueError:
             pass
     return None
-
-
-def _execution_valid(entry, task, requirement):
-    if not entry or not requirement or entry.get("stale") is not False or entry.get("planning_invalidated"):
-        return False
-    if not entry.get("run_id") or not isinstance(entry.get("run_version"), int) or entry["run_version"] < 1:
-        return False
-    expected = {
-        "task_id": task["id"],
-        "title": task["title"],
-        "description": task["description"],
-        "assigned_to": task["assigned_to"],
-        "requirement_id": task["req_id"],
-        "requirement_title": requirement["title"],
-        "requirement_description": requirement["description"],
-        "acceptance_criteria": requirement["acceptance_criteria"],
-        "revision": requirement["flow"]["revision"],
-    }
-    snapshot = entry.get("snapshot") or {}
-    return all(key in snapshot and snapshot[key] == value for key, value in expected.items())
 
 
 def _accepted(requirement, tasks, issues):
@@ -110,32 +91,13 @@ def capture_facts(db, project):
         )
     by_requirement = {r["id"]: r for r in snapshot["requirements"]}
     canonical = {t.id: t for t in records(db, Task, project).all()}
-    latest = {entry["task_id"]: entry for entry in snapshot["executions"]}
     tasks = []
     for task in sorted(snapshot["tasks"], key=lambda t: t["id"]):
         requirement = by_requirement.get(task["req_id"])
         flow = requirement["flow"] if requirement else {}
         planning = task["planning"]
-        entry = latest.get(task["id"])
-        valid_execution = _execution_valid(entry, task, requirement)
         recorded_status = canonical[task["id"]].status
-        if (
-            task["status"] == "blocked"
-            or planning.get("blocked_reason")
-            or flow.get("blocked_reason")
-            or task.get("dependency_blocked")
-        ):
-            status = "blocked"
-        elif valid_execution and entry["status"] == "awaiting_review":
-            status = "awaiting_review"
-        elif recorded_status == "completed":
-            status = (
-                "verified_completed"
-                if task["status"] == "completed" and verification.verified(task["id"])
-                else "recorded_completed"
-            )
-        else:
-            status = "in_progress" if task["status"] == "in_progress" else "pending"
+        status = verification.delivery_status(task["id"])
         tasks.append(
             {
                 "id": task["id"],
@@ -148,6 +110,7 @@ def capture_facts(db, project):
                 "estimate": task.get("estimate") or None,
                 "starts_on": _date(planning.get("starts_on")),
                 "ends_on": _date(planning.get("ends_on")),
+                "allocations": deepcopy(planning.get("allocations", [])),
                 "basis": fact_basis(
                     {
                         "title": task["title"],

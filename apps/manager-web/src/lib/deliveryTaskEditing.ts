@@ -3,6 +3,7 @@ import { remapCriterionIndexes } from "./deliveryTaskPlan";
 export type TaskEditSession = {
   projectId: string;
   version: number;
+  planningBasis: string;
   task: DeliveryTask;
   criteria: string[];
 };
@@ -12,12 +13,15 @@ export function openTaskEdit(
 ): TaskEditSession {
   const task = workspace.tasks.find((item) => item.id === taskId);
   if (!task?.basis) throw new Error("Current task basis unavailable");
+  if (!workspace.planning_basis)
+    throw new Error("Current planning basis unavailable");
   const requirement = workspace.requirements.find(
     (item) => item.id === task.req_id,
   );
   return {
     projectId: workspace.project.id,
     version: workspace.version,
+    planningBasis: workspace.planning_basis,
     task: structuredClone(task),
     criteria: [...(requirement?.acceptance_criteria || [])],
   };
@@ -29,6 +33,7 @@ export function taskEditPayload(
   return {
     id: session.task.id,
     task_basis: session.task.basis,
+    planning_basis: session.planningBasis,
     description: values.description || "",
     acceptance_criteria: session.task.req_id
       ? ((values.acceptance_criteria || []) as string[]).map(Number)

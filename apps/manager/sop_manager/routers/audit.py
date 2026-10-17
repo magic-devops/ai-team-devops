@@ -117,6 +117,8 @@ def _audit_task_payload(row: AuditLog, body: AuditTaskIn) -> dict[str, Any]:
 
 # ── 审计中间件 ────────────────────────────────────────────────────
 _AUDIT_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
+# Scheduling previews use a body to describe a pure read, never a mutation.
+_READ_ONLY_REQUESTS = {("POST", "/api/v1/delivery/schedule-preview")}
 _SKIP_PREFIXES = (
     "/api/v1/health",
     "/metrics",
@@ -139,7 +141,8 @@ def _resource_from_path(path: str) -> tuple[str, str]:
 
 async def audit_middleware(request: Request, call_next):
     path = request.url.path
-    if request.method not in _AUDIT_METHODS or path.startswith(_SKIP_PREFIXES):
+    if (request.method not in _AUDIT_METHODS or path.startswith(_SKIP_PREFIXES)
+            or (request.method, path) in _READ_ONLY_REQUESTS):
         return await call_next(request)
 
     response: Response = await call_next(request)

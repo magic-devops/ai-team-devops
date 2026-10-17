@@ -9,6 +9,14 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .delivery_scheduling_contract import (
+    AllocationInput,
+    CalendarSave,
+    ScheduleChanges,
+    StoredAllocation,
+    civil_date,
+)
+
 STAGES = [
     {"id": "intake", "artifact": "", "route": "#/requirements/intake"},
     {"id": "product", "artifact": "prd", "route": "#/requirements"},
@@ -52,6 +60,8 @@ class Command(Input):
         "task.create",
         "task.update",
         "task.manual_review",
+        "tasks.schedule",
+        "member.calendar.save",
         "tasks.plan",
         "artifact.add",
         "stage.advance",
@@ -73,6 +83,7 @@ class Command(Input):
 class Dated(Input):
     starts_on: date | None = None
     ends_on: date | None = None
+    _civil_dates = field_validator("starts_on", "ends_on", mode="before")(civil_date)
 
     @model_validator(mode="after")
     def dates_in_order(self):
@@ -233,6 +244,7 @@ class ProgressTaskFact(BaseModel):
     basis: str
     status: ProgressTaskStatus
     recorded_status: str
+    allocations: list[StoredAllocation] | None = None
 
 
 class ProgressRequirementFact(BaseModel):
@@ -331,6 +343,8 @@ class ProgressComparison(BaseModel):
     removed: list[ProgressTaskFact]
     changed: list[ProgressTaskChange]
     unchanged_count: int
+    incomplete_plan_fields: list[str] = Field(default_factory=list)
+    incomplete_task_ids: list[str] = Field(default_factory=list)
 
 
 class ProgressIdealPoint(BaseModel):
@@ -382,7 +396,6 @@ class MemberEdit(Input):
     kind: Literal["agent", "tool"]
     role: str = Field(default="developer", max_length=80)
     tool: str = Field(default="", max_length=80)
-    capacity: int = Field(default=5, ge=1, le=100)
     active: bool = True
 
 
@@ -469,6 +482,8 @@ class TaskEdit(Dated):
     )
     depends_on: list[str] | None = Field(default=None, max_length=40)
     task_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    planning_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    allocations: list[AllocationInput] | None = Field(default=None, max_length=80)
 
     @field_validator("acceptance_criteria", "depends_on")
     @classmethod
@@ -484,6 +499,10 @@ class TaskEdit(Dated):
     def references_require_basis(self):
         if {"acceptance_criteria", "depends_on"} & self.model_fields_set and self.task_basis is None:
             raise ValueError("Reference edits require the current task basis")
+        if {"starts_on", "ends_on", "allocations"} & self.model_fields_set and self.planning_basis is None:
+            raise ValueError("Date and reservation edits require the current project planning basis")
+        if "allocations" in self.model_fields_set and self.allocations is None:
+            raise ValueError("Use an array, including [] to clear reservations")
         return self
 
 
@@ -692,6 +711,8 @@ class ExecutionReview(ExecutionSync):
 
 
 PAYLOADS = {
+    "tasks.schedule": ScheduleChanges,
+    "member.calendar.save": CalendarSave,
     "task.manual_review": TaskManualReview,
     "progress.record": ProgressRecord,
     "baseline.create": BaselineCreate,

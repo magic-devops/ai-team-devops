@@ -8,6 +8,7 @@ import {
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressDetails";
 import { progressChartOptions } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProgressCharts";
 import { progressTranslations } from "../i18n/delivery-progress";
+import { schedulingTranslations } from "../i18n/delivery-scheduling";
 import type {
   DeliveryProgress,
   ProgressObservation,
@@ -24,7 +25,9 @@ function translate(key: string, options?: Record<string, unknown>): string {
         current && typeof current === "object"
           ? (current as Record<string, unknown>)[part]
           : undefined,
-      progressTranslations[language],
+      key.startsWith("deliverySchedule.")
+        ? schedulingTranslations[language]
+        : progressTranslations[language],
     );
   return String(value ?? options?.defaultValue ?? key).replace(
     /\{\{(\w+)\}\}/g,
@@ -60,6 +63,7 @@ const metrics: ProgressMetrics = {
   },
 };
 const task = {
+  allocations: null,
   id: "present",
   req_id: "req",
   title: "Historical task title",
@@ -119,6 +123,44 @@ const progress = {
 } as unknown as DeliveryProgress;
 
 describe("real progress presentation", () => {
+  it("renders frozen reservation changes with units and reports uncaptured baseline fields", () => {
+    language = "en-US";
+    const allocation = {
+      member_id: "tool",
+      starts_on: "2026-10-19",
+      ends_on: "2026-10-20",
+      quantity_per_day: 2,
+      weekdays: [0, 1],
+      unit: "slots" as const,
+    };
+    const html = renderToStaticMarkup(
+      createElement(DeliveryProgressComparison, {
+        comparison: {
+          added: [],
+          removed: [],
+          changed: [
+            {
+              id: "present",
+              before: { ...task, allocations: [] },
+              after: { ...task, allocations: [allocation] },
+              fields: ["allocations"],
+            },
+          ],
+          unchanged_count: 0,
+          incomplete_plan_fields: ["allocations"],
+          incomplete_task_ids: ["old-task"],
+        } as unknown as Parameters<
+          typeof DeliveryProgressComparison
+        >[0]["comparison"],
+        currentTasks: [{ id: "present", req_id: "req" }],
+        onOpenTask: () => {},
+      }),
+    );
+    expect(html).toContain("slots / day");
+    expect(html).toContain("2026-10-19");
+    expect(html).toContain("Reservations were not captured in this baseline");
+    expect(html).not.toContain("[object Object]");
+  });
   it("provides keyboard buttons only for actual observations and labels missing versus future dates", () => {
     const html = renderToStaticMarkup(
       createElement(DeliveryProgressHistory, {
@@ -212,6 +254,8 @@ describe("real progress presentation", () => {
             },
           ],
           unchanged_count: 1,
+          incomplete_plan_fields: [],
+          incomplete_task_ids: [],
         },
         currentTasks: [{ id: "present", req_id: "req" }],
         onOpenTask: () => {},
@@ -223,6 +267,24 @@ describe("real progress presentation", () => {
     expect(html).toContain("When frozen");
     expect(html).toContain("Changed fields");
     expect(html.match(/Open current task/g)).toHaveLength(1);
+  });
+  it("does not claim unchanged scope when original reservation facts were not collected", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeliveryProgressComparison, {
+        comparison: {
+          added: [],
+          removed: [],
+          changed: [],
+          unchanged_count: 0,
+          incomplete_plan_fields: ["allocations"],
+          incomplete_task_ids: [task.id],
+        },
+        currentTasks: [],
+        onOpenTask: () => {},
+      }),
+    );
+    expect(html).toContain("No changes were found in the comparable fields.");
+    expect(html).not.toContain("The current scope matches the frozen plan.");
   });
   it("has the same localized vocabulary and no technical translation keys in any supported language", () => {
     const keys = (value: object): string[] =>
@@ -285,6 +347,8 @@ describe("real progress presentation", () => {
             },
           ],
           unchanged_count: 0,
+          incomplete_plan_fields: [],
+          incomplete_task_ids: [],
         },
         currentTasks: [{ id: task.id, req_id: "req" }],
         onOpenTask: () => {},

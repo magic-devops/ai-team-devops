@@ -20,7 +20,6 @@ export type DeliveryMember = {
   kind: "human" | "agent" | "tool";
   role: string;
   tool: string;
-  capacity: number;
   active: boolean;
 };
 export type DeliveryEvidence = {
@@ -208,6 +207,7 @@ export function fetchDeliveryInbox(
   });
 }
 export type DeliveryWorkspace = {
+  planning_basis: string;
   version: number;
   project: {
     id: string;
@@ -272,6 +272,8 @@ export type DeliveryAction =
   | "task.create"
   | "task.update"
   | "task.manual_review"
+  | "member.calendar.save"
+  | "tasks.schedule"
   | "tasks.plan"
   | "artifact.add"
   | "stage.advance"

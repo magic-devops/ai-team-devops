@@ -32,6 +32,7 @@ def initial_state():
         "flows": {},
         "task_owners": {},
         "task_details": {},
+        "member_calendars": {},
     }
 
 
@@ -61,7 +62,6 @@ def members(db, project, data, user):
         )
         .filter(
             User.tenant_id == project.tenant_id,
-            User.status == "active",
             or_(ProjectMember.project_id == project.id, User.role.in_(["tenant_admin", "super_admin"])),
         )
         .order_by(User.id)
@@ -74,12 +74,14 @@ def members(db, project, data, user):
             "kind": "human",
             "role": role or u.role,
             "tool": "",
-            "capacity": 5,
-            "active": True,
+            "active": u.status == "active",
         }
         for u, role in people
     ]
-    return result + data["members"]
+    return result + [
+        {key: member[key] for key in ("id", "name", "kind", "role", "tool", "active")}
+        for member in data["members"]
+    ]
 
 
 def validate_owner(owner, roster):
@@ -359,6 +361,13 @@ def _save_entry(data, action, body, roster, values):
         validate_owner(body.owner_id, roster)
     if body.id and not any(x["id"] == body.id for x in data[collection]):
         raise HTTPException(404, "Entry not found")
+    if collection == "members" and body.id:
+        previous = next(x for x in data[collection] if x["id"] == body.id)
+        if previous["kind"] != body.kind:
+            raise HTTPException(
+                409,
+                {"code": "member_kind_immutable", "message": "Resource kind cannot change after creation"},
+            )
     resource_id = body.id or identifier("member" if collection == "members" else "milestone")
     values["id"] = resource_id
     data[collection] = [x for x in data[collection] if x["id"] != resource_id] + [values]
@@ -390,6 +399,37 @@ def _update_requirement(db, project, data, body, roster, values):
     return resource_id, before
 
 
+def _edit_task_planning(db, project, data, body, roster):
+    scheduling = bool({"starts_on", "ends_on", "allocations"} & body.model_fields_set)
+    if scheduling:
+        from .delivery_scheduling import require_basis
+
+        require_basis(db, project, data, body.planning_basis)
+    changes = body.model_dump(mode="json", exclude_unset=True)
+    planning = data.setdefault("task_details", {}).setdefault(body.id, {})
+    blocked_before = planning.get("blocked_reason") or ""
+    if "starts_on" in changes or "ends_on" in changes:
+        start = changes.get("starts_on", planning.get("starts_on"))
+        end = changes.get("ends_on", planning.get("ends_on"))
+        planning.update(starts_on=start, ends_on=end)
+    if "allocations" in changes:
+        from .delivery_scheduling import normalize_allocations
+
+        planning["allocations"] = normalize_allocations(body.allocations, roster)
+    if "blocked_reason" in changes:
+        planning["blocked_reason"] = body.blocked_reason or ""
+    return planning, scheduling, blocked_before
+
+
+def _require_task_transition(db, project, data, row, body):
+    if body.status in {"in_progress", "completed"}:
+        from .delivery_plan import require_dependencies
+
+        require_dependencies(db, project, data, row.id)
+    if body.status == "completed" and any(e["task_id"] == row.id for e in data.get("executions", [])):
+        raise HTTPException(409, "Complete managed executions through evidence review")
+
+
 def _update_task(db, project, data, body, roster):
     from .delivery_plan import edit_task_links
 
@@ -406,24 +446,26 @@ def _update_task(db, project, data, body, roster):
                 },
             )
     before = serialize(row)
-    changes = body.model_dump(mode="json", exclude_unset=True)
-    planning = data.setdefault("task_details", {}).setdefault(row.id, {})
-    if "starts_on" in changes or "ends_on" in changes:
-        start = changes.get("starts_on", planning.get("starts_on"))
-        end = changes.get("ends_on", planning.get("ends_on"))
-        planning.update(starts_on=start, ends_on=end)
-    if "blocked_reason" in changes:
-        planning["blocked_reason"] = body.blocked_reason or ""
+    planning, scheduling, blocked_before = _edit_task_planning(db, project, data, body, roster)
     links_changed = edit_task_links(db, project, data, row, body)
-    if body.status in {"in_progress", "completed"}:
-        from .delivery_plan import require_dependencies
+    if scheduling:
+        from .delivery_scheduling import validate_final
 
-        require_dependencies(db, project, data, row.id)
-    if body.status == "completed" and any(e["task_id"] == row.id for e in data.get("executions", [])):
-        raise HTTPException(409, "Complete managed executions through evidence review")
+        validate_final(db, project, data, data["task_details"], [row.id])
+    _require_task_transition(db, project, data, row, body)
     resource_id = row.id
     flow = data["flows"].get(row.req_id, {})
-    if flow.get("stage") in {"release", "operations"}:
+    business_change = links_changed or (
+        body.owner_id is not None
+        and body.owner_id != data.get("task_owners", {}).get(row.id, "")
+        or body.status is not None
+        and body.status != before["status"]
+        or body.description is not None
+        and body.description != before["description"]
+        or body.blocked_reason is not None
+        and body.blocked_reason != blocked_before
+    )
+    if flow.get("stage") in {"release", "operations"} and business_change:
         raise HTTPException(409, "Reopen the requirement before changing accepted work")
     if body.owner_id is not None:
         row.assigned_to = validate_owner(body.owner_id, roster)

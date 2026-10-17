@@ -587,6 +587,7 @@ export function DeliveryProgress({
               )}
               {data.comparison && (
                 <DeliveryProgressComparison
+                  members={workspace.members}
                   comparison={data.comparison}
                   currentTasks={workspace.tasks}
                   onOpenTask={openCurrentTask}

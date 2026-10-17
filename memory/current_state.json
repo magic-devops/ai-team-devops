@@ -6,7 +6,7 @@
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "manual_review_and_canonical_dependencies_verified",
+    "status": "team_calendar_reservations_dependency_scheduling_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,23 +15,26 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/manual-task-review/",
-    "verification_status": "verified_local_stage",
-    "next_step": "team_capacity_calendar_dependency_timeline_and_project_portfolio",
+    "evidence": ".sop-runtime/delivery-evidence/team-scheduling/",
+    "verification_status": "verified",
+    "next_step": "project_portfolio_archive_and_team_governance_then_quality_release_operations",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "manager": 479,
-      "web": 281,
-      "sdk_cli_targeted": 40,
+      "manager": 547,
+      "web": 304,
+      "web_files": 49,
+      "sdk_cli_targeted": 55,
       "typescript": "passed",
       "production_build": "passed",
-      "actual_http_browser": "passed"
+      "actual_http_browser": "passed",
+      "review_p2_fixed": 2
     },
     "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
     "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
-    "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers"
+    "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
+    "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md"
   },
   "tasks": {
     "completed": [
