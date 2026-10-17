@@ -30,6 +30,8 @@ export type IssueEvidenceTarget = {
   requirement_id?: string;
   task_id?: string;
   execution_id?: string;
+  node_id?: string;
+  attempt?: number | null;
   deployment_id?: string;
   issue_id?: string;
 };
@@ -444,6 +446,13 @@ export function issueEvidenceHref(
   } else if (target.execution_id) {
     params.set("view", "list");
     params.set("execution_id", target.execution_id);
+    if (target.node_id) {
+      if (!Number.isSafeInteger(target.attempt) || Number(target.attempt) < 1)
+        return null;
+      params.set("execution_node", target.node_id);
+      params.set("execution_attempt", String(target.attempt));
+      params.set("execution_stream", "stdout");
+    }
   } else if (target.requirement_id) {
     params.set("view", "list");
     params.set("requirement", target.requirement_id);

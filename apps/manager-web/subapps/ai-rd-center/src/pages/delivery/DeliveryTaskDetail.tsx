@@ -18,6 +18,7 @@ import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import "./task-acceptance.css";
 import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 
 type TaskContentProps = {
   workspace?: DeliveryWorkspace;
@@ -25,12 +26,14 @@ type TaskContentProps = {
   taskId: string;
   sessionId?: string;
   canEdit: boolean;
+  executionBlocked?: boolean;
   onSaved: (workspace: DeliveryWorkspace) => void;
   onEditingChange: (editing: boolean) => void;
   onCommand?: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) => Promise<void>;
+  onUnresolvedChange?: (value: boolean) => void;
 };
 export function TaskDetailContent({
   workspace,
@@ -38,13 +41,16 @@ export function TaskDetailContent({
   taskId,
   sessionId = "",
   canEdit,
+  executionBlocked = false,
   onSaved,
   onEditingChange,
   onCommand,
+  onUnresolvedChange,
 }: TaskContentProps) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
   const data = pinnedWorkspace || workspace;
+  const editable = canEdit && !executionBlocked;
   const task = data?.tasks.find((item) => item.id === taskId);
   if (!data) return null;
   if (!task)
@@ -57,7 +63,9 @@ export function TaskDetailContent({
     );
   const requirement = data.requirements.find((item) => item.id === task.req_id);
   const owner = data.members.find((member) => member.id === task.owner_id);
-  const unavailableOwner = Boolean(task.owner_id && (!owner?.active || owner.kind === "tool"));
+  const unavailableOwner = Boolean(
+    task.owner_id && (!owner?.active || owner.kind === "tool"),
+  );
   const native = Boolean(
     task.execution_id ||
     data.executions?.some((entry) => entry.task_id === task.id),
@@ -68,13 +76,14 @@ export function TaskDetailContent({
   );
   const execution = (
     <DeliveryExecutionPanel
-      disabled={!canEdit}
+      disabled={!editable}
       data={data}
       task={task}
       sessionId={sessionId}
       onCommand={command}
       onSaved={onSaved}
       onEditingChange={onEditingChange}
+      onUnresolvedChange={onUnresolvedChange}
     />
   );
   return (
@@ -115,11 +124,13 @@ export function TaskDetailContent({
             label={`${tr("owner")} ${task.title}`}
             value={task.owner_id}
             members={data.members}
-            disabled={!canEdit || !onCommand || stageLocked || !task.basis}
+            disabled={!editable || !onCommand || stageLocked || !task.basis}
             onChange={(owner_id) =>
-              void command("task.update", { id: task.id, owner_id, task_basis: task.basis }).catch(
-                () => {},
-              )
+              void command("task.update", {
+                id: task.id,
+                owner_id,
+                task_basis: task.basis,
+              }).catch(() => {})
             }
           />
         </label>
@@ -128,7 +139,7 @@ export function TaskDetailContent({
           <Select
             aria-label={`${tr("recordStatus")} ${task.title}`}
             value={task.recorded_status ?? task.status}
-            disabled={!canEdit || !onCommand || stageLocked}
+            disabled={!editable || !onCommand || stageLocked}
             options={["pending", "in_progress", "blocked", "completed"].map(
               (value) => ({
                 value,
@@ -151,7 +162,11 @@ export function TaskDetailContent({
           />
         </label>
       </div>
-      {unavailableOwner && <p className="runtime-help" role="status">{t("deliveryTeam.unavailableOwner")}</p>}
+      {unavailableOwner && (
+        <p className="runtime-help" role="status">
+          {t("deliveryTeam.unavailableOwner")}
+        </p>
+      )}
       <p className="runtime-help">{tr("executionOwner")}</p>
       <TaskAcceptanceFacts acceptance={task.acceptance} />
       <DeliveryTaskPlanMaintenance
@@ -161,7 +176,7 @@ export function TaskDetailContent({
           location.hash = manualTaskHref(dependency);
         }}
         onSaved={onSaved}
-        canEdit={canEdit && !stageLocked}
+        canEdit={editable && !stageLocked}
         onEditingChange={onEditingChange}
       />
       {!native && execution}
@@ -204,14 +219,19 @@ export function DeliveryTaskDetail({
   projectId,
   sessionId,
   taskId,
+  onUnresolvedChange,
 }: {
   projectId: string;
   sessionId: string;
   taskId: string;
+  onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const executionExit = useExecutionExitGuard();
   const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryWorkspace>();
+  const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
+    useState<DeliveryWorkspace>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const latestWorkspace = useRef<DeliveryWorkspace>();
@@ -249,7 +269,7 @@ export function DeliveryTaskDetail({
     payload: Record<string, unknown>,
   ) {
     const current = qc.getQueryData<DeliveryWorkspace>(key);
-    if (!current || busy || query.isError)
+    if (!current || busy || query.isError || executionExit.pending)
       throw new Error(t("deliveryTaskAcceptance.readonly"));
     const signature = JSON.stringify([action, payload, current.version]);
     if (intent.current?.signature !== signature)
@@ -290,9 +310,16 @@ export function DeliveryTaskDetail({
         />
       )}
       {error && <Alert type="error" role="alert" title={error} />}
+      {executionExit.blocked && (
+        <Alert
+          type="warning"
+          role="status"
+          title={t("deliveryExecutionRuntime.pendingNavigation")}
+        />
+      )}
       <TaskDetailContent
         workspace={query.data}
-        pinnedWorkspace={pinnedWorkspace}
+        pinnedWorkspace={executionPinnedWorkspace || pinnedWorkspace}
         taskId={taskId}
         sessionId={sessionId}
         onSaved={saved}
@@ -301,8 +328,19 @@ export function DeliveryTaskDetail({
           !query.isError &&
           !busy
         }
+        executionBlocked={executionExit.pending}
         onEditingChange={editingChanged}
         onCommand={command}
+        onUnresolvedChange={(value) => {
+          const pending = executionExit.setPending(taskId, value);
+          const latest = latestWorkspace.current;
+          if (pending && latest)
+            setExecutionPinnedWorkspace(
+              (previous) => previous || structuredClone(latest),
+            );
+          else if (!pending) setExecutionPinnedWorkspace(undefined);
+          onUnresolvedChange?.(pending);
+        }}
       />
     </div>
   );

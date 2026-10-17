@@ -13,6 +13,7 @@ import { progressTranslations } from "./i18n/delivery-progress";
 import { manualReviewTranslations } from "./i18n/delivery-manual-review";
 import { taskAcceptanceTranslations } from "./i18n/task-acceptance";
 import { runtimeTranslations } from "./i18n/delivery-runtime";
+import { executionRuntimeTranslations } from "./i18n/delivery-execution-runtime";
 import { schedulingTranslations } from "./i18n/delivery-scheduling";
 import { teamIdentityTranslations } from "./i18n/delivery-team";
 import { teamRuntimeTranslations } from "./i18n/delivery-team-runtime";
@@ -73,6 +74,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["zh-CN"],
           deliverySchedule: schedulingTranslations["zh-CN"],
           deliveryRuntime: runtimeTranslations["zh-CN"],
+          deliveryExecutionRuntime: executionRuntimeTranslations["zh-CN"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["zh-CN"],
           deliveryTeam: teamIdentityTranslations["zh-CN"],
           deliveryTeamRuntime: teamRuntimeTranslations["zh-CN"],
@@ -106,6 +108,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["en-US"],
           deliverySchedule: schedulingTranslations["en-US"],
           deliveryRuntime: runtimeTranslations["en-US"],
+          deliveryExecutionRuntime: executionRuntimeTranslations["en-US"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["en-US"],
           deliveryTeam: teamIdentityTranslations["en-US"],
           deliveryTeamRuntime: teamRuntimeTranslations["en-US"],
@@ -139,6 +142,7 @@ i18n
           deliveryManualReview: manualReviewTranslations["ja-JP"],
           deliverySchedule: schedulingTranslations["ja-JP"],
           deliveryRuntime: runtimeTranslations["ja-JP"],
+          deliveryExecutionRuntime: executionRuntimeTranslations["ja-JP"],
           deliveryTaskAcceptance: taskAcceptanceTranslations["ja-JP"],
           deliveryTeam: teamIdentityTranslations["ja-JP"],
           deliveryTeamRuntime: teamRuntimeTranslations["ja-JP"],

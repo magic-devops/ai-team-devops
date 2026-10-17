@@ -82,6 +82,56 @@ const session = () => ({
   commands: [commandDraft("tests", "python")],
 });
 describe("dispatch basis and observation transport", () => {
+  it("inserts one pure local approval before commands and never counts it as a test", () => {
+    const draft = {
+      ...session(),
+      mode: "command" as const,
+      target: structuredClone(targets.workspaces[0].local),
+      approvalBeforeRun: true,
+    };
+    const payload = executionPayload(draft);
+    expect(payload.nodes[0]).toMatchObject({
+      id: "confirm_before_run",
+      kind: "approval",
+      argv: [],
+      agent_id: "",
+      prompt: "",
+    });
+    expect(payload.nodes[1]).toMatchObject({
+      id: "tests",
+      kind: "command",
+      argv: ["python"],
+    });
+    expect(payload.test_node_ids).toEqual(["tests"]);
+    expect(
+      executionPayload(prepareExecution(draft).session).nodes.filter(
+        (node) => node.kind === "approval",
+      ),
+    ).toHaveLength(1);
+  });
+  it("refuses a local-only approval on a remote target", () => {
+    expect(() =>
+      executionPayload({
+        ...session(),
+        mode: "command",
+        approvalBeforeRun: true,
+      }),
+    ).toThrow("target_approval_unsupported");
+  });
+  it("keeps a confirmation node distinct from a user command with the same preferred ID", () => {
+    const payload = executionPayload({
+      ...session(),
+      mode: "command",
+      target: structuredClone(targets.workspaces[0].local),
+      commands: [commandDraft("confirm_before_run", "python")],
+      approvalBeforeRun: true,
+    });
+    expect(payload.nodes.map((node) => node.id)).toEqual([
+      "confirm_before_run_2",
+      "confirm_before_run",
+    ]);
+    expect(payload.test_node_ids).toEqual(["confirm_before_run"]);
+  });
   it("does not adopt a latest task that the server marks ineligible for dispatch", () => {
     expect(() =>
       adoptExecutionDraft(

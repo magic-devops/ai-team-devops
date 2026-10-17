@@ -233,64 +233,51 @@ def _bound_result_for_outbox(result: dict) -> dict:
 
 def _run_agentd_command(agentd: str, root: Path, task: dict, node: dict, server: str, credential: dict) -> dict:
     argv, timeout_seconds = _validate_node(node)
-    request = json.dumps({"argv": argv, "timeout_seconds": timeout_seconds})
-    started = time.monotonic()
-    heartbeat_at = started
-    proc = subprocess.Popen(  # noqa: S603
-        [agentd, "run-tool", "--root", str(root)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
-        start_new_session=os.name != "nt",
-    )
-    try:
-        assert proc.stdin is not None
-        proc.stdin.write(request)
-        proc.stdin.close()
-        proc.stdin = None
-        while True:
-            if time.monotonic() - started > timeout_seconds + 10:
-                raise WorkerError("agentd did not return within the node time budget")
-            if time.monotonic() - heartbeat_at >= 2:
-                presence = task.get("_worker_presence")
-                if presence:
-                    _request_json(server, "/api/hermes/v1/remote/presence", {
-                        **presence, "idempotency_key": "presence:" + uuid.uuid4().hex,
-                    }, credential, timeout=10)
-                _request_json(server, "/api/hermes/v1/remote/heartbeat", {
-                    "run_id": task["run_id"],
-                    "owner": task["owner"],
-                    "idempotency_key": f"heartbeat:{task['owner']}:{int(time.time())}",
-                }, credential, timeout=10)
-                heartbeat_at = time.monotonic()
-            try:
-                stdout, stderr = proc.communicate(timeout=0.25)
-                break
-            except subprocess.TimeoutExpired:
-                continue
-        try:
-            result = json.loads(stdout)
-        except ValueError:
-            result = {"ok": False, "exit_code": -1, "stdout": stdout[-LOG_LIMIT_BYTES:],
-                      "stderr": (stderr or "agentd returned invalid JSON")[-LOG_LIMIT_BYTES:],
-                      "error": "agentd_protocol"}
-        if not isinstance(result, dict):
-            result = {"ok": False, "exit_code": -1, "stdout": "", "stderr": "agentd returned non-object JSON",
-                      "error": "agentd_protocol"}
-        result.setdefault("stdout", "")
-        result.setdefault("stderr", stderr or "")
-        expected = node.get("expected_exit_code", 0)
-        if type(expected) is int and expected > 0 and result.get("exit_code") == expected and not result.get("error"):
-            # agentd reports process exit success; a command test can explicitly expect a nonzero exit.
-            result["ok"] = True
-        return _bound_result_for_outbox(result)
-    except Exception:
-        _terminate(proc)
-        raise
-    finally:
-        _terminate(proc)
+    from .stream_runner import run_stream
+    heartbeat_at = time.monotonic()
+    stop_request_id = None
+    outbox, record = task.get("_outbox"), task.get("_record")
+    uploads_available = True
+
+    def control():
+        nonlocal heartbeat_at, stop_request_id
+        if stop_request_id:
+            return stop_request_id
+        if time.monotonic() - heartbeat_at < 2:
+            return None
+        presence = task.get("_worker_presence")
+        if presence:
+            _request_json(server, "/api/hermes/v1/remote/presence", {
+                **presence, "idempotency_key": "presence:" + uuid.uuid4().hex,
+            }, credential, timeout=5)
+        response = _request_json(server, "/api/hermes/v1/remote/heartbeat", {
+            "run_id": task["run_id"], "owner": task["owner"],
+            "idempotency_key": "heartbeat:" + uuid.uuid4().hex,
+        }, credential, timeout=5)
+        heartbeat_at = time.monotonic()
+        stop = (response.get("items") or [{}])[0].get("stop_request")
+        if stop:
+            stop_request_id = stop["id"]
+        return stop_request_id
+
+    def output(event):
+        nonlocal uploads_available
+        if outbox is None:
+            return
+        batch = outbox.save_events(record, [event])
+        if uploads_available:
+            uploads_available = _upload_technical(server, credential, outbox, batch)
+
+    result = run_stream(agentd, root, argv, timeout_seconds, on_output=output, control=control,
+                        known_secrets=(credential.get("credential"),))
+    if stop_request_id:
+        result["_stop_request_id"] = stop_request_id
+    expected = node.get("expected_exit_code", 0)
+    if type(expected) is int and expected > 0 and result.get("exit_code") == expected and not result.get("error"):
+        result["ok"] = True
+    internal = {key: value for key, value in result.items() if key.startswith("_")}
+    return {**_bound_result_for_outbox(result), **internal,
+            **{key: result[key] for key in ("process_tree_stopped", "wait_completed", "output_eof", "backend") if key in result}}
 
 
 def _agent_failure(message: str, *, provider: str = "") -> dict:
@@ -371,7 +358,8 @@ def _run_agent_task(agentd: str, root: Path, task: dict, server: str, credential
     result["ok"] = command_ok and provider_ok
     if not provider_ok and not result.get("error"):
         result["error"] = str(evidence.get("error") or "Agent did not produce a successful terminal provider event")
-    return _bound_result_for_outbox(result)
+    return {**_bound_result_for_outbox(result), **{key: value for key, value in result.items()
+        if key.startswith("_") or key in {"process_tree_stopped", "wait_completed", "output_eof", "backend"}}}
 
 
 def _execute_task(agentd: str, root: Path, task: dict, server: str, credential: dict) -> dict:
@@ -405,6 +393,38 @@ def pair_device(args: argparse.Namespace) -> int:
     return 0
 
 
+def _upload_technical(server, credential, outbox, record):
+    if not outbox.validate_record_binding(record):
+        outbox.quarantine(record, "Credential binding changed")
+        raise WorkerError("Outbox credential binding changed")
+    kind = record["kind"]
+    body = {"run_id": record["run_id"], "owner": record["owner"], "node_id": record["node_id"],
+            "attempt": record.get("attempt", 1), "idempotency_key": record["result_idempotency_key"], **record["result"]}
+    path = "/api/hermes/v1/remote/events" if kind == "output" else "/api/hermes/v1/remote/stop-ack"
+    try:
+        response = _request_json(server, path, body, credential, timeout=5)
+    except RemoteRequestError as exc:
+        if exc.retryable:
+            outbox.mark_retryable(record, str(exc), exc.status_code)
+            return False
+        outbox.quarantine(record, str(exc), exc.status_code)
+        raise
+    flag = "events_recorded" if kind == "output" else "stop_recorded"
+    items = response.get("items")
+    valid = (isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict))
+    if valid and kind == "output":
+        valid = (items[0].get("last_source_seq") == record["result"]["events"][-1]["source_seq"]
+                 and items[0].get("count") == len(record["result"]["events"])
+                 and type(items[0].get("cursor")) is int)
+    elif valid:
+        valid = items[0].get("id") == record["run_id"]
+    if response.get("ok") is not True or response.get("summary", {}).get(flag) is not True or not valid:
+        outbox.mark_retryable(record, "Malformed technical acknowledgement", 200)
+        return False
+    outbox.acknowledge(record, response)
+    return True
+
+
 def _upload_result(args: argparse.Namespace, credential: dict, outbox: RemoteOutbox, record: dict) -> bool:
     if not outbox.validate_record_binding(record):
         outbox.quarantine(record, "Outbox record credential binding does not match current credential")
@@ -421,6 +441,10 @@ def _upload_result(args: argparse.Namespace, credential: dict, outbox: RemoteOut
         if exc.retryable:
             outbox.mark_retryable(record, str(exc), exc.status_code)
             return False
+        if exc.status_code == 409:
+            recovered = _recover_pending_result_stop(args, credential, outbox, record)
+            if recovered is not None:
+                return recovered
         outbox.quarantine(record, str(exc), exc.status_code)
         raise WorkerError(f"Remote result was permanently rejected: {exc}") from exc
     items = response.get("items") if isinstance(response, dict) else None
@@ -435,15 +459,80 @@ def _upload_result(args: argparse.Namespace, credential: dict, outbox: RemoteOut
     return True
 
 
+def _recover_pending_result_stop(args, credential, outbox, record):
+    """Convert only the original durable physical proof, never rerun a node."""
+    result = record["result"]
+    if not all(result.get(key) is True for key in ("process_tree_stopped", "wait_completed", "output_eof")):
+        return None
+    for batch in sorted(outbox.assignment_output_records(record), key=lambda entry: entry["result"]["events"][0]["source_seq"]):
+        if batch["state"] == "pending" and not _upload_technical(args.server, credential, outbox, batch):
+            return False
+        if batch["state"] not in {"pending", "acknowledged"}:
+            return None
+    try:
+        response = _request_json(args.server, "/api/hermes/v1/remote/heartbeat", {
+            "run_id": record["run_id"], "owner": record["owner"],
+            "idempotency_key": "stop-discovery:" + uuid.uuid4().hex,
+        }, credential)
+    except RemoteRequestError as exc:
+        if exc.retryable:
+            outbox.mark_retryable(record, str(exc), exc.status_code)
+            return False
+        return None
+    items = response.get("items") if isinstance(response, dict) else None
+    if (not isinstance(response, dict) or response.get("ok") is not True or not isinstance(items, list)
+            or len(items) != 1 or not isinstance(items[0], dict) or items[0].get("run_id") != record["run_id"]):
+        outbox.mark_retryable(record, "Malformed original-assignment stop discovery", 200)
+        return False
+    stop = items[0].get("stop_request")
+    attempt = record.get("task", {}).get("attempt", record.get("attempt", 1))
+    if (not isinstance(stop, dict) or not stop.get("id") or stop.get("node_id") != record["node_id"]
+            or stop.get("attempt") != attempt or stop.get("state") not in {"requested", "unknown", "confirmed"}):
+        return None
+    # This is independently fsynced before upload. Reopening the outbox preserves
+    # the exact ACK body/key even if the first response was lost after commit.
+    receipt = outbox.save_stop(record, stop["id"], result)
+    if receipt["state"] == "quarantined":
+        return None
+    if receipt["state"] != "acknowledged" and not _upload_technical(args.server, credential, outbox, receipt):
+        return False
+    outbox.acknowledge(record, {"items": [{"id": record["run_id"]}], "summary": {"stop_recorded": True}})
+    return True
+
+
 def flush_pending(args: argparse.Namespace, credential: dict, outbox: RemoteOutbox) -> tuple[int, int]:
     acknowledged = 0
     retryable = 0
     for record in outbox.pending_records():
-        if _upload_result(args, credential, outbox, record):
+        uploaded = (_upload_technical(args.server, credential, outbox, record) if record.get("kind") in {"output", "stop"}
+                    else _upload_result(args, credential, outbox, record))
+        if uploaded:
             acknowledged += 1
         else:
             retryable += 1
+            break
     return acknowledged, retryable
+
+
+def _recover_local_terminal(args, credential, outbox, record):
+    result = record["local_terminal"]
+    if not all(result.get(key) is True for key in ("process_tree_stopped", "wait_completed", "output_eof")):
+        raise WorkerError("Local terminal evidence does not prove the process tree stopped")
+    request_id = result.get("_stop_request_id")
+    if not request_id:
+        response = _request_json(args.server, "/api/hermes/v1/remote/heartbeat", {
+            "run_id": record["run_id"], "owner": record["owner"], "idempotency_key": "stop-discovery:" + uuid.uuid4().hex,
+        }, credential)
+        request_id = ((response.get("items") or [{}])[0].get("stop_request") or {}).get("id")
+    if request_id:
+        outbox.save_stop(record, request_id, result)
+        outbox.save({**record, "state": "acknowledged", "result": {"stopped_locally": True}, "updated_at": time.time()})
+    else:
+        # Controller connectivity loss stopped this still-owned node. Report its
+        # failure with physical evidence rather than silently resuming work.
+        terminal = {key: value for key, value in result.items() if not key.startswith("_")}
+        terminal.update(ok=False, error="Execution controller disconnected; process tree stopped")
+        outbox.save_result(record, terminal)
 
 
 def _block_unknown_executing(outbox: RemoteOutbox) -> None:
@@ -454,6 +543,9 @@ def _block_unknown_executing(outbox: RemoteOutbox) -> None:
 
 def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[str, Path],
              agentd: str, outbox: RemoteOutbox) -> bool:
+    for executing in outbox.executing_records():
+        if executing.get("local_terminal"):
+            _recover_local_terminal(args, credential, outbox, executing)
     acknowledged, retryable = flush_pending(args, credential, outbox)
     if retryable:
         raise RemoteRequestError("Pending remote result upload is retryable")
@@ -482,10 +574,16 @@ def run_once(args: argparse.Namespace, credential: dict, workspace_roots: dict[s
     if root is None:
         raise WorkerError(f"No local root mapping for workspace {workspace_id}")
     record = outbox.journal_claim(task, claim_idempotency_key=claim_idempotency_key)
-    result = _execute_task(agentd, root, task, args.server, credential)
-    record = outbox.save_result(record, result)
-    if not _upload_result(args, credential, outbox, record):
-        raise RemoteRequestError("Pending remote result upload is retryable")
+    result = _execute_task(agentd, root, {**task, "_outbox": outbox, "_record": record}, args.server, credential)
+    if result.get("_controller_cancelled"):
+        record = {**record, "local_terminal": result, "updated_at": time.time()}
+        outbox.save(record)
+        _recover_local_terminal(args, credential, outbox, record)
+    else:
+        record = outbox.save_result(record, {key: value for key, value in result.items() if not key.startswith("_")})
+    _, retryable = flush_pending(args, credential, outbox)
+    if retryable:
+        raise RemoteRequestError("Pending remote evidence upload is retryable")
     return True
 
 

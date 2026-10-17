@@ -150,6 +150,10 @@ def project_facts(db, project, data=None, *, as_of=None):
         }
     )
     intents = [entry for entry in effective.get("executions", []) if entry["status"] not in CLOSED]
+    from .delivery_execution_runtime import unresolved_stop_targets
+
+    unresolved_stops = unresolved_stop_targets(db, project, effective)
+    execution_ids = {entry["id"] for entry in intents} | {item["target"]["execution_id"] for item in unresolved_stops}
     from .delivery_deployment import active_deployment_ids
 
     deployment_ids = active_deployment_ids(effective)
@@ -162,6 +166,7 @@ def project_facts(db, project, data=None, *, as_of=None):
             "utc_day": now.date().isoformat(),
             "risks": risks,
             "intents": intents,
+            "unresolved_stops": unresolved_stops,
             "active_deployment_ids": deployment_ids,
             "active_diagnosis_ids": diagnosis_ids,
             "milestones": effective.get("milestones", []),
@@ -172,7 +177,7 @@ def project_facts(db, project, data=None, *, as_of=None):
         "basis": basis,
         "metrics": scoped["metrics"],
         "risk_counts": counts,
-        "unclosed_intents_total": len(intents) + len(deployment_ids) + len(diagnosis_ids),
+        "unclosed_intents_total": len(execution_ids) + len(deployment_ids) + len(diagnosis_ids),
         "nearest_milestone": nearest,
         "risks": risks,
     }

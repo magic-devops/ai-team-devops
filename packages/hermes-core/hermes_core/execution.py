@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import shutil
-import signal
 import subprocess
 import time
 import uuid
@@ -20,11 +19,17 @@ from .agents import AgentProfile, provider_command, provider_evidence, squad_rou
 from .execution_targets import validate_execution_target_snapshot
 from .models import CoreError, Node, Principal
 from .repository import Repository
+from .run_controls import stop_request_data
 from .transactional import Store, digest
 
 
 class RunState(TypedDict, total=False):
     results: dict
+
+
+def _validate_handoff_attempt(item, expected_attempt):
+    if expected_attempt is not None and item["data"].get("attempt", 1) != expected_attempt:
+        raise CoreError("stale_attempt", "Execution handoff belongs to a previous attempt", 409)
 
 
 class Execution:
@@ -63,6 +68,7 @@ class Execution:
                         raise CoreError("lease_active", "Execution lease is still active", 409)
                     return {"status": "failed", "data": {**item["data"], "execution_owner": None,
                         "lease_expires_at": None, "recovery_requires_review": True,
+                        "stop_request": stop_request_data(item, "lease_expired"),
                         "error": "Execution lease expired. Review external side effects before retrying."}}
                 try:
                     self.store.mutate(principal, workspace, "runs", run["id"], operation="run.lease_expired",
@@ -104,56 +110,100 @@ class Execution:
     def tool(self, principal, workspace, run_id, node: Node, root: str, owner: str):
         if not self.available():
             raise CoreError("executor_unavailable", "Install or configure HERMES_AGENTD before running tools", 503)
-        request = json.dumps({"argv": node.argv, "timeout_seconds": node.timeout_seconds})
-        with subprocess.Popen([self.agentd, "run-tool", "--root", root], stdin=subprocess.PIPE,
+        from .run_controls import acknowledge_stop
+        from .run_output import append_run_events
+        from .stream_runner import run_stream
+
+        original = self.store.get(principal, workspace, "runs", run_id)
+        attempt = original["data"].get("attempt", 1)
+        heartbeat = time.monotonic()
+
+        def control():
+            nonlocal heartbeat
+            run = self.store.get(principal, workspace, "runs", run_id)
+            stop = run["data"].get("stop_request") or {}
+            if stop.get("owner") == owner and stop.get("state") in {"requested", "unknown"}:
+                return stop["id"]
+            if run["status"] != "running" or run["data"].get("execution_owner") != owner:
+                return "assignment-lost"
+            if time.monotonic() - heartbeat >= 10:
+                self.patch(principal, workspace, run_id, "run.heartbeat", lambda item: {
+                    "data": {**item["data"], "lease_expires_at": time.time() + self.lease_seconds}}, owner)
+                heartbeat = time.monotonic()
+            return None
+
+        def output(event):
+            append_run_events(self.store, principal, workspace, run_id, owner=owner, attempt=attempt,
+                node_id=node.id, events=[event], idempotency_key=f"output:{owner}:{event['source_seq']}")
+
+        result = run_stream(self.agentd, root, node.argv, node.timeout_seconds, on_output=output, control=control)
+        run = self.store.get(principal, workspace, "runs", run_id)
+        stop = run["data"].get("stop_request") or {}
+        if stop.get("owner") == owner and stop.get("state") in {"requested", "unknown"}:
+            if all(result.get(key) is True for key in ("process_tree_stopped", "wait_completed", "output_eof")):
+                acknowledge_stop(self.store, principal, workspace, run_id, request_id=stop["id"], owner=owner,
+                    attempt=attempt, node_id=node.id, evidence=result, final_source_seq=result["_last_source_seq"],
+                    idempotency_key="stop:" + stop["id"])
+            raise CoreError("cancelled", "Execution cancelled; inspect the physical stop receipt", 409)
+        if result.get("_controller_cancelled"):
+            raise CoreError("stop_unknown", "Execution lost its controller; review external side effects", 409)
+        result = {key: value for key, value in result.items() if not key.startswith("_")}
+        result["expected_exit_code"] = node.expected_exit_code
+        result["succeeded"] = result["exit_code"] == node.expected_exit_code and not result.get("error")
+        return result
+
+    def atomic_tool(self, principal, workspace, run_id, node: Node, root: str, owner: str):
+        """Independent binary-safe Git evidence operations use one bounded JSON result."""
+        if not self.available():
+            raise CoreError("executor_unavailable", "Configure the local execution agent first", 503)
+        current = self.store.get(principal, workspace, "runs", run_id)
+        if current["status"] != "running" or current["data"].get("execution_owner") != owner:
+            raise CoreError("cancelled", "Atomic evidence operation lost its assignment before spawn", 409)
+        with subprocess.Popen([self.agentd, "run-tool", "--root", root], stdin=subprocess.PIPE,  # noqa: S603 - configured executor; authorized argv goes on stdin
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                               env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
                               start_new_session=os.name != "nt") as proc:
             try:
-                proc.stdin.write(request)
+                proc.stdin.write(json.dumps({"argv": node.argv, "timeout_seconds": node.timeout_seconds}))
                 proc.stdin.close()
                 proc.stdin = None
-                started = time.monotonic()
-                heartbeat = started
+                started = heartbeat = time.monotonic()
                 while True:
                     run = self.store.get(principal, workspace, "runs", run_id)
-                    if run["status"] == "cancelled" or run["data"].get("execution_owner") != owner:
-                        raise CoreError("cancelled", "Execution cancelled or lease replaced", 409)
+                    if run["status"] != "running" or run["data"].get("execution_owner") != owner:
+                        raise CoreError("cancelled", "Atomic evidence operation lost its assignment", 409)
                     if time.monotonic() - started > node.timeout_seconds + 10:
-                        raise CoreError("timeout", "Executor did not return within its time budget", 408)
-                    if time.monotonic() - heartbeat >= 10:
+                        raise CoreError("timeout", "Atomic evidence executor exceeded its budget", 408)
+                    if time.monotonic() - heartbeat > 10:
                         self.patch(principal, workspace, run_id, "run.heartbeat", lambda item: {
                             "data": {**item["data"], "lease_expires_at": time.time() + self.lease_seconds}}, owner)
                         heartbeat = time.monotonic()
                     try:
-                        stdout, stderr = proc.communicate(timeout=0.25)
+                        stdout, stderr = proc.communicate(timeout=.25)
                         break
                     except subprocess.TimeoutExpired:
                         continue
                 try:
                     result = json.loads(stdout)
-                except (ValueError, TypeError) as exc:
-                    raise CoreError("executor_protocol", (stderr or "Executor returned invalid JSON")[:1000], 502) from exc
-                if not isinstance(result, dict) or "exit_code" not in result:
-                    raise CoreError("executor_protocol", "Missing executor exit evidence", 502)
+                except (TypeError, ValueError) as exc:
+                    raise CoreError("executor_protocol", (stderr or "Invalid atomic executor JSON")[:1000], 502) from exc
+                if not isinstance(result, dict) or type(result.get("exit_code")) is not int:
+                    raise CoreError("executor_protocol", "Missing atomic executor exit evidence", 502)
                 result["stdout"] = str(result.get("stdout", ""))[-262144:]
                 result["stderr"] = str(result.get("stderr", ""))[-262144:]
-                result["expected_exit_code"] = node.expected_exit_code
                 result["succeeded"] = result["exit_code"] == node.expected_exit_code and not result.get("error")
                 return result
             finally:
                 if proc.poll() is None:
-                    if os.name == "nt":
-                        proc.terminate()
-                    else:
-                        os.killpg(proc.pid, signal.SIGTERM)
+                    # This non-stream operation cannot supply a physical stop receipt.
+                    proc.terminate()
                     try:
                         proc.wait(timeout=3)
                     except subprocess.TimeoutExpired:
                         proc.kill()
                         proc.wait()
 
-    def execute(self, principal: Principal, workspace: str, run_id: str, *, resume=None):
+    def execute(self, principal: Principal, workspace: str, run_id: str, *, resume=None, expected_attempt=None):
         owner = uuid.uuid4().hex
         run = self.store.get(principal, workspace, "runs", run_id)
         if run["data"].get("target_device_id"):
@@ -164,6 +214,7 @@ class Execution:
         definition_hash = digest({key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit", "agent_bindings", "agent_source")})
 
         def claim(item):
+            _validate_handoff_attempt(item, expected_attempt)
             if item["status"] not in {"queued", "interrupted", "retrying"}:
                 raise CoreError("already_claimed", "Run already has an execution owner", 409)
             if resume is not None:
@@ -293,7 +344,8 @@ class Execution:
                 self.patch(principal, workspace, run_id, "run.failed", lambda item: {
                     "status": "failed",
                     "data": {**item["data"], "error": message, "execution_owner": None, "lease_expires_at": None,
-                             "recovery_requires_review": bool(item["data"].get("active_node"))}}, owner)
+                             "recovery_requires_review": bool(item["data"].get("active_node")),
+                             "stop_request": stop_request_data(item, "executor_interrupted") if item["data"].get("active_node") else item["data"].get("stop_request")}}, owner)
             except CoreError as lost:
                 if lost.code != "lease_lost":
                     raise

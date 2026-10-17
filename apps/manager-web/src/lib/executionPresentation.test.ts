@@ -151,6 +151,9 @@ function renderObservedCard(
       entry,
       projectId: "project",
       active: false,
+      sessionId: "session",
+      workspaceVersion: 1,
+      onSaved: () => {},
       onCommand: async () => {},
     }),
   );

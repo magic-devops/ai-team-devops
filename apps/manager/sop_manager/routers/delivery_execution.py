@@ -90,6 +90,9 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
     from .project_lifecycle import require_active
 
     require_active(project)
+    if body.target_kind == "device" and any(node.kind == "approval" for node in body.nodes):
+        raise HTTPException(422, {"code": "target_approval_unsupported",
+                                  "message": "Approval gates require the local server checkpoint executor."})
     """Pure proposal validation shared by preview and the versioned write."""
     from hermes_core.execution_targets import select_execution_target
 
@@ -176,6 +179,9 @@ def prepare_plan(db, project, user, state, body, store, execution=None):
 
 
 def _queue(db, project, user, state, body, store, execution=None):
+    from .delivery_execution_runtime import require_previous_stops
+
+    require_previous_stops(db, project, user, state, body.task_id, store)
     plan = prepare_plan(db, project, user, state, body, store, execution)
     task = get_record(db, Task, project, body.task_id)
     entry = {
@@ -308,55 +314,6 @@ def _dispatch(store, principal, entry, execution=None):
     entry["run_id"] = result["run"]["id"]
 
 
-def _cancel(db, project, state, entry, store, principal):
-    from .delivery_verification import VerificationContext
-
-    if entry["status"] in CLOSED:
-        raise HTTPException(409, "Execution already closed")
-    verification = VerificationContext(db, project, state)
-    current = verification.execution_snapshot_current(entry)
-    if not entry["run_id"]:
-        if "requirement" not in entry.get("snapshot", {}):
-            raise HTTPException(
-                409, "Historical dispatch definition is unavailable; its external receipt cannot be verified"
-            )
-        receipt_actor = replace(principal, actor=entry["requested_by"])
-        _recover_dispatch(store, receipt_actor, entry)
-    if entry["run_id"]:
-        run = store.get(principal, entry["workspace_id"], "runs", entry["run_id"])
-        if run["status"] == "completed" and current:
-            raise HTTPException(409, "Review completed execution instead of cancelling")
-        # Closing an obsolete business intent retains its terminal runtime proof.
-        if run["status"] not in {"completed", "failed", "cancelled"}:
-
-            def cancel(current):
-                if current["status"] == "completed":
-                    raise CoreError("invalid_transition", "Execution completed; review evidence", 409)
-                return {
-                    "status": "cancelled",
-                    "data": {**current["data"], "execution_owner": None, "lease_expires_at": None},
-                }
-
-            run = store.mutate(
-                principal,
-                entry["workspace_id"],
-                "runs",
-                run["id"],
-                operation="manager.cancel",
-                key=entry["id"],
-                request={},
-                trace=entry["id"],
-                expected=run["version"],
-                transform=cancel,
-            )
-        entry["run_version"] = run["version"]
-    entry["status"] = "cancelled"
-    entry["cancelled_at"] = stamp()
-    entry["stale"] = not current
-    if current:
-        verification.tasks[entry["task_id"]].status = "blocked"
-
-
 def _observe(db, project, state, entry, store, principal):
     from .delivery_execution_observations import project_result
     from .delivery_verification import VerificationContext
@@ -367,6 +324,9 @@ def _observe(db, project, state, entry, store, principal):
     requirement = verification.requirements.get(task.req_id) if task else None
     flow = state["flows"].setdefault(requirement.id, default_flow()) if requirement else None
     entry["stale"] = not verification.execution_snapshot_current(entry)
+    from .delivery_execution_runtime import record_stop
+
+    record_stop(entry, run)
     results = run["data"].get("node_results", {})
     entry.update(
         run_version=run["version"],
@@ -385,7 +345,7 @@ def _observe(db, project, state, entry, store, principal):
             task.status = (
                 "blocked" if run["status"] in {"failed", "cancelled", "interrupted"} else "in_progress"
             )
-    if not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
+    if entry["status"] not in CLOSED and not entry["stale"] and run["status"] == "failed" and not entry.get("issue_id"):
         issue = Issue(
             id=identifier("ISS"),
             tenant_id=project.tenant_id,
@@ -474,9 +434,12 @@ def _handoff_pending(db, project, state, entry, store, principal, execution):
     from .project_lifecycle import require_active
 
     require_active(project)
+    from .delivery_execution_runtime import require_previous_stops
+
     originator = db.get(User, entry["requested_by"])
     if not originator or originator.status != "active":
         raise HTTPException(403, "Original dispatcher is no longer active; cancel and prepare a new plan")
+    require_previous_stops(db, project, originator, state, entry["task_id"], store, exclude=entry["id"])
     check_project_access(originator, project.id, db)
     dispatcher, workspace = context(store, originator, entry["workspace_id"], "execute")
     from .delivery_verification import VerificationContext
@@ -524,10 +487,14 @@ def apply_execution(db, project, user, state, action, body, store, execution=Non
         # Reader must independently have workspace access; replay uses the original
         # actor so a second operator cannot create a second external receipt/run.
         permission = {"execution.review": "approve", "execution.cancel": "execute"}.get(action, "read")
-        principal, _ = context(store, user, entry["workspace_id"], permission)
+        if action == "execution.sync" and entry.get("stop_pending"):
+            from .delivery_issue_evidence import _access
+
+            principal, _ = _access(store, user, project, entry["workspace_id"])
+        else:
+            principal, _ = context(store, user, entry["workspace_id"], permission)
         if action == "execution.cancel":
-            _cancel(db, project, state, entry, store, principal)
-            return entry["id"], before
+            raise HTTPException(422, "Use the fixed execution control preview and command payload")
         _handoff_pending(db, project, state, entry, store, principal, execution)
         run, task, _, flow = _observe(db, project, state, entry, store, principal)
         if action == "execution.review":

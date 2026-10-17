@@ -15,7 +15,7 @@ from sop_manager.routers.sql_models import (
     get_session,
 )
 from sqlalchemy import update
-from test_delivery_execution import bridge, finish, queue_payload, sync  # noqa: F401
+from test_delivery_execution import bridge, cancel_execution, finish, queue_payload, sync  # noqa: F401
 from test_delivery_manual_review import review, reviews
 from test_delivery_workbench import command, env, requirement  # noqa: F401
 
@@ -298,7 +298,7 @@ def test_cancel_invalidated_intent_preserves_current_task_status_and_allows_new_
     observed = client.get(f"/api/v1/delivery/executions/{intent['id']}/observations")
     assert observed.status_code == 200, observed.text
     assert observed.json()["stale"] and observed.json()["permissions"]["can_cancel"]
-    cancelled = command(client, "execution.cancel", {"id": intent["id"]})
+    cancelled = cancel_execution(client, intent["id"])
     assert cancelled.status_code == 200, cancelled.text
     task = next(t for t in cancelled.json()["tasks"] if t["id"] == task["id"])
     assert task["status"] == "pending"
@@ -354,7 +354,7 @@ def test_old_native_snapshot_get_is_pure_and_pending_unknown_receipt_cannot_canc
     assert observation.status_code == 200, observation.text
     assert observation.json()["stale"]
     assert not any(observation.json()["permissions"].values())
-    assert command(client, "execution.cancel", {"id": intent["id"]}).status_code == 409
+    assert cancel_execution(client, intent["id"]).status_code == 409
     with sessions() as db:
         assert db.get(DeliveryWorkspace, "project").version == version
         assert db.get(DeliveryWorkspace, "project").data["executions"][-1]["snapshot"] == old
@@ -637,12 +637,12 @@ def test_stale_completed_intent_can_close_without_changing_terminal_run_or_curre
     assert observation.status_code == 200, observation.text
     assert observation.json()["permissions"]["can_cancel"]
     original_run = store.get(principal, workspace["id"], "runs", execution["run_id"])
-    cancelled = command(client, "execution.cancel", {"id": intent["id"]})
+    cancelled = cancel_execution(client, intent["id"])
     assert cancelled.status_code == 200, cancelled.text
     assert cancelled.json()["executions"][-1]["status"] == "cancelled"
     assert cancelled.json()["executions"][-1]["snapshot"] == intent["snapshot"]
     assert store.get(principal, workspace["id"], "runs", execution["run_id"]) == original_run
-    assert command(client, "execution.cancel", {"id": intent["id"]}).status_code == 409
+    assert cancel_execution(client, intent["id"]).status_code == 409
     with sessions() as db:
         row = db.get(Task, task["id"])
         if mutation == "deleted":
@@ -670,7 +670,7 @@ def test_current_completed_and_reviewed_execution_cannot_bypass_human_review_by_
     original_run = store.get(principal, workspace["id"], "runs", execution["run_id"])
     observation = client.get(f"/api/v1/delivery/executions/{intent['id']}/observations")
     assert not observation.json()["permissions"]["can_cancel"]
-    assert command(client, "execution.cancel", {"id": intent["id"]}).status_code == 409
+    assert cancel_execution(client, intent["id"]).status_code == 409
     accepted = command(
         client,
         "execution.review",
@@ -682,5 +682,5 @@ def test_current_completed_and_reviewed_execution_cannot_bypass_human_review_by_
         },
     )
     assert accepted.status_code == 200, accepted.text
-    assert command(client, "execution.cancel", {"id": intent["id"]}).status_code == 409
+    assert cancel_execution(client, intent["id"]).status_code == 409
     assert store.get(principal, workspace["id"], "runs", execution["run_id"]) == original_run

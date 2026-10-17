@@ -193,3 +193,8 @@ CI导入的 `payload.envelope` 必须是原始DSSE JSON文本，不能预先解�
 - CLI 命令：`packages/sop-cli/README.md`
 - 安装与环境：`docs/TOOLS_AND_SCRIPTS.md`
 - 同步与 IPC：`ai-sop-ops/SYNC_AND_PLATFORMS.md`
+## 执行过程与人工干预
+
+`delivery_execution_runtime(execution_id)` 读取精确运行概况；`delivery_execution_output(execution_id, node_id, attempt=2, stream="stderr", cursor="")` 读取指定步骤及批次；`delivery_execution_control_preview(body)` 预览固定操作。完整流程与停止状态见 [执行过程指南](../../docs/EXECUTION_RUNTIME_GUIDE.md)。
+
+`execution.start`、`execution.retry`、`execution.cancel` 和 `execution.approval` 经业务命令提交预览原载荷、原版本及固定请求键；未知结果保持原请求恢复，不新建运行。仅 `id` 的取消不再有效。日志成功不等于任务验收。

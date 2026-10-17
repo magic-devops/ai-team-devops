@@ -29,6 +29,7 @@ def _facts(value):
 def preview(db, project, user, data, body, *, version):
     from .delivery_deployment import active_deployment_ids
     from .delivery_execution import CLOSED
+    from .delivery_execution_runtime import unresolved_stop_targets
 
     facts = project_facts(db, project, data)
     members = [
@@ -40,6 +41,7 @@ def preview(db, project, user, data, body, *, version):
     ]
     roster = TeamContext(db, project, data).roster
     intents = data.get("executions", [])
+    unresolved_stops = unresolved_stop_targets(db, project, data)
     basis = fact_basis(
         {
             "project": serialize(project),
@@ -48,6 +50,7 @@ def preview(db, project, user, data, body, *, version):
             "delivery_members": data.get("members", []),
             "facts_basis": facts["basis"],
             "intents": intents,
+            "unresolved_stops": unresolved_stops,
             "deployments": data.get("deployments", []),
             "target_status": body.target_status,
             "reason": body.reason,
@@ -82,8 +85,10 @@ def preview(db, project, user, data, body, *, version):
                     "status": deployment["status"],
                     "run_id": next((operation.get("run_id") for operation in reversed(deployment.get("operations", [])) if operation.get("run_id")), None),
                 })
+        blockers.extend(unresolved_stops)
+        stop_ids = {item["target"]["execution_id"] for item in unresolved_stops}
         for entry in intents:
-            if entry["status"] not in CLOSED:
+            if entry["status"] not in CLOSED and entry["id"] not in stop_ids:
                 blockers.append(
                     {
                         "code": "project_execution_unclosed",

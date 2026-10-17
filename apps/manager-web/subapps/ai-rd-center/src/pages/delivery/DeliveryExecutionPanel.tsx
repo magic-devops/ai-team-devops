@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Collapse, Skeleton } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Send } from "lucide-react";
 import {
@@ -28,6 +28,7 @@ type Props = {
   onSaved: (data: DeliveryWorkspace) => void;
   onEditingChange?: (editing: boolean) => void;
   disabled?: boolean;
+  onUnresolvedChange?: (value: boolean) => void;
 };
 const closed = ["accepted", "changes_requested", "cancelled"];
 
@@ -39,6 +40,7 @@ export function DeliveryExecutionPanel({
   sessionId,
   onEditingChange,
   disabled = false,
+  onUnresolvedChange,
 }: Props) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
@@ -49,6 +51,16 @@ export function DeliveryExecutionPanel({
     retry: false,
   });
   const [draft, setDraft] = useState<ExecutionDraftSession>();
+  const [historyId, setHistoryId] = useState("");
+  const [controlLocked, setControlLocked] = useState(false);
+  const pendingControls = useRef(new Set<string>());
+  const controlPending = (id: string, value: boolean) => {
+    if (value) pendingControls.current.add(id);
+    else pendingControls.current.delete(id);
+    const pending = pendingControls.current.size > 0;
+    setControlLocked(pending);
+    onUnresolvedChange?.(pending);
+  };
   const executions = (data.executions || [])
     .filter((entry) => entry.task_id === task.id)
     .slice()
@@ -71,6 +83,7 @@ export function DeliveryExecutionPanel({
     );
   const canDispatch =
     !disabled &&
+    !controlLocked &&
     data.permissions.write &&
     targets.data?.can_execute &&
     !targets.isError &&
@@ -146,6 +159,11 @@ export function DeliveryExecutionPanel({
             key={`${data.project.id}:${sessionId}:${current.id}`}
             entry={current}
             projectId={data.project.id}
+            sessionId={sessionId}
+            workspaceVersion={data.version}
+            onSaved={onSaved}
+            disabled={disabled || controlLocked}
+            onUnresolvedChange={(value) => controlPending(current.id, value)}
             active
             onCommand={onCommand}
           />
@@ -160,28 +178,69 @@ export function DeliveryExecutionPanel({
         <Collapse
           size="small"
           ghost
+          collapsible={controlLocked ? "disabled" : undefined}
           items={[
             {
               key: "history",
               label: `${tr("history")} · ${executions.length - 1}`,
-              children: executions
-                .slice(1)
-                .map((entry) => (
-                  <ExecutionObservationCard
-                    key={`${data.project.id}:${sessionId}:${entry.id}`}
-                    entry={entry}
-                    projectId={data.project.id}
-                    active={false}
-                    onCommand={onCommand}
-                  />
-                )),
+              children: (
+                <div className="execution-history-list">
+                  {executions.slice(1).map((entry) => (
+                    <section key={entry.id} className="execution-history-entry">
+                      <div className="runtime-section-heading">
+                        <div>
+                          <strong>
+                            {t(`delivery.execution.states.${entry.status}`, {
+                              defaultValue: entry.status,
+                            })}
+                          </strong>
+                          <small className="runtime-identity">
+                            {entry.id} · {tr("attempt")} {entry.attempt ?? "—"}{" "}
+                            · {new Date(entry.created_at).toLocaleString()}
+                          </small>
+                        </div>
+                        <Button
+                          size="small"
+                          disabled={controlLocked}
+                          onClick={() =>
+                            setHistoryId((selected) =>
+                              selected === entry.id ? "" : entry.id,
+                            )
+                          }
+                        >
+                          {t(
+                            `deliveryExecutionRuntime.${historyId === entry.id ? "closeHistory" : "openHistory"}`,
+                          )}
+                        </Button>
+                      </div>
+                      {historyId === entry.id && (
+                        <ExecutionObservationCard
+                          key={`${data.project.id}:${sessionId}:${entry.id}`}
+                          entry={entry}
+                          projectId={data.project.id}
+                          sessionId={sessionId}
+                          workspaceVersion={data.version}
+                          onSaved={onSaved}
+                          disabled={disabled || controlLocked}
+                          active={false}
+                          onCommand={onCommand}
+                          onUnresolvedChange={(value) =>
+                            controlPending(entry.id, value)
+                          }
+                        />
+                      )}
+                    </section>
+                  ))}
+                </div>
+              ),
             },
           ]}
         />
       )}
       {draft && targets.data && (
         <ExecutionPlanEditor
-          members={data.members} sessionId={sessionId}
+          members={data.members}
+          sessionId={sessionId}
           initial={draft}
           initialTargets={structuredClone(targets.data)}
           canConfigure={

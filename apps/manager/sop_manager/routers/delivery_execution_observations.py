@@ -8,6 +8,7 @@ from dataclasses import replace
 from fastapi import HTTPException
 from hermes_core.models import CoreError
 
+from .delivery_execution_runtime_safety import safe_text, safe_usage
 from .delivery_service import stamp
 
 
@@ -25,23 +26,23 @@ def project_result(value, *, attempt=None):
         usage = agent.get("usage")
         oversized = isinstance(usage, dict) and len(json.dumps(usage, default=str)) > 16000
         agent_result = {
-            "provider": str(agent.get("provider") or "")[:80],
-            "agent_id": str(agent.get("agent_id") or "")[:64],
+            "provider": safe_text(agent.get("provider"), 80)[0],
+            "agent_id": safe_text(agent.get("agent_id"), 64)[0],
             "profile_version": _integer(agent.get("profile_version")),
             "completed": agent.get("completed") is True,
-            "usage": usage if isinstance(usage, dict) and not oversized else None,
+            "usage": safe_usage(usage) if isinstance(usage, dict) and not oversized else None,
             "usage_truncated": oversized,
-            "message": str(agent.get("message") or "")[-12000:],
-            "error": str(agent.get("error") or "")[-2000:],
+            "message": safe_text(agent.get("message"), 12000, tail=True)[0],
+            "error": safe_text(agent.get("error"), 2000, tail=True)[0],
             "event_count": len(agent.get("events", [])) if isinstance(agent.get("events"), list) else 0,
         }
     return {
         "succeeded": value.get("succeeded") if isinstance(value.get("succeeded"), bool) else None,
         "exit_code": _integer(value.get("exit_code")),
         "expected_exit_code": _integer(value.get("expected_exit_code")),
-        "error": str(value["error"])[-2000:] if value.get("error") is not None else None,
-        "stdout": str(value["stdout"])[-12000:] if value.get("stdout") is not None else None,
-        "stderr": str(value["stderr"])[-12000:] if value.get("stderr") is not None else None,
+        "error": safe_text(value["error"], 2000, tail=True)[0] if value.get("error") is not None else None,
+        "stdout": safe_text(value["stdout"], 12000, tail=True)[0] if value.get("stdout") is not None else None,
+        "stderr": safe_text(value["stderr"], 12000, tail=True)[0] if value.get("stderr") is not None else None,
         "duration_ms": _integer(value.get("duration_ms")),
         "attempt": _integer(value.get("attempt", attempt)),
         "skipped": value.get("skipped") is True,
@@ -90,10 +91,11 @@ def _after(cursor, project_id, execution_id, run_id):
 def observations(db, project, user, state, entry, store, execution, permissions, *, limit, cursor):
     from hermes_core.execution_targets import validate_execution_target_snapshot
 
-    from .delivery_execution import CLOSED, _recover_dispatch, context
+    from .delivery_execution import CLOSED, _recover_dispatch
+    from .delivery_issue_evidence import _access
     from .delivery_verification import VerificationContext
 
-    principal, _ = context(store, user, entry["workspace_id"])
+    principal, _ = _access(store, user, project, entry["workspace_id"])
     entry = deepcopy(entry)
     if not entry.get("run_id"):
         _recover_dispatch(store, replace(principal, actor=entry["requested_by"]), entry)
@@ -141,7 +143,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
         nodes.append(
             {
                 "id": node["id"],
-                "title": node.get("title") or node["id"],
+                "title": safe_text(node.get("title") or node["id"], 256)[0],
                 "kind": node.get("kind", "command"),
                 "is_test": node["id"] in entry["test_node_ids"],
                 "status": status,
@@ -192,14 +194,14 @@ def observations(db, project, user, state, entry, store, execution, permissions,
                 "id": f"{run_id}:{row['seq']}",
                 "seq": row["seq"],
                 "at": str(row["created_at"]),
-                "type": str(row["action"])[:120],
-                "node_id": str(row["data"].get("node_id"))[:64]
+                "type": safe_text(row["action"], 120)[0],
+                "node_id": safe_text(row["data"].get("node_id"), 64)[0]
                 if row["data"].get("node_id") is not None
                 else None,
-                "status": str(row["data"].get("status"))[:80]
+                "status": safe_text(row["data"].get("status"), 80)[0]
                 if row["data"].get("status") is not None
                 else None,
-                "message": str(row["data"].get("message") or row["data"].get("error") or "")[-2000:],
+                "message": safe_text(row["data"].get("message") or row["data"].get("error"), 2000, tail=True)[0],
                 "attempt": _integer(row["data"].get("attempt")),
                 "result": project_result(row["data"].get("result"), attempt=row["data"].get("attempt")),
             }
@@ -238,7 +240,7 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             and "approve" in principal.permissions
             and entry["status"] not in CLOSED
             and bool(run and run["status"] in {"completed", "failed", "cancelled"}),
-            "can_sync": actionable
+            "can_sync": (actionable or bool(entry.get("stop_pending")))
             and not executor_invalidated
             and permissions["write"]
             and "read" in principal.permissions,

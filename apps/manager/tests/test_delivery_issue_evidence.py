@@ -104,6 +104,8 @@ def test_linked_runtime_projects_actual_test_result_without_plan_or_config(evide
     assert "never-send-config" not in encoded
     assert nodes[0]["target"]["execution_id"] == "execution"
     assert nodes[0]["target"]["project_id"] == "project"
+    assert nodes[0]["target"]["node_id"] == "tests"
+    assert nodes[0]["target"]["attempt"] == 1
 
 
 def test_runtime_membership_is_rechecked_for_evidence_and_history(evidence):

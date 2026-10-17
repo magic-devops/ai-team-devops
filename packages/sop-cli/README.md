@@ -258,3 +258,8 @@ CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/
 `sop delivery deployments` 读取当前项目的受控环境和部署意图；`--id <id>` 读取精确部署详情、实际运行、健康证据及失败问题。`sop delivery deployment-preview --file deployment.json` 预览明确的 `candidate_id`、`environment_id`、`reason`，回滚则只提交 `rollback_of` 和 `reason`。保存继续使用 `sop delivery command --file command.json`，携带预览原版本、`preview_basis` 及固定幂等键。
 
 部署通过 `deployment.environment.save`、`deployment.create`、`deployment.dispatch`、`deployment.start`、`deployment.advance`、`deployment.observe`、`deployment.cancel`、`deployment.sync` 操作。环境配置与实际运行权限分别检查；开始、灰度晋级和回滚都需明确操作。结果未知时查询原意图或执行只读观察，不能自动重新执行 apply。只有当前候选的实际 100% 流量及健康检查通过才计入已发布。执行端需安装标准 runner，并配置受信 HTTPS 来源和独立探针；协议、配置和恢复说明见 `docs/DELIVERY_DEPLOYMENT_DESIGN.md`。
+## 执行过程与人工干预
+
+新增 `sop delivery execution-runtime --id ...`、`execution-output --id ... --node ... --attempt 2 --stream stderr`、`execution-control-preview --file ...`。步骤与批次必须明确选择，续读使用原查询游标。详见 [执行过程指南](../../docs/EXECUTION_RUNTIME_GUIDE.md)。
+
+`execution.start`、`execution.retry`、`execution.cancel`、`execution.approval` 通过 `sop delivery command` 提交预览固定载荷；保留原版本和请求键以恢复未知结果。取消不证明外部进程已经停止，也不回滚副作用。

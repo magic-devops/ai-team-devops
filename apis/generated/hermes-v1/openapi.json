@@ -894,6 +894,88 @@
         }
       }
     },
+    "/api/hermes/v1/remote/events": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Events",
+        "operationId": "events_api_hermes_v1_remote_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteEvents"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/hermes/v1/remote/stop-ack": {
+      "post": {
+        "tags": [
+          "Hermes Remote Execution"
+        ],
+        "summary": "Stop Ack",
+        "operationId": "stop_ack_api_hermes_v1_remote_stop_ack_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoteStopAck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hermes/v1/remote/result": {
       "post": {
         "tags": [
@@ -2991,6 +3073,60 @@
         ],
         "title": "RemoteClaim"
       },
+      "RemoteEvents": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Run Id"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 16,
+            "title": "Owner"
+          },
+          "node_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Node Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "owner",
+          "node_id",
+          "attempt",
+          "idempotency_key",
+          "events"
+        ],
+        "title": "RemoteEvents"
+      },
       "RemoteHeartbeat": {
         "properties": {
           "run_id": {
@@ -3062,6 +3198,68 @@
           "idempotency_key"
         ],
         "title": "RemoteResult"
+      },
+      "RemoteStopAck": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Run Id"
+          },
+          "owner": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 16,
+            "title": "Owner"
+          },
+          "node_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Node Id"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt"
+          },
+          "request_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Request Id"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Idempotency Key"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Evidence"
+          },
+          "final_source_seq": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Final Source Seq"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "run_id",
+          "owner",
+          "node_id",
+          "attempt",
+          "request_id",
+          "idempotency_key",
+          "evidence",
+          "final_source_seq"
+        ],
+        "title": "RemoteStopAck"
       },
       "RunAction": {
         "properties": {

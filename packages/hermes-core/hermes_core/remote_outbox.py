@@ -194,7 +194,10 @@ class RemoteOutbox:
         return {"ok": True, "outbox_dir": str(self.path), "counts": counts, "records": safe_records}
 
     def pending_records(self) -> list[dict[str, Any]]:
-        return [record for record in self.load_records() if record.get("state") == "pending"]
+        pending = [record for record in self.load_records() if record.get("state") == "pending"]
+        return sorted(pending, key=lambda record: (
+            0 if record.get("kind") == "output" else 1 if record.get("kind") == "stop" else 2,
+            record.get("result", {}).get("events", [{}])[0].get("source_seq", 0), record["created_at"]))
 
     def executing_records(self) -> list[dict[str, Any]]:
         return [record for record in self.load_records() if record.get("state") == "executing"]
@@ -233,9 +236,50 @@ class RemoteOutbox:
         return record
 
     def save_result(self, record: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-        updated = {**record, "state": "pending", "result": result, "updated_at": time.time()}
+        updated = {**record, "state": "pending", "result": result, "updated_at": time.time(),
+                   "terminal_source_seq": self.last_source_seq(record)}
         self.save(updated)
         return updated
+
+    def assignment_output_records(self, record: dict[str, Any]) -> list[dict[str, Any]]:
+        attempt = record.get("task", {}).get("attempt", record.get("attempt", 1))
+        return [entry for entry in self.load_records() if entry.get("kind") == "output"
+                and all(entry.get(key) == record.get(key) for key in ("run_id", "owner", "node_id", "credential_generation_hash"))
+                and entry.get("attempt", 1) == attempt]
+
+    def last_source_seq(self, record: dict[str, Any]) -> int:
+        return max((event["source_seq"] for entry in self.assignment_output_records(record)
+                    for event in entry["result"]["events"]), default=0)
+
+    def save_events(self, record: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+        from .run_output import sanitize_text
+        safe = [{**event, "text": sanitize_text(event.get("text", ""), known_secrets=(self.credential.get("credential"),))} for event in events]
+        key = f"events:{record['owner']}:{events[0]['source_seq']}"
+        result = self._technical_record(record, "output", {"events": safe}, key)
+        self.save(result)
+        return result
+
+    def save_stop(self, record: dict[str, Any], request_id: str, result: dict[str, Any]) -> dict[str, Any]:
+        evidence = {key: result[key] for key in ("process_tree_stopped", "wait_completed", "output_eof", "exit_code", "backend") if key in result}
+        receipt = self._technical_record(record, "stop", {"request_id": request_id, "evidence": evidence,
+            "final_source_seq": result.get("_last_source_seq", record.get("terminal_source_seq", self.last_source_seq(record)))}, "stop:" + request_id)
+        path = self._record_path(receipt["record_id"])
+        if path.exists():
+            existing = self._load_path(path)
+            if any(existing.get(key) != receipt.get(key) for key in ("run_id", "owner", "node_id", "attempt", "result", "credential_generation_hash")):
+                raise OutboxError("Stop receipt conflicts with the original durable assignment evidence")
+            return existing
+        self.save(receipt)
+        return receipt
+
+    def _technical_record(self, record, kind, result, key):
+        keep = ("schema_version", "server", "device_id", "workspace_id", "credential_generation_hash", "claim_idempotency_key",
+                "run_id", "owner", "node_id")
+        body = {name: record[name] for name in keep}
+        body.update(record_id=hashlib.sha256(key.encode()).hexdigest() + ".json", kind=kind, state="pending", result=result,
+                    attempt=record.get("task", {}).get("attempt", 1), result_idempotency_key=key,
+                    created_at=time.time(), updated_at=time.time(), attempts=0)
+        return body
 
     def acknowledge(self, record: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
         updated = dict(record)

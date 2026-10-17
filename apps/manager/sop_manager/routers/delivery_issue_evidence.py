@@ -248,7 +248,8 @@ def _nodes(evidence, run, *, target, scope, test_ids=()):
             f"node:{run['id']}:{node_id}",
             "node",
             str(node_id),
-            target,
+            {**target, "node_id": node_id, "attempt": result.get("attempt", 1) if result else current_attempt}
+            if target.get("execution_id") else target,
             status=status,
             summary="node_historical" if not result_current else "node_result" if result else "node_missing",
             facts={

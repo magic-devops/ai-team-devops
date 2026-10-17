@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from hermes_core.transactional import digest
 from sop_manager.routers.sql_models import DeliveryWorkspace, Project, Task, User
 from sqlalchemy import update
-from test_delivery_execution import bridge, sync  # noqa: F401
+from test_delivery_execution import bridge, cancel_execution, sync  # noqa: F401
 from test_delivery_external_execution import agent_proposal, all_counts
 from test_delivery_workbench import command, env  # noqa: F401
 
@@ -162,7 +162,7 @@ def test_pending_binding_a_b_a_is_permanent_without_task_scope_invalidation(boun
     rejected = command(client, "execution.sync", {"id": entry["id"]})
     assert rejected.status_code == 409, rejected.text
     assert not store.list(principal, ws["id"], "runs")
-    assert command(client, "execution.cancel", {"id": entry["id"]}).status_code == 200
+    assert cancel_execution(client, entry["id"]).status_code == 200
 
 
 def test_executor_member_rename_keeps_binding_and_original_snapshot(bound):
@@ -292,7 +292,7 @@ def test_runtime_profile_version_drift_blocks_new_handoff_and_cancellation_remai
     rejected = command(client, "execution.sync", {"id": entry["id"]})
     assert rejected.status_code == 409, rejected.text
     assert not store.list(principal, ws["id"], "runs")
-    assert command(client, "execution.cancel", {"id": entry["id"]}).status_code == 200
+    assert cancel_execution(client, entry["id"]).status_code == 200
 
 
 def test_pending_binding_marker_rolls_back_with_failed_business_capture(bound, monkeypatch):

@@ -35,6 +35,12 @@ from .delivery_execution_contract import (
     ExecutionQueue,
     ExecutionTargetsResponse,
 )
+from .delivery_execution_runtime_contract import (
+    ExecutionControlPreviewInput,
+    ExecutionControlPreviewResponse,
+    ExecutionNodeOutputResponse,
+    ExecutionRuntimeResponse,
+)
 from .delivery_release_contract import (
     DeliveryQualityResponse,
     DeliveryReleaseDetail,
@@ -480,6 +486,67 @@ def execution_observations(
         raise HTTPException(exc.status, {"code": exc.code, "message": exc.message}) from exc
 
 
+def _runtime_entry(db, project, execution_id):
+    row = db.get(DeliveryWorkspace, project.id)
+    state = reconcile(db, project, row.data) if row else initial_state()
+    entry = next((item for item in state.get("executions", []) if item["id"] == execution_id), None)
+    if entry is None:
+        raise HTTPException(404, "Execution not found in project")
+    return row, state, entry
+
+
+@router.get("/executions/{execution_id}/runtime", response_model=ExecutionRuntimeResponse)
+def execution_runtime(
+    execution_id: str, request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_runtime import runtime_detail
+
+    project = _project(db, user, project_id)
+    _row, state, entry = _runtime_entry(db, project, execution_id)
+    return runtime_detail(db, project, user, state, entry,
+                          getattr(request.app.state, "hermes_store", None),
+                          getattr(request.app.state, "hermes_execution", None),
+                          _permissions(db, user, project))
+
+
+@router.get("/executions/{execution_id}/nodes/{node_id}/output", response_model=ExecutionNodeOutputResponse)
+def execution_node_output(
+    execution_id: str, node_id: str, request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    attempt: Annotated[int, Query(ge=1)],
+    stream: Literal["stdout", "stderr"] = "stdout",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str, Query(max_length=2000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_runtime import node_output
+
+    project = _project(db, user, project_id)
+    _row, state, entry = _runtime_entry(db, project, execution_id)
+    return node_output(db, project, user, state, entry,
+                       getattr(request.app.state, "hermes_store", None),
+                       node_id=node_id, attempt=attempt, stream=stream, limit=limit, cursor=cursor)
+
+
+@router.post("/execution-control-preview", response_model=ExecutionControlPreviewResponse)
+def execution_control_preview(
+    body: ExecutionControlPreviewInput, request: Request,
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_execution_runtime import control_preview
+
+    project = _project(db, user, project_id)
+    row = db.get(DeliveryWorkspace, project.id)
+    state = reconcile(db, project, row.data) if row else initial_state()
+    return control_preview(db, project, user, state, body,
+                           getattr(request.app.state, "hermes_store", None),
+                           getattr(request.app.state, "hermes_execution", None),
+                           _permissions(db, user, project), version=row.version if row else 0)
+
+
 @router.get("/tasks/{task_id}/reviews", response_model=TaskReviewsResponse)
 def task_reviews(
     task_id: str,
@@ -602,6 +669,7 @@ def _command_permission(action, payload):
         "release.candidate.review",
         "release.candidate.revoke",
         "execution.review",
+        "execution.approval",
         "baseline.create",
         "task.manual_review",
     }:
@@ -657,7 +725,7 @@ def execute(
     if receipt:
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
-        _schedule_queued_deployment(db, project, user, body, request, background_tasks, receipt.version)
+        _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
         return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
@@ -680,7 +748,7 @@ def execute(
             if receipt:
                 if receipt.request_hash != fingerprint:
                     raise HTTPException(409, "Idempotency key already used with different input")
-                _schedule_queued_deployment(db, project, user, body, request, background_tasks, receipt.version)
+                _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
                 return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
             return _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks)
     except Exception:
@@ -688,8 +756,12 @@ def execute(
         raise
 
 
-def _schedule_queued_deployment(db, project, user, body, request, background_tasks, applied_version):
+def _schedule_committed_run(db, project, user, body, request, background_tasks, applied_version):
     """Resume only an already committed start; never create or restart a run."""
+    if body.action in {"execution.start", "execution.retry", "execution.approval"}:
+        from .delivery_execution_schedule import schedule_committed_execution
+
+        return schedule_committed_execution(db, project, user, body, request, background_tasks, applied_version)
     if body.action != "deployment.start" or request is None or background_tasks is None:
         return
     from hermes_core.models import CoreError
@@ -773,7 +845,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
         reservation = reserve_workspace_version(db, project, next_version)
         data = reconcile(db, project, row.data)
-        applied = _apply(db, project, user, data, body.action, payload, request)
+        applied = _apply(db, project, user, data, body.action, payload, request, command_key=body.idempotency_key)
         resource_id, before = applied[:2]
         event_data = {"before": before, "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update")}
         if body.action == "project.update" and "vector_db_config" in event_data["input"]:
@@ -820,7 +892,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         )
         db.commit()
         db.expire_all()
-        _schedule_queued_deployment(db, project, user, body, request, background_tasks, next_version)
+        _schedule_committed_run(db, project, user, body, request, background_tasks, next_version)
         return {**_snapshot(db, project, user), "replayed": False, "applied_version": next_version}
     except IntegrityError as exc:
         db.rollback()
@@ -837,7 +909,16 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
             release_workspace_version(db, reservation)
 
 
-def _apply(db, project, user, data, action, payload, request):
+def _apply(db, project, user, data, action, payload, request, *, command_key=""):
+    if action in {"execution.start", "execution.retry", "execution.cancel", "execution.approval"}:
+        from .delivery_execution_runtime import apply_runtime_control
+
+        return apply_runtime_control(
+            db, project, user, data, action, payload,
+            getattr(request.app.state, "hermes_store", None) if request else None,
+            getattr(request.app.state, "hermes_execution", None) if request else None,
+            command_key=command_key,
+        )
     if action.startswith("issue.diagnosis."):
         from .delivery_issue_diagnosis import apply_issue_diagnosis
 

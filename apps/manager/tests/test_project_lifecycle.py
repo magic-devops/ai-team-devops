@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sop_manager.routers.delivery_service import initial_state
 from sop_manager.routers.sql_models import DeliveryWorkspace, Project, User
 from test_delivery_execution import bridge as delivery_bridge
-from test_delivery_execution import queue, queue_payload, sync
+from test_delivery_execution import cancel_execution, queue, queue_payload, sync
 from test_delivery_workbench import command
 from test_delivery_workbench import env as delivery_env
 
@@ -87,7 +87,7 @@ def test_paused_pending_cannot_handoff_but_can_cancel(bridge):  # noqa: F811
     response = command(bridge[0], "execution.sync", {"id": intent["id"]})
     assert response.status_code == 409, response.text
     assert not bridge[2].list(bridge[3], bridge[4]["id"], "runs")
-    assert command(bridge[0], "execution.cancel", {"id": intent["id"]}).status_code == 200
+    assert cancel_execution(bridge[0], intent["id"]).status_code == 200
 
 
 def test_paused_receipt_recovers_after_manager_rollback_before_fresh_dispatch_gate(bridge, monkeypatch):  # noqa: F811

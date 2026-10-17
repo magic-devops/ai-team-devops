@@ -13,12 +13,12 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from . import __version__
-from .agents import AgentDispatch, Agents, validate_bound_profiles
+from .agents import AgentDispatch, Agents
 from .collaboration import COLLAB_ACTIONS, create_collaboration_router, filter_collaboration_events
 from .delivery import Delivery
 from .diagnostics import runtime_checks
 from .execution import Execution
-from .execution_targets import select_execution_target, validate_execution_target_snapshot
+from .execution_targets import select_execution_target
 from .models import (
     ACTIONS,
     API_BASE,
@@ -42,6 +42,15 @@ from .scheduling import create_scheduling_router
 from .transactional import Store, digest
 
 
+def _validate_task_source_change(resource, current, changes):
+    if resource != "tasks" or "source" not in changes:
+        return
+    existing, proposed = current.get("source"), changes["source"]
+    if (isinstance(existing, dict) and existing.get("kind") == "manager.delivery"
+            or isinstance(proposed, dict) and proposed.get("kind") == "manager.delivery"):
+        raise CoreError("managed_execution", "Manager delivery provenance is immutable", 409)
+
+
 def resource_contracts() -> dict[str, dict[str, object]]:
     return {
         resource: {
@@ -60,7 +69,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
     repository = Repository(execution)
     delivery = Delivery(store, repository)
     agents = Agents(store)
-    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot", "deployment_source"}
+    run_internal_fields = {"node_results", "attempt", "active_node", "error", "execution_owner", "lease_expires_at", "recovery_requires_review", "replay_of", "code_workspace", "code_evidence", "agent_bindings", "agent_source", "schedule", "remote_worker_version", "remote_claim_key", "target_snapshot", "deployment_source", "stop_request"}
 
     def require(principal: Principal, action: str):
         if action not in principal.permissions:
@@ -157,6 +166,12 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         require(principal, "export" if action == "export" else "execute")
         workspace = workspace_id(request, principal)
         run = store.get(principal, workspace, "runs", run_id)
+        if action in {"start", "retry", "cancel"}:
+            from .run_controls import apply_run_action
+            result = apply_run_action(store, execution, principal, workspace, run_id, action, body)
+            if not body.dry_run and action in {"start", "retry"} and result["status"] in {"queued", "retrying"}:
+                background.add_task(execution.execute, principal, workspace, run_id, expected_attempt=result["data"].get("attempt", 1))
+            return response(principal, workspace, [result], summary={"dry_run": body.dry_run})
         if run["data"].get("deployment_source") and action != "export":
             raise CoreError("managed_deployment", "Use the managed deployment operation; generic run actions cannot repeat deployment side effects", 409)
         if action not in {"start", "cancel", "retry", "replay", "export"}:
@@ -165,26 +180,9 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         if not body.dry_run:
             cached = store.receipt(principal, workspace, operation, body.idempotency_key, body.model_dump())
             if cached is not None:
-                if action in {"start", "retry"} and run["status"] in {"queued", "retrying"}:
-                    background.add_task(execution.execute, principal, workspace, run_id)
                 return response(principal, workspace, [cached])
         if run["version"] != body.expected_version:
             raise CoreError("version_conflict", "Run changed; reload before applying this action", 409)
-        if action in {"start", "retry"}:
-            source = run["data"].get("task_source")
-            if source:
-                task = store.get(principal, workspace, "tasks", source["task_id"])
-                link = task["data"].get("delivery", {})
-                if link.get("run_id") != run_id or link.get("phase") != "executing":
-                    raise CoreError("delivery_closed", "Dispatch a new plan from the task before executing", 409)
-            current_workspace = store.get(principal, "", "workspaces", workspace)
-            if run["data"].get("workspace_version") != current_workspace["version"]:
-                raise CoreError("workspace_changed", "Workspace configuration changed; create a newly reviewed run", 409)
-            snapshot = run["data"].get("target_snapshot")
-            if snapshot:
-                for node in run["data"].get("nodes", []):
-                    provider = run["data"].get("agent_bindings", {}).get(node["id"], {}).get("profile", {}).get("provider", "")
-                    validate_execution_target_snapshot(store, execution, principal, workspace, snapshot, provider=provider)
         if action == "export":
             evidence = []
             while True:
@@ -208,13 +206,6 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             artifact = store.create(principal, workspace, "artifacts", package, body.idempotency_key, uuid.uuid4().hex,
                                     operation=operation, request=body.model_dump())
             return response(principal, workspace, [artifact])
-        allowed = {"start": {"planned"}, "retry": {"failed"}, "cancel": {"planned", "queued", "running", "interrupted", "retrying"}}
-        if action in allowed and run["status"] not in allowed[action]:
-            raise CoreError("invalid_transition", f"Cannot {action} a {run['status']} run", 409)
-        if action == "retry" and run["data"].get("recovery_requires_review"):
-            require(principal, "approve")
-        if body.dry_run:
-            return response(principal, workspace, [run], summary={"dry_run": True, "action": action, "would_execute": action in {"start", "retry"}, "executor_available": execution.available()})
         if action == "replay":
             if run["data"].get("task_source"):
                 raise CoreError("task_dispatch_required", "Create the next delivery from its task to retain review history", 409)
@@ -226,90 +217,17 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             result = store.create(principal, workspace, "runs", {**data, "replay_of": run_id}, body.idempotency_key, uuid.uuid4().hex,
                                   status="planned", operation=operation, request=body.model_dump())
             return response(principal, workspace, [result])
-        target = {"start": "queued", "retry": "retrying", "cancel": "cancelled"}[action]
-
-        def transition(item):
-            if item["status"] not in allowed[action]:
-                raise CoreError("invalid_transition", f"Cannot {action} a {item['status']} run", 409)
-            if action in {"start", "retry"} and not item["data"].get("target_device_id") and not execution.available():
-                raise CoreError("executor_unavailable", "Configure the local execution agent first", 503)
-            if action == "retry":
-                return {"status": target, "data": {**item["data"], "attempt": item["data"].get("attempt", 1) + 1}}
-            if action == "cancel":
-                return {"status": target, "data": {**item["data"], "execution_owner": None, "lease_expires_at": None}}
-            return {"status": target}
-
-        def guard_delivery(conn):
-            if action in {"start", "retry"}:
-                validate_bound_profiles(store, conn, principal, workspace, run["data"].get("agent_bindings", {}))
-            source = run["data"].get("task_source")
-            if source and action in {"start", "retry"}:
-                task = store._get(conn, principal, workspace, "tasks", source["task_id"])
-                link = task["data"].get("delivery", {})
-                if link.get("run_id") != run_id or link.get("phase") != "executing":
-                    raise CoreError("delivery_closed", "The task delivery is no longer executable", 409)
-            if action in {"start", "retry"} and run["data"].get("target_snapshot"):
-                for node in run["data"].get("nodes", []):
-                    provider = run["data"].get("agent_bindings", {}).get(node["id"], {}).get("profile", {}).get("provider", "")
-                    validate_execution_target_snapshot(store, execution, principal, workspace, run["data"]["target_snapshot"], provider=provider, conn=conn)
-
-        result = store.mutate(principal, workspace, "runs", run_id, operation="run." + action,
-            key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
-            expected=body.expected_version, transform=transition, precondition=guard_delivery)
-        if action in {"start", "retry"}:
-            background.add_task(execution.execute, principal, workspace, run_id)
-        return response(principal, workspace, [result])
+        raise CoreError("unknown_action", "Unsupported run action", 404)
 
     @router.post("/approvals/{approval_id}/decision", response_model=Envelope)
     def decision(approval_id: str, body: Decision, request: Request, background: BackgroundTasks,
                  principal: Principal = Depends(identity)):
-        require(principal, "approve")
+        from .run_controls import decide_approval
         workspace = workspace_id(request, principal)
-        approval = store.get(principal, workspace, "approvals", approval_id)
-        run_id = approval["data"]["run_id"]
-        run = store.get(principal, workspace, "runs", run_id)
-        definition = {key: run["data"].get(key) for key in ("nodes", "workspace_root", "workspace_version", "isolation", "base_commit", "agent_bindings", "agent_source")}
-        if digest(definition) != approval["data"]["definition_hash"]:
-            raise CoreError("approval_stale", "Run definition changed after approval was requested", 409)
-        if approval["data"].get("attempt", 1) != run["data"].get("attempt", 1):
-            raise CoreError("approval_stale", "Approval belongs to a previous execution attempt", 409)
-        if body.decision == "approve" and approval["status"] == "pending":
-            current_workspace = store.get(principal, "", "workspaces", workspace)
-            if run["data"].get("workspace_version") != current_workspace["version"]:
-                raise CoreError("approval_stale", "Workspace changed after approval was requested", 409)
-        if body.dry_run:
-            if approval["version"] != body.expected_version or approval["status"] != "pending" or run["status"] != "interrupted":
-                raise CoreError("approval_closed", "Approval changed or is no longer pending", 409)
-            return response(principal, workspace, [approval], summary={"dry_run": True})
-
-        def should_resume(approved):
-            current = store.get(principal, workspace, "runs", run_id)
-            return (current["status"] == "interrupted"
-                    and current["data"].get("active_node") == approved["data"].get("node_id")
-                    and approved["status"] == "approved"
-                    and approved["data"].get("decision") == "approve")
-
-        def decide(item):
-            if item["status"] != "pending" or run["status"] != "interrupted":
-                raise CoreError("approval_closed", "Approval is no longer pending", 409)
-            return {"status": "approved" if body.decision == "approve" else "rejected",
-                    "data": {**item["data"], "decision": body.decision, "decided_by": principal.actor}}
-
-        result = store.mutate(principal, workspace, "approvals", approval_id, operation="approval.decision",
-            key=body.idempotency_key, request=body.model_dump(), trace=uuid.uuid4().hex,
-            expected=body.expected_version, transform=decide)
-        if should_resume(result):
-            background.add_task(execution.execute, principal, workspace, run_id,
-                                resume={"approval_id": approval_id, "approval_version": result["version"]})
-        elif result["status"] == "rejected":
-            current = store.get(principal, workspace, "runs", run_id)
-            if current["status"] == "interrupted" and current["data"].get("active_node") == result["data"].get("node_id"):
-                store.mutate(principal, workspace, "runs", run_id, operation="approval.rejected",
-                    key=uuid.uuid4().hex, request={}, trace=uuid.uuid4().hex, expected=current["version"],
-                    transform=lambda item: {"status": "failed", "data": {**item["data"],
-                        "error": "Execution approval was rejected", "execution_owner": None,
-                        "lease_expires_at": None, "recovery_requires_review": False}})
-        return response(principal, workspace, [result])
+        result = decide_approval(store, execution, principal, workspace, approval_id, body)
+        if not body.dry_run and result["resume"]:
+            background.add_task(execution.execute, principal, workspace, result["run"]["id"], resume=result["resume"])
+        return response(principal, workspace, [result["approval"]], summary={"dry_run": body.dry_run})
 
     @router.get("/tasks/{task_id}/delivery", response_model=Envelope)
     def task_delivery(task_id: str, request: Request, principal: Principal = Depends(identity)):
@@ -344,6 +262,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         require(principal, "write")
         require(principal, "execute")
         workspace = workspace_id(request, principal)
+        if store.get(principal, workspace, "tasks", task_id)["data"].get("source", {}).get("kind") == "manager.delivery":
+            raise CoreError("managed_execution", "Use the project delivery execution control", 409)
         trace = uuid.uuid4().hex
         result = delivery.dispatch(principal, workspace, task_id, body, trace)
         return payload(principal, workspace, [result], trace=trace,
@@ -354,6 +274,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
     def task_review(task_id: str, body: TaskReview, request: Request, principal: Principal = Depends(identity)):
         require(principal, "approve")
         workspace = workspace_id(request, principal)
+        if store.get(principal, workspace, "tasks", task_id)["data"].get("source", {}).get("kind") == "manager.delivery":
+            raise CoreError("managed_execution", "Use the project delivery execution control", 409)
         trace = uuid.uuid4().hex
         result = delivery.review(principal, workspace, task_id, body, trace)
         return payload(principal, workspace, [result], trace=trace, summary={"dry_run": body.dry_run})
@@ -369,6 +291,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         require(principal, "write")
         require(principal, "execute")
         workspace = workspace_id(request, principal)
+        if store.get(principal, workspace, "tasks", task_id)["data"].get("source", {}).get("kind") == "manager.delivery":
+            raise CoreError("managed_execution", "Use the project delivery execution control", 409)
         trace = uuid.uuid4().hex
         result = agents.dispatch(principal, workspace, task_id, body, trace, delivery)
         return payload(principal, workspace, [result], trace=trace, summary={"dry_run": body.dry_run},
@@ -449,6 +373,8 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
         if resource not in RESOURCES or resource in {"approvals", "artifacts", "schedules"}:
             raise CoreError("unknown_resource", "Resource cannot be created directly", 404)
         workspace = "" if resource == "workspaces" else workspace_id(request, principal)
+        if resource == "tasks" and isinstance(body.data.get("source"), dict) and body.data["source"].get("kind") == "manager.delivery":
+            raise CoreError("server_owned_fields", "Manager delivery provenance is server-managed", 422)
         if resource == "runs" and run_internal_fields.intersection(body.data):
             raise CoreError("server_owned_fields", "Run execution evidence and ownership are server-managed", 422)
         if resource == "runs" and "task_source" in body.data:
@@ -493,6 +419,7 @@ def create_router(store: Store, execution: Execution, identity: Callable, *, act
             raise CoreError("server_owned_fields", "Task delivery evidence is server-managed", 422)
 
         def transform(item):
+            _validate_task_source_change(resource, item["data"], body.data)
             if resource == "runs" and item["data"].get("deployment_source"):
                 raise CoreError("managed_deployment", "Managed deployment plans and evidence are immutable", 409)
             if resource == "tasks" and item["data"].get("delivery", {}).get("phase") in {"executing", "accepted"}:

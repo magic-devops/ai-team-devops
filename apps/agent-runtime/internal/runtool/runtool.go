@@ -35,12 +35,16 @@ type Request struct {
 }
 
 type Response struct {
-	OK         bool   `json:"ok"`
-	ExitCode   int    `json:"exit_code"`
-	Stdout     string `json:"stdout"`
-	Stderr     string `json:"stderr"`
-	DurationMS int64  `json:"duration_ms"`
-	Error      string `json:"error,omitempty"`
+	OK                 bool   `json:"ok"`
+	ExitCode           int    `json:"exit_code"`
+	Stdout             string `json:"stdout"`
+	Stderr             string `json:"stderr"`
+	DurationMS         int64  `json:"duration_ms"`
+	Error              string `json:"error,omitempty"`
+	ProcessTreeStopped bool   `json:"process_tree_stopped,omitempty"`
+	WaitCompleted      bool   `json:"wait_completed,omitempty"`
+	OutputEOF          bool   `json:"output_eof,omitempty"`
+	Backend            string `json:"backend,omitempty"`
 }
 
 func Run(ctx context.Context, root string, req Request) Response {
@@ -83,6 +87,7 @@ func run(ctx context.Context, root string, req Request) Response {
 	if err := attachCommand(cmd); err != nil {
 		terminateCommand(cmd)
 		_ = cmd.Wait()
+		cleanupCommand(cmd)
 		return Response{
 			OK:       false,
 			ExitCode: -1,

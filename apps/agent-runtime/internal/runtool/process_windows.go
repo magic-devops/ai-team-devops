@@ -3,8 +3,11 @@
 package runtool
 
 import (
+	"fmt"
 	"os/exec"
 	"sync"
+	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -12,7 +15,10 @@ import (
 
 var commandJobs sync.Map
 
-func prepareCommand(_ *exec.Cmd) {}
+func prepareCommand(cmd *exec.Cmd) {
+	// No user instruction runs before the whole tree belongs to the kill job.
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_SUSPENDED | windows.CREATE_NO_WINDOW}
+}
 
 func attachCommand(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
@@ -44,8 +50,51 @@ func attachCommand(cmd *exec.Cmd) error {
 		return err
 	}
 	commandJobs.Store(cmd.Process.Pid, job)
-	return nil
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(snapshot)
+	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
+	for err = windows.Thread32First(snapshot, &entry); err == nil; err = windows.Thread32Next(snapshot, &entry) {
+		if entry.OwnerProcessID != uint32(cmd.Process.Pid) {
+			continue
+		}
+		thread, openErr := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
+		if openErr != nil {
+			return openErr
+		}
+		_, resumeErr := windows.ResumeThread(thread)
+		_ = windows.CloseHandle(thread)
+		return resumeErr
+	}
+	return fmt.Errorf("suspended command primary thread was not found: %w", err)
 }
+
+func commandTreeStopped(cmd *exec.Cmd) bool {
+	job, ok := commandJobs.Load(cmd.Process.Pid)
+	if !ok {
+		return false
+	}
+	// JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, including ActiveProcesses.
+	var info struct {
+		TotalUserTime, TotalKernelTime, ThisPeriodTotalUserTime, ThisPeriodTotalKernelTime int64
+		TotalPageFaultCount, TotalProcesses, ActiveProcesses, TotalTerminatedProcesses     uint32
+	}
+	until := time.Now().Add(3 * time.Second)
+	for time.Now().Before(until) {
+		if windows.QueryInformationJobObject(job.(windows.Handle), windows.JobObjectBasicAccountingInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil) != nil {
+			return false
+		}
+		if info.ActiveProcesses == 0 {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
+func processBackend() string { return "windows_job" }
 
 func terminateCommand(cmd *exec.Cmd) {
 	if cmd.Process == nil {

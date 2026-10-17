@@ -236,6 +236,111 @@
 .runtime-review label {
   font-size: 12px;
 }
+.execution-runtime-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  min-width: 0;
+}
+.execution-runtime-controls {
+  display: grid;
+  gap: 6px;
+}
+.execution-runtime-control .ant-modal-body {
+  display: grid;
+  gap: 10px;
+  max-height: 70dvh;
+  overflow: auto;
+}
+.execution-runtime-control .ant-descriptions-item-content,
+.execution-runtime-panel .ant-alert-description {
+  overflow-wrap: anywhere;
+}
+.execution-node-output {
+  border-top: 1px solid var(--border, #dce3ec);
+  padding-top: 12px;
+  min-width: 0;
+}
+.execution-output-layout {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+.execution-step-list {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  max-height: 440px;
+  overflow: auto;
+}
+.execution-step-list .ant-btn {
+  height: auto;
+  min-height: 42px;
+  white-space: normal;
+  display: grid;
+  gap: 3px;
+  justify-content: stretch;
+  padding: 7px 9px;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.execution-step-list small {
+  font-size: 10px;
+  opacity: 0.85;
+}
+.execution-step-content,
+.execution-output-pane {
+  min-width: 0;
+}
+.execution-output-selectors {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.execution-output-selectors > label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+}
+.execution-output-selectors .execution-step-picker {
+  display: none;
+}
+.execution-output-selectors .ant-select {
+  width: 100%;
+  min-width: 0;
+}
+.execution-output-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 8px 0;
+}
+.execution-output-toolbar > .ant-input-affix-wrapper,
+.execution-output-toolbar > .ant-input {
+  flex: 1;
+  min-width: min(180px, 100%);
+}
+.execution-stream-output {
+  min-height: 110px;
+  max-height: 340px;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.execution-stream-output:focus-visible {
+  outline: 2px solid var(--brand, #356ac3);
+  outline-offset: 2px;
+}
+.execution-history-entry {
+  border-bottom: 1px solid var(--border, #dce3ec);
+  padding: 10px 0;
+}
+.execution-runtime-panel .ant-btn,
+.execution-runtime-control .ant-btn {
+  min-height: 30px;
+}
 .runtime-execution-card blockquote {
   margin: 12px 0 0;
   border-left: 2px solid var(--border, #dce3ec);
@@ -248,6 +353,24 @@
   margin-top: 6px;
 }
 @media (max-width: 600px) {
+  .execution-output-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .execution-step-list {
+    display: none;
+  }
+  .execution-output-selectors .execution-step-picker {
+    display: grid;
+    grid-column: 1 / -1;
+  }
+  .execution-runtime-control .ant-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .execution-runtime-control .ant-modal-footer .ant-btn {
+    margin-inline-start: 0;
+  }
   .runtime-plan-selectors,
   .runtime-stages {
     grid-template-columns: minmax(0, 1fr);

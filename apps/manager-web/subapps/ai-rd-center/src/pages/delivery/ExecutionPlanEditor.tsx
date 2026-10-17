@@ -1,4 +1,13 @@
-import { Alert, Button, Collapse, Modal, Select, Space, Tag } from "antd";
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Collapse,
+  Modal,
+  Select,
+  Space,
+  Tag,
+} from "antd";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -8,7 +17,12 @@ import {
   type DeliveryWorkspace,
   type DeliveryMember,
 } from "@/lib/delivery";
-import { fetchTeamRuntimeBindings, selectExecutionMember, useDirectExecution, type TeamRuntimeBindings } from "@/lib/deliveryTeamRuntime";
+import {
+  fetchTeamRuntimeBindings,
+  selectExecutionMember,
+  useDirectExecution,
+  type TeamRuntimeBindings,
+} from "@/lib/deliveryTeamRuntime";
 import {
   adoptExecutionDraft,
   fetchDeliveryTargets,
@@ -26,7 +40,10 @@ import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
 import { ExecutionPolicyEditor } from "./ExecutionPolicyEditor";
 import { planError } from "@/lib/deliveryTaskPlan";
-import { ExecutionExecutorFacts, RuntimeBindingFacts } from "./ExecutionExecutorFacts";
+import {
+  ExecutionExecutorFacts,
+  RuntimeBindingFacts,
+} from "./ExecutionExecutorFacts";
 
 export function ExecutionPlanEditor({
   initial,
@@ -62,7 +79,13 @@ export function ExecutionPlanEditor({
     recoveryError?: string;
   }>();
   const teamKey = ["delivery-team-runtime", draft.projectId, sessionId];
-  const team = useQuery({ queryKey: teamKey, queryFn: ({ signal }) => fetchTeamRuntimeBindings(draft.projectId, signal), enabled: draft.mode === "agent", retry: false, gcTime: 0 });
+  const team = useQuery({
+    queryKey: teamKey,
+    queryFn: ({ signal }) => fetchTeamRuntimeBindings(draft.projectId, signal),
+    enabled: draft.mode === "agent",
+    retry: false,
+    gcTime: 0,
+  });
   const [policyTarget, setPolicyTarget] = useState<ExecutionTarget>();
   const workspace = targets.workspaces.find(
     (item) => item.id === draft.workspaceId,
@@ -74,7 +97,11 @@ export function ExecutionPlanEditor({
   const fail = (failure: unknown) => {
     const message = (failure as Error).message;
     const parsed = planError(failure);
-    setError(parsed.code && /^(runtime_|executor_)/.test(parsed.code) ? `reasons.${parsed.code}` : parsed.message);
+    setError(
+      parsed.code && /^(runtime_|executor_)/.test(parsed.code)
+        ? `reasons.${parsed.code}`
+        : parsed.message,
+    );
     if (message.includes("409")) setConflict(true);
     setCandidate(undefined);
   };
@@ -92,8 +119,10 @@ export function ExecutionPlanEditor({
         result.version !== draft.intent.version ||
         result.task_basis !== draft.taskBasis ||
         result.target.basis !== draft.target?.basis ||
-        (result.executor_snapshot?.member_id || "") !== draft.executorMemberId ||
-        (result.executor_snapshot?.binding_basis || "") !== draft.executorBindingBasis
+        (result.executor_snapshot?.member_id || "") !==
+          draft.executorMemberId ||
+        (result.executor_snapshot?.binding_basis || "") !==
+          draft.executorBindingBasis
       )
         throw new Error("409: basis changed");
       setDraft({ ...prepared.session, preview: result });
@@ -133,11 +162,22 @@ export function ExecutionPlanEditor({
         fetchDelivery(draft.projectId),
         fetchDeliveryTargets(draft.projectId),
       ]);
-      const latestBindings = draft.executorMemberId ? await fetchTeamRuntimeBindings(draft.projectId) : undefined;
+      const latestBindings = draft.executorMemberId
+        ? await fetchTeamRuntimeBindings(draft.projectId)
+        : undefined;
       let adopted: ExecutionDraftSession | undefined;
       let recoveryError = "";
-      try { adopted = adoptExecutionDraft(draft, latestWorkspace, latestTargets, crypto.randomUUID(), latestBindings); }
-      catch (failure) { recoveryError = (failure as Error).message; }
+      try {
+        adopted = adoptExecutionDraft(
+          draft,
+          latestWorkspace,
+          latestTargets,
+          crypto.randomUUID(),
+          latestBindings,
+        );
+      } catch (failure) {
+        recoveryError = (failure as Error).message;
+      }
       setCandidate({
         workspace: latestWorkspace,
         targets: latestTargets,
@@ -170,10 +210,40 @@ export function ExecutionPlanEditor({
   const latestRequirement = candidate?.workspace.requirements.find(
     (requirement) => requirement.id === latestTask?.req_id,
   );
-  const selectedMember = team.data?.members.find((item) => item.member_id === draft.executorMemberId);
-  const executorInvalid = Boolean(draft.executorMemberId && (team.isError || !selectedMember?.binding || selectedMember.status !== "current" || selectedMember.binding_basis !== draft.executorBindingBasis || selectedMember.binding.workspace_id !== draft.workspaceId || selectedMember.binding.agent_id !== draft.agentId || selectedMember.binding.agent_version !== draft.agentVersion || !workspace?.agents.some((item) => item.id === draft.agentId && item.version === draft.agentVersion)));
-  const memberOptions = [{ value: "", label: tm("direct"), disabled: false }, ...(team.data?.members || []).map((item) => ({ value: item.member_id, label: `${members.find((member) => member.id === item.member_id)?.name || item.member_id} · ${item.member_id} · ${tm(`states.${item.status}`)}`, disabled: item.status !== "current" || !item.binding }))];
-  if (draft.executorMemberId && !memberOptions.some((item) => item.value === draft.executorMemberId)) memberOptions.push({ value: draft.executorMemberId, label: `${tm("missingMember")} · ${draft.executorMemberId}`, disabled: true });
+  const selectedMember = team.data?.members.find(
+    (item) => item.member_id === draft.executorMemberId,
+  );
+  const executorInvalid = Boolean(
+    draft.executorMemberId &&
+    (team.isError ||
+      !selectedMember?.binding ||
+      selectedMember.status !== "current" ||
+      selectedMember.binding_basis !== draft.executorBindingBasis ||
+      selectedMember.binding.workspace_id !== draft.workspaceId ||
+      selectedMember.binding.agent_id !== draft.agentId ||
+      selectedMember.binding.agent_version !== draft.agentVersion ||
+      !workspace?.agents.some(
+        (item) =>
+          item.id === draft.agentId && item.version === draft.agentVersion,
+      )),
+  );
+  const memberOptions = [
+    { value: "", label: tm("direct"), disabled: false },
+    ...(team.data?.members || []).map((item) => ({
+      value: item.member_id,
+      label: `${members.find((member) => member.id === item.member_id)?.name || item.member_id} · ${item.member_id} · ${tm(`states.${item.status}`)}`,
+      disabled: item.status !== "current" || !item.binding,
+    })),
+  ];
+  if (
+    draft.executorMemberId &&
+    !memberOptions.some((item) => item.value === draft.executorMemberId)
+  )
+    memberOptions.push({
+      value: draft.executorMemberId,
+      label: `${tm("missingMember")} · ${draft.executorMemberId}`,
+      disabled: true,
+    });
 
   return (
     <>
@@ -200,15 +270,20 @@ export function ExecutionPlanEditor({
                 executorInvalid ||
                 targetProblems.length > 0
               }
-              onClick={() => void preview()}
+              onClick={preview}
             >
               {tr("preview")}
             </Button>
             <Button
               type="primary"
               loading={busy}
-              disabled={!draft.preview || conflict || Boolean(policyTarget) || executorInvalid}
-              onClick={() => void save()}
+              disabled={
+                !draft.preview ||
+                conflict ||
+                Boolean(policyTarget) ||
+                executorInvalid
+              }
+              onClick={save}
             >
               {tr("save")}
             </Button>
@@ -223,18 +298,80 @@ export function ExecutionPlanEditor({
             title={
               conflict
                 ? tr("conflict")
-                : tm(error) !== `deliveryTeamRuntime.${error}` ? tm(error) : tr(error) === `deliveryRuntime.${error}`
-                  ? error
-                  : tr(error)
+                : tm(error) !== `deliveryTeamRuntime.${error}`
+                  ? tm(error)
+                  : tr(error) === `deliveryRuntime.${error}`
+                    ? t(`deliveryExecutionRuntime.${error}`, {
+                        defaultValue: error,
+                      })
+                    : tr(error)
             }
           />
         )}
-        {draft.mode === "agent" && <section className="team-runtime-selector">
-          <label>{tm("optional")}<Select aria-label={tm("optional")} loading={team.isFetching} disabled={busy || (!team.data && !draft.executorMemberId)} value={draft.executorMemberId} showSearch optionFilterProp="label" options={memberOptions} onChange={(id) => { try { if (!id) setDraft(useDirectExecution(draft)); else { const row = team.data?.members.find((item) => item.member_id === id); if (!row) throw new Error("executorUnavailable"); setDraft(selectExecutionMember(draft, row)); } setCandidate(undefined); } catch (failure) { fail(failure); } }} /></label>
-          {team.isError && <Alert type="warning" title={tm("catalogueFailed")} action={<Button size="small" onClick={() => void team.refetch()}>{tm("retry")}</Button>} />}
-          {draft.executorMemberId && <><code className="runtime-identity">{draft.workspaceId} / {draft.agentId} · v{draft.agentVersion}</code><p className="runtime-help">{tm("boundHint")}</p><Button size="small" disabled={busy} onClick={() => { setDraft(useDirectExecution(draft)); setCandidate(undefined); }}>{tm("useDirect")}</Button><p className="runtime-help">{tm("directHint")}</p></>}
-          {executorInvalid && <Alert type="warning" title={tm("unavailableSelection")} />}
-        </section>}
+        {draft.mode === "agent" && (
+          <section className="team-runtime-selector">
+            <label>
+              {tm("optional")}
+              <Select
+                aria-label={tm("optional")}
+                loading={team.isFetching}
+                disabled={busy || (!team.data && !draft.executorMemberId)}
+                value={draft.executorMemberId}
+                showSearch
+                optionFilterProp="label"
+                options={memberOptions}
+                onChange={(id) => {
+                  try {
+                    if (!id) setDraft(useDirectExecution(draft));
+                    else {
+                      const row = team.data?.members.find(
+                        (item) => item.member_id === id,
+                      );
+                      if (!row) throw new Error("executorUnavailable");
+                      setDraft(selectExecutionMember(draft, row));
+                    }
+                    setCandidate(undefined);
+                  } catch (failure) {
+                    fail(failure);
+                  }
+                }}
+              />
+            </label>
+            {team.isError && (
+              <Alert
+                type="warning"
+                title={tm("catalogueFailed")}
+                action={
+                  <Button size="small" onClick={() => void team.refetch()}>
+                    {tm("retry")}
+                  </Button>
+                }
+              />
+            )}
+            {draft.executorMemberId && (
+              <>
+                <code className="runtime-identity">
+                  {draft.workspaceId} / {draft.agentId} · v{draft.agentVersion}
+                </code>
+                <p className="runtime-help">{tm("boundHint")}</p>
+                <Button
+                  size="small"
+                  disabled={busy}
+                  onClick={() => {
+                    setDraft(useDirectExecution(draft));
+                    setCandidate(undefined);
+                  }}
+                >
+                  {tm("useDirect")}
+                </Button>
+                <p className="runtime-help">{tm("directHint")}</p>
+              </>
+            )}
+            {executorInvalid && (
+              <Alert type="warning" title={tm("unavailableSelection")} />
+            )}
+          </section>
+        )}
         <div className="runtime-plan-selectors">
           <label>
             {tr("workspace")}
@@ -247,7 +384,12 @@ export function ExecutionPlanEditor({
                 label: item.name,
               }))}
               onChange={(workspaceId) =>
-                change({ workspaceId, agentId: "", target: null })
+                change({
+                  workspaceId,
+                  agentId: "",
+                  target: null,
+                  approvalBeforeRun: false,
+                })
               }
             />
           </label>
@@ -264,6 +406,7 @@ export function ExecutionPlanEditor({
               onChange={(mode) =>
                 change({
                   mode,
+                  approvalBeforeRun: false,
                   executorMemberId: "",
                   executorBindingBasis: "",
                   agentId: "",
@@ -284,10 +427,19 @@ export function ExecutionPlanEditor({
                 aria-label={tr("agentProfile")}
                 disabled={busy || !workspace || Boolean(draft.executorMemberId)}
                 value={draft.agentId || undefined}
-                options={draft.executorMemberId ? [{ value: draft.agentId, label: `${draft.agentId} · v${draft.agentVersion}` }] : workspace?.agents.map((agent) => ({
-                  value: agent.id,
-                  label: `${agent.title} · ${agent.provider} · v${agent.version}`,
-                }))}
+                options={
+                  draft.executorMemberId
+                    ? [
+                        {
+                          value: draft.agentId,
+                          label: `${draft.agentId} · v${draft.agentVersion}`,
+                        },
+                      ]
+                    : workspace?.agents.map((agent) => ({
+                        value: agent.id,
+                        label: `${agent.title} · ${agent.provider} · v${agent.version}`,
+                      }))
+                }
                 onChange={(agentId) =>
                   change({
                     agentId,
@@ -318,6 +470,7 @@ export function ExecutionPlanEditor({
               }))}
               onChange={(value) =>
                 change({
+                  approvalBeforeRun: false,
                   target: structuredClone(
                     allTargets.find(
                       (item) => `${item.kind}:${item.id}` === value,
@@ -364,10 +517,37 @@ export function ExecutionPlanEditor({
             ]}
           />
         )}
+        {draft.mode === "command" && draft.target?.kind === "local" && (
+          <div className="runtime-approval-choice">
+            <Checkbox
+              checked={draft.approvalBeforeRun}
+              disabled={
+                busy ||
+                (!draft.approvalBeforeRun && draft.commands.length >= 32)
+              }
+              onChange={(event) =>
+                change({
+                  approvalBeforeRun: event.target.checked,
+                  approvalTitle: t(
+                    "deliveryExecutionRuntime.approvalBeforeRun",
+                  ),
+                })
+              }
+            >
+              {t("deliveryExecutionRuntime.approvalBeforeRun")}
+            </Checkbox>
+            <p className="runtime-help">
+              {t("deliveryExecutionRuntime.approvalBeforeRunHint")}
+            </p>
+          </div>
+        )}
         <ExecutionCommandEditor
           rows={draft.commands}
           agent={draft.mode === "agent"}
           disabled={busy}
+          maxCommands={
+            draft.mode === "command" && draft.approvalBeforeRun ? 31 : 32
+          }
           onChange={(commands) => change({ commands })}
         />
         <p className="runtime-help">{tr("previewRequired")}</p>
@@ -383,7 +563,9 @@ export function ExecutionPlanEditor({
                 : t("deliveryTaskAcceptance.ownSnapshot")}
             </strong>
             <h4>{draft.preview.snapshot.title}</h4>
-            <ExecutionExecutorFacts snapshot={draft.preview.executor_snapshot} />
+            <ExecutionExecutorFacts
+              snapshot={draft.preview.executor_snapshot}
+            />
             <ExecutionAcceptanceSnapshot snapshot={draft.preview.snapshot} />
             <div className="runtime-node-chips">
               {draft.preview.nodes.map((node) => (
@@ -431,17 +613,43 @@ export function ExecutionPlanEditor({
                     </ul>
                   </>
                 )}
-                {candidate.bindings?.members.find((item) => item.member_id === draft.executorMemberId)?.binding && <RuntimeBindingFacts binding={candidate.bindings.members.find((item) => item.member_id === draft.executorMemberId)!.binding!} />}
-                {candidate.adopted?.target && <ExecutionTargetFacts target={candidate.adopted.target} />}
-                {candidate.adopted && !candidate.adopted.target && <p className="runtime-help">{tm("changedSelection")}</p>}
-                {candidate.recoveryError && <Alert type="warning" title={tm("latestUnavailable")} description={tm(candidate.recoveryError) === `deliveryTeamRuntime.${candidate.recoveryError}` ? candidate.recoveryError : tm(candidate.recoveryError)} />}
+                {candidate.bindings?.members.find(
+                  (item) => item.member_id === draft.executorMemberId,
+                )?.binding && (
+                  <RuntimeBindingFacts
+                    binding={
+                      candidate.bindings.members.find(
+                        (item) => item.member_id === draft.executorMemberId,
+                      )!.binding!
+                    }
+                  />
+                )}
+                {candidate.adopted?.target && (
+                  <ExecutionTargetFacts target={candidate.adopted.target} />
+                )}
+                {candidate.adopted && !candidate.adopted.target && (
+                  <p className="runtime-help">{tm("changedSelection")}</p>
+                )}
+                {candidate.recoveryError && (
+                  <Alert
+                    type="warning"
+                    title={tm("latestUnavailable")}
+                    description={
+                      tm(candidate.recoveryError) ===
+                      `deliveryTeamRuntime.${candidate.recoveryError}`
+                        ? candidate.recoveryError
+                        : tm(candidate.recoveryError)
+                    }
+                  />
+                )}
                 <Button
                   disabled={busy || !candidate.adopted}
                   onClick={() => {
                     if (!candidate.adopted) return;
                     setDraft(candidate.adopted);
                     setTargets(candidate.targets);
-                    if (candidate.bindings) qc.setQueryData(teamKey, candidate.bindings);
+                    if (candidate.bindings)
+                      qc.setQueryData(teamKey, candidate.bindings);
                     setCandidate(undefined);
                     setConflict(false);
                     setError("");

@@ -102,6 +102,31 @@ class ManagerClient:
     def delivery_workspace(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/workspace")
 
+    def delivery_execution_runtime(self, execution_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/runtime")
+
+    def delivery_execution_output(
+        self, execution_id: str, node_id: str, *, attempt: int,
+        stream: str = "stdout", cursor: str = "", limit: int = 50,
+    ) -> dict[str, Any]:
+        """Read the exact captured attempt; never choose a current attempt implicitly."""
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+            raise ValueError("Choose an explicit positive attempt")
+        if stream not in {"stdout", "stderr"}:
+            raise ValueError("Choose stdout or stderr")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("Output limit must be between 1 and 100")
+        if not isinstance(cursor, str) or len(cursor) > 2000:
+            raise ValueError("Invalid output cursor")
+        return self._request(
+            "GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/nodes/{_resource_segment(node_id)}/output",
+            params={"attempt": attempt, "stream": stream, "cursor": cursor, "limit": limit},
+        )
+
+    def delivery_execution_control_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Inspect a fixed human intent; actual writes use delivery_command."""
+        return self._request("POST", "/api/v1/delivery/execution-control-preview", json_body=dict(body))
+
     def delivery_issue(self, issue_id: str) -> dict[str, Any]:
         """Read the exact project issue, fixed evidence and diagnosis history."""
         return self._request("GET", f"/api/v1/delivery/issues/{_resource_segment(issue_id)}")

@@ -20,6 +20,7 @@ from .execution_targets import (
     validate_execution_target_snapshot,
 )
 from .models import API_BASE, CoreError, Envelope, Node, Principal, RunAction, payload
+from .run_controls import stop_request_data
 from .transactional import Store, digest, now
 
 PAIRING_TTL_SECONDS = 10 * 60
@@ -56,6 +57,28 @@ class RemoteResult(BaseModel):
     node_id: str = Field(min_length=1, max_length=64)
     idempotency_key: str = Field(min_length=1, max_length=160)
     result: dict[str, Any] = Field(default_factory=dict)
+
+
+class RemoteEvents(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: str = Field(min_length=1, max_length=64)
+    owner: str = Field(min_length=16, max_length=160)
+    node_id: str = Field(min_length=1, max_length=64)
+    attempt: int = Field(ge=1, strict=True)
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    events: list[dict[str, Any]] = Field(min_length=1, max_length=100)
+
+
+class RemoteStopAck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    run_id: str = Field(min_length=1, max_length=64)
+    owner: str = Field(min_length=16, max_length=160)
+    node_id: str = Field(min_length=1, max_length=64)
+    attempt: int = Field(ge=1, strict=True)
+    request_id: str = Field(min_length=1, max_length=64)
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    evidence: dict[str, Any]
+    final_source_seq: int = Field(ge=0, strict=True)
 
 
 @dataclass(frozen=True)
@@ -224,6 +247,13 @@ def _sanitize_result(raw: dict[str, Any], expected_exit_code: int) -> dict[str, 
     }
     if "agent" in raw:
         result["agent"] = _sanitize_agent_result(raw["agent"])
+    for key in ("process_tree_stopped", "wait_completed", "output_eof"):
+        if key in raw:
+            if not isinstance(raw[key], bool):
+                raise CoreError("invalid_result", "Process evidence flags must be booleans", 422)
+            result[key] = raw[key]
+    if raw.get("backend") in {"windows_job", "posix_process_group"}:
+        result["backend"] = raw["backend"]
     result["succeeded"] = ok and exit_code == expected_exit_code and not result["error"]
     return result
 
@@ -432,6 +462,7 @@ def _task_payload(run: dict[str, Any], workspace: str, device_id: str, owner: st
                   node: RemoteNode, version: int) -> dict[str, Any]:
     task = {"run_id": run["id"], "run_version": version, "owner": owner,
             "workspace_id": workspace, "device_id": device_id, "lease_seconds": REMOTE_LEASE_SECONDS,
+            "attempt": run["data"].get("attempt", 1),
             "node": node.model_dump(), "boundary": {"supports": [node.kind],
             "unsupported": ["approval", "git_worktree", "squad_agent_routing"],
             "workspace_root_from_server_is_untrusted": True}}
@@ -491,6 +522,7 @@ def recover_expired_remote(store: Store, principal: Principal, workspace: str) -
                     raise CoreError("lease_active", "Remote execution lease is still active", 409)
                 return {"status": "failed", "data": {**item["data"], "execution_owner": None,
                     "lease_expires_at": None, "recovery_requires_review": True,
+                    "stop_request": stop_request_data(item, "lease_expired"),
                     "error": "Remote execution lease expired. Review external side effects before retrying."}}
 
             try:
@@ -773,6 +805,12 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
         identity_data = device_auth(request)
         principal, workspace, device = identity_data.principal, identity_data.workspace, identity_data.device
         recover_expired_remote(store, principal, workspace)
+        current = store.get(principal, workspace, "runs", body.run_id)
+        stop = current["data"].get("stop_request") or {}
+        if stop.get("owner") == body.owner and current["data"].get("target_device_id") == device["id"]:
+            from .run_controls import stop_view
+            return _response(principal, workspace, [{"run_id": body.run_id, "status": current["status"],
+                "stop_request": stop_view(current)}])
 
         def beat(item: dict[str, Any]) -> dict[str, Any]:
             if item["status"] == "cancelled":
@@ -795,6 +833,33 @@ def create_remote_router(store: Store, identity: Callable):  # noqa: C901
         return _response(principal, workspace, [{"run_id": body.run_id, "status": result["status"],
                                                 "lease_expires_at": result["data"].get("lease_expires_at")}],
                          cli=_run_cli(body.run_id))
+
+    def assignment_guard(identity_data, run_id):
+        def guard(conn):
+            _assert_device_active_in_tx(store, conn, identity_data.device, credential_table, identity_data.credential_secret)
+            run = store._get(conn, identity_data.principal, identity_data.workspace, "runs", run_id)
+            if run["data"].get("target_device_id") != identity_data.device["id"]:
+                raise CoreError("forbidden", "Run is assigned to a different device", 403)
+        return guard
+
+    @router.post("/remote/events", response_model=Envelope)
+    def events(body: RemoteEvents, request: Request):
+        from .run_output import append_run_events
+        identity_data = device_auth(request)
+        result = append_run_events(store, identity_data.principal, identity_data.workspace, body.run_id,
+            owner=body.owner, attempt=body.attempt, node_id=body.node_id, events=body.events,
+            idempotency_key=body.idempotency_key, precondition=assignment_guard(identity_data, body.run_id))
+        return _response(identity_data.principal, identity_data.workspace, [result], summary={"events_recorded": True})
+
+    @router.post("/remote/stop-ack", response_model=Envelope)
+    def stop_ack(body: RemoteStopAck, request: Request):
+        from .run_controls import acknowledge_stop
+        identity_data = device_auth(request)
+        result = acknowledge_stop(store, identity_data.principal, identity_data.workspace, body.run_id,
+            request_id=body.request_id, owner=body.owner, attempt=body.attempt, node_id=body.node_id,
+            evidence=body.evidence, final_source_seq=body.final_source_seq, idempotency_key=body.idempotency_key,
+            precondition=assignment_guard(identity_data, body.run_id))
+        return _response(identity_data.principal, identity_data.workspace, [result], summary={"stop_recorded": True})
 
     @router.post("/remote/result")
     def result(body: RemoteResult, request: Request):

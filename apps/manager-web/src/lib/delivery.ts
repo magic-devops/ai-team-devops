@@ -325,6 +325,9 @@ export type DeliveryAction =
   | "deployment.sync"
   | "execution.queue"
   | "execution.sync"
+  | "execution.start"
+  | "execution.retry"
+  | "execution.approval"
   | "execution.cancel"
   | "execution.review";
 export type DeliveryIntent = {

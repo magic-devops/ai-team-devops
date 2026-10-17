@@ -359,3 +359,23 @@ Manager完整1212项通过（325.18秒），Web完整437项/83文件通过（98.
 新增IssueDiagnosis支持表在既有SQLite启动上真实创建且旧表不变，PostgreSQL DDL仅编译验证，未冒称live PostgreSQL。证据 `.sop-runtime/delivery-evidence/delivery-issue-diagnosis/` 包含三库before-live备份、真实HTTP与中断恢复、首次失败及修复、唯一审查、RED/GREEN/完整日志、公共契约、源码/证据散列和精确清理/commit回执。验证服务停止，临时凭据已删除，测试私钥仅清点散列后清理；阶段全部非忽略改动commit、不push，依赖store保持忽略且0跟踪。
 
 本阶段390px中英日和最终详情实机视觉仍待复核，之前浏览器协议策略拒绝后未绕过，组件测试不代替实际视觉。完整目标继续active，production_integration_complete=false；继续节点内部日志与受控干预、生产身份/模型与数据库验证、规模和长期运行验证及实际视觉复核。
+
+## 2026-10-17：执行过程、实时日志与受控干预
+
+复用现Task/run/events/receipts/outbox，将运行概况、精确步骤日志、固定操作确认和按需历史集成回任务与执行详情。真实agentd JSONL支持stdout/stderr、原始attempt和游标续读；分段令牌、PEM和凭据先净化再落盘/上传，流预算显式截断后继续排空。日志不逐块提升run业务版本，Git NUL证据保留独立atomic接口。
+
+Manager统一start/retry/cancel/approval的预览、业务CAS、双域权限、固定语义basis及原key恢复，去掉仅id取消。提交event和Core claim同时固定attempt，旧回执不授权新批次；queued恢复要新明确预览。正常公开队列可创建本地纯人工审批gate，不当测试；批准和拒绝能力分开，暂停或范围变化仍允许授权拒绝收尾。配对审批提前明确拒绝。
+
+业务cancelled与requested/confirmed/unknown/not_started分别展示。Windows suspended→Job→resume关闭抢跑窗口，仅进程树归零/Wait/EOF确认停止。lease丢失先冻结assignment；未知阻重派/重试/归档，显式sync才采纳真实停止。配对日志先ACK、终态结果断网上传与cancel竞态通过原assignment stop ACK恢复，不重跑。
+
+最终Manager完整1350通过/450.68秒（wall479.708秒），Core完整247通过/5个平台skip/303.26秒（wall309.25秒），Web完整532项/105文件/47.37秒，SDK/CLI相关86项/3.56秒。TypeScript58.249秒、Vite41.67秒（wall43.044秒）通过，Go新流测试通过。42个Python文件完整规则对HEAD无新增或变差诊断，原28诊断降26；两个C901下降消息另列，未用例外隐藏旧债。
+
+首次Manager完整1347通过/1旧仅id取消断言失败，按canonical preview更新后最终完整通过；首次Core235通过/3失败/5skip，2项为Windows venv缺tzdata，使用已有随附IANA数据的进程局部PYTHONTZPATH验证，1项shared control的delivery_closed优先级回归已修，最终完整重跑。Web首次528，审查修复后完整532。旧Python弃用、AntD弃用、大包提示和Windows下5个既有POSIX Go夹具失败明确留档，未称全平台全套Go通过。
+
+真实HTTP：原生/配对日志beforeexit，UTF8及脱敏、Windows孙进程停止确认、强杀父控制进程unknown并阻retry、人工审批继续但Task不自动验收、同run批次1/2输出隔离、真实SDK和CLI、原已验收Task有效。纯GET跨Manager/runtime/checkpoint三库29表散列相同。配对专门用本地代理先503终态上传、再Manager取消，恢复经409→heartbeat原stop发现→stop ACK200确认，无节点重跑。外部模型调用0。
+
+唯一独立审查2个P2已修，原始两个复现root各1pass；公开审批边界、离页/关闭/unknown回调、权限撤回及outbox离线/重启/ACK丢失有永久回归。Manager OpenAPI911引用/14当前模型/3新增操作，149未涉路径与360未涉schema不变；Hermes47路径/27schema/124引用验证，文档例子可解析。
+
+证据 `.sop-runtime/delivery-evidence/delivery-execution-runtime/`，含一致三库before-live备份、首次失败、RED/GREEN、唯一审查、真实进程/HTTP、完整日志、source与evidence散列、精确cleanup及commit回执。临时凭据只留hash不留内容，源码/重要文件先留档再清理task scratch；新二进制升入既有runtime位置、旧二进制备份。阶段全部非忽略更改commit、不push，依赖store零跟踪。
+
+390px中英日实机视觉仍受原浏览器协议策略限制，未绕过，组件测试不代替实机。配对审批、生产账户与模型、真实数据库/基础设施、统一事件导航、日历容量及规模/长期验证继续；full goal active，production_integration_complete=false。

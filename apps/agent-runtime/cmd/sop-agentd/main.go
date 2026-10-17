@@ -80,11 +80,15 @@ func doctorCmd() *cobra.Command {
 
 func runToolCmd() *cobra.Command {
 	var root string
+	var events bool
 	c := &cobra.Command{
 		Use:   "run-tool --root PATH",
 		Short: "执行 Hermes core 授权的一次性本地工具调用",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if events {
+				return runtool.ServeEvents(cmd.Context(), root, os.Stdin, os.Stdout)
+			}
 			var req runtool.Request
 			if err := json.NewDecoder(os.Stdin).Decode(&req); err != nil {
 				req = runtool.Request{}
@@ -96,6 +100,7 @@ func runToolCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&root, "root", "", "workspace root")
+	c.Flags().BoolVar(&events, "events", false, "emit bounded JSONL output and accept stdin cancellation")
 	_ = c.MarkFlagRequired("root")
 	return c
 }

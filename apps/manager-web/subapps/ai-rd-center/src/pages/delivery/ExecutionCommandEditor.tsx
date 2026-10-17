@@ -11,11 +11,13 @@ export function ExecutionCommandEditor({
   onChange,
   agent,
   disabled,
+  maxCommands = 32,
 }: {
   rows: ExecutionCommandDraft[];
   onChange: (rows: ExecutionCommandDraft[]) => void;
   agent: boolean;
   disabled: boolean;
+  maxCommands?: number;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRuntime.${key}`);
@@ -35,7 +37,7 @@ export function ExecutionCommandEditor({
         <Button
           size="small"
           icon={<Plus size={14} />}
-          disabled={disabled || rows.length >= 32}
+          disabled={disabled || rows.length >= maxCommands}
           onClick={() =>
             onChange([...rows, commandDraft(`tests${rows.length + 1}`)])
           }

@@ -83,6 +83,15 @@ def sync(bridge, execution):
     return response.json()["executions"][-1]
 
 
+def cancel_execution(client, execution_id, reason="Human reviewed this cancellation"):
+    preview = client.post("/api/v1/delivery/execution-control-preview", json={
+        "id": execution_id, "action": "execution.cancel", "reason": reason,
+    })
+    assert preview.status_code == 200, preview.text
+    fixed = preview.json()
+    return command(client, "execution.cancel", fixed["payload"], version=fixed["version"])
+
+
 def finish(bridge, execution, success=True):
     _, _, store, p, ws, _, _ = bridge
     run = store.get(p, ws["id"], "runs", execution["run_id"])
@@ -101,7 +110,8 @@ def finish(bridge, execution, success=True):
             "data": {
                 **r["data"],
                 "node_results": {
-                    "tests": {"succeeded": success, "exit_code": 0 if success else 1, "stdout": "test output"}
+                    "tests": {"succeeded": success, "exit_code": 0 if success else 1, "stdout": "test output",
+                              "process_tree_stopped": True, "wait_completed": True, "output_eof": True}
                 },
             },
         },
@@ -216,7 +226,7 @@ def test_pending_intent_can_be_cancelled_after_requirement_changes(bridge):
     client, _, store, p, ws, rid, _ = bridge
     intent = queue(bridge)
     command(client, "requirement.update", {"id": rid, "description": "Changed"})
-    response = command(client, "execution.cancel", {"id": intent["id"]})
+    response = cancel_execution(client, intent["id"])
     assert response.status_code == 200, response.text
     assert response.json()["executions"][0]["status"] == "cancelled"
     assert not store.list(p, ws["id"], "runs")
@@ -354,7 +364,7 @@ def test_authorized_admin_can_take_over_after_dispatcher_disabled(bridge, dispat
         db.commit()
         replacement = db.get(User, "replacement")
     client.app.dependency_overrides[current_user] = lambda: replacement
-    response = command(client, "execution.cancel", {"id": execution["id"]})
+    response = cancel_execution(client, execution["id"])
     assert response.status_code == 200, response.text
     assert response.json()["executions"][0]["status"] == "cancelled"
 

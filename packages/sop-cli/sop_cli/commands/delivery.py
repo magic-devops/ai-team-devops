@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 
@@ -25,6 +25,58 @@ class ProjectState(str, Enum):
     active = "active"
     paused = "paused"
     archived = "archived"
+
+
+class OutputStream(str, Enum):
+    stdout = "stdout"
+    stderr = "stderr"
+
+
+@app.command("execution-runtime")
+def execution_runtime(execution_id: Annotated[str, typer.Option("--id")]):
+    """核对明确运行、节点、停止事实及实际可用操作；不会启动运行。"""
+    try:
+        with get_client() as client:
+            console.print_json(data=client.delivery_execution_runtime(execution_id))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("execution-output")
+def execution_output(
+    execution_id: Annotated[str, typer.Option("--id")],
+    node_id: Annotated[str, typer.Option("--node")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1)],
+    stream: Annotated[OutputStream, typer.Option("--stream")] = OutputStream.stdout,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 50,
+):
+    """读取明确节点/尝试/通道的净化输出，保留来源和缺失提示。"""
+    try:
+        with get_client() as client:
+            console.print_json(data=client.delivery_execution_output(
+                execution_id, node_id, attempt=attempt, stream=stream.value, cursor=cursor, limit=limit,
+            ))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("execution-control-preview")
+def execution_control_preview(
+    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+):
+    """预览原操作理由与固定运行；提交仍需明确 command 和原幂等键。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict):
+            raise ValueError("Expected a JSON object")
+        with get_client() as client:
+            console.print_json(data=client.delivery_execution_control_preview(body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("issue")

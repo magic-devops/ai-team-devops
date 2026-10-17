@@ -342,5 +342,32 @@ describe("exact project issue API and recovery", () => {
     expect(issueHref("P", "ISS-one", "https://evil.example")).not.toContain(
       "return_to",
     );
+    const nodeLink = issueEvidenceHref(
+      "P",
+      {
+        project_id: "P",
+        execution_id: "E-one",
+        node_id: "tests",
+        attempt: 2,
+      },
+      href,
+    );
+    const nodeParams = new URLSearchParams(nodeLink!.split("?")[1]);
+    expect(nodeParams.get("execution_node")).toBe("tests");
+    expect(nodeParams.get("execution_attempt")).toBe("2");
+    expect(nodeParams.get("execution_stream")).toBe("stdout");
+    expect(nodeParams.get("return_to")).toBe(href);
+    expect(
+      issueEvidenceHref(
+        "P",
+        {
+          project_id: "P",
+          execution_id: "E-one",
+          node_id: "tests",
+          attempt: 0,
+        },
+        href,
+      ),
+    ).toBeNull();
   });
 });

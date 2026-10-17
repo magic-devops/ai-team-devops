@@ -80,7 +80,7 @@ class Repository:
             raise CoreError("invalid_commit", "The selected commit is unavailable", 422)
 
     def _tool(self, principal, workspace, run_id, root, owner, args, *, allow_truncated=False):
-        result = self.execution.tool(
+        result = self.execution.atomic_tool(
             principal,
             workspace,
             run_id,

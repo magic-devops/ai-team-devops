@@ -88,6 +88,8 @@ import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
 import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
 import { DeliveryExecutionInspector } from "./DeliveryExecutionInspector";
+import { useExecutionExitGuard } from "@/lib/executionExitGuard";
+import { parseExecutionSelection } from "@/lib/executionRuntime";
 import { DeliveryReleaseWorkbench } from "./DeliveryReleaseWorkbench";
 import {
   parseReleaseRoute,
@@ -131,6 +133,21 @@ function ProjectDelivery() {
   const originScope = useRef(sessionSnapshot());
   const qc = useQueryClient();
   const queryKey = ["delivery", projectId, sessionId];
+  const executionExit = useExecutionExitGuard();
+  const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
+    useState<DeliveryWorkspace>();
+  const executionPending = (identity: string, value: boolean) => {
+    const pending = executionExit.setPending(identity, value);
+    const current = qc.getQueryData<DeliveryWorkspace>(queryKey);
+    if (pending && current)
+      setExecutionPinnedWorkspace(
+        (previous) => previous || structuredClone(current),
+      );
+    else if (!pending) setExecutionPinnedWorkspace(undefined);
+  };
+  const [executionSelection, setExecutionSelection] = useState(() =>
+    parseExecutionSelection(location.hash),
+  );
   const [taskEditing, setTaskEditing] = useState(false);
   const [taskPinnedWorkspace, setTaskPinnedWorkspace] =
     useState<DeliveryWorkspace>();
@@ -205,6 +222,7 @@ function ProjectDelivery() {
         new URLSearchParams(location.hash.split("?")[1]).get("execution_id") ||
           "",
       );
+      setExecutionSelection(parseExecutionSelection(location.hash));
       setView(route.view);
       setSelectedId(route.requirement);
       setDetailTab(route.detail);
@@ -243,6 +261,8 @@ function ProjectDelivery() {
     }) => {
       if (originScope.current !== sessionSnapshot())
         throw new Error(tr("scopeChanged"));
+      if (!executionExit.canNavigate())
+        throw new Error(t("deliveryExecutionRuntime.pendingNavigation"));
       const current = qc.getQueryData<DeliveryWorkspace>(queryKey);
       if (!current) throw new Error(tr("refresh"));
       if (form && editorIntent.current) {
@@ -306,6 +326,7 @@ function ProjectDelivery() {
     push = false,
     filters: Partial<DeliveryRoute> = {},
   ) => {
+    if (!executionExit.canNavigate()) return;
     if (["quality", "releases"].includes(nextView)) {
       id = "";
       detail = "details";
@@ -337,6 +358,7 @@ function ProjectDelivery() {
       window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const setIssueRoute = (id: string) => {
+    if (!executionExit.canNavigate()) return;
     const params = new URLSearchParams(location.hash.split("?")[1]);
     params.set("view", "issues");
     params.set("project_id", projectId);
@@ -350,7 +372,7 @@ function ProjectDelivery() {
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
-  const data = taskPinnedWorkspace || query.data;
+  const data = executionPinnedWorkspace || taskPinnedWorkspace || query.data;
   const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
   const inboxQuery = useQuery({
     queryKey: ["delivery-inbox", projectId, sessionId, inboxQueryScope],
@@ -369,6 +391,7 @@ function ProjectDelivery() {
     });
   };
   const openTarget = (target: DeliveryInboxTarget) => {
+    if (!executionExit.canNavigate()) return;
     target = normalizeInboxTarget(target);
     if (
       target.task_id &&
@@ -734,7 +757,6 @@ function ProjectDelivery() {
       />
     );
   const canWrite = data.permissions.write;
-  const actionsDisabled = mutation.isPending;
   const stageTag = (r: DeliveryRequirement) => (
     <Tag
       color={r.flow.closed ? "green" : r.flow.blocked_reason ? "red" : "cyan"}
@@ -935,6 +957,13 @@ function ProjectDelivery() {
         />
       )}
       {!canWrite && <Alert type="info" title={tr("readOnly")} />}
+      {executionExit.blocked && (
+        <Alert
+          type="warning"
+          role="status"
+          title={t("deliveryExecutionRuntime.pendingNavigation")}
+        />
+      )}
       {selectedId && !selected && (
         <Alert
           type="warning"
@@ -1239,6 +1268,9 @@ function ProjectDelivery() {
       )}
       <Drawer
         open={Boolean(requestedTaskId)}
+        closable={!executionExit.pending}
+        maskClosable={!executionExit.pending}
+        keyboard={!executionExit.pending}
         afterOpenChange={taskInspector.afterOpenChange}
         onClose={() => navigate(view, "", "details", "")}
         title={
@@ -1255,6 +1287,9 @@ function ProjectDelivery() {
             projectId={projectId}
             sessionId={sessionId}
             taskId={taskInspector.displayId}
+            onUnresolvedChange={(value) =>
+              executionPending(`task:${taskInspector.displayId}`, value)
+            }
           />
         )}
       </Drawer>
@@ -1262,18 +1297,35 @@ function ProjectDelivery() {
         executionId={selectedExecutionId}
         sessionId={sessionId}
         workspace={data}
+        onSaved={saveWorkspace}
+        nodeId={executionSelection.nodeId}
+        attempt={executionSelection.attempt}
+        stream={executionSelection.stream}
+        onUnresolvedChange={(value) =>
+          executionPending(`execution:${selectedExecutionId}`, value)
+        }
         onCommand={(action, payload) => commit(action, payload, false)}
         onClose={() => {
+          if (!executionExit.canNavigate()) return;
           const params = new URLSearchParams(location.hash.split("?")[1]);
           params.delete("execution_id");
+          params.delete("execution_node");
+          params.delete("execution_attempt");
+          params.delete("execution_stream");
           location.hash = `#/dev-flow?${params}`;
         }}
       />
       <Drawer
         open={Boolean(selected)}
-        onClose={() =>
-          releaseReturn ? (location.hash = releaseReturn) : navigate(view, "")
-        }
+        closable={!executionExit.pending}
+        maskClosable={!executionExit.pending}
+        keyboard={!executionExit.pending}
+        onClose={() => {
+          if (executionExit.canNavigate()) {
+            if (releaseReturn) location.hash = releaseReturn;
+            else navigate(view, "");
+          }
+        }}
         size="min(680px, 100vw)"
         title={selected?.title}
         className="delivery-inspector"
@@ -1468,9 +1520,13 @@ function ProjectDelivery() {
                               workspace={data}
                               taskId={task.id}
                               sessionId={sessionId}
-                              canEdit={canWrite && !actionsDisabled}
+                              canEdit={canWrite && !mutation.isPending}
+                              executionBlocked={executionExit.pending}
                               onSaved={saveWorkspace}
                               onEditingChange={taskEditingChanged}
+                              onUnresolvedChange={(value) =>
+                                executionPending(`task:${task.id}`, value)
+                              }
                               onCommand={(action, payload) =>
                                 commit(action, payload, false)
                               }

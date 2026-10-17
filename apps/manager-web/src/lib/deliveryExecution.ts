@@ -9,7 +9,10 @@ import type {
   ExecutionCommandDraft,
 } from "./executionCommands";
 import { commandNodes } from "./executionCommands";
-import type { ExecutorSnapshot, TeamRuntimeBindings } from "./deliveryTeamRuntime";
+import type {
+  ExecutorSnapshot,
+  TeamRuntimeBindings,
+} from "./deliveryTeamRuntime";
 
 export type ExecutionProvider = {
   id: "codex" | "claude" | "opencode";
@@ -72,7 +75,17 @@ export type ExecutionPayload = {
   target_device_id: string;
   agent_id: string;
   agent_version: number;
-  nodes: ExecutionCommand[];
+  nodes: (
+    | ExecutionCommand
+    | {
+        id: string;
+        title: string;
+        kind: "approval";
+        argv: [];
+        agent_id: "";
+        prompt: "";
+      }
+  )[];
   test_nodes: ExecutionCommand[];
   test_node_ids: string[];
 };
@@ -240,6 +253,8 @@ export type ExecutionDraftSession = {
   agentVersion: number;
   target: ExecutionTarget | null;
   commands: ExecutionCommandDraft[];
+  approvalBeforeRun: boolean;
+  approvalTitle?: string;
   preview: ExecutionPreview | null;
 };
 export function openExecutionDraft(
@@ -262,13 +277,19 @@ export function openExecutionDraft(
     agentVersion: 1,
     target: null,
     commands: [],
+    approvalBeforeRun: false,
     preview: null,
   };
 }
 export function executionPayload(
   session: ExecutionDraftSession,
 ): ExecutionPayload {
-  if (Boolean(session.executorMemberId) !== Boolean(session.executorBindingBasis) || (session.executorMemberId && session.mode !== "agent")) throw new Error("executorAssociationInvalid");
+  if (
+    Boolean(session.executorMemberId) !==
+      Boolean(session.executorBindingBasis) ||
+    (session.executorMemberId && session.mode !== "agent")
+  )
+    throw new Error("executorAssociationInvalid");
   if (!session.workspaceId || !session.target || !session.target.can_execute)
     throw new Error("targetRequired");
   if (session.mode === "agent" && !session.agentId)
@@ -276,6 +297,24 @@ export function executionPayload(
   const nodes = session.commands.length ? commandNodes(session.commands) : [];
   if (session.mode === "command" && !nodes.length)
     throw new Error("commandCount");
+  const plan: ExecutionPayload["nodes"] = [...nodes];
+  if (session.mode === "command" && session.approvalBeforeRun) {
+    if (session.target.kind !== "local")
+      throw new Error("target_approval_unsupported");
+    if (nodes.length >= 32) throw new Error("approvalNodeLimit");
+    let id = "confirm_before_run",
+      suffix = 2;
+    while (nodes.some((node) => node.id === id))
+      id = `confirm_before_run_${suffix++}`;
+    plan.unshift({
+      id,
+      title: session.approvalTitle || "Confirm before execution",
+      kind: "approval",
+      argv: [],
+      agent_id: "",
+      prompt: "",
+    });
+  }
   return {
     executor_member_id: session.executorMemberId,
     executor_binding_basis: session.executorBindingBasis,
@@ -287,7 +326,7 @@ export function executionPayload(
     target_device_id: session.target.kind === "device" ? session.target.id : "",
     agent_id: session.mode === "agent" ? session.agentId : "",
     agent_version: session.agentVersion,
-    nodes: session.mode === "command" ? nodes : [],
+    nodes: session.mode === "command" ? plan : [],
     test_nodes: session.mode === "agent" ? nodes : [],
     test_node_ids:
       session.mode === "command"
@@ -354,16 +393,57 @@ export function adoptExecutionDraft(
     throw new Error("Scope changed");
   const task = data.tasks.find((item) => item.id === session.taskId);
   if (session.executorMemberId) {
-    if (!bindings || bindings.project_id !== data.project.id) throw new Error("executorCatalogueRequired");
-    const member = bindings.members.find((row) => row.member_id === session.executorMemberId);
-    if (!member?.binding || member.status !== "current") throw new Error("executorUnavailable");
-    const boundWorkspace = targets.workspaces.find((item) => item.id === member.binding!.workspace_id);
-    const boundAgent = boundWorkspace?.agents.find((item) => item.id === member.binding!.agent_id && item.version === member.binding!.agent_version);
-    if (!task?.execution_gate.eligible || !boundWorkspace || !boundAgent) throw new Error("executorUnavailable");
-    const sameConfiguration = session.workspaceId === boundWorkspace.id && session.agentId === boundAgent.id && session.agentVersion === boundAgent.version;
-    const currentTarget = sameConfiguration && [boundWorkspace.local, ...boundWorkspace.devices].find((item) => item.id === session.target?.id && item.kind === session.target?.kind);
-    const target = currentTarget && currentTarget.can_execute && !executionTargetProblems(currentTarget, "agent", boundAgent.provider, Boolean(session.commands.length)).length ? structuredClone(currentTarget) : null;
-    return { ...session, mode: "agent", taskBasis: task.basis, executorBindingBasis: member.binding_basis, workspaceId: boundWorkspace.id, agentId: boundAgent.id, agentVersion: boundAgent.version, target, intent: { version: data.version, key }, commands: structuredClone(session.commands), preview: null };
+    if (!bindings || bindings.project_id !== data.project.id)
+      throw new Error("executorCatalogueRequired");
+    const member = bindings.members.find(
+      (row) => row.member_id === session.executorMemberId,
+    );
+    if (!member?.binding || member.status !== "current")
+      throw new Error("executorUnavailable");
+    const boundWorkspace = targets.workspaces.find(
+      (item) => item.id === member.binding!.workspace_id,
+    );
+    const boundAgent = boundWorkspace?.agents.find(
+      (item) =>
+        item.id === member.binding!.agent_id &&
+        item.version === member.binding!.agent_version,
+    );
+    if (!task?.execution_gate.eligible || !boundWorkspace || !boundAgent)
+      throw new Error("executorUnavailable");
+    const sameConfiguration =
+      session.workspaceId === boundWorkspace.id &&
+      session.agentId === boundAgent.id &&
+      session.agentVersion === boundAgent.version;
+    const currentTarget =
+      sameConfiguration &&
+      [boundWorkspace.local, ...boundWorkspace.devices].find(
+        (item) =>
+          item.id === session.target?.id && item.kind === session.target?.kind,
+      );
+    const target =
+      currentTarget &&
+      currentTarget.can_execute &&
+      !executionTargetProblems(
+        currentTarget,
+        "agent",
+        boundAgent.provider,
+        Boolean(session.commands.length),
+      ).length
+        ? structuredClone(currentTarget)
+        : null;
+    return {
+      ...session,
+      mode: "agent",
+      taskBasis: task.basis,
+      executorBindingBasis: member.binding_basis,
+      workspaceId: boundWorkspace.id,
+      agentId: boundAgent.id,
+      agentVersion: boundAgent.version,
+      target,
+      intent: { version: data.version, key },
+      commands: structuredClone(session.commands),
+      preview: null,
+    };
   }
   const workspace = targets.workspaces.find(
     (item) => item.id === session.workspaceId,

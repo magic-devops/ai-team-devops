@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hermes_core.models import CoreError
 from hermes_core.remote_outbox import RECORD_LIMIT_BYTES, OutboxError, OutboxLock, OutboxLocked, RemoteOutbox
 from hermes_core.remote_worker import LOG_LIMIT_BYTES, WorkerError, _load_credential, _run_agentd
 from hermes_core.remote_worker import main as worker_main
@@ -128,8 +129,8 @@ def _agentd(tmp_path: Path) -> Path:
         "root = Path(sys.argv[sys.argv.index('--root') + 1])\n"
         "count = root / 'executions.txt'\n"
         "count.write_text(str(int(count.read_text() or '0') + 1) if count.exists() else '1')\n"
-        "json.loads(sys.stdin.read())\n"
-        "print(json.dumps({'exit_code': 0, 'stdout': 'agentd-ok', 'stderr': '', 'duration_ms': 7}))\n",
+        "json.loads(sys.stdin.readline())\n"
+        "print(json.dumps({'event':'tool.completed','result':{'exit_code': 0, 'stdout': 'agentd-ok', 'stderr': '', 'duration_ms': 7}}))\n",
         encoding="utf-8",
     )
     script.chmod(0o700)
@@ -145,10 +146,10 @@ def _agentd_executes_argv(tmp_path: Path) -> Path:
         "root = Path(sys.argv[sys.argv.index('--root') + 1])\n"
         "count = root / 'agent-executions.txt'\n"
         "count.write_text(str(int(count.read_text() or '0') + 1) if count.exists() else '1')\n"
-        "payload = json.loads(sys.stdin.read())\n"
+        "payload = json.loads(sys.stdin.readline())\n"
         "proc = subprocess.run(payload['argv'], cwd=root, text=True, capture_output=True, timeout=payload['timeout_seconds'])\n"
-        "print(json.dumps({'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout, "
-        "'stderr': proc.stderr, 'duration_ms': 9}))\n",
+        "print(json.dumps({'event':'tool.completed','result':{'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout, "
+        "'stderr': proc.stderr, 'duration_ms': 9}}))\n",
         encoding="utf-8",
     )
     script.chmod(0o700)
@@ -412,17 +413,14 @@ def test_agentd_overlong_raw_data_is_bounded_before_outbox_or_http(tmp_path: Pat
     agentd.write_text(
         "#!" + sys.executable + "\n"
         "import json, sys\n"
-        "json.loads(sys.stdin.read())\n"
+        "json.loads(sys.stdin.readline())\n"
         "print(json.dumps({'exit_code': 0, 'stdout': '汉' * 300000, 'stderr': 'e' * 300000, "
         "'duration_ms': 1, 'raw': 'x' * 9000000}))\n",
         encoding="utf-8",
     )
     agentd.chmod(0o700)
-    result = _run_agentd(str(agentd), tmp_path, _task(), "http://127.0.0.1:1",
-                         _credential("http://127.0.0.1:1"))
-    assert set(result) == {"exit_code", "stdout", "stderr", "duration_ms"}
-    assert len(result["stdout"]) == LOG_LIMIT_BYTES
-    assert len(result["stderr"]) == LOG_LIMIT_BYTES
+    with pytest.raises(CoreError, match="protocol limit"):
+        _run_agentd(str(agentd), tmp_path, _task(), "http://127.0.0.1:1", _credential("http://127.0.0.1:1"))
 
 
 def test_credential_loader_rejects_fifo_before_read(tmp_path: Path) -> None:

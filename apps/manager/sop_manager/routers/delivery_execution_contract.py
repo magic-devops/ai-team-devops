@@ -7,9 +7,31 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from .delivery_team_runtime_contract import ExecutorSnapshot
 
+OutputText = Annotated[str, StringConstraints(strip_whitespace=False)]
+
 
 class ExecutionInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+def _command_plan_node(node):
+    return (node.kind == "command" and bool(node.argv) and not node.agent_id and not node.prompt
+            and all(arg and "\x00" not in arg for arg in node.argv))
+
+
+def _approval_plan_node(node):
+    return node.kind == "approval" and not node.argv and not node.agent_id and not node.prompt
+
+
+def _validate_plan_nodes(nodes, *, post_agent):
+    if post_agent:
+        if any(not _command_plan_node(node) for node in nodes):
+            raise ValueError("Post-agent tests require executable command nodes only")
+        return
+    if not any(_command_plan_node(node) for node in nodes):
+        raise ValueError("A command plan requires at least one executable command")
+    if any(not (_command_plan_node(node) or _approval_plan_node(node)) for node in nodes):
+        raise ValueError("Use executable commands or pure approval gates without command or Agent fields")
 
 
 class ExecutionQueue(ExecutionInput):
@@ -47,20 +69,13 @@ class ExecutionQueue(ExecutionInput):
         if not self.agent_id and self.test_nodes:
             raise ValueError("Post-agent tests require an agent plan")
         selected = self.test_nodes if self.agent_id else self.nodes
-        if any(
-            n.kind != "command"
-            or not n.argv
-            or n.agent_id
-            or n.prompt
-            or any(not arg or "\x00" in arg for arg in n.argv)
-            for n in selected
-        ):
-            raise ValueError("Command tests require executable command nodes only")
+        _validate_plan_nodes(selected, post_agent=bool(self.agent_id))
         ids = [n.id for n in selected]
         if len(set(ids)) != len(ids) or len(set(self.test_node_ids)) != len(self.test_node_ids):
             raise ValueError("Plan and test IDs must be unique")
-        if not set(self.test_node_ids).issubset(ids):
-            raise ValueError("Test IDs must reference command plan nodes")
+        command_ids = {node.id for node in selected if node.kind == "command"}
+        if not set(self.test_node_ids).issubset(command_ids):
+            raise ValueError("Test IDs must reference command plan nodes; approval gates are not tests")
         if self.agent_id and any(node_id.startswith("agent_") for node_id in ids):
             raise ValueError("Post-agent test IDs must not use the reserved agent_ prefix")
         return self
@@ -174,8 +189,8 @@ class ExecutionAgentEvidence(ExecutionInput):
     completed: bool
     usage: dict[str, Any] | None
     usage_truncated: bool
-    message: str
-    error: str
+    message: OutputText
+    error: OutputText
     event_count: int
 
 
@@ -183,9 +198,9 @@ class ExecutionNodeResult(ExecutionInput):
     succeeded: bool | None
     exit_code: int | None
     expected_exit_code: int | None
-    error: str | None
-    stdout: str | None
-    stderr: str | None
+    error: OutputText | None
+    stdout: OutputText | None
+    stderr: OutputText | None
     duration_ms: int | None
     attempt: int | None
     skipped: bool
@@ -211,7 +226,7 @@ class ExecutionObservationEvent(ExecutionInput):
     type: str
     node_id: str | None
     status: str | None
-    message: str
+    message: OutputText
     attempt: int | None
     result: ExecutionNodeResult | None
 

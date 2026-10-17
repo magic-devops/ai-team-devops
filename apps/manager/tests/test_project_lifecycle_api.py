@@ -120,7 +120,9 @@ def test_archive_blocks_pending_intent_even_after_task_deletion_until_explicit_c
     with sessions() as db:
         assert db.get(Project, "project").status == "active"
         assert db.query(DeliveryEvent).filter_by(action="project.lifecycle").count() == 0
-    assert command(client, "execution.cancel", {"id": intent["id"]}).status_code == 200
+    from test_delivery_execution import cancel_execution
+
+    assert cancel_execution(client, intent["id"]).status_code == 200
     archived = submit(client, proposal(client), key="archive-after-explicit-cancel")
     assert archived.status_code == 200, archived.text
     assert archived.json()["project"]["status"] == "archived"

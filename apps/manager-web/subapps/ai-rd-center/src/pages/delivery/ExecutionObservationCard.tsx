@@ -11,8 +11,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExecutionExecutorFacts } from "./ExecutionExecutorFacts";
-import { request } from "@/lib/http";
-import type { DeliveryAction, DeliveryExecution } from "@/lib/delivery";
+import type {
+  DeliveryAction,
+  DeliveryExecution,
+  DeliveryWorkspace,
+} from "@/lib/delivery";
 import {
   fetchExecutionObservations,
   mergeExecutionEvents,
@@ -22,6 +25,7 @@ import {
 import { executionIssueHref } from "@/lib/executionCommands";
 import { ExecutionTargetFacts } from "./ExecutionTargetFacts";
 import { ExecutionAcceptanceSnapshot } from "./ExecutionAcceptanceSnapshot";
+import { ExecutionRuntimePanel } from "./ExecutionRuntimePanel";
 
 export function ExecutionStageFacts({
   observation,
@@ -81,10 +85,25 @@ export function ExecutionObservationCard({
   projectId,
   active,
   onCommand,
+  sessionId,
+  onSaved,
+  onUnresolvedChange,
+  initialNodeId,
+  initialAttempt,
+  initialStream,
+  disabled = false,
 }: {
   entry: DeliveryExecution;
   projectId: string;
   active: boolean;
+  sessionId: string;
+  workspaceVersion: number;
+  onSaved: (data: DeliveryWorkspace) => void;
+  onUnresolvedChange?: (value: boolean) => void;
+  initialNodeId?: string;
+  initialAttempt?: number;
+  initialStream?: string;
+  disabled?: boolean;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
@@ -100,6 +119,7 @@ export function ExecutionObservationCard({
   const [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false);
   const [comment, setComment] = useState("");
+  const [controlLocked, setControlLocked] = useState(false);
   const cursor = useRef<string>();
   const controller = useRef<AbortController>();
   const readingRef = useRef(false);
@@ -166,7 +186,13 @@ export function ExecutionObservationCard({
   const status = observation?.status || entry.status;
   const stale = Boolean(entry.stale || observation?.stale);
   const runId = observation?.run_id || entry.run_id;
-  const pendingBindingInvalidated = !runId && Boolean(observation ? observation.executor_binding_invalidated : entry.executor_binding_invalidated);
+  const pendingBindingInvalidated =
+    !runId &&
+    Boolean(
+      observation
+        ? observation.executor_binding_invalidated
+        : entry.executor_binding_invalidated,
+    );
   const permissions = observation?.permissions;
   const completed =
     observation?.nodes.filter((node) =>
@@ -215,7 +241,12 @@ export function ExecutionObservationCard({
         {observation?.attempt ?? entry.attempt ?? "—"}
       </code>
       {stale && <Alert type="warning" title={tr("stale")} />}
-      {pendingBindingInvalidated && <Alert type="warning" title={t("deliveryTeamRuntime.pendingInvalidated")} />}
+      {pendingBindingInvalidated && (
+        <Alert
+          type="warning"
+          title={t("deliveryTeamRuntime.pendingInvalidated")}
+        />
+      )}
       <ExecutionExecutorFacts snapshot={entry.executor_snapshot} />
       {readError && (
         <Alert
@@ -268,7 +299,7 @@ export function ExecutionObservationCard({
       <Space wrap className="runtime-actions">
         <Button
           size="small"
-          disabled={reading || busy}
+          disabled={reading || busy || controlLocked}
           onClick={() => void observe()}
         >
           {tr("refresh")}
@@ -281,54 +312,13 @@ export function ExecutionObservationCard({
         {permissions?.can_sync && (
           <Button
             size="small"
-            disabled={busy || Boolean(readError)}
+            disabled={busy || controlLocked || disabled || Boolean(readError)}
             loading={busy}
             onClick={() =>
               void act(() => onCommand("execution.sync", { id: entry.id }))
             }
           >
             {tr("sync")}
-          </Button>
-        )}
-        {permissions?.can_start && (
-          <Button
-            size="small"
-            type="primary"
-            disabled={busy || stale || !runId || Boolean(readError)}
-            loading={busy}
-            onClick={() =>
-              void act(async () => {
-                await request(
-                  `/api/hermes/v1/runs/${encodeURIComponent(runId)}/start`,
-                  {
-                    method: "POST",
-                    headers: {
-                      "X-Workspace-Id": entry.workspace_id,
-                      "X-Project-Id": projectId,
-                    },
-                    body: JSON.stringify({
-                      expected_version: observation!.run_version,
-                      idempotency_key: `${entry.id}-start-${observation!.run_version}`,
-                      dry_run: false,
-                    }),
-                  },
-                );
-                await onCommand("execution.sync", { id: entry.id });
-              })
-            }
-          >
-            {tr("start")}
-          </Button>
-        )}
-        {permissions?.can_cancel && (
-          <Button
-            size="small"
-            disabled={busy || Boolean(readError)}
-            onClick={() =>
-              void act(() => onCommand("execution.cancel", { id: entry.id }))
-            }
-          >
-            {tr("cancel")}
           </Button>
         )}
         {entry.issue_id && (
@@ -340,6 +330,22 @@ export function ExecutionObservationCard({
           </Button>
         )}
       </Space>
+      <ExecutionRuntimePanel
+        projectId={projectId}
+        executionId={entry.id}
+        sessionId={sessionId}
+        active={active}
+        paused={paused}
+        disabled={disabled || busy || Boolean(readError)}
+        onSaved={onSaved}
+        initialNodeId={initialNodeId}
+        initialAttempt={initialAttempt}
+        initialStream={initialStream}
+        onUnresolvedChange={(value) => {
+          setControlLocked(value);
+          onUnresolvedChange?.(value);
+        }}
+      />
       <Collapse
         size="small"
         ghost
@@ -394,10 +400,12 @@ export function ExecutionObservationCard({
           },
           {
             key: "nodes",
-            label: tr("nodes"),
+            label: t("deliveryExecutionRuntime.resultFacts"),
             children: (
               <>
-                <p className="runtime-help">{tr("readOnlyLog")}</p>
+                <p className="runtime-help">
+                  {t("deliveryExecutionRuntime.resultFactsHint")}
+                </p>
                 {observation?.nodes.map((node) => (
                   <section className="runtime-node-evidence" key={node.id}>
                     <div className="runtime-section-heading">
@@ -455,21 +463,23 @@ export function ExecutionObservationCard({
                           node.result.agent?.usage_truncated) && (
                           <Tag color="warning">{tr("truncated")}</Tag>
                         )}
-                        <pre
-                          className="runtime-output"
-                          tabIndex={0}
-                          aria-label={`${tr("output")} ${node.id}`}
-                        >
-                          {[
-                            node.result.error,
-                            node.result.stdout,
-                            node.result.stderr,
-                            node.result.agent?.message,
-                            node.result.agent?.error,
-                          ]
-                            .filter(Boolean)
-                            .join("\n") || "—"}
-                        </pre>
+                        {node.result.agent && (
+                          <pre
+                            className="runtime-output"
+                            tabIndex={0}
+                            aria-label={`${t("deliveryExecutionRuntime.agentResult")} ${node.id}`}
+                          >
+                            {[
+                              node.result.agent?.message,
+                              node.result.agent?.error,
+                            ]
+                              .filter(Boolean)
+                              .join("\n") || "—"}
+                          </pre>
+                        )}
+                        {node.result.error && (
+                          <p className="runtime-help">{node.result.error}</p>
+                        )}
                       </>
                     )}
                   </section>
@@ -538,6 +548,8 @@ export function ExecutionObservationCard({
               size="small"
               disabled={
                 busy ||
+                controlLocked ||
+                disabled ||
                 stale ||
                 Boolean(readError) ||
                 status !== "awaiting_review" ||
@@ -552,7 +564,13 @@ export function ExecutionObservationCard({
             </Button>
             <Button
               size="small"
-              disabled={busy || Boolean(readError) || !comment.trim()}
+              disabled={
+                busy ||
+                controlLocked ||
+                disabled ||
+                Boolean(readError) ||
+                !comment.trim()
+              }
               onClick={() => void review("request_changes")}
             >
               {tr("reject")}

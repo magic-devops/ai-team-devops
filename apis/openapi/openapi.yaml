@@ -5340,6 +5340,184 @@ paths:
       description: Read one exact stored proposal and its original evidence scope. If its Issue was deleted, the historical
         proposal remains readable with current=false and can_adopt=false; an authorized writer/reviewer may explicitly dismiss
         a pending proposal. Unknown proposal IDs return 404 and never select another proposal.
+  /api/v1/delivery/executions/{execution_id}/runtime:
+    get:
+      tags:
+      - delivery
+      summary: Execution Runtime
+      operationId: deliveryExecutionRuntime
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: execution_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Execution Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Pure scoped read; no business or runtime writes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionRuntimeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Exact scoped execution, node or attempt not found
+      description: Read exact scoped runtime and control capabilities without synchronizing or writing business state. Logical
+        cancellation and physical stop proof are separate; inactive workspaces allow historical reads under current permission.
+  /api/v1/delivery/executions/{execution_id}/nodes/{node_id}/output:
+    get:
+      tags:
+      - delivery
+      summary: Execution Node Output
+      operationId: deliveryExecutionNodeOutput
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: execution_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Execution Id
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Node Id
+      - name: attempt
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Attempt
+      - name: stream
+        in: query
+        required: false
+        schema:
+          enum:
+          - stdout
+          - stderr
+          type: string
+          default: stdout
+          title: Stream
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 2000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Pure scoped read; no business or runtime writes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionNodeOutputResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Exact scoped execution, node or attempt not found
+      description: Read sanitized output for an explicit node, positive attempt and stream. The cursor is scoped to project/execution/run/node/attempt/stream.
+        Unknown identities return 404 without fallback. Captured live events and completed-node evidence remain distinct, with
+        explicit gaps, truncation and unavailable history.
+  /api/v1/delivery/execution-control-preview:
+    post:
+      tags:
+      - delivery
+      summary: Execution Control Preview
+      operationId: deliveryExecutionControlPreview
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionControlPreviewInput'
+      responses:
+        '200':
+          description: Read-only control preview; not an execution receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionControlPreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context is required
+        '401':
+          description: Authenticated active account required
+        '403':
+          description: Project permission denied
+        '404':
+          description: Exact scoped execution, node or attempt not found
+        '409':
+          description: Execution context changed; review the exact current facts
+      description: Preview one explicit control with its reason, current business version, exact run/attempt/approval and semantic
+        basis. This never executes a control. Commit the unchanged payload through delivery commands with a fixed request key.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -9732,6 +9910,9 @@ components:
           - execution.sync
           - execution.review
           - execution.cancel
+          - execution.start
+          - execution.retry
+          - execution.approval
           - progress.record
           - baseline.create
         payload:
@@ -10062,12 +10243,55 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/IssueDiagnosisDismiss'
+      - if:
+          properties:
+            action:
+              const: execution.start
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ExecutionRuntimeControl'
+      - if:
+          properties:
+            action:
+              const: execution.retry
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ExecutionRuntimeControl'
+      - if:
+          properties:
+            action:
+              const: execution.cancel
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ExecutionRuntimeControl'
+      - if:
+          properties:
+            action:
+              const: execution.approval
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ExecutionRuntimeControl'
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
         Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
         and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay. Issue
         diagnosis adoption requires approve, original selected evidence access and current issue/evidence basis. It reuses the
         unique source Issue requirement without overwriting existing work or closing the Issue. Dismissal records an explicit
-        cancellation/rejection; it does not stop a remote provider.
+        cancellation/rejection; it does not stop a remote provider. Runtime controls require an explicit preview, exact run/attempt,
+        semantic basis and nonempty reason. Only-id cancellation is invalid. Requested/unknown physical stops block rerun, handoff
+        and archive. Receipt replay retains its original attempt; queued recovery requires an explicit new preview. Technical
+        logs never prove task acceptance.
     TaskEdit:
       additionalProperties: false
       properties:
@@ -18590,6 +18814,17 @@ components:
           default: ''
           title: Execution Id
           type: string
+        node_id:
+          default: ''
+          title: Node Id
+          type: string
+        attempt:
+          anyOf:
+          - minimum: 1
+            type: integer
+          - type: 'null'
+          default: null
+          title: Attempt
         deployment_id:
           default: ''
           title: Deployment Id
@@ -19005,4 +19240,561 @@ components:
       - created_at
       - source_kinds
       title: WorkspaceIssue
+      type: object
+    ExecutionControlCapability:
+      additionalProperties: false
+      properties:
+        allowed:
+          title: Allowed
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ExecutionControlReason'
+          title: Reasons
+          type: array
+      required:
+      - allowed
+      - reasons
+      title: ExecutionControlCapability
+      type: object
+    ExecutionControlReason:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: ExecutionControlReason
+      type: object
+    ExecutionRuntimeApproval:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        node_id:
+          title: Node Id
+          type: string
+        attempt:
+          title: Attempt
+          type: integer
+        status:
+          title: Status
+          type: string
+        title:
+          title: Title
+          type: string
+      required:
+      - id
+      - version
+      - node_id
+      - attempt
+      - status
+      - title
+      title: ExecutionRuntimeApproval
+      type: object
+    ExecutionRuntimeControls:
+      additionalProperties: false
+      properties:
+        start:
+          $ref: '#/components/schemas/ExecutionControlCapability'
+        retry:
+          $ref: '#/components/schemas/ExecutionControlCapability'
+        cancel:
+          $ref: '#/components/schemas/ExecutionControlCapability'
+        approval:
+          $ref: '#/components/schemas/ExecutionControlCapability'
+        approval_reject:
+          $ref: '#/components/schemas/ExecutionControlCapability'
+      required:
+      - start
+      - retry
+      - cancel
+      - approval
+      - approval_reject
+      title: ExecutionRuntimeControls
+      type: object
+    ExecutionRuntimeNode:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        kind:
+          enum:
+          - command
+          - approval
+          - agent
+          title: Kind
+          type: string
+        is_test:
+          title: Is Test
+          type: boolean
+        status:
+          enum:
+          - pending
+          - running
+          - passed
+          - failed
+          - skipped
+          title: Status
+          type: string
+        available_attempts:
+          items:
+            type: integer
+          title: Available Attempts
+          type: array
+        result_attempt:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Result Attempt
+        reused_result:
+          title: Reused Result
+          type: boolean
+      required:
+      - id
+      - title
+      - kind
+      - is_test
+      - status
+      - available_attempts
+      - result_attempt
+      - reused_result
+      title: ExecutionRuntimeNode
+      type: object
+    ExecutionStopFact:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        state:
+          enum:
+          - requested
+          - confirmed
+          - unknown
+          - not_started
+          title: State
+          type: string
+        node_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Node Id
+        attempt:
+          title: Attempt
+          type: integer
+        reason:
+          title: Reason
+          type: string
+        requested_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requested At
+        confirmed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Confirmed At
+        evidence:
+          title: Evidence
+          type: string
+      required:
+      - id
+      - state
+      - node_id
+      - attempt
+      - reason
+      - requested_at
+      - confirmed_at
+      - evidence
+      title: ExecutionStopFact
+      type: object
+    ExecutionRuntimeResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        execution_id:
+          title: Execution Id
+          type: string
+        run_id:
+          title: Run Id
+          type: string
+        run_version:
+          title: Run Version
+          type: integer
+        attempt:
+          title: Attempt
+          type: integer
+        status:
+          title: Status
+          type: string
+        runtime_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Runtime Status
+        stale:
+          title: Stale
+          type: boolean
+        active_node_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Active Node Id
+        observed_at:
+          title: Observed At
+          type: string
+        recovery_requires_review:
+          title: Recovery Requires Review
+          type: boolean
+        stop:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionStopFact'
+          - type: 'null'
+        approval:
+          anyOf:
+          - $ref: '#/components/schemas/ExecutionRuntimeApproval'
+          - type: 'null'
+        nodes:
+          items:
+            $ref: '#/components/schemas/ExecutionRuntimeNode'
+          title: Nodes
+          type: array
+        controls:
+          $ref: '#/components/schemas/ExecutionRuntimeControls'
+      required:
+      - project_id
+      - execution_id
+      - run_id
+      - run_version
+      - attempt
+      - status
+      - runtime_status
+      - stale
+      - active_node_id
+      - observed_at
+      - recovery_requires_review
+      - stop
+      - approval
+      - nodes
+      - controls
+      title: ExecutionRuntimeResponse
+      type: object
+    ExecutionOutputChunk:
+      additionalProperties: false
+      properties:
+        seq:
+          title: Seq
+          type: integer
+        source_seq:
+          title: Source Seq
+          type: integer
+        node_id:
+          title: Node Id
+          type: string
+        attempt:
+          title: Attempt
+          type: integer
+        stream:
+          enum:
+          - stdout
+          - stderr
+          title: Stream
+          type: string
+        text:
+          title: Text
+          type: string
+        observed_at:
+          title: Observed At
+          type: string
+        truncated:
+          title: Truncated
+          type: boolean
+      required:
+      - seq
+      - source_seq
+      - node_id
+      - attempt
+      - stream
+      - text
+      - observed_at
+      - truncated
+      title: ExecutionOutputChunk
+      type: object
+    ExecutionOutputGap:
+      additionalProperties: false
+      properties:
+        after_seq:
+          title: After Seq
+          type: integer
+        before_seq:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Before Seq
+        reason:
+          title: Reason
+          type: string
+      required:
+      - after_seq
+      - before_seq
+      - reason
+      title: ExecutionOutputGap
+      type: object
+    ExecutionNodeOutputResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        execution_id:
+          title: Execution Id
+          type: string
+        run_id:
+          title: Run Id
+          type: string
+        node_id:
+          title: Node Id
+          type: string
+        attempt:
+          title: Attempt
+          type: integer
+        stream:
+          enum:
+          - stdout
+          - stderr
+          title: Stream
+          type: string
+        source:
+          enum:
+          - live_capture
+          - completed_node_result
+          - unavailable
+          title: Source
+          type: string
+        availability:
+          enum:
+          - available
+          - missing
+          - restricted
+          - unavailable
+          - pending
+          title: Availability
+          type: string
+        available_attempts:
+          items:
+            type: integer
+          title: Available Attempts
+          type: array
+        chunks:
+          items:
+            $ref: '#/components/schemas/ExecutionOutputChunk'
+          title: Chunks
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        more:
+          title: More
+          type: boolean
+        complete:
+          title: Complete
+          type: boolean
+        truncated:
+          title: Truncated
+          type: boolean
+        sanitized:
+          title: Sanitized
+          type: boolean
+        gaps:
+          items:
+            $ref: '#/components/schemas/ExecutionOutputGap'
+          title: Gaps
+          type: array
+      required:
+      - project_id
+      - execution_id
+      - run_id
+      - node_id
+      - attempt
+      - stream
+      - source
+      - availability
+      - available_attempts
+      - chunks
+      - next_cursor
+      - more
+      - complete
+      - truncated
+      - sanitized
+      - gaps
+      title: ExecutionNodeOutputResponse
+      type: object
+    ExecutionControlPreviewInput:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 100
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Id
+          type: string
+        action:
+          enum:
+          - execution.start
+          - execution.retry
+          - execution.cancel
+          - execution.approval
+          title: Action
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+        approval_id:
+          anyOf:
+          - maxLength: 100
+            minLength: 1
+            pattern: ^[^\s\x00-\x1f\x7f]+$
+            type: string
+          - type: 'null'
+          default: null
+          title: Approval Id
+        decision:
+          anyOf:
+          - enum:
+            - approve
+            - reject
+            type: string
+          - type: 'null'
+          default: null
+          title: Decision
+      required:
+      - id
+      - action
+      - reason
+      title: ExecutionControlPreviewInput
+      type: object
+    ExecutionRuntimeControl:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 100
+          minLength: 1
+          pattern: ^[^\s\x00-\x1f\x7f]+$
+          title: Id
+          type: string
+        run_id:
+          maxLength: 64
+          title: Run Id
+          type: string
+        run_version:
+          minimum: 0
+          title: Run Version
+          type: integer
+        attempt:
+          minimum: 1
+          title: Attempt
+          type: integer
+        control_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Control Basis
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+        approval_id:
+          anyOf:
+          - maxLength: 100
+            minLength: 1
+            pattern: ^[^\s\x00-\x1f\x7f]+$
+            type: string
+          - type: 'null'
+          default: null
+          title: Approval Id
+        approval_version:
+          anyOf:
+          - minimum: 1
+            type: integer
+          - type: 'null'
+          default: null
+          title: Approval Version
+        decision:
+          anyOf:
+          - enum:
+            - approve
+            - reject
+            type: string
+          - type: 'null'
+          default: null
+          title: Decision
+      required:
+      - id
+      - run_id
+      - run_version
+      - attempt
+      - control_basis
+      - reason
+      title: ExecutionRuntimeControl
+      type: object
+    ExecutionControlPreviewResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        execution_id:
+          title: Execution Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        action:
+          enum:
+          - execution.start
+          - execution.retry
+          - execution.cancel
+          - execution.approval
+          title: Action
+          type: string
+        allowed:
+          title: Allowed
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/ExecutionControlReason'
+          title: Reasons
+          type: array
+        payload:
+          $ref: '#/components/schemas/ExecutionRuntimeControl'
+      required:
+      - project_id
+      - execution_id
+      - version
+      - action
+      - allowed
+      - reasons
+      - payload
+      title: ExecutionControlPreviewResponse
       type: object

@@ -192,12 +192,12 @@ def _write_fake_agentd(path: Path) -> None:
     path.write_text(
         "#!/usr/bin/env python3\n"
         "import json, os, subprocess, sys, time\n"
-        "payload = json.loads(sys.stdin.read())\n"
+        "payload = json.loads(sys.stdin.readline())\n"
         "root = sys.argv[sys.argv.index('--root') + 1]\n"
         "started = time.monotonic()\n"
         "proc = subprocess.run(payload['argv'], cwd=root, text=True, capture_output=True, timeout=payload['timeout_seconds'])\n"
-        "print(json.dumps({'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout,\n"
-        "                  'stderr': proc.stderr, 'duration_ms': int((time.monotonic() - started) * 1000)}))\n",
+        "print(json.dumps({'event':'tool.completed','result':{'ok': proc.returncode == 0, 'exit_code': proc.returncode, 'stdout': proc.stdout,\n"
+        "                  'stderr': proc.stderr, 'duration_ms': int((time.monotonic() - started) * 1000)}}))\n",
         encoding="utf-8",
     )
     path.chmod(0o700)

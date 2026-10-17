@@ -65,6 +65,8 @@ class EvidenceTarget(IssueContract):
     requirement_id: str = ""
     task_id: str = ""
     execution_id: str = ""
+    node_id: str = ""
+    attempt: int | None = Field(default=None, ge=1)
     deployment_id: str = ""
     issue_id: str = ""
 
