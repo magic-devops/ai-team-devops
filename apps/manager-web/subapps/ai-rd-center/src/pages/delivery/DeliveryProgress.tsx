@@ -1,3 +1,5 @@
+import { useDeliveryMemberReferences } from "@/lib/deliveryQueryHooks";
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -18,7 +20,7 @@ import {
   saveDelivery,
   type DeliveryInboxTarget,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryContext,
 } from "@/lib/delivery";
 import { planError } from "@/lib/deliveryTaskPlan";
 import {
@@ -61,8 +63,8 @@ function progressQueryKey(
 type Props = {
   projectId: string;
   sessionId: string;
-  workspace: DeliveryWorkspace;
-  onWorkspace: (data: DeliveryWorkspace) => void;
+  workspace: DeliveryContext;
+  onWorkspace: (data: DeliveryCommandAck) => void;
   onOpenTask: (target: DeliveryInboxTarget) => void;
 };
 export function DeliveryProgress({
@@ -121,7 +123,10 @@ export function DeliveryProgress({
     dateDraft.startsOn,
     dateDraft.endsOn,
   );
-  const key = progressQueryKey(projectId, sessionId, route);
+  const key = [
+    ...progressQueryKey(projectId, sessionId, route),
+    workspace.query_generation,
+  ];
   const query = useQuery({
     queryKey: key,
     queryFn: ({ signal }) =>
@@ -152,10 +157,23 @@ export function DeliveryProgress({
     gcTime: 0,
     retry: false,
   });
+  const memberRefs = useDeliveryMemberReferences(
+    projectId,
+    sessionId,
+    [...(data?.current.tasks || []), ...(data?.baseline?.tasks || [])]
+      .flatMap((task) => [
+        task.owner_id,
+        ...(task.allocations || []).map((allocation) => allocation.member_id),
+      ])
+      .concat(
+        data?.baseline?.created_by ? [`user:${data.baseline.created_by}`] : [],
+      ),
+    workspace.query_generation,
+  );
   const scopeOptions =
     data?.scopes[route.scope === "sprint" ? "sprints" : "milestones"] || [];
   const refresh = () => void query.refetch();
-  const saveResult = (updated: DeliveryWorkspace) => {
+  const saveResult = (updated: DeliveryCommandAck) => {
     onWorkspace(updated);
     void qc.invalidateQueries({
       queryKey: ["delivery-progress", projectId, sessionId],
@@ -250,15 +268,10 @@ export function DeliveryProgress({
             intent.key,
           );
           saveResult(updated);
-          const receiptEvent = updated.activity.find(
-            (event) =>
-              event.action === "baseline.create" &&
-              event.data.input.basis === payload.basis &&
-              event.data.input.title === payload.title,
-          );
           changeRoute({
             ...frozenRoute,
-            baselineId: receiptEvent?.resource_id || "",
+            baselineId:
+              updated.resource.kind === "baseline" ? updated.resource.id : "",
           });
         } catch (error) {
           const failure = planError(error);
@@ -288,7 +301,7 @@ export function DeliveryProgress({
                 latest.current.tasks
                   .map(
                     (task) =>
-                      `${task.title} (${task.id}) · ${identity(workspace.members, task.owner_id)} · ${task.estimate || "—"} · ${task.starts_on || "—"} → ${task.ends_on || "—"}`,
+                      `${task.title} (${task.id}) · ${identity(memberRefs.members, task.owner_id)} · ${task.estimate || "—"} · ${task.starts_on || "—"} → ${task.ends_on || "—"}`,
                   )
                   .join("\n") || tr("noTasks"),
             },
@@ -577,7 +590,7 @@ export function DeliveryProgress({
               </p>
               <small>
                 {tr("createdBy")}:{" "}
-                {workspace.members.find(
+                {memberRefs.members.find(
                   (member) => member.id === `user:${data.baseline!.created_by}`,
                 )?.name || data.baseline.created_by}{" "}
                 · {tr("createdAt")}:{" "}
@@ -589,9 +602,8 @@ export function DeliveryProgress({
               )}
               {data.comparison && (
                 <DeliveryProgressComparison
-                  members={workspace.members}
+                  members={memberRefs.members}
                   comparison={data.comparison}
-                  currentTasks={workspace.tasks}
                   onOpenTask={openCurrentTask}
                 />
               )}
@@ -625,7 +637,6 @@ export function DeliveryProgress({
         {observation.data && (
           <DeliveryProgressSnapshot
             observation={observation.data}
-            currentTasks={workspace.tasks}
             onOpenTask={openCurrentTask}
           />
         )}

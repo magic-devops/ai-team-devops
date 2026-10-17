@@ -1,8 +1,10 @@
 import { Alert, Button, Empty, Tag } from "antd";
+import { useState } from "react";
+import { getProjectId } from "@/lib/authStorage";
+import { fetchTaskDetail } from "@/lib/deliveryQuery";
 import { allocationSummary } from "@/lib/deliveryScheduling";
 import { useTranslation } from "react-i18next";
 import {
-  currentProgressTaskTarget,
   progressStates,
   type DeliveryProgress,
   type ProgressComparison,
@@ -107,22 +109,40 @@ export function DeliveryProgressHistory({
   );
 }
 type TaskNavigation = {
-  currentTasks: { id: string; req_id: string }[];
+  currentTasks?: { id: string; req_id: string }[];
   onOpenTask: (target: DeliveryInboxTarget) => void;
 };
 function CurrentTaskButton({
   task,
-  currentTasks,
   onOpenTask,
 }: TaskNavigation & { task: ProgressTask }) {
   const { t } = useTranslation();
-  const target = currentProgressTaskTarget(task.id, currentTasks);
-  return target ? (
-    <Button size="small" onClick={() => onOpenTask(target)}>
-      {t("deliveryProgress.openCurrentTask")}
-    </Button>
-  ) : (
-    <small className="delivery-hint">{t("deliveryProgress.deletedTask")}</small>
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const open = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const detail = await fetchTaskDetail(getProjectId() || "", task.id);
+      onOpenTask({
+        view: "progress",
+        requirement_id: detail.task.req_id,
+        task_id: detail.task.id,
+        detail: "tasks",
+      });
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Button size="small" loading={busy} onClick={() => void open()}>
+        {t("deliveryProgress.openCurrentTask")}
+      </Button>
+      {error && <small role="alert">{error}</small>}
+    </>
   );
 }
 export function DeliveryProgressSnapshot({

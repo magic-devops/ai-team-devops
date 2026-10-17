@@ -3,7 +3,7 @@ import { Button, Collapse } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryExecutionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryExecutionPanel";
 import { ExecutionObservationCard } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionObservationCard";
-import type { DeliveryTask, DeliveryWorkspace } from "./delivery";
+import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 const hooks = vi.hoisted(() => ({
   values: [] as unknown[],
   refs: [] as any[],
@@ -33,24 +33,20 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: undefined, isPending: false, isError: false }),
+  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[0] === "delivery-execution-exact" ? { execution: executions.find((entry) => entry.id === queryKey.at(-1)) } : undefined, isPending: false, isError: false }),
+  useInfiniteQuery: () => ({ data: { pages: [{ items: executions.map((entry) => ({ data: entry })) }] }, isPending: false, isError: false }),
 }));
+const executions = ["current", "old-two", "old-one"].map((id) => ({ id, task_id: "T", status: "cancelled", created_at: "2026-10-17T00:00:00Z", attempt: 1 }));
 const data = {
   project: { id: "P" },
   version: 7,
   permissions: { write: true },
-  executions: ["old-one", "old-two", "current"].map((id) => ({
-    id,
-    task_id: "T",
-    status: "cancelled",
-    created_at: "2026-10-17T00:00:00Z",
-    attempt: 1,
-  })),
-} as unknown as DeliveryWorkspace;
+} as unknown as DeliveryTaskData;
 const task = {
   id: "T",
   req_id: "",
   status: "blocked",
+  execution_id: "current",
   acceptance: { available: true },
   execution_gate: { eligible: true, reasons: [] },
 } as unknown as DeliveryTask;
@@ -68,6 +64,7 @@ const render = () => {
 function collect(node: ReactNode, type: unknown): any[] {
   if (Array.isArray(node)) return node.flatMap((child) => collect(child, type));
   if (!isValidElement<any>(node)) return [];
+  if (typeof node.type === "function" && node.type.name === "ExactExecutionCard") return collect((node.type as (props: any) => ReactNode)(node.props), type);
   return [
     ...(node.type === type ? [node.props] : []),
     ...collect(node.props.children, type),

@@ -1,7 +1,7 @@
 import { Alert, Button, Descriptions, Input, Modal, Space } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   assertExecutionSession,
@@ -22,7 +22,7 @@ export type ExecutionRuntimeControlProps = {
   runtime: ExecutionRuntime;
   disabled?: boolean;
   readOnly?: boolean;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onObserved: (data: ExecutionRuntime) => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
 };

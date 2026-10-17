@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Empty, Skeleton, Tag } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import {
   fetchDeliveryDeployments,
   type DeploymentEnvironment,
@@ -39,7 +39,7 @@ export function DeliveryDeploymentWorkbench({
   preparation: Preparation;
   background: string;
   readOnly: boolean;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onClosePreparation: () => void;
   onRollback: (id: string) => void;
   onOpenDeployment: (id: string, candidateId: string) => void;
@@ -62,7 +62,7 @@ export function DeliveryDeploymentWorkbench({
   const deployments = (index?.deployments || []).filter(
     (deployment) => !releaseId || deployment.candidate_id === releaseId,
   );
-  const saved = (data: DeliveryWorkspace) => {
+  const saved = (data: DeliveryCommandAck) => {
     onSaved(data);
     void qc.invalidateQueries({
       queryKey: ["delivery-deployment-index", projectId, sessionId],

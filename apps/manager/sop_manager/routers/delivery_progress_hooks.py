@@ -28,7 +28,22 @@ def _models():
     return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent, DeliveryTaskReview
 
 
-def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=False):
+def _administrator_roster_scopes(db, tenant_ids, user_ids, include_roster):
+    from .sql_models import Project, User
+
+    # Administrators appear in every project roster of their tenant, including
+    # when they own no work and have no ProjectMember row.
+    tenants = set(tenant_ids) if include_roster else set()
+    tenants.update(db.connection().scalars(
+        select(User.tenant_id).where(User.id.in_(user_ids), User.tenant_id.in_(tenant_ids),
+                                    User.role.in_(["tenant_admin", "super_admin"]))
+    ).all())
+    return db.connection().execute(
+        select(Project.tenant_id, Project.id).where(Project.tenant_id.in_(tenants))
+    ).all() if tenants else []
+
+
+def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=False, include_roster=False):
     """Actual stable responsibility scopes affected by account or membership changes."""
     from .sql_models import DeliveryTaskReview, DeliveryWorkspace, Project, ProjectMember, Task
 
@@ -54,6 +69,7 @@ def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=
         ):
             affected.add((tenant_id, project_id))
         if trusted:
+            affected.update(_administrator_roster_scopes(db, tenant_ids, user_ids, include_roster))
             affected.update(db.connection().execute(
                 select(Project.tenant_id, Project.id).join(ProjectMember, ProjectMember.project_id == Project.id)
                 .where(Project.tenant_id.in_(tenant_ids), ProjectMember.user_id.in_(user_ids))
@@ -102,7 +118,8 @@ def _identity_object_scopes(db, obj):
             )
             if original:
                 tenants.add(original)
-        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id}, trusted=True)
+        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id}, trusted=True,
+                         include_roster=obj.role in {"tenant_admin", "super_admin"})
     elif isinstance(obj, ProjectMember):
         projects = {obj.project_id}
         if state.persistent:
@@ -231,6 +248,7 @@ def _core_identity_write(state, table):
                     tenant_ids={value["tenant_id"]},
                     user_ids={value["id"]},
                     trusted=True,
+                    include_roster=value.get("role") in {"tenant_admin", "super_admin"},
                 )
             elif not is_user and value.get("project_id"):
                 _identity_scopes(state.session, project_ids={value["project_id"]})
@@ -339,6 +357,12 @@ def _before_commit(db):
             identity_scopes = set().union(*db.info.get(_TRUSTED_SCOPES, {}).values()) if db.info.get(_TRUSTED_SCOPES) else set()
             identity = (tenant_id, project_id) in identity_scopes
             if in_lifecycle_scope(db, tenant_id, project_id) and not identity:
+                from .delivery_progress_facts import evaluate_project
+                from .delivery_query_index import replace_from_evaluation
+
+                # Lifecycle has its own audit trail. Refresh disposable query
+                # facts in this transaction without inventing a work observation.
+                replace_from_evaluation(db, project, evaluate_project(db, project))
                 continue
             context = identity_capture_scope(db, tenant_id, project_id) if identity else nullcontext()
             with context:

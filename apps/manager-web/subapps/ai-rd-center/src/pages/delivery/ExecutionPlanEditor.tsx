@@ -1,4 +1,8 @@
 import {
+  fetchDeliveryTaskData,
+  type DeliveryCommandAck,
+} from "@/lib/deliveryQuery";
+import {
   Alert,
   Button,
   Checkbox,
@@ -12,9 +16,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  fetchDelivery,
   saveDelivery,
-  type DeliveryWorkspace,
+  type DeliveryTaskData,
   type DeliveryMember,
 } from "@/lib/delivery";
 import {
@@ -58,7 +61,7 @@ export function ExecutionPlanEditor({
   initialTargets: DeliveryTargets;
   canConfigure: boolean;
   onClose: () => void;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   members: DeliveryMember[];
   sessionId: string;
 }) {
@@ -72,7 +75,7 @@ export function ExecutionPlanEditor({
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const [candidate, setCandidate] = useState<{
-    workspace: DeliveryWorkspace;
+    workspace: DeliveryTaskData;
     targets: DeliveryTargets;
     bindings?: TeamRuntimeBindings;
     adopted?: ExecutionDraftSession;
@@ -159,7 +162,7 @@ export function ExecutionPlanEditor({
     setError("");
     try {
       const [latestWorkspace, latestTargets] = await Promise.all([
-        fetchDelivery(draft.projectId),
+        fetchDeliveryTaskData(draft.projectId, draft.taskId),
         fetchDeliveryTargets(draft.projectId),
       ]);
       const latestBindings = draft.executorMemberId
@@ -204,12 +207,8 @@ export function ExecutionPlanEditor({
         Boolean(draft.commands.length),
       )
     : [];
-  const latestTask = candidate?.workspace.tasks.find(
-    (task) => task.id === draft.taskId,
-  );
-  const latestRequirement = candidate?.workspace.requirements.find(
-    (requirement) => requirement.id === latestTask?.req_id,
-  );
+  const latestTask = candidate?.workspace.task;
+  const latestRequirement = candidate?.workspace.requirement;
   const selectedMember = team.data?.members.find(
     (item) => item.member_id === draft.executorMemberId,
   );

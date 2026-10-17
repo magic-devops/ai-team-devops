@@ -1,14 +1,23 @@
+import {
+  fetchDeliveryContext,
+  fetchDeliveryReferences,
+  fetchRequirementDetail,
+  type RequirementDetail,
+  invalidateDeliveryQueries,
+  rebuildDeliveryQuery,
+} from "@/lib/deliveryQuery";
+import {
+  DeliveryRequirementIndex,
+  DeliveryRequirementTasks,
+  DeliveryQueryError,
+} from "./DeliveryQueryViews";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   Button,
   Drawer,
   Empty,
-  Input,
-  Progress,
-  Select,
   Skeleton,
-  Table,
   Tabs,
   Tag,
   Tooltip,
@@ -21,12 +30,10 @@ import {
   List,
   Plus,
   RefreshCw,
-  Search,
   Settings2,
   Users,
 } from "lucide-react";
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -34,14 +41,12 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { getProjectId, getToken, getWorkspaceScope } from "@/lib/authStorage";
+import { getProjectId, getToken } from "@/lib/authStorage";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   deliveryStages,
-  fetchDelivery,
   fetchDeliveryInbox,
-  filterRequirements,
   prepareDeliveryIntent,
-  requirementProgress,
   safeEvidenceUrl,
   saveDelivery,
   type DeliveryAction,
@@ -49,7 +54,8 @@ import {
   type DeliveryMember,
   type DeliveryMilestone,
   type DeliveryRequirement,
-  type DeliveryWorkspace,
+  type DeliveryContext,
+  type DeliveryCommandAck,
   type DeliveryInboxTarget,
 } from "@/lib/delivery";
 import {
@@ -68,7 +74,6 @@ import {
   parseDeliveryRoute,
   normalizeInboxTarget,
   projectUpdatePayload,
-  taskTargetState,
   type DeliveryRoute,
   type InboxCategory,
   type InboxScope,
@@ -81,7 +86,7 @@ import { DeliveryProgress, DeliveryProgressSummary } from "./DeliveryProgress";
 import { preserveProgressRoute } from "@/lib/deliveryProgress";
 import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
 import { DeliveryScheduling } from "./DeliveryScheduling";
-import { DeliveryTaskDetail, TaskDetailContent } from "./DeliveryTaskDetail";
+import { DeliveryTaskDetail } from "./DeliveryTaskDetail";
 import {
   DeliveryActivityFeed,
   DeliveryActivityDetail,
@@ -114,7 +119,7 @@ const subscribe = (cb: () => void) => {
     window.removeEventListener("storage", cb);
   };
 };
-const sessionSnapshot = () => JSON.stringify([getToken(), getWorkspaceScope()]);
+const sessionSnapshot = projectSessionKey;
 const views = deliveryViews;
 const lines = (value: unknown) =>
   String(value || "")
@@ -141,13 +146,13 @@ function ProjectDelivery() {
   const sessionId = useMemo(() => crypto.randomUUID(), []);
   const originScope = useRef(sessionSnapshot());
   const qc = useQueryClient();
-  const queryKey = ["delivery", projectId, sessionId];
+  const queryKey = ["delivery-context", projectId, sessionId];
   const executionExit = useExecutionExitGuard();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
-    useState<DeliveryWorkspace>();
+    useState<DeliveryContext>();
   const executionPending = (identity: string, value: boolean) => {
     const pending = executionExit.setPending(identity, value);
-    const current = qc.getQueryData<DeliveryWorkspace>(queryKey);
+    const current = qc.getQueryData<DeliveryContext>(queryKey);
     if (pending && current)
       setExecutionPinnedWorkspace(
         (previous) => previous || structuredClone(current),
@@ -157,30 +162,10 @@ function ProjectDelivery() {
   const [executionSelection, setExecutionSelection] = useState(() =>
     parseExecutionSelection(location.hash),
   );
-  const [taskEditing, setTaskEditing] = useState(false);
-  const [taskPinnedWorkspace, setTaskPinnedWorkspace] =
-    useState<DeliveryWorkspace>();
-  const taskEditingChanged = useCallback(
-    (editing: boolean) => {
-      setTaskEditing(editing);
-      if (editing) {
-        const current = qc.getQueryData<DeliveryWorkspace>([
-          "delivery",
-          projectId,
-          sessionId,
-        ]);
-        if (current)
-          setTaskPinnedWorkspace(
-            (previous) => previous || structuredClone(current),
-          );
-      } else setTaskPinnedWorkspace(undefined);
-    },
-    [projectId, sessionId, qc],
-  );
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => fetchDelivery(projectId, signal),
-    enabled: Boolean(projectId && getToken()) && !taskEditing,
+    queryFn: ({ signal }) => fetchDeliveryContext(projectId, signal),
+    enabled: Boolean(projectId && getToken()),
     gcTime: 0,
     refetchInterval: 5000,
   });
@@ -241,6 +226,7 @@ function ProjectDelivery() {
       setInboxCategory(route.inboxCategory);
       setResourceKind(route.resourceKind);
       setShowArchived(route.showArchived);
+      setRoute(route);
     };
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
@@ -249,9 +235,27 @@ function ProjectDelivery() {
       window.removeEventListener("popstate", syncRoute);
     };
   }, []);
-  const [search, setSearch] = useState("");
-  const [stage, setStage] = useState("");
-  const [owner, setOwner] = useState("");
+  const [route, setRoute] = useState(() => parseDeliveryRoute(location.hash));
+  const detailQuery = useQuery({
+    queryKey: [
+      "delivery-requirement-detail",
+      projectId,
+      sessionId,
+      selectedId,
+      query.data?.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchRequirementDetail(
+        projectId,
+        selectedId,
+        signal,
+        query.data?.query_generation,
+      ),
+    enabled: Boolean(selectedId) && !executionExit.pending,
+    retry: false,
+    gcTime: 0,
+    refetchInterval: 5000,
+  });
   const [changeRequirement, setChangeRequirement] =
     useState<DeliveryRequirement | null>(null);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
@@ -274,7 +278,7 @@ function ProjectDelivery() {
         throw new Error(tr("scopeChanged"));
       if (!executionExit.canNavigate())
         throw new Error(t("deliveryExecutionRuntime.pendingNavigation"));
-      const current = qc.getQueryData<DeliveryWorkspace>(queryKey);
+      const current = qc.getQueryData<DeliveryContext>(queryKey);
       if (!current) throw new Error(tr("refresh"));
       if (form && editorIntent.current) {
         const intent = prepareDeliveryIntent(
@@ -303,7 +307,8 @@ function ProjectDelivery() {
       );
     },
     onSuccess: (data) => {
-      qc.setQueryData(queryKey, data);
+      if (data.project_id === projectId)
+        void invalidateDeliveryQueries(qc, projectId);
       for (const key of ["delivery-activity", "delivery-requirement-history"])
         void qc.invalidateQueries({ queryKey: [key, projectId, sessionId] });
       void qc.invalidateQueries({
@@ -359,16 +364,14 @@ function ProjectDelivery() {
         issue_id: filters.issue,
       },
       { inboxScope, inboxCategory, resourceKind, showArchived, ...filters },
+      location.hash,
     );
     history[push ? "pushState" : "replaceState"](
       null,
       "",
       `${location.pathname}${location.search}${preserveCollaborationRoute(["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash), location.hash)}`,
     );
-    if (
-      ["progress", "team", "timeline", "quality", "releases"].includes(nextView)
-    )
-      window.dispatchEvent(new PopStateEvent("popstate"));
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
   const setIssueRoute = (id: string) => {
     if (!executionExit.canNavigate()) return;
@@ -385,7 +388,7 @@ function ProjectDelivery() {
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
-  const data = executionPinnedWorkspace || taskPinnedWorkspace || query.data;
+  const data = executionPinnedWorkspace || query.data;
   const inboxQueryScope = view === "overview" ? "mine" : inboxScope;
   const inboxQuery = useQuery({
     queryKey: ["delivery-inbox", projectId, sessionId, inboxQueryScope],
@@ -397,8 +400,13 @@ function ProjectDelivery() {
     gcTime: 0,
     refetchInterval: 5000,
   });
-  const saveWorkspace = (updated: DeliveryWorkspace) => {
-    qc.setQueryData(queryKey, updated);
+  const saveWorkspace = (updated: DeliveryCommandAck) => {
+    if (
+      originScope.current !== sessionSnapshot() ||
+      updated.project_id !== projectId
+    )
+      return;
+    void invalidateDeliveryQueries(qc, projectId);
     for (const key of ["delivery-activity", "delivery-requirement-history"])
       void qc.invalidateQueries({ queryKey: [key, projectId, sessionId] });
     void qc.invalidateQueries({
@@ -448,13 +456,62 @@ function ProjectDelivery() {
     const frame = requestAnimationFrame(locateTask);
     return () => cancelAnimationFrame(frame);
   }, [selectedId, selectedTaskId, detailTab]);
-  const visible = filterRequirements(
-    data?.requirements || [],
-    search,
-    stage,
-    owner,
-  );
-  const selected = data?.requirements.find((r) => r.id === selectedId);
+  const retainedRequirement = useRef<RequirementDetail>();
+  if (retainedRequirement.current?.requirement.id !== selectedId)
+    retainedRequirement.current = undefined;
+  if (detailQuery.data?.requirement.id === selectedId)
+    retainedRequirement.current = detailQuery.data;
+  const selected = retainedRequirement.current?.requirement;
+  const selectedOwner = useQuery({
+    queryKey: [
+      "delivery-requirement-owner",
+      projectId,
+      sessionId,
+      selected?.flow.owner_id,
+      query.data?.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<DeliveryMember>(
+        projectId,
+        "member",
+        { ids: [selected!.flow.owner_id] },
+        signal,
+        query.data?.query_generation,
+      ),
+    enabled: Boolean(selected?.flow.owner_id),
+    retry: false,
+    gcTime: 0,
+  });
+  const selectedMilestone = useQuery({
+    queryKey: [
+      "delivery-requirement-milestone",
+      projectId,
+      sessionId,
+      selected?.flow.milestone_id,
+      query.data?.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<DeliveryMilestone>(
+        projectId,
+        "milestone",
+        { ids: [selected!.flow.milestone_id] },
+        signal,
+        query.data?.query_generation,
+      ),
+    enabled: Boolean(selected?.flow.milestone_id),
+    retry: false,
+    gcTime: 0,
+  });
+  const changeQueryRoute = (patch: Partial<DeliveryRoute>, push = false) => {
+    navigate(
+      view,
+      patch.requirement ?? selectedId,
+      detailTab,
+      patch.task ?? selectedTaskId,
+      push,
+      patch,
+    );
+  };
   const releaseReturn = releaseReturnFromHash(location.hash);
   const collaborationReturn = safeCollaborationReturn(
     new URLSearchParams(location.hash.split("?")[1]).get(
@@ -479,23 +536,15 @@ function ProjectDelivery() {
           day: "numeric",
         }).format(new Date(value.length === 10 ? value + "T12:00:00" : value))
       : tr("unscheduled");
-  const name = (id: string) => identityLabel(data?.members || [], id);
-  const ownerOptions = [
-    { label: tr("unassigned"), value: "" },
-    ...(data?.members || [])
-      .filter((m) => m.active && m.kind !== "tool")
-      .map((m) => ({
-        label: identityLabel(data?.members || [], m.id),
-        value: m.id,
-      })),
-  ];
+  const name = (id: string) =>
+    identityLabel(selectedOwner.data?.items.map((item) => item.data) || [], id);
   const field = (
     key: string,
     label: string,
     extra: Partial<EditorField> = {},
   ): EditorField => ({ key, label: tr(label), ...extra });
   const ownerField = field("owner_id", "owner", {
-    members: data?.members || [],
+    members: [],
   });
   const edit = (
     title: string,
@@ -509,7 +558,9 @@ function ProjectDelivery() {
     },
   ) => {
     editorIntent.current = {
-      version: data?.version || 0,
+      version: ["addEvidence", "advance", "reopen"].includes(title)
+        ? detailQuery.data?.version || 0
+        : data?.version || 0,
       key: crypto.randomUUID(),
     };
     setEditor({
@@ -522,33 +573,46 @@ function ProjectDelivery() {
         if (originScope.current !== sessionSnapshot())
           throw new Error(tr("scopeChanged"));
         if (hooks?.loadLatest) return hooks.loadLatest();
-        const fresh = await fetchDelivery(projectId);
+        const fresh = await fetchDeliveryContext(projectId);
         qc.setQueryData(queryKey, fresh);
         const [action, payload] = JSON.parse(
           editorIntent.current?.signature || '["",{}]',
         ) as [string, Record<string, string>];
-        const req = fresh.requirements.find(
-          (r) => r.id === (payload.requirement_id || payload.id),
-        );
+        const req = selectedId
+          ? (await fetchRequirementDetail(projectId, selectedId)).requirement
+          : undefined;
         let current: Record<string, unknown> = { name: fresh.project.name };
         if (action === "project.update") current = fresh.project;
-        else if (action === "task.update") {
-          const task = fresh.tasks.find((item) => item.id === payload.id);
-          current = task ? { ...task, ...task.planning } : {};
-        } else if (req)
+        else if (action === "member.save")
+          current = payload.id
+            ? (
+                await fetchDeliveryReferences<DeliveryMember>(
+                  projectId,
+                  "member",
+                  { ids: [payload.id] },
+                )
+              ).items[0]?.data || {}
+            : {};
+        else if (action === "milestone.save")
+          current = payload.id
+            ? (
+                await fetchDeliveryReferences<DeliveryMilestone>(
+                  projectId,
+                  "milestone",
+                  { ids: [payload.id] },
+                )
+              ).items[0]?.data || {}
+            : {};
+        else if (req)
           current = {
             ...req,
             ...req.flow,
             criteria: req.acceptance_criteria.join("\n"),
           };
-        else if (action === "member.save")
-          current = fresh.members.find((m) => m.id === payload.id) || {};
-        else if (action === "milestone.save")
-          current = fresh.milestones.find((m) => m.id === payload.id) || {};
         const items = [
           {
             label: tr("requirements"),
-            value: String(fresh.summary.requirements),
+            value: String(fresh.summary?.requirements ?? "—"),
           },
         ];
         if (req)
@@ -563,7 +627,7 @@ function ProjectDelivery() {
             label: f.label,
             value:
               (f.members
-                ? identityLabel(fresh.members, String(value || ""))
+                ? String(value || tr("unassigned"))
                 : f.options?.find((o) => o.value === value)?.label) ||
               String(value ?? tr("none")),
           });
@@ -596,13 +660,8 @@ function ProjectDelivery() {
         ownerField,
         field("due_on", "due", { type: "date" }),
         field("milestone_id", "milestone", {
-          options: [
-            { label: tr("none"), value: "" },
-            ...(data?.milestones || []).map((m) => ({
-              label: m.title,
-              value: m.id,
-            })),
-          ],
+          referenceKind: "milestone",
+          options: [{ label: tr("none"), value: "" }],
         }),
       ],
       { priority: "P1", owner_id: "", milestone_id: "" },
@@ -635,7 +694,7 @@ function ProjectDelivery() {
       ],
       { owner_id: "", ...data?.project },
       async (v) => {
-        const current = qc.getQueryData<DeliveryWorkspace>(queryKey);
+        const current = qc.getQueryData<DeliveryContext>(queryKey);
         if (!current?.permissions.write) throw new Error(tp("noPermission"));
         if (
           data?.permissions.configure &&
@@ -707,7 +766,11 @@ function ProjectDelivery() {
       },
       "toolsHint",
     );
-  const planEditor = (r: DeliveryRequirement) => setPlanRequirement(r);
+  const planVersion = useRef(0);
+  const planEditor = (r: DeliveryRequirement) => {
+    planVersion.current = detailQuery.data?.version || 0;
+    setPlanRequirement(r);
+  };
   const evidenceEditor = (r: DeliveryRequirement) =>
     edit(
       "addEvidence",
@@ -781,7 +844,31 @@ function ProjectDelivery() {
         }
       />
     );
-  const canWrite = data.permissions.write;
+  if (data.query_state.status !== "ready")
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        title={t("deliveryQuery.rebuildRequired")}
+        action={
+          data.permissions.query_rebuild ? (
+            <Button
+              onClick={() =>
+                void rebuildDeliveryQuery(projectId)
+                  .then(() => query.refetch())
+                  .catch((failure) => setActionError(failure.message))
+              }
+            >
+              {t("deliveryQuery.rebuild")}
+            </Button>
+          ) : undefined
+        }
+        description={actionError || undefined}
+      />
+    );
+  const canWrite = data.permissions.write && !query.isError;
+  const canWriteRequirement =
+    canWrite && !detailQuery.isPending && !detailQuery.isError;
   const stageTag = (r: DeliveryRequirement) => (
     <Tag
       color={r.flow.closed ? "green" : r.flow.blocked_reason ? "red" : "cyan"}
@@ -789,101 +876,6 @@ function ProjectDelivery() {
       {r.flow.closed ? tr("closed") : tr(`stages.${r.flow.stage}`)}
     </Tag>
   );
-  const empty = (
-    <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={
-        <>
-          <strong>{tr("empty")}</strong>
-          <p>{tr("emptyHint")}</p>
-        </>
-      }
-    >
-      <Button
-        onClick={() => {
-          setSearch("");
-          setOwner("");
-          setStage("");
-        }}
-      >
-        {tr("reset")}
-      </Button>
-    </Empty>
-  );
-  const columns = [
-    {
-      title: tr("titleField"),
-      key: "title",
-      render: (_: unknown, r: DeliveryRequirement) => (
-        <button
-          className="delivery-title-link"
-          onClick={() => navigate(view, r.id)}
-        >
-          <span>{r.title}</span>
-          <small>
-            {r.id} · {t("delivery.revision", { number: r.flow.revision })}
-          </small>
-        </button>
-      ),
-    },
-    {
-      title: tr("current"),
-      key: "stage",
-      width: 150,
-      render: (_: unknown, r: DeliveryRequirement) => stageTag(r),
-    },
-    {
-      title: tr("priority"),
-      dataIndex: "priority",
-      width: 90,
-      render: (p: string) => (
-        <Tag color={p === "P0" ? "red" : p === "P1" ? "orange" : "default"}>
-          {p}
-        </Tag>
-      ),
-    },
-    {
-      title: tr("owner"),
-      key: "owner",
-      width: 140,
-      render: (_: unknown, r: DeliveryRequirement) => name(r.flow.owner_id),
-    },
-    {
-      title: tr("progress"),
-      key: "progress",
-      width: 160,
-      render: (_: unknown, r: DeliveryRequirement) => (
-        <div className="delivery-progress">
-          <Progress
-            percent={requirementProgress(r)}
-            showInfo={false}
-            size="small"
-          />
-          <small>
-            {r.tasks_done}/{r.tasks_total}
-          </small>
-        </div>
-      ),
-    },
-    {
-      title: tr("due"),
-      key: "due",
-      width: 130,
-      render: (_: unknown, r: DeliveryRequirement) => (
-        <span
-          className={
-            r.flow.due_on &&
-            r.flow.due_on < new Date().toLocaleDateString("en-CA") &&
-            !r.flow.closed
-              ? "delivery-overdue"
-              : ""
-          }
-        >
-          {date(r.flow.due_on)}
-        </span>
-      ),
-    },
-  ];
   return (
     <section className="delivery-workbench" aria-label={tr("title")}>
       {data.project.status === "archived" && (
@@ -917,7 +909,10 @@ function ProjectDelivery() {
               aria-label={tr("refresh")}
               icon={<RefreshCw size={16} />}
               loading={query.isFetching}
-              onClick={() => void query.refetch()}
+              onClick={() => {
+                void query.refetch();
+                void invalidateDeliveryQueries(qc, projectId);
+              }}
             />
           </Tooltip>
           <Button
@@ -954,18 +949,6 @@ function ProjectDelivery() {
           title={t("deliveryExecutionRuntime.pendingNavigation")}
         />
       )}
-      {selectedId && !selected && (
-        <Alert
-          type="warning"
-          showIcon
-          title={tp("requirementMissing")}
-          action={
-            <Button onClick={() => navigate("inbox", "")}>
-              {tp("backInbox")}
-            </Button>
-          }
-        />
-      )}
       <div className="delivery-metrics">
         {(
           [
@@ -981,15 +964,15 @@ function ProjectDelivery() {
             <strong>
               {
                 [
-                  data.summary.requirements,
-                  data.summary.accepted,
-                  data.summary.released,
-                  data.summary.blocked,
-                  data.summary.open_issues,
+                  data.summary?.requirements,
+                  data.summary?.accepted,
+                  data.summary?.released,
+                  data.summary?.blocked,
+                  data.summary?.open_issues,
                 ][idx]
               }
             </strong>
-            {idx === 1 && <small>{data.summary.acceptance_rate}%</small>}
+            {idx === 1 && <small>{data.summary?.acceptance_rate}%</small>}
           </div>
         ))}
       </div>
@@ -1032,40 +1015,16 @@ function ProjectDelivery() {
         }))}
       />
       {["list", "board"].includes(view) && (
-        <div className="delivery-toolbar">
-          <Input
-            aria-label={tr("search")}
-            placeholder={tr("search")}
-            prefix={<Search size={15} />}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            allowClear
-          />
-          <Select
-            aria-label={tr("allStages")}
-            value={stage}
-            onChange={setStage}
-            options={[
-              { label: tr("allStages"), value: "" },
-              ...deliveryStages.map((value) => ({
-                value,
-                label: tr(`stages.${value}`),
-              })),
-            ]}
-          />
-          <Select
-            aria-label={tr("allOwners")}
-            value={owner}
-            onChange={setOwner}
-            options={[
-              { label: tr("allOwners"), value: "" },
-              ...ownerOptions.filter((o) => o.value),
-            ]}
-          />
-          <span>
-            {visible.length} / {data.requirements.length}
-          </span>
-        </div>
+        <DeliveryRequirementIndex
+          projectId={projectId}
+          sessionId={sessionId}
+          view={view as "list" | "board"}
+          route={route}
+          queryGeneration={data.query_generation}
+          onRefreshContext={() => void query.refetch()}
+          onRoute={changeQueryRoute}
+          onOpen={(id) => navigate(view, id, "details", "", true)}
+        />
       )}
       {view === "overview" && (
         <>
@@ -1083,7 +1042,7 @@ function ProjectDelivery() {
           <div className="delivery-section-heading">
             <h2>{tr("current")}</h2>
             <span>
-              {tr("tasksDone")} {data.summary.tasks_done}/{data.summary.tasks}
+              {tr("tasksDone")} {data.summary?.tasks_done}/{data.summary?.tasks}
             </span>
           </div>
           <div className="delivery-stage-rail">
@@ -1091,13 +1050,16 @@ function ProjectDelivery() {
               <button
                 key={s}
                 onClick={() => {
-                  setStage(s);
-                  navigate("list", "");
+                  navigate("list", "", "details", "", true, {
+                    stage: s,
+                    page: 1,
+                    cursor: "",
+                  });
                 }}
               >
                 <small>{String(i + 1).padStart(2, "0")}</small>
                 <strong>
-                  {data.requirements.filter((r) => r.flow.stage === s).length}
+                  {data.metrics?.requirement_stage_counts?.[s] ?? "—"}
                 </strong>
                 <span>{tr(`stages.${s}`)}</span>
               </button>
@@ -1180,66 +1142,6 @@ function ProjectDelivery() {
           onOpen={openTarget}
         />
       )}
-      {view === "list" && (
-        <Table
-          rowKey="id"
-          dataSource={visible}
-          columns={columns}
-          size="middle"
-          scroll={{ x: 920 }}
-          pagination={{ pageSize: 20, hideOnSinglePage: true }}
-          locale={{ emptyText: empty }}
-        />
-      )}
-      {view === "board" &&
-        (visible.length ? (
-          <div className="delivery-board">
-            {deliveryStages
-              .filter((s) => !stage || s === stage)
-              .map((s) => (
-                <section key={s} className="delivery-lane">
-                  <header>
-                    <span>{tr(`stages.${s}`)}</span>
-                    <Tag>
-                      {visible.filter((r) => r.flow.stage === s).length}
-                    </Tag>
-                  </header>
-                  {visible
-                    .filter((r) => r.flow.stage === s)
-                    .map((r) => (
-                      <button
-                        className="delivery-card"
-                        key={r.id}
-                        onClick={() => navigate(view, r.id)}
-                      >
-                        <div>
-                          <small>{r.id}</small>
-                          <Tag color={r.priority === "P0" ? "red" : "default"}>
-                            {r.priority}
-                          </Tag>
-                        </div>
-                        <h3>{r.title}</h3>
-                        {r.flow.blocked_reason && (
-                          <p className="delivery-overdue">
-                            {r.flow.blocked_reason}
-                          </p>
-                        )}
-                        <Progress
-                          percent={requirementProgress(r)}
-                          size="small"
-                        />
-                        <footer>
-                          <span>{name(r.flow.owner_id)}</span>
-                          <span>{date(r.flow.due_on)}</span>
-                        </footer>
-                      </button>
-                    ))}
-                </section>
-              ))}
-          </div>
-        ) : (
-          empty
-        ))}
       {["team", "timeline"].includes(view) && (
         <DeliveryScheduling
           projectId={projectId}
@@ -1276,10 +1178,7 @@ function ProjectDelivery() {
             ? collaborationNavigate(collaborationReturn)
             : navigate(view, "", "details", "")
         }
-        title={
-          data.tasks.find((task) => task.id === taskInspector.displayId)
-            ?.title || t("deliveryManualReview.unavailable")
-        }
+        title={t("deliveryTaskAcceptance.details")}
         width={680}
         className="delivery-inspector"
         destroyOnHidden
@@ -1323,7 +1222,7 @@ function ProjectDelivery() {
         }}
       />
       <Drawer
-        open={Boolean(selected)}
+        open={Boolean(selectedId)}
         closable={!executionExit.pending}
         maskClosable={!executionExit.pending}
         keyboard={!executionExit.pending}
@@ -1342,6 +1241,16 @@ function ProjectDelivery() {
           if (open) locateTask();
         }}
       >
+        {detailQuery.isPending && <Skeleton active />}
+        {detailQuery.error && (
+          <DeliveryQueryError
+            error={detailQuery.error}
+            onRetry={() => {
+              void query.refetch();
+              void detailQuery.refetch();
+            }}
+          />
+        )}
         {selected && (
           <>
             <div className="delivery-inspector-meta">
@@ -1386,9 +1295,9 @@ function ProjectDelivery() {
                         <span>
                           {tr("milestone")}
                           <strong>
-                            {data.milestones.find(
-                              (m) => m.id === selected.flow.milestone_id,
-                            )?.title || tr("none")}
+                            {selectedMilestone.data?.items[0]?.label ||
+                              selected.flow.milestone_id ||
+                              tr("none")}
                           </strong>
                         </span>
                       </div>
@@ -1406,7 +1315,7 @@ function ProjectDelivery() {
                       )}
                       <Button
                         onClick={() => reqEditor(selected)}
-                        disabled={!canWrite}
+                        disabled={!canWriteRequirement}
                       >
                         {tr("edit")}
                       </Button>
@@ -1440,6 +1349,9 @@ function ProjectDelivery() {
                           type="primary"
                           disabled={
                             !data.permissions.approve ||
+                            query.isError ||
+                            detailQuery.isError ||
+                            detailQuery.isPending ||
                             selected.flow.closed ||
                             selected.flow.gates.some((g) => !g.ok)
                           }
@@ -1452,7 +1364,12 @@ function ProjectDelivery() {
                           )}
                         </Button>
                         <Button
-                          disabled={!data.permissions.approve}
+                          disabled={
+                            !data.permissions.approve ||
+                            query.isError ||
+                            detailQuery.isError ||
+                            detailQuery.isPending
+                          }
                           onClick={() => reviewEditor(selected, true)}
                         >
                           {tr("reopen")}
@@ -1466,28 +1383,12 @@ function ProjectDelivery() {
                   label: tr("tasks"),
                   children: (
                     <>
-                      {taskTargetState(
-                        data.tasks,
-                        selected.id,
-                        selectedTaskId,
-                      ) === "missing" && (
-                        <Alert
-                          type="warning"
-                          showIcon
-                          title={tp("taskMissing")}
-                          action={
-                            <Button onClick={() => navigate("inbox", "")}>
-                              {tp("backInbox")}
-                            </Button>
-                          }
-                        />
-                      )}
                       <p className="delivery-hint">{tr("assignmentHint")}</p>
                       <div className="delivery-actions">
                         <Button
                           onClick={() => planEditor(selected)}
                           disabled={
-                            !canWrite ||
+                            !canWriteRequirement ||
                             ["release", "operations"].includes(
                               selected.flow.stage,
                             )
@@ -1499,48 +1400,17 @@ function ProjectDelivery() {
                           {tr("dispatch")}
                         </Button>
                       </div>
-                      {!data.tasks.some(
-                        (task) => task.req_id === selected.id,
-                      ) && (
-                        <Empty
-                          description={tr("noTasks")}
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        />
-                      )}
-                      {data.tasks
-                        .filter((task) => task.req_id === selected.id)
-                        .map((task) => (
-                          <article
-                            className={`delivery-task ${selectedTaskId === task.id ? "is-target" : ""}`}
-                            key={task.id}
-                            tabIndex={-1}
-                            ref={(node) => {
-                              if (node) taskNodes.current.set(task.id, node);
-                              else taskNodes.current.delete(task.id);
-                            }}
-                            aria-label={
-                              selectedTaskId === task.id
-                                ? `${tp("taskLocated")}: ${task.title}`
-                                : undefined
-                            }
-                          >
-                            <TaskDetailContent
-                              workspace={data}
-                              taskId={task.id}
-                              sessionId={sessionId}
-                              canEdit={canWrite && !mutation.isPending}
-                              executionBlocked={executionExit.pending}
-                              onSaved={saveWorkspace}
-                              onEditingChange={taskEditingChanged}
-                              onUnresolvedChange={(value) =>
-                                executionPending(`task:${task.id}`, value)
-                              }
-                              onCommand={(action, payload) =>
-                                commit(action, payload, false)
-                              }
-                            />
-                          </article>
-                        ))}
+                      <DeliveryRequirementTasks
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        requirementId={selected.id}
+                        route={route}
+                        queryGeneration={data.query_generation}
+                        onRoute={changeQueryRoute}
+                        onUnresolvedChange={(value) =>
+                          executionPending(`task:${selectedTaskId}`, value)
+                        }
+                      />
                     </>
                   ),
                 },
@@ -1550,7 +1420,7 @@ function ProjectDelivery() {
                   children: (
                     <>
                       <Button
-                        disabled={!canWrite || selected.flow.closed}
+                        disabled={!canWriteRequirement || selected.flow.closed}
                         onClick={() => evidenceEditor(selected)}
                       >
                         {tr("addEvidence")}
@@ -1717,6 +1587,7 @@ function ProjectDelivery() {
           key={changeRequirement.id}
           workspace={data}
           requirement={changeRequirement}
+          requirementVersion={detailQuery.data?.version}
           sessionId={sessionId}
           onClose={() => setChangeRequirement(null)}
           onSaved={(updated) => {
@@ -1736,10 +1607,11 @@ function ProjectDelivery() {
           key={planRequirement.id}
           data={data}
           requirement={planRequirement}
+          requirementVersion={planVersion.current}
           onClose={() => setPlanRequirement(null)}
           onSaved={(updated) => {
             if (originScope.current !== sessionSnapshot()) return;
-            qc.setQueryData(queryKey, updated);
+            saveWorkspace(updated);
             setPlanRequirement(null);
             navigate("list", planRequirement.id, "tasks");
           }}

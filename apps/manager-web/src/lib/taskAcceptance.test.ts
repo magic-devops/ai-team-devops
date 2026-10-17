@@ -8,7 +8,7 @@ import {
   taskEditPayload,
 } from "./deliveryTaskEditing";
 import { TaskDetailContent } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryRequirement, DeliveryTaskData } from "./delivery";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -19,17 +19,9 @@ const workspace = () =>
     planning_basis: "plan",
     permissions: { write: true, approve: true, configure: true },
     members: [],
-    executions: [],
-    requirements: [
-      {
-        id: "REQ",
-        title: "Requirement",
-        acceptance_criteria: ["Requirement A", "Requirement B"],
-        flow: { revision: 3 },
-      },
-    ],
-    tasks: [
-      {
+    requirement: null,
+    dependencies: [],
+    task: {
         id: "T-one",
         req_id: "",
         title: "Standalone task",
@@ -51,8 +43,7 @@ const workspace = () =>
         execution_gate: { eligible: true, reasons: [] },
         planning: { depends_on: [], requirement_criteria_indices: [] },
       },
-    ],
-  }) as unknown as DeliveryWorkspace;
+  }) as unknown as DeliveryTaskData;
 describe("task acceptance as explicit business content", () => {
   it("submits own text and requirement indices as separate fields with the fixed basis", () => {
     const data = workspace();
@@ -66,18 +57,20 @@ describe("task acceptance as explicit business content", () => {
     expect(result.acceptance_criteria).toEqual(["Verify final output"]);
     expect(result.requirement_criteria_indices).toEqual([]);
     expect(result.task_basis).toBe("basis");
-    expect(data.tasks[0].acceptance_criteria).toEqual([
+    expect(data.task.acceptance_criteria).toEqual([
       "Task must preserve draft",
     ]);
   });
   it("retains own criteria while explicitly adopting reordered requirement references", () => {
     const data = workspace();
-    data.tasks[0].req_id = "REQ";
+    data.task.req_id = "REQ";
+    data.requirement = { id: "REQ", title: "Requirement", acceptance_criteria: ["Requirement A", "Requirement B"], flow: { revision: 3 } } as DeliveryRequirement;
     const session = openTaskEdit(data, "T-one");
     const latest = workspace();
-    latest.tasks[0].req_id = "REQ";
+    latest.task.req_id = "REQ";
+    latest.requirement = structuredClone(data.requirement);
     latest.version = 8;
-    latest.requirements[0].acceptance_criteria.reverse();
+    latest.requirement.acceptance_criteria.reverse();
     const adopted = adoptTaskEdit(session, latest, {
       acceptance_criteria: ["My edited condition"],
       requirement_criteria_indices: ["0"],
@@ -92,7 +85,7 @@ describe("task acceptance as explicit business content", () => {
         QueryClientProvider,
         { client: new QueryClient() },
         createElement(TaskDetailContent, {
-          workspace: workspace(),
+          detail: workspace(),
           taskId: "T-one",
           canEdit: true,
           onSaved: () => {},

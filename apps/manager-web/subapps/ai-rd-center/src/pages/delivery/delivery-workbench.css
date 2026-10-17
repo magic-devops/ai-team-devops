@@ -5,6 +5,65 @@
   padding: 8px 4px 32px;
   --delivery-accent: var(--brand, #0d9488);
 }
+.delivery-query-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.delivery-query-pagination > span {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.delivery-query-id,
+.delivery-query-task-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.delivery-query-task-row.ant-btn {
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  justify-content: space-between;
+  white-space: normal;
+  text-align: left;
+  margin-bottom: 6px;
+}
+.delivery-query-task-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.delivery-reference-select {
+  min-width: 0;
+  width: 100%;
+}
+.delivery-toolbar > .delivery-reference-select {
+  flex: 1 1 170px;
+}
+.delivery-lane .delivery-query-pagination .ant-btn {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+}
+@media (max-width: 560px) {
+  .delivery-query-pagination .ant-btn {
+    flex: 1 1 100px;
+    height: auto;
+    min-height: 36px;
+    white-space: normal;
+  }
+  .delivery-toolbar > .delivery-reference-select {
+    flex-basis: 100%;
+  }
+  .delivery-query-task-row.ant-btn {
+    align-items: flex-start;
+  }
+}
 .delivery-project-overview {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
@@ -1586,5 +1645,34 @@
   }
   .delivery-task-plan-editor .ant-modal-body {
     max-height: 68dvh;
+  }
+}
+
+.delivery-query-mobile-list {
+  display: none;
+}
+.delivery-query-mobile-list .delivery-card {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.delivery-query-mobile-list .delivery-card > span {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.delivery-query-mobile-list .delivery-card:focus-visible {
+  outline: 2px solid var(--accent, #1677ff);
+  outline-offset: 3px;
+}
+@media (max-width: 640px) {
+  .delivery-query-desktop-list {
+    display: none;
+  }
+  .delivery-query-mobile-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
   }
 }

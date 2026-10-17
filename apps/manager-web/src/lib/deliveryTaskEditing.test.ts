@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DeliveryTaskPlanning } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanning";
-import type { DeliveryTask, DeliveryWorkspace } from "./delivery";
+import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import {
   adoptTaskEdit,
   openTaskEdit,
@@ -30,9 +30,10 @@ const workspace = {
   project: { id: "project" },
   version: 7,
   planning_basis: "planning-old",
-  tasks: [task],
-  requirements: [],
-} as unknown as DeliveryWorkspace;
+  task,
+  requirement: null,
+  dependencies: [],
+} as unknown as DeliveryTaskData;
 describe("one task plan editor", () => {
   it("pins standalone task basis and submits dependencies without invented requirement criteria", () => {
     const session = openTaskEdit(workspace, task.id);
@@ -70,16 +71,16 @@ describe("one task plan editor", () => {
     };
     const first = {
       ...workspace,
-      tasks: [oldTask],
-      requirements: [{ id: "REQ-one", acceptance_criteria: ["A", "B"] }],
-    } as unknown as DeliveryWorkspace;
+      task: oldTask,
+      requirement: { id: "REQ-one", acceptance_criteria: ["A", "B"] },
+    } as unknown as DeliveryTaskData;
     const session = openTaskEdit(first, task.id);
     const fresh = {
       ...first,
       version: 8,
-      tasks: [{ ...oldTask, basis: "latest" }],
-      requirements: [{ id: "REQ-one", acceptance_criteria: ["B", "A"] }],
-    } as unknown as DeliveryWorkspace;
+      task: { ...oldTask, basis: "latest" },
+      requirement: { id: "REQ-one", acceptance_criteria: ["B", "A"] },
+    } as unknown as DeliveryTaskData;
     const adopted = adoptTaskEdit(session, fresh, {
       description: "My draft",
       acceptance_criteria: ["Own criterion"],
@@ -96,7 +97,7 @@ describe("one task plan editor", () => {
       version: 8,
       task: { basis: "latest" },
     });
-    expect(() => adoptTaskEdit(session, { ...fresh, tasks: [] }, {})).toThrow();
+    expect(() => adoptTaskEdit(session, { ...fresh, task: { ...fresh.task, id: "T-other" } }, {})).toThrow();
   });
   it("treats task basis changes as explicit recoverable conflicts", () => {
     expect(

@@ -1833,7 +1833,9 @@ paths:
         Issue diagnosis adoption requires approve, original selected evidence access and current issue/evidence basis. It reuses
         the unique source Issue requirement without overwriting existing work or closing the Issue. Dismissal records an explicit
         cancellation/rejection; it does not stop a remote provider. Pending diagnosis receipts block archive until an explicit
-        dismissal. Archived projects remain read-only.'
+        dismissal. Archived projects remain read-only. Returns CommandAck rather than a workspace snapshot. applied_version/resource/result/affected_refs
+        are the original committed result; version/query_generation are current. Old receipts without immutable result return
+        delivery_receipt_result_unavailable.'
       security:
       - bearerAuth: []
       parameters:
@@ -1850,11 +1852,11 @@ paths:
               $ref: '#/components/schemas/DeliveryCommand'
       responses:
         '200':
-          description: Updated snapshot with replayed and applied_version
+          description: Immutable original command result with current read metadata; replay never guesses from current entities
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeliveryWorkspace'
+                $ref: '#/components/schemas/CommandAck'
         '403':
           description: Project or execution permission denied
         '409':
@@ -5813,6 +5815,736 @@ paths:
       description: Pure preview of exact title/description/acceptance changes pinned to current requirement_basis. Returns differences,
         direct and dependent work, permitted runtime targets, preview_basis and project version. It never writes history, reschedules,
         dispatches, runs a model or accepts work.
+  /api/v1/delivery/context:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Context
+      operationId: deliveryContext
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryContext'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Read narrow project metadata, current permissions and full-scope effective summary. Missing index returns
+        unknown null metrics, never zero placeholders. No entity bodies or run arrays.
+  /api/v1/delivery/query/rebuild:
+    post:
+      tags:
+      - delivery
+      summary: Delivery Query Rebuild
+      operationId: deliveryQueryRebuild
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryRebuilt'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Explicit configure-authorized atomic replacement of disposable query facts. No request body. Never creates
+        progress, activity or definition observations. Ordinary reads never rebuild.
+  /api/v1/delivery/requirements:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Page
+      operationId: deliveryRequirements
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: stage
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 32
+          default: ''
+          title: Stage
+      - name: priority
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 8
+          default: ''
+          title: Priority
+      - name: owner_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Owner Id
+      - name: milestone_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Milestone Id
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - created_desc
+          - id_asc
+          - id_desc
+          - title_asc
+          - priority_asc
+          - due_asc
+          type: string
+          default: created_desc
+          title: Sort
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Filter and keyset-page narrow requirement summaries in SQL. Total and stage facets cover the full matching
+        scope. Cursor binds identity, project, filters, sort, limit and query generation; changed generation requires restarting
+        at page one.
+  /api/v1/delivery/requirements/{requirement_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Detail
+      operationId: deliveryRequirement
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Read one exact scoped requirement and its own workflow JSON path, independent of any loaded page.
+  /api/v1/delivery/tasks:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Task Page
+      operationId: deliveryTasks
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Requirement Id
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - pending
+            - in_progress
+            - blocked
+            - awaiting_review
+            - recorded_completed
+            - verified_completed
+            type: string
+          - const: ''
+            type: string
+          default: ''
+          title: Status
+      - name: priority
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 8
+          default: ''
+          title: Priority
+      - name: owner_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 100
+          default: ''
+          title: Owner Id
+      - name: milestone_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Milestone Id
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - created_desc
+          - id_asc
+          - id_desc
+          - title_asc
+          - priority_asc
+          - due_asc
+          type: string
+          default: created_desc
+          title: Sort
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Filter and keyset-page narrow task summaries using the six effective delivery states. Recorded completion
+        is distinct from verified completion. No full workspace or task descriptions are loaded.
+  /api/v1/delivery/tasks/{task_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Task Detail
+      operationId: deliveryTask
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Read one exact scoped task, current effective proof, own planning JSON path and planning basis. Never infer
+        existence from a list window.
+  /api/v1/delivery/issues:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Issue Page
+      operationId: deliveryIssues
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Requirement Id
+      - name: task_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Task Id
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 32
+          default: ''
+          title: Status
+      - name: severity
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 8
+          default: ''
+          title: Severity
+      - name: source
+        in: query
+        required: false
+        schema:
+          enum:
+          - ''
+          - execution
+          - deployment
+          - other
+          type: string
+          default: ''
+          title: Source
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: SQL-filter and page project issue summaries. Total covers the full matching scope; exact issue detail remains
+        separate.
+  /api/v1/delivery/executions/{execution_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Execution Detail
+      operationId: deliveryExecution
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: execution_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Execution Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Read one exact execution JSON entry with current runtime workspace authorization. Does not substitute a latest
+        run or include unrelated history.
+  /api/v1/delivery/references:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Reference Page
+      operationId: deliveryReferences
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: kind
+        in: query
+        required: true
+        schema:
+          enum:
+          - member
+          - milestone
+          - resource
+          - sprint
+          - requirement
+          - task
+          - execution
+          type: string
+          title: Kind
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: ids
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 10100
+          default: ''
+          title: Ids
+      - name: requirement_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Requirement Id
+      - name: task_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Task Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: member_kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - ''
+          - human
+          - agent
+          - tool
+          type: string
+          default: ''
+          title: Member Kind
+      - name: member_active
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Member Active
+      - name: resource_kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - ''
+          - repository
+          - document
+          - design
+          - other
+          type: string
+          default: ''
+          title: Resource Kind
+      - name: archived
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Archived
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - id_asc
+          - ends_asc
+          - created_desc
+          type: string
+          default: id_asc
+          title: Sort
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record not found
+        '409':
+          description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
+      description: Bounded reference directory or exact selected IDs. Member task counts and milestone requirement/task counts
+        are full-scope facts, independent of this page. Cursor binds all selectors and query generation.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -20701,4 +21433,377 @@ components:
       - restricted_execution_count
       - restricted_deployment_count
       title: RequirementLinks
+      type: object
+    CommandReference:
+      additionalProperties: false
+      properties:
+        kind:
+          title: Kind
+          type: string
+        id:
+          title: Id
+          type: string
+      required:
+      - kind
+      - id
+      title: CommandReference
+      type: object
+    CommandAck:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        action:
+          title: Action
+          type: string
+        resource:
+          $ref: '#/components/schemas/CommandReference'
+        result:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          title: Result
+        affected_refs:
+          items:
+            $ref: '#/components/schemas/CommandReference'
+          title: Affected Refs
+          type: array
+        applied_version:
+          title: Applied Version
+          type: integer
+        replayed:
+          title: Replayed
+          type: boolean
+      required:
+      - project_id
+      - version
+      - query_generation
+      - action
+      - resource
+      - applied_version
+      - replayed
+      title: CommandAck
+      type: object
+    QueryState:
+      additionalProperties: false
+      properties:
+        status:
+          enum:
+          - ready
+          - rebuild_required
+          title: Status
+          type: string
+        schema_version:
+          default: 1
+          title: Schema Version
+          type: integer
+        computed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Computed At
+      required:
+      - status
+      title: QueryState
+      type: object
+    DeliveryContext:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        query_state:
+          $ref: '#/components/schemas/QueryState'
+        project:
+          additionalProperties: true
+          title: Project
+          type: object
+        permissions:
+          additionalProperties:
+            type: boolean
+          title: Permissions
+          type: object
+        stages:
+          items:
+            additionalProperties:
+              type: string
+            type: object
+          title: Stages
+          type: array
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+        metrics:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Metrics
+      required:
+      - project_id
+      - version
+      - query_generation
+      - query_state
+      - project
+      - permissions
+      - stages
+      - summary
+      - metrics
+      title: DeliveryContext
+      type: object
+    ExecutionDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        execution:
+          additionalProperties: true
+          title: Execution
+          type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - execution
+      title: ExecutionDetail
+      type: object
+    QueryEnvelope:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+      required:
+      - project_id
+      - version
+      - query_generation
+      title: QueryEnvelope
+      type: object
+    QueryPage:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        as_of:
+          title: As Of
+          type: string
+        items:
+          items:
+            additionalProperties: true
+            type: object
+          title: Items
+          type: array
+        total:
+          title: Total
+          type: integer
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        limit:
+          title: Limit
+          type: integer
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - items
+      - total
+      - next_cursor
+      - limit
+      title: QueryPage
+      type: object
+    QueryRebuilt:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        query_state:
+          $ref: '#/components/schemas/QueryState'
+      required:
+      - project_id
+      - version
+      - query_generation
+      - query_state
+      title: QueryRebuilt
+      type: object
+    ReadModel:
+      additionalProperties: false
+      properties: {}
+      title: ReadModel
+      type: object
+    RequirementDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        requirement:
+          additionalProperties: true
+          title: Requirement
+          type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - requirement
+      title: RequirementDetail
+      type: object
+    RequirementPage:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        as_of:
+          title: As Of
+          type: string
+        items:
+          items:
+            additionalProperties: true
+            type: object
+          title: Items
+          type: array
+        total:
+          title: Total
+          type: integer
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        limit:
+          title: Limit
+          type: integer
+        facets:
+          additionalProperties:
+            additionalProperties:
+              type: integer
+            type: object
+          title: Facets
+          type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - items
+      - total
+      - next_cursor
+      - limit
+      - facets
+      title: RequirementPage
+      type: object
+    TaskDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        query_generation:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Query Generation
+        task:
+          additionalProperties: true
+          title: Task
+          type: object
+        requirement:
+          anyOf:
+          - additionalProperties:
+              type: string
+            type: object
+          - type: 'null'
+          title: Requirement
+        planning_basis:
+          title: Planning Basis
+          type: string
+      required:
+      - project_id
+      - version
+      - query_generation
+      - task
+      - requirement
+      - planning_basis
+      title: TaskDetail
       type: object

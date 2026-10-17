@@ -29,9 +29,9 @@ def unit(member):
     return "hours" if member["kind"] == "human" else "slots"
 
 
-def planning_basis(db, project, data=None):
+def planning_basis(db, project, data=None, *, verification=None):
     data = state(db, project)[1] if data is None else data
-    context = VerificationContext(db, project, data)
+    context = verification or VerificationContext(db, project, data)
     tasks = []
     for task in sorted(context.tasks.values(), key=lambda t: t.id):
         planning = data.get("task_details", {}).get(task.id, {})

@@ -1,7 +1,7 @@
 import { Alert, Button, Drawer, Input, Select } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   deploymentProblem,
@@ -33,7 +33,7 @@ export function DeliveryDeploymentEditor({
   background: string;
   readOnly?: boolean;
   onClose: () => void;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
 }) {
   const { t } = useTranslation(),
     tr = (key: string) => t(`deliveryDeployment.${key}`);

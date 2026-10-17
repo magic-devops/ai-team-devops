@@ -305,7 +305,7 @@ def test_pending_binding_marker_rolls_back_with_failed_business_capture(bound, m
         raise RuntimeError("Capture interrupted")
 
     with monkeypatch.context() as patch:
-        patch.setattr(delivery_progress_capture, "capture_facts", interrupted)
+        patch.setattr(delivery_progress_capture, "evaluate_project", interrupted)
         with bridge[1]() as db:
             row = db.get(DeliveryWorkspace, "project")
             data = deepcopy(row.data)

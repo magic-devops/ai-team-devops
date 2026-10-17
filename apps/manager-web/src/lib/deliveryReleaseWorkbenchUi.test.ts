@@ -3,7 +3,7 @@ import { Button, Checkbox } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryReleaseWorkbench } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryReleaseWorkbench";
 import { releaseIndex, releaseQuality } from "./deliveryReleaseFixtures";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryDisplayContext } from "./delivery";
 import { releaseTranslations } from "../i18n/delivery-release";
 const hooks = vi.hoisted(() => ({
   state: [] as unknown[],
@@ -57,7 +57,7 @@ const render = (view: "quality" | "releases" = "quality") => {
   hooks.next = 0;
   return DeliveryReleaseWorkbench({
     view,
-    workspace: { project: { id: "P", status: "active" } } as DeliveryWorkspace,
+    workspace: { project: { id: "P", status: "active" } } as DeliveryDisplayContext,
     sessionId: "test",
     onSaved: vi.fn(),
   });

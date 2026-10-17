@@ -364,10 +364,10 @@ def test_invalidation_and_business_edits_rollback_together(env, monkeypatch):  #
     task = completed(client)
     assert review(client, task["id"]).status_code == 200
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise RuntimeError("Failed progress capture")
 
-    monkeypatch.setattr(delivery_progress_capture, "capture_facts", fail)
+    monkeypatch.setattr(delivery_progress_capture, "evaluate_project", fail)
     with sessions() as db:
         db.get(models.Task, task["id"]).title = "Uncommitted"
         with pytest.raises(RuntimeError, match="Failed progress"):

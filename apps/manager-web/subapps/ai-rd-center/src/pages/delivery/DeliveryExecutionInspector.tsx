@@ -1,8 +1,15 @@
-import { Alert, Drawer } from "antd";
+import { Alert, Drawer, Skeleton } from "antd";
+import { useQuery } from "@tanstack/react-query";
+import { fetchExecutionDetail } from "@/lib/deliveryQuery";
+import { DeliveryQueryError } from "./DeliveryQueryViews";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
-import type { DeliveryAction, DeliveryWorkspace } from "@/lib/delivery";
+import type {
+  DeliveryAction,
+  DeliveryContext,
+  DeliveryCommandAck,
+} from "@/lib/delivery";
 import { ExecutionObservationCard } from "./ExecutionObservationCard";
 export function DeliveryExecutionInspector({
   executionId,
@@ -18,13 +25,13 @@ export function DeliveryExecutionInspector({
 }: {
   executionId: string;
   sessionId: string;
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
   onClose: () => void;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) => Promise<void>;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange?: (value: boolean) => void;
   nodeId?: string;
   attempt?: number;
@@ -36,9 +43,20 @@ export function DeliveryExecutionInspector({
     `${workspace.project.id}:${sessionId}`,
     executionId,
   );
-  const entry = workspace.executions?.find(
-    (item) => item.id === identity.displayId,
-  );
+  const query = useQuery({
+    queryKey: [
+      "delivery-execution-exact",
+      workspace.project.id,
+      sessionId,
+      identity.displayId,
+    ],
+    queryFn: ({ signal }) =>
+      fetchExecutionDetail(workspace.project.id, identity.displayId, signal),
+    enabled: Boolean(identity.displayId) && !locked,
+    retry: false,
+    gcTime: 0,
+  });
+  const entry = query.data?.execution;
   return (
     <Drawer
       open={Boolean(executionId)}
@@ -55,7 +73,14 @@ export function DeliveryExecutionInspector({
       destroyOnHidden
     >
       {identity.displayId &&
-        (entry ? (
+        (query.isPending ? (
+          <Skeleton active />
+        ) : query.error ? (
+          <DeliveryQueryError
+            error={query.error}
+            onRetry={() => void query.refetch()}
+          />
+        ) : entry ? (
           <ExecutionObservationCard
             key={`${workspace.project.id}:${sessionId}:${entry.id}`}
             entry={entry}

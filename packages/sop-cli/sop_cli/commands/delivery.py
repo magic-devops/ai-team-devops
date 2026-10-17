@@ -10,8 +10,157 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / inbox / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
+
+
+def _query_output(method, *args, **selection):
+    try:
+        with get_client() as client:
+            console.print_json(data=getattr(client, method)(*args, **selection))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("context")
+def context():
+    """读取项目概要、全范围有效统计和查询状态。"""
+    _query_output("delivery_context")
+
+
+@app.command("requirements")
+def requirements(
+    q: Annotated[str, typer.Option("--query")] = "",
+    stage: Annotated[str, typer.Option("--stage")] = "",
+    priority: Annotated[str, typer.Option("--priority")] = "",
+    owner_id: Annotated[str, typer.Option("--owner")] = "",
+    milestone_id: Annotated[str, typer.Option("--milestone")] = "",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    sort: Annotated[str, typer.Option("--sort")] = "created_desc",
+):
+    """按服务端筛选和排序分页读取需求摘要，total为全范围计数。"""
+    _query_output(
+        "delivery_requirements",
+        q=q,
+        stage=stage,
+        priority=priority,
+        owner_id=owner_id,
+        milestone_id=milestone_id,
+        cursor=cursor,
+        limit=limit,
+        sort=sort,
+    )
+
+
+@app.command("requirement")
+def requirement(requirement_id: Annotated[str, typer.Option("--id")]):
+    """按精确ID读取完整需求，不受列表页窗口影响。"""
+    _query_output("delivery_requirement", requirement_id)
+
+
+@app.command("tasks")
+def tasks(
+    requirement_id: Annotated[str, typer.Option("--requirement")] = "",
+    q: Annotated[str, typer.Option("--query")] = "",
+    status: Annotated[str, typer.Option("--status")] = "",
+    priority: Annotated[str, typer.Option("--priority")] = "",
+    owner_id: Annotated[str, typer.Option("--owner")] = "",
+    milestone_id: Annotated[str, typer.Option("--milestone")] = "",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    sort: Annotated[str, typer.Option("--sort")] = "created_desc",
+):
+    """按六态有效进度筛选任务；变更后旧游标需从第一页重读。"""
+    _query_output(
+        "delivery_tasks",
+        requirement_id=requirement_id,
+        q=q,
+        status=status,
+        priority=priority,
+        owner_id=owner_id,
+        milestone_id=milestone_id,
+        cursor=cursor,
+        limit=limit,
+        sort=sort,
+    )
+
+
+@app.command("task")
+def task(task_id: Annotated[str, typer.Option("--id")]):
+    """读取精确任务、有效验收和当前排期依据。"""
+    _query_output("delivery_task", task_id)
+
+
+@app.command("issues")
+def issues(
+    requirement_id: Annotated[str, typer.Option("--requirement")] = "",
+    task_id: Annotated[str, typer.Option("--task")] = "",
+    q: Annotated[str, typer.Option("--query")] = "",
+    status: Annotated[str, typer.Option("--status")] = "",
+    severity: Annotated[str, typer.Option("--severity")] = "",
+    source: Annotated[str, typer.Option("--source")] = "",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+):
+    """分页查询项目问题；完整问题使用issue --id。"""
+    _query_output(
+        "delivery_issues",
+        requirement_id=requirement_id,
+        task_id=task_id,
+        q=q,
+        status=status,
+        severity=severity,
+        source=source,
+        cursor=cursor,
+        limit=limit,
+    )
+
+
+@app.command("execution")
+def execution(execution_id: Annotated[str, typer.Option("--id")]):
+    """读取精确执行记录，并核验当前工作区权限。"""
+    _query_output("delivery_execution", execution_id)
+
+
+@app.command("references")
+def references(
+    kind: Annotated[str, typer.Option("--kind")],
+    q: Annotated[str, typer.Option("--query")] = "",
+    ids: Annotated[str, typer.Option("--ids")] = "",
+    requirement_id: Annotated[str, typer.Option("--requirement")] = "",
+    task_id: Annotated[str, typer.Option("--task")] = "",
+    member_kind: Annotated[str, typer.Option("--member-kind")] = "",
+    resource_kind: Annotated[str, typer.Option("--resource-kind")] = "",
+    member_active: Annotated[bool | None, typer.Option("--member-active/--member-inactive")] = None,
+    archived: Annotated[bool | None, typer.Option("--archived/--not-archived")] = None,
+    sort: Annotated[str, typer.Option("--sort")] = "id_asc",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 50,
+):
+    """分页查找成员、里程碑、资源等引用，或用逗号分隔ID取已选对象。"""
+    _query_output(
+        "delivery_references",
+        kind,
+        q=q,
+        ids=[value for value in ids.split(",") if value],
+        requirement_id=requirement_id,
+        task_id=task_id,
+        cursor=cursor,
+        limit=limit,
+        member_kind=member_kind,
+        resource_kind=resource_kind,
+        member_active=member_active,
+        archived=archived,
+        sort=sort,
+    )
+
+
+@app.command("query-rebuild")
+def query_rebuild():
+    """显式重建当前项目派生查询索引；需要项目配置权限。"""
+    _query_output("delivery_query_rebuild")
 
 
 class ProgressScope(str, Enum):

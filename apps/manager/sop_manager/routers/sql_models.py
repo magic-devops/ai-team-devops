@@ -281,6 +281,41 @@ class DeliveryReceipt(Base):
     version = Column(Integer, nullable=False)
 
 
+class DeliveryQueryState(Base):
+    """Current derived query generation; never an independent business entity."""
+    __tablename__ = "delivery_query_states"
+    tenant_id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    schema_version = Column(Integer, nullable=False)
+    generation = Column(Integer, nullable=False)
+    source_version = Column(Integer, nullable=False)
+    computed_at = Column(DateTime, nullable=False)
+    summary = Column(JSON, nullable=False)
+    metrics = Column(JSON, nullable=False)
+    planning_basis = Column(String(64), nullable=False)
+
+
+class DeliveryQueryFact(Base):
+    """Disposable proof/search metadata, joined to canonical rows for business text."""
+    __tablename__ = "delivery_query_facts"
+    tenant_id = Column(String(64), primary_key=True)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    kind = Column(String(24), primary_key=True)
+    entity_id = Column(String(100), primary_key=True)
+    parent_id = Column(String(64), nullable=False, default="")
+    owner_id = Column(String(100), nullable=False, default="")
+    milestone_id = Column(String(64), nullable=False, default="")
+    status = Column(String(32), nullable=False, default="")
+    due_on = Column(String(10), nullable=True)
+    label = Column(String(256), nullable=False, default="")
+    data = Column(JSON, nullable=False)
+    __table_args__ = (
+        Index("ix_delivery_query_status", "tenant_id", "project_id", "kind", "status", "entity_id"),
+        Index("ix_delivery_query_parent", "tenant_id", "project_id", "kind", "parent_id", "entity_id"),
+        Index("ix_delivery_query_owner", "tenant_id", "project_id", "kind", "owner_id", "entity_id"),
+    )
+
+
 class DeliveryActivityLink(Base):
     """Immutable requirement association recorded in the event's own transaction."""
     __tablename__ = "delivery_activity_links"

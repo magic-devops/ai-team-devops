@@ -502,11 +502,11 @@ def test_native_owner_invalidation_and_user_edit_rollback_together(bridge, write
     response = command(client, "execution.queue", queue_payload(bridge))
     intent = response.json()["executions"][-1]
 
-    def fail(*args):
+    def fail(*args, **kwargs):
         raise RuntimeError("Capture failed")
 
     with monkeypatch.context() as patch:
-        patch.setattr(delivery_progress_capture, "capture_facts", fail)
+        patch.setattr(delivery_progress_capture, "evaluate_project", fail)
         with sessions() as db:
             if writer == "orm":
                 db.get(User, "lead").status = "suspended"

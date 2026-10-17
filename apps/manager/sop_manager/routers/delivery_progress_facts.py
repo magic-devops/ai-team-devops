@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 from fastapi import HTTPException
 
 from .delivery_service import initial_state, materialize, reconcile, records
-from .sql_models import DeliveryWorkspace, Sprint, Task
+from .delivery_verification import VerificationContext
+from .sql_models import DeliveryWorkspace, Sprint
 
 STATUSES = (
     "pending",
@@ -62,16 +65,51 @@ def _accepted(requirement, tasks, issues):
     return all(gate["ok"] for gate in stage_gates(requirement, acceptance, tasks, issues))
 
 
+@dataclass
+class ProjectEvaluation:
+    """One transaction's effective metadata, proof, presentation and progress facts."""
+
+    state: dict
+    snapshot: dict
+    verification: VerificationContext
+    facts: dict
+
+
+def evaluate_project(db, project, state=None, *, verification=None):
+    """Load canonical collections once; retain independent task and progress bases."""
+    if verification is None:
+        if state is None:
+            row = db.get(DeliveryWorkspace, project.id)
+            state = row.data if row else initial_state()
+        data = deepcopy(state)
+        verification = VerificationContext(db, project, data)
+        reconcile(db, project, data, verification=verification)
+    else:
+        data = verification.data
+        if state is not None and state is not data:
+            raise ValueError("A shared verification context must use its own reconciled state")
+        verification.reset_proof()
+    snapshot = materialize(db, project, data, None, verification=verification)
+    facts = _facts_from_evaluation(db, project, snapshot, verification)
+    return ProjectEvaluation(data, snapshot, verification, facts)
+
+
 def capture_facts(db, project):
     """Read canonical rows plus effective reconciled approvals within the caller's SQL transaction."""
-    row = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, row.data) if row else initial_state()
-    snapshot = materialize(db, project, data, None)
-    from .delivery_verification import VerificationContext
+    return evaluate_project(db, project).facts
 
-    verification = VerificationContext(db, project, data)
+
+def _facts_from_evaluation(db, project, snapshot, verification):
+    task_groups, issue_groups = defaultdict(list), defaultdict(list)
+    for task in snapshot["tasks"]:
+        task_groups[task["req_id"]].append(task)
+    for issue in snapshot["issues"]:
+        task = verification.tasks.get(issue["task_id"])
+        if task:
+            issue_groups[task.req_id].append(issue)
     accepted = {
-        r["id"]: _accepted(r, snapshot["tasks"], snapshot["issues"]) for r in snapshot["requirements"]
+        r["id"]: _accepted(r, task_groups[r["id"]], issue_groups[r["id"]])
+        for r in snapshot["requirements"]
     }
     requirements = []
     for requirement in sorted(snapshot["requirements"], key=lambda r: r["id"]):
@@ -90,7 +128,7 @@ def capture_facts(db, project):
             }
         )
     by_requirement = {r["id"]: r for r in snapshot["requirements"]}
-    canonical = {t.id: t for t in records(db, Task, project).all()}
+    canonical = verification.tasks
     tasks = []
     for task in sorted(snapshot["tasks"], key=lambda t: t["id"]):
         requirement = by_requirement.get(task["req_id"])

@@ -1,5 +1,5 @@
 import { request } from "./http";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryCommandAck } from "./delivery";
 import { projectHeaders, projectSessionKey } from "./projectPortfolio";
 
 export type ExecutionControlAction =
@@ -234,9 +234,9 @@ export function prepareExecutionControl(
 }
 export async function submitExecutionControl(
   intent: ExecutionControlIntent,
-): Promise<DeliveryWorkspace> {
+): Promise<DeliveryCommandAck> {
   assertExecutionSession(intent.scope);
-  const data = await request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  const data = await request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: projectHeaders(intent.projectId),
     body: JSON.stringify({
@@ -247,7 +247,7 @@ export async function submitExecutionControl(
     }),
   });
   assertExecutionSession(intent.scope);
-  if (data.project.id !== intent.projectId) throw new Error("scopeChanged");
+  if (data.project_id !== intent.projectId) throw new Error("scopeChanged");
   return data;
 }
 export async function fetchExecutionNodeOutput(

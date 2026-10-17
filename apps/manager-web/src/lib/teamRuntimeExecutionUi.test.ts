@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionPlanEditor } from "../../subapps/ai-rd-center/src/pages/delivery/ExecutionPlanEditor";
 import { openExecutionDraft, previewDeliveryExecution, type DeliveryTargets, type ExecutionPreview, type ExecutionTarget } from "./deliveryExecution";
 import { commandDraft } from "./executionCommands";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 import type { TeamRuntimeBindings } from "./deliveryTeamRuntime";
 const hooks = vi.hoisted(() => ({ state: [] as unknown[], next: 0, catalogue: undefined as unknown, failed: false }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"), useState: (initial: unknown) => {
@@ -19,7 +19,7 @@ const member = { id: "agent:one", name: "Executor", kind: "agent" as const, acti
 const catalogue: TeamRuntimeBindings = { project_id: "project", version: 7, as_of: "", runtime_configured: true, members: [{ member_id: member.id, generation: 2, binding_basis: "binding-2", status: "current", reasons: [], permissions: { can_bind: false, can_unbind: false }, binding: { workspace_id: "runtime", agent_id: "profile", agent_version: 2, profile_digest: "digest", source: { workspace_name: "Runtime", agent_title: "Profile", provider: "codex" }, bound_by: "user:lead", bound_at: "2026-10-17T00:00:00Z" } }], workspaces: [] };
 const target: ExecutionTarget = { id: "device", kind: "device", name: "Device", version: 1, basis: "target-basis", paired: true, online: true, last_seen_at: null, expires_at: null, worker_id: "worker", capability_digest: "digest", runtime_capabilities: ["agent", "command"], providers: [{ id: "codex", executable_present: true, version: null, auth: "unknown" }], policy: { allowed_runtimes: ["agent", "command"], allowed_providers: ["codex"] }, can_execute: true, reason_codes: [] };
 const targets: DeliveryTargets = { project_id: "project", as_of: "", runtime_configured: true, can_execute: true, can_configure_policy: false, workspaces: [{ id: "runtime", name: "Runtime", version: 1, agents: [{ id: "profile", version: 2, title: "Profile", provider: "codex" }], local: { ...target, id: "local", kind: "local", paired: null, online: null }, devices: [target] }] };
-const data = { project: { id: "project" }, version: 7, tasks: [{ id: "T-one", basis: "task-basis", owner_id: "user:owner" }] } as unknown as DeliveryWorkspace;
+const data = { project: { id: "project" }, version: 7, task: { id: "T-one", basis: "task-basis", owner_id: "user:owner" } } as unknown as DeliveryTaskData;
 function find(node: ReactNode, type: unknown, predicate: (props: Record<string, unknown>) => boolean): Record<string, any> | undefined {
   if (Array.isArray(node)) return node.map((child) => find(child, type, predicate)).find(Boolean);
   if (!isValidElement<Record<string, unknown>>(node)) return undefined;
@@ -48,7 +48,7 @@ describe("actual execution editor member controls", () => {
     select(selected, "deliveryRuntime.target").onChange("device:device");
     button(render(), "deliveryRuntime.preview").onClick(); await settle();
     expect(previewDeliveryExecution).toHaveBeenCalledWith("project", expect.objectContaining({ executor_member_id: member.id, executor_binding_basis: "binding-2", agent_id: "profile", agent_version: 2, target_device_id: "device", test_nodes: [expect.objectContaining({ argv: ["python"] })] }));
-    expect(data.tasks[0].owner_id).toBe("user:owner");
+    expect(data.task.owner_id).toBe("user:owner");
     expect(button(render(), "deliveryRuntime.save").disabled).toBe(false);
   });
   it("keeps a lost member selection and tests until the user explicitly switches to direct configuration", () => {

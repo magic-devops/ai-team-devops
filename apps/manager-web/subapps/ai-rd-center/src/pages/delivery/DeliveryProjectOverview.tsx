@@ -1,7 +1,15 @@
-import { Button, Progress, Tag } from "antd";
+import { useQuery } from "@tanstack/react-query";
+import {
+  fetchDeliveryReferences,
+  type MilestoneSummary,
+} from "@/lib/deliveryQuery";
+import type { DeliveryResource } from "@/lib/delivery";
+import { Button, Progress, Skeleton, Tag } from "antd";
+import { DeliveryQueryError } from "./DeliveryQueryViews";
+import { getSessionRevision } from "@/lib/authStorage";
 import { ArrowRight, FileText, Inbox } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryInbox, DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryInbox, DeliveryContext } from "@/lib/delivery";
 
 export function DeliveryProjectOverview({
   data,
@@ -9,19 +17,52 @@ export function DeliveryProjectOverview({
   onView,
   onMilestone,
 }: {
-  data: DeliveryWorkspace;
+  data: DeliveryContext;
   inbox?: DeliveryInbox;
   onView: (view: string) => void;
   onMilestone: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
-  const activeResources = (data.resources || []).filter(
-    (resource) => !resource.archived,
-  );
-  const milestones = [...data.milestones]
-    .sort((a, b) => (a.ends_on || "9999").localeCompare(b.ends_on || "9999"))
-    .slice(0, 3);
+  const milestoneQuery = useQuery({
+    queryKey: [
+      "delivery-overview-milestones",
+      data.project.id,
+      getSessionRevision(),
+      data.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<MilestoneSummary>(
+        data.project.id,
+        "milestone",
+        { limit: 3, sort: "ends_asc" },
+        signal,
+        data.query_generation,
+      ),
+    retry: false,
+    gcTime: 0,
+  });
+  const resourceQuery = useQuery({
+    queryKey: [
+      "delivery-overview-resources",
+      data.project.id,
+      getSessionRevision(),
+      data.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<DeliveryResource>(
+        data.project.id,
+        "resource",
+        { limit: 2, archived: false },
+        signal,
+        data.query_generation,
+      ),
+    retry: false,
+    gcTime: 0,
+  });
+  const activeResources =
+    resourceQuery.data?.items.map((item) => item.data) || [];
+  const milestones = milestoneQuery.data?.items.map((item) => item.data) || [];
   return (
     <div className="delivery-project-overview">
       <section className="delivery-panel delivery-project-milestones">
@@ -32,15 +73,18 @@ export function DeliveryProjectOverview({
             <ArrowRight size={12} />
           </Button>
         </div>
-        {milestones.length ? (
+        {milestoneQuery.isPending ? (
+          <Skeleton active />
+        ) : milestoneQuery.error ? (
+          <DeliveryQueryError
+            error={milestoneQuery.error}
+            onRetry={() => void milestoneQuery.refetch()}
+          />
+        ) : milestones.length ? (
           <div className="delivery-compact-milestones">
             {milestones.map((milestone) => {
-              const linked = data.requirements.filter(
-                (requirement) => requirement.flow.milestone_id === milestone.id,
-              );
-              const accepted = linked.filter((requirement) =>
-                ["release", "operations"].includes(requirement.flow.stage),
-              ).length;
+              const linkedCount = milestone.requirement_count ?? 0;
+              const accepted = milestone.accepted_requirement_count ?? 0;
               return (
                 <button
                   type="button"
@@ -61,8 +105,8 @@ export function DeliveryProjectOverview({
                   </div>
                   <Progress
                     percent={
-                      linked.length
-                        ? Math.round((accepted / linked.length) * 100)
+                      linkedCount
+                        ? Math.round((accepted / linkedCount) * 100)
                         : 0
                     }
                     size="small"
@@ -70,7 +114,7 @@ export function DeliveryProjectOverview({
                   />
                   <span>
                     {t("deliveryProject.milestoneCount", {
-                      count: linked.length,
+                      count: linkedCount,
                     })}{" "}
                     · {t("delivery.accepted")} {accepted}
                   </span>
@@ -87,9 +131,11 @@ export function DeliveryProjectOverview({
         <div>
           <h2>{tp("resources")}</h2>
           <p>
-            {t("deliveryProject.resourceCount", {
-              count: activeResources.length,
-            })}
+            {resourceQuery.data
+              ? t("deliveryProject.resourceCount", {
+                  count: resourceQuery.data.total,
+                })
+              : "—"}
           </p>
           <div>
             {activeResources.slice(0, 2).map((resource) => (

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { taskAcceptanceTranslations } from "../i18n/task-acceptance";
 import { DeliveryExecutionPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryExecutionPanel";
 import { ManualReviewFacts } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
-import type { DeliveryTask, DeliveryWorkspace } from "./delivery";
+import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import type { ManualReviewCurrent } from "./deliveryTaskReview";
 let language: keyof typeof taskAcceptanceTranslations = "zh-CN";
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string, options?: { defaultValue?: string }) => {
@@ -20,7 +20,7 @@ describe("responsible identity gate messages", () => {
     for (const code of codes) expect(messages[code], code).toEqual(expect.any(String));
     const reasons = codes.map((code) => ({ code, message: `UNTRANSLATED SERVER MESSAGE ${code}` }));
     const task = { id: "T-one", req_id: "", status: "pending", acceptance: { available: true }, execution_gate: { eligible: false, reasons } } as DeliveryTask;
-    const workspace = { project: { id: "project" }, permissions: { write: false }, executions: [] } as unknown as DeliveryWorkspace;
+    const workspace = { project: { id: "project" }, permissions: { write: false }, task } as unknown as DeliveryTaskData;
     const cache = new QueryClient();
     const execution = renderToStaticMarkup(createElement(QueryClientProvider, { client: cache }, createElement(DeliveryExecutionPanel, { data: workspace, task, sessionId: "test", onCommand: vi.fn(), onSaved: vi.fn() })));
     const manual = renderToStaticMarkup(createElement(ManualReviewFacts, { current: { task: { status: "pending" }, reasons, verified: false } as ManualReviewCurrent, compact: true }));

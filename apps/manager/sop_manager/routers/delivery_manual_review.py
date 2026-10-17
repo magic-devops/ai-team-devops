@@ -163,11 +163,13 @@ def list_reviews(db, project, task_id, *, can_approve, limit=20, cursor=""):
     }
 
 
-def invalidate_reviews(db, project):
+def invalidate_reviews(db, project, *, verification=None):
     """Called in a business transaction before its progress facts are captured."""
-    workspace = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, workspace.data) if workspace else initial_state()
-    context = VerificationContext(db, project, data)
+    if verification is None:
+        workspace = db.get(DeliveryWorkspace, project.id)
+        data = reconcile(db, project, workspace.data) if workspace else initial_state()
+        verification = VerificationContext(db, project, data)
+    context = verification
     rows = (
         db.query(DeliveryTaskReview)
         .filter_by(
@@ -189,3 +191,4 @@ def invalidate_reviews(db, project):
             row.invalidated_at = datetime.now(timezone.utc).replace(tzinfo=None)
             row.invalidated_reason = "task_review_task_missing" if missing else "task_review_basis_changed"
     db.flush()
+    context.reset_proof()

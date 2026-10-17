@@ -162,7 +162,7 @@ beforeEach(() => {
       if (path.endsWith("/runtime")) return runtime;
       sent.push(JSON.parse(String(init?.body)));
       if (fail) throw new Error(fail);
-      return { project: { id: "P" } };
+      return { project_id: "P", action: sent.at(-1).action, resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: version + 1, version: version + 1, query_generation: 2, replayed: false };
     });
 });
 describe("operator callbacks retain the exact execution intent", () => {

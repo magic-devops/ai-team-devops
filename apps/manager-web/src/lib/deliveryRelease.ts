@@ -2,7 +2,7 @@ import { request } from "./http";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "./delivery";
 import { projectHeaders } from "./projectPortfolio";
 import type { DeploymentStatus } from "./deliveryDeployment";
@@ -413,7 +413,7 @@ export function submitReleaseCommand(
   payload: Record<string, unknown>,
   intent: DeliveryIntent,
 ) {
-  return request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: scope(projectId),
     body: JSON.stringify({

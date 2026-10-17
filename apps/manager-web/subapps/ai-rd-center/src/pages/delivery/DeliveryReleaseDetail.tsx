@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "@/lib/delivery";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
@@ -44,7 +44,7 @@ export function DeliveryReleaseDetail({
   sessionId: string;
   background: string;
   onClose: () => void;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onPrepareDeployment?: (id: string) => void;
   onOpenDeployment?: (id: string) => void;
 }) {
@@ -90,7 +90,7 @@ export function ReleaseDetailContent({
   releaseId: string;
   sessionId: string;
   background: string;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onPrepareDeployment?: (id: string) => void;
   onOpenDeployment?: (id: string) => void;
 }) {

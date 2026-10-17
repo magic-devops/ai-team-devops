@@ -10,7 +10,7 @@ import {
   type DeliveryTargets,
   type ExecutionTarget,
 } from "./deliveryExecution";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 import { request } from "./http";
 import { commandDraft } from "./executionCommands";
 vi.mock("./http", () => ({ request: vi.fn() }));
@@ -40,14 +40,12 @@ const target: ExecutionTarget = {
 const workspace = {
   project: { id: "project" },
   version: 7,
-  tasks: [
-    {
+  task: {
       id: "T-one",
       basis: "task-fixed",
       execution_gate: { eligible: true, reasons: [] },
     },
-  ],
-} as unknown as DeliveryWorkspace;
+} as unknown as DeliveryTaskData;
 const targets: DeliveryTargets = {
   project_id: "project",
   as_of: "",
@@ -138,9 +136,8 @@ describe("dispatch basis and observation transport", () => {
         session(),
         {
           ...workspace,
-          tasks: [
-            {
-              ...workspace.tasks[0],
+          task: {
+              ...workspace.task,
               execution_gate: {
                 eligible: false,
                 reasons: [
@@ -151,7 +148,6 @@ describe("dispatch basis and observation transport", () => {
                 ],
               },
             },
-          ],
         },
         targets,
         "key",
@@ -211,7 +207,7 @@ describe("dispatch basis and observation transport", () => {
       {
         ...workspace,
         version: 9,
-        tasks: [{ ...workspace.tasks[0], basis: "new-task" }],
+        task: { ...workspace.task, basis: "new-task" },
       },
       {
         ...targets,
@@ -247,7 +243,7 @@ describe("dispatch basis and observation transport", () => {
         ),
       ).toThrow();
     expect(() =>
-      adoptExecutionDraft(draft, { ...workspace, tasks: [] }, targets, "key"),
+      adoptExecutionDraft(draft, { ...workspace, task: { ...workspace.task, id: "T-other" } }, targets, "key"),
     ).toThrow();
   });
   it("deduplicates reconnect events while preserving original sequence order", () => {

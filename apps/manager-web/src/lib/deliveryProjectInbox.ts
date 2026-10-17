@@ -45,6 +45,15 @@ export type DeliveryRoute = {
   inboxCategory: InboxCategory;
   resourceKind: ResourceKindFilter;
   showArchived: boolean;
+  search: string;
+  stage: string;
+  owner: string;
+  sort: string;
+  page: number;
+  cursor: string;
+  taskPage: number;
+  taskCursor: string;
+  taskSort: string;
 };
 export function parseDeliveryRoute(hash: string): DeliveryRoute {
   const params = new URLSearchParams(hash.split("?")[1]);
@@ -53,6 +62,10 @@ export function parseDeliveryRoute(hash: string): DeliveryRoute {
   const category = params.get("category") || "all";
   const kind = params.get("resource_kind") || "all";
   const exactIssue = view === "issues" && Boolean(params.get("issue"));
+  const pageNumber = (key: string) =>
+    /^\d{1,6}$/.test(params.get(key) || "")
+      ? Math.max(1, Number(params.get(key)))
+      : 1;
   return {
     view: deliveryViews.includes(view as (typeof deliveryViews)[number])
       ? view
@@ -80,6 +93,15 @@ export function parseDeliveryRoute(hash: string): DeliveryRoute {
       ? (kind as ResourceKindFilter)
       : "all",
     showArchived: params.get("archived") === "1",
+    search: params.get("q") || "",
+    stage: params.get("stage") || "",
+    owner: params.get("owner") || "",
+    sort: params.get("sort") || "created_desc",
+    page: pageNumber("page"),
+    cursor: params.get("cursor") || "",
+    taskPage: pageNumber("task_page"),
+    taskCursor: params.get("task_cursor") || "",
+    taskSort: params.get("task_sort") || "created_desc",
   };
 }
 export function normalizeInboxTarget(
@@ -92,9 +114,27 @@ export function normalizeInboxTarget(
 export function deliveryInboxHash(
   target: DeliveryInboxTarget,
   filters: Partial<DeliveryRoute> = {},
+  source = "",
 ) {
   target = normalizeInboxTarget(target);
-  const params = new URLSearchParams({ view: target.view });
+  const params = new URLSearchParams(source.split("?")[1]);
+  if ((params.get("requirement") || "") !== target.requirement_id) {
+    params.delete("task_page");
+    params.delete("task_cursor");
+  }
+  if (
+    ("resourceKind" in filters &&
+      (filters.resourceKind === "all" ? "" : filters.resourceKind) !==
+        (params.get("resource_kind") || "")) ||
+    ("showArchived" in filters &&
+      Boolean(filters.showArchived) !== (params.get("archived") === "1"))
+  ) {
+    params.delete("resource_cursor");
+    params.delete("resource_page");
+  }
+  params.set("view", target.view);
+  for (const key of ["requirement", "detail", "task", "issue"])
+    params.delete(key);
   if (target.requirement_id) params.set("requirement", target.requirement_id);
   if (target.requirement_id) params.set("detail", target.detail);
   if (target.task_id) params.set("task", target.task_id);
@@ -105,6 +145,25 @@ export function deliveryInboxHash(
   if (filters.resourceKind && filters.resourceKind !== "all")
     params.set("resource_kind", filters.resourceKind);
   if (filters.showArchived) params.set("archived", "1");
+  else if ("showArchived" in filters) params.delete("archived");
+  if (filters.resourceKind === "all") params.delete("resource_kind");
+  if (filters.inboxCategory === "all") params.delete("category");
+  for (const [field, key] of [
+    ["search", "q"],
+    ["stage", "stage"],
+    ["owner", "owner"],
+    ["sort", "sort"],
+    ["page", "page"],
+    ["cursor", "cursor"],
+    ["taskPage", "task_page"],
+    ["taskCursor", "task_cursor"],
+    ["taskSort", "task_sort"],
+  ] as const) {
+    if (field in filters)
+      filters[field]
+        ? params.set(key, String(filters[field]))
+        : params.delete(key);
+  }
   return `#/dev-flow?${params}`;
 }
 export function deliveryInboxHref(

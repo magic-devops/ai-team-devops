@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import {
   safeEvidenceUrl,
   saveDelivery,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "@/lib/delivery";
 import {
   adoptManualReviewBasis,
@@ -350,7 +350,7 @@ export function DeliveryManualReviewPanel({
   projectId: string;
   sessionId: string;
   taskId: string;
-  onSaved?: (workspace: DeliveryWorkspace) => void;
+  onSaved?: (workspace: DeliveryCommandAck) => void;
   onEditingChange?: (editing: boolean) => void;
 }) {
   const { t } = useTranslation();

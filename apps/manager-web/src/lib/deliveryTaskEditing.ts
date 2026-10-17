@@ -1,4 +1,4 @@
-import type { DeliveryTask, DeliveryWorkspace } from "./delivery";
+import type { DeliveryTask, DeliveryTaskData } from "./delivery";
 import { remapCriterionIndexes } from "./deliveryTaskPlan";
 import { normalizeTaskCriteria } from "./taskAcceptance";
 export type TaskEditSession = {
@@ -9,16 +9,14 @@ export type TaskEditSession = {
   criteria: string[];
 };
 export function openTaskEdit(
-  workspace: DeliveryWorkspace,
+  workspace: DeliveryTaskData,
   taskId: string,
 ): TaskEditSession {
-  const task = workspace.tasks.find((item) => item.id === taskId);
+  const task = workspace.task.id === taskId ? workspace.task : undefined;
   if (!task?.basis) throw new Error("Current task basis unavailable");
   if (!workspace.planning_basis)
     throw new Error("Current planning basis unavailable");
-  const requirement = workspace.requirements.find(
-    (item) => item.id === task.req_id,
-  );
+  const requirement = workspace.requirement;
   return {
     projectId: workspace.project.id,
     version: workspace.version,
@@ -50,7 +48,7 @@ export function taskEditPayload(
 }
 export function adoptTaskEdit(
   session: TaskEditSession,
-  workspace: DeliveryWorkspace,
+  workspace: DeliveryTaskData,
   values: Record<string, unknown>,
 ): { session: TaskEditSession; values: Record<string, unknown> } {
   if (workspace.project.id !== session.projectId)

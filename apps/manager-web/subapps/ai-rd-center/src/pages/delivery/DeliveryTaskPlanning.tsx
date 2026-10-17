@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type {
   DeliveryRequirement,
   DeliveryTask,
-  DeliveryWorkspace,
+  DeliveryTaskData,
 } from "@/lib/delivery";
 
 export function DeliveryTaskPlanning({
@@ -16,8 +16,8 @@ export function DeliveryTaskPlanning({
 }: {
   task: DeliveryTask;
   requirement?: DeliveryRequirement;
-  data: DeliveryWorkspace;
-  onTask: (task: DeliveryTask) => void;
+  data: DeliveryTaskData;
+  onTask: (task: Pick<DeliveryTask, "id" | "req_id">) => void;
   onEdit: () => void;
   canEdit: boolean;
 }) {
@@ -46,7 +46,9 @@ export function DeliveryTaskPlanning({
             <div className="delivery-plan-dependencies">
               <small>{tr("dependencies")}</small>
               {(plan.depends_on || []).map((id) => {
-                const dependency = data.tasks.find((item) => item.id === id);
+                const dependency = data.dependencies.find(
+                  (item) => item.id === id,
+                );
                 return dependency ? (
                   <Button
                     key={id}

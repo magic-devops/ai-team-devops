@@ -1,3 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
+import { DeliveryPageControls, DeliveryQueryError } from "./DeliveryQueryViews";
+import {
+  fetchDeliveryContext,
+  fetchDeliveryReferences,
+} from "@/lib/deliveryQuery";
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { Alert, Button, Empty, Select, Switch, Tag } from "antd";
 import {
   Archive,
@@ -11,15 +18,13 @@ import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getToken, getWorkspaceScope } from "@/lib/authStorage";
 import {
-  fetchDelivery,
   prepareDeliveryIntent,
   saveDelivery,
   type DeliveryIntent,
   type DeliveryResource,
-  type DeliveryWorkspace,
+  type DeliveryContext,
 } from "@/lib/delivery";
 import {
-  filterProjectResources,
   resourceKinds,
   resourcePayload,
   safeResourceUrl,
@@ -42,15 +47,16 @@ export function DeliveryProjectResources({
   onSaved,
 }: {
   projectId: string;
-  data: DeliveryWorkspace;
+  data: DeliveryContext;
   kind: ResourceKindFilter;
   showArchived: boolean;
   onFilter: (kind: ResourceKindFilter, archived: boolean) => void;
-  onSaved: (updated: DeliveryWorkspace) => void;
+  onSaved: (updated: DeliveryCommandAck) => void;
 }) {
   const { t } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
+  const [readError, setReadError] = useState("");
   const [editorId, setEditorId] = useState(0);
   const intent = useRef<DeliveryIntent>();
   const latestWorkspace = useRef(data);
@@ -62,12 +68,63 @@ export function DeliveryProjectResources({
     if (!latestWorkspace.current.permissions.configure)
       throw new Error(tp("noPermission"));
   };
-  const resources = filterProjectResources(data.resources, kind, showArchived);
-  const openEditor = (
+  const params = new URLSearchParams(location.hash.split("?")[1]);
+  const cursor = params.get("resource_cursor") || "",
+    page = Number(params.get("resource_page")) || 1;
+  const query = useQuery({
+    queryKey: [
+      "delivery-resources-page",
+      projectId,
+      kind,
+      showArchived,
+      cursor,
+      data.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<DeliveryResource>(
+        projectId,
+        "resource",
+        {
+          resource_kind: kind === "all" ? "" : kind,
+          archived: showArchived ? undefined : false,
+          cursor,
+          limit: 20,
+        },
+        signal,
+        data.query_generation,
+      ),
+    retry: false,
+    gcTime: 0,
+  });
+  const resources = query.data?.items.map((item) => item.data) || [];
+  const pageRoute = (page: number, cursor: string) => {
+    const next = new URLSearchParams(location.hash.split("?")[1]);
+    next.set("resource_page", String(page));
+    if (cursor) next.set("resource_cursor", cursor);
+    else next.delete("resource_cursor");
+    history.pushState(null, "", `#/dev-flow?${next}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+  const openEditor = async (
     resource?: DeliveryResource,
     mode: "edit" | "archive" | "restore" = "edit",
   ) => {
     if (!data.permissions.configure) return;
+    setReadError("");
+    if (resource?.id) {
+      try {
+        const exact = await fetchDeliveryReferences<DeliveryResource>(
+          projectId,
+          "resource",
+          { ids: [resource.id] },
+        );
+        if (!exact.items[0]) throw new Error(tp("resourceMissing"));
+        resource = exact.items[0].data;
+      } catch (failure) {
+        setReadError((failure as Error).message);
+        return;
+      }
+    }
     intent.current = { version: data.version, key: crypto.randomUUID() };
     setEditorId((value) => value + 1);
     const fields: EditorField[] = [
@@ -146,7 +203,7 @@ export function DeliveryProjectResources({
           );
           if (originSession.current !== session())
             throw new Error(t("delivery.scopeChanged"));
-          latestWorkspace.current = updated;
+
           onSaved(updated);
         } catch (error) {
           const failure = planError(error);
@@ -160,11 +217,17 @@ export function DeliveryProjectResources({
       loadLatest: async () => {
         if (originSession.current !== session())
           throw new Error(t("delivery.scopeChanged"));
-        const fresh = await fetchDelivery(projectId);
+        const fresh = await fetchDeliveryContext(projectId);
         latestWorkspace.current = fresh;
-        onSaved(fresh);
+
         const current = resource
-          ? fresh.resources?.find((item) => item.id === resource.id)
+          ? (
+              await fetchDeliveryReferences<DeliveryResource>(
+                projectId,
+                "resource",
+                { ids: [resource.id!] },
+              )
+            ).items[0]?.data
           : undefined;
         if (resource && !current) throw new Error(tp("resourceMissing"));
         return {
@@ -190,8 +253,16 @@ export function DeliveryProjectResources({
               ]
             : [
                 {
-                    label: tp("resources"),
-                  value: String(fresh.resources?.length || 0),
+                  label: tp("resources"),
+                  value: String(
+                    (
+                      await fetchDeliveryReferences<DeliveryResource>(
+                        projectId,
+                        "resource",
+                        { limit: 1, archived: false },
+                      )
+                    ).total,
+                  ),
                 },
               ],
         };
@@ -203,6 +274,7 @@ export function DeliveryProjectResources({
   };
   return (
     <section className="delivery-project-resources">
+      {readError && <Alert type="error" title={readError} />}
       <div className="delivery-section-heading delivery-project-heading">
         <div>
           <h2>{tp("resources")}</h2>
@@ -243,7 +315,7 @@ export function DeliveryProjectResources({
           <span>{tp("showArchived")}</span>
         </label>
         <small>
-          {resources.length} / {data.resources?.length || 0}
+          {resources.length} / {query.data?.total ?? "—"}
         </small>
       </div>
       {resources.length ? (
@@ -329,11 +401,7 @@ export function DeliveryProjectResources({
           description={
             <>
               <strong>
-                {tp(
-                  data.resources?.length || 0
-                    ? "noFilteredResources"
-                    : "noResources",
-                )}
+                {tp(kind !== "all" ? "noFilteredResources" : "noResources")}
               </strong>
               <p>{tp("resourceEmptyHint")}</p>
             </>
@@ -351,6 +419,23 @@ export function DeliveryProjectResources({
           key={editorId}
           spec={editor}
           onClose={() => setEditor(null)}
+        />
+      )}
+      {query.error && (
+        <DeliveryQueryError
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onReset={() => pageRoute(1, "")}
+        />
+      )}
+      {query.data && (
+        <DeliveryPageControls
+          page={page}
+          cursor={cursor}
+          next={query.data.next_cursor}
+          total={query.data.total}
+          loading={query.isFetching}
+          onPage={pageRoute}
         />
       )}
     </section>

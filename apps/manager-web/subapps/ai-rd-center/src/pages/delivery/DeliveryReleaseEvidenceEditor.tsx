@@ -1,7 +1,7 @@
 import { Alert, Button, Drawer, Input } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryIntent, DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryIntent, DeliveryCommandAck } from "@/lib/delivery";
 import { prepareDeliveryIntent } from "@/lib/delivery";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
@@ -53,7 +53,7 @@ export function DeliveryReleaseEvidenceEditor({
   initial: DeliveryReleases;
   quality: DeliveryQuality | undefined;
   mode: "policy" | "ci";
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   readOnly?: boolean;
 }) {

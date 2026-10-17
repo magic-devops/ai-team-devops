@@ -7,7 +7,13 @@ import { ownerIdentityLabel, ownerIdentityOptions, filterTeamMembers } from "./d
 import { teamIdentityTranslations } from "../i18n/delivery-team";
 import { DeliveryTeamMembers } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTeamMembers";
 import { parseSchedulingRoute } from "./deliveryScheduling";
-import type { DeliveryMember, DeliveryWorkspace } from "./delivery";
+import type { DeliveryMember, DeliveryDisplayContext } from "./delivery";
+let remoteMembers: DeliveryMember[] = [];
+vi.mock("@tanstack/react-query", () => ({ useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
+  const search = String(queryKey[3] || ""), kind = queryKey[4], active = queryKey[5];
+  const selected = queryKey[0] === "delivery-members-page" ? remoteMembers.filter((member) => (!search || `${member.id} ${member.name}`.includes(search)) && (kind === "all" || member.kind === kind) && (active === "all" || member.active === (active === "active"))) : queryKey[0] === "delivery-member-exact" ? remoteMembers.filter((member) => member.id === queryKey[3]) : [];
+  return { data: { items: selected.map((data) => ({ id: data.id, data })), total: selected.length, next_cursor: null }, isPending: false, isError: false };
+} }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en-US" } }) }));
 const members: DeliveryMember[] = [
   { id: "user:one", name: "Alex", kind: "human", active: true, role: "QA", tool: "" },
@@ -38,8 +44,9 @@ describe("responsibility follows identity", () => {
   });
 });
 describe("team roster states", () => {
-  const workspace = { project: { id: "project" }, members, tasks: [], permissions: { write: true, configure: false, approve: false } } as unknown as DeliveryWorkspace;
-  function render(extra = {}) {
+  const workspace = { project: { id: "project" }, members, referenceTotals: { members: members.length, milestones: 0, activeResources: 0 }, permissions: { write: true, configure: false, approve: false } } as unknown as DeliveryDisplayContext;
+  function render(extra = {}, serverMembers = members) {
+    remoteMembers = serverMembers;
     vi.stubGlobal("location", { hash: "#/dev-flow?view=team" });
     return renderToStaticMarkup(createElement(DeliveryTeamMembers, { workspace, sessionId: "test", onSaved: vi.fn(), calendarFailed: true, route: parseSchedulingRoute("#/dev-flow?view=team"), onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn(), ...extra }));
   }
@@ -52,7 +59,7 @@ describe("team roster states", () => {
     expect(html).not.toContain("can_execute");
   });
   it("distinguishes no registered members from no filter matches", () => {
-    expect(render({ workspace: { ...workspace, members: [] } })).toContain("deliveryTeam.emptyHint");
+    expect(render({ workspace: { ...workspace, members: [], referenceTotals: { ...workspace.referenceTotals, members: 0 } } }, [])).toContain("deliveryTeam.emptyHint");
     expect(render({ route: { ...parseSchedulingRoute("#/dev-flow?view=team"), teamSearch: "missing" } })).toContain("deliveryTeam.noMatchesHint");
   });
   it("keeps the registry flow separate from the legacy team card grid", () => {

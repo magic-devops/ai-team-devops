@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from copy import deepcopy
 
 from sqlalchemy import func
@@ -32,6 +33,12 @@ class VerificationContext:
         self.tasks = {row.id: row for row in scoped(Task)}
         self.requirements = {row.id: row for row in scoped(Requirement)}
         self.issues = scoped(Issue)
+        self.tasks_by_requirement = defaultdict(list)
+        self.issues_by_task = defaultdict(list)
+        for task in self.tasks.values():
+            self.tasks_by_requirement[task.req_id].append(task)
+        for issue in self.issues:
+            self.issues_by_task[issue.task_id].append(issue)
         self.team = TeamContext(db, project, data)
         self.roster = self.team.roster
         self.executions = {entry["task_id"]: entry for entry in data.get("executions", [])}
@@ -45,7 +52,12 @@ class VerificationContext:
             row.task_id: row
             for row in db.query(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq)
         }
+        self.reset_proof()
+
+    def reset_proof(self):
+        """Reconciliation mutates effective metadata before proof can be reused."""
         self._snapshots, self._definitions, self._verified, self._accepted = {}, {}, {}, {}
+        self._bases = {}
         self._accepting = set()
 
     def owner(self, task):
@@ -198,7 +210,9 @@ class VerificationContext:
         return {"eligible": not reasons, "reasons": reasons}
 
     def basis(self, task_id):
-        return fingerprint(semantic_snapshot(self.snapshot(task_id)))
+        if task_id not in self._bases:
+            self._bases[task_id] = fingerprint(semantic_snapshot(self.snapshot(task_id)))
+        return self._bases[task_id]
 
     def execution_valid(self, task_id):
         """Validate one current execution snapshot before assigning any review state."""
@@ -289,7 +303,8 @@ class VerificationContext:
             for r in flow["reviews"]
         )
         tasks = []
-        for task in self.tasks.values():
+        linked = self.tasks_by_requirement.get(requirement_id, [])
+        for task in linked:
             status = task.status
             if self.data.get("task_details", {}).get(task.id, {}).get("blocked_reason"):
                 status = "blocked"
@@ -307,7 +322,8 @@ class VerificationContext:
             )
         issues = [
             {"task_id": issue.task_id, "status": issue.status, "severity": issue.severity}
-            for issue in self.issues
+            for task in linked
+            for issue in self.issues_by_task.get(task.id, [])
         ]
         accepted = reviewed and all(
             gate["ok"]

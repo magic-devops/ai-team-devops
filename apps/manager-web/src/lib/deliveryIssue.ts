@@ -1,5 +1,5 @@
 import { request } from "./http";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryCommandAck } from "./delivery";
 import { projectHeaders } from "./projectPortfolio";
 import { safeExecutionReturn } from "./executionCommands";
 import { safePortfolioReturn } from "./projectPortfolioRoute";
@@ -385,7 +385,7 @@ export function submitIssueReview(
   projectId: string,
   command: IssueReviewCommand,
 ) {
-  return request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: scoped(projectId),
     body: JSON.stringify(command),

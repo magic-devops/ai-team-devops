@@ -118,7 +118,7 @@ def test_observation_failure_rolls_back_business_transaction(sessions, monkeypat
         def fail(*args, **kwargs):
             raise RuntimeError("Cannot preserve progress facts")
 
-        monkeypatch.setattr(delivery_progress_capture, "capture_facts", fail)
+        monkeypatch.setattr(delivery_progress_capture, "evaluate_project", fail)
         add_task(db)
         with pytest.raises(RuntimeError, match="preserve progress"):
             db.commit()

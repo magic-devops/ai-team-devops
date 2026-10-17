@@ -16,7 +16,7 @@ from sop_sdk import build_default_client
 cli = build_default_client()           # 自动读取 .sop-runtime/agent.toml + 环境变量
 print(cli.health())
 tasks = cli.list_tasks(status="pending")
-members = cli.delivery_workspace()["members"]  # 当前授权项目中的稳定身份
+members = [item["data"] for item in cli.delivery_references("member")["items"]]  # 当前页的稳定身份
 cli.update_task("T-example", {"owner_id": members[0]["id"]})  # 选择有效人员或 Agent
 ```
 
@@ -209,8 +209,7 @@ CI导入的 `payload.envelope` 必须是原始DSSE JSON文本，不能预先解�
 ```python
 import uuid
 
-workspace = client.delivery_workspace()
-requirement = next(item for item in workspace["requirements"] if item["id"] == "REQ-example")
+requirement = client.delivery_requirement("REQ-example")["requirement"]
 changes = {"description": "明确核对过的新需求范围"}
 preview = client.delivery_requirement_change_preview(requirement["id"], {
     "requirement_basis": requirement["basis"], "changes": changes,
@@ -227,3 +226,13 @@ command = {
 ```
 
 并发冲突保留草稿，重新读取后明确采用并重新预览；结果未知重试原命令，不能生成新key。变更影响不代表自动改期、重新派发、重跑或验收。详见 [协作活动与变更指南](../../docs/DELIVERY_COLLABORATION_GUIDE.md)。
+
+## 分页查询与命令回执
+
+`delivery_context()` 返回项目概要、权限和全项目有效统计，不含需求、任务或执行正文。列表使用 `delivery_requirements(...)`、`delivery_tasks(...)`、`delivery_issues(...)`；`total` 是服务端筛选后的全范围数量。下一页保留原筛选、排序和 limit，传回 `next_cursor`。任务 status 使用 pending/in_progress/blocked/awaiting_review/recorded_completed/verified_completed 六态，已记录完成与已验证完成分别表达。
+
+`delivery_requirement(id)`、`delivery_task(id)` 和 `delivery_execution(id)` 精确取详情，不受当前列表窗口影响。成员、里程碑、资源和候选选项使用 `delivery_references(kind, q=..., ids=[...])`，返回有界页；已选ID需显式补取。可变目录在项目变更后返回 `delivery_query_cursor_stale`，应让用户回到第一页；历史活动的固定上界游标另有独立语义。
+
+`delivery_command(body)` 返回统一回执：`resource` 为原命令的结果对象，`result` 为动作专用结果，`affected_refs` 为需刷新的对象；`applied_version` 固定在原提交，`version/query_generation` 表达当前项目读状态。重放仍返回原对象，即使后来已被删除，不能从当前列表猜测创建结果。旧回执缺少原结果时明确返回 `delivery_receipt_result_unavailable`。
+
+索引缺失时 context 的 summary/metrics 为 null，其余查询明确要求重建；具有配置权限的调用方可显式执行 `delivery_query_rebuild()`。重建只替换派生查询数据，不制造进度或历史。`delivery_workspace()` 保留为明确的完整导出，交互读取不调用它。详见 [查询与详情指南](../../docs/DELIVERY_QUERY_GUIDE.md)。

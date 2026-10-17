@@ -1,13 +1,23 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryInbox } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryInbox";
 import { DeliveryProjectResources } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProjectResources";
 import { DeliveryProjectOverview } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryProjectOverview";
-import type { DeliveryInbox as InboxData, DeliveryWorkspace } from "./delivery";
+import type { DeliveryInbox as InboxData, DeliveryDisplayContext, DeliveryResource } from "./delivery";
 import { projectInboxTranslations } from "../i18n/delivery-project-inbox";
 
 let activeLanguage: keyof typeof projectInboxTranslations = "en-US";
+let resourceRows: DeliveryResource[] = [];
+vi.mock("@tanstack/react-query", async () => ({
+  ...await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query"),
+  useQuery: ({ queryKey }: { queryKey: string[] }) => {
+    const rows = queryKey[0].includes("resource") ? resourceRows : [];
+    return { data: { items: rows.map((data) => ({ id: data.id, data })), total: rows.length, next_cursor: null }, isError: false, isPending: false };
+  },
+  useQueries: ({ queries }: { queries: { queryKey: unknown[] }[] }) => queries.map(({ queryKey }) => ({ data: { items: workspace.members.filter((member) => (queryKey.at(-1) as string[]).includes(member.id)).map((data) => ({ id: data.id, data })) } })),
+}));
+beforeEach(() => { resourceRows = []; vi.stubGlobal("location", { hash: "#/dev-flow?view=resources" }); });
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -34,10 +44,10 @@ const workspace = {
   project: { id: "project", name: "Project", description: "" },
   permissions: { write: true, configure: false, approve: false },
   members: [{ id: "user:lead", name: "Lead", kind: "human" }],
-  requirements: [],
-  tasks: [],
+  resources: [],
   milestones: [],
-} as unknown as DeliveryWorkspace;
+  referenceTotals: { members: 1, milestones: 0, activeResources: 0 },
+} as unknown as DeliveryDisplayContext;
 const inbox = {
   project_id: "project",
   version: 4,
@@ -179,26 +189,14 @@ describe("project inbox presentation", () => {
     expect(html).toMatch(
       /disabled=""[^>]*><span[^>]*>.*?<\/span><span>deliveryProject.addResource/s,
     );
+    resourceRows = [
+      { id: "safe", kind: "document", title: "Plan", url: "https://example.org/doc" },
+      { id: "unsafe", kind: "repository", title: "Unsafe link", url: "https://example.org/?private_token=secret" },
+    ] as DeliveryResource[];
     const links = renderToStaticMarkup(
       createElement(DeliveryProjectResources, {
         projectId: "project",
-        data: {
-          ...workspace,
-          resources: [
-            {
-              id: "safe",
-              kind: "document",
-              title: "Plan",
-              url: "https://example.org/doc",
-            },
-            {
-              id: "unsafe",
-              kind: "repository",
-              title: "Unsafe link",
-              url: "https://example.org/?private_token=secret",
-            },
-          ],
-        },
+        data: workspace,
         kind: "all",
         showArchived: false,
         onFilter: () => {},

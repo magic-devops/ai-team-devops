@@ -1,3 +1,4 @@
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -12,7 +13,7 @@ import {
 } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryContext } from "@/lib/delivery";
 import {
   fetchDeliveryQuality,
   fetchDeliveryReleases,
@@ -44,9 +45,9 @@ export function DeliveryReleaseWorkbench({
   onSaved,
 }: {
   view: "quality" | "releases";
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
   sessionId: string;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
@@ -76,7 +77,12 @@ export function DeliveryReleaseWorkbench({
   const selectedCount =
     selected.requirement_ids.length + selected.task_ids.length;
   const catalogue = useQuery({
-    queryKey: ["delivery-quality-catalogue", projectId, sessionId],
+    queryKey: [
+      "delivery-quality-catalogue",
+      projectId,
+      sessionId,
+      workspace.query_generation,
+    ],
     queryFn: ({ signal }) => fetchDeliveryQuality(projectId, undefined, signal),
     gcTime: 0,
     retry: false,
@@ -90,6 +96,7 @@ export function DeliveryReleaseWorkbench({
       ...selected.requirement_ids,
       "tasks",
       ...selected.task_ids,
+      workspace.query_generation,
     ],
     queryFn: ({ signal }) => fetchDeliveryQuality(projectId, selected, signal),
     enabled: selectedCount > 0,
@@ -98,7 +105,12 @@ export function DeliveryReleaseWorkbench({
     refetchInterval: 5000,
   });
   const indexQuery = useQuery({
-    queryKey: ["delivery-release-index", projectId, sessionId],
+    queryKey: [
+      "delivery-release-index",
+      projectId,
+      sessionId,
+      workspace.query_generation,
+    ],
     queryFn: ({ signal }) => fetchDeliveryReleases(projectId, signal),
     gcTime: 0,
     retry: false,
@@ -129,7 +141,7 @@ export function DeliveryReleaseWorkbench({
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
-  const saved = (updated: DeliveryWorkspace) => {
+  const saved = (updated: DeliveryCommandAck) => {
     onSaved(updated);
     for (const key of [
       "delivery-quality-catalogue",

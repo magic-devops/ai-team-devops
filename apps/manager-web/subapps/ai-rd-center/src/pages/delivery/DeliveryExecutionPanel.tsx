@@ -1,4 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import {
+  fetchDeliveryReferences,
+  fetchExecutionDetail,
+} from "@/lib/deliveryQuery";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Alert, Button, Collapse, Skeleton } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +11,9 @@ import {
   fetchDeliveryTargets,
   type DeliveryAction,
   type DeliveryTask,
-  type DeliveryWorkspace,
+  type DeliveryTaskData,
+  type DeliveryCommandAck,
+  type DeliveryExecution,
 } from "@/lib/delivery";
 import {
   openExecutionDraft,
@@ -19,13 +25,13 @@ import "./delivery-runtime.css";
 
 type Props = {
   sessionId: string;
-  data: DeliveryWorkspace;
+  data: DeliveryTaskData;
   task: DeliveryTask;
   onCommand: (
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) => Promise<void>;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onEditingChange?: (editing: boolean) => void;
   disabled?: boolean;
   onUnresolvedChange?: (value: boolean) => void;
@@ -61,11 +67,46 @@ export function DeliveryExecutionPanel({
     setControlLocked(pending);
     onUnresolvedChange?.(pending);
   };
-  const executions = (data.executions || [])
-    .filter((entry) => entry.task_id === task.id)
-    .slice()
-    .reverse();
-  const current = executions[0];
+  const currentQuery = useQuery({
+    queryKey: [
+      "delivery-execution-exact",
+      data.project.id,
+      sessionId,
+      task.execution_id,
+    ],
+    queryFn: ({ signal }) =>
+      fetchExecutionDetail(data.project.id, task.execution_id!, signal),
+    enabled: Boolean(task.execution_id),
+    retry: false,
+    gcTime: 0,
+    refetchInterval: controlLocked ? false : 5000,
+  });
+  const history = useInfiniteQuery({
+    queryKey: ["delivery-task-executions", data.project.id, sessionId, task.id],
+    initialPageParam: "",
+    queryFn: ({ pageParam, signal }) =>
+      fetchDeliveryReferences<
+        Pick<DeliveryExecution, "id" | "status" | "created_at" | "attempt">
+      >(
+        data.project.id,
+        "execution",
+        {
+          task_id: task.id,
+          limit: 20,
+          sort: "created_desc",
+          cursor: pageParam,
+        },
+        signal,
+      ),
+    getNextPageParam: (page) => page.next_cursor || undefined,
+    retry: false,
+    gcTime: 0,
+  });
+  const executions =
+    history.data?.pages
+      .flatMap((page) => page.items.map((item) => item.data))
+      .filter((entry) => entry.id !== task.execution_id) || [];
+  const current = currentQuery.data?.execution;
   const gateReasons = task.execution_gate.reasons.map((reason) =>
     !task.req_id && reason.code === "task_dispatch_stage_blocked"
       ? t("deliveryTaskAcceptance.standaloneStageBlocked")
@@ -87,6 +128,7 @@ export function DeliveryExecutionPanel({
     data.permissions.write &&
     targets.data?.can_execute &&
     !targets.isError &&
+    !currentQuery.isError &&
     task.execution_gate.eligible &&
     (!current || closed.includes(current.status));
   useEffect(() => {
@@ -139,6 +181,30 @@ export function DeliveryExecutionPanel({
         </p>
       )}
       {!current && <p className="runtime-help">{tr("empty")}</p>}
+      {currentQuery.error && (
+        <Alert
+          type="error"
+          title={t("deliveryQuery.readFailed")}
+          description={currentQuery.error.message}
+          action={
+            <Button onClick={() => void currentQuery.refetch()}>
+              {t("deliveryQuery.retry")}
+            </Button>
+          }
+        />
+      )}
+      {history.error && (
+        <Alert
+          type="error"
+          title={t("deliveryQuery.readFailed")}
+          description={history.error.message}
+          action={
+            <Button onClick={() => void history.refetch()}>
+              {t("deliveryQuery.retry")}
+            </Button>
+          }
+        />
+      )}
       {!task.execution_gate.eligible && !compactGate && (
         <Alert
           type="info"
@@ -174,7 +240,7 @@ export function DeliveryExecutionPanel({
           {gateReasons.join(" ")}
         </p>
       )}
-      {executions.length > 1 && (
+      {executions.length > 0 && (
         <Collapse
           size="small"
           ghost
@@ -182,10 +248,10 @@ export function DeliveryExecutionPanel({
           items={[
             {
               key: "history",
-              label: `${tr("history")} · ${executions.length - 1}`,
+              label: `${tr("history")} · ${history.data?.pages[0]?.total || executions.length}`,
               children: (
                 <div className="execution-history-list">
-                  {executions.slice(1).map((entry) => (
+                  {executions.map((entry) => (
                     <section key={entry.id} className="execution-history-entry">
                       <div className="runtime-section-heading">
                         <div>
@@ -214,16 +280,14 @@ export function DeliveryExecutionPanel({
                         </Button>
                       </div>
                       {historyId === entry.id && (
-                        <ExecutionObservationCard
-                          key={`${data.project.id}:${sessionId}:${entry.id}`}
-                          entry={entry}
+                        <ExactExecutionCard
+                          id={entry.id}
                           projectId={data.project.id}
                           sessionId={sessionId}
                           workspaceVersion={data.version}
                           onSaved={onSaved}
-                          disabled={disabled || controlLocked}
-                          active={false}
                           onCommand={onCommand}
+                          disabled={disabled || controlLocked}
                           onUnresolvedChange={(value) =>
                             controlPending(entry.id, value)
                           }
@@ -231,6 +295,14 @@ export function DeliveryExecutionPanel({
                       )}
                     </section>
                   ))}
+                  {history.hasNextPage && (
+                    <Button
+                      loading={history.isFetchingNextPage}
+                      onClick={() => void history.fetchNextPage()}
+                    >
+                      {t("deliveryQuery.more")}
+                    </Button>
+                  )}
                 </div>
               ),
             },
@@ -253,5 +325,39 @@ export function DeliveryExecutionPanel({
         />
       )}
     </section>
+  );
+}
+
+function ExactExecutionCard({
+  id,
+  ...props
+}: Omit<Parameters<typeof ExecutionObservationCard>[0], "entry" | "active"> & {
+  id: string;
+}) {
+  const query = useQuery({
+    queryKey: [
+      "delivery-execution-exact",
+      props.projectId,
+      props.sessionId,
+      id,
+    ],
+    queryFn: ({ signal }) => fetchExecutionDetail(props.projectId, id, signal),
+    retry: false,
+    gcTime: 0,
+  });
+  return query.data ? (
+    <ExecutionObservationCard
+      {...props}
+      entry={query.data.execution}
+      active={false}
+    />
+  ) : query.error ? (
+    <Alert
+      type="error"
+      title={query.error.message}
+      action={<Button onClick={() => void query.refetch()}>↻</Button>}
+    />
+  ) : (
+    <Skeleton active />
   );
 }

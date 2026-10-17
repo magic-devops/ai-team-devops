@@ -13,6 +13,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth_sql import _norm_role, check_project_access, current_user
+from .delivery_activity_contract import (
+    ActivityDetail,
+    ActivityPage,
+    RequirementChangePreview,
+    RequirementChangePreviewInput,
+    RequirementHistory,
+    RequirementVersionDetail,
+)
 from .delivery_contract import (
     PAYLOADS,
     STAGES,
@@ -41,6 +49,20 @@ from .delivery_execution_runtime_contract import (
     ExecutionNodeOutputResponse,
     ExecutionRuntimeResponse,
 )
+from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
+from .delivery_query_contract import (
+    CommandAck,
+    DeliveryContext,
+    DeliveryStatus,
+    ExecutionDetail,
+    QueryPage,
+    QueryRebuilt,
+    QuerySort,
+    ReferenceKind,
+    RequirementDetail,
+    RequirementPage,
+    TaskDetail,
+)
 from .delivery_release_contract import (
     DeliveryQualityResponse,
     DeliveryReleaseDetail,
@@ -58,21 +80,11 @@ from .delivery_service import (
     apply_action,
     identifier,
     initial_state,
-    materialize,
     reconcile,
     records,
     remember_basis,
 )
 from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
-from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
-from .delivery_activity_contract import (
-    ActivityDetail,
-    ActivityPage,
-    RequirementChangePreview,
-    RequirementChangePreviewInput,
-    RequirementHistory,
-    RequirementVersionDetail,
-)
 from .project_lifecycle_contract import ProjectLifecyclePreviewInput
 from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .sql_models import (
@@ -120,10 +132,11 @@ def _permissions(db, user, project):
 
 def _snapshot(db, project, user):
     from .delivery_activity import legacy_activity
+    from .delivery_progress_facts import evaluate_project
 
     row = db.get(DeliveryWorkspace, project.id)
-    state = reconcile(db, project, row.data) if row else initial_state()
-    result = materialize(db, project, state, user)
+    evaluation = evaluate_project(db, project, row.data if row else initial_state())
+    state, result = evaluation.state, evaluation.snapshot
     events = records(db, DeliveryEvent, project).order_by(DeliveryEvent.version.desc()).limit(200).all()
     result.update(
         version=row.version if row else 0,
@@ -138,7 +151,7 @@ def _snapshot(db, project, user):
     )
     from .delivery_scheduling import planning_basis
 
-    result["planning_basis"] = planning_basis(db, project, state)
+    result["planning_basis"] = planning_basis(db, project, state, verification=evaluation.verification)
     return result
 
 
@@ -179,6 +192,139 @@ def workspace(
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     return _snapshot(db, _project(db, user, project_id), user)
+
+
+@router.get("/context", response_model=DeliveryContext)
+def delivery_context(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import context
+
+    project = _project(db, user, project_id)
+    permissions = {**_permissions(db, user, project),
+                   "query_rebuild": _role_permissions(db, user, project)["configure"]}
+    return context(db, project, permissions)
+
+
+@router.post("/query/rebuild", response_model=QueryRebuilt)
+def delivery_query_rebuild(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_index import rebuild
+
+    project = _project(db, user, project_id)
+    if not _role_permissions(db, user, project)["configure"]:
+        raise HTTPException(403, "Project configure permission required")
+    return rebuild(db, project, user)
+
+
+@router.get("/requirements", response_model=RequirementPage)
+def delivery_requirement_page(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    q: str = Query("", max_length=200), stage: str = Query("", max_length=32),
+    priority: str = Query("", max_length=8), owner_id: str = Query("", max_length=100),
+    milestone_id: str = Query("", max_length=64), sort: QuerySort = "created_desc",
+    cursor: str = Query("", max_length=4000), limit: int = Query(20, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import entity_page
+
+    if stage and stage not in {item["id"] for item in STAGES}:
+        raise HTTPException(422, "Unknown delivery stage")
+    filters = {"q": q, "stage": stage, "priority": priority, "owner_id": owner_id,
+               "milestone_id": milestone_id, "sort": sort}
+    return entity_page(db, _project(db, user, project_id), user, "requirement", filters, limit=limit, cursor=cursor)
+
+
+@router.get("/tasks", response_model=QueryPage)
+def delivery_task_page(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    requirement_id: str = Query("", max_length=64), q: str = Query("", max_length=200),
+    status: DeliveryStatus | Literal[""] = "", priority: str = Query("", max_length=8),
+    owner_id: str = Query("", max_length=100), milestone_id: str = Query("", max_length=64),
+    sort: QuerySort = "created_desc", cursor: str = Query("", max_length=4000),
+    limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import entity_page
+
+    if sort == "due_asc":
+        raise HTTPException(422, "Task queries do not support due date sorting")
+    filters = {"requirement_id": requirement_id, "q": q, "status": status, "priority": priority,
+               "owner_id": owner_id, "milestone_id": milestone_id, "sort": sort}
+    return entity_page(db, _project(db, user, project_id), user, "task", filters, limit=limit, cursor=cursor)
+
+
+@router.get("/issues", response_model=QueryPage)
+def delivery_issue_page(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Session, Depends(get_session)],
+    requirement_id: str = Query("", max_length=64), task_id: str = Query("", max_length=64),
+    q: str = Query("", max_length=200), status: str = Query("", max_length=32),
+    severity: str = Query("", max_length=8), source: Literal["", "execution", "deployment", "other"] = "",
+    cursor: str = Query("", max_length=4000),
+    limit: int = Query(20, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import entity_page
+
+    filters = {"requirement_id": requirement_id, "task_id": task_id, "q": q, "status": status,
+               "severity": severity, "source": source, "sort": "created_desc"}
+    return entity_page(db, _project(db, user, project_id), user, "issue", filters, limit=limit, cursor=cursor)
+
+
+@router.get("/references", response_model=QueryPage)
+def delivery_reference_page(
+    kind: ReferenceKind, request: Request, user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)], q: str = Query("", max_length=200),
+    ids: str = Query("", max_length=10100), requirement_id: str = Query("", max_length=64),
+    task_id: str = Query("", max_length=64), cursor: str = Query("", max_length=4000),
+    member_kind: Literal["", "human", "agent", "tool"] = "", member_active: bool | None = None,
+    resource_kind: Literal["", "repository", "document", "design", "other"] = "", archived: bool | None = None,
+    sort: Literal["id_asc", "ends_asc", "created_desc"] = "id_asc",
+    limit: int = Query(50, ge=1, le=100), project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import reference_page
+
+    if sort == "ends_asc" and kind != "milestone":
+        raise HTTPException(422, "End date sorting applies to milestone references")
+    if sort == "created_desc" and kind != "execution":
+        raise HTTPException(422, "Creation date sorting applies to execution references")
+    filters = {"kind": kind, "q": q, "ids": ids, "requirement_id": requirement_id, "task_id": task_id,
+               "member_kind": member_kind, "member_active": member_active, "resource_kind": resource_kind,
+               "archived": archived, "sort": sort}
+    return reference_page(db, _project(db, user, project_id), user, filters, limit=limit, cursor=cursor,
+                          store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/requirements/{requirement_id}", response_model=RequirementDetail)
+def delivery_requirement_detail(
+    requirement_id: str, user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import requirement_detail
+
+    return requirement_detail(db, _project(db, user, project_id), requirement_id)
+
+
+@router.get("/tasks/{task_id}", response_model=TaskDetail)
+def delivery_task_detail(
+    task_id: str, user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import task_detail
+
+    return task_detail(db, _project(db, user, project_id), task_id)
+
+
+@router.get("/executions/{execution_id}", response_model=ExecutionDetail)
+def delivery_execution_detail(
+    execution_id: str, request: Request, user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)], project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_query_read import execution_detail
+
+    return execution_detail(db, _project(db, user, project_id), user, execution_id,
+                            getattr(request.app.state, "hermes_store", None))
 
 
 @router.get("/activity", response_model=ActivityPage)
@@ -795,7 +941,7 @@ def project_lifecycle_preview(
                    version=row.version if row else 0)
 
 
-@router.post("/commands")
+@router.post("/commands", response_model=CommandAck)
 def execute(
     body: Command,
     user: Annotated[User, Depends(current_user)],
@@ -819,10 +965,13 @@ def execute(
     fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
     receipt = db.get(DeliveryReceipt, key)
     if receipt:
+        from .delivery_query_commands import replay_ack
+
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
         _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
-        return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
+        return replay_ack(db, project, receipt.version, user=user,
+                          store=getattr(request.app.state, "hermes_store", None) if request else None)
     from ..project_write_guard import lifecycle_scope, require_project_operation
 
     scope = lifecycle_scope(db, project.tenant_id, project.id) if body.action == "project.lifecycle" else nullcontext()
@@ -842,10 +991,13 @@ def execute(
             user = locked_actor
             receipt = db.get(DeliveryReceipt, key, populate_existing=True)
             if receipt:
+                from .delivery_query_commands import replay_ack
+
                 if receipt.request_hash != fingerprint:
                     raise HTTPException(409, "Idempotency key already used with different input")
                 _schedule_committed_run(db, project, user, body, request, background_tasks, receipt.version)
-                return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
+                return replay_ack(db, project, receipt.version, user=user,
+                                  store=getattr(request.app.state, "hermes_store", None) if request else None)
             return _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks)
     except Exception:
         db.rollback()
@@ -948,6 +1100,11 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
             event_data["input"]["vector_db_config"] = {"changed": True}
         if len(applied) == 3:
             event_data["result"] = applied[2]
+        from .delivery_query_commands import command_access, recorded_ack
+
+        ack = recorded_ack(project, body.action, resource_id, event_data.get("result"), next_version)
+        event_data["command_ack"] = ack
+        event_data["command_ack_access"] = command_access(data, body.action, resource_id)
         db.flush()
         if body.action != "project.lifecycle" and not body.action.startswith(("release.", "deployment.")):
             remember_basis(db, project, data)
@@ -964,7 +1121,6 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         if updated.rowcount != 1:
             raise HTTPException(409, "Concurrent edit. Reload the project.")
         db.flush()
-        summary = materialize(db, project, data, user)["summary"]
         event = DeliveryEvent(
                 id=identifier("event"),
                 project_id=project.id,
@@ -973,7 +1129,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
                 actor=user.username,
                 action=body.action,
                 resource_id=resource_id,
-                data={"snapshot": summary, **event_data},
+                data=event_data,
             )
         from .delivery_activity import record_activity
 
@@ -990,7 +1146,9 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         db.commit()
         db.expire_all()
         _schedule_committed_run(db, project, user, body, request, background_tasks, next_version)
-        return {**_snapshot(db, project, user), "replayed": False, "applied_version": next_version}
+        from .delivery_query_commands import current_ack
+
+        return current_ack(db, project, ack, replayed=False)
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(

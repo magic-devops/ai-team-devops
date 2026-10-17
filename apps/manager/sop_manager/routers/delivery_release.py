@@ -1,5 +1,6 @@
 """Canonical quality and immutable release decisions, without progress/materialization recursion."""
 
+from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -100,9 +101,9 @@ def _selected(context, requirement_ids, task_ids):
 def _issues(context, task_ids):
     return [
         issue
-        for issue in context.issues
-        if issue.task_id in task_ids
-        and issue.severity in {"P0", "P1"}
+        for task_id in task_ids
+        for issue in context.issues_by_task.get(task_id, [])
+        if issue.severity in {"P0", "P1"}
         and issue.status not in {"resolved", "closed"}
     ]
 
@@ -299,12 +300,15 @@ def _scope_payload(context, selected, included, requirements, tasks):
     }
 
 
-def quality(db, project, data, *, requirement_ids=None, task_ids=None):
-    context = VerificationContext(db, project, data)
+def quality(db, project, data, *, requirement_ids=None, task_ids=None, verification=None):
+    context = verification or VerificationContext(db, project, data)
     selected, included = _selected(context, requirement_ids, task_ids)
     tasks = [_task_quality(context, task) for task in sorted(context.tasks.values(), key=lambda row: row.id)]
+    grouped = defaultdict(list)
+    for task in tasks:
+        grouped[task["requirement_id"]].append(task)
     requirements = [
-        _requirement_quality(context, req, tasks)
+        _requirement_quality(context, req, grouped[req.id])
         for req in sorted(context.requirements.values(), key=lambda row: row.id)
     ]
     chosen_requirements = [row for row in requirements if row["id"] in selected["requirement_ids"]]
@@ -338,8 +342,8 @@ def quality(db, project, data, *, requirement_ids=None, task_ids=None):
     }
 
 
-def _scope_quality(db, project, data, selected):
-    return quality(db, project, data, **selected)
+def _scope_quality(db, project, data, selected, *, verification=None):
+    return quality(db, project, data, **selected, verification=verification)
 
 
 def _snapshot_quality(value):
@@ -363,7 +367,7 @@ def _sequence(evidence):
     return predicate["run_number"], predicate["run_attempt"]
 
 
-def _ci_reasons(db, project, data, evidence, current_quality=None):
+def _ci_reasons(db, project, data, evidence, current_quality=None, *, verification=None):
     reasons = []
     policy = data.get("release_policy")
     predicate = evidence["statement"]["predicate"]
@@ -373,7 +377,7 @@ def _ci_reasons(db, project, data, evidence, current_quality=None):
     if peers and _sequence(evidence) < max(map(_sequence, peers)):
         reasons.append(_reason("release_ci_superseded", "A later CI attempt superseded this evidence."))
     try:
-        current_quality = current_quality or _scope_quality(db, project, data, evidence["selected"])
+        current_quality = current_quality or _scope_quality(db, project, data, evidence["selected"], verification=verification)
         if predicate["scope_basis"] != current_quality["scope_basis"]:
             reasons.append(_reason("release_scope_changed", "The selected quality scope changed."))
     except HTTPException:
@@ -412,21 +416,21 @@ def _approver_available(db, project, actor_id):
         return False
 
 
-def _candidate_reasons(db, project, data, candidate):
+def _candidate_reasons(db, project, data, candidate, *, verification=None):
     reasons = deepcopy(candidate.get("invalidated_reasons", []))
     snapshot = candidate["snapshot"]
     evidence = next((row for row in data.get("ci_evidence", []) if row["id"] == snapshot["ci"]["id"]), None)
     if evidence is None:
         reasons.append(_reason("release_ci_missing", "The original signed CI evidence is unavailable."))
     else:
-        reasons.extend(_ci_reasons(db, project, data, evidence))
+        reasons.extend(_ci_reasons(db, project, data, evidence, verification=verification))
         if not evidence["passed"]:
             reasons.append(_reason("release_ci_failed", "The selected signed CI checks did not pass."))
     policy = data.get("release_policy")
     if not policy or policy["generation"] != snapshot["ci"]["policy_generation"]:
         reasons.append(_reason("release_policy_changed", "The configured CI trust policy changed."))
     try:
-        current = _scope_quality(db, project, data, snapshot["selected"])
+        current = _scope_quality(db, project, data, snapshot["selected"], verification=verification)
         if current["scope_basis"] != snapshot["quality"]["scope_basis"]:
             reasons.append(_reason("release_scope_changed", "The selected quality scope changed."))
         if not current["eligible"]:
@@ -452,10 +456,10 @@ def _candidate_reasons(db, project, data, candidate):
     return list({row["code"]: row for row in reasons}.values())
 
 
-def reconcile_releases(db, project, data):
+def reconcile_releases(db, project, data, *, verification=None):
     """Only latch the three invalidation fields; original content and decisions stay immutable."""
     for candidate in data.get("release_candidates", []):
-        reasons = _candidate_reasons(db, project, data, candidate)
+        reasons = _candidate_reasons(db, project, data, candidate, verification=verification)
         if reasons and not candidate.get("invalidated"):
             candidate["invalidated"] = True
             candidate["invalidated_at"] = _now()

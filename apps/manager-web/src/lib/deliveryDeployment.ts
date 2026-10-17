@@ -2,7 +2,7 @@ import { request } from "./http";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "./delivery";
 import type { ExecutionTarget } from "./deliveryExecution";
 import { projectHeaders } from "./projectPortfolio";
@@ -278,7 +278,7 @@ export function submitDeploymentCommand(
   payload: Record<string, unknown>,
   intent: DeliveryIntent,
 ) {
-  return request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: scoped(projectId),
     body: JSON.stringify({

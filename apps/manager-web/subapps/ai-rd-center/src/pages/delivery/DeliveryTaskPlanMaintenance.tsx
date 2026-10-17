@@ -1,14 +1,17 @@
+import {
+  fetchDeliveryTaskData,
+  type DeliveryCommandAck,
+} from "@/lib/deliveryQuery";
 import { useEffect, useState } from "react";
 import "./delivery-scheduling.css";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
-  fetchDelivery,
   prepareDeliveryIntent,
   saveDelivery,
   type DeliveryIntent,
   type DeliveryTask,
-  type DeliveryWorkspace,
+  type DeliveryTaskData,
 } from "@/lib/delivery";
 import {
   adoptTaskEdit,
@@ -39,9 +42,9 @@ export function DeliveryTaskPlanMaintenance({
   onEditingChange,
 }: {
   task: DeliveryTask;
-  data: DeliveryWorkspace;
-  onTask: (task: DeliveryTask) => void;
-  onSaved: (data: DeliveryWorkspace) => void;
+  data: DeliveryTaskData;
+  onTask: (task: Pick<DeliveryTask, "id" | "req_id">) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   canEdit: boolean;
   onEditingChange?: (editing: boolean) => void;
 }) {
@@ -56,7 +59,7 @@ export function DeliveryTaskPlanMaintenance({
     onEditingChange?.(true);
     return () => onEditingChange?.(false);
   }, [Boolean(editor), onEditingChange]);
-  const requirement = data.requirements.find((item) => item.id === task.req_id);
+  const requirement = data.requirement || undefined;
   function edit() {
     if (!task.basis) {
       setError(t("deliveryManualReview.readFailed"));
@@ -64,12 +67,12 @@ export function DeliveryTaskPlanMaintenance({
     }
     setError("");
     let pinned = openTaskEdit(data, task.id);
-    let latest: DeliveryWorkspace | undefined;
+    let latest: DeliveryTaskData | undefined;
     let intent: DeliveryIntent = {
       version: data.version,
       key: crypto.randomUUID(),
     };
-    const fields = (workspace: DeliveryWorkspace): EditorField[] => [
+    const fields = (workspace: DeliveryTaskData): EditorField[] => [
       {
         key: "description",
         label: tr("description"),
@@ -98,7 +101,8 @@ export function DeliveryTaskPlanMaintenance({
         key: "depends_on",
         label: tr("taskPlan.dependencies"),
         multiple: true,
-        options: workspace.tasks
+        referenceKind: "task",
+        options: workspace.dependencies
           .filter((item) => item.id !== task.id)
           .map((item) => ({ value: item.id, label: item.title })),
       },
@@ -159,8 +163,8 @@ export function DeliveryTaskPlanMaintenance({
         }
       },
       loadLatest: async () => {
-        latest = await fetchDelivery(data.project.id);
-        if (!latest.tasks.some((item) => item.id === task.id))
+        latest = await fetchDeliveryTaskData(data.project.id, task.id);
+        if (latest.task.id !== task.id)
           throw new Error(t("deliveryManualReview.taskPlanUnavailable"));
         const current = openTaskEdit(latest, task.id);
         return {
@@ -178,9 +182,8 @@ export function DeliveryTaskPlanMaintenance({
             {
               label: t("deliveryManualReview.requirement"),
               value:
-                latest.requirements.find(
-                  (item) => item.id === current.task.req_id,
-                )?.title || t("deliveryManualReview.standalone"),
+                latest.requirement?.title ||
+                t("deliveryManualReview.standalone"),
             },
             { label: tr("description"), value: current.task.description },
             {
@@ -197,7 +200,8 @@ export function DeliveryTaskPlanMaintenance({
                 (current.task.planning?.depends_on || [])
                   .map(
                     (id) =>
-                      latest!.tasks.find((item) => item.id === id)?.title || id,
+                      latest!.dependencies.find((item) => item.id === id)
+                        ?.title || id,
                   )
                   .join(" · ") || tr("none"),
             },

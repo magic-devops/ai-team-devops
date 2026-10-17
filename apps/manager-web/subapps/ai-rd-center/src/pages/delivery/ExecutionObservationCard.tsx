@@ -14,7 +14,7 @@ import { ExecutionExecutorFacts } from "./ExecutionExecutorFacts";
 import type {
   DeliveryAction,
   DeliveryExecution,
-  DeliveryWorkspace,
+  DeliveryCommandAck,
 } from "@/lib/delivery";
 import {
   fetchExecutionObservations,
@@ -98,7 +98,7 @@ export function ExecutionObservationCard({
   active: boolean;
   sessionId: string;
   workspaceVersion: number;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange?: (value: boolean) => void;
   initialNodeId?: string;
   initialAttempt?: number;

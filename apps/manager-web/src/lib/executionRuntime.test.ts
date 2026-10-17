@@ -41,7 +41,7 @@ describe("fixed execution controls and exact output", () => {
     captured.payload.reason = "different operation";
     vi.mocked(request)
       .mockRejectedValueOnce(new Error("network lost"))
-      .mockResolvedValue({ project: { id: "P" } });
+      .mockResolvedValue({ project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: 8, version: 8, query_generation: 2, replayed: false });
     await expect(submitExecutionControl(intent)).rejects.toThrow(
       "network lost",
     );
@@ -75,7 +75,7 @@ describe("fixed execution controls and exact output", () => {
     context.scope = "session-one";
     vi.mocked(request).mockImplementationOnce(async () => {
       context.scope = "session-two";
-      return { project: { id: "P" } };
+      return { project_id: "P", action: "execution.cancel", resource: { kind: "execution", id: "E" }, result: null, affected_refs: [], applied_version: 8, version: 8, query_generation: 2, replayed: false };
     });
     await expect(submitExecutionControl(intent)).rejects.toThrow(
       "scopeChanged",

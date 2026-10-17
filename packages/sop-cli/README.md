@@ -91,7 +91,7 @@ sop db-config list --json
 sop db-config add prod-ob --type oceanbase --role business --capability sql --capability vector --host ob.example.com --port 2881 --database app --username app --secret-ref env://APP_OB_URL
 sop db-config test prod-ob --url "$APP_OB_URL"
 sop task list --status pending
-sop delivery workspace  # 查看当前项目 members 中的稳定 ID
+sop delivery references --kind member  # 查看当前页的稳定成员 ID
 sop task create "实现登录页 SSO 对接" --priority P1 --owner-id "user:<成员ID>"
 sop task update "T-<任务ID>" --owner-id ""  # 明确清空负责人；省略该选项保持原负责人
 sop task pull T-123
@@ -270,3 +270,21 @@ CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/
 `sop delivery activity --scope requirement --scope-id REQ-example --limit 20` 读取已记录的范围活动；分页原样使用返回的 `next_cursor`，`--event <event-id>` 只读取精确事件。`sop delivery requirement-history --id REQ-example` 读取观测版本，`--version <version-id>` 查看精确内容，不会恢复或覆盖当前需求。
 
 `sop delivery requirement-change-preview --id REQ-example --file proposal.json` 预览固定的 `requirement_basis` 和定义 `changes`（title/description/acceptance_criteria）。人工核对字段差异和影响后，用原 `version`、`requirement_basis`、`preview_basis` 构造 `requirement.update` 的 command 文件；payload 中预览指纹名为 `change_preview_basis`。保存仍用 `sop delivery command --file command.json`。原文件和幂等键用于未知结果恢复；409之后必须明确采用最新状态并重新预览，不静默重试新范围。完整步骤见 [协作活动与变更指南](../../docs/DELIVERY_COLLABORATION_GUIDE.md)。
+
+## 有界项目查询
+
+```bash
+sop delivery context
+sop delivery requirements --query 交付 --stage design --limit 20 --sort due_asc
+sop delivery requirement --id REQ-example
+sop delivery tasks --requirement REQ-example --status recorded_completed --limit 20
+sop delivery task --id T-example
+sop delivery issues --task T-example --severity P0
+sop delivery execution --id execution-example
+sop delivery references --kind member --query 设计
+sop delivery references --kind task --ids T-example,T-predecessor
+```
+
+列表的 `total` 为全部匹配数量，下一页使用原参数加 `--cursor <next_cursor>`。变更导致游标过期时回到第一页，不能静默拼接不同代次。详情始终按精确ID读取。`command` 输出原对象的统一回执，无需从完整项目快照猜结果；未知提交仍用原文件和幂等键恢复。
+
+`sop delivery query-rebuild` 是有配置权限时的显式派生索引重建；普通读取不执行修复写入。`workspace` 仅用于明确的完整导出。详见 [查询与详情指南](../../docs/DELIVERY_QUERY_GUIDE.md)。

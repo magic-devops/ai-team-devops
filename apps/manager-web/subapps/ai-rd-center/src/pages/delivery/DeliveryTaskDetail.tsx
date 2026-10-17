@@ -1,12 +1,16 @@
+import {
+  fetchDeliveryTaskData,
+  invalidateDeliveryQueries,
+} from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Collapse, Select, Skeleton, Tag } from "antd";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  fetchDelivery,
   saveDelivery,
   type DeliveryAction,
-  type DeliveryWorkspace,
+  type DeliveryTaskData,
+  type DeliveryCommandAck,
 } from "@/lib/delivery";
 import {
   manualTaskHref,
@@ -17,17 +21,18 @@ import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
 import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import "./task-acceptance.css";
-import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 import { useExecutionExitGuard } from "@/lib/executionExitGuard";
 
 type TaskContentProps = {
-  workspace?: DeliveryWorkspace;
-  pinnedWorkspace?: DeliveryWorkspace;
+  detail?: DeliveryTaskData;
+  pinnedDetail?: DeliveryTaskData;
   taskId: string;
   sessionId?: string;
   canEdit: boolean;
   executionBlocked?: boolean;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onEditingChange: (editing: boolean) => void;
   onCommand?: (
     action: DeliveryAction,
@@ -36,8 +41,8 @@ type TaskContentProps = {
   onUnresolvedChange?: (value: boolean) => void;
 };
 export function TaskDetailContent({
-  workspace,
-  pinnedWorkspace,
+  detail,
+  pinnedDetail,
   taskId,
   sessionId = "",
   canEdit,
@@ -49,9 +54,9 @@ export function TaskDetailContent({
 }: TaskContentProps) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryTaskAcceptance.${key}`);
-  const data = pinnedWorkspace || workspace;
+  const data = pinnedDetail || detail;
   const editable = canEdit && !executionBlocked;
-  const task = data?.tasks.find((item) => item.id === taskId);
+  const task = data?.task.id === taskId ? data.task : undefined;
   if (!data) return null;
   if (!task)
     return (
@@ -61,15 +66,12 @@ export function TaskDetailContent({
         description={tr("missingHint")}
       />
     );
-  const requirement = data.requirements.find((item) => item.id === task.req_id);
+  const requirement = data.requirement || undefined;
   const owner = data.members.find((member) => member.id === task.owner_id);
   const unavailableOwner = Boolean(
     task.owner_id && (!owner?.active || owner.kind === "tool"),
   );
-  const native = Boolean(
-    task.execution_id ||
-    data.executions?.some((entry) => entry.task_id === task.id),
-  );
+  const native = Boolean(task.execution_id);
   const command = onCommand || (async () => {});
   const stageLocked = Boolean(
     requirement && ["release", "operations"].includes(requirement.flow.stage),
@@ -120,7 +122,8 @@ export function TaskDetailContent({
       <div className="task-delivery-properties">
         <label>
           {tr("owner")}
-          <OwnerSelect
+          <ProjectOwnerSelect
+            queryGeneration={data.query_generation}
             label={`${tr("owner")} ${task.title}`}
             value={task.owner_id}
             members={data.members}
@@ -180,16 +183,21 @@ export function TaskDetailContent({
         onEditingChange={onEditingChange}
       />
       {!native && execution}
-      {native ? (
+      {
         <>
-          <p className="runtime-help">{tr("nativeReview")}</p>
+          {native && <p className="runtime-help">{tr("nativeReview")}</p>}
           <Collapse
             size="small"
             ghost
             items={[
               {
                 key: "manual-history",
-                label: t("deliveryManualReview.history"),
+                label: t(
+                  native
+                    ? "deliveryManualReview.history"
+                    : "deliveryManualReview.title",
+                ),
+                forceRender: false,
                 children: (
                   <DeliveryManualReviewPanel
                     projectId={data.project.id}
@@ -203,15 +211,7 @@ export function TaskDetailContent({
             ]}
           />
         </>
-      ) : (
-        <DeliveryManualReviewPanel
-          projectId={data.project.id}
-          sessionId={sessionId}
-          taskId={task.id}
-          onSaved={onSaved}
-          onEditingChange={onEditingChange}
-        />
-      )}
+      }
     </div>
   );
 }
@@ -219,22 +219,27 @@ export function DeliveryTaskDetail({
   projectId,
   sessionId,
   taskId,
+  expectedRequirementId,
+  queryGeneration,
   onUnresolvedChange,
 }: {
   projectId: string;
   sessionId: string;
   taskId: string;
+  expectedRequirementId?: string;
+  queryGeneration?: number | null;
   onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const origin = useRef(projectSessionKey());
   const executionExit = useExecutionExitGuard();
-  const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryWorkspace>();
+  const [pinnedWorkspace, setPinnedWorkspace] = useState<DeliveryTaskData>();
   const [executionPinnedWorkspace, setExecutionPinnedWorkspace] =
-    useState<DeliveryWorkspace>();
+    useState<DeliveryTaskData>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const latestWorkspace = useRef<DeliveryWorkspace>();
+  const latestWorkspace = useRef<DeliveryTaskData>();
   const editingChanged = useCallback((editing: boolean) => {
     if (editing) {
       const current = latestWorkspace.current;
@@ -242,17 +247,29 @@ export function DeliveryTaskDetail({
         setPinnedWorkspace((previous) => previous || structuredClone(current));
     } else setPinnedWorkspace(undefined);
   }, []);
-  const key = ["delivery", projectId, sessionId];
+  const key = [
+    "delivery-task-detail",
+    projectId,
+    sessionId,
+    taskId,
+    queryGeneration,
+  ];
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => fetchDelivery(projectId, signal),
+    queryFn: ({ signal }) =>
+      fetchDeliveryTaskData(projectId, taskId, signal, queryGeneration),
     gcTime: 0,
     enabled: !pinnedWorkspace,
     refetchInterval: pinnedWorkspace ? false : 5000,
   });
   latestWorkspace.current = query.data;
-  const saved = (workspace: DeliveryWorkspace) => {
-    qc.setQueryData(key, workspace);
+  const saved = (workspace: DeliveryCommandAck) => {
+    if (
+      workspace.project_id !== projectId ||
+      origin.current !== projectSessionKey()
+    )
+      return;
+    void invalidateDeliveryQueries(qc, projectId);
     for (const name of [
       "delivery-task-reviews",
       "delivery-inbox",
@@ -268,8 +285,14 @@ export function DeliveryTaskDetail({
     action: DeliveryAction,
     payload: Record<string, unknown>,
   ) {
-    const current = qc.getQueryData<DeliveryWorkspace>(key);
-    if (!current || busy || query.isError || executionExit.pending)
+    const current = qc.getQueryData<DeliveryTaskData>(key);
+    if (
+      !current ||
+      busy ||
+      query.isError ||
+      executionExit.pending ||
+      origin.current !== projectSessionKey()
+    )
       throw new Error(t("deliveryTaskAcceptance.readonly"));
     const signature = JSON.stringify([action, payload, current.version]);
     if (intent.current?.signature !== signature)
@@ -310,6 +333,25 @@ export function DeliveryTaskDetail({
         />
       )}
       {error && <Alert type="error" role="alert" title={error} />}
+      {expectedRequirementId &&
+        query.data &&
+        query.data.task.req_id !== expectedRequirementId && (
+          <Alert
+            type="warning"
+            title={t("deliveryQuery.relationChanged")}
+            action={
+              <Button
+                href={manualTaskHref(
+                  query.data.task,
+                  `#/dev-flow?project_id=${encodeURIComponent(projectId)}`,
+                )}
+              >
+                {query.data.requirement?.title ||
+                  t("deliveryTaskAcceptance.details")}
+              </Button>
+            }
+          />
+        )}
       {executionExit.blocked && (
         <Alert
           type="warning"
@@ -318,8 +360,8 @@ export function DeliveryTaskDetail({
         />
       )}
       <TaskDetailContent
-        workspace={query.data}
-        pinnedWorkspace={executionPinnedWorkspace || pinnedWorkspace}
+        detail={query.data}
+        pinnedDetail={executionPinnedWorkspace || pinnedWorkspace}
         taskId={taskId}
         sessionId={sessionId}
         onSaved={saved}

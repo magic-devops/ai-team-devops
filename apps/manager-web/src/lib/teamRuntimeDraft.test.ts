@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { executionPayload, openExecutionDraft, type ExecutionDraftSession, type ExecutionTarget } from "./deliveryExecution";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 const target = { id: "device", kind: "device", basis: "target-basis", can_execute: true } as ExecutionTarget;
 function draft() {
-  const data = { project: { id: "project" }, version: 7, tasks: [{ id: "T-one", basis: "task-basis" }] } as unknown as DeliveryWorkspace;
+  const data = { project: { id: "project" }, version: 7, task: { id: "T-one", basis: "task-basis" } } as unknown as DeliveryTaskData;
   return { ...openExecutionDraft(data, "T-one", "intent"), workspaceId: "runtime", agentId: "profile", agentVersion: 2, target };
 }
 describe("optional team executor dispatch contract", () => {

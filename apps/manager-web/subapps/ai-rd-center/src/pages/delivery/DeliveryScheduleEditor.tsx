@@ -10,7 +10,7 @@ import {
 } from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { saveDelivery, type DeliveryWorkspace } from "@/lib/delivery";
+import { saveDelivery, type DeliveryCommandAck } from "@/lib/delivery";
 import {
   adoptSchedulingBasis,
   allocationSummary,
@@ -582,7 +582,7 @@ export function DeliveryScheduleEditor({
 }: {
   initial: SchedulingSession;
   onClose: () => void;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, values?: Record<string, unknown>) =>

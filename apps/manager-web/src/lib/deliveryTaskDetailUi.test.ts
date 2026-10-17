@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { TaskDetailContent } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -15,10 +15,10 @@ describe("standalone task edit retention", () => {
       project: { id: "project" },
       version: 7,
       permissions: { write: true },
-      requirements: [],
+      requirement: null,
       members: [],
-      tasks: [
-        {
+      dependencies: [],
+      task: {
           id: "T-alone",
           req_id: "",
           basis: "original",
@@ -35,19 +35,18 @@ describe("standalone task edit retention", () => {
           execution_gate: { eligible: false, reasons: [] },
           planning: { starts_on: "2026-10-17", depends_on: [] },
         },
-      ],
-    } as unknown as DeliveryWorkspace;
+    } as unknown as DeliveryTaskData;
     const frozen = structuredClone(original);
-    original.tasks = [];
+    original.task = { ...original.task, id: "T-migrated" };
     const cache = new QueryClient();
-    const render = (pinnedWorkspace?: DeliveryWorkspace) =>
+    const render = (pinnedDetail?: DeliveryTaskData) =>
       renderToStaticMarkup(
         createElement(
           QueryClientProvider,
           { client: cache },
           createElement(TaskDetailContent, {
-            workspace: original,
-            pinnedWorkspace,
+            detail: original,
+            pinnedDetail,
             taskId: "T-alone",
             canEdit: true,
             onSaved: () => {},

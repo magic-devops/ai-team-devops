@@ -10,7 +10,7 @@ import { IssueProposalFacts } from "../../subapps/ai-rd-center/src/pages/deliver
 import { IssueReviewPanel } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryIssueReview";
 import { fetchIssueDiagnosisHistory } from "./deliveryIssue";
 import { diagnosisFixture, issueDetailFixture } from "./deliveryIssueFixtures";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryCommandAck, DeliveryDisplayContext, DeliveryWorkspace } from "./delivery";
 const hooks = vi.hoisted(() => ({
   state: [] as any[],
   refs: [] as any[],
@@ -24,6 +24,7 @@ const hooks = vi.hoisted(() => ({
   invalidated: [] as unknown[],
   detailReads: 0,
   exactReads: 0,
+  issueRows: [] as DeliveryWorkspace["issues"],
 }));
 vi.mock("react", async () => ({
   ...(await vi.importActual<typeof import("react")>("react")),
@@ -54,7 +55,9 @@ vi.mock("react-i18next", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: any) => ({
     data:
-      options.queryKey[0] === "delivery-issue-diagnosis"
+      options.queryKey[0] === "delivery-issues-page"
+        ? { items: hooks.issueRows.filter((row) => options.queryKey[6] === "all" || row.source_kinds?.includes(options.queryKey[6])), total: hooks.issueRows.length, next_cursor: null }
+        : options.queryKey[0] === "delivery-issue-diagnosis"
         ? hooks.exact
         : hooks.data,
     isPending: false,
@@ -121,6 +124,7 @@ beforeEach(() => {
   hooks.invalidated = [];
   hooks.detailReads = 0;
   hooks.exactReads = 0;
+  hooks.issueRows = [];
   hooks.data = structuredClone(issueDetailFixture);
   resetHooks();
   vi.stubGlobal("location", {
@@ -166,9 +170,16 @@ describe("exact issue detail and retained identity", () => {
       actions: { can_adopt: false, can_dismiss: true, reasons: [] },
     };
     find(content(diagnosisFixture.id), IssueReviewPanel).onSaved({
-      project: { id: "P" },
+      project_id: "P",
+      action: "issue.diagnosis.dismiss",
+      resource: { kind: "diagnosis", id: diagnosisFixture.id },
+      result: null,
+      affected_refs: [],
+      applied_version: 8,
       version: 8,
-    } as DeliveryWorkspace);
+      query_generation: 3,
+      replayed: false,
+    } as DeliveryCommandAck);
     expect(hooks.invalidated).toContainEqual({
       queryKey: ["delivery-issue-diagnosis", "P", "session", "ISS-one"],
     });
@@ -263,9 +274,7 @@ describe("exact issue detail and retained identity", () => {
 
 describe("actionable issue queue", () => {
   it("filters real source kinds and opens the exact issue instead of a generic task list", () => {
-    const workspace = {
-      project: { id: "P" },
-      issues: [
+    hooks.issueRows = [
         {
           id: "ISS-one",
           title: "Deployment problem",
@@ -282,9 +291,8 @@ describe("actionable issue queue", () => {
           source_kinds: ["execution"],
           task_id: "T-two",
         },
-      ],
-      requirements: [],
-    } as unknown as DeliveryWorkspace;
+      ] as DeliveryWorkspace["issues"];
+    const workspace = { project: { id: "P" } } as unknown as DeliveryDisplayContext;
     const render = () => {
       resetHooks();
       return DeliveryIssueWorkbench({

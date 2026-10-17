@@ -1,4 +1,10 @@
 import {
+  fetchRequirementDetail,
+  type RequirementDetail,
+  type DeliveryCommandAck,
+} from "@/lib/deliveryQuery";
+import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
+import {
   Alert,
   Button,
   Checkbox,
@@ -15,12 +21,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getToken, getWorkspaceScope } from "@/lib/authStorage";
 import {
-  fetchDelivery,
   prepareDeliveryIntent,
   saveDelivery,
   type DeliveryIntent,
   type DeliveryRequirement,
-  type DeliveryWorkspace,
+  type DeliveryContext,
 } from "@/lib/delivery";
 import {
   planError,
@@ -33,14 +38,14 @@ import {
   type TaskPlanRow,
 } from "@/lib/deliveryTaskPlan";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
-import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 
 type Baseline = {
   version: number;
   revision: number;
   basis?: string;
   requirement: DeliveryRequirement;
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
 };
 type Draft = {
   rows: TaskPlanRow[];
@@ -52,13 +57,15 @@ const scope = () => JSON.stringify([getToken(), getWorkspaceScope()]);
 export function DeliveryTaskPlanEditor({
   data,
   requirement,
+  requirementVersion,
   onClose,
   onSaved,
 }: {
-  data: DeliveryWorkspace;
+  data: DeliveryContext;
   requirement: DeliveryRequirement;
+  requirementVersion?: number;
   onClose: () => void;
-  onSaved: (updated: DeliveryWorkspace) => void;
+  onSaved: (updated: DeliveryCommandAck) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, values?: Record<string, unknown>) =>
@@ -67,7 +74,7 @@ export function DeliveryTaskPlanEditor({
   const origin = useRef(scope());
   const projectId = data.project.id;
   const [baseline, setBaseline] = useState<Baseline>(() => ({
-    version: data.version,
+    version: requirementVersion ?? data.version,
     revision: requirement.flow.revision,
     basis: requirement.basis,
     requirement,
@@ -102,21 +109,23 @@ export function DeliveryTaskPlanEditor({
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState(false);
   const [generationFailed, setGenerationFailed] = useState(false);
-  const [latest, setLatest] = useState<DeliveryWorkspace | null>(null);
+  const [latest, setLatest] = useState<RequirementDetail | null>(null);
   const previewRequest = useRef<PlanPreviewRequest>();
   const submitIntent = useRef<DeliveryIntent>({
-    version: data.version,
+    version: requirementVersion ?? data.version,
     key: crypto.randomUUID(),
   });
   const controller = useRef<AbortController>();
   useEffect(() => () => controller.current?.abort(), []);
   const criteria = baseline.requirement.acceptance_criteria;
   const items = selectedPlanItems(rows);
-  const availableTasks = baseline.workspace.tasks;
+  const availableTasks: { id: string; title: string; req_id: string }[] = [];
   const problems = taskPlanProblems(
     rows,
     criteria.length,
-    availableTasks.map((task) => task.id),
+    rows.flatMap((row) =>
+      row.depends_on.filter((id) => !id.startsWith("draft-")),
+    ),
   );
   const coverage = new Set(
     items.flatMap((item) => item.requirement_criteria_indices),
@@ -215,10 +224,10 @@ export function DeliveryTaskPlanEditor({
     });
   const loadLatest = () =>
     void guarded(async () => {
-      setLatest(await fetchDelivery(projectId));
+      setLatest(await fetchRequirementDetail(projectId, requirement.id));
     });
   const adopt = () => {
-    const req = latest?.requirements.find((r) => r.id === requirement.id);
+    const req = latest?.requirement;
     if (!req || !latest) return;
     const changed =
       JSON.stringify([
@@ -240,7 +249,7 @@ export function DeliveryTaskPlanEditor({
       version: latest.version,
       revision: req.flow.revision,
       requirement: req,
-      workspace: latest,
+      workspace: baseline.workspace,
       basis: req.basis,
     });
     if (changed) {
@@ -257,7 +266,7 @@ export function DeliveryTaskPlanEditor({
     setError("");
     setLatest(null);
   };
-  const latestReq = latest?.requirements.find((r) => r.id === requirement.id);
+  const latestReq = latest?.requirement;
 
   return (
     <Modal
@@ -303,11 +312,7 @@ export function DeliveryTaskPlanEditor({
           <p>{baseline.requirement.description}</p>
         </details>
         <small>
-          {tr("existing")}:{" "}
-          {
-            availableTasks.filter((task) => task.req_id === requirement.id)
-              .length
-          }
+          {tr("existing")}: {baseline.requirement.tasks_total}
         </small>
       </section>
       {error && (
@@ -336,11 +341,7 @@ export function DeliveryTaskPlanEditor({
                 ))}
               </ol>
               <p>
-                {tr("existing")}:{" "}
-                {latest!.tasks
-                  .filter((task) => task.req_id === requirement.id)
-                  .map((task) => task.title)
-                  .join(" · ") || "—"}
+                {tr("existing")}: {latestReq.tasks_total}
               </p>
               <Button onClick={adopt}>{tr("adopt")}</Button>
             </>
@@ -540,10 +541,10 @@ export function DeliveryTaskPlanEditor({
               <div className="delivery-plan-fields">
                 <label>
                   {common("owner")}
-                  <OwnerSelect
+                  <ProjectOwnerSelect
+                    queryGeneration={baseline.workspace.query_generation}
                     label={label(common("owner"))}
                     value={row.owner_id}
-                    members={baseline.workspace.members}
                     onChange={(value) => update(row.key, { owner_id: value })}
                     disabled={busy}
                   />
@@ -604,15 +605,15 @@ export function DeliveryTaskPlanEditor({
                 </label>
                 <label>
                   {tr("dependencies")}
-                  <Select
-                    mode="multiple"
-                    aria-label={label(tr("dependencies"))}
+                  <DeliveryReferenceSelect
+                    kind="task"
+                    queryGeneration={baseline.workspace.query_generation}
+                    multiple
+                    label={label(tr("dependencies"))}
                     value={row.depends_on}
                     options={dependencyOptions}
                     onChange={(value) => update(row.key, { depends_on: value })}
                     disabled={busy}
-                    showSearch
-                    optionFilterProp="label"
                   />
                 </label>
               </div>

@@ -1,6 +1,6 @@
-import { createElement } from "react";
+import { createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DeliveryProgressHistory,
   DeliveryProgressSnapshot,
@@ -13,7 +13,22 @@ import type {
   DeliveryProgress,
   ProgressObservation,
   ProgressMetrics,
+  ProgressTask,
 } from "./deliveryProgress";
+import { fetchTaskDetail } from "./deliveryQuery";
+
+const navigationHooks = vi.hoisted(() => ({ values: [] as unknown[], next: 0 }));
+vi.mock("react", async () => ({
+  ...await vi.importActual<typeof import("react")>("react"),
+  useState: (initial: unknown) => {
+    const index = navigationHooks.next++;
+    if (!(index in navigationHooks.values)) navigationHooks.values[index] = typeof initial === "function" ? initial() : initial;
+    return [navigationHooks.values[index], (value: any) => { navigationHooks.values[index] = typeof value === "function" ? value(navigationHooks.values[index]) : value; }];
+  },
+}));
+vi.mock("./authStorage", async () => ({ ...await vi.importActual<typeof import("./authStorage")>("./authStorage"), getProjectId: () => "P" }));
+vi.mock("./deliveryQuery", async () => ({ ...await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery"), fetchTaskDetail: vi.fn() }));
+beforeEach(() => { navigationHooks.values = []; navigationHooks.next = 0; language = "en-US"; vi.mocked(fetchTaskDetail).mockReset(); });
 
 let language: keyof typeof progressTranslations = "en-US";
 function translate(key: string, options?: Record<string, unknown>): string {
@@ -122,6 +137,19 @@ const progress = {
   coverage: { future_days: ["2026-10-18"] },
 } as unknown as DeliveryProgress;
 
+function findCurrentControl(node: ReactNode, id: string): any {
+  if (Array.isArray(node)) return node.map((child) => findCurrentControl(child, id)).find(Boolean);
+  if (!isValidElement<any>(node)) return undefined;
+  if (typeof node.type === "function" && node.type.name === "CurrentTaskButton" && node.props.task.id === id) return node;
+  return findCurrentControl(node.props.children, id);
+}
+function currentControl(historical: ProgressTask, onOpenTask: (target: any) => void) {
+  const observation = { id: "O", scope: { kind: "project", id: "", label: "Project" }, current: { tasks: [historical], metrics } } as ProgressObservation;
+  const node = findCurrentControl(DeliveryProgressSnapshot({ observation, currentTasks: [], onOpenTask }), historical.id);
+  return () => { navigationHooks.next = 0; return node.type(node.props); };
+}
+async function settleNavigation() { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); }
+
 describe("real progress presentation", () => {
   it("shows acceptance changes as readable criteria and sources rather than object serialization", () => {
     language = "en-US";
@@ -215,7 +243,7 @@ describe("real progress presentation", () => {
       )?.data,
     ).toEqual([1, "-", 1, "-"]);
   });
-  it("renders historical facts read only and offers explicit current navigation only for surviving tasks", () => {
+  it("renders historical facts read only and offers explicit exact lookups without claiming current existence", () => {
     const observation = {
       id: "O",
       observed_at: "2026-10-15T20:00:00Z",
@@ -241,12 +269,13 @@ describe("real progress presentation", () => {
     expect(html).toContain("Historical snapshot · Read only");
     expect(html).toContain("Historical task title");
     expect(html).toContain("Removed historical task");
-    expect(html.match(/Open current task/g)).toHaveLength(1);
-    expect(html).toContain("Current task no longer exists");
+    expect(html.match(/Open current task/g)).toHaveLength(2);
+    expect(fetchTaskDetail).not.toHaveBeenCalled();
+    expect(html).not.toContain("Current task no longer exists");
     expect(html).not.toContain("execution.review");
     expect(html).not.toContain("stage.advance");
   });
-  it("preserves frozen titles, changed fields and current titles while leaving removed tasks without false links", () => {
+  it("preserves frozen and changed titles while deferring current navigation to an exact read", () => {
     const html = renderToStaticMarkup(
       createElement(DeliveryProgressComparison, {
         comparison: {
@@ -273,7 +302,31 @@ describe("real progress presentation", () => {
     expect(html).toContain("Current renamed task");
     expect(html).toContain("When frozen");
     expect(html).toContain("Changed fields");
-    expect(html.match(/Open current task/g)).toHaveLength(1);
+    expect(html.match(/Open current task/g)).toHaveLength(2);
+    expect(fetchTaskDetail).not.toHaveBeenCalled();
+  });
+  it("does not navigate a removed historical task when its explicit exact read returns 404", async () => {
+    const onOpenTask = vi.fn();
+    const render = currentControl({ ...task, id: "deleted", title: "Removed historical task" }, onOpenTask);
+    vi.mocked(fetchTaskDetail).mockRejectedValue(new Error("HTTP 404: Current task no longer exists"));
+    expect(fetchTaskDetail).not.toHaveBeenCalled();
+    render().props.children[0].props.onClick();
+    await settleNavigation();
+    expect(fetchTaskDetail).toHaveBeenCalledWith("P", "deleted");
+    expect(onOpenTask).not.toHaveBeenCalled();
+    const missing = render().props.children[1];
+    expect(missing.props.role).toBe("alert");
+    expect(missing.props.children).toContain("Current task no longer exists");
+  });
+  it("opens the current exact task using its remote requirement after migration out of the historical scope", async () => {
+    const onOpenTask = vi.fn();
+    const render = currentControl({ ...task, req_id: "REQ-historical" }, onOpenTask);
+    vi.mocked(fetchTaskDetail).mockResolvedValue({ project_id: "P", version: 9, query_generation: 4, planning_basis: "current-plan", task: { id: "present", req_id: "REQ-current" }, requirement: { id: "REQ-current", title: "Current requirement" } } as Awaited<ReturnType<typeof fetchTaskDetail>>);
+    render().props.children[0].props.onClick();
+    await settleNavigation();
+    expect(fetchTaskDetail).toHaveBeenCalledWith("P", "present");
+    expect(onOpenTask).toHaveBeenCalledOnce();
+    expect(onOpenTask).toHaveBeenCalledWith({ view: "progress", requirement_id: "REQ-current", task_id: "present", detail: "tasks" });
   });
   it("does not claim unchanged scope when original reservation facts were not collected", () => {
     const html = renderToStaticMarkup(

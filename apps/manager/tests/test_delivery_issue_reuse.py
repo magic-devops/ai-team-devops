@@ -59,12 +59,13 @@ def test_deleted_old_feedback_never_duplicates_or_overwrites_current_requirement
             },
         )
         assert response.status_code == 200, response.text
-        rows = [
-            row
-            for row in response.json()["requirements"]
-            if row["flow"].get("source_issue_id") == "ISSUE-selected"
-        ]
-        return rows, proposal_id
+        ack = response.json()
+        assert "requirements" not in ack and ack["resource"]["kind"] == "requirement"
+        selected = client.get("/api/v1/delivery/requirements/" + ack["resource"]["id"], headers=auth)
+        assert selected.status_code == 200, selected.text
+        row = selected.json()["requirement"]
+        assert row["flow"]["source_issue_id"] == "ISSUE-selected"
+        return [row], proposal_id
 
     first, _ = promote(1)
     assert len(first) == 1

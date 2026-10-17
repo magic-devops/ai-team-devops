@@ -7,7 +7,7 @@ import {
   type DeliveryTargets,
   type ExecutionTarget,
 } from "./deliveryExecution";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 import { commandDraft } from "./executionCommands";
 import { request } from "./http";
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }));
@@ -54,8 +54,8 @@ const target: ExecutionTarget = {
 const data = {
   project: { id: "P" },
   version: 7,
-  tasks: [{ id: "T", basis: "task-basis" }],
-} as unknown as DeliveryWorkspace;
+  task: { id: "T", basis: "task-basis" },
+} as unknown as DeliveryTaskData;
 const targets: DeliveryTargets = {
   project_id: "P",
   as_of: "",

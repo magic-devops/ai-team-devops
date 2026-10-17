@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
+from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from .delivery_progress_facts import capture_facts, fact_basis
+from .delivery_progress_facts import evaluate_project, fact_basis
 from .sql_models import (
     DeliveryProgressCheckpoint,
     DeliveryProgressObservation,
@@ -60,7 +61,9 @@ def record_observation(
     # database state, after flushing all pending ORM edits, not a cached workspace.
     db.expire_all()
     from .delivery_manual_review import invalidate_reviews
-    from .delivery_service import reconcile
+    from .delivery_query_index import replace_from_evaluation
+    from .delivery_service import initial_state, reconcile
+    from .delivery_verification import VerificationContext
 
     workspace = db.scalar(
         select(DeliveryWorkspace)
@@ -68,8 +71,10 @@ def record_observation(
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    state = deepcopy(workspace.data) if workspace else initial_state()
+    verification = VerificationContext(db, project, state)
+    effective = reconcile(db, project, state, verification=verification)
     if workspace:
-        effective = reconcile(db, project, workspace.data)
         changed = effective["flows"] != workspace.data["flows"]
         changed = changed or effective.get("release_candidates", []) != workspace.data.get("release_candidates", [])
         original_entries = {entry["id"]: entry for entry in workspace.data.get("executions", [])}
@@ -105,8 +110,12 @@ def record_observation(
             if applied.rowcount != 1:
                 raise HTTPException(409, "Concurrent delivery definition change; reload and retry")
             db.expire(workspace)
-    invalidate_reviews(db, project)
-    facts = capture_facts(db, project)
+    invalidate_reviews(db, project, verification=verification)
+    evaluation = evaluate_project(db, project, state=effective, verification=verification)
+    # Query freshness includes priority and metadata edits which need no new
+    # progress observation. Refresh before the progress fingerprint shortcut.
+    replace_from_evaluation(db, project, evaluation)
+    facts = evaluation.facts
     fingerprint = fact_basis(facts)
     instant = _utc(now)
     day = instant.date().isoformat()

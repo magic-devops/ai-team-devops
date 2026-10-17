@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Empty, Skeleton, Tag } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import {
   fetchDeliveryIssue,
   fetchIssueDiagnosis,
@@ -29,7 +29,7 @@ type DetailProps = {
   workspaceVersion?: number;
   background: string;
   readOnly: boolean;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onBusyChange?: (busy: boolean) => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
 };
@@ -214,10 +214,10 @@ export function IssueDetailContent({
       if (origin.current === projectSessionKey()) setHistoryBusy(false);
     }
   }
-  const saved = (workspace: DeliveryWorkspace) => {
+  const saved = (workspace: DeliveryCommandAck) => {
     if (
       origin.current !== projectSessionKey() ||
-      workspace.project.id !== projectId
+      workspace.project_id !== projectId
     )
       return;
     onSaved(workspace);

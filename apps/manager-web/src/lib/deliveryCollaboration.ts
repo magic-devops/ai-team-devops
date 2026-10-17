@@ -2,7 +2,7 @@ import { request } from "./http";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "./delivery";
 import { getToken, getWorkspaceScope } from "./authStorage";
 import { useEffect, useState } from "react";
@@ -384,7 +384,7 @@ export function saveRequirementChange(
   intent: DeliveryIntent,
   payload: Record<string, unknown>,
 ) {
-  return request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: projectHeaders(projectId),
     body: JSON.stringify({

@@ -43,6 +43,9 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en-US" },
   }),
 }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+}));
 vi.mock("./projectPortfolio", async () => ({
   ...(await vi.importActual<typeof import("./projectPortfolio")>(
     "./projectPortfolio",
@@ -140,7 +143,17 @@ beforeEach(() => {
     .mockResolvedValue(structuredClone(diagnosisFixture));
   vi.mocked(submitIssueReview)
     .mockReset()
-    .mockResolvedValue({ project: { id: "P" } } as never);
+    .mockImplementation(async (_projectId, command) => ({
+      project_id: "P",
+      action: command.action,
+      resource: { kind: command.action === "issue.diagnosis.adopt" ? "requirement" : "diagnosis", id: command.action === "issue.diagnosis.adopt" ? "REQ-adopted" : diagnosisFixture.id },
+      result: command.action === "issue.diagnosis.adopt" ? { requirement_id: "REQ-adopted" } : null,
+      affected_refs: [],
+      applied_version: command.expected_version + 1,
+      version: command.expected_version + 1,
+      query_generation: 2,
+      replayed: false,
+    }));
 });
 
 describe("issue diagnosis actual callbacks", () => {

@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "@/lib/delivery";
 import {
   deploymentProblem,
@@ -54,7 +54,7 @@ type DetailProps = {
   sessionId: string;
   background: string;
   readOnly?: boolean;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onRollback: (id: string) => void;
   onUnresolvedChange?: (value: boolean) => void;
 };

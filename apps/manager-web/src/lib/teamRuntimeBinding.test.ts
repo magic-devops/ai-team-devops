@@ -3,11 +3,11 @@ import { request } from "./http";
 import { adoptRuntimeBindingDraft, changeBindingWorkspace, fetchTeamRuntimeBindings, openRuntimeBindingDraft, prepareRuntimeBinding, selectExecutionMember, useDirectExecution, type MemberRuntimeState, type TeamRuntimeBindings } from "./deliveryTeamRuntime";
 import { adoptExecutionDraft, openExecutionDraft, executionPayload, type DeliveryTargets, type ExecutionTarget } from "./deliveryExecution";
 import { commandDraft } from "./executionCommands";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 vi.mock("./http", () => ({ request: vi.fn() }));
 const member: MemberRuntimeState = { member_id: "agent:member", binding_basis: "binding-2", generation: 2, status: "current", permissions: { can_bind: true, can_unbind: true }, reasons: [], binding: { workspace_id: "runtime", agent_id: "profile", agent_version: 2, profile_digest: "digest", source: { workspace_name: "Runtime", agent_title: "Profile", provider: "codex" }, bound_by: "user:lead", bound_at: "2026-10-17T00:00:00Z" } };
 const catalogue: TeamRuntimeBindings = { project_id: "project", version: 7, as_of: "", runtime_configured: true, members: [member], workspaces: [{ id: "runtime", name: "Runtime", agents: [{ id: "profile", version: 2, title: "Profile", provider: "codex" }] }] };
-const workspace = { project: { id: "project" }, version: 7, tasks: [{ id: "T-one", basis: "task", owner_id: "user:owner", execution_gate: { eligible: true } }] } as unknown as DeliveryWorkspace;
+const workspace = { project: { id: "project" }, version: 7, task: { id: "T-one", basis: "task", owner_id: "user:owner", execution_gate: { eligible: true } } } as unknown as DeliveryTaskData;
 beforeEach(() => vi.mocked(request).mockClear());
 describe("explicit runtime association editing", () => {
   it("reads only the explicit project catalogue without writing defaults", async () => {
@@ -45,7 +45,7 @@ describe("member association is independent from responsible ownership and targe
     const initial = { ...openExecutionDraft(workspace, "T-one", "intent"), commands: [commandDraft("tests", "python")], preview: {} as never, target: {} as never };
     const selected = selectExecutionMember(initial, member);
     expect(selected).toMatchObject({ executorMemberId: member.member_id, executorBindingBasis: "binding-2", workspaceId: "runtime", agentId: "profile", agentVersion: 2, target: null, preview: null, commands: initial.commands });
-    expect(workspace.tasks[0].owner_id).toBe("user:owner");
+    expect(workspace.task.owner_id).toBe("user:owner");
     expect(() => selectExecutionMember(selected, { ...member, status: "stale" })).toThrow("executorUnavailable");
     const direct = useDirectExecution(selected);
     expect(direct).toMatchObject({ executorMemberId: "", executorBindingBasis: "", workspaceId: "runtime", agentId: "profile", commands: initial.commands });

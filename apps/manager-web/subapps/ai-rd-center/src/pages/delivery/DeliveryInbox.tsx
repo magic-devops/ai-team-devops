@@ -1,3 +1,4 @@
+import { useDeliveryMemberReferences } from "@/lib/deliveryQueryHooks";
 import { Alert, Button, Empty, Segmented, Skeleton, Tag } from "antd";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +6,7 @@ import type {
   DeliveryInbox as InboxData,
   DeliveryInboxItem,
   DeliveryInboxTarget,
-  DeliveryWorkspace,
+  DeliveryContext,
 } from "@/lib/delivery";
 import {
   filterDeliveryInbox,
@@ -30,7 +31,7 @@ export function DeliveryInbox({
   onOpen,
 }: {
   data?: InboxData;
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
   scope: InboxScope;
   category: InboxCategory;
   loading: boolean;
@@ -45,7 +46,13 @@ export function DeliveryInbox({
   const tp = (key: string) => t(`deliveryProject.${key}`);
   const items = filterDeliveryInbox(data?.items || [], category);
   const identity = useMemberIdentity();
-  const ownerName = (id: string) => identity(workspace.members, id);
+  const memberRefs = useDeliveryMemberReferences(
+    workspace.project.id,
+    "inbox",
+    items.map((item) => item.owner_id),
+    workspace.query_generation,
+  );
+  const ownerName = (id: string) => identity(memberRefs.members, id);
   const due = (date: string | null) =>
     date
       ? new Intl.DateTimeFormat(i18n.language, {

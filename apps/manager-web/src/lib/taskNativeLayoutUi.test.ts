@@ -3,10 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { TaskDetailContent } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock("@tanstack/react-query", async () => ({
+  ...await vi.importActual<typeof import("@tanstack/react-query")>("@tanstack/react-query"),
+  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[0] === "delivery-execution-exact" ? { execution: { id: "E", task_id: "T", status: "accepted", stale: false } } : undefined, isPending: false, isError: false }),
+  useInfiniteQuery: () => ({ data: { pages: [] }, isPending: false, isError: false }),
 }));
 vi.mock(
   "../../subapps/ai-rd-center/src/pages/delivery/ExecutionObservationCard",
@@ -37,10 +42,10 @@ function renderTask(
     project: { id: "project" },
     version: 7,
     permissions: { write: true },
-    requirements: [],
+    requirement: null,
     members: [],
-    tasks: [
-      {
+    dependencies: [],
+    task: {
         id: "T",
         req_id: "",
         title: "Accepted standalone task",
@@ -49,6 +54,7 @@ function renderTask(
         recorded_status: "completed",
         delivery_status: "verified_completed",
         verified: true,
+        execution_id: "E",
         acceptance_criteria: ["Own condition"],
         acceptance: {
           criteria: ["Own condition"],
@@ -67,15 +73,13 @@ function renderTask(
           ],
         },
       },
-    ],
-    executions: [{ id: "E", task_id: "T", status: "accepted", stale: false }],
-  } as unknown as DeliveryWorkspace;
+  } as unknown as DeliveryTaskData;
   return renderToStaticMarkup(
     createElement(
       QueryClientProvider,
       { client: new QueryClient() },
       createElement(TaskDetailContent, {
-        workspace: data,
+        detail: data,
         taskId: "T",
         canEdit: true,
         onSaved: () => {},

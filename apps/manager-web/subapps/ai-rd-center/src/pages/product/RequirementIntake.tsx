@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { api } from "@/lib/api";
 import { getProjectId, getSessionRevision } from "@/lib/authStorage";
-import { fetchDelivery } from "@/lib/delivery";
+import { fetchDeliveryContext } from "@/lib/deliveryQuery";
 import {
   assistanceError,
   assistanceIntent,
@@ -152,7 +152,7 @@ export function RequirementIntake({ onImported }: { onImported: () => void }) {
     inFlight.current = true;
     setBusy("latest");
     try {
-      setLatest((await fetchDelivery(projectId)).version);
+      setLatest((await fetchDeliveryContext(projectId)).version);
     } catch (cause) {
       setError(assistanceError(cause));
     } finally {

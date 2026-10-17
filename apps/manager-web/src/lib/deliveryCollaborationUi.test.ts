@@ -12,10 +12,11 @@ import {
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementChangeEditor";
 import { DeliveryRequirementHistory } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryRequirementHistory";
 import {
-  fetchDelivery,
   type DeliveryRequirement,
-  type DeliveryWorkspace,
+  type DeliveryDisplayContext,
+  type DeliveryCommandAck,
 } from "./delivery";
+import { fetchRequirementDetail, fetchDeliveryContext } from "./deliveryQuery";
 import {
   previewRequirementChange,
   saveRequirementChange,
@@ -81,9 +82,10 @@ vi.mock("./deliveryCollaboration", async () => ({
   previewRequirementChange: vi.fn(),
   saveRequirementChange: vi.fn(),
 }));
-vi.mock("./delivery", async () => ({
-  ...(await vi.importActual<typeof import("./delivery")>("./delivery")),
-  fetchDelivery: vi.fn(),
+vi.mock("./deliveryQuery", async () => ({
+  ...(await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery")),
+  fetchRequirementDetail: vi.fn(),
+  fetchDeliveryContext: vi.fn(),
 }));
 const event: ActivityItem = {
   id: "E",
@@ -119,13 +121,16 @@ const requirement = {
   },
 } as DeliveryRequirement;
 const workspace = {
+  project_id: "P",
+  query_generation: 3,
+  query_state: { status: "ready", schema_version: 1, computed_at: null },
   project: { id: "P" },
   version: 7,
   permissions: { write: true },
-  requirements: [requirement],
   members: [],
   milestones: [],
-} as unknown as DeliveryWorkspace;
+} as unknown as DeliveryDisplayContext;
+const ack: DeliveryCommandAck = { project_id: "P", action: "requirement.update", resource: { kind: "requirement", id: "R" }, result: null, affected_refs: [{ kind: "requirement", id: "R" }], applied_version: 8, version: 8, query_generation: 3, replayed: false };
 const preview: RequirementChangePreview = {
   project_id: "P",
   requirement_id: "R",
@@ -189,7 +194,8 @@ beforeEach(() => {
   unresolved.mockReset();
   vi.mocked(previewRequirementChange).mockReset();
   vi.mocked(saveRequirementChange).mockReset();
-  vi.mocked(fetchDelivery).mockReset();
+  vi.mocked(fetchRequirementDetail).mockReset();
+  vi.mocked(fetchDeliveryContext).mockReset();
   vi.stubGlobal("location", { hash: "#/dev-flow?view=overview&project_id=P" });
 });
 const feed = () =>
@@ -298,7 +304,7 @@ describe("exact activity navigation", () => {
 describe("explicit requirement change preview", () => {
   it("previews displayed definition edits before the fixed confirmation command", async () => {
     vi.mocked(previewRequirementChange).mockResolvedValue(preview);
-    vi.mocked(saveRequirementChange).mockResolvedValue(workspace);
+    vi.mocked(saveRequirementChange).mockResolvedValue(ack);
     find(
       editor(),
       Input,
@@ -320,7 +326,7 @@ describe("explicit requirement change preview", () => {
         change_preview_basis: "fixed-preview",
       }),
     );
-    expect(saved).toHaveBeenCalledWith(workspace);
+    expect(saved).toHaveBeenCalledWith(ack);
   });
   it("retains edited text on conflict and requires explicit latest-basis adoption and a new preview", async () => {
     vi.mocked(previewRequirementChange).mockRejectedValueOnce(
@@ -337,17 +343,16 @@ describe("explicit requirement change preview", () => {
         .value,
     ).toBe("My edited text");
     expect(button(editor(), "preview-change").disabled).toBe(true);
-    vi.mocked(fetchDelivery).mockResolvedValue({
-      ...workspace,
+    vi.mocked(fetchDeliveryContext).mockResolvedValue({ ...workspace, version: 8 });
+    vi.mocked(fetchRequirementDetail).mockResolvedValue({
+      project_id: "P", query_generation: 3,
       version: 8,
-      requirements: [
-        {
+      requirement: {
           ...requirement,
           basis: "latest-basis",
           title: "Other user's edit",
           description: "Fresh unedited scope",
         },
-      ],
     });
     await button(editor(), "read-latest").onClick();
     expect(button(editor(), "preview-change").disabled).toBe(true);
@@ -375,7 +380,7 @@ describe("explicit requirement change preview", () => {
   it("blocks close on unknown writes and retries exactly the original key and payload", async () => {
     vi.mocked(saveRequirementChange)
       .mockRejectedValueOnce(new Error("network disconnected"))
-      .mockResolvedValueOnce(workspace);
+      .mockResolvedValueOnce(ack);
     find(editor(), Select, (p) => p["data-field"] === "priority").onChange(
       "P2",
     );

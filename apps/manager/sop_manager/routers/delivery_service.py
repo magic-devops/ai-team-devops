@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -104,21 +105,25 @@ def _work_fingerprint(tasks, team, requirement_id):
     )
 
 
-def reconcile(db, project, state):
+def reconcile(db, project, state, *, verification=None):
     """Legacy APIs still edit canonical rows; never reuse approvals against changed scope.
 
     Reads return an effective view without writing. The next delivery command persists
     the invalidation and its reason in the same versioned transaction.
     """
-    data = deepcopy(state)
-    tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.id).all()]
-    team = TeamContext(db, project, data)
-    for req in records(db, Requirement, project).all():
+    from .delivery_verification import VerificationContext
+
+    data = verification.data if verification is not None else deepcopy(state)
+    context = verification or VerificationContext(db, project, data)
+    tasks = defaultdict(list)
+    for task in sorted(context.tasks.values(), key=lambda row: row.id):
+        tasks[task.req_id].append(serialize(task))
+    for req in context.requirements.values():
         flow = data["flows"].get(req.id)
         if not flow:
             continue
         definition = _fingerprint([req.title, req.description, req.acceptance_criteria])
-        work = _work_fingerprint(tasks, team, req.id)
+        work = _work_fingerprint(tasks[req.id], context.team, req.id)
         changed = flow.get("definition", definition) != definition or (
             flow["stage"] in {"testing", "acceptance", "release", "operations"}
             and flow.get("tested_work", work) != work
@@ -136,17 +141,19 @@ def reconcile(db, project, state):
             )
             invalidate(flow)
         flow["definition"] = definition
-    _reconcile_execution_evidence(db, project, data)
+    _reconcile_execution_evidence(db, project, data, context=context)
+    context.reset_proof()
     from .delivery_release import reconcile_releases
 
-    reconcile_releases(db, project, data)
+    reconcile_releases(db, project, data, verification=context)
+    context.reset_proof()
     return data
 
 
-def _reconcile_execution_evidence(db, project, data):
+def _reconcile_execution_evidence(db, project, data, *, context=None):
     from .delivery_verification import VerificationContext
 
-    context = VerificationContext(db, project, data)
+    context = context or VerificationContext(db, project, data)
     executions = data.get("executions", [])
     latest = {entry["task_id"]: entry for entry in executions}
     runs = {entry["run_id"]: entry for entry in executions if entry.get("run_id")}
@@ -175,7 +182,9 @@ def _reconcile_execution_evidence(db, project, data):
 
 
 def remember_basis(db, project, data):
-    tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.id).all()]
+    tasks = defaultdict(list)
+    for task in records(db, Task, project).order_by(Task.id).all():
+        tasks[task.req_id].append(serialize(task))
     team = TeamContext(db, project, data)
     for req in records(db, Requirement, project).all():
         flow = data["flows"].get(req.id)
@@ -183,16 +192,16 @@ def remember_basis(db, project, data):
             continue
         flow["definition"] = _fingerprint([req.title, req.description, req.acceptance_criteria])
         if flow["stage"] in {"testing", "acceptance", "release", "operations"}:
-            flow["tested_work"] = _work_fingerprint(tasks, team, req.id)
+            flow["tested_work"] = _work_fingerprint(tasks[req.id], team, req.id)
 
 
-def materialize(db, project, data, user):
+def materialize(db, project, data, user, *, verification=None):
     from .delivery_deployment_facts import current_deployed_requirement_ids
     from .delivery_verification import VerificationContext
 
-    verification = VerificationContext(db, project, data)
+    verification = verification or VerificationContext(db, project, data)
     roster = verification.roster
-    tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.created_at, Task.id).all()]
+    tasks = [serialize(t) for t in sorted(verification.tasks.values(), key=lambda row: (row.created_at, row.id))]
     for task in tasks:
         task["recorded_status"] = task["status"]
         task["basis"] = verification.basis(task["id"])
@@ -200,7 +209,7 @@ def materialize(db, project, data, user):
         task["execution_gate"] = verification.execution_gate(task["id"])
         task["delivery_status"] = verification.delivery_status(task["id"])
         task["verified"] = verification.verified(task["id"])
-        latest = next((e for e in reversed(data.get("executions", [])) if e["task_id"] == task["id"]), None)
+        latest = verification.executions.get(task["id"])
         task["execution_id"] = latest["id"] if latest else ""
         if (
             latest
@@ -212,9 +221,9 @@ def materialize(db, project, data, user):
         task["owner_active"] = bool(task["owner"] and task["owner"]["available"])
         task["assigned_to"] = (task["owner"] or {}).get("name") or ""
         task["planning"] = deepcopy(data.get("task_details", {}).get(task["id"], {}))
-    from .delivery_plan import dependency_status, requirement_basis
+    from .delivery_plan import requirement_basis
 
-    blockers = dependency_status(db, project, data)
+    blockers = {tid: verification.blocked(tid) for tid in verification.tasks}
     for task in tasks:
         task["dependency_blocked"] = blockers.get(task["id"], [])
         if (
@@ -223,31 +232,40 @@ def materialize(db, project, data, user):
             and task["status"] == "completed"
         ):
             task["status"] = "blocked"
-    issues = [serialize(i) for i in records(db, Issue, project).order_by(Issue.created_at.desc()).all()]
+    issues = [serialize(i) for i in sorted(verification.issues, key=lambda row: row.created_at, reverse=True)]
+    task_groups, issue_groups = defaultdict(list), defaultdict(list)
+    for task in tasks:
+        task_groups[task["req_id"]].append(task)
+    requirement_by_task = {task["id"]: task["req_id"] for task in tasks}
+    for issue in issues:
+        issue_groups[requirement_by_task.get(issue["task_id"])].append(issue)
     for issue in issues:
         issue["source_kinds"] = [
             kind for kind, collection in (("execution", "executions"), ("deployment", "deployments"))
             if any(entry.get("issue_id") == issue["id"] for entry in data.get(collection, []))
         ]
     reqs = []
-    deployed_requirements = current_deployed_requirement_ids(db, project, data)
-    for row in (
-        records(db, Requirement, project).order_by(Requirement.created_at.desc(), Requirement.id).all()
-    ):
+    deployed_requirements = current_deployed_requirement_ids(db, project, data, verification=verification)
+    requirement_rows = sorted(verification.requirements.values(), key=lambda row: row.id)
+    requirement_rows.sort(key=lambda row: row.created_at, reverse=True)
+    for row in requirement_rows:
         req = serialize(row)
         req["basis"] = requirement_basis(row)
         flow = deepcopy(data["flows"].get(row.id, default_flow()))
         flow["legacy_completed"] = row.status == "completed" and row.id not in data["flows"]
         req["deployment_verified"] = row.id in deployed_requirements
-        flow["gates"] = stage_gates(req, flow, tasks, issues, deployment_verified=req["deployment_verified"])
+        linked = task_groups[row.id]
+        flow["gates"] = stage_gates(req, flow, linked, issue_groups[row.id], deployment_verified=req["deployment_verified"])
         req["flow"] = flow
-        req["tasks_total"] = sum(t["req_id"] == row.id for t in tasks)
-        req["tasks_done"] = sum(t["req_id"] == row.id and t["status"] == "completed" for t in tasks)
+        req["tasks_total"] = len(linked)
+        req["tasks_done"] = sum(t["verified"] for t in linked)
+        req["tasks_recorded_completed"] = sum(t["delivery_status"] == "recorded_completed" for t in linked)
         reqs.append(req)
     summary = {
         "requirements": len(reqs),
         "tasks": len(tasks),
-        "tasks_done": sum(t["status"] == "completed" for t in tasks),
+        "tasks_done": sum(t["verified"] for t in tasks),
+        "recorded_completed": sum(t["delivery_status"] == "recorded_completed" for t in tasks),
         "blocked": sum(bool(r["flow"].get("blocked_reason")) for r in reqs)
         + sum(t["status"] == "blocked" for t in tasks),
         "accepted": sum(verification.requirement_accepted(r["id"]) for r in reqs),

@@ -1,3 +1,9 @@
+import {
+  fetchDeliveryReferences,
+  type MilestoneSummary,
+} from "@/lib/deliveryQuery";
+import { DeliveryPageControls, DeliveryQueryError } from "./DeliveryQueryViews";
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -11,19 +17,14 @@ import {
   Skeleton,
   Tag,
 } from "antd";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  RefreshCw,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   DeliveryInboxTarget,
   DeliveryMember,
   DeliveryMilestone,
-  DeliveryWorkspace,
+  DeliveryContext,
 } from "@/lib/delivery";
 import {
   defaultSchedulingRange,
@@ -48,8 +49,8 @@ type Props = {
   projectId: string;
   sessionId: string;
   view: "team" | "timeline";
-  workspace: DeliveryWorkspace;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  workspace: DeliveryContext;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onOpenTask: (target: DeliveryInboxTarget) => void;
   onEditMember: (member?: DeliveryMember) => void;
   onEditMilestone: (milestone?: DeliveryMilestone) => void;
@@ -111,6 +112,7 @@ export function DeliveryScheduling({
   );
   const problem = schedulingRangeProblem(route.startsOn, route.endsOn);
   const draftProblem = schedulingRangeProblem(dates.startsOn, dates.endsOn);
+  const mode = view === "team" ? route.teamMode : route.timelineMode;
   const query = useQuery({
     queryKey: [
       "delivery-schedule",
@@ -118,9 +120,10 @@ export function DeliveryScheduling({
       sessionId,
       route.startsOn,
       route.endsOn,
+      workspace.query_generation,
     ],
     queryFn: ({ signal }) => fetchDeliverySchedule(projectId, route, signal),
-    enabled: !problem,
+    enabled: !problem && (mode === "capacity" || mode === "dependencies"),
     gcTime: 0,
     refetchInterval: 15000,
   });
@@ -130,7 +133,38 @@ export function DeliveryScheduling({
   const resources = (data?.resources || []).filter(
     (resource) => !route.memberId || resource.id === route.memberId,
   );
-  const mode = view === "team" ? route.teamMode : route.timelineMode;
+  const milestoneParams = new URLSearchParams(location.hash.split("?")[1]);
+  const milestoneCursor = milestoneParams.get("milestone_cursor") || "",
+    milestonePage = Number(milestoneParams.get("milestone_page")) || 1;
+  const milestonesQuery = useQuery({
+    queryKey: [
+      "delivery-milestones-page",
+      projectId,
+      sessionId,
+      milestoneCursor,
+      workspace.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryReferences<MilestoneSummary>(
+        projectId,
+        "milestone",
+        { sort: "ends_asc", cursor: milestoneCursor, limit: 20 },
+        signal,
+        workspace.query_generation,
+      ),
+    enabled: mode === "milestones",
+    retry: false,
+    gcTime: 0,
+  });
+  const milestones = milestonesQuery.data?.items.map((item) => item.data) || [];
+  const milestonePaging = (page: number, cursor: string) => {
+    const params = new URLSearchParams(location.hash.split("?")[1]);
+    params.set("milestone_page", String(page));
+    if (cursor) params.set("milestone_cursor", cursor);
+    else params.delete("milestone_cursor");
+    history.pushState(null, "", `#/dev-flow?${params}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
   const detailed = mode === "capacity" || mode === "dependencies";
   const dayResource = data?.resources.find(
     (resource) => resource.id === route.dayMemberId,
@@ -162,10 +196,11 @@ export function DeliveryScheduling({
       setActionError(tr("missingTask"));
     }
   }
-  function openCalendar(id: string) {
-    if (!data || query.isError || !data.permissions.configure) return;
+  async function openCalendar(id: string) {
+    const current = data || (await query.refetch()).data;
+    if (!current || !current.permissions.configure) return;
     try {
-      setEditor(openMemberCalendar(data, id, crypto.randomUUID()));
+      setEditor(openMemberCalendar(current, id, crypto.randomUUID()));
       setActionError("");
       setSaved(false);
     } catch {
@@ -184,7 +219,7 @@ export function DeliveryScheduling({
     setEditor(null);
     if (route.editTaskId) changeRoute({ editTaskId: "" }, true);
   }
-  function saveResult(updated: DeliveryWorkspace) {
+  function saveResult(updated: DeliveryCommandAck) {
     onSaved(updated);
     setSaved(true);
     for (const name of [
@@ -460,10 +495,10 @@ export function DeliveryScheduling({
           onClose={() => setSaved(false)}
         />
       )}
-      {query.isPending && !problem && (
+      {query.isPending && detailed && !problem && (
         <Skeleton active paragraph={{ rows: 6 }} />
       )}
-      {data && !problem && (
+      {data && detailed && !problem && (
         <>
           <div className="delivery-schedule-source">
             <span>{progressDateTime(data.as_of, i18n.language)} UTC</span>
@@ -557,84 +592,105 @@ export function DeliveryScheduling({
               />
             </>
           )}
-          {mode === "milestones" &&
-            (workspace.milestones.length ? (
-              <div className="delivery-scheduling-milestones">
-                {[...workspace.milestones]
-                  .sort((a, b) =>
-                    (a.ends_on || "9999").localeCompare(b.ends_on || "9999"),
-                  )
-                  .map((milestone) => {
-                    const related = data.tasks.filter(
-                      (task) => task.milestone_id === milestone.id,
-                    );
-                    const verified = related.filter(
-                      (task) => task.verified,
-                    ).length;
-                    return (
-                      <article key={milestone.id}>
-                        <div className="delivery-schedule-section-heading">
-                          <div>
-                            <h3>{milestone.title}</h3>
-                            <small>
-                              {milestone.starts_on || "—"} →{" "}
-                              {milestone.ends_on || "—"}
-                            </small>
-                          </div>
-                          <div className="delivery-actions">
-                            <Button
-                              size="small"
-                              onClick={() =>
-                                changeRoute({
-                                  view: "timeline",
-                                  timelineMode: "dependencies",
-                                  milestoneId: milestone.id,
-                                })
-                              }
-                            >
-                              {tr("dependencies")}
-                            </Button>
-                            <Button
-                              size="small"
-                              type="text"
-                              disabled={!workspace.permissions.write}
-                              onClick={() => onEditMilestone(milestone)}
-                            >
-                              {t("delivery.editMilestone")}
-                            </Button>
-                          </div>
-                        </div>
-                        <p>
-                          {workspace.members.find(
-                            (member) => member.id === milestone.owner_id,
-                          )?.name || t("delivery.unassigned")}{" "}
-                          · {tr("verifiedTasks")} {verified}/{related.length}
-                        </p>
-                        <Progress
-                          percent={
-                            related.length
-                              ? Math.round((verified / related.length) * 100)
-                              : 0
-                          }
-                          size="small"
-                          showInfo={false}
-                        />
-                      </article>
-                    );
-                  })}
-              </div>
-            ) : (
-              <Empty description={t("delivery.noMilestones")} />
-            ))}
         </>
       )}
-      {mode === "members" && <DeliveryTeamMembers
-        sessionId={sessionId} onSaved={onSaved}
-        workspace={workspace} schedule={data} calendarFailed={query.isError}
-        route={route} onRoute={(patch) => changeRoute(patch, !("teamMemberId" in patch) && !("teamMode" in patch))}
-        onEdit={onEditMember} onCalendar={openCalendar}
-        onRetryCalendar={() => void query.refetch()} onTask={onOpenTask}
-      />}
+      {milestonesQuery.error && mode === "milestones" && (
+        <DeliveryQueryError
+          error={milestonesQuery.error}
+          onRetry={() => void milestonesQuery.refetch()}
+          onReset={() => milestonePaging(1, "")}
+        />
+      )}
+      {mode === "milestones" &&
+        (milestones.length ? (
+          <div className="delivery-scheduling-milestones">
+            {[...milestones]
+              .sort((a, b) =>
+                (a.ends_on || "9999").localeCompare(b.ends_on || "9999"),
+              )
+              .map((milestone) => {
+                const total = milestone.task_count ?? 0;
+                const verified = milestone.verified_task_count ?? 0;
+                return (
+                  <article key={milestone.id}>
+                    <div className="delivery-schedule-section-heading">
+                      <div>
+                        <h3>{milestone.title}</h3>
+                        <small>
+                          {milestone.starts_on || "—"} →{" "}
+                          {milestone.ends_on || "—"}
+                        </small>
+                      </div>
+                      <div className="delivery-actions">
+                        <Button
+                          size="small"
+                          onClick={() =>
+                            changeRoute({
+                              view: "timeline",
+                              timelineMode: "dependencies",
+                              milestoneId: milestone.id,
+                            })
+                          }
+                        >
+                          {tr("dependencies")}
+                        </Button>
+                        <Button
+                          size="small"
+                          type="text"
+                          disabled={!workspace.permissions.write}
+                          onClick={() => onEditMilestone(milestone)}
+                        >
+                          {t("delivery.editMilestone")}
+                        </Button>
+                      </div>
+                    </div>
+                    <p>
+                      {milestone.owner_id || t("delivery.unassigned")} ·{" "}
+                      {tr("verifiedTasks")} {verified}/{total}
+                    </p>
+                    <Progress
+                      percent={total ? Math.round((verified / total) * 100) : 0}
+                      size="small"
+                      showInfo={false}
+                    />
+                  </article>
+                );
+              })}
+          </div>
+        ) : (
+          <Empty description={t("delivery.noMilestones")} />
+        ))}
+
+      {mode === "milestones" && milestonesQuery.data && (
+        <DeliveryPageControls
+          page={milestonePage}
+          cursor={milestoneCursor}
+          next={milestonesQuery.data.next_cursor}
+          total={milestonesQuery.data.total}
+          loading={milestonesQuery.isFetching}
+          onPage={milestonePaging}
+        />
+      )}
+      {mode === "members" && (
+        <DeliveryTeamMembers
+          sessionId={sessionId}
+          onSaved={onSaved}
+          workspace={workspace}
+          schedule={data}
+          calendarFailed={query.isError}
+          route={route}
+          onRoute={(patch) =>
+            changeRoute(
+              patch,
+              !("teamMemberId" in patch) && !("teamMode" in patch),
+            )
+          }
+          onEdit={onEditMember}
+          onCalendar={(id) => void openCalendar(id)}
+          onRetryCalendar={() => void query.refetch()}
+          onTask={onOpenTask}
+        />
+      )}
       <Drawer
         open={Boolean(route.day && route.dayMemberId && !hasTaskInspector)}
         title={tr("dayTitle", {

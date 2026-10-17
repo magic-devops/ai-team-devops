@@ -1,7 +1,7 @@
 import { Alert, Button, Skeleton, Space, Tag } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import {
   assertExecutionSession,
   executionRuntimeProblem,
@@ -18,7 +18,7 @@ type Props = {
   active: boolean;
   paused: boolean;
   disabled: boolean;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
   onUnresolvedChange: (value: boolean) => void;
   initialNodeId?: string;
   initialAttempt?: number;

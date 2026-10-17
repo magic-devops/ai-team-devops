@@ -3,7 +3,7 @@
 from .delivery_deployment import deployment_verified_for_release
 
 
-def current_deployed_requirement_ids(db, project, data):
+def current_deployed_requirement_ids(db, project, data, *, verification=None):
     from .delivery_release import _candidate_reasons
 
     deployed = set()
@@ -14,7 +14,7 @@ def current_deployed_requirement_ids(db, project, data):
             candidate["decision"] == "approved"
             and not candidate.get("invalidated")
             and deployment_verified_for_release(data, candidate["id"])
-            and not _candidate_reasons(db, project, data, candidate)
+            and not _candidate_reasons(db, project, data, candidate, verification=verification)
         ):
             deployed.update(candidate["snapshot"]["selected"]["requirement_ids"])
     return deployed

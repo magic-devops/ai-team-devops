@@ -13,7 +13,9 @@ import { useTranslation } from "react-i18next";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
 import { normalizeTaskCriteria } from "@/lib/taskAcceptance";
 import type { DeliveryMember } from "@/lib/delivery";
-import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
+import type { DeliveryReferenceKind } from "@/lib/deliveryQuery";
 
 export type EditorField = {
   key: string;
@@ -24,6 +26,7 @@ export type EditorField = {
   options?: { label: string; value: string }[];
   multiple?: boolean;
   members?: DeliveryMember[];
+  referenceKind?: DeliveryReferenceKind;
 };
 export type EditorSpec = {
   title: string;
@@ -160,19 +163,51 @@ export function DeliveryEditor({
             name={f.key}
             label={f.label}
             valuePropName={f.type === "boolean" ? "checked" : "value"}
-            rules={f.type === "criteria" ? [{ validator: async (_rule, value) => { try { normalizeTaskCriteria(value || []); } catch (failure) { throw new Error(t(`deliveryTaskAcceptance.${(failure as Error).message}`)); } } }] :
-              f.required
+            rules={
+              f.type === "criteria"
                 ? [
                     {
-                      required: true,
-                      whitespace: f.type !== "number" && f.type !== "boolean",
-                      message: t("delivery.required"),
+                      validator: async (_rule, value) => {
+                        try {
+                          normalizeTaskCriteria(value || []);
+                        } catch (failure) {
+                          throw new Error(
+                            t(
+                              `deliveryTaskAcceptance.${(failure as Error).message}`,
+                            ),
+                          );
+                        }
+                      },
                     },
                   ]
-                : []
+                : f.required
+                  ? [
+                      {
+                        required: true,
+                        whitespace: f.type !== "number" && f.type !== "boolean",
+                        message: t("delivery.required"),
+                      },
+                    ]
+                  : []
             }
           >
-            {f.members ? <OwnerSelect members={f.members} label={f.label} disabled={busy} /> : f.type === "criteria" ? <TaskCriteriaEditor disabled={busy} /> : f.options ? (
+            {f.members ? (
+              <ProjectOwnerSelect
+                members={f.members}
+                label={f.label}
+                disabled={busy}
+              />
+            ) : f.referenceKind ? (
+              <DeliveryReferenceSelect
+                kind={f.referenceKind}
+                options={f.options}
+                multiple={f.multiple}
+                label={f.label}
+                disabled={busy}
+              />
+            ) : f.type === "criteria" ? (
+              <TaskCriteriaEditor disabled={busy} />
+            ) : f.options ? (
               <Select
                 mode={f.multiple ? "multiple" : undefined}
                 options={f.options}

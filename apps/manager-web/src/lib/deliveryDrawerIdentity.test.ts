@@ -3,7 +3,7 @@ import { Drawer } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryTeamMembers } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTeamMembers";
 import { parseSchedulingRoute } from "./deliveryScheduling";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryDisplayContext } from "./delivery";
 import { useDrawerIdentity } from "./useDrawerIdentity";
 const hooks = vi.hoisted(() => ({ state: [] as unknown[], next: 0, effects: [] as (() => void)[] }));
 vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>("react"),
@@ -15,6 +15,11 @@ vi.mock("react", async () => ({ ...await vi.importActual<typeof import("react")>
   useEffect: (effect: () => void) => { hooks.effects.push(effect); },
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@tanstack/react-query", () => ({ useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => {
+  const members = queryKey[1] === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }] : [];
+  const selected = queryKey[0] === "delivery-member-exact" ? members.filter((member) => member.id === queryKey[3]) : queryKey[0] === "delivery-members-page" ? members : [];
+  return { data: { items: selected.map((data) => ({ id: data.id, data })), total: selected.length, next_cursor: null }, isPending: false, isError: false };
+} }));
 type DrawerProps = { open: boolean; children: ReactNode; afterOpenChange: (open: boolean) => void };
 function findDrawer(node: ReactNode): DrawerProps | undefined {
   if (Array.isArray(node)) return node.map(findDrawer).find(Boolean);
@@ -25,7 +30,7 @@ function memberDrawer(id: string, projectId = "project-a") {
   hooks.next = 0;
   hooks.effects = [];
   vi.stubGlobal("location", { hash: "#/dev-flow?view=team" });
-  const workspace = { project: { id: projectId }, members: projectId === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }] : [], tasks: [], permissions: { configure: false } } as unknown as DeliveryWorkspace;
+  const workspace = { project: { id: projectId }, members: projectId === "project-a" ? [{ id: "agent:one", name: "Visible agent", kind: "agent", active: true }] : [], permissions: { configure: false } } as unknown as DeliveryDisplayContext;
   const tree = DeliveryTeamMembers({ workspace, sessionId: "test", onSaved: vi.fn(), calendarFailed: false, route: { ...parseSchedulingRoute("#/dev-flow?view=team"), teamMemberId: id }, onRoute: vi.fn(), onEdit: vi.fn(), onCalendar: vi.fn(), onRetryCalendar: vi.fn(), onTask: vi.fn() });
   const drawer = findDrawer(tree)!;
   hooks.effects.forEach((effect) => effect());

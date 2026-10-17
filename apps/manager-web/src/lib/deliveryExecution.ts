@@ -2,7 +2,7 @@ import { request } from "./http";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryTaskData,
 } from "./delivery";
 import type {
   ExecutionCommand,
@@ -258,11 +258,11 @@ export type ExecutionDraftSession = {
   preview: ExecutionPreview | null;
 };
 export function openExecutionDraft(
-  data: DeliveryWorkspace,
+  data: DeliveryTaskData,
   taskId: string,
   key: string,
 ): ExecutionDraftSession {
-  const task = data.tasks.find((item) => item.id === taskId);
+  const task = data.task.id === taskId ? data.task : undefined;
   if (!task || !task.basis) throw new Error("Task unavailable");
   return {
     executorMemberId: "",
@@ -381,7 +381,7 @@ export function executionTargetProblems(
 }
 export function adoptExecutionDraft(
   session: ExecutionDraftSession,
-  data: DeliveryWorkspace,
+  data: DeliveryTaskData,
   targets: DeliveryTargets,
   key: string,
   bindings?: TeamRuntimeBindings,
@@ -391,7 +391,7 @@ export function adoptExecutionDraft(
     targets.project_id !== data.project.id
   )
     throw new Error("Scope changed");
-  const task = data.tasks.find((item) => item.id === session.taskId);
+  const task = data.task.id === session.taskId ? data.task : undefined;
   if (session.executorMemberId) {
     if (!bindings || bindings.project_id !== data.project.id)
       throw new Error("executorCatalogueRequired");

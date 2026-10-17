@@ -3,6 +3,13 @@ import type { TaskPlanning } from "./deliveryTaskPlan";
 import type { TaskAcceptance } from "./taskAcceptance";
 import type { ProgressState } from "./deliveryProgress";
 import type { ExecutorSnapshot } from "./deliveryTeamRuntime";
+import type { DeliveryCommandAck } from "./deliveryQuery";
+export type {
+  DeliveryCommandAck,
+  DeliveryContext,
+  DeliveryDisplayContext,
+  DeliveryTaskData,
+} from "./deliveryQuery";
 import type {
   ExecutionAgent,
   ExecutionTarget,
@@ -369,7 +376,7 @@ export function saveDelivery(
   version: number,
   key: string,
 ) {
-  return request<DeliveryWorkspace>("/api/v1/delivery/commands", {
+  return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
     headers: { "X-Project-Id": projectId },
     body: JSON.stringify({

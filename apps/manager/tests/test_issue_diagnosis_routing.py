@@ -1,6 +1,6 @@
 """Public Issue diagnosis routes join existing delivery receipts and requirements."""
 
-from sop_manager.routers.sql_models import DeliveryWorkspace, Issue
+from sop_manager.routers.sql_models import DeliveryWorkspace, Issue, Requirement
 from test_delivery_workbench import env  # noqa: F401
 
 
@@ -72,11 +72,16 @@ def test_rules_proposal_and_human_adoption_reuse_one_canonical_requirement(env):
     assert saved.status_code == 200, saved.text
     replay = client.post("/api/v1/delivery/commands", json=command)
     assert replay.status_code == 200 and replay.json()["replayed"]
-    promoted = [
-        row for row in replay.json()["requirements"] if row["flow"]["source_issue_id"] == "ISS-diagnosis"
-    ]
-    assert len(promoted) == 1
-    assert promoted[0]["flow"]["source_diagnosis"]["id"] == generated["id"]
+    assert "requirements" not in replay.json()
+    assert replay.json()["resource"] == saved.json()["resource"]
+    assert replay.json()["result"] == saved.json()["result"]
+    requirement_id = saved.json()["resource"]["id"]
+    assert saved.json()["result"]["requirement_id"] == requirement_id
+    promoted = client.get(f"/api/v1/delivery/requirements/{requirement_id}").json()["requirement"]
+    assert promoted["flow"]["source_issue_id"] == "ISS-diagnosis"
+    assert promoted["flow"]["source_diagnosis"]["id"] == generated["id"]
+    with sessions() as db:
+        assert db.query(Requirement).filter_by(tenant_id="tenant", project_id="project").count() == 1
     assert client.get("/api/v1/delivery/issues/ISS-diagnosis").json()["issue"]["status"] == "open"
 
 

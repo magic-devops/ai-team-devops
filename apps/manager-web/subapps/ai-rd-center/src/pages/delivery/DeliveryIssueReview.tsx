@@ -1,7 +1,12 @@
 import { Alert, Button, Input, Select, Tag } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { fetchDelivery, type DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
+import {
+  fetchDeliveryContext,
+  invalidateDeliveryQueries,
+} from "@/lib/deliveryQuery";
+import { useQueryClient } from "@tanstack/react-query";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   fetchIssueDiagnosis,
@@ -24,7 +29,7 @@ export type IssueReviewPanelProps = {
   diagnosis: DiagnosisView;
   background: string;
   readOnly: boolean;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onBusyChange?: (busy: boolean) => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
 };
@@ -39,6 +44,7 @@ export function IssueReviewPanel({
   onBusyChange,
   onUnresolvedChange,
 }: IssueReviewPanelProps) {
+  const qc = useQueryClient();
   const { t } = useTranslation(),
     tr = (key: string) => t(`deliveryIssue.${key}`);
   const [base, setBase] = useState(() => structuredClone(detail)),
@@ -149,11 +155,14 @@ export function IssueReviewPanel({
       assertCurrent();
       const workspace = await submitIssueReview(projectId, captured);
       assertCurrent();
-      if (workspace.project.id !== projectId) throw new Error("scopeChanged");
-      const requirement = workspace.requirements?.find(
-        (item) => item.flow.source_issue_id === proposal.issue_id,
+      if (workspace.project_id !== projectId) throw new Error("scopeChanged");
+      const requirementId = String(
+        workspace.result?.requirement_id ||
+          (workspace.resource.kind === "requirement"
+            ? workspace.resource.id
+            : ""),
       );
-      if (requirement) setLinkedRequirementId(requirement.id);
+      if (requirementId) setLinkedRequirementId(requirementId);
       setCompleted(true);
       setUnknown(false);
       onUnresolvedChange?.(false);
@@ -186,12 +195,12 @@ export function IssueReviewPanel({
         setLatestProposal(fresh);
       } else {
         const [value, fresh] = await Promise.all([
-          fetchDelivery(projectId),
+          fetchDeliveryContext(projectId),
           fetchIssueDiagnosis(projectId, proposal.issue_id, proposal.id),
         ]);
         assertCurrent();
         if (
-          value.project.id !== projectId ||
+          value.project_id !== projectId ||
           fresh.id !== proposal.id ||
           fresh.issue_id !== proposal.issue_id ||
           fresh.issue_basis !== proposal.issue_basis
@@ -226,16 +235,16 @@ export function IssueReviewPanel({
         });
         return;
       }
-      const workspace = await fetchDelivery(projectId);
+      const workspace = await fetchDeliveryContext(projectId);
       assertCurrent();
-      if (workspace.project.id !== projectId) throw new Error("scopeChanged");
+      if (workspace.project_id !== projectId) throw new Error("scopeChanged");
       setProposal(found);
       if (found.review.requirement_id)
         setLinkedRequirementId(found.review.requirement_id);
       setCompleted(true);
       setUnknown(false);
       onUnresolvedChange?.(false);
-      onSaved(workspace);
+      void invalidateDeliveryQueries(qc, projectId);
     } catch (cause) {
       if (current()) setProblem(issueProblem(cause));
     } finally {

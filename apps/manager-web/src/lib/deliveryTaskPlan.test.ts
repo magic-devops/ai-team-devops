@@ -6,7 +6,7 @@ import { DeliveryTaskPlanning } from "../../subapps/ai-rd-center/src/pages/deliv
 import type {
   DeliveryRequirement,
   DeliveryTask,
-  DeliveryWorkspace,
+  DeliveryTaskData,
 } from "./delivery";
 import {
   remapPlanCriteria,
@@ -97,7 +97,7 @@ describe("editable task plans", () => {
           flow: { revision: 1 },
           acceptance_criteria: [],
         } as unknown as DeliveryRequirement,
-        data: { tasks: [] } as unknown as DeliveryWorkspace,
+        data: { dependencies: [] } as unknown as DeliveryTaskData,
         onTask: () => {},
         onEdit: () => {},
         canEdit: true,

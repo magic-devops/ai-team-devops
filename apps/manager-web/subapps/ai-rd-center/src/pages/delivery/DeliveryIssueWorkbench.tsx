@@ -1,19 +1,23 @@
+import { useQuery } from "@tanstack/react-query";
+import { fetchIssuePage } from "@/lib/deliveryQuery";
+import { DeliveryPageControls, DeliveryQueryError } from "./DeliveryQueryViews";
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { Alert, Button, Empty, Input, Select, Tag } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryContext } from "@/lib/delivery";
 import { safeExecutionReturn } from "@/lib/executionCommands";
 import { safePortfolioReturn } from "@/lib/projectPortfolioRoute";
 import { DeliveryIssueDetail } from "./DeliveryIssueDetail";
 import "./delivery-issue.css";
 export type DeliveryIssueWorkbenchProps = {
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
   projectId: string;
   sessionId: string;
   issueId: string;
   background: string;
   readOnly: boolean;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onOpenIssue: (id: string) => void;
   onCloseIssue: () => void;
 };
@@ -37,25 +41,63 @@ export function DeliveryIssueWorkbench({
     [source, setSource] = useState(initial.get("issue_source") || "all");
   const filterChanged = (key: string, value: string) => {
     const params = new URLSearchParams(location.hash.split("?")[1]);
+    params.delete("issue_cursor");
+    params.delete("issue_page");
+    setCursor("");
+    setPage(1);
     if (value && value !== "all") params.set(key, value);
     else params.delete(key);
     history.replaceState(null, "", `#/dev-flow?${params}`);
   };
-  const visible = workspace.issues.filter((issue) => {
-    const kinds = issue.source_kinds || [];
-    return (
-      (status === "all" || issue.status === status) &&
-      (severity === "all" || issue.severity === severity) &&
-      (source === "all" ||
-        (source === "other"
-          ? !kinds.length
-          : kinds.includes(source as "execution" | "deployment"))) &&
-      (!search.trim() ||
-        `${issue.id} ${issue.title}`
-          .toLocaleLowerCase()
-          .includes(search.trim().toLocaleLowerCase()))
-    );
+  const [cursor, setCursor] = useState(initial.get("issue_cursor") || "");
+  const [page, setPage] = useState(Number(initial.get("issue_page")) || 1);
+  useEffect(() => {
+    const sync = () => {
+      const params = new URLSearchParams(location.hash.split("?")[1]);
+      setSearch(params.get("issue_q") || "");
+      setStatus(params.get("issue_status") || "all");
+      setSeverity(params.get("issue_severity") || "all");
+      setSource(params.get("issue_source") || "all");
+      setCursor(params.get("issue_cursor") || "");
+      setPage(Number(params.get("issue_page")) || 1);
+    };
+    window.addEventListener("popstate", sync);
+    window.addEventListener("hashchange", sync);
+    return () => {
+      window.removeEventListener("popstate", sync);
+      window.removeEventListener("hashchange", sync);
+    };
+  }, []);
+  const query = useQuery({
+    queryKey: [
+      "delivery-issues-page",
+      projectId,
+      sessionId,
+      search,
+      status,
+      severity,
+      source,
+      cursor,
+      workspace.query_generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchIssuePage(
+        projectId,
+        {
+          q: search,
+          status: status === "all" ? "" : status,
+          severity: severity === "all" ? "" : severity,
+          source: source === "all" ? "" : source,
+          cursor,
+          limit: 20,
+        },
+        signal,
+        workspace.query_generation,
+      ),
+    retry: false,
+    gcTime: 0,
   });
+  const visible = query.data?.items || [];
   const back =
     safeExecutionReturn(initial.get("return_to") || "") ||
     safePortfolioReturn(initial.get("return_to") || "");
@@ -118,14 +160,23 @@ export function DeliveryIssueWorkbench({
         />
       </div>
       <p className="issue-meta" role="status">
-        {tr("visibleCount")} {visible.length} / {workspace.issues.length}
+        {tr("visibleCount")} {visible.length} / {query.data?.total ?? "—"}
       </p>
+      {query.error && (
+        <DeliveryQueryError
+          error={query.error}
+          onRetry={() => void query.refetch()}
+          onReset={() => {
+            setCursor("");
+            setPage(1);
+            filterChanged("issue_cursor", "");
+          }}
+        />
+      )}
       {visible.length ? (
         <div className="issue-queue">
           {visible.map((issue) => {
-            const requirement = workspace.requirements.find(
-              (item) => item.flow.source_issue_id === issue.id,
-            );
+            const requirement = issue.linked_requirement_id;
             return (
               <article
                 className={`issue-row${issueId === issue.id ? " is-selected" : ""}`}
@@ -171,9 +222,25 @@ export function DeliveryIssueWorkbench({
       ) : (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={tr(
-            workspace.issues.length ? "noMatchingIssues" : "noIssues",
-          )}
+          description={tr(query.data?.total ? "noMatchingIssues" : "noIssues")}
+        />
+      )}
+      {query.data && (
+        <DeliveryPageControls
+          page={page}
+          cursor={cursor}
+          next={query.data.next_cursor}
+          total={query.data.total}
+          loading={query.isFetching}
+          onPage={(nextPage, nextCursor) => {
+            setPage(nextPage);
+            setCursor(nextCursor);
+            const params = new URLSearchParams(location.hash.split("?")[1]);
+            params.set("issue_page", String(nextPage));
+            if (nextCursor) params.set("issue_cursor", nextCursor);
+            else params.delete("issue_cursor");
+            history.pushState(null, "", `#/dev-flow?${params}`);
+          }}
         />
       )}
       <DeliveryIssueDetail

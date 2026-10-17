@@ -45,8 +45,24 @@ _DEFAULT_HEADERS = {"Accept": "application/json"}
 
 def _resource_segment(value: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,199}", value):
-        raise ValueError("resource ID must contain only ASCII letters, digits, dots, underscores, colons or hyphens")
+        raise ValueError(
+            "resource ID must contain only ASCII letters, digits, dots, underscores, colons or hyphens"
+        )
     return quote(value, safe="")
+
+
+def _delivery_query_params(*, limit: int, cursor: str, **filters: Any) -> dict[str, Any]:
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ValueError("limit must be an integer between 1 and 100")
+    if not isinstance(cursor, str) or len(cursor) > 4000 or any(ord(c) < 32 for c in cursor):
+        raise ValueError("invalid opaque delivery cursor")
+    if not isinstance(filters.get("q", ""), str) or len(filters.get("q", "")) > 200:
+        raise ValueError("q must be at most 200 characters")
+    return {
+        "limit": limit,
+        **({"cursor": cursor} if cursor else {}),
+        **{key: value for key, value in filters.items() if value != "" and value is not None},
+    }
 
 
 def _progress_scope_params(scope: str, scope_id: str) -> dict[str, str]:
@@ -100,7 +116,155 @@ class ManagerClient:
         return self._request("POST", "/api/v1/delivery/project-lifecycle-preview", json_body=dict(body))
 
     def delivery_workspace(self) -> dict[str, Any]:
+        """Explicit complete export; interactive clients should use bounded queries."""
         return self._request("GET", "/api/v1/delivery/workspace")
+
+    def delivery_context(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/delivery/context")
+
+    def delivery_requirements(
+        self,
+        *,
+        q: str = "",
+        stage: str = "",
+        priority: str = "",
+        owner_id: str = "",
+        milestone_id: str = "",
+        cursor: str = "",
+        limit: int = 20,
+        sort: str = "created_desc",
+    ) -> dict[str, Any]:
+        if sort not in {"created_desc", "id_asc", "id_desc", "title_asc", "priority_asc", "due_asc"}:
+            raise ValueError("invalid requirement sort")
+        params = _delivery_query_params(
+            limit=limit,
+            cursor=cursor,
+            q=q,
+            stage=stage,
+            priority=priority,
+            owner_id=owner_id,
+            milestone_id=milestone_id,
+            sort=sort,
+        )
+        return self._request("GET", "/api/v1/delivery/requirements", params=params)
+
+    def delivery_requirement(self, requirement_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}")
+
+    def delivery_tasks(
+        self,
+        *,
+        requirement_id: str = "",
+        q: str = "",
+        status: str = "",
+        priority: str = "",
+        owner_id: str = "",
+        milestone_id: str = "",
+        cursor: str = "",
+        limit: int = 20,
+        sort: str = "created_desc",
+    ) -> dict[str, Any]:
+        if sort not in {"created_desc", "id_asc", "id_desc", "title_asc", "priority_asc"}:
+            raise ValueError("invalid task sort")
+        if status and status not in {
+            "pending",
+            "in_progress",
+            "blocked",
+            "awaiting_review",
+            "recorded_completed",
+            "verified_completed",
+        }:
+            raise ValueError("invalid effective delivery status")
+        params = _delivery_query_params(
+            limit=limit,
+            cursor=cursor,
+            requirement_id=requirement_id,
+            q=q,
+            status=status,
+            priority=priority,
+            owner_id=owner_id,
+            milestone_id=milestone_id,
+            sort=sort,
+        )
+        return self._request("GET", "/api/v1/delivery/tasks", params=params)
+
+    def delivery_task(self, task_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/tasks/{_resource_segment(task_id)}")
+
+    def delivery_issues(
+        self,
+        *,
+        requirement_id: str = "",
+        task_id: str = "",
+        q: str = "",
+        status: str = "",
+        severity: str = "",
+        source: str = "",
+        cursor: str = "",
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        if source not in {"", "execution", "deployment", "other"}:
+            raise ValueError("invalid issue source")
+        params = _delivery_query_params(
+            limit=limit,
+            cursor=cursor,
+            requirement_id=requirement_id,
+            task_id=task_id,
+            q=q,
+            status=status,
+            severity=severity,
+            source=source,
+        )
+        return self._request("GET", "/api/v1/delivery/issues", params=params)
+
+    def delivery_execution(self, execution_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}")
+
+    def delivery_references(
+        self,
+        kind: str,
+        *,
+        q: str = "",
+        ids: Sequence[str] = (),
+        requirement_id: str = "",
+        task_id: str = "",
+        cursor: str = "",
+        limit: int = 50,
+        member_kind: str = "",
+        member_active: bool | None = None,
+        archived: bool | None = None,
+        sort: str = "id_asc",
+        resource_kind: str = "",
+    ) -> dict[str, Any]:
+        if kind not in {"member", "milestone", "resource", "sprint", "requirement", "task", "execution"}:
+            raise ValueError("invalid reference kind")
+        if isinstance(ids, str) or len(ids) > 100:
+            raise ValueError("ids must contain at most 100 exact references")
+        if member_kind not in {"", "human", "agent", "tool"} or sort not in {"id_asc", "ends_asc", "created_desc"}:
+            raise ValueError("invalid reference filter or sort")
+        if any(value is not None and type(value) is not bool for value in (member_active, archived)):
+            raise ValueError("member_active and archived must be booleans")
+        for value in ids:
+            _resource_segment(value)
+        params = _delivery_query_params(
+            limit=limit,
+            cursor=cursor,
+            kind=kind,
+            q=q,
+            ids=",".join(ids),
+            requirement_id=requirement_id,
+            task_id=task_id,
+            member_kind=member_kind,
+            member_active=member_active,
+            archived=archived,
+            sort=sort,
+            resource_kind=resource_kind,
+        )
+        return self._request("GET", "/api/v1/delivery/references", params=params)
+
+    def delivery_query_rebuild(self) -> dict[str, Any]:
+        """Explicit authorized derived-index repair; never used as a hidden GET fallback."""
+        return self._request("POST", "/api/v1/delivery/query/rebuild")
 
     def delivery_execution_runtime(self, execution_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/executions/{_resource_segment(execution_id)}/runtime")

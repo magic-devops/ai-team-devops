@@ -12,7 +12,7 @@ import {
   type ReleaseForm,
   type ReleaseScope,
 } from "@/lib/deliveryRelease";
-import type { DeliveryWorkspace } from "@/lib/delivery";
+import type { DeliveryCommandAck } from "@/lib/delivery";
 import { ReleaseReasons, ReleaseSnapshotFacts } from "./DeliveryReleaseFacts";
 
 export function DeliveryReleaseEditor({
@@ -26,7 +26,7 @@ export function DeliveryReleaseEditor({
   projectId: string;
   initial: DeliveryReleases;
   selected: ReleaseScope;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   readOnly?: boolean;
 }) {

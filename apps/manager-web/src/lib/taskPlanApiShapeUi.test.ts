@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DeliveryTaskPlanMaintenance } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskPlanMaintenance";
-import type { DeliveryWorkspace } from "./delivery";
+import type { DeliveryTaskData } from "./delivery";
 
 let edit: (() => void) | undefined;
 vi.mock("react-i18next", () => ({
@@ -30,11 +30,11 @@ describe("task editor with the materialized API task shape", () => {
         version: 7,
         planning_basis: "plan-basis",
         members: [],
-        requirements: linked
-          ? [{ id: "REQ", acceptance_criteria: ["A", "B"] }]
-          : [],
-        tasks: [
-          {
+        requirement: linked
+          ? { id: "REQ", acceptance_criteria: ["A", "B"] }
+          : null,
+        dependencies: [],
+        task: {
             id: "T",
             title: "Actual API task",
             req_id: linked ? "REQ" : "",
@@ -45,8 +45,7 @@ describe("task editor with the materialized API task shape", () => {
               requirement_criteria_indices: linked ? [1] : [],
             },
           },
-        ],
-      } as unknown as DeliveryWorkspace;
+      } as unknown as DeliveryTaskData;
       const editingChanged = vi.fn();
       renderToStaticMarkup(
         createElement(
@@ -54,7 +53,7 @@ describe("task editor with the materialized API task shape", () => {
           { client: new QueryClient() },
           createElement(DeliveryTaskPlanMaintenance, {
             data,
-            task: data.tasks[0],
+            task: data.task,
             canEdit: true,
             onTask: () => {},
             onSaved: () => {},

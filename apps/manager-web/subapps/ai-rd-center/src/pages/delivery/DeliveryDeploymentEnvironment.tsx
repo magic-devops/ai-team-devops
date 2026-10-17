@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   prepareDeliveryIntent,
   type DeliveryIntent,
-  type DeliveryWorkspace,
+  type DeliveryCommandAck,
 } from "@/lib/delivery";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
@@ -31,7 +31,7 @@ export function DeliveryDeploymentEnvironment({
   environment?: DeploymentEnvironment;
   readOnly: boolean;
   onClose: () => void;
-  onSaved: (data: DeliveryWorkspace) => void;
+  onSaved: (data: DeliveryCommandAck) => void;
 }) {
   const { t } = useTranslation(),
     tr = (key: string) => t(`deliveryDeployment.${key}`);

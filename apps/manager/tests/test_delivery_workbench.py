@@ -95,7 +95,7 @@ def command(client, action, payload, key=None, version=None):
         and "planning_basis" not in payload
     ):
         payload = {**payload, "planning_basis": state["planning_basis"]}
-    return client.post(
+    response = client.post(
         "/api/v1/delivery/commands",
         json={
             "action": action,
@@ -104,6 +104,14 @@ def command(client, action, payload, key=None, version=None):
             "idempotency_key": key or f"test-{action}-{state['version']}",
         },
     )
+    if response.status_code != 200:
+        return response
+    # Legacy domain tests explicitly inspect the export after a successful write.
+    # Raw HTTP CommandAck contracts are tested without this inspection helper.
+    exported = client.get("/api/v1/delivery/workspace")
+    assert exported.status_code == 200, exported.text
+    return response.__class__(response.status_code, json={**exported.json(), **response.json()},
+                              headers=response.headers, request=response.request)
 
 
 def requirement(client):
@@ -131,7 +139,11 @@ def test_read_does_not_create_state_and_creation_is_real_business_data(env):
     snapshot = client.get("/api/v1/delivery/workspace").json()
     assert snapshot["requirements"][0]["flow"]["stage"] == "intake"
     assert snapshot["summary"]["accepted"] == 0
-    assert snapshot["history"][0]["requirements"] == 1
+    with sessions() as db:
+        from sop_manager.routers.sql_models import DeliveryProgressObservation
+
+        observed = db.query(DeliveryProgressObservation).order_by(DeliveryProgressObservation.seq.desc()).first()
+        assert len(observed.data["requirements"]) == 1
 
 
 def test_receipt_replay_and_stale_edits_do_not_duplicate_or_overwrite(env):

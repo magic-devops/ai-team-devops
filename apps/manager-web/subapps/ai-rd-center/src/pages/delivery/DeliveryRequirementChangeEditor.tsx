@@ -1,11 +1,17 @@
+import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
+import {
+  fetchRequirementDetail,
+  fetchDeliveryContext,
+  type RequirementDetail,
+} from "@/lib/deliveryQuery";
+import type { DeliveryCommandAck } from "@/lib/deliveryQuery";
 import { useRef, useState } from "react";
 import { Alert, Button, Input, Modal, Select, Tag } from "antd";
 import { useTranslation } from "react-i18next";
-import { OwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
 import {
-  fetchDelivery,
   type DeliveryRequirement,
-  type DeliveryWorkspace,
+  type DeliveryContext,
   type DeliveryIntent,
 } from "@/lib/delivery";
 import {
@@ -140,15 +146,17 @@ export function RequirementImpactFacts({
 export function DeliveryRequirementChangeEditor({
   workspace,
   requirement,
+  requirementVersion,
   sessionId,
   onSaved,
   onClose,
   onUnresolvedChange = () => {},
 }: {
-  workspace: DeliveryWorkspace;
+  workspace: DeliveryContext;
   requirement: DeliveryRequirement;
+  requirementVersion?: number;
   sessionId: string;
-  onSaved: (workspace: DeliveryWorkspace) => void;
+  onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   onUnresolvedChange?: (value: boolean) => void;
 }) {
@@ -157,7 +165,7 @@ export function DeliveryRequirementChangeEditor({
   const origin = useRef(collaborationSessionKey());
   const [pinned, setPinned] = useState(() => ({
     requirement: structuredClone(requirement),
-    version: workspace.version,
+    version: requirementVersion ?? workspace.version,
     writable: workspace.permissions.write,
   }));
   const [draft, setDraft] = useState<Draft>(() => draftOf(requirement));
@@ -167,9 +175,11 @@ export function DeliveryRequirementChangeEditor({
     [error, setError] = useState(""),
     [conflict, setConflict] = useState(false),
     [unknown, setUnknown] = useState(false);
-  const [latest, setLatest] = useState<DeliveryWorkspace | null>(null);
+  const [latest, setLatest] = useState<
+    (RequirementDetail & { permissions: DeliveryContext["permissions"] }) | null
+  >(null);
   const intent = useRef<DeliveryIntent>({
-    version: workspace.version,
+    version: requirementVersion ?? workspace.version,
     key: crypto.randomUUID(),
   });
   const pending = useRef<{
@@ -284,7 +294,7 @@ export function DeliveryRequirementChangeEditor({
         command.payload,
       );
       current();
-      if (result.project.id !== workspace.project.id)
+      if (result.project_id !== workspace.project.id)
         throw new Error(tr("scopeChanged"));
       setUnknown(false);
       onUnresolvedChange(false);
@@ -304,11 +314,15 @@ export function DeliveryRequirementChangeEditor({
     setLatest(null);
     try {
       current();
-      const result = await fetchDelivery(workspace.project.id);
+      const [detail, context] = await Promise.all([
+        fetchRequirementDetail(workspace.project.id, requirement.id),
+        fetchDeliveryContext(workspace.project.id),
+      ]);
+      const result = { ...detail, permissions: context.permissions };
       current();
       if (
-        result.project.id !== workspace.project.id ||
-        !result.requirements.some((row) => row.id === requirement.id)
+        result.project_id !== workspace.project.id ||
+        result.requirement.id !== requirement.id
       )
         throw new Error(tr("requirementUnavailable"));
       setLatest(result);
@@ -321,7 +335,7 @@ export function DeliveryRequirementChangeEditor({
   const adoptLatest = () => {
     if (!latest || busy || unknown || !latest.permissions.write) return;
     current();
-    const row = latest.requirements.find((item) => item.id === requirement.id);
+    const row = latest.requirement;
     if (!row) return;
     const next = draftOf(row);
     for (const key of dirty.current) next[key] = draft[key];
@@ -421,23 +435,17 @@ export function DeliveryRequirementChangeEditor({
                   {
                     field: "title",
                     before: pinned.requirement.title,
-                    after: latest.requirements.find(
-                      (row) => row.id === requirement.id,
-                    )?.title,
+                    after: latest.requirement.title,
                   },
                   {
                     field: "description",
                     before: pinned.requirement.description,
-                    after: latest.requirements.find(
-                      (row) => row.id === requirement.id,
-                    )?.description,
+                    after: latest.requirement.description,
                   },
                   {
                     field: "acceptance_criteria",
                     before: pinned.requirement.acceptance_criteria,
-                    after: latest.requirements.find(
-                      (row) => row.id === requirement.id,
-                    )?.acceptance_criteria,
+                    after: latest.requirement.acceptance_criteria,
                   },
                 ]}
               />
@@ -502,9 +510,9 @@ export function DeliveryRequirementChangeEditor({
           </label>
           <label>
             {t("delivery.owner")}
-            <OwnerSelect
+            <ProjectOwnerSelect
+              queryGeneration={workspace.query_generation}
               label={t("delivery.owner")}
-              members={workspace.members}
               value={draft.owner_id}
               disabled={locked}
               onChange={(value) => update("owner_id", value)}
@@ -524,16 +532,12 @@ export function DeliveryRequirementChangeEditor({
           </label>
           <label>
             {t("delivery.milestone")}
-            <Select
-              aria-label={t("delivery.milestone")}
+            <DeliveryReferenceSelect
+              kind="milestone"
+              queryGeneration={workspace.query_generation}
+              label={t("delivery.milestone")}
               value={draft.milestone_id}
-              options={[
-                { value: "", label: tr("none") },
-                ...workspace.milestones.map((row) => ({
-                  value: row.id,
-                  label: row.title,
-                })),
-              ]}
+              options={[{ value: "", label: tr("none") }]}
               disabled={locked}
               onChange={(value) => update("milestone_id", value)}
             />

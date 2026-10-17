@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-17T15:44:45.162404+00:00",
+  "updated_at": "2026-10-17T16:49:37.017353+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-17T15:44:45.162404+00:00",
-    "status": "verified_delivery_collaboration_stage",
+    "updated_at": "2026-10-17T16:49:37.017353+00:00",
+    "status": "bounded_queries_and_exact_workspaces_verified_with_documented_limits",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,67 +15,242 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/delivery-collaboration/",
+    "evidence": ".sop-runtime/delivery-evidence/delivery-query/",
     "verification_status": "passed_with_documented_limits",
-    "next_step": "bounded_project_requirement_task_queries_generic_activity_sources_and_actual_visual_production_validation",
+    "next_step": "bounded_manual_review_and_other_specialized_reads_generic_activity_sources_actual_visual_and_production_validation",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "stage": "delivery_activity_observed_requirement_versions_and_change_impact",
-      "base": "4de57a0",
-      "verified_at": "2026-10-17T15:44:45.162404+00:00",
-      "manager_full_passed": 1374,
+      "stage": "bounded_delivery_queries_exact_workspaces_and_consistent_interactions",
+      "base": "1cec3e6",
+      "verified_at": "2026-10-17T16:49:37.017353+00:00",
+      "manager_full_passed": 1400,
       "manager_full_failed": 0,
-      "manager_full_wall_seconds": 454.657,
-      "manager_full_seconds": 424.85,
-      "manager_initial_passed": 1369,
-      "manager_initial_seconds": 538.05,
-      "manager_initial_source_unchanged": false,
-      "web_passed": 560,
-      "web_files": 109,
-      "web_seconds": 54.29,
-      "web_wall_seconds": 55.888,
-      "sdk_cli_related_passed": 92,
-      "sdk_cli_related_seconds": 2.88,
-      "typescript_build": "passed",
-      "typescript_wall_seconds": 33.238,
-      "production_build": "passed",
-      "production_build_wall_seconds": 73.268,
-      "sdk_cli_full_initial_passed": 190,
-      "sdk_cli_full_initial_failed": 5,
-      "sdk_cli_failed_nodes_environment_rerun_passed": 3,
+      "manager_full_seconds": 392.8,
+      "manager_full_wall_seconds": 426.564,
+      "manager_initial_passed": 1399,
+      "manager_initial_failed": 1,
+      "manager_initial_failure": "old raw adoption test expected workspace; migrated to original Ack plus exact detail and DB uniqueness",
+      "web_passed": 587,
+      "web_files": 114,
+      "web_seconds": 58.14,
+      "web_wall_seconds": 60.509,
+      "web_initial_passed": 565,
+      "web_initial_failed": 9,
+      "sdk_cli_related_passed": 105,
+      "sdk_cli_related_seconds": 2.98,
+      "sdk_cli_full_passed": 206,
+      "sdk_cli_full_failed": 2,
+      "sdk_cli_full_seconds": 43.6,
       "sdk_cli_unchanged_baseline_failures": 2,
-      "independent_incremental_reviews": 1,
-      "independent_new_p1_p2_findings": 0,
-      "independent_sql_invariants_passed": 2,
-      "actual_http_discovered_defects_fixed": [
-        "event_before_fk_links",
-        "omitted_none_not_a_definition_change"
-      ],
-      "original_defect_regressions_passed": 5,
-      "actual_fixed_upper_bound_events": 210,
-      "actual_observed_requirement_versions": 3,
-      "actual_task_transfer_preserves_recorded_association": true,
-      "actual_sdk_methods": 5,
-      "actual_cli_selections": 5,
+      "typescript_build": "passed",
+      "typescript_wall_seconds": 65.664,
+      "production_build": "passed",
+      "production_build_wall_seconds": 34.018,
+      "actual_http_passed": true,
+      "actual_http_production_sources": 17,
+      "actual_sdk_methods": 9,
+      "actual_cli_selections": 9,
+      "actual_selected_reference_ids": 100,
+      "actual_cursor_chars": 280,
       "pure_get_databases": 3,
-      "pure_get_unchanged_tables": 31,
-      "preview_domain_writes": 0,
-      "preview_normal_http_audit_preserved": true,
-      "actual_production_source_files_verified": 14,
-      "final_full_suite_sources_unchanged": true,
-      "python_lint_files": 21,
-      "python_lint_new_files": 9,
-      "python_lint_baseline_diagnostics": 70,
-      "python_lint_current_diagnostics": 69,
+      "pure_get_unchanged_tables": 33,
+      "rebuild_domain_writes": 0,
+      "benchmark_requirements": 10000,
+      "benchmark_tasks": 10000,
+      "benchmark_bounded_trials": 15,
+      "benchmark_loaded_dependency_modules": 70,
+      "benchmark_source_files": 427,
+      "benchmark_summary": {
+        "context": {
+          "seconds": [
+            0.012541999996756203,
+            0.010821999996551313,
+            0.009764599992195144
+          ],
+          "response_bytes": [
+            1658,
+            1658,
+            1658
+          ],
+          "queries_including_fixture_lookups": [
+            5,
+            5,
+            5
+          ],
+          "subject_queries": [
+            3,
+            3,
+            3
+          ],
+          "workspace_decodes": [
+            0,
+            0,
+            0
+          ],
+          "orm_business_rows": [
+            {},
+            {},
+            {}
+          ]
+        },
+        "requirements-first": {
+          "seconds": [
+            0.137074099999154,
+            0.13291689999459777,
+            0.1323378000088269
+          ],
+          "response_bytes": [
+            10378,
+            10378,
+            10378
+          ],
+          "queries_including_fixture_lookups": [
+            7,
+            7,
+            7
+          ],
+          "subject_queries": [
+            5,
+            5,
+            5
+          ],
+          "workspace_decodes": [
+            0,
+            0,
+            0
+          ],
+          "orm_business_rows": [
+            {},
+            {},
+            {}
+          ]
+        },
+        "tasks-recorded-first": {
+          "seconds": [
+            0.026852900002268143,
+            0.02669979998609051,
+            0.021052900003269315
+          ],
+          "response_bytes": [
+            11607,
+            11607,
+            11607
+          ],
+          "queries_including_fixture_lookups": [
+            6,
+            6,
+            6
+          ],
+          "subject_queries": [
+            4,
+            4,
+            4
+          ],
+          "workspace_decodes": [
+            0,
+            0,
+            0
+          ],
+          "orm_business_rows": [
+            {},
+            {},
+            {}
+          ]
+        },
+        "requirement-exact": {
+          "seconds": [
+            0.014335100000607781,
+            0.011397199996281415,
+            0.010601999994833022
+          ],
+          "response_bytes": [
+            2894,
+            2894,
+            2894
+          ],
+          "queries_including_fixture_lookups": [
+            7,
+            7,
+            7
+          ],
+          "subject_queries": [
+            5,
+            5,
+            5
+          ],
+          "workspace_decodes": [
+            0,
+            0,
+            0
+          ],
+          "orm_business_rows": [
+            {
+              "requirements": 1
+            },
+            {
+              "requirements": 1
+            },
+            {
+              "requirements": 1
+            }
+          ]
+        },
+        "task-exact": {
+          "seconds": [
+            0.013222800000221469,
+            0.011612799993599765,
+            0.012490499997511506
+          ],
+          "response_bytes": [
+            3335,
+            3335,
+            3335
+          ],
+          "queries_including_fixture_lookups": [
+            9,
+            9,
+            9
+          ],
+          "subject_queries": [
+            7,
+            7,
+            7
+          ],
+          "workspace_decodes": [
+            0,
+            0,
+            0
+          ],
+          "orm_business_rows": [
+            {
+              "tasks": 1,
+              "requirements": 1
+            },
+            {
+              "tasks": 1,
+              "requirements": 1
+            },
+            {
+              "tasks": 1,
+              "requirements": 1
+            }
+          ]
+        }
+      },
+      "benchmark_sql_functions_not_http_or_production": true,
+      "independent_validated_p2_fixed": 6,
+      "independent_new_unresolved_p1_p2": 0,
+      "python_lint_files": 32,
+      "python_lint_new_files": 12,
+      "python_lint_baseline_diagnostics": 4,
+      "python_lint_current_diagnostics": 3,
       "python_lint_new_or_worsened_diagnostics": 0,
-      "openapi_current_models_matched": 17,
-      "openapi_resolved_refs": 938,
-      "openapi_new_operations": 5,
-      "openapi_unrelated_paths_unchanged": 152,
-      "openapi_unrelated_schemas_unchanged": 374,
-      "readme_python_examples_parse": 9,
+      "openapi_models": 12,
+      "openapi_resolved_refs": 960,
+      "openapi_new_operations": 9,
+      "openapi_command_ack_updated": true,
       "postgresql_ddl_compiled": true,
       "live_postgresql_verified": false,
       "external_model_calls": 0,
@@ -88,28 +263,27 @@
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/delivery-collaboration/commit-receipt.json",
+    "commit_receipt": ".sop-runtime/delivery-evidence/delivery-query/commit-receipt.json",
     "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md",
     "team_identity_design": "docs/DELIVERY_TEAM_IDENTITY_DESIGN.md",
     "team_runtime_design": "docs/DELIVERY_TEAM_RUNTIME_DESIGN.md",
     "last_verified_stage": {
+      "stage": "bounded_delivery_queries_exact_workspaces_and_consistent_interactions",
+      "verified_at": "2026-10-17T16:49:37.017353+00:00",
+      "commit_receipt": ".sop-runtime/delivery-evidence/delivery-query/commit-receipt.json",
+      "manager_passed": 1400,
+      "web_passed": 587,
+      "sdk_cli_related_passed": 105
+    },
+    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
+    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
+    "previous_verified_stage": {
       "stage": "delivery_activity_observed_requirement_versions_and_change_impact",
       "commit_receipt": ".sop-runtime/delivery-evidence/delivery-collaboration/commit-receipt.json",
       "verified_at": "2026-10-17T15:44:45.162404+00:00",
       "manager_passed": 1374,
       "web_passed": 560,
       "sdk_cli_related_passed": 92
-    },
-    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
-    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
-    "previous_verified_stage": {
-      "stage": "execution_runtime_logs_and_controlled_intervention",
-      "commit_receipt": ".sop-runtime/delivery-evidence/delivery-execution-runtime/commit-receipt.json",
-      "verified_at": "2026-10-17T15:01:52.492786+00:00",
-      "manager_passed": 1350,
-      "core_passed": 247,
-      "web_passed": 532,
-      "sdk_cli_related_passed": 86
     },
     "deployment_design": "docs/DELIVERY_DEPLOYMENT_DESIGN.md",
     "deployment_guide": "docs/CONTROLLED_DEPLOYMENT_GUIDE.md",
@@ -118,11 +292,13 @@
     "execution_runtime_design": "docs/DELIVERY_EXECUTION_RUNTIME_DESIGN.md",
     "collaboration_design": "docs/DELIVERY_COLLABORATION_DESIGN.md",
     "current_stage": {
-      "id": "T-delivery-collaboration",
-      "base": "4de57a0",
+      "id": "T-delivery-query",
+      "base": "1cec3e6",
       "status": "verified",
+      "evidence": ".sop-runtime/delivery-evidence/delivery-query/",
       "goal_complete": false
-    }
+    },
+    "query_design": "docs/DELIVERY_QUERY_DESIGN.md"
   },
   "tasks": {
     "completed": [
@@ -550,15 +726,16 @@
       "当前质量与可信CI签名、固定提交/制品、不可变发布候选与真实身份评审；旧手工发布入口退出，完整回归和实际本地producer/API验证。",
       "受控部署全链路：固定环境与候选、真实agentd及配对worker、独立探针和灰度晋级、明确稳定基线回滚、未知副作用只读恢复、唯一Issue及需求回流；退役41个旧假成功入口，完成审查和全量回归",
       "问题真实证据、固定AI/规则诊断与人工唯一需求回流：生产会话、中断恢复、三项独立审查修复及完整回归；实机视觉和生产验证继续。",
-      "安全活动/精确导航、需求真实观测版本与固定变更影响、Sprint有效验收统计；两项真实HTTP缺陷原症状修复、最终回归及客户端验证。"
+      "安全活动/精确导航、需求真实观测版本与固定变更影响、Sprint有效验收统计；两项真实HTTP缺陷原症状修复、最终回归及客户端验证。",
+      "需求/任务/引用SQL分页、精确详情、共享验收计算及全部交付UI读取切换；修复刷新/混代/会话/详情失败与权限问题，完整回归、万级及真实HTTP验证。"
     ],
     "in_progress": [
-      "完整项目/需求/任务定向读取与服务端分页、通用及跨存储实际活动来源统一",
-      "当前390px中英日实机视觉与生产身份/规模验证；原策略限制持续，不绕过"
+      "显式人工评审及其他专属读取的有界化、通用/跨存储统一活动来源",
+      "当前390px中英日实机视觉、生产身份/模型、真实数据库/基础设施与长期复杂规模验证，遵守原策略限制"
     ],
     "blocked": [],
     "pending": [],
-    "current": "完成安全有界交付活动、需求观测版本与固定变更影响预览、Sprint有效验收统计统一；完整目标继续active，阶段验证后全部commit不push。"
+    "current": "有界需求/任务/引用目录、精确工作区与统一回执已验证；全流程目标继续active，生产与实机验证未完成。"
   },
   "metrics": {
     "completion_rate": null,
@@ -566,5 +743,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "完成安全有界交付活动、需求观测版本与固定变更影响预览、Sprint有效验收统计统一；完整目标继续active，阶段验证后全部commit不push。"
+  "current": "有界需求/任务/引用目录、精确工作区与统一回执已验证；全流程目标继续active，生产与实机验证未完成。"
 }
