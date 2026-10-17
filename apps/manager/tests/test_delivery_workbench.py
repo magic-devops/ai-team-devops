@@ -80,6 +80,15 @@ def env():
 
 def command(client, action, payload, key=None, version=None):
     state = client.get("/api/v1/delivery/workspace").json()
+    if action == "requirement.update" and {"title", "description", "acceptance_criteria"} & payload.keys() and not {"requirement_basis", "change_preview_basis"} & payload.keys():
+        requirement = next((row for row in state["requirements"] if row["id"] == payload.get("id")), None)
+        if requirement:
+            preview = client.post(f"/api/v1/delivery/requirements/{requirement['id']}/change-preview", json={
+                "requirement_basis": requirement["basis"],
+                "changes": {field: payload[field] for field in ("title", "description", "acceptance_criteria") if field in payload},
+            })
+            if preview.status_code == 200:
+                payload = {**payload, "requirement_basis": preview.json()["requirement_basis"], "change_preview_basis": preview.json()["preview_basis"]}
     if (
         action == "task.update"
         and {"starts_on", "ends_on", "allocations"} & payload.keys()

@@ -281,6 +281,13 @@ def _core_write(state):
         ).update(row_id for row_id, _, _ in affected)
 
 
+def _capture_requirement_definitions(db, project, identity, actor):
+    if not identity:
+        from .delivery_requirement_history import capture_definitions
+
+        capture_definitions(db, project, actor=actor)
+
+
 def _before_commit(db):
     from .delivery_progress_capture import record_observation
     from .sql_models import Project, User
@@ -336,6 +343,7 @@ def _before_commit(db):
             context = identity_capture_scope(db, tenant_id, project_id) if identity else nullcontext()
             with context:
                 record_observation(db, project, actor=actors.get((tenant_id, project_id), ""))
+                _capture_requirement_definitions(db, project, identity, actors.get((tenant_id, project_id), ""))
     finally:
         db.info.pop(_BUSY, None)
 
@@ -347,7 +355,7 @@ def _after_commit(db):
         values = scopes.pop(nested, set())
         if values:
             scopes.setdefault(nested.parent, set()).update(values)
-        for key in (_RECORDED, _ACTORS, _RESERVED_VERSIONS):
+        for key in (_RECORDED, _ACTORS, _RESERVED_VERSIONS, "delivery_collaboration_actor"):
             groups = db.info.get(key, {})
             group = groups.pop(nested, {})
             if group:
@@ -363,13 +371,13 @@ def _after_commit(db):
 def _after_soft_rollback(db, previous):
     if previous.nested:
         db.info.get(_SCOPES, {}).pop(previous, None)
-        for key in (_RECORDED, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS):
+        for key in (_RECORDED, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS, "delivery_collaboration_actor"):
             db.info.get(key, {}).pop(previous, None)
 
 
 def _after_transaction_end(db, transaction):
     if transaction.parent is None:
-        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS):
+        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS, "delivery_collaboration_actor"):
             db.info.pop(key, None)
 
 

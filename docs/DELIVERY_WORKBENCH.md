@@ -12,7 +12,10 @@
 | 项目资料 | 仓库、文档、设计及其他链接；编辑、分类筛选、可恢复归档；配置权限、版本冲突与来源记录 |
 | 交付待办 | 本人/团队的工作、可评审阶段、当前有效待验收执行及阻塞事项；分类去重、实际日期、准确跳转 |
 | 团队 | 实际人员与Agent/工具登记、稳定身份归属、成员筛选/详情/任务深链；Agent 可明确关联固定版本运行配置，与负责人和设备分别表达 |
-| 需求 | 创建、编辑、验收标准、优先级、负责人、截止日期、里程碑、阻塞原因、问题来源 |
+| 需求 | 创建、编辑、验收标准、优先级、负责人、截止日期、里程碑、阻塞原因、问题来源；固定定义变更预览、影响核对与明确确认 |
+| 需求版本 | 实际事务观察的规范定义、basis、观察序号/时间与流程修订；分页列表和精确版本只读，不补造未采集历史 |
+| 协作活动 | 项目/需求范围先过滤再分页、固定上界、精确详情与安全对象导航；稳定保存当时关联，任务转属不迁移旧历史 |
+| 排期与资源 | 依赖时间线、成员每日容量/日历、显式资源预留、原子批量改期；只有有效验收释放活动负荷，筛选不隐去全项目占用 |
 | 需求辅助 | 明确选择 AI 或规则；采集、评审和原型先预览、编辑、选择后确认；保存生成来源、实际用量与历史，旧建议基准变化后不能直接采用 |
 | 设计 | 产品设计、UED 原型、架构设计、代码变更、测试报告、运维手册的内容与链接登记；按修订保留历史 |
 | 拆解 | 手动/模板/AI 建议共用可编辑计划；逐项选择标题、范围、负责人、优先级、估算、日期、验收关联和依赖；确认当前选中内容后原子创建真实 Task |
@@ -64,7 +67,7 @@
 
 SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_command(body)`；CLI 提供 `sop delivery workspace`、`sop delivery targets`、`sop delivery command --file <json>`，均沿用相同作用域、版本与幂等命令。API 契约位于 `apis/openapi/openapi.yaml`。
 
-新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。Task 使用正式 `acceptance_criteria` 文本列与唯一 `owner_id` 身份列，旧库使用显式 `sop-manager schema verify|apply`，不在正常启动时隐式 ALTER。SQLite 升级已实测，PostgreSQL 仅编译验证；旧 MySQL/OceanBase 自动升级明确拒绝，需单独验证迁移。
+新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`、协作支持表 `delivery_activity_links` 与 `delivery_requirement_versions`。Task 使用正式 `acceptance_criteria` 文本列与唯一 `owner_id` 身份列，旧库使用显式 `sop-manager schema verify|apply`，不在正常启动时隐式 ALTER。SQLite 升级已实测，PostgreSQL 仅编译验证；旧 MySQL/OceanBase 自动升级明确拒绝，需单独验证迁移。
 
 ## 需求拆解与任务计划
 
@@ -84,8 +87,8 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 - 已发布：当前有效修订已进入运维阶段；历史发布记录继续保留。
 - 进度页使用独立持久 SQL 观测，不受最近 200 条交付事件或 12 天界面上限限制。按 UTC 当天最后一次实际观测绘图；缺失日期为 null，未来日期单列，不填零、不前填。业务事务及独立每日采集保存实际事实，回滚不留下成功观测，停机日期不补造。
 - `progress.record` 明确记录当前事实；`baseline.create` 按完整任务集合、内容基准、项目版本和幂等身份冻结不可变计划。正常状态推进不单独算范围变化；新增、移出及计划字段变化保留前后值，已删除任务仍可读历史。只有明确计划日期才绘制固定基线参考线，不当作预测工时。
-- 旧 Sprint 燃尽保留数字 day 及原 stats 兼容字段，实际观测使用已验证完成口径并另列 current_metrics；稀疏日期断线，缺少起止日期时不构造时间曲线。旧理想线仍是当前范围参考，冻结基线请使用新进度页。
-- 人员容量暂为规划值；智能体容量可配置。工具登记不代表完成连接、鉴权或可执行能力探测。
+- Sprint 进度、燃尽 stats、summary 与治理风险共用有效验收六态及 current_metrics；completed、remaining、completion_rate 仅按已验证交付计算，recorded_completed 与 awaiting_review 单独表达，原始 completed 不再作为统计兼容口径。数字 day 图保留实际观测与缺口，缺少起止日期时不构造时间曲线；当前范围参考线与进度页的冻结计划基线分开。
+- 人员、Agent和工具使用显式每日资源预留与日历预算；未知容量不填默认值。人类小时与Agent/工具槽位分别计量；只有有效验收释放活动负荷。工具登记不代表完成连接、鉴权或可执行能力探测。
 
 ## 验证
 
@@ -112,7 +115,7 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 3. 供应商无关的CI签名、实际本地producer及提交/制品关联已实现并完成本地验证，详见 `docs/DELIVERY_RELEASE_DESIGN.md`；生产CI身份/密钥配置、GitHub原生Sigstore证明适配和长期真实流水线验证仍需继续。执行摘要、人工文字与退出码不能替代签名证明或部署结果。
 4. 受控部署、环境授权、分批观察和回滚操作已实现并完成隔离本机与配对执行验证，详见 `DELIVERY_DEPLOYMENT_DESIGN.md`；生产基础设施授权、真实集群灰度与长期运维验证仍待完成。发布登记仍不会隐式触发部署。
 5. 问题证据诊断、AI/规则建议、人工编辑确认及唯一来源需求回流已实现，详见 `DELIVERY_ISSUE_DIAGNOSIS_DESIGN.md`；生产告警接入、自动修复执行及长期诊断质量评估仍待完成。建议不自动修复、解决问题或完成任务。
-6. 更完整的跨存储统一事件流、依赖甘特图、成员日历与工时容量、万级需求的服务端分页。真实每日观测及不可变计划基线已纳入本地实现和本阶段验收；无法补回此前未采集的历史，长期生产覆盖及规模验证仍需持续积累。
+6. 依赖时间线、成员每日容量/日历、显式资源预留、原子批量排期、真实每日观测及不可变计划基线已实现。当前阶段补充安全活动导航和需求观测版本/变更预览；更完整跨存储/通用业务事件统一、万级需求/任务定向读取与服务端分页仍待完善。不能补造此前未采集的历史，长期生产覆盖及规模验证继续积累。
 7. 完整生产压测、MySQL/OceanBase 验证，以及所有主题、浏览器和屏幕尺寸的视觉回归。
 8. 项目组合、四态归档恢复、当前风险定位及归档写保护已实现；保留策略与更深入跨模块整合继续完善。旧业务作用域、会话竞态和需求辅助已修复；工作流结论仍不等于业务任务完成。Temporal worker及其作用域审查合约尚未实现，接口明确返回不可用。
 
@@ -168,7 +171,7 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 - 独立 SQL 观测与业务事务原子保存，覆盖旧任务/需求/同步入口、ORM 与 Core 批量写入。嵌套回滚不留幽灵记录，同日 A→B→A 保留；转移项目/租户时两侧都保存最终实际范围，未知写者不冒领此前审核人。
 - 每日采集独立于 Hermes，分页检查真实活跃租户/项目，多实例 checkpoint 去重。GET 不写历史，停机缺口不补造。项目日期查询在 SQL 选择每日最后事实，coverage 使用聚合；命名范围仅分页投影轻量 scopes 元信息，避免短窗口装载全期快照。
 - 六类任务状态互斥，运行成功、待验收、仅登记完成与已验证完成分别表达；需求验收/发布独立计数。冻结基线使用 approve、完整 task_ids、内容 basis、项目 CAS 与固定重试身份。基线不可覆盖；新计划另建，新增/移出/计划字段变化显示真实前后值，删除任务保留只读快照。
-- 新进度页提供 UTC 日期和范围筛选、燃尽/累计流、同源键盘列表、图表点击、历史详情、当前任务精确导航及返回/刷新定位。旧 Sprint 保留兼容字段，实际历史同源并明确未验证口径，两种图形实现都保留缺口。中文/英文/日文和 390px 布局已实际核验。
+- 新进度页提供 UTC 日期和范围筛选、燃尽/累计流、同源键盘列表、图表点击、历史详情、当前任务精确导航及返回/刷新定位。Sprint 数字 day 图与日期图均使用实际历史并保留缺口；统计口径已在下方协作增量统一为有效验收六态。此进度阶段的中文/英文/日文和 390px 布局已实际核验，不替代后续增量视觉验证。
 - OpenAPI 新增 4 个读取路径（含旧 Sprint 契约）、保留 21 个 delivery 动作，475 个本地引用解析通过；52 个既有路径和 100 个既有 schema 保持语义不变，原 Command 仅追加两动作/条件与说明。SDK/CLI 三个只读入口与固定 Command 同步。
 
 唯一一次独立审查发现三项 Important：变化值未显示、Core 迁移漏记目标项目、短窗口加载整个历史，均定点修复。root 原复现脚本确认目标项目新观测包含迁入任务，1 日查询的 53 份完整快照从全部装载降为 1 份，范围外装载 0；更大 project/命名范围/Sprint 测试为 455/602/251→各 1。没有进行第二轮泛扫。
@@ -392,3 +395,26 @@ Manager完整1212项通过（325.18秒），Web完整437项/83文件通过（98.
 证据位于 `.sop-runtime/delivery-evidence/delivery-execution-runtime/`；临时目录只使用 `.cache/delivery-execution-runtime/`，源码、重要文件及测试私钥先清点散列，真实临时凭据不保留内容。验证后的新agentd保存在既有 `.sop-runtime/delivery-agentd.exe`，旧二进制已留档。全部阶段commit及clean以该目录commit-receipt.json为准，不push。
 
 限制仍明确保留：390px三语实机视觉受先前浏览器协议策略限制，组件检查不代替实际渲染；配对审批未实现；本机未执行POSIX进程组停止，既有5个Go POSIX夹具在Windows失败；Core完整回归以进程局部PYTHONTZPATH使用现有随附IANA时区数据，生产依赖安装仍需验证。生产账户、基础设施、数据库与规模验证继续推进，完整目标未标记完成。
+
+## 协作活动、需求版本与变更影响增量（2026-10-17）
+
+设计见 [交付协作设计](DELIVERY_COLLABORATION_DESIGN.md)，操作见 [协作活动与需求变更](DELIVERY_COLLABORATION_GUIDE.md)。沿用唯一 Project、Requirement、Task、Sprint、DeliveryWorkspace 及已有进度事实，不重新实现已完成的容量日历、资源预留或依赖排期。
+
+- 项目概览和需求活动共享安全活动服务：服务端先按租户、项目、需求当时关联及动作过滤，再按固定上界游标分页；精确事件详情仅输出白名单事实。任务转属不迁移旧活动，批量排期在多个需求中仍定位同一事件；旧事件未记录当时关联时明确未知，不按当前归属补造历史。打开任务、执行、评审、发布、部署或问题前重新检查当前对象及访问权限，受限运行信息不借历史泄漏。
+- 需求定义由真实 ORM/Core 事务保存观察版本，规范标题、描述、验收条件及 basis；观察序号、观察时间与流程修订分别表达，A→B→A 保留实际变化，回滚不留下幽灵版本。历史列表和精确版本只读；缺失早期内容不补造。通用需求写保存内容历史，不伪装成交付命令事件，独立外部 journal 与所有通用入口的统一活动尚未完成。
+- 编辑需求先固定候选并预览字段前后值、直接工作及下游依赖影响；提交重验 requirement basis、preview basis、项目 CAS 和原幂等身份。定义变化沿用已有永久失效门禁，管理字段变化不冒称全部交付失效。409 保留草稿、读取最新后明确采用并重新预览；未知结果使用原请求身份恢复。不会自动改期、派发、重跑或验收。
+- 项目/需求活动、事件详情、变更编辑预览和需求历史复用现有紧凑布局、抽屉、主题及中英日文案，保留精确 URL、当前对象/当时事实区分、返回来源、加载失败和只读状态。Sprint progress、burndown stats、summary 与治理风险统一有效验收六态，登记完成和待验收不计为已验证完成，空迭代与当前范围维持同一口径。
+
+第四次实际公开 HTTP 回路通过，见 `actual-http-proof-4.json`（汇总 `actual-http-proof.json`）：210 条活动验证先过滤后分页及固定上界，新活动不插入旧页；任务转属后历史关联保持；定义预览、提交、原请求重放及通用写产生 3 份真实观察版本，SDK 5 个方法和 CLI 5 类选择直接读取真实服务。纯 GET 前后 Manager/runtime/checkpoint 三库 31 表散列一致；POST 预览仅正常 `audit_logs` 改变，业务/观测/运行不变。原已验收任务仍 verified；外部模型调用 0。回路覆盖的 **14 个生产文件**前后散列一致，服务已确认停止。
+
+root 在实际 HTTP 中发现并修复两个缺陷：首次活动关联与事件的外键写入顺序，以及 description-only 修改时缺省 null 被错误投影为字段变化；原症状红绿证据和最终 HTTP 均保留。另一次 CLI 项目/业务作用域工具失败单独留档，不当作第三个产品缺陷。唯一独立增量审查新增 P1/P2 为 0，独立 SQL 不变量验证 2 项通过（2.83 秒）；此结论不替代最终回归。
+
+已完成验证：Web 完整 **560 项/109 文件**（54.29 秒，wall 55.888 秒），TypeScript **33.238 秒**、Vite 生产构建 wall **73.268 秒**通过；SDK/CLI 相关 **92 项**（2.88 秒）通过。完整客户端初轮为 **190 通过/5 失败**，仅原 5 项在进程内 UTF-8、160 列及已有 IANA 数据下重跑 **3 通过/2 失败**；剩 Windows IPC 硬断言 Unix 与 Pages 旧 `--assigned-to` 源码契约均与 HEAD 原样一致，不宣称完整 SDK/CLI 通过。既有弃用及大包提示继续留档。
+
+首轮 Manager 完整 1369 项通过（538.05 秒，wall 574.267 秒），但运行期间源码漂移，不能作为最终源码验证。最终冻结源码 Manager 完整 **1374 项通过/0失败**（424.85秒，wall 454.657秒）；`verification-manager-2.json` 记录退出0及运行前后源码散列一致。
+
+Ruff 对 21 个变更 Python 文件按原完整规则与 HEAD 对比，原 70 条诊断降为 69 条，新增/变差 0。严格 OpenAPI 17 个当前模型、938 引用、5 操作验证，152 个未涉路径和374个未涉 schema 语义不变，9 个文档 Python 示例可解析；两个新协作支持表的 PostgreSQL DDL 仅编译通过，未验证 live PostgreSQL。
+
+证据根 `.sop-runtime/delivery-evidence/delivery-collaboration/` 保存真实 HTTP/纯读、数据库备份、源码冻结、客户端基线、契约和验证回执；唯一审查及原始回归保留后再按任务边界清理 scratch。阶段提交与清洁状态以该目录的 `commit-receipt.json` 为准，不推送，不把尚未生成的回执当作已提交。
+
+完整目标继续 active，`production_integration_complete=false`。当前 390px 中英日实机视觉仍未复核，遵守原浏览器协议限制；交互测试、真实 HTTP、类型和构建不代替实机效果。万级需求/任务仍由父工作台读取完整 workspace，定向读取、服务端列表分页、全量基线摘要与长期规模验证留待下一阶段；活动分页不能冒称已完成这些规模能力。生产身份/模型、真实数据库与基础设施、跨存储统一活动及长期运维验证仍须按实际授权推进。

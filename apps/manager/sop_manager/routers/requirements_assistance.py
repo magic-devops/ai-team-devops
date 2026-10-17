@@ -465,6 +465,10 @@ def _apply_selected(db, project, user, data, action, body, requirement, origin, 
         changes = {"id": requirement.id}
         if body.acceptance_criteria is not None:
             changes["acceptance_criteria"] = body.acceptance_criteria
+            from .delivery_requirement_history import change_facts
+
+            basis, preview_basis, _, _ = change_facts(db, project, data, requirement, {"acceptance_criteria": body.acceptance_criteria})
+            changes.update(requirement_basis=basis, change_preview_basis=preview_basis)
         _, _ = apply_action(
             db, project, user, data, "requirement.update", RequirementEdit.model_validate(changes)
         )
@@ -578,8 +582,7 @@ def adopt(db, project, user, action, body, requirement_id=""):
         workspace.version = body.expected_version + 1
         db.flush()
         summary = materialize(db, project, data, user)["summary"]
-        db.add(
-            DeliveryEvent(
+        event = DeliveryEvent(
                 id=identifier("event"),
                 tenant_id=project.tenant_id,
                 project_id=project.id,
@@ -594,7 +597,9 @@ def adopt(db, project, user, action, body, requirement_id=""):
                     "input": body.model_dump(mode="json"),
                 },
             )
-        )
+        from .delivery_activity import record_activity
+
+        record_activity(db, project, user, data, event)
         # Source receipt links every adoption without trusting any client-supplied model name.
         origin.data = {
             **origin.data,

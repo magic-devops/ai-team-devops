@@ -82,7 +82,16 @@ import { preserveProgressRoute } from "@/lib/deliveryProgress";
 import { preserveSchedulingRoute } from "@/lib/deliveryScheduling";
 import { DeliveryScheduling } from "./DeliveryScheduling";
 import { DeliveryTaskDetail, TaskDetailContent } from "./DeliveryTaskDetail";
-import { DeliveryActivityAction } from "./DeliveryActivityAction";
+import {
+  DeliveryActivityFeed,
+  DeliveryActivityDetail,
+} from "./DeliveryActivityFeed";
+import { DeliveryRequirementChangeEditor } from "./DeliveryRequirementChangeEditor";
+import { DeliveryRequirementHistory } from "./DeliveryRequirementHistory";
+import {
+  preserveCollaborationRoute,
+  safeCollaborationReturn,
+} from "@/lib/deliveryCollaboration";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { ProjectContextGate } from "@/components/ProjectContextGate";
@@ -243,6 +252,8 @@ function ProjectDelivery() {
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("");
   const [owner, setOwner] = useState("");
+  const [changeRequirement, setChangeRequirement] =
+    useState<DeliveryRequirement | null>(null);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
   const [planRequirement, setPlanRequirement] =
     useState<DeliveryRequirement | null>(null);
@@ -293,6 +304,8 @@ function ProjectDelivery() {
     },
     onSuccess: (data) => {
       qc.setQueryData(queryKey, data);
+      for (const key of ["delivery-activity", "delivery-requirement-history"])
+        void qc.invalidateQueries({ queryKey: [key, projectId, sessionId] });
       void qc.invalidateQueries({
         queryKey: ["delivery-inbox", projectId, sessionId],
       });
@@ -350,7 +363,7 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash)}`,
+      `${location.pathname}${location.search}${preserveCollaborationRoute(["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash), location.hash)}`,
     );
     if (
       ["progress", "team", "timeline", "quality", "releases"].includes(nextView)
@@ -386,6 +399,8 @@ function ProjectDelivery() {
   });
   const saveWorkspace = (updated: DeliveryWorkspace) => {
     qc.setQueryData(queryKey, updated);
+    for (const key of ["delivery-activity", "delivery-requirement-history"])
+      void qc.invalidateQueries({ queryKey: [key, projectId, sessionId] });
     void qc.invalidateQueries({
       queryKey: ["delivery-inbox", projectId, sessionId],
     });
@@ -441,6 +456,22 @@ function ProjectDelivery() {
   );
   const selected = data?.requirements.find((r) => r.id === selectedId);
   const releaseReturn = releaseReturnFromHash(location.hash);
+  const collaborationReturn = safeCollaborationReturn(
+    new URLSearchParams(location.hash.split("?")[1]).get(
+      "collaboration_return",
+    ) || "",
+    projectId,
+  );
+  const collaborationNavigate = (href: string) => {
+    if (!executionExit.canNavigate()) return;
+    const [path, query] = href.split("?");
+    if (path !== "#/dev-flow") return;
+    const params = new URLSearchParams(query);
+    if (params.has("project_id") && params.get("project_id") !== projectId)
+      return;
+    params.set("project_id", projectId);
+    location.hash = `${path}?${params}`;
+  };
   const date = (value?: string | null) =>
     value
       ? new Intl.DateTimeFormat(i18n.language, {
@@ -545,9 +576,13 @@ function ProjectDelivery() {
       },
     });
   };
-  const reqEditor = (r?: DeliveryRequirement) =>
+  const reqEditor = (r?: DeliveryRequirement) => {
+    if (r) {
+      setChangeRequirement(structuredClone(r));
+      return;
+    }
     edit(
-      r ? "edit" : "create",
+      "create",
       [
         field("title", "titleField", { required: true }),
         field("description", "description", { type: "area" }),
@@ -569,30 +604,20 @@ function ProjectDelivery() {
             })),
           ],
         }),
-        ...(r
-          ? [
-              field("blocked_reason", "blockedReason", {
-                type: "area",
-                max: 2000,
-              }),
-            ]
-          : []),
       ],
-      r
-        ? { ...r, ...r.flow, criteria: r.acceptance_criteria.join("\n") }
-        : { priority: "P1", owner_id: "", milestone_id: "" },
+      { priority: "P1", owner_id: "", milestone_id: "" },
       async (v) => {
         const { criteria, ...rest } = v;
-        await commit(r ? "requirement.update" : "requirement.create", {
+        await commit("requirement.create", {
           ...rest,
-          ...(r ? { id: r.id } : {}),
           description: rest.description || "",
           due_on: dateValue(v.due_on),
           acceptance_criteria: lines(criteria),
         });
       },
-      r ? "changeHint" : undefined,
+      undefined,
     );
+  };
   const projectEditor = () =>
     edit(
       "project",
@@ -764,41 +789,6 @@ function ProjectDelivery() {
       {r.flow.closed ? tr("closed") : tr(`stages.${r.flow.stage}`)}
     </Tag>
   );
-  const activityView = (requirement?: DeliveryRequirement) => {
-    const taskIds = new Set(
-      data.tasks
-        .filter((task) => task.req_id === requirement?.id)
-        .map((task) => task.id),
-    );
-    const events = data.activity.filter(
-      (e) =>
-        !requirement ||
-        e.resource_id === requirement.id ||
-        e.data.input.requirement_id === requirement.id ||
-        taskIds.has(e.resource_id),
-    );
-    return events.length ? (
-      <ol className="delivery-activity">
-        {events.map((e) => (
-          <li key={e.id}>
-            <span className="delivery-activity-dot" />
-            <div>
-              <DeliveryActivityAction action={e.action} />
-              <small>
-                {e.actor} ·{" "}
-                {new Date(e.created_at).toLocaleString(i18n.language)}
-              </small>
-            </div>
-          </li>
-        ))}
-      </ol>
-    ) : (
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={tr("noActivity")}
-      />
-    );
-  };
   const empty = (
     <Empty
       image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1012,6 +1002,11 @@ function ProjectDelivery() {
           )}
         </Button>
       )}
+      {collaborationReturn && (
+        <Button onClick={() => collaborationNavigate(collaborationReturn)}>
+          {t("deliveryCollaboration.backActivity")}
+        </Button>
+      )}
       <Tabs
         className="delivery-tabs"
         activeKey={view}
@@ -1116,7 +1111,11 @@ function ProjectDelivery() {
             />
             <section className="delivery-panel">
               <h2>{tr("activity")}</h2>
-              {activityView()}
+              <DeliveryActivityFeed
+                projectId={projectId}
+                sessionId={sessionId}
+                onNavigate={collaborationNavigate}
+              />
             </section>
           </div>
         </>
@@ -1272,7 +1271,11 @@ function ProjectDelivery() {
         maskClosable={!executionExit.pending}
         keyboard={!executionExit.pending}
         afterOpenChange={taskInspector.afterOpenChange}
-        onClose={() => navigate(view, "", "details", "")}
+        onClose={() =>
+          collaborationReturn
+            ? collaborationNavigate(collaborationReturn)
+            : navigate(view, "", "details", "")
+        }
         title={
           data.tasks.find((task) => task.id === taskInspector.displayId)
             ?.title || t("deliveryManualReview.unavailable")
@@ -1307,6 +1310,10 @@ function ProjectDelivery() {
         onCommand={(action, payload) => commit(action, payload, false)}
         onClose={() => {
           if (!executionExit.canNavigate()) return;
+          if (collaborationReturn) {
+            collaborationNavigate(collaborationReturn);
+            return;
+          }
           const params = new URLSearchParams(location.hash.split("?")[1]);
           params.delete("execution_id");
           params.delete("execution_node");
@@ -1322,7 +1329,8 @@ function ProjectDelivery() {
         keyboard={!executionExit.pending}
         onClose={() => {
           if (executionExit.canNavigate()) {
-            if (releaseReturn) location.hash = releaseReturn;
+            if (collaborationReturn) collaborationNavigate(collaborationReturn);
+            else if (releaseReturn) location.hash = releaseReturn;
             else navigate(view, "");
           }
         }}
@@ -1652,6 +1660,19 @@ function ProjectDelivery() {
                   ),
                 },
                 {
+                  key: "history",
+                  label: t("deliveryCollaboration.historyTab"),
+                  children: (
+                    <DeliveryRequirementHistory
+                      key={selected.id}
+                      projectId={projectId}
+                      sessionId={sessionId}
+                      requirement={selected}
+                      onNavigate={collaborationNavigate}
+                    />
+                  ),
+                },
+                {
                   key: "activity",
                   label: tr("activity"),
                   children: (
@@ -1671,7 +1692,13 @@ function ProjectDelivery() {
                           </small>
                         </article>
                       ))}
-                      {activityView(selected)}
+                      <DeliveryActivityFeed
+                        key={selected.id}
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        requirementId={selected.id}
+                        onNavigate={collaborationNavigate}
+                      />
                     </>
                   ),
                 },
@@ -1680,6 +1707,27 @@ function ProjectDelivery() {
           </>
         )}
       </Drawer>
+      <DeliveryActivityDetail
+        projectId={projectId}
+        sessionId={sessionId}
+        onNavigate={collaborationNavigate}
+      />
+      {changeRequirement && (
+        <DeliveryRequirementChangeEditor
+          key={changeRequirement.id}
+          workspace={data}
+          requirement={changeRequirement}
+          sessionId={sessionId}
+          onClose={() => setChangeRequirement(null)}
+          onSaved={(updated) => {
+            if (originScope.current === sessionSnapshot())
+              saveWorkspace(updated);
+          }}
+          onUnresolvedChange={(value) =>
+            executionPending(`requirement:${changeRequirement.id}`, value)
+          }
+        />
+      )}
       {editor && (
         <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
       )}

@@ -446,7 +446,7 @@ def apply_plan(db, project, user, data, requirement, body, roster):
         _create_task(db, project, data, requirement, draft, roster, task_id=ids[key])
         details = data.setdefault("task_details", {})[ids[key]]
         details.update(source, key=key, depends_on=[ids.get(ref, ref) for ref in draft.depends_on])
-    return ids[keys[-1]], None
+    return ids[keys[-1]], None, {"task_ids": list(ids.values())}
 
 
 def dependency_status(db, project, data):

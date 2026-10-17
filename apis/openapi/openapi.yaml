@@ -5518,6 +5518,301 @@ paths:
           description: Execution context changed; review the exact current facts
       description: Preview one explicit control with its reason, current business version, exact run/attempt/approval and semantic
         basis. This never executes a control. Commit the unchanged payload through delivery commands with a fixed request key.
+  /api/v1/delivery/activity:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Activity
+      operationId: deliveryActivity
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: scope
+        in: query
+        required: false
+        schema:
+          enum:
+          - project
+          - requirement
+          type: string
+          default: project
+          title: Scope
+      - name: scope_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Scope Id
+      - name: action
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Action
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record was not found
+      description: Read a bounded recorded project or requirement activity page. Requirement associations are frozen at recording
+        time. Cursor binds tenant/project/filter and a fixed upper bound. Missing historical associations stay unknown; technical
+        logs are read separately.
+  /api/v1/delivery/activity/{event_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Activity Detail
+      operationId: deliveryActivityEvent
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record was not found
+      description: Read one exact recorded event and its currently authorized source targets. Deleted and restricted targets
+        remain explicit; raw event input/results are never returned.
+  /api/v1/delivery/requirements/{requirement_id}/history:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement History
+      operationId: deliveryRequirementHistory
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementHistory'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record was not found
+      description: Read bounded actual canonical definition observations. Observation number/time differ from workflow revision
+        and original edit time. Earlier uncaptured content remains unknown; this read never backfills it.
+  /api/v1/delivery/requirements/{requirement_id}/history/{version_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Requirement Version
+      operationId: deliveryRequirementVersion
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: version_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Version Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementVersionDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record was not found
+      description: Read one exact immutable observed requirement definition in the current tenant/project scope, including after
+        canonical deletion. This does not restore or adopt it.
+  /api/v1/delivery/requirements/{requirement_id}/change-preview:
+    post:
+      tags:
+      - delivery
+      summary: Delivery Requirement Change Preview
+      operationId: deliveryRequirementChangePreview
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: requirement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Requirement Id
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementChangePreviewInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequirementChangePreview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          description: Explicit project context required
+        '401':
+          description: Active authenticated identity required
+        '403':
+          description: Current project or operation permission denied
+        '404':
+          description: Exact scoped record was not found
+        '409':
+          description: Requirement, affected work or project status changed; explicitly read and adopt current facts
+      description: Pure preview of exact title/description/acceptance changes pinned to current requirement_basis. Returns differences,
+        direct and dependent work, permitted runtime targets, preview_basis and project version. It never writes history, reschedules,
+        dispatches, runs a model or accepts work.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -10283,6 +10578,16 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/ExecutionRuntimeControl'
+      - if:
+          properties:
+            action:
+              const: requirement.update
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/RequirementEdit'
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
         Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
         and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay. Issue
@@ -10291,7 +10596,9 @@ components:
         cancellation/rejection; it does not stop a remote provider. Runtime controls require an explicit preview, exact run/attempt,
         semantic basis and nonempty reason. Only-id cancellation is invalid. Requested/unknown physical stops block rerun, handoff
         and archive. Receipt replay retains its original attempt; queued recovery requires an explicit new preview. Technical
-        logs never prove task acceptance.
+        logs never prove task acceptance. Actual title/description/acceptance_criteria changes require requirement_basis and change_preview_basis
+        from the reviewed exact proposal. Project CAS and fixed command idempotency still apply; metadata-only edits do not invalidate
+        all acceptance.
     TaskEdit:
       additionalProperties: false
       properties:
@@ -19797,4 +20104,601 @@ components:
       - reasons
       - payload
       title: ExecutionControlPreviewResponse
+      type: object
+    ActivityActor:
+      additionalProperties: false
+      properties:
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      title: ActivityActor
+      type: object
+    ActivityItem:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        at:
+          title: At
+          type: string
+        action:
+          title: Action
+          type: string
+        actor:
+          $ref: '#/components/schemas/ActivityActor'
+        association:
+          enum:
+          - recorded
+          - unknown
+          title: Association
+          type: string
+        requirement_ids:
+          items:
+            type: string
+          title: Requirement Ids
+          type: array
+        target:
+          anyOf:
+          - $ref: '#/components/schemas/ActivityTarget'
+          - type: 'null'
+        related_targets:
+          items:
+            $ref: '#/components/schemas/ActivityTarget'
+          title: Related Targets
+          type: array
+        changes:
+          items:
+            $ref: '#/components/schemas/FieldChange'
+          title: Changes
+          type: array
+      required:
+      - id
+      - at
+      - action
+      - actor
+      - association
+      - requirement_ids
+      - target
+      - related_targets
+      - changes
+      title: ActivityItem
+      type: object
+    ActivityTarget:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+          - project
+          - requirement
+          - task
+          - execution
+          - issue
+          - release_candidate
+          - deployment
+          title: Kind
+          type: string
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        available:
+          title: Available
+          type: boolean
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      required:
+      - kind
+      - id
+      - label
+      - available
+      - reason
+      title: ActivityTarget
+      type: object
+    FieldChange:
+      additionalProperties: false
+      properties:
+        field:
+          enum:
+          - title
+          - description
+          - acceptance_criteria
+          title: Field
+          type: string
+        before:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+          title: Before
+        after:
+          anyOf:
+          - type: string
+          - items:
+              type: string
+            type: array
+          title: After
+      required:
+      - field
+      - before
+      - after
+      title: FieldChange
+      type: object
+    ActivityDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        item:
+          $ref: '#/components/schemas/ActivityItem'
+      required:
+      - project_id
+      - item
+      title: ActivityDetail
+      type: object
+    ActivityPage:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        as_of:
+          title: As Of
+          type: string
+        scope:
+          enum:
+          - project
+          - requirement
+          title: Scope
+          type: string
+        scope_id:
+          title: Scope Id
+          type: string
+        items:
+          items:
+            $ref: '#/components/schemas/ActivityItem'
+          title: Items
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      required:
+      - project_id
+      - as_of
+      - scope
+      - scope_id
+      - items
+      - next_cursor
+      title: ActivityPage
+      type: object
+    ChangeImpact:
+      additionalProperties: false
+      properties:
+        task_ids:
+          items:
+            type: string
+          title: Task Ids
+          type: array
+        dependent_task_ids:
+          items:
+            type: string
+          title: Dependent Task Ids
+          type: array
+        execution_ids:
+          items:
+            type: string
+          title: Execution Ids
+          type: array
+        release_candidate_ids:
+          items:
+            type: string
+          title: Release Candidate Ids
+          type: array
+        deployment_ids:
+          items:
+            type: string
+          title: Deployment Ids
+          type: array
+        invalidates_current_acceptance:
+          title: Invalidates Current Acceptance
+          type: boolean
+        restricted_execution_count:
+          default: 0
+          title: Restricted Execution Count
+          type: integer
+        restricted_deployment_count:
+          default: 0
+          title: Restricted Deployment Count
+          type: integer
+      required:
+      - task_ids
+      - dependent_task_ids
+      - execution_ids
+      - release_candidate_ids
+      - deployment_ids
+      - invalidates_current_acceptance
+      title: ChangeImpact
+      type: object
+    CollaborationReason:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+      required:
+      - code
+      - message
+      title: CollaborationReason
+      type: object
+    DefinitionChanges:
+      additionalProperties: false
+      properties:
+        title:
+          anyOf:
+          - maxLength: 256
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Title
+        description:
+          anyOf:
+          - maxLength: 20000
+            type: string
+          - type: 'null'
+          default: null
+          title: Description
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
+      title: DefinitionChanges
+      type: object
+    RequirementChangePreview:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        requirement_basis:
+          title: Requirement Basis
+          type: string
+        preview_basis:
+          title: Preview Basis
+          type: string
+        changes:
+          items:
+            $ref: '#/components/schemas/FieldChange'
+          title: Changes
+          type: array
+        impact:
+          $ref: '#/components/schemas/ChangeImpact'
+        allowed:
+          title: Allowed
+          type: boolean
+        reasons:
+          items:
+            $ref: '#/components/schemas/CollaborationReason'
+          title: Reasons
+          type: array
+      required:
+      - project_id
+      - requirement_id
+      - version
+      - requirement_basis
+      - preview_basis
+      - changes
+      - impact
+      - allowed
+      - reasons
+      title: RequirementChangePreview
+      type: object
+    RequirementChangePreviewInput:
+      additionalProperties: false
+      properties:
+        requirement_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Requirement Basis
+          type: string
+        changes:
+          $ref: '#/components/schemas/DefinitionChanges'
+      required:
+      - requirement_basis
+      - changes
+      title: RequirementChangePreviewInput
+      type: object
+    RequirementDefinition:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        description:
+          title: Description
+          type: string
+        acceptance_criteria:
+          items:
+            type: string
+          title: Acceptance Criteria
+          type: array
+      required:
+      - id
+      - title
+      - description
+      - acceptance_criteria
+      title: RequirementDefinition
+      type: object
+    RequirementVersion:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        number:
+          title: Number
+          type: integer
+        basis:
+          title: Basis
+          type: string
+        definition:
+          $ref: '#/components/schemas/RequirementDefinition'
+        at:
+          title: At
+          type: string
+        actor:
+          $ref: '#/components/schemas/ActivityActor'
+        source:
+          enum:
+          - delivery_command
+          - sql_observed
+          title: Source
+          type: string
+        flow_revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Flow Revision
+      required:
+      - id
+      - number
+      - basis
+      - definition
+      - at
+      - actor
+      - source
+      - flow_revision
+      title: RequirementVersion
+      type: object
+    RequirementHistory:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        current_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Current Basis
+        items:
+          items:
+            $ref: '#/components/schemas/RequirementVersion'
+          title: Items
+          type: array
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        earlier_history_unknown:
+          default: true
+          title: Earlier History Unknown
+          type: boolean
+        current_links:
+          anyOf:
+          - $ref: '#/components/schemas/RequirementLinks'
+          - type: 'null'
+          default: null
+      required:
+      - project_id
+      - requirement_id
+      - current_basis
+      - items
+      - next_cursor
+      title: RequirementHistory
+      type: object
+    RequirementVersionDetail:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        requirement_id:
+          title: Requirement Id
+          type: string
+        item:
+          $ref: '#/components/schemas/RequirementVersion'
+      required:
+      - project_id
+      - requirement_id
+      - item
+      title: RequirementVersionDetail
+      type: object
+    RequirementEdit:
+      additionalProperties: false
+      properties:
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        title:
+          anyOf:
+          - maxLength: 256
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Title
+        description:
+          anyOf:
+          - maxLength: 20000
+            type: string
+          - type: 'null'
+          default: null
+          title: Description
+        priority:
+          anyOf:
+          - enum:
+            - P0
+            - P1
+            - P2
+            - P3
+            type: string
+          - type: 'null'
+          default: null
+          title: Priority
+        acceptance_criteria:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
+        owner_id:
+          anyOf:
+          - maxLength: 100
+            type: string
+          - type: 'null'
+          default: null
+          title: Owner Id
+        due_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Due On
+        milestone_id:
+          anyOf:
+          - maxLength: 100
+            type: string
+          - type: 'null'
+          default: null
+          title: Milestone Id
+        blocked_reason:
+          anyOf:
+          - maxLength: 2000
+            type: string
+          - type: 'null'
+          default: null
+          title: Blocked Reason
+        requirement_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Requirement Basis
+        change_preview_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Change Preview Basis
+      required:
+      - id
+      title: RequirementEdit
+      type: object
+    RequirementLinks:
+      additionalProperties: false
+      properties:
+        requirement_basis:
+          title: Requirement Basis
+          type: string
+        task_ids:
+          items:
+            type: string
+          title: Task Ids
+          type: array
+        dependent_task_ids:
+          items:
+            type: string
+          title: Dependent Task Ids
+          type: array
+        execution_ids:
+          items:
+            type: string
+          title: Execution Ids
+          type: array
+        release_candidate_ids:
+          items:
+            type: string
+          title: Release Candidate Ids
+          type: array
+        deployment_ids:
+          items:
+            type: string
+          title: Deployment Ids
+          type: array
+        restricted_execution_count:
+          title: Restricted Execution Count
+          type: integer
+        restricted_deployment_count:
+          title: Restricted Deployment Count
+          type: integer
+      required:
+      - requirement_basis
+      - task_ids
+      - dependent_task_ids
+      - execution_ids
+      - release_candidate_ids
+      - deployment_ids
+      - restricted_execution_count
+      - restricted_deployment_count
+      title: RequirementLinks
       type: object

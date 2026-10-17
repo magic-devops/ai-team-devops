@@ -7,6 +7,7 @@ import enUS from "./i18n/en-US.json";
 import jaJP from "./i18n/ja-JP.json";
 import { collaborationTranslations } from "./i18n/collaboration";
 import { deliveryTranslations } from "./i18n/delivery";
+import { deliveryCollaborationTranslations } from "./i18n/deliveryCollaboration";
 import { assistanceTranslations } from "./i18n/assistance";
 import { projectInboxTranslations } from "./i18n/delivery-project-inbox";
 import { progressTranslations } from "./i18n/delivery-progress";
@@ -68,6 +69,7 @@ i18n
           },
           collaboration: collaborationTranslations["zh-CN"],
           delivery: deliveryTranslations["zh-CN"],
+          deliveryCollaboration: deliveryCollaborationTranslations["zh-CN"],
           assistance: assistanceTranslations["zh-CN"],
           deliveryProject: projectInboxTranslations["zh-CN"],
           deliveryProgress: progressTranslations["zh-CN"],
@@ -102,6 +104,7 @@ i18n
           },
           collaboration: collaborationTranslations["en-US"],
           delivery: deliveryTranslations["en-US"],
+          deliveryCollaboration: deliveryCollaborationTranslations["en-US"],
           assistance: assistanceTranslations["en-US"],
           deliveryProject: projectInboxTranslations["en-US"],
           deliveryProgress: progressTranslations["en-US"],
@@ -136,6 +139,7 @@ i18n
           },
           collaboration: collaborationTranslations["ja-JP"],
           delivery: deliveryTranslations["ja-JP"],
+          deliveryCollaboration: deliveryCollaborationTranslations["ja-JP"],
           assistance: assistanceTranslations["ja-JP"],
           deliveryProject: projectInboxTranslations["ja-JP"],
           deliveryProgress: progressTranslations["ja-JP"],

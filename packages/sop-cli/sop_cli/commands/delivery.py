@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：workspace / inbox / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 
@@ -30,6 +30,79 @@ class ProjectState(str, Enum):
 class OutputStream(str, Enum):
     stdout = "stdout"
     stderr = "stderr"
+
+
+class ActivityScope(str, Enum):
+    project = "project"
+    requirement = "requirement"
+
+
+@app.command("activity")
+def activity(
+    scope: Annotated[ActivityScope, typer.Option("--scope")] = ActivityScope.project,
+    scope_id: Annotated[str, typer.Option("--scope-id")] = "",
+    event_id: Annotated[str, typer.Option("--event")] = "",
+    action: Annotated[str, typer.Option("--action")] = "",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+):
+    """分页读取已记录活动，或按精确事件ID查看当前有权访问的来源。"""
+    try:
+        if event_id and (scope != ActivityScope.project or scope_id or cursor or action or limit != 20):
+            raise ValueError("--event 不能同时使用范围或分页参数")
+        if not event_id and (scope == ActivityScope.requirement) != bool(scope_id):
+            raise ValueError("requirement 范围需要 --scope-id；project 范围不使用该参数")
+        with get_client() as client:
+            options = {"scope": scope.value, "scope_id": scope_id, "cursor": cursor, "limit": limit}
+            if action:
+                options["action"] = action
+            result = client.delivery_activity_event(event_id) if event_id else client.delivery_activity(**options)
+            console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("requirement-history")
+def requirement_history(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    version_id: Annotated[str, typer.Option("--version")] = "",
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+):
+    """读取真实观测的需求内容历史，或精确只读版本；不补造早期内容。"""
+    try:
+        if version_id and (cursor or limit != 20):
+            raise ValueError("--version 不能同时使用分页参数")
+        with get_client() as client:
+            result = client.delivery_requirement_version(requirement_id, version_id) if version_id else client.delivery_requirement_history(
+                requirement_id, cursor=cursor, limit=limit,
+            )
+            console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("requirement-change-preview")
+def requirement_change_preview(
+    requirement_id: Annotated[str, typer.Option("--id")],
+    file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=False, readable=True)],
+):
+    """核对固定需求内容变更及影响；不会保存、重派或重新验收。"""
+    try:
+        body = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(body, dict) or set(body) != {"requirement_basis", "changes"}:
+            raise ValueError("需要明确 requirement_basis 和 changes")
+        if not isinstance(body["requirement_basis"], str) or not isinstance(body["changes"], dict) or not body["changes"]:
+            raise ValueError("requirement_basis 必须为字符串，changes 必须为非空对象")
+        if set(body["changes"]) - {"title", "description", "acceptance_criteria"}:
+            raise ValueError("changes 只能修改 title、description、acceptance_criteria")
+        with get_client() as client:
+            console.print_json(data=client.delivery_requirement_change_preview(requirement_id, body))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("execution-runtime")

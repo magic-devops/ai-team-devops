@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from .sql_models import get_session, Sprint, Task, Issue
+from .sql_models import get_session, Sprint, Task, Issue, Project
 from .auth_sql import current_user_or_apikey, User, check_project_access
 from .business_access import business_project_id, require_business_access
 from sop_manager.path_config import (
@@ -20,7 +20,8 @@ from sop_manager.path_config import (
     resolved_tenant_code,
 )
 from .webhook import notify_webhook
-from .delivery_progress import burndown_observation, sprint_burndown_history
+from .delivery_progress import sprint_burndown_history
+from .delivery_progress_facts import capture_facts, metrics, select_scope
 
 router = APIRouter(prefix="/api/v1/sprints", tags=["sprints"],
                    dependencies=[Depends(require_business_access)])
@@ -46,38 +47,50 @@ def _parse_dt(val: Any) -> Optional[datetime]:
         return None
 
 
-def _task_stats(tasks: List[Task]) -> Dict[str, Any]:
-    total = len(tasks)
-    done = sum(1 for t in tasks if t.status == "completed")
+def _sprint_current(db: Session, sprint: Sprint) -> dict[str, Any]:
+    project = db.get(Project, sprint.project_id)
+    if project is None or project.tenant_id != sprint.tenant_id:
+        raise HTTPException(404, "Sprint project not found")
+    return select_scope(capture_facts(db, project), "sprint", sprint.id)
+
+
+def _task_stats(tasks: List[Task], current: dict[str, Any]) -> Dict[str, Any]:
+    effective = current["metrics"]
+    total = effective["tasks_total"]
+    done = effective["verified_completed"]
+    states = effective["status_counts"]
     confs = [float(t.confidence) for t in tasks if t.confidence is not None]
     return {
         "total_tasks": total,
         "completed": done,
-        "in_progress": sum(1 for t in tasks if t.status == "in_progress"),
-        "pending": sum(1 for t in tasks if t.status == "pending"),
+        "verified_completed": done,
+        "recorded_completed": effective["recorded_completed"],
+        "awaiting_review": effective["awaiting_review"],
+        "status_counts": states,
+        "in_progress": states["in_progress"],
+        "pending": states["pending"],
         "blocked": [
-            {"id": t.id, "title": t.title, "owner_id": t.owner_id}
-            for t in tasks
-            if t.status == "blocked"
+            {"id": t["id"], "title": t["title"], "owner_id": t["owner_id"]}
+            for t in current["tasks"]
+            if t["status"] == "blocked"
         ],
         "completion_rate": round(done / max(1, total) * 100, 1),
         "avg_confidence": round(sum(confs) / max(1, len(confs)), 2) if confs else 0,
-        "remaining": max(0, total - done),
+        "remaining": effective["remaining"],
+        "remaining_basis": "verified_completion",
     }
 
 
-def _burndown_payload(sprint: Sprint, tasks: List[Task], db: Optional[Session] = None, now: Optional[datetime] = None) -> Dict[str, Any]:
-    stats = _task_stats(tasks)
-    total = int(stats["total_tasks"])
-    remaining = int(stats["remaining"])
+def _burndown_payload(sprint: Sprint, tasks: List[Task], db: Session, now: Optional[datetime] = None) -> Dict[str, Any]:
+    current = _sprint_current(db, sprint)
+    stats = _task_stats(tasks, current)
     started = _parse_dt(sprint.started_at)
     ends = _parse_dt(sprint.ends_at)
     return {
         "ok": True,
         "sprint": _row(sprint),
         "stats": stats,
-        **(sprint_burndown_history(db, sprint, started, ends, now=now) if db is not None
-           else burndown_observation(total, remaining, started, ends, now=now)),
+        **sprint_burndown_history(db, sprint, started, ends, now=now),
     }
 
 
@@ -94,11 +107,12 @@ def _active_sprint(items: List[Sprint]) -> Optional[Sprint]:
     return next((s for s in items if str(s.status or "").lower() == "active"), None)
 
 
-def _sprint_ops_payload(sprints: List[Sprint], tasks: List[Task], issues: List[Issue], sprint: Optional[Sprint]) -> Dict[str, Any]:
+def _sprint_ops_payload(sprints: List[Sprint], tasks: List[Task], issues: List[Issue], sprint: Optional[Sprint], db: Session) -> Dict[str, Any]:
     active = sprint or _active_sprint(sprints)
     sprint_tasks = [t for t in tasks if active and t.sprint_id == active.id]
     sprint_issues = [i for i in issues if active and i.sprint_id == active.id]
-    stats = _task_stats(sprint_tasks) if active else {"total_tasks": 0, "completed": 0, "in_progress": 0, "pending": 0, "blocked": [], "completion_rate": 0, "avg_confidence": 0, "remaining": 0}
+    current = _sprint_current(db, active) if active else {"tasks": [], "metrics": metrics([], [])}
+    stats = _task_stats(sprint_tasks, current)
     open_issues = [i for i in sprint_issues if str(i.status or "open").lower() in ("open", "reopened", "new")]
     critical_issues = [i for i in open_issues if str(i.severity or "").upper() in ("P0", "P1", "CRITICAL", "BLOCKER")]
     now_dt = datetime.now(timezone.utc)
@@ -261,7 +275,7 @@ def sprints_ops_plan(
     if eff_pid:
         tasks = tasks.filter(Task.project_id == eff_pid)
         issues = issues.filter(Issue.project_id == eff_pid)
-    return _sprint_ops_payload(sprints, tasks.all(), issues.all(), selected)
+    return _sprint_ops_payload(sprints, tasks.all(), issues.all(), selected, db)
 
 
 @router.post("/ops-tasks")
@@ -334,7 +348,7 @@ def sprints_summary(
     active_progress = None
     if active:
         tasks = db.query(Task).filter_by(sprint_id=active.id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
-        active_progress = _task_stats(tasks)
+        active_progress = _task_stats(tasks, _sprint_current(db, active))
     return {
         "ok": True,
         "total": len(items),
@@ -451,10 +465,12 @@ def sprint_progress(sprint_id: str, user: User = Depends(current_user_or_apikey)
     if not s: raise HTTPException(404, "Sprint 不存在")
     tasks = db.query(Task).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
     issues = db.query(Issue).filter_by(sprint_id=sprint_id, tenant_id=_resolved_tenant_id(), project_id=_resolved_project_id()).all()
-    stats = _task_stats(tasks)
+    current = _sprint_current(db, s)
+    stats = _task_stats(tasks, current)
     return {
         "sprint": _row(s),
         **stats,
+        "current_metrics": current["metrics"],
         "open_issues": [{"id": i.id, "title": i.title, "severity": i.severity}
                         for i in issues if i.status == "open"],
     }

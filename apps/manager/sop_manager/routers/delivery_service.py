@@ -391,8 +391,11 @@ def _update_requirement(db, project, data, body, roster, values):
     row = get_record(db, Requirement, project, body.id)
     before = serialize(row)
     resource_id = row.id
+    from .delivery_requirement_history import require_change_preview
+
+    require_change_preview(db, project, data, row, body)
     flow = data["flows"].setdefault(row.id, default_flow())
-    changes = body.model_dump(exclude_unset=True, exclude={"id"})
+    changes = body.model_dump(exclude_unset=True, exclude={"id", "requirement_basis", "change_preview_basis"})
     if "owner_id" in changes:
         validate_owner(body.owner_id, roster)
     if "milestone_id" in changes:

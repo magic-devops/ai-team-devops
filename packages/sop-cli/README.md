@@ -263,3 +263,10 @@ CI使用 `scripts/delivery-ci-attest.py --help`，从实际干净checkout构建/
 新增 `sop delivery execution-runtime --id ...`、`execution-output --id ... --node ... --attempt 2 --stream stderr`、`execution-control-preview --file ...`。步骤与批次必须明确选择，续读使用原查询游标。详见 [执行过程指南](../../docs/EXECUTION_RUNTIME_GUIDE.md)。
 
 `execution.start`、`execution.retry`、`execution.cancel`、`execution.approval` 通过 `sop delivery command` 提交预览固定载荷；保留原版本和请求键以恢复未知结果。取消不证明外部进程已经停止，也不回滚副作用。
+
+
+## 活动与需求版本
+
+`sop delivery activity --scope requirement --scope-id REQ-example --limit 20` 读取已记录的范围活动；分页原样使用返回的 `next_cursor`，`--event <event-id>` 只读取精确事件。`sop delivery requirement-history --id REQ-example` 读取观测版本，`--version <version-id>` 查看精确内容，不会恢复或覆盖当前需求。
+
+`sop delivery requirement-change-preview --id REQ-example --file proposal.json` 预览固定的 `requirement_basis` 和定义 `changes`（title/description/acceptance_criteria）。人工核对字段差异和影响后，用原 `version`、`requirement_basis`、`preview_basis` 构造 `requirement.update` 的 command 文件；payload 中预览指纹名为 `change_preview_basis`。保存仍用 `sop delivery command --file command.json`。原文件和幂等键用于未知结果恢复；409之后必须明确采用最新状态并重新预览，不静默重试新范围。完整步骤见 [协作活动与变更指南](../../docs/DELIVERY_COLLABORATION_GUIDE.md)。

@@ -490,6 +490,8 @@ class RequirementEdit(Input):
     due_on: date | None = None
     milestone_id: str | None = Field(default=None, max_length=100)
     blocked_reason: str | None = Field(default=None, max_length=2000)
+    requirement_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    change_preview_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("acceptance_criteria")
     @classmethod

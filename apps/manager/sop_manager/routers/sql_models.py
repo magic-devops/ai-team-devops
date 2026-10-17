@@ -281,6 +281,38 @@ class DeliveryReceipt(Base):
     version = Column(Integer, nullable=False)
 
 
+class DeliveryActivityLink(Base):
+    """Immutable requirement association recorded in the event's own transaction."""
+    __tablename__ = "delivery_activity_links"
+    event_id = Column(String(64), ForeignKey("delivery_events.id", ondelete="CASCADE"), primary_key=True)
+    requirement_id = Column(String(64), primary_key=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), nullable=False)
+    __table_args__ = (Index("ix_delivery_activity_requirement", "tenant_id", "project_id", "requirement_id", "event_id"),)
+
+
+class DeliveryRequirementVersion(Base):
+    """Observed canonical definitions, never a second Requirement or guessed past revision."""
+    __tablename__ = "delivery_requirement_versions"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), nullable=False)
+    requirement_id = Column(String(64), nullable=False)
+    number = Column(Integer, nullable=False)
+    basis = Column(String(64), nullable=False)
+    definition = Column(JSON, nullable=False)
+    actor_id = Column(String(64), nullable=True)
+    actor_name = Column(String(128), nullable=False, default="")
+    source = Column(String(32), nullable=False)
+    flow_revision = Column(Integer, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "requirement_id", "number", name="uq_requirement_observed_version"),
+        Index("ix_requirement_version_scope", "tenant_id", "project_id", "requirement_id", "seq"),
+    )
+
+
 class DeliveryProgressObservation(Base):
     """Append-only facts, independent of the bounded delivery activity feed."""
     __tablename__ = "delivery_progress_observations"

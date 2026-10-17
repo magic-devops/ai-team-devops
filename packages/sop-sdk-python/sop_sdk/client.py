@@ -265,6 +265,48 @@ class ManagerClient:
             params["cursor"] = cursor
         return self._request("GET", f"/api/v1/delivery/executions/{resource}/observations", params=params)
 
+    def delivery_activity(
+        self, *, scope: str = "project", scope_id: str = "", cursor: str = "", limit: int = 20, action: str = ""
+    ) -> dict[str, Any]:
+        """Read a bounded recorded activity page; preserve its scope-bound cursor."""
+        if scope not in {"project", "requirement"} or (scope == "requirement") != bool(scope_id):
+            raise ValueError("Use project scope without an ID, or requirement scope with an ID")
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("limit must be an integer between 1 and 100")
+        params = {
+            "scope": scope, "scope_id": scope_id, "cursor": cursor, "limit": limit,
+        }
+        if action:
+            params["action"] = action
+        return self._request("GET", "/api/v1/delivery/activity", params=params)
+
+    def delivery_activity_event(self, event_id: str) -> dict[str, Any]:
+        """Resolve one exact event and its currently authorized targets."""
+        return self._request("GET", f"/api/v1/delivery/activity/{_resource_segment(event_id)}")
+
+    def delivery_requirement_history(
+        self, requirement_id: str, *, cursor: str = "", limit: int = 20
+    ) -> dict[str, Any]:
+        """Read actual observed definitions; missing earlier history stays unknown."""
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("limit must be an integer between 1 and 100")
+        return self._request("GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/history",
+                             params={"cursor": cursor, "limit": limit})
+
+    def delivery_requirement_version(self, requirement_id: str, version_id: str) -> dict[str, Any]:
+        """Read an exact immutable observed version without adopting or restoring it."""
+        return self._request(
+            "GET", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/history/{_resource_segment(version_id)}",
+        )
+
+    def delivery_requirement_change_preview(
+        self, requirement_id: str, body: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Preview exact definition changes; submission separately requires the returned bases."""
+        return self._request(
+            "POST", f"/api/v1/delivery/requirements/{_resource_segment(requirement_id)}/change-preview", json_body=dict(body),
+        )
+
     def delivery_schedule(
         self, *, starts_on: str | None = None, ends_on: str | None = None
     ) -> dict[str, Any]:

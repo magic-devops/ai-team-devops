@@ -80,7 +80,8 @@ def test_canonical_completed_without_acceptance_is_still_unverified_remaining(en
         db.get(Task, task_id).status = "completed"
         db.commit()
     body = client.get("/api/v1/sprints/SPRINT-selected/burndown", headers=headers()).json()
-    assert body["stats"]["completed"] == 1 and body["stats"]["remaining"] == 0
+    assert body["stats"]["completed"] == 0 and body["stats"]["remaining"] == 1
+    assert body["stats"]["recorded_completed"] == 1
     assert body["current_metrics"]["recorded_completed"] == 1
     assert body["current_metrics"]["verified_completed"] == 0
     assert body["actual"][-1]["remaining"] == 1.0

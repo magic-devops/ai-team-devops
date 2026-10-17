@@ -198,3 +198,32 @@ CI导入的 `payload.envelope` 必须是原始DSSE JSON文本，不能预先解�
 `delivery_execution_runtime(execution_id)` 读取精确运行概况；`delivery_execution_output(execution_id, node_id, attempt=2, stream="stderr", cursor="")` 读取指定步骤及批次；`delivery_execution_control_preview(body)` 预览固定操作。完整流程与停止状态见 [执行过程指南](../../docs/EXECUTION_RUNTIME_GUIDE.md)。
 
 `execution.start`、`execution.retry`、`execution.cancel` 和 `execution.approval` 经业务命令提交预览原载荷、原版本及固定请求键；未知结果保持原请求恢复，不新建运行。仅 `id` 的取消不再有效。日志成功不等于任务验收。
+
+
+## 活动追踪与需求内容变更
+
+`delivery_activity(scope="requirement", scope_id="REQ-example", cursor="", limit=20)` 服务端先按当时已记录的需求关联筛选，再返回固定上界的历史页；下一页原样传回 `next_cursor`。`delivery_activity_event(event_id)` 读取精确事件和当前可访问的对象，来源缺失/受限不会回落到其它工作。`delivery_requirement_history(requirement_id)` 与 `delivery_requirement_version(requirement_id, version_id)` 读取真实观察到的内容版本；观察序号不等于流程修订，早期未采集内容保持未知。
+
+需求标题、描述或验收条件的实际变更先预览，再提交同一固定候选。纯管理字段编辑继续使用正常权限和项目版本校验。
+
+```python
+import uuid
+
+workspace = client.delivery_workspace()
+requirement = next(item for item in workspace["requirements"] if item["id"] == "REQ-example")
+changes = {"description": "明确核对过的新需求范围"}
+preview = client.delivery_requirement_change_preview(requirement["id"], {
+    "requirement_basis": requirement["basis"], "changes": changes,
+})
+# 人工核对 preview["changes"]、preview["impact"] 和 allowed/reasons 后才提交。
+command = {
+    "action": "requirement.update",
+    "payload": {"id": requirement["id"], **changes,
+                "requirement_basis": preview["requirement_basis"],
+                "change_preview_basis": preview["preview_basis"]},
+    "expected_version": preview["version"], "idempotency_key": uuid.uuid4().hex,
+}
+# 先保存 command 原文件；明确确认后 client.delivery_command(command)。
+```
+
+并发冲突保留草稿，重新读取后明确采用并重新预览；结果未知重试原命令，不能生成新key。变更影响不代表自动改期、重新派发、重跑或验收。详见 [协作活动与变更指南](../../docs/DELIVERY_COLLABORATION_GUIDE.md)。

@@ -62,10 +62,17 @@ from .delivery_service import (
     reconcile,
     records,
     remember_basis,
-    serialize,
 )
 from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
 from .delivery_issue_contract import DiagnosisHistory, DiagnosisView, IssueDetail, IssueDiagnosisGenerate
+from .delivery_activity_contract import (
+    ActivityDetail,
+    ActivityPage,
+    RequirementChangePreview,
+    RequirementChangePreviewInput,
+    RequirementHistory,
+    RequirementVersionDetail,
+)
 from .project_lifecycle_contract import ProjectLifecyclePreviewInput
 from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .sql_models import (
@@ -112,6 +119,8 @@ def _permissions(db, user, project):
 
 
 def _snapshot(db, project, user):
+    from .delivery_activity import legacy_activity
+
     row = db.get(DeliveryWorkspace, project.id)
     state = reconcile(db, project, row.data) if row else initial_state()
     result = materialize(db, project, state, user)
@@ -120,7 +129,7 @@ def _snapshot(db, project, user):
         version=row.version if row else 0,
         stages=STAGES,
         permissions=_permissions(db, user, project),
-        activity=[serialize(e) for e in events[:50]],
+        activity=[legacy_activity(e) for e in events[:50]],
         history=[
             {"at": e.created_at.isoformat() + "Z", **e.data["snapshot"]}
             for e in reversed(events)
@@ -170,6 +179,93 @@ def workspace(
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
     return _snapshot(db, _project(db, user, project_id), user)
+
+
+@router.get("/activity", response_model=ActivityPage)
+def delivery_activity(
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    scope: Literal["project", "requirement"] = "project",
+    scope_id: str = Query(default="", max_length=64),
+    action: str = Query(default="", max_length=64),
+    cursor: str = Query(default="", max_length=4000),
+    limit: int = Query(default=20, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_activity import list_activity
+
+    project = _project(db, user, project_id)
+    workspace = db.get(DeliveryWorkspace, project.id)
+    return list_activity(db, project, workspace.data if workspace else initial_state(), user,
+        scope=scope, scope_id=scope_id, action=action, cursor=cursor, limit=limit,
+        store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/activity/{event_id}", response_model=ActivityDetail)
+def delivery_activity_detail(
+    event_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_activity import activity_detail
+
+    project = _project(db, user, project_id)
+    workspace = db.get(DeliveryWorkspace, project.id)
+    return activity_detail(db, project, workspace.data if workspace else initial_state(), user, event_id,
+        store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/requirements/{requirement_id}/history", response_model=RequirementHistory)
+def delivery_requirement_history(
+    requirement_id: str,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    cursor: str = Query(default="", max_length=4000),
+    limit: int = Query(default=20, ge=1, le=100),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_history import requirement_history
+
+    return requirement_history(db, _project(db, user, project_id), requirement_id, cursor=cursor, limit=limit,
+        user=user, store=getattr(request.app.state, "hermes_store", None))
+
+
+@router.get("/requirements/{requirement_id}/history/{version_id}", response_model=RequirementVersionDetail)
+def delivery_requirement_version(
+    requirement_id: str,
+    version_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_history import requirement_version_detail
+
+    return requirement_version_detail(db, _project(db, user, project_id), requirement_id, version_id)
+
+
+@router.post("/requirements/{requirement_id}/change-preview", response_model=RequirementChangePreview)
+def delivery_requirement_change_preview(
+    requirement_id: str,
+    body: RequirementChangePreviewInput,
+    request: Request,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_requirement_history import preview_change
+
+    project = _project(db, user, project_id)
+    if not _role_permissions(db, user, project)["write"]:
+        raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
+    workspace = db.get(DeliveryWorkspace, project.id)
+    return preview_change(db, project, reconcile(db, project, workspace.data) if workspace else initial_state(),
+        user, requirement_id, body.requirement_basis, body.changes.model_dump(exclude_unset=True),
+        version=workspace.version if workspace else 0, store=getattr(request.app.state, "hermes_store", None))
 
 
 @router.get("/issues/{issue_id}", response_model=IssueDetail)
@@ -869,8 +965,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
             raise HTTPException(409, "Concurrent edit. Reload the project.")
         db.flush()
         summary = materialize(db, project, data, user)["summary"]
-        db.add(
-            DeliveryEvent(
+        event = DeliveryEvent(
                 id=identifier("event"),
                 project_id=project.id,
                 tenant_id=project.tenant_id,
@@ -880,7 +975,9 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
                 resource_id=resource_id,
                 data={"snapshot": summary, **event_data},
             )
-        )
+        from .delivery_activity import record_activity
+
+        record_activity(db, project, user, data, event)
         db.add(
             DeliveryReceipt(
                 id=key,

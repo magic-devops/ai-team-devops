@@ -60,7 +60,14 @@ export function parseDeliveryRoute(hash: string): DeliveryRoute {
     requirement: exactIssue ? "" : params.get("requirement") || "",
     detail:
       !exactIssue &&
-      ["details", "tasks", "evidence", "release", "activity"].includes(detail)
+      [
+        "details",
+        "tasks",
+        "evidence",
+        "release",
+        "activity",
+        "history",
+      ].includes(detail)
         ? detail
         : "details",
     task: exactIssue ? "" : params.get("task") || "",
