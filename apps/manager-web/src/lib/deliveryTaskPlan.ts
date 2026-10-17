@@ -175,7 +175,7 @@ export function planError(error: unknown): {
         code,
         conflict:
           raw.startsWith("HTTP 409") &&
-          ["project_version_conflict", "plan_basis_changed"].includes(code),
+          ["project_version_conflict", "plan_basis_changed", "task_basis_changed"].includes(code),
       };
     }
   } catch {

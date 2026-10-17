@@ -10,6 +10,7 @@ import { deliveryTranslations } from "./i18n/delivery";
 import { assistanceTranslations } from "./i18n/assistance";
 import { projectInboxTranslations } from "./i18n/delivery-project-inbox";
 import { progressTranslations } from "./i18n/delivery-progress";
+import { manualReviewTranslations } from "./i18n/delivery-manual-review";
 
 function getStoredLanguage() {
   try {
@@ -18,6 +19,11 @@ function getStoredLanguage() {
     return undefined;
   }
 }
+
+i18n.on("languageChanged", (language) => {
+  if (typeof document !== "undefined" && document.documentElement)
+    document.documentElement.lang = i18n.resolvedLanguage || language;
+});
 
 i18n
   .use(LanguageDetector)
@@ -35,6 +41,7 @@ i18n
           assistance: assistanceTranslations["zh-CN"],
           deliveryProject: projectInboxTranslations["zh-CN"],
           deliveryProgress: progressTranslations["zh-CN"],
+          deliveryManualReview: manualReviewTranslations["zh-CN"],
         },
       },
       "en-US": {
@@ -45,6 +52,7 @@ i18n
           assistance: assistanceTranslations["en-US"],
           deliveryProject: projectInboxTranslations["en-US"],
           deliveryProgress: progressTranslations["en-US"],
+          deliveryManualReview: manualReviewTranslations["en-US"],
         },
       },
       "ja-JP": {
@@ -55,6 +63,7 @@ i18n
           assistance: assistanceTranslations["ja-JP"],
           deliveryProject: projectInboxTranslations["ja-JP"],
           deliveryProgress: progressTranslations["ja-JP"],
+          deliveryManualReview: manualReviewTranslations["ja-JP"],
         },
       },
     },

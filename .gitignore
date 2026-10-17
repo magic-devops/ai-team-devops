@@ -91,6 +91,7 @@ ai-sop-ops/.mcp-npm-smoke/
 node_modules/
 **/node_modules/
 .pnpm-store/
+*.tsbuildinfo
 .cache/
 apps/manager-web/.delivery-preview.html
 apps/manager-web/.session-preview.html

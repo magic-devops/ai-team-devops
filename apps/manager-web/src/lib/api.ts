@@ -321,15 +321,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  addTaskDependency: (id: string, body: { target_id: string; type?: string; note?: string }) =>
-    request<any>(`/api/v1/tasks/${encodeURIComponent(id)}/dependencies`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-  deleteTaskDependency: (id: string, targetId: string, type = "") => {
-    const qs = type ? `?type=${encodeURIComponent(type)}` : "";
-    return request<any>(`/api/v1/tasks/${encodeURIComponent(id)}/dependencies/${encodeURIComponent(targetId)}${qs}`, { method: "DELETE" });
-  },
   reorderTasksBoard: (groups: Record<string, string[]>) =>
     request<any>("/api/v1/tasks/reorder-board", {
       method: "POST",

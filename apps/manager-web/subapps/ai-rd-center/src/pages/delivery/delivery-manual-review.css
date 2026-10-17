@@ -1,0 +1,247 @@
+.delivery-manual-panel {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  min-width: 0;
+}
+.delivery-manual-heading,
+.delivery-manual-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.delivery-manual-heading {
+  margin: 0 0 10px;
+}
+.delivery-manual-heading > div:first-child > svg {
+  color: var(--brand);
+}
+.delivery-manual-heading h3,
+.delivery-manual-heading h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.delivery-manual-heading small,
+.delivery-manual-help,
+.delivery-manual-identity,
+.delivery-manual-fixed,
+.delivery-manual-dependencies,
+.delivery-manual-history summary > small {
+  color: var(--muted-strong, var(--muted));
+  font-size: 12px;
+}
+.delivery-manual-help {
+  margin: 10px 0;
+  line-height: 1.65;
+}
+.delivery-manual-current {
+  margin: 12px 0 18px;
+}
+.delivery-manual-current > .ant-tag {
+  margin-bottom: 10px;
+}
+.delivery-manual-facts > strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.delivery-manual-identity {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.delivery-manual-properties {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.delivery-manual-properties > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  font-size: 12px;
+}
+.delivery-manual-properties dt {
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-manual-properties dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.delivery-manual-content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 12px 0;
+}
+.delivery-manual-criteria {
+  font-size: 12px;
+}
+.delivery-manual-criteria > strong {
+  font-weight: 500;
+}
+.delivery-manual-criteria ol {
+  padding-left: 20px;
+  line-height: 1.75;
+}
+.delivery-manual-dependencies {
+  overflow-wrap: anywhere;
+}
+.delivery-manual-dependencies b {
+  font-weight: 500;
+}
+.delivery-manual-reasons {
+  border-left: 2px solid var(--chart-4, #f59e0b);
+  padding-left: 20px;
+  color: var(--muted-strong, var(--muted));
+  font-size: 12px;
+  line-height: 1.8;
+}
+.delivery-manual-review-record {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 10px 0;
+  background: var(--surface);
+}
+.delivery-manual-review-record > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 12px;
+  font-size: 12px;
+}
+.delivery-manual-review-record > summary::-webkit-details-marker {
+  display: none;
+}
+.delivery-manual-review-record > summary::before {
+  content: "›";
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.delivery-manual-review-record[open] > summary::before {
+  transform: rotate(90deg);
+}
+.delivery-manual-review-record > summary > small {
+  margin-left: auto;
+}
+.delivery-manual-review-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.delivery-manual-review-status .ant-tag {
+  margin: 0;
+}
+.delivery-manual-review-record > :not(summary) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+.delivery-manual-review-record > .delivery-manual-original {
+  margin-top: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.delivery-manual-original h4 {
+  font-size: 12px;
+  margin: 0 0 12px;
+  color: var(--muted-strong, var(--muted));
+}
+.delivery-manual-original small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.delivery-manual-original code,
+.delivery-manual-fixed code {
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+.delivery-manual-evidence {
+  padding-top: 14px;
+  font-size: 12px;
+}
+.delivery-manual-evidence a {
+  overflow-wrap: anywhere;
+  color: var(--brand);
+}
+.delivery-manual-form-fields {
+  margin-top: 16px;
+}
+.delivery-manual-form-fields > label {
+  display: block;
+  margin: 16px 0;
+}
+.delivery-manual-form-fields > label > span:first-child {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 7px;
+}
+.delivery-manual-form-fields > label > .ant-select {
+  width: 100%;
+}
+.delivery-manual-fixed {
+  padding: 10px 12px;
+  background: var(--surface-muted, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+}
+.delivery-manual-conflict {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.delivery-manual-conflict h4 {
+  font-size: 13px;
+}
+.delivery-manual-panel button:focus-visible,
+.delivery-manual-panel summary:focus-visible,
+.delivery-manual-modal button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+@media (max-width: 640px) {
+  .delivery-manual-heading > div:last-child {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .delivery-manual-properties > div {
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .delivery-manual-review-record > summary {
+    gap: 8px;
+  }
+  .delivery-manual-review-record > summary > small {
+    width: 100%;
+    margin-left: 14px;
+  }
+  .delivery-manual-modal .ant-modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .delivery-manual-modal .ant-modal-footer .ant-btn {
+    margin: 0;
+    max-width: 100%;
+  }
+  .delivery-manual-conflict .ant-btn {
+    white-space: normal;
+    height: auto;
+    min-height: 32px;
+    max-width: 100%;
+  }
+}

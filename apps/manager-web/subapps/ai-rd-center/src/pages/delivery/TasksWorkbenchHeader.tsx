@@ -4,16 +4,22 @@ import { useTranslation } from "react-i18next";
 import { AiAssistButton, AiAssistDrawer } from "@/components/ai/AiAssistDrawer";
 import { LoadingBlock, RefreshButton } from "@/components/PageStates";
 import { api } from "@/lib/api";
+import { taskRecordStatusLabel } from "@/lib/deliveryTaskReview";
 import { WorkbenchShell } from "@/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "@/pages/shared/workbenchUi";
 
 const EChartsDonutLazy = lazy(() =>
-  import("@/components/charts/EChartsDonut").then((m) => ({ default: m.EChartsDonut })),
+  import("@/components/charts/EChartsDonut").then((m) => ({
+    default: m.EChartsDonut,
+  })),
 );
 
-function pieToRecord(items?: Array<{ name: string; value: number }>) {
+function pieToRecord(
+  items?: Array<{ name: string; value: number }>,
+  label: (name: string) => string = (name) => name,
+) {
   const out: Record<string, number> = {};
-  for (const row of items ?? []) out[row.name] = row.value;
+  for (const row of items ?? []) out[label(row.name)] = row.value;
   return out;
 }
 
@@ -26,8 +32,14 @@ export function TasksWorkbenchHeader({
 }) {
   const { t } = useTranslation();
   const [aiOpen, setAiOpen] = useState(false);
-  const summaryQ = useQuery({ queryKey: ["tasksSummary"], queryFn: api.tasksSummary });
-  const chartsQ = useQuery({ queryKey: ["tasksCharts"], queryFn: api.tasksCharts });
+  const summaryQ = useQuery({
+    queryKey: ["tasksSummary"],
+    queryFn: api.tasksSummary,
+  });
+  const chartsQ = useQuery({
+    queryKey: ["tasksCharts"],
+    queryFn: api.tasksCharts,
+  });
   const summary = summaryQ.data?.summary ?? {};
 
   return (
@@ -52,10 +64,22 @@ export function TasksWorkbenchHeader({
           <WorkbenchStats
             items={[
               { label: t("page.tasks.total"), value: summary.total ?? 0 },
-              { label: t("page.tasks.inProgress"), value: summary.in_progress ?? 0 },
-              { label: t("page.tasks.depBlocked"), value: summary.blocked ?? 0 },
-              { label: t("page.tasks.done"), value: summary.completed ?? 0 },
-              { label: t("page.tasks.completion"), value: `${summary.completion_rate ?? 0}%` },
+              {
+                label: t("page.tasks.inProgress"),
+                value: summary.in_progress ?? 0,
+              },
+              {
+                label: t("page.tasks.depBlocked"),
+                value: summary.blocked ?? 0,
+              },
+              {
+                label: t("deliveryManualReview.recordedCompleted"),
+                value: summary.completed ?? 0,
+              },
+              {
+                label: t("deliveryManualReview.recordedCompletionRate"),
+                value: `${summary.completion_rate ?? 0}%`,
+              },
             ]}
           />
         }
@@ -64,21 +88,32 @@ export function TasksWorkbenchHeader({
           {Object.keys(pieToRecord(chartsQ.data?.by_status)).length ? (
             <WorkbenchPanel title={t("page.tasks.chartStatus")}>
               <Suspense fallback={<LoadingBlock />}>
-                <EChartsDonutLazy data={pieToRecord(chartsQ.data?.by_status)} height={200} />
+                <EChartsDonutLazy
+                  data={pieToRecord(chartsQ.data?.by_status, (status) =>
+                    taskRecordStatusLabel(status, t),
+                  )}
+                  height={200}
+                />
               </Suspense>
             </WorkbenchPanel>
           ) : null}
           {Object.keys(pieToRecord(chartsQ.data?.by_priority)).length ? (
             <WorkbenchPanel title={t("page.tasks.chartPriority")}>
               <Suspense fallback={<LoadingBlock />}>
-                <EChartsDonutLazy data={pieToRecord(chartsQ.data?.by_priority)} height={200} />
+                <EChartsDonutLazy
+                  data={pieToRecord(chartsQ.data?.by_priority)}
+                  height={200}
+                />
               </Suspense>
             </WorkbenchPanel>
           ) : null}
           {Object.keys(pieToRecord(chartsQ.data?.by_source)).length ? (
             <WorkbenchPanel title={t("page.tasks.chartSource")}>
               <Suspense fallback={<LoadingBlock />}>
-                <EChartsDonutLazy data={pieToRecord(chartsQ.data?.by_source)} height={200} />
+                <EChartsDonutLazy
+                  data={pieToRecord(chartsQ.data?.by_source)}
+                  height={200}
+                />
               </Suspense>
             </WorkbenchPanel>
           ) : null}

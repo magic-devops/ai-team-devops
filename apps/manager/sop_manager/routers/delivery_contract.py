@@ -51,6 +51,7 @@ class Command(Input):
         "requirement.update",
         "task.create",
         "task.update",
+        "task.manual_review",
         "tasks.plan",
         "artifact.add",
         "stage.advance",
@@ -467,8 +468,7 @@ class TaskEdit(Dated):
         default=None, max_length=80
     )
     depends_on: list[str] | None = Field(default=None, max_length=40)
-    requirement_basis: str | None = Field(default=None, min_length=64, max_length=64)
-    requirement_revision: int | None = Field(default=None, ge=1)
+    task_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     @field_validator("acceptance_criteria", "depends_on")
     @classmethod
@@ -482,10 +482,8 @@ class TaskEdit(Dated):
 
     @model_validator(mode="after")
     def references_require_basis(self):
-        if {"acceptance_criteria", "depends_on"} & self.model_fields_set and (
-            self.requirement_basis is None or self.requirement_revision is None
-        ):
-            raise ValueError("Reference edits require the current requirement basis and revision")
+        if {"acceptance_criteria", "depends_on"} & self.model_fields_set and self.task_basis is None:
+            raise ValueError("Reference edits require the current task basis")
         return self
 
 
@@ -528,6 +526,113 @@ class ArtifactAdd(Input):
         if not self.content and not self.url:
             raise ValueError("Evidence needs content or a link")
         return self
+
+
+class TaskManualReview(Input):
+    task_id: str = Field(min_length=1, max_length=64)
+    decision: Literal["accept", "request_changes"]
+    basis: str = Field(pattern=r"^[0-9a-f]{64}$")
+    comment: str = Field(min_length=1, max_length=4000)
+    evidence_content: str = Field(default="", max_length=20000)
+    evidence_url: str = Field(default="", max_length=2000)
+    _url = field_validator("evidence_url")(ArtifactAdd.safe_url.__func__)
+
+    @model_validator(mode="after")
+    def accepted_evidence_required(self):
+        if self.decision == "accept" and not (self.evidence_content or self.evidence_url):
+            raise ValueError("Manual acceptance requires evidence content or an HTTP(S) link")
+        return self
+
+
+class TaskReviewTask(BaseModel):
+    id: str
+    title: str
+    description: str
+    req_id: str
+    status: str
+    assigned_to: str
+    priority: str
+    estimate: str
+    blocked_reason: str
+
+
+class TaskReviewOwner(BaseModel):
+    id: str
+    name: str
+    kind: Literal["human", "agent", "tool"]
+    active: bool
+
+
+class TaskReviewRequirement(BaseModel):
+    id: str
+    title: str
+    description: str
+    revision: int
+    acceptance_criteria: list[str]
+    blocked_reason: str
+
+
+class TaskReviewPlanning(BaseModel):
+    acceptance_criteria: list[int]
+    depends_on: list[str]
+
+
+class TaskReviewSnapshot(BaseModel):
+    task: TaskReviewTask
+    owner: TaskReviewOwner | None
+    requirement: TaskReviewRequirement | None
+    planning: TaskReviewPlanning
+    dependency_basis: dict[str, str]
+
+
+class TaskReviewReason(BaseModel):
+    code: str
+    message: str
+
+
+class TaskReviewCurrent(TaskReviewSnapshot):
+    basis: str
+    eligible: bool
+    can_review: bool
+    can_accept: bool
+    reasons: list[TaskReviewReason]
+    dependency_blocked: list[str]
+    verified: bool
+
+
+class TaskReviewReviewer(BaseModel):
+    id: str
+    name: str
+
+
+class TaskReviewRecord(BaseModel):
+    id: str
+    task_id: str
+    decision: Literal["accept", "request_changes"]
+    created_at: str
+    reviewer: TaskReviewReviewer
+    task_basis: str
+    snapshot: TaskReviewSnapshot
+    comment: str
+    evidence_content: str
+    evidence_url: str
+    source: Literal["manual"]
+    invalidated: bool
+    invalidated_at: str | None
+    invalidated_reason: str
+    valid: bool
+
+
+class TaskReviewsResponse(BaseModel):
+    project_id: str
+    task_id: str
+    version: int
+    as_of: str
+    current: TaskReviewCurrent | None
+    reviews: list[TaskReviewRecord]
+    total: int
+    next_cursor: str | None
+    limit: int
 
 
 class StageAction(Input):
@@ -587,6 +692,7 @@ class ExecutionReview(ExecutionSync):
 
 
 PAYLOADS = {
+    "task.manual_review": TaskManualReview,
     "progress.record": ProgressRecord,
     "baseline.create": BaselineCreate,
     "execution.queue": ExecutionQueue,

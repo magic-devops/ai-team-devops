@@ -250,8 +250,14 @@ def test_plan_dependencies_resolve_ids_and_block_completion_until_predecessor_de
         {
             "requirement_id": rid,
             "items": [
-                {"key": "build", "title": "Build", "acceptance_criteria": [0]},
-                {"key": "verify", "title": "Verify", "depends_on": ["build"], "acceptance_criteria": [0]},
+                {"key": "build", "title": "Build", "owner_id": "user:lead", "acceptance_criteria": [0]},
+                {
+                    "key": "verify",
+                    "title": "Verify",
+                    "owner_id": "user:lead",
+                    "depends_on": ["build"],
+                    "acceptance_criteria": [0],
+                },
             ],
         },
     )
@@ -262,6 +268,22 @@ def test_plan_dependencies_resolve_ids_and_block_completion_until_predecessor_de
     assert tasks["Verify"]["dependency_blocked"] == [first]
     assert command(client, "task.update", {"id": second, "status": "completed"}).status_code == 409
     assert command(client, "task.update", {"id": first, "status": "completed"}).status_code == 200
+    assert command(client, "task.update", {"id": second, "status": "completed"}).status_code == 409
+    basis = client.get(f"/api/v1/delivery/tasks/{first}/reviews").json()["current"]["basis"]
+    assert (
+        command(
+            client,
+            "task.manual_review",
+            {
+                "task_id": first,
+                "decision": "accept",
+                "basis": basis,
+                "comment": "Verified current delivery",
+                "evidence_content": "Manually inspected build output",
+            },
+        ).status_code
+        == 200
+    )
     assert command(client, "task.update", {"id": second, "status": "completed"}).status_code == 200
 
 
@@ -464,14 +486,12 @@ def test_generic_task_status_write_cannot_bypass_dependencies(env, monkeypatch):
 def edit_links(client, task_id, **changes):
     state = client.get("/api/v1/delivery/workspace").json()
     task = next(item for item in state["tasks"] if item["id"] == task_id)
-    req = next(item for item in state["requirements"] if item["id"] == task["req_id"])
     return command(
         client,
         "task.update",
         {
             "id": task_id,
-            "requirement_basis": req["basis"],
-            "requirement_revision": req["flow"]["revision"],
+            "task_basis": task["basis"],
             **changes,
         },
     )
@@ -567,23 +587,21 @@ def test_task_link_edits_validate_graph_criteria_scope_and_schedule_atomically(e
 
 
 @pytest.mark.parametrize(
-    "invalid", ["no_basis", "no_revision", "stale", "null_dependencies", "null_criteria"]
+    "invalid", ["no_basis", "invalid_basis", "stale", "null_dependencies", "null_criteria"]
 )
-def test_task_link_edits_require_explicit_current_requirement_basis(env, invalid):
+def test_task_link_edits_require_explicit_current_task_basis(env, invalid):
     client, sessions, _ = env
     rid = requirement(client)
     saved = command(client, "task.create", {"requirement_id": rid, "title": "Original"}).json()
-    row = saved["requirements"][0]
     payload = {
         "id": saved["tasks"][0]["id"],
         "acceptance_criteria": [0],
-        "requirement_basis": row["basis"],
-        "requirement_revision": row["flow"]["revision"],
+        "task_basis": saved["tasks"][0]["basis"],
     }
     if invalid == "no_basis":
-        payload.pop("requirement_basis")
-    elif invalid == "no_revision":
-        payload.pop("requirement_revision")
+        payload.pop("task_basis")
+    elif invalid == "invalid_basis":
+        payload["task_basis"] = "invalid"
     elif invalid == "null_dependencies":
         payload["depends_on"] = None
     elif invalid == "null_criteria":

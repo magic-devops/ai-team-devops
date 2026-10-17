@@ -86,6 +86,9 @@ def capture_facts(db, project):
     row = db.get(DeliveryWorkspace, project.id)
     data = reconcile(db, project, row.data) if row else initial_state()
     snapshot = materialize(db, project, data, None)
+    from .delivery_verification import VerificationContext
+
+    verification = VerificationContext(db, project, data)
     accepted = {
         r["id"]: _accepted(r, snapshot["tasks"], snapshot["issues"]) for r in snapshot["requirements"]
     }
@@ -115,14 +118,6 @@ def capture_facts(db, project):
         planning = task["planning"]
         entry = latest.get(task["id"])
         valid_execution = _execution_valid(entry, task, requirement)
-        review = (entry or {}).get("review") or {}
-        native_accepted = (
-            valid_execution
-            and entry["status"] == "accepted"
-            and review.get("decision") == "accept"
-            and review.get("run_version") == entry["run_version"]
-            and bool(review.get("evidence_sha256"))
-        )
         recorded_status = canonical[task["id"]].status
         if (
             task["status"] == "blocked"
@@ -136,7 +131,7 @@ def capture_facts(db, project):
         elif recorded_status == "completed":
             status = (
                 "verified_completed"
-                if task["status"] == "completed" and (native_accepted or accepted.get(task["req_id"], False))
+                if task["status"] == "completed" and verification.verified(task["id"])
                 else "recorded_completed"
             )
         else:

@@ -62,7 +62,7 @@ def _safe_task_id(tid: str) -> str:
 
 
 def _ui_default() -> Dict[str, Any]:
-    return {"version": 1, "columns": {p: [] for p in _PRIOS}, "fields": {}, "dependencies": {}}
+    return {"version": 1, "columns": {p: [] for p in _PRIOS}, "fields": {}}
 
 
 def _ui_load() -> Dict[str, Any]:
@@ -75,10 +75,9 @@ def _ui_load() -> Dict[str, Any]:
             return _ui_default()
         d.setdefault("columns", {p: [] for p in _PRIOS})
         d.setdefault("fields", {})
-        d.setdefault("dependencies", {})
         for p in _PRIOS:
             d["columns"].setdefault(p, [])
-        return d
+        return {key: d[key] for key in ("version", "columns", "fields") if key in d}
     except Exception:
         return _ui_default()
 
@@ -116,10 +115,6 @@ def _ui_remove_from_columns(st: Dict[str, Any], task_id: str) -> None:
 def _ui_delete_id(st: Dict[str, Any], task_id: str) -> None:
     _ui_remove_from_columns(st, task_id)
     st.get("fields", {}).pop(task_id, None)
-    deps = st.setdefault("dependencies", {})
-    deps.pop(task_id, None)
-    for source_id, edges in list(deps.items()):
-        deps[source_id] = [e for e in edges if e.get("target_id") != task_id]
 
 
 def _ui_append_to_column(st: Dict[str, Any], task_id: str, priority: str) -> None:
@@ -340,12 +335,6 @@ class QualityTasksIn(BaseModel):
     limit: int = Field(50, ge=1, le=200)
 
 
-class TaskDependencyIn(BaseModel):
-    target_id: str
-    type: str = Field("blocks", pattern="^(blocks|relates|duplicates)$")
-    note: str = ""
-
-
 class TaskDependencyTasksIn(BaseModel):
     dry_run: bool = True
     include_cycles: bool = True
@@ -359,50 +348,6 @@ class TaskDependencyTasksIn(BaseModel):
 
 def _task_by_id(task_id: str) -> Dict[str, Any] | None:
     return next((x for x in rows("tasks", 1000) if x.get("id") == task_id), None)
-
-
-def _dep_edges(st: Dict[str, Any]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    deps = st.get("dependencies") or {}
-    if not isinstance(deps, dict):
-        return out
-    for source_id, edges in deps.items():
-        if not isinstance(edges, list):
-            continue
-        for edge in edges:
-            if not isinstance(edge, dict):
-                continue
-            target_id = str(edge.get("target_id") or "")
-            if not target_id:
-                continue
-            out.append({
-                "source_id": str(source_id),
-                "target_id": target_id,
-                "type": str(edge.get("type") or "blocks"),
-                "note": str(edge.get("note") or ""),
-                "created_at": str(edge.get("created_at") or ""),
-            })
-    return out
-
-
-def _would_cycle(source_id: str, target_id: str, edges: List[Dict[str, Any]]) -> bool:
-    graph: Dict[str, List[str]] = {}
-    for edge in edges:
-        if edge.get("type") != "blocks":
-            continue
-        graph.setdefault(str(edge["source_id"]), []).append(str(edge["target_id"]))
-    graph.setdefault(source_id, []).append(target_id)
-    seen: set[str] = set()
-
-    def visit(node: str) -> bool:
-        if node == source_id:
-            return True
-        if node in seen:
-            return False
-        seen.add(node)
-        return any(visit(n) for n in graph.get(node, []))
-
-    return visit(target_id)
 
 
 def _dispatch_actor(task: Dict[str, Any]) -> tuple[str, str, str]:
@@ -430,27 +375,10 @@ def _dispatch_actor(task: Dict[str, Any]) -> tuple[str, str, str]:
 
 def _dispatch_plan(tasks: List[Dict[str, Any]], body: TaskDispatchIn) -> list[Dict[str, Any]]:
     selected = {str(x) for x in body.ids if str(x).strip()}
-    edges = _dep_edges(_ui_load())
-    blockers: Dict[str, list[str]] = {}
-    completed = {str(t.get("id")) for t in tasks if str(t.get("status") or "") == "completed"}
-    for edge in edges:
-        if edge.get("type") != "blocks":
-            continue
-        source = str(edge.get("source_id") or "")
-        target = str(edge.get("target_id") or "")
-        if source and target and source not in completed:
-            blockers.setdefault(target, []).append(source)
-
+    snapshot = _dependency_snapshot(tasks, selected)
     candidates: list[Dict[str, Any]] = []
-    for task in tasks:
-        tid = str(task.get("id") or "")
-        if not tid:
-            continue
-        if selected and tid not in selected:
-            continue
-        if str(task.get("status") or "pending") == "completed":
-            continue
-        blocked_by = blockers.get(tid, [])
+    for task in snapshot["ready"] + snapshot["blocked"]:
+        blocked_by = task["blocked_by"]
         if blocked_by and not body.include_blocked:
             continue
         candidates.append({**task, "_blocked_by": blocked_by})
@@ -842,6 +770,9 @@ def _quality_gates(task: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) -> Dict[str, Any]:
+    from .delivery_dependencies import scoped_dependencies
+
+    delivery = scoped_dependencies()
     task_by_id = {str(task.get("id")): task for task in task_rows if task.get("id")}
     active_ids = [
         tid
@@ -849,8 +780,8 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
         if (not selected or tid in selected) and str(task.get("status") or "pending") != "completed"
     ]
     active = set(active_ids)
-    completed = {tid for tid, task in task_by_id.items() if str(task.get("status") or "") == "completed"}
-    edges = [edge for edge in _dep_edges(_ui_load()) if edge.get("type") == "blocks"]
+    edges = delivery["edges"]
+    completed = delivery["verified_completed"]
     blockers: Dict[str, List[str]] = {}
     graph: Dict[str, List[str]] = {tid: [] for tid in active}
     indegree: Dict[str, int] = {tid: 0 for tid in active}
@@ -860,8 +791,10 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
         if target not in active:
             continue
         if source and source not in completed:
-            blockers.setdefault(target, []).append(source)
-        if source in active and target in active:
+            values = blockers.setdefault(target, [])
+            if source not in values:
+                values.append(source)
+        if source in active and target in active and target not in graph.get(source, []):
             graph.setdefault(source, []).append(target)
             indegree[target] = indegree.get(target, 0) + 1
 
@@ -879,6 +812,8 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
             processed.add(tid)
             task = task_by_id[tid]
             blocked_by = blockers.get(tid, [])
+            if tid in delivery["explicit_blocks"]:
+                blocked_by = blocked_by + ["delivery:blocked_reason"]
             if str(task.get("status") or "") == "blocked":
                 blocked_by = blocked_by + ["manual_status:blocked"]
             stage_tasks.append({
@@ -922,12 +857,53 @@ def _dependency_snapshot(task_rows: List[Dict[str, Any]], selected: set[str]) ->
             blocked_by.append("dependency_cycle")
         if str(task.get("status") or "") == "blocked":
             blocked_by.append("manual_status:blocked")
-        row = {**task, "blocked_by": blocked_by, "ready": not bool(blocked_by)}
+        if tid in delivery["explicit_blocks"]:
+            blocked_by.append("delivery:blocked_reason")
+        row = {
+            **task,
+            "blocked_by": blocked_by,
+            "ready": not bool(blocked_by),
+            "blocking_reason": delivery["explicit_blocks"].get(tid, ""),
+        }
         if blocked_by:
             blocked.append(row)
         else:
             ready.append(row)
-    return {"stages": stages, "ready": ready, "blocked": blocked, "cycle_ids": cycle_ids, "edges": edges}
+    return {
+        "stages": stages,
+        "ready": ready,
+        "blocked": blocked,
+        "cycle_ids": cycle_ids,
+        "edges": edges,
+        "verified_completed": completed,
+        "explicit_blocks": delivery["explicit_blocks"],
+    }
+
+
+def _require_task_dependencies(task_ids: List[str], target_status: str | None = None) -> None:
+    """Preflight every requested task before changing status, assignments or files."""
+    selected = set(task_ids)
+    task_rows = rows("tasks", 1000)
+    if selected - {row.get("id") for row in task_rows}:
+        raise HTTPException(404, "Task not found in the selected project task scope")
+    # An explicit status transition can resume a manually blocked record. Keep
+    # actual planning/requirement reasons and predecessor proof authoritative.
+    # A completion candidate stays in the active graph during this preflight.
+    candidate_status = "in_progress" if target_status == "in_progress" else "pending"
+    candidates = [
+        {**row, "status": candidate_status}
+        if row.get("id") in selected and (target_status is not None or row.get("status") == "completed")
+        else row
+        for row in task_rows
+    ]
+    snapshot = _dependency_snapshot(candidates, selected)
+    blocked = {row["id"]: row["blocked_by"] for row in snapshot["blocked"]}
+    if blocked:
+        raise HTTPException(409, {
+            "code": "task_dependencies_blocked",
+            "message": "Resolve blocking reasons and verify predecessor deliveries first",
+            "blocked": blocked,
+        })
 
 
 def _sort_scheduler_candidates(items: List[Dict[str, Any]], policy: str) -> List[Dict[str, Any]]:
@@ -1128,7 +1104,7 @@ def _scheduler_plan(task_rows: List[Dict[str, Any]], body: TaskSchedulerIn) -> D
     event_wakeups = [
         {"event": "task.created", "action": "recompute_ready_queue", "target": "scheduler"},
         {"event": "task.updated", "action": "refresh_priority_and_quality_gates", "target": "scheduler"},
-        {"event": "task.status_changed", "action": "unlock_downstream_when_completed", "target": "scheduler"},
+        {"event": "task.status_changed", "action": "recheck_verified_deliveries", "target": "scheduler"},
         {"event": "task.dependency_deleted", "action": "wake_blocked_task", "target": "scheduler"},
         {"event": "task.agent_reported", "action": "evaluate_quality_gate_and_continue_dag", "target": "scheduler"},
         {"event": "notify.inbound", "action": "convert_message_to_requirement_or_task", "target": "intake"},
@@ -1992,9 +1968,10 @@ def task_dependencies():
     task_rows = [_ui_merge_row(r, st) for r in rows("tasks", 1000)]
     task_by_id = {str(t.get("id")): t for t in task_rows if t.get("id")}
     task_ids = {str(t.get("id")) for t in task_rows if t.get("id")}
+    snapshot = _dependency_snapshot(task_rows, set())
     edges = [
-        edge for edge in _dep_edges(st)
-        if edge["source_id"] in task_ids and edge["target_id"] in task_ids
+        edge for edge in snapshot["edges"]
+        if edge["target_id"] in task_ids
     ]
     outgoing: Dict[str, int] = {}
     incoming: Dict[str, int] = {}
@@ -2002,29 +1979,39 @@ def task_dependencies():
     for edge in edges:
         outgoing[edge["source_id"]] = outgoing.get(edge["source_id"], 0) + 1
         incoming[edge["target_id"]] = incoming.get(edge["target_id"], 0) + 1
-        if edge["type"] == "blocks":
-            blockers.setdefault(edge["target_id"], []).append(edge["source_id"])
+        if edge["type"] == "blocks" and edge["source_id"] not in snapshot["verified_completed"]:
+            sources = blockers.setdefault(edge["target_id"], [])
+            if edge["source_id"] not in sources:
+                sources.append(edge["source_id"])
         edge["source_title"] = str((task_by_id.get(edge["source_id"]) or {}).get("title") or "")
         edge["target_title"] = str((task_by_id.get(edge["target_id"]) or {}).get("title") or "")
     nodes = []
+    active_state = {row["id"]: row for row in snapshot["ready"] + snapshot["blocked"]}
     for task in task_rows:
         tid = str(task.get("id") or "")
         if not tid:
             continue
-        is_blocked = bool(blockers.get(tid)) and task.get("status") != "completed"
+        is_blocked = bool(blockers.get(tid)) and tid not in snapshot["verified_completed"]
+        state = active_state.get(tid, {})
+        blocked_by = list(dict.fromkeys(blockers.get(tid, []) + state.get("blocked_by", [])))
+        blocking_reason = snapshot["explicit_blocks"].get(tid, "")
+        if blocking_reason and "delivery:blocked_reason" not in blocked_by:
+            blocked_by.append("delivery:blocked_reason")
         nodes.append({
             "id": tid,
+            "req_id": task.get("req_id") or "",
             "title": task.get("title") or "",
             "status": task.get("status") or "pending",
             "priority": task.get("priority") or "P3",
             "assigned_to": task.get("assigned_to") or "",
             "outgoing": outgoing.get(tid, 0),
             "incoming": incoming.get(tid, 0),
-            "blocked_by": blockers.get(tid, []),
+            "blocked_by": blocked_by,
+            "blocking_reason": blocking_reason,
+            "ready": bool(state.get("ready")),
             "is_dependency_blocked": is_blocked,
-            "risk_level": "high" if is_blocked and str(task.get("priority") or "").upper() in {"P0", "P1"} else "medium" if is_blocked else "normal",
+            "risk_level": "high" if blocked_by and str(task.get("priority") or "").upper() in {"P0", "P1"} else "medium" if blocked_by else "normal",
         })
-    snapshot = _dependency_snapshot(task_rows, set())
     recommendations: List[Dict[str, Any]] = []
     if snapshot.get("cycle_ids"):
         recommendations.append({
@@ -2048,7 +2035,7 @@ def task_dependencies():
             "id": "build-dependency-map",
             "severity": "info",
             "title": "补齐任务依赖关系",
-            "summary": "当前没有任务依赖，建议为拆解任务补充 blocks/relates/duplicates，提升调度准确性。",
+            "summary": "当前没有任务依赖，请在交付工作台的任务计划中维护前置任务。",
             "command": "sop task deps --json",
         })
     return {
@@ -2075,11 +2062,11 @@ def task_dependencies():
         "summary": {
             "nodes": len(nodes),
             "edges": len(edges),
-            "blocked": sum(1 for n in nodes if n["is_dependency_blocked"]),
+            "blocked": len(snapshot["blocked"]),
             "ready": len(snapshot.get("ready") or []),
             "cycles": len(snapshot.get("cycle_ids") or []),
             "stages": len(snapshot.get("stages") or []),
-            "by_type": {k: sum(1 for e in edges if e["type"] == k) for k in ("blocks", "relates", "duplicates")},
+            "by_type": {"blocks": len(edges)},
         },
     }
 
@@ -2122,7 +2109,7 @@ def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
             "dependency-cycle",
             "high",
             f"修复任务依赖环路：{len(cycle_ids)} 个任务",
-            "blocks 依赖存在环路，调度器无法稳定计算拓扑批次，需要拆除错误阻塞边或改成 relates。",
+            "任务依赖存在环路，请在交付工作台修正前置任务后重新计算调度。",
             [
                 "sop task deps --json",
                 "sop task dep-tasks --json",
@@ -2183,7 +2170,7 @@ def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
                 "dependency-map-missing",
                 "medium",
                 "补齐高优先级任务依赖地图",
-                "当前任务池没有任何依赖边，AI 调度只能按优先级粗排，建议补充 blocks/relates/duplicates 关系。",
+                "当前任务池没有前置任务关系，请在交付工作台补齐任务计划。",
                 [
                     "sop task deps --json",
                     "sop task schedule-insights --json",
@@ -2223,68 +2210,6 @@ def _dependency_governance_tasks(body: TaskDependencyTasksIn) -> Dict[str, Any]:
 @router.post("/dependencies/tasks")
 def task_dependency_tasks(body: TaskDependencyTasksIn):
     return _dependency_governance_tasks(body)
-
-
-@router.post("/{task_id}/dependencies")
-def add_task_dependency(task_id: str, body: TaskDependencyIn):
-    task_id = _safe_task_id(task_id)
-    target_id = _safe_task_id(body.target_id)
-    if task_id == target_id:
-        raise HTTPException(400, "任务不能依赖自身")
-    if not _task_by_id(task_id):
-        raise HTTPException(404, "源任务不存在")
-    if not _task_by_id(target_id):
-        raise HTTPException(404, "目标任务不存在")
-    st = _ui_load()
-    deps = st.setdefault("dependencies", {})
-    edges = _dep_edges(st)
-    if body.type == "blocks" and _would_cycle(task_id, target_id, edges):
-        raise HTTPException(400, "blocks 依赖不能形成环")
-    arr = deps.setdefault(task_id, [])
-    for edge in arr:
-        if edge.get("target_id") == target_id and edge.get("type", "blocks") == body.type:
-            edge["note"] = (body.note or "").strip()[:500]
-            edge["updated_at"] = now().isoformat()
-            _ui_save(st)
-            return {"ok": True, "updated": True, "edge": {"source_id": task_id, **edge}}
-    edge = {
-        "target_id": target_id,
-        "type": body.type,
-        "note": (body.note or "").strip()[:500],
-        "created_at": now().isoformat(),
-    }
-    arr.append(edge)
-    _ui_save(st)
-    notify_webhook(
-        "task.dependency_added",
-        {"task_id": task_id, "target_id": target_id, "type": body.type},
-        tenant_id=resolved_tenant_id(),
-        project_id=resolved_project_id(),
-    )
-    return {"ok": True, "edge": {"source_id": task_id, **edge}}
-
-
-@router.delete("/{task_id}/dependencies/{target_id}")
-def delete_task_dependency(task_id: str, target_id: str, type: str = Query("")):
-    task_id = _safe_task_id(task_id)
-    target_id = _safe_task_id(target_id)
-    st = _ui_load()
-    deps = st.setdefault("dependencies", {})
-    arr = deps.get(task_id) or []
-    before = len(arr)
-    deps[task_id] = [
-        e for e in arr
-        if not (e.get("target_id") == target_id and (not type or e.get("type", "blocks") == type))
-    ]
-    _ui_save(st)
-    if before != len(deps[task_id]):
-        notify_webhook(
-            "task.dependency_deleted",
-            {"task_id": task_id, "target_id": target_id, "type": type or "*"},
-            tenant_id=resolved_tenant_id(),
-            project_id=resolved_project_id(),
-        )
-    return {"ok": True, "deleted": before - len(deps[task_id])}
 
 
 @router.post("")
@@ -2406,6 +2331,8 @@ def bulk_update_tasks(body: TaskBulkUpdate):
         vals["assigned_to"] = str(body.assigned_to).strip()[:64]
     if not vals:
         raise HTTPException(400, "未提供可更新字段")
+    if vals.get("status") in {"in_progress", "completed"}:
+        _require_task_dependencies(ids, target_status=vals["status"])
     vals["updated_at"] = now()
     for tid in ids:
         t.update(where=f"id = '{tid}'", values=vals)
@@ -2444,7 +2371,10 @@ def dispatch_tasks(body: TaskDispatchIn):
     ts = now()
     fld = st.setdefault("fields", {})
     applied = 0
+    applied_ids = []
     for item in plan:
+        if not item["ready"]:
+            continue
         tid = _safe_task_id(str(item.get("task_id") or ""))
         t.update(where=f"id = '{tid}'", values={"assigned_to": item["assigned_to"], "updated_at": ts})
         task_fields = fld.setdefault(tid, {})
@@ -2454,10 +2384,11 @@ def dispatch_tasks(body: TaskDispatchIn):
             f"blocked_by={','.join(item.get('blocked_by') or [])}"
         )[:2000]
         applied += 1
+        applied_ids.append(tid)
     _ui_save(st)
     notify_webhook(
         "task.dispatched",
-        {"count": applied, "strategy": body.strategy, "task_ids": [x.get("task_id") for x in plan]},
+        {"count": applied, "strategy": body.strategy, "task_ids": applied_ids},
         tenant_id=resolved_tenant_id(),
         project_id=resolved_project_id(),
     )
@@ -2836,6 +2767,7 @@ def task_agent_claim(body: TaskAgentClaimIn):
     task = next((row for row in task_rows if row.get("id") == task_id), None)
     if not task:
         raise HTTPException(404, "任务不存在")
+    _require_task_dependencies([task_id])
     if packet is None:
         fallback_assignee, tool, reason = _dispatch_actor(task)
         packet = _agent_packet(task, order=1, lane=1, assigned_to=agent or fallback_assignee, dev_tool=body.dev_tool or tool, reason=reason)
@@ -2974,6 +2906,7 @@ def task_agent_heartbeat(body: TaskAgentHeartbeatIn):
 @router.post("/{task_id}:pull")
 def pull_task(task_id: str):
     _safe_task_id(task_id)
+    _require_task_dependencies([task_id], target_status="in_progress")
     t = table("tasks")
     if t is None:
         raise HTTPException(503, "数据库不可用")
@@ -3010,6 +2943,8 @@ def task_agent_report(task_id: str, body: TaskAgentReportIn):
         status = "blocked"
     if failed_gates and status == "completed":
         status = "blocked"
+    if status in {"in_progress", "completed"}:
+        _require_task_dependencies([task_id], target_status=status)
     vals: Dict[str, Any] = {"updated_at": now()}
     if status:
         vals["status"] = status
@@ -3149,6 +3084,8 @@ def update_task(task_id: str, body: TaskUpdate):
     vals = {k: v for k, v in raw.items() if v is not None}
     if not vals and not ui_patch:
         return {"ok": True}
+    if vals.get("status") in {"in_progress", "completed"}:
+        _require_task_dependencies([task_id], target_status=vals["status"])
     if vals:
         vals["updated_at"] = now()
         t.update(where=f"id = '{task_id}'", values=vals)

@@ -324,6 +324,29 @@ class DeliveryPlanPreview(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class DeliveryTaskReview(Base):
+    """Append-only human decisions; invalidation preserves the original evidence."""
+    __tablename__ = "delivery_task_reviews"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    reviewer_id = Column(String(64), nullable=False)
+    reviewer_name = Column(String(128), nullable=False)
+    decision = Column(String(32), nullable=False)
+    task_basis = Column(String(64), nullable=False)
+    snapshot = Column(JSON, nullable=False)
+    comment = Column(Text, nullable=False)
+    evidence_content = Column(Text, nullable=False, default="")
+    evidence_url = Column(String(2000), nullable=False, default="")
+    invalidated = Column(Boolean, nullable=False, default=False)
+    invalidated_at = Column(DateTime, nullable=True)
+    invalidated_reason = Column(String(64), nullable=False, default="")
+    __table_args__ = (Index("ix_task_review_scope", "tenant_id", "project_id", "task_id", "seq"),)
+
+
 class RequirementAssistance(Base):
     """Durable generation or adoption intent scoped to one project and actor."""
     __tablename__ = "requirement_assistance"

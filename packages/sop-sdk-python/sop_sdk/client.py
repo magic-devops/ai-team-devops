@@ -119,6 +119,19 @@ class ManagerClient:
         resource = _resource_segment(baseline_id)
         return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}")
 
+    def delivery_task_reviews(
+        self, task_id: str, *, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read manual review evidence and current eligibility in the selected project."""
+        resource = _resource_segment(task_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("review limit must be an integer between 1 and 100")
+        params: dict[str, Any] = {"limit": limit}
+        if cursor:
+            _resource_segment(cursor)
+            params["cursor"] = cursor
+        return self._request("GET", f"/api/v1/delivery/tasks/{resource}/reviews", params=params)
+
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")
 

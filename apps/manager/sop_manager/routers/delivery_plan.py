@@ -393,11 +393,9 @@ def edit_task_links(db, project, data, task, body):
         if {"starts_on", "ends_on"} & body.model_fields_set:
             validate_schedule(data.get("task_details", {}), [task.id])
         return False
-    requirement = get_record(db, Requirement, project, task.req_id)
-    revision = data["flows"].get(requirement.id, default_flow())["revision"]
-    basis = requirement_basis(requirement)
-    if body.requirement_basis != basis or body.requirement_revision != revision:
-        fail(409, "plan_basis_changed", "Requirement changed. Review and explicitly adopt the latest basis.")
+    requirement = get_record(db, Requirement, project, task.req_id) if task.req_id else None
+    revision = data["flows"].get(requirement.id, default_flow())["revision"] if requirement else None
+    basis = requirement_basis(requirement) if requirement else None
     details = data.setdefault("task_details", {}).setdefault(task.id, {})
     before = deepcopy(details)
     details.update({field: getattr(body, field) for field in fields})
@@ -405,7 +403,7 @@ def edit_task_links(db, project, data, task, body):
     if any(ref not in existing for ref in details.get("depends_on", [])):
         fail(422, "plan_dependency_missing", "Choose existing predecessor tasks from this project")
     if any(
-        index >= len(requirement.acceptance_criteria or [])
+        index >= len(requirement.acceptance_criteria or []) if requirement else True
         for index in details.get("acceptance_criteria", [])
     ):
         fail(422, "plan_criteria_invalid", "Acceptance criteria index is not in this requirement revision")
@@ -417,11 +415,12 @@ def edit_task_links(db, project, data, task, body):
     changed = any(before.get(field, []) != details.get(field, []) for field in fields) or (
         bool(before.get("requirement_basis")) and before["requirement_basis"] != basis
     )
-    details.update(
-        requirement_snapshot=requirement_snapshot(requirement),
-        requirement_basis=basis,
-        requirement_revision=revision,
-    )
+    if requirement:
+        details.update(
+            requirement_snapshot=requirement_snapshot(requirement),
+            requirement_basis=basis,
+            requirement_revision=revision,
+        )
     if changed:
         for entry in data.get("executions", []):
             if entry["task_id"] == task.id:
@@ -447,29 +446,10 @@ def apply_plan(db, project, user, data, requirement, body, roster):
 
 def dependency_status(db, project, data):
     """Only verified canonical completion satisfies a dependency, including its chain."""
-    tasks = {task.id: task for task in records(db, Task, project).all()}
-    executions = {entry["task_id"]: entry for entry in data.get("executions", [])}
-    graph = {tid: details.get("depends_on", []) for tid, details in data.get("task_details", {}).items()}
-    memo = {}
+    from .delivery_verification import VerificationContext
 
-    def completed(tid, trail):
-        if tid in memo:
-            return memo[tid]
-        task = tasks.get(tid)
-        entry = executions.get(tid)
-        if (
-            tid in trail
-            or not task
-            or task.status != "completed"
-            or data.get("task_details", {}).get(tid, {}).get("blocked_reason")
-            or (entry and (entry["status"] != "accepted" or entry.get("stale")))
-        ):
-            return False
-        result = all(completed(ref, trail | {tid}) for ref in graph.get(tid, []))
-        memo[tid] = result
-        return result
-
-    return {tid: [ref for ref in graph.get(tid, []) if not completed(ref, {tid})] for tid in tasks}
+    context = VerificationContext(db, project, data)
+    return {tid: context.blocked(tid) for tid in context.tasks}
 
 
 def dependency_blocked(db, project, data, task_id):
@@ -477,9 +457,12 @@ def dependency_blocked(db, project, data, task_id):
 
 
 def require_dependencies(db, project, data, task_id):
-    reason = data.get("task_details", {}).get(task_id, {}).get("blocked_reason")
+    task = get_record(db, Task, project, task_id)
+    reason = data.get("task_details", {}).get(task_id, {}).get("blocked_reason") or data.get("flows", {}).get(
+        task.req_id, {}
+    ).get("blocked_reason")
     if reason:
-        fail(409, "task_blocked", "Resolve the task blocking reason first: " + reason)
+        fail(409, "task_blocked", "Resolve the task or requirement blocking reason first: " + reason)
     blocked = dependency_blocked(db, project, data, task_id)
     if blocked:
         fail(409, "task_dependencies_blocked", "Deliver predecessor tasks first: " + ", ".join(blocked))

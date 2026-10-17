@@ -82,6 +82,7 @@ export type DeliveryRequirement = {
   };
 };
 export type DeliveryTask = {
+  basis: string;
   id: string;
   req_id: string;
   title: string;
@@ -270,6 +271,7 @@ export type DeliveryAction =
   | "requirement.update"
   | "task.create"
   | "task.update"
+  | "task.manual_review"
   | "tasks.plan"
   | "artifact.add"
   | "stage.advance"

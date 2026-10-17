@@ -8,8 +8,10 @@ import { TasksWorkbenchHeader } from "./delivery/TasksWorkbenchHeader";
 import { SprintBurndownChart } from "@/pages/shared/SprintBurndownChart";
 import { SprintProgressPanel } from "@/pages/shared/SprintProgressPanel";
 import { api } from "@/lib/api";
-import { getProjectId, getToken } from "@/lib/authStorage";
+import { getProjectId, getToken, getSessionRevision } from "@/lib/authStorage";
 import { linkedTaskRows, taskIdFromHash } from "@/lib/taskDeepLink";
+import { manualTaskHref, taskRecordStatusLabel } from "@/lib/deliveryTaskReview";
+import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
@@ -104,6 +106,7 @@ function TaskCard({
   busy?: boolean;
   draggable?: boolean;
 }) {
+  const { t } = useTranslation();
   const pr = (task.priority || "P3").toUpperCase();
   return (
     <div
@@ -159,7 +162,7 @@ function TaskCard({
       >
         {STATUSES.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {taskRecordStatusLabel(s, t)}
           </option>
         ))}
       </select>
@@ -182,7 +185,6 @@ export function Tasks({
   const hasProject = Boolean(getProjectId());
   const [tab, setTab] = useState<Tab>(initialTab);
   const [sprintId, setSprintId] = useState<string>("");
-  const [depDraft, setDepDraft] = useState({ source: "", target: "", type: "blocks", note: "" });
   const [depQuery, setDepQuery] = useState("");
   const [depFilter, setDepFilter] = useState("all");
   const [depSelectedNode, setDepSelectedNode] = useState<any>(null);
@@ -641,25 +643,6 @@ export function Tasks({
     },
   });
 
-  const addDependency = useMutation({
-    mutationFn: () =>
-      api.addTaskDependency(depDraft.source, {
-        target_id: depDraft.target,
-        type: depDraft.type,
-        note: depDraft.note,
-      }),
-    onSuccess: () => {
-      setDepDraft((v) => ({ ...v, note: "" }));
-      void qc.invalidateQueries({ queryKey: ["taskDependencies"] });
-    },
-  });
-
-  const deleteDependency = useMutation({
-    mutationFn: ({ source, target, type }: { source: string; target: string; type: string }) =>
-      api.deleteTaskDependency(source, target, type),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["taskDependencies"] }),
-  });
-
   const depTasksMut = useMutation({
     mutationFn: (dryRun: boolean) =>
       api.taskDependencyTasks({
@@ -732,7 +715,7 @@ export function Tasks({
   const dependencyNodes = useMemo(() => {
     const q = depQuery.trim().toLowerCase();
     return (depsQ.data?.nodes ?? []).filter((node: any) => {
-      const text = `${node.id} ${node.title} ${node.status} ${node.priority} ${node.assigned_to || ""}`.toLowerCase();
+      const text = `${node.id} ${node.title} ${taskRecordStatusLabel(node.status, t)} ${node.priority} ${node.assigned_to || ""}`.toLowerCase();
       const matchQ = !q || text.includes(q);
       const matchFilter =
         depFilter === "all" ||
@@ -796,7 +779,7 @@ export function Tasks({
       dataIndex: "title",
       render: (_value, task) => (
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--text)]">{task.title}</p>
+          <a href={manualTaskHref(task)} className="block truncate text-sm font-semibold text-[var(--brand)]">{task.title}</a>
           <p className="mt-1 truncate font-mono text-xs text-[var(--muted)]">{task.id}</p>
           {task.debug_notes ? <p className="mt-1 line-clamp-1 text-xs text-[var(--muted-strong)]">{task.debug_notes}</p> : null}
         </div>
@@ -813,7 +796,7 @@ export function Tasks({
           value={value || "pending"}
           disabled={busy}
           onChange={(status) => patchTask.mutate({ id: task.id, patch: { status } })}
-          options={STATUSES.map((status) => ({ value: status, label: t(`page.tasks.status.${status}`) }))}
+          options={STATUSES.map((status) => ({ value: status, label: taskRecordStatusLabel(status, t) }))}
         />
       ),
     },
@@ -926,10 +909,16 @@ export function Tasks({
         </Space>
       </div>
 
+      {linkedTaskId && authed && hasProject && (
+        <Card title={t("deliveryManualReview.currentFacts")}>
+          <DeliveryTaskDetail key={`${getProjectId()}:${getSessionRevision()}:${linkedTaskId}`} projectId={getProjectId()!} sessionId={getSessionRevision() || ""} taskId={linkedTaskId} />
+        </Card>
+      )}
+
       <Card title={t("page.tasks.filters")}>
         <div className="flex flex-wrap items-center gap-2">
           <Input.Search
-            className="min-w-[20rem] flex-1"
+            className="min-w-0 w-full flex-1 sm:min-w-[20rem]"
             allowClear
             value={taskQuery}
             onChange={(e) => setTaskQuery(e.target.value)}
@@ -941,7 +930,7 @@ export function Tasks({
             onChange={setStatusFilter}
             options={[
               { value: "", label: t("page.tasks.allStatuses") },
-              ...STATUSES.map((status) => ({ value: status, label: t(`page.tasks.status.${status}`) })),
+              ...STATUSES.map((status) => ({ value: status, label: taskRecordStatusLabel(status, t) })),
             ]}
           />
           <Select
@@ -1167,7 +1156,7 @@ export function Tasks({
               placeholder={t("page.tasks.bulkStatus")}
               value={bulkStatus || undefined}
               onChange={(value) => setBulkStatus(value || "")}
-              options={STATUSES.map((status) => ({ value: status, label: t(`page.tasks.status.${status}`) }))}
+              options={STATUSES.map((status) => ({ value: status, label: taskRecordStatusLabel(status, t) }))}
             />
             <Select
               className="min-w-36"
@@ -1905,7 +1894,7 @@ export function Tasks({
       {tab === "board" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {STATUSES.map((st) => (
-            <Card key={st} title={`${t(`page.tasks.status.${st}`)} (${boardGroups[st].length})`}>
+            <Card key={st} title={`${taskRecordStatusLabel(st, t)} (${boardGroups[st].length})`}>
               <div
                 className="min-h-[80px] space-y-2"
                 onDragOver={(e) => {
@@ -1983,7 +1972,7 @@ export function Tasks({
                       <span
                         className={`ml-2 rounded px-1 py-0.5 text-xs ${statusColor[task.status] || ""}`}
                       >
-                        {task.status}
+                        {taskRecordStatusLabel(task.status, t)}
                       </span>
                     </li>
                   ))
@@ -2091,7 +2080,7 @@ export function Tasks({
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${statusColor[task.status] || ""}`}
                     >
-                      {task.status}
+                      {taskRecordStatusLabel(task.status, t)}
                     </span>
                   </li>
                 ))}
@@ -2214,7 +2203,7 @@ export function Tasks({
                         <p className="mt-0.5 font-mono text-[10px] text-slate-400">{node.id}</p>
                       </div>
                       <div className="flex flex-col items-end gap-1">
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${statusColor[node.status] || ""}`}>{node.status}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] ${statusColor[node.status] || ""}`}>{taskRecordStatusLabel(node.status, t)}</span>
                         <Tag color={node.risk_level === "high" ? "red" : node.risk_level === "medium" ? "orange" : "green"}>{node.risk_level}</Tag>
                       </div>
                     </div>
@@ -2241,14 +2230,6 @@ export function Tasks({
                       {(edge.source_title || edge.source_id)} → {(edge.target_title || edge.target_id)}
                     </p>
                     {edge.note ? <p className="mt-1 text-xs text-slate-500">{edge.note}</p> : null}
-                    <button
-                      type="button"
-                      className="mt-2 text-xs text-rose-600 disabled:opacity-50"
-                      disabled={deleteDependency.isPending}
-                      onClick={() => deleteDependency.mutate({ source: edge.source_id, target: edge.target_id, type: edge.type })}
-                    >
-                      {t("page.tasks.depDelete")}
-                    </button>
                   </li>
                 ))}
                 {depsQ.isSuccess && !dependencyEdges.length ? <li className="text-sm text-slate-500">{t("page.tasks.depEmpty")}</li> : null}
@@ -2264,7 +2245,7 @@ export function Tasks({
                     <div className="mt-1 font-mono text-[10px] text-[var(--muted)]">{depSelectedNode.id}</div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       <Tag>{depSelectedNode.priority}</Tag>
-                      <Tag>{depSelectedNode.status}</Tag>
+                      <Tag>{taskRecordStatusLabel(depSelectedNode.status, t)}</Tag>
                       <Tag color={depSelectedNode.risk_level === "high" ? "red" : depSelectedNode.risk_level === "medium" ? "orange" : "green"}>{depSelectedNode.risk_level}</Tag>
                     </div>
                   </div>
@@ -2279,11 +2260,8 @@ export function Tasks({
                     </div>
                   ) : null}
                   <Space wrap>
-                    <Button size="small" onClick={() => setDepDraft((v) => ({ ...v, source: depSelectedNode.id }))}>
-                      {t("page.tasks.depUseAsSource")}
-                    </Button>
-                    <Button size="small" onClick={() => setDepDraft((v) => ({ ...v, target: depSelectedNode.id }))}>
-                      {t("page.tasks.depUseAsTarget")}
+                    <Button size="small" href={manualTaskHref(depSelectedNode)}>
+                      {t("deliveryManualReview.openTaskPlan")}
                     </Button>
                   </Space>
                 </div>
@@ -2317,49 +2295,7 @@ export function Tasks({
                 {depsQ.isSuccess && !(depsQ.data?.blocked_queue ?? []).length ? <p className="text-sm text-[var(--muted)]">{t("page.tasks.depNoBlockedQueue")}</p> : null}
               </div>
             </Card>
-            <Card title={t("page.tasks.depCreate")}>
-              <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!depDraft.source || !depDraft.target) return;
-                  addDependency.mutate();
-                }}
-              >
-                <label className="block text-xs text-slate-500">
-                  {t("page.tasks.depSource")}
-                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.source} onChange={(e) => setDepDraft((v) => ({ ...v, source: e.target.value }))}>
-                    <option value="">—</option>
-                    {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
-                  </select>
-                </label>
-                <label className="block text-xs text-slate-500">
-                  {t("page.tasks.depTarget")}
-                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.target} onChange={(e) => setDepDraft((v) => ({ ...v, target: e.target.value }))}>
-                    <option value="">—</option>
-                    {tasks.map((task: any) => <option key={task.id} value={task.id}>{task.id} · {task.title}</option>)}
-                  </select>
-                </label>
-                <label className="block text-xs text-slate-500">
-                  {t("page.tasks.depType")}
-                  <select className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.type} onChange={(e) => setDepDraft((v) => ({ ...v, type: e.target.value }))}>
-                    <option value="blocks">blocks</option>
-                    <option value="relates">relates</option>
-                    <option value="duplicates">duplicates</option>
-                  </select>
-                </label>
-                <textarea className="min-h-24 w-full rounded border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" value={depDraft.note} onChange={(e) => setDepDraft((v) => ({ ...v, note: e.target.value }))} placeholder={t("page.tasks.depNote")} />
-                <button
-                  type="submit"
-                  disabled={addDependency.isPending || !depDraft.source || !depDraft.target}
-                  className="w-full rounded-lg bg-sky-600 px-4 py-1.5 text-sm text-white disabled:opacity-50"
-                >
-                  {t("page.tasks.depSave")}
-                </button>
-                {addDependency.error ? <p className="text-sm text-rose-600">{(addDependency.error as Error).message}</p> : null}
-                {deleteDependency.error ? <p className="text-sm text-rose-600">{(deleteDependency.error as Error).message}</p> : null}
-              </form>
-            </Card>
+
           </div>
         </div>
       ) : null}

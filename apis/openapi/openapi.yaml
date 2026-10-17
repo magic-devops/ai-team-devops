@@ -1500,6 +1500,64 @@ paths:
         maximum 366 selected days; consumers must preserve gaps rather than connect sparse observations. current_observation
         is live and is not appended as history. Missing valid plan dates produces no ideal/actual time curve. Ideal
         uses current scope, not an immutable baseline; use delivery/progress to compare a frozen plan.
+  /api/v1/delivery/tasks/{task_id}/reviews:
+    get:
+      tags:
+      - delivery
+      summary: Read current manual task review eligibility and original review evidence
+      operationId: task_reviews_api_v1_delivery_tasks__task_id__reviews_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskReviewsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '400':
+          $ref: '#/components/responses/BusinessProjectMissing'
+        '401':
+          $ref: '#/components/responses/BusinessUnauthorized'
+        '403':
+          $ref: '#/components/responses/BusinessForbidden'
+        '404':
+          $ref: '#/components/responses/BusinessNotFound'
+      description: Pure read in the explicitly selected authorized project. No runtime, model, default records or
+        progress observations are created. Manual evidence is human registered, not signed CI output. Records are
+        ordered by descending sequence; next_cursor identifies the last record in this page. The cursor is restricted
+        to this project and task. A deleted task with review evidence has current=null.
   /api/v1/delivery/workspace:
     get:
       tags: [delivery]
@@ -1587,9 +1645,9 @@ paths:
 
         task.update can maintain dependency IDs and acceptance criterion indexes; changing
 
-        either association requires the current requirement_basis and requirement_revision.
+        either association requires the current task_basis, including for independent tasks.
 
-        Empty arrays explicitly clear associations. Stale requirement bases are rejected.
+        Empty arrays explicitly clear associations. Stale task scope is rejected.
 
 
         project.update changes only explicitly supplied fields, retaining untouched owner/goal/dates. name/description
@@ -1599,7 +1657,11 @@ paths:
 
         progress.record requires write and records current UTC facts. baseline.create requires approve and freezes
         an immutable plan after checking complete task IDs and content basis. Both use the same CAS, idempotency receipts
-        and atomic business transaction; failures retain no successful observation.'
+        and atomic business transaction; failures retain no successful observation.
+
+        task.manual_review requires approve and fixed task basis, project version and idempotency identity. A changed
+        basis returns structured 409 code task_review_basis_changed without saving a decision. Manual acceptance,
+        permanent invalidation and progress observations share the business transaction.'
       security:
       - bearerAuth: []
       parameters:
@@ -5334,6 +5396,412 @@ components:
         366 selected days; consumers must preserve gaps rather than connect sparse observations. current_observation
         is live and is not appended as history. Missing valid plan dates produces no ideal/actual time curve. Ideal
         uses current scope, not an immutable baseline; use delivery/progress to compare a frozen plan.
+    TaskReviewsResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        task_id:
+          type: string
+          title: Task Id
+        version:
+          type: integer
+          title: Version
+        as_of:
+          type: string
+          title: As Of
+        current:
+          anyOf:
+          - $ref: '#/components/schemas/TaskReviewCurrent'
+          - type: 'null'
+        reviews:
+          items:
+            $ref: '#/components/schemas/TaskReviewRecord'
+          type: array
+          title: Reviews
+        total:
+          type: integer
+          title: Total
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        limit:
+          type: integer
+          title: Limit
+      type: object
+      required:
+      - project_id
+      - task_id
+      - version
+      - as_of
+      - current
+      - reviews
+      - total
+      - next_cursor
+      - limit
+      title: TaskReviewsResponse
+    TaskReviewRecord:
+      properties:
+        id:
+          type: string
+          title: Id
+        task_id:
+          type: string
+          title: Task Id
+        decision:
+          type: string
+          enum:
+          - accept
+          - request_changes
+          title: Decision
+        created_at:
+          type: string
+          title: Created At
+        reviewer:
+          $ref: '#/components/schemas/TaskReviewReviewer'
+        task_basis:
+          type: string
+          title: Task Basis
+        snapshot:
+          $ref: '#/components/schemas/TaskReviewSnapshot'
+        comment:
+          type: string
+          title: Comment
+        evidence_content:
+          type: string
+          title: Evidence Content
+        evidence_url:
+          type: string
+          title: Evidence Url
+        source:
+          type: string
+          const: manual
+          title: Source
+        invalidated:
+          type: boolean
+          title: Invalidated
+        invalidated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invalidated At
+        invalidated_reason:
+          type: string
+          title: Invalidated Reason
+        valid:
+          type: boolean
+          title: Valid
+      type: object
+      required:
+      - id
+      - task_id
+      - decision
+      - created_at
+      - reviewer
+      - task_basis
+      - snapshot
+      - comment
+      - evidence_content
+      - evidence_url
+      - source
+      - invalidated
+      - invalidated_at
+      - invalidated_reason
+      - valid
+      title: TaskReviewRecord
+    TaskReviewSnapshot:
+      properties:
+        task:
+          $ref: '#/components/schemas/TaskReviewTask'
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/TaskReviewOwner'
+          - type: 'null'
+        requirement:
+          anyOf:
+          - $ref: '#/components/schemas/TaskReviewRequirement'
+          - type: 'null'
+        planning:
+          $ref: '#/components/schemas/TaskReviewPlanning'
+        dependency_basis:
+          additionalProperties:
+            type: string
+          type: object
+          title: Dependency Basis
+      type: object
+      required:
+      - task
+      - owner
+      - requirement
+      - planning
+      - dependency_basis
+      title: TaskReviewSnapshot
+    TaskReviewPlanning:
+      properties:
+        acceptance_criteria:
+          items:
+            type: integer
+          type: array
+          title: Acceptance Criteria
+        depends_on:
+          items:
+            type: string
+          type: array
+          title: Depends On
+      type: object
+      required:
+      - acceptance_criteria
+      - depends_on
+      title: TaskReviewPlanning
+    TaskReviewRequirement:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        revision:
+          type: integer
+          title: Revision
+        acceptance_criteria:
+          items:
+            type: string
+          type: array
+          title: Acceptance Criteria
+        blocked_reason:
+          type: string
+          title: Blocked Reason
+      type: object
+      required:
+      - id
+      - title
+      - description
+      - revision
+      - acceptance_criteria
+      - blocked_reason
+      title: TaskReviewRequirement
+    TaskReviewOwner:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        kind:
+          type: string
+          enum:
+          - human
+          - agent
+          - tool
+          title: Kind
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - id
+      - name
+      - kind
+      - active
+      title: TaskReviewOwner
+    TaskReviewTask:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        description:
+          type: string
+          title: Description
+        req_id:
+          type: string
+          title: Req Id
+        status:
+          type: string
+          title: Status
+        assigned_to:
+          type: string
+          title: Assigned To
+        priority:
+          type: string
+          title: Priority
+        estimate:
+          type: string
+          title: Estimate
+        blocked_reason:
+          type: string
+          title: Blocked Reason
+      type: object
+      required:
+      - id
+      - title
+      - description
+      - req_id
+      - status
+      - assigned_to
+      - priority
+      - estimate
+      - blocked_reason
+      title: TaskReviewTask
+    TaskReviewReviewer:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      type: object
+      required:
+      - id
+      - name
+      title: TaskReviewReviewer
+    TaskReviewCurrent:
+      properties:
+        task:
+          $ref: '#/components/schemas/TaskReviewTask'
+        owner:
+          anyOf:
+          - $ref: '#/components/schemas/TaskReviewOwner'
+          - type: 'null'
+        requirement:
+          anyOf:
+          - $ref: '#/components/schemas/TaskReviewRequirement'
+          - type: 'null'
+        planning:
+          $ref: '#/components/schemas/TaskReviewPlanning'
+        dependency_basis:
+          additionalProperties:
+            type: string
+          type: object
+          title: Dependency Basis
+        basis:
+          type: string
+          title: Basis
+        eligible:
+          type: boolean
+          title: Eligible
+        can_review:
+          type: boolean
+          title: Can Review
+        can_accept:
+          type: boolean
+          title: Can Accept
+        reasons:
+          items:
+            $ref: '#/components/schemas/TaskReviewReason'
+          type: array
+          title: Reasons
+        dependency_blocked:
+          items:
+            type: string
+          type: array
+          title: Dependency Blocked
+        verified:
+          type: boolean
+          title: Verified
+      type: object
+      required:
+      - task
+      - owner
+      - requirement
+      - planning
+      - dependency_basis
+      - basis
+      - eligible
+      - can_review
+      - can_accept
+      - reasons
+      - dependency_blocked
+      - verified
+      title: TaskReviewCurrent
+    TaskReviewReason:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - code
+      - message
+      title: TaskReviewReason
+    TaskManualReview:
+      additionalProperties: false
+      properties:
+        task_id:
+          maxLength: 64
+          minLength: 1
+          title: Task Id
+          type: string
+        decision:
+          enum:
+          - accept
+          - request_changes
+          title: Decision
+          type: string
+        basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Basis
+          type: string
+        comment:
+          maxLength: 4000
+          minLength: 1
+          title: Comment
+          type: string
+          pattern: \S
+        evidence_content:
+          default: ''
+          maxLength: 20000
+          title: Evidence Content
+          type: string
+        evidence_url:
+          default: ''
+          maxLength: 2000
+          title: Evidence Url
+          type: string
+      required:
+      - task_id
+      - decision
+      - basis
+      - comment
+      title: TaskManualReview
+      type: object
+      allOf:
+      - if:
+          properties:
+            decision:
+              const: accept
+          required:
+          - decision
+        then:
+          anyOf:
+          - required:
+            - evidence_content
+            properties:
+              evidence_content:
+                pattern: \S
+          - required:
+            - evidence_url
+            properties:
+              evidence_url:
+                minLength: 1
+                pattern: ^https?://
+      description: Requires current project approval permission, a human owned task without execution evidence and the
+        pinned current basis. Accept requires recorded completion, verified predecessors and manual evidence; request_changes
+        reopens the task. Decisions append immutable original scope and evidence. Changed scope permanently invalidates
+        prior acceptance; pure date changes preserve it.
     DeliveryCommand:
       type: object
       additionalProperties: false
@@ -5355,6 +5823,7 @@ components:
           - requirement.update
           - task.create
           - task.update
+          - task.manual_review
           - tasks.plan
           - artifact.add
           - stage.advance
@@ -5456,48 +5925,123 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/BaselineCreate'
+      - if:
+          properties:
+            action:
+              const: task.manual_review
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/TaskManualReview'
     TaskEdit:
-      type: object
       additionalProperties: false
-      required: [id]
-      description: |
-        Patch only the supplied task fields. Dependency and acceptance associations
-        require both the current requirement basis and revision. Omit these arrays
-        to preserve associations; use an empty array to clear them. Explicit null
-        associations are invalid. Date changes validate the resulting saved range
-        and the planned date order of predecessor and successor tasks atomically.
       properties:
-        id: { type: string, minLength: 1, maxLength: 64 }
-        status: { type: [string, 'null'], enum: [pending, in_progress, blocked, completed, null], default: null }
-        owner_id: { type: [string, 'null'], maxLength: 100, default: null }
-        description: { type: [string, 'null'], maxLength: 10000, default: null }
-        starts_on: { type: [string, 'null'], format: date, default: null }
-        ends_on: { type: [string, 'null'], format: date, default: null }
-        blocked_reason: { type: [string, 'null'], maxLength: 2000, default: null }
-        depends_on:
-          type: array
-          maxItems: 40
-          uniqueItems: true
-          items: { type: string, minLength: 1, maxLength: 64 }
-          description: Existing canonical task IDs in this project; strings are trimmed and empty IDs, duplicates, self-dependencies and cycles are rejected
+        starts_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Starts On
+        ends_on:
+          anyOf:
+          - format: date
+            type: string
+          - type: 'null'
+          default: null
+          title: Ends On
+        id:
+          maxLength: 64
+          minLength: 1
+          title: Id
+          type: string
+        status:
+          anyOf:
+          - enum:
+            - pending
+            - in_progress
+            - blocked
+            - completed
+            type: string
+          - type: 'null'
+          default: null
+          title: Status
+        owner_id:
+          anyOf:
+          - maxLength: 100
+            type: string
+          - type: 'null'
+          default: null
+          title: Owner Id
+        description:
+          anyOf:
+          - maxLength: 10000
+            type: string
+          - type: 'null'
+          default: null
+          title: Description
+        blocked_reason:
+          anyOf:
+          - maxLength: 2000
+            type: string
+          - type: 'null'
+          default: null
+          title: Blocked Reason
         acceptance_criteria:
-          type: array
-          maxItems: 80
-          uniqueItems: true
-          items: { type: integer, minimum: 0 }
-          description: Zero-based indexes into the explicitly adopted current requirement acceptance criteria
-        requirement_revision: { type: [integer, 'null'], minimum: 1, default: null }
-        requirement_basis: { type: [string, 'null'], minLength: 64, maxLength: 64, default: null }
+          anyOf:
+          - items:
+              minimum: 0
+              type: integer
+            maxItems: 80
+            type: array
+          - type: 'null'
+          default: null
+          title: Acceptance Criteria
+        depends_on:
+          anyOf:
+          - items:
+              type: string
+            maxItems: 40
+            type: array
+          - type: 'null'
+          default: null
+          title: Depends On
+        task_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Task Basis
+      required:
+      - id
+      title: TaskEdit
+      type: object
+      description: The single task plan edit command for requirement and independent tasks. Reference changes require
+        the pinned task_basis; independent tasks have no requirement acceptance indexes. Final dependency graph and
+        dates are validated atomically. No duplicate dependency file writes are supported.
       allOf:
-        - if:
-            anyOf:
-              - required: [depends_on]
-              - required: [acceptance_criteria]
-          then:
-            required: [requirement_basis, requirement_revision]
-            properties:
-              requirement_basis: { type: string, minLength: 64, maxLength: 64 }
-              requirement_revision: { type: integer, minimum: 1 }
+      - if:
+          anyOf:
+          - required:
+            - acceptance_criteria
+          - required:
+            - depends_on
+        then:
+          required:
+          - task_basis
+          properties:
+            task_basis:
+              type: string
+              pattern: ^[0-9a-f]{64}$
+            acceptance_criteria:
+              type: array
+              uniqueItems: true
+            depends_on:
+              type: array
+              uniqueItems: true
     TaskDraft:
       type: object
       additionalProperties: false

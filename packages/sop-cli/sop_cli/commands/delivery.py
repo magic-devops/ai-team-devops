@@ -10,7 +10,7 @@ import typer
 from .._util import console, get_client, warn
 
 app = typer.Typer(
-    help="项目交付：workspace / inbox / progress / observation / baseline / targets / preview / command"
+    help="项目交付：workspace / inbox / progress / observation / baseline / reviews / targets / preview / command"
 )
 
 
@@ -101,6 +101,23 @@ def workspace():
     """读取项目需求、任务、执行和审查快照。"""
     with get_client() as client:
         console.print_json(data=client.delivery_workspace())
+
+
+@app.command("reviews")
+def reviews(
+    task_id: str,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100, help="每页审查记录数")] = 20,
+    cursor: Annotated[str, typer.Option("--cursor", help="上一页返回的 next_cursor")] = "",
+    json_out: Annotated[bool, typer.Option("--json", help="保留原始证据、资格和分页信息")] = False,
+):
+    """读取人工任务验收历史；删除或失效的历史不替代当前交付。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_task_reviews(task_id, limit=limit, cursor=cursor)
+        _show_progress_record(result, json_out, "人工任务验收")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
 
 
 @app.command("inbox")

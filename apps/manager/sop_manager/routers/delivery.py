@@ -20,6 +20,7 @@ from .delivery_contract import (
     ProgressObservationResponse,
     ProgressResponse,
     TaskPlanPreview,
+    TaskReviewsResponse,
 )
 from .delivery_service import (
     apply_action,
@@ -172,6 +173,28 @@ def execution_targets(
     return catalog(getattr(request.app.state, "hermes_store", None), user)
 
 
+@router.get("/tasks/{task_id}/reviews", response_model=TaskReviewsResponse)
+def task_reviews(
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=64)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_manual_review import list_reviews
+
+    project = _project(db, user, project_id)
+    return list_reviews(
+        db,
+        project,
+        task_id,
+        can_approve=_permissions(db, user, project)["approve"],
+        limit=limit,
+        cursor=cursor,
+    )
+
+
 @router.post("/task-plan-preview")
 def task_plan_preview(
     body: TaskPlanPreview,
@@ -193,7 +216,14 @@ def _command_permission(action, payload):
         action == "project.update" and {"name", "description"} & payload.keys()
     ):
         return "configure"
-    if action in {"stage.advance", "stage.reopen", "release.save", "execution.review", "baseline.create"}:
+    if action in {
+        "stage.advance",
+        "stage.reopen",
+        "release.save",
+        "execution.review",
+        "baseline.create",
+        "task.manual_review",
+    }:
         return "approve"
     return "write"
 
@@ -302,6 +332,10 @@ def execute(
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action == "task.manual_review":
+        from .delivery_manual_review import apply_review
+
+        return apply_review(db, project, user, data, payload)
     if action in {"progress.record", "baseline.create"}:
         from .delivery_progress_baseline import apply_progress
 

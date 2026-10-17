@@ -62,7 +62,7 @@
 
 SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_command(body)`；CLI 提供 `sop delivery workspace`、`sop delivery targets`、`sop delivery command --file <json>`，均沿用相同作用域、版本与幂等命令。API 契约位于 `apis/openapi/openapi.yaml`。
 
-新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`。通过现有 SQLAlchemy `create_all` 创建，未改变既有业务表列。生产库上线仍应按团队迁移与备份流程执行，并验证 MySQL/OceanBase；本地数据库验证为 SQLite。
+新增表：`delivery_workspaces`、`delivery_events`、`delivery_receipts`、`delivery_plan_previews`、`requirement_assistance`，以及进度表 `delivery_progress_observations`、`delivery_progress_checkpoints`、`delivery_progress_baselines`、人工验收表 `delivery_task_reviews`。通过现有 SQLAlchemy `create_all` 创建，未改变既有业务表列。生产库上线仍应按团队迁移与备份流程执行，并验证 MySQL/OceanBase；本地数据库验证为 SQLite。
 
 ## 需求拆解与任务计划
 
@@ -71,7 +71,7 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 - 每个需求返回内容 basis，包括尚无交付 flow 的旧需求。需求标题、范围或验收条件重排后，旧基准不能静默创建错误关联。冲突保留输入；明确采用最新基准时按验收条件文本及重复出现顺序重新匹配，删除的条件不会转绑其他条件。
 - 计划生成凭据在调用模型前单独提交，不持有业务工作区写锁。相同请求成功时重放结果，生成中或已失败时不重复调用模型；用户主动「重新生成」才使用新请求身份。生成后再次核验账户、项目权限和需求基准。
 - AI 使用现有 `llm_gateway.llm_chat(task_type=plan, cache_ttl=0)`，记录实际 model/provider/usage。模型输出经严格结构与依赖校验，缺省任务 key 规范化后再返回。模型失败、额度不足及非法输出明确返回，不静默降级为模板成功。模型管理页的当前项目配置已用于实际调用；v2 治理策略及生产执行路由仍需继续统一。
-- 创建后「维护任务计划」可修改验收关联、依赖、日期及阻塞原因。修改关联需要当前需求基准；已删除的前置项可解除或替换。同次清除依赖和改期按最终图原子校验。关联变化永久作废旧执行证据；同值关联与单纯日期保存不会作废已验收结果。
+- 创建后「维护任务计划」可修改验收关联、依赖、日期及阻塞原因。修改关联固定当前任务基准（包含当前需求定义），独立任务也可维护前置关系；已删除的前置项可解除或替换。同次清除依赖和改期按最终图原子校验。关联变化永久作废旧执行证据；同值关联与单纯日期保存不会作废已验收结果。
 - 旧任务允许空或部分规划元数据。没有来源凭据时不伪造来源；查看、编辑和执行入口继续可用。详情展示原验收快照、计划来源与可点击的前置任务，未交付依赖阻止开始和完成，通用任务写入也受约束。
 - SDK `delivery_task_plan_preview(body)` 与 CLI `sop delivery preview --file <json>` 复用同一契约；CLI 要求显式 generator，重试复用原 JSON。设计及四种交互状态见 `docs/DELIVERY_TASK_PLAN_DESIGN.md`。
 
@@ -180,3 +180,24 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 证据统一在 `.sop-runtime/delivery-evidence/progress-baselines/`：`http-proof.json`、`http-final-read-proof.json`、`ui-proof.json`、`independent-review.md`、`review-probes-fixed.json`、OpenAPI 回执、测试日志和桌面/窄屏截图。所有服务与数据均为本地隔离 fixture，外部模型调用 0。清理仅限已清点散列并保留重要证据的 `.cache/delivery-progress-baselines/`，最终清理和 Git SHA 见回执。
 
 按用户约定，本阶段全部非忽略代码、测试、契约、文档和进度记录统一提交到当前分支，不推送。完整目标仍 active，production_integration_complete=false；下一步继续成员日历/容量、依赖时间线与项目组合/归档治理，生产身份/模型、可信 CI、实际部署回滚、智能运维及规模验证保留待办。
+
+## 人工任务验收与统一依赖增量（2026-10-17）
+
+设计见 [人工任务验收与统一依赖](DELIVERY_MANUAL_REVIEW_DESIGN.md)。按用户最新要求，以合理目标设计直接重构，不新增历史格式兼容层或双源桥。必要的原始验收依据、人工证据及永久失效记录用于判断交付有效性，继续保留。
+
+- 新增 SQL `delivery_task_reviews`，人工任务通过明确审查和证据登记获得有效交付。无原生执行、当前唯一活跃人类负责人、已登记完成且无真实阻塞才可通过；原生任务继续使用运行审查，人工入口不能绕过。退回追加决定并回到进行中，不覆盖原意见与证据。
+- 审查固定任务 basis、项目版本及幂等身份。内容、需求、归属或依赖变化在业务事务内永久作废旧通过，A→B→A不会复活；纯日期维护保留有效交付。身份失活/移除、ORM/Core及回滚参与同一观测链。历史审核人后来失活不抹除其当时合法记录。当前判定以 SQL 每任务最新 seq 查询，分页证据另按游标读取。
+- DeliveryWorkspace 是唯一任务前置图。图、派单、调度、订阅、领取及状态写门禁消费同一有效验收；删除旧文件图与重复依赖 POST/DELETE。仅登记 completed 不解锁依赖，include_blocked 只控制可见性。需求/任务显式阻塞继续阻止开始，只有单纯状态阻塞时允许明确恢复。
+- 有关联需求和独立任务共享计划编辑器，关联写固定 `task_basis`，移除该 Command payload 的旧 requirement_basis/revision；模板预览与新计划仍使用自身需求依据。独立任务可维护前置关系，不能伪造需求验收索引。只读依赖图节点和任务标题精确进入同一计划/验收入口。
+- 需求详情和独立任务提供人工验收区、资格说明、原始证据与失效记录。409保留意见/证据，读取最新事实后明确采用；删除任务时计划草稿保留，缺失新任务不可采用。编辑中固定工作区快照；读取最新失败清除旧可采用候选。任务页原始完成指标明确为登记口径，三语和document.lang同步。
+- typed GET `/api/v1/delivery/tasks/{task_id}/reviews`、SDK `delivery_task_reviews`、CLI `sop delivery reviews` 与 OpenAPI 同步。契约22个delivery动作、496个本地引用解析通过，严格YAML无重复key，9项实际输入模型边界核验。任务计划Command schema正确使用TaskEdit，普通Task PATCH TaskUpdate保持实际接口定义。
+
+唯一一次独立审查发现4项P2：需求阻塞漏入门禁、单纯状态阻塞无法直接恢复、独立任务编辑可能卸载丢稿、静态TaskEdit/TaskUpdate契约错置，均已定点修复。原2项SQL探针与回归83项通过；root最终服务真实HTTP验证前两项，实际界面验证删除草稿保护，接口导出与模型边界验证第四项，没有第二轮泛扫。
+
+最终验证：Manager **479项**（325.14秒）、Web **281项/46文件**（61.46秒）、SDK/CLI相关 **40项**通过；TypeScript、生产构建（1分45秒）、相关Python Ruff及差异检查通过。既有Python/Pydantic/AntD弃用和构建大包提示保留，未声称全SDK、全部lint债务、所有主题/浏览器或生产数据库已验证。
+
+实际隔离HTTP验证了登记完成阻塞→人工通过解锁、重试零重复、内容A→B→A永久失效、日期保持、旧表单409零写、退回、独立计划、分页/权限/跨项目及SDK/CLI一致。最终服务重启后审查证据保留，人工入口拒绝原生运行任务，需求阻塞两入口均409、单纯blocked可200恢复；GET不写证据/观测/事件/receipt。实际界面完成独立和需求任务审查、409明确恢复、计划保存导致旧验收失效、删除任务后保留草稿、键盘关闭及390px三语无横向溢出。
+
+证据统一在 `.sop-runtime/delivery-evidence/manual-task-review/`，含原审查与修复回执、HTTP/UI证明、桌面/窄屏截图、完整测试/类型/构建日志、源与证据散列、临时目录清理和阶段提交回执。初次测试收集受到既有失效.ai-memory链接影响，使用明确测试根后完整通过；pnpm自动依赖检查中止后直接使用现有已安装工具完成测试和构建，没有重装依赖或外部模型调用。
+
+`.pnpm-store/`继续忽略且0跟踪；新增忽略`*.tsbuildinfo`并取消已生成构建缓存的Git跟踪，保留本地缓存。完整主目标继续active；本阶段全部非忽略代码、测试、契约与文档统一commit，不推送。下一阶段继续成员容量/日历、依赖时间线、项目组合和归档治理。现有启发式派单名称不等于真实在线Agent身份，生产外部账户/模型、可信CI、实际部署回滚、智能运维及规模验证继续保留待办。

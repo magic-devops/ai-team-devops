@@ -37,6 +37,9 @@ def record_observation(
     # SQL Core CAS intentionally avoids identity-map synchronization. Read its final
     # database state, after flushing all pending ORM edits, not a cached workspace.
     db.expire_all()
+    from .delivery_manual_review import invalidate_reviews
+
+    invalidate_reviews(db, project)
     facts = capture_facts(db, project)
     fingerprint = fact_basis(facts)
     instant = _utc(now)

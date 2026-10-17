@@ -2,7 +2,7 @@ const zh = {
   title: "拆解与规划任务",
   editTask: "维护任务计划",
   editHint:
-    "可修正前置任务、验收关联和计划日期。修改关联范围会使旧执行证据失效。",
+    "可修正前置任务、验收关联和计划日期。变更关联范围会使此前的交付验收依据失效。",
   missingTask: "任务或需求已不存在，草稿已保留，请关闭后核对最新列表。",
   hint: "先调整任务范围、验收关联与前置关系，再创建选中的任务。",
   manual: "手动计划",
@@ -61,7 +61,7 @@ const en: typeof zh = {
   title: "Break down & plan tasks",
   editTask: "Edit task plan",
   editHint:
-    "Update dependencies, acceptance links and dates. Changing scope links invalidates earlier execution evidence.",
+    "Update dependencies, acceptance links and dates. Changing scope links invalidates the basis of earlier delivery acceptance.",
   missingTask:
     "Task or requirement no longer exists. Your draft is kept; close and review the latest list.",
   hint: "Adjust scope, acceptance coverage and dependencies before creating selected tasks.",
@@ -122,7 +122,7 @@ const ja: typeof zh = {
   title: "タスクの分解と計画",
   editTask: "タスク計画を編集",
   editHint:
-    "前提タスク、条件の関連、日付を修正できます。関連範囲の変更は以前の実行証拠を無効にします。",
+    "前提タスク、条件の関連、日付を修正できます。関連範囲の変更は以前の成果物受け入れの根拠を無効にします。",
   missingTask:
     "タスクまたは要件が存在しません。下書きは保持されています。閉じて最新の一覧を確認してください。",
   hint: "範囲、受け入れ条件、前提タスクを調整してから選択したタスクを作成します。",

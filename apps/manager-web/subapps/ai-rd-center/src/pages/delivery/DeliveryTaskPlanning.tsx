@@ -15,7 +15,7 @@ export function DeliveryTaskPlanning({
   canEdit,
 }: {
   task: DeliveryTask;
-  requirement: DeliveryRequirement;
+  requirement?: DeliveryRequirement;
   data: DeliveryWorkspace;
   onTask: (task: DeliveryTask) => void;
   onEdit: () => void;
@@ -84,19 +84,25 @@ export function DeliveryTaskPlanning({
                   {plan.provider} · {plan.model}
                 </small>
               )}
-              <p>
-                {t("delivery.revision", { number: plan.requirement_revision })}
-              </p>
-              <ul>
-                {(plan.acceptance_criteria || []).map((index) => (
-                  <li key={index}>
-                    {plan.requirement_snapshot?.acceptance_criteria[index] ||
-                      (plan.requirement_revision === requirement.flow.revision
-                        ? requirement.acceptance_criteria[index]
-                        : `${index + 1} · ${t("delivery.oldRevision")}`)}
-                  </li>
-                ))}
-              </ul>
+              {requirement && (
+                <p>
+                  {t("delivery.revision", {
+                    number: plan.requirement_revision,
+                  })}
+                </p>
+              )}
+              {requirement && (
+                <ul>
+                  {(plan.acceptance_criteria || []).map((index) => (
+                    <li key={index}>
+                      {plan.requirement_snapshot?.acceptance_criteria[index] ||
+                        (plan.requirement_revision === requirement.flow.revision
+                          ? requirement.acceptance_criteria[index]
+                          : `${index + 1} · ${t("delivery.oldRevision")}`)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </details>
           )}
         </>

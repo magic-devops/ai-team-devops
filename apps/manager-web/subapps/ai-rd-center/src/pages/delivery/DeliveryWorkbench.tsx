@@ -51,7 +51,6 @@ import {
   type DeliveryMember,
   type DeliveryMilestone,
   type DeliveryRequirement,
-  type DeliveryTask,
   type DeliveryWorkspace,
   type DeliveryInboxTarget,
 } from "@/lib/delivery";
@@ -63,8 +62,9 @@ import {
 import "./delivery-workbench.css";
 import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
 import { DeliveryTaskPlanEditor } from "./DeliveryTaskPlanEditor";
-import { DeliveryTaskPlanning } from "./DeliveryTaskPlanning";
-import { planError, remapCriterionIndexes } from "@/lib/deliveryTaskPlan";
+import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
+import { DeliveryManualReviewPanel } from "./DeliveryManualReviewPanel";
+import { planError } from "@/lib/deliveryTaskPlan";
 import {
   deliveryInboxHash,
   deliveryInboxHref,
@@ -116,10 +116,11 @@ function ProjectDelivery() {
   const originScope = useRef(sessionSnapshot());
   const qc = useQueryClient();
   const queryKey = ["delivery", projectId, sessionId];
+  const [taskEditing, setTaskEditing] = useState(false);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => fetchDelivery(projectId, signal),
-    enabled: Boolean(projectId && getToken()),
+    enabled: Boolean(projectId && getToken()) && !taskEditing,
     gcTime: 0,
     refetchInterval: 5000,
   });
@@ -575,124 +576,6 @@ function ProjectDelivery() {
       "toolsHint",
     );
   const planEditor = (r: DeliveryRequirement) => setPlanRequirement(r);
-  const taskEditor = (task: DeliveryTask) => {
-    let basis = data!.requirements.find((req) => req.id === task.req_id)!;
-    let fresh: DeliveryWorkspace | null = null;
-    const taskFields = (
-      req: DeliveryRequirement,
-      workspace: DeliveryWorkspace,
-    ): EditorField[] => [
-      field("description", "description", { type: "area", max: 10000 }),
-      field("acceptance_criteria", "taskPlan.criteria", {
-        multiple: true,
-        options: req.acceptance_criteria.map((text, index) => ({
-          value: String(index),
-          label: `${index + 1}. ${text}`,
-        })),
-      }),
-      field("depends_on", "taskPlan.dependencies", {
-        multiple: true,
-        options: workspace.tasks
-          .filter((item) => item.id !== task.id)
-          .map((item) => ({ value: item.id, label: item.title })),
-      }),
-      field("starts_on", "taskPlan.starts", { type: "date" }),
-      field("ends_on", "taskPlan.ends", { type: "date" }),
-      field("blocked_reason", "blockedReason", { type: "area", max: 2000 }),
-    ];
-    edit(
-      "taskPlan.editTask",
-      taskFields(basis, data!),
-      {
-        description: task.description,
-        acceptance_criteria: remapCriterionIndexes(
-          task.planning?.acceptance_criteria || [],
-          task.planning?.requirement_snapshot?.acceptance_criteria ||
-            basis.acceptance_criteria,
-          basis.acceptance_criteria,
-        ).map(String),
-        depends_on: task.planning?.depends_on || [],
-        starts_on: task.planning?.starts_on,
-        ends_on: task.planning?.ends_on,
-        blocked_reason: task.planning?.blocked_reason || "",
-      },
-      async (values) => {
-        await commit("task.update", {
-          id: task.id,
-          description: values.description,
-          acceptance_criteria: (
-            (values.acceptance_criteria || []) as string[]
-          ).map(Number),
-          depends_on: values.depends_on || [],
-          requirement_basis: basis.basis,
-          requirement_revision: basis.flow.revision,
-          starts_on: dateValue(values.starts_on),
-          ends_on: dateValue(values.ends_on),
-          blocked_reason: values.blocked_reason || "",
-        });
-      },
-      "taskPlan.editHint",
-      {
-        loadLatest: async () => {
-          fresh = await fetchDelivery(projectId);
-          qc.setQueryData(queryKey, fresh);
-          const req = fresh.requirements.find(
-            (item) => item.id === task.req_id,
-          );
-          const currentTask = fresh.tasks.find((item) => item.id === task.id);
-          if (!req || !currentTask) throw new Error(tr("taskPlan.missingTask"));
-          return {
-            version: fresh.version,
-            items: [
-              {
-                label: tr("taskPlan.latest"),
-                value: `${req.title}\n${req.acceptance_criteria.join("\n")}`,
-              },
-              { label: tr("description"), value: currentTask.description },
-              {
-                label: tr("taskPlan.dependencies"),
-                value:
-                  (currentTask.planning?.depends_on || [])
-                    .map(
-                      (id) =>
-                        fresh!.tasks.find((item) => item.id === id)?.title ||
-                        id,
-                    )
-                    .join(" · ") || tr("none"),
-              },
-              {
-                label: tr("taskPlan.starts"),
-                value: currentTask.planning?.starts_on || tr("unscheduled"),
-              },
-              {
-                label: tr("taskPlan.ends"),
-                value: currentTask.planning?.ends_on || tr("unscheduled"),
-              },
-              {
-                label: tr("blockedReason"),
-                value: currentTask.planning?.blocked_reason || tr("none"),
-              },
-            ],
-          };
-        },
-        adoptVersion: (_version, draft) => {
-          const req = fresh!.requirements.find(
-            (item) => item.id === task.req_id,
-          )!;
-          const criteria = remapCriterionIndexes(
-            ((draft.acceptance_criteria || []) as string[]).map(Number),
-            basis.acceptance_criteria,
-            req.acceptance_criteria,
-          );
-          basis = req;
-          setEditor((current) =>
-            current ? { ...current, fields: taskFields(req, fresh!) } : current,
-          );
-          return { acceptance_criteria: criteria.map(String) };
-        },
-      },
-    );
-  };
   const evidenceEditor = (r: DeliveryRequirement) =>
     edit(
       "addEvidence",
@@ -1761,9 +1644,9 @@ function ProjectDelivery() {
                                 }
                               />
                             </div>
-                            <DeliveryTaskPlanning
+                            <DeliveryTaskPlanMaintenance
+                              key={`plan:${projectId}:${task.id}`}
                               task={task}
-                              requirement={selected}
                               data={data}
                               onTask={(dependency) =>
                                 navigate(
@@ -1774,7 +1657,8 @@ function ProjectDelivery() {
                                   true,
                                 )
                               }
-                              onEdit={() => taskEditor(task)}
+                              onSaved={saveWorkspace}
+                              onEditingChange={setTaskEditing}
                               canEdit={
                                 canWrite &&
                                 !actionsDisabled &&
@@ -1782,6 +1666,14 @@ function ProjectDelivery() {
                                   selected.flow.stage,
                                 )
                               }
+                            />
+                            <DeliveryManualReviewPanel
+                              key={`review:${projectId}:${task.id}`}
+                              projectId={projectId}
+                              sessionId={sessionId}
+                              taskId={task.id}
+                              onSaved={saveWorkspace}
+                              onEditingChange={setTaskEditing}
                             />
                             <DeliveryExecutionPanel
                               data={data}

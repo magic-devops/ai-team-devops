@@ -6,7 +6,7 @@
   "sprint": null,
   "delivery_workbench": {
     "updated_at": "2026-10-17",
-    "status": "progress_history_and_baselines_verified",
+    "status": "manual_review_and_canonical_dependencies_verified",
     "entry": "#/dev-flow",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,20 +15,23 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/progress-baselines/",
+    "evidence": ".sop-runtime/delivery-evidence/manual-task-review/",
     "verification_status": "verified_local_stage",
-    "next_step": "team_capacity_dependency_timeline_and_project_portfolio",
+    "next_step": "team_capacity_calendar_dependency_timeline_and_project_portfolio",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "manager": 440,
-      "web": 263,
-      "sdk_cli_targeted": 55,
+      "manager": 479,
+      "web": 281,
+      "sdk_cli_targeted": 40,
       "typescript": "passed",
       "production_build": "passed",
       "actual_http_browser": "passed"
-    }
+    },
+    "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
+    "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
+    "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers"
   },
   "tasks": {
     "completed": [

@@ -53,6 +53,7 @@ export function DeliveryEditor({
   > | null>(null);
   const loadLatest = async () => {
     setBusy(true);
+    setLatest(null);
     try {
       setLatest(await spec.loadLatest());
     } catch (e) {

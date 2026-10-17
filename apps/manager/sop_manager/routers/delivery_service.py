@@ -194,9 +194,13 @@ def remember_basis(db, project, data):
 
 
 def materialize(db, project, data, user):
-    roster = members(db, project, data, user)
+    from .delivery_verification import VerificationContext
+
+    verification = VerificationContext(db, project, data)
+    roster = verification.roster
     tasks = [serialize(t) for t in records(db, Task, project).order_by(Task.created_at, Task.id).all()]
     for task in tasks:
+        task["basis"] = verification.basis(task["id"])
         latest = next((e for e in reversed(data.get("executions", [])) if e["task_id"] == task["id"]), None)
         task["execution_id"] = latest["id"] if latest else ""
         if (
@@ -390,6 +394,17 @@ def _update_task(db, project, data, body, roster):
     from .delivery_plan import edit_task_links
 
     row = get_record(db, Task, project, body.id)
+    if body.task_basis is not None:
+        from .delivery_verification import VerificationContext
+
+        if body.task_basis != VerificationContext(db, project, data).basis(row.id):
+            raise HTTPException(
+                409,
+                {
+                    "code": "task_basis_changed",
+                    "message": "Task scope changed. Review and explicitly adopt the latest task basis.",
+                },
+            )
     before = serialize(row)
     changes = body.model_dump(mode="json", exclude_unset=True)
     planning = data.setdefault("task_details", {}).setdefault(row.id, {})

@@ -11,9 +11,63 @@ _CORE_ROWS = "delivery_progress_core_rows"
 
 
 def _models():
-    from .sql_models import DeliveryEvent, DeliveryWorkspace, Issue, Project, Requirement, Sprint, Task
+    from .sql_models import (
+        DeliveryEvent,
+        DeliveryTaskReview,
+        DeliveryWorkspace,
+        Issue,
+        Project,
+        Requirement,
+        Sprint,
+        Task,
+    )
 
-    return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent
+    return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent, DeliveryTaskReview
+
+
+def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
+    """Actual review scopes affected by membership, name or account status changes."""
+    from .sql_models import DeliveryTaskReview, Project
+
+    if tenant_ids and user_ids:
+        for tenant_id, project_id in db.connection().execute(
+            select(DeliveryTaskReview.tenant_id, DeliveryTaskReview.project_id)
+            .where(
+                DeliveryTaskReview.tenant_id.in_(tenant_ids),
+                DeliveryTaskReview.snapshot["owner"]["id"]
+                .as_string()
+                .in_(["user:" + value for value in user_ids]),
+            )
+            .distinct()
+        ):
+            mark_progress(db, tenant_id, project_id)
+    if project_ids:
+        for tenant_id, project_id in db.connection().execute(
+            select(Project.tenant_id, Project.id).where(Project.id.in_(project_ids))
+        ):
+            mark_progress(db, tenant_id, project_id)
+
+
+def _identity_object_scopes(db, obj):
+    from sqlalchemy import inspect
+
+    from .sql_models import ProjectMember, User
+
+    state = inspect(obj)
+    if isinstance(obj, User):
+        tenants = {obj.tenant_id}
+        if state.persistent:
+            original = (
+                db.connection().execute(select(User.tenant_id).where(User.id == state.identity[0])).scalar()
+            )
+            if original:
+                tenants.add(original)
+        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id})
+    elif isinstance(obj, ProjectMember):
+        projects = {obj.project_id}
+        if state.persistent:
+            projects.add(state.identity[0])
+        _identity_scopes(db, project_ids=projects)
 
 
 def mark_progress(db, tenant_id, project_id):
@@ -35,6 +89,7 @@ def _before_flush(db, flush_context, instances):
     if db.info.get(_BUSY):
         return
     for obj in db.new | db.dirty | db.deleted:
+        _identity_object_scopes(db, obj)
         if not isinstance(obj, _models()):
             continue
         if obj in db.dirty and not db.is_modified(obj, include_collections=False):
@@ -75,6 +130,39 @@ def _before_flush(db, flush_context, instances):
             )
 
 
+def _core_identity_write(state, table):
+    from sqlalchemy import tuple_
+
+    from .sql_models import ProjectMember, User
+
+    if table is None or table.name not in {User.__tablename__, ProjectMember.__tablename__}:
+        return False
+    if state.is_insert:
+        return True
+    is_user = table.name == User.__tablename__
+    columns = [table.c.id, table.c.tenant_id] if is_user else [table.c.project_id, table.c.user_id]
+    query = select(*columns)
+    if state.statement.whereclause is not None:
+        query = query.where(state.statement.whereclause)
+    elif isinstance(state.parameters, list):
+        keys = [
+            tuple(row.get(column.key) for column in columns[: 1 if is_user else 2])
+            for row in state.parameters
+        ]
+        query = query.where(tuple_(*columns[: 1 if is_user else 2]).in_(keys))
+    rows = (
+        state.session.connection()
+        .execute(query, state.parameters if isinstance(state.parameters, dict) else {})
+        .all()
+    )
+    if is_user:
+        for user_id, tenant_id in rows:
+            _identity_scopes(state.session, tenant_ids={tenant_id}, user_ids={user_id})
+    else:
+        _identity_scopes(state.session, project_ids={row[0] for row in rows})
+    return True
+
+
 def _core_write(state):
     from .sql_models import Project
 
@@ -82,6 +170,8 @@ def _core_write(state):
         return
     statement = state.statement
     table = getattr(statement, "table", None)
+    if _core_identity_write(state, table):
+        return
     if table is None or table.name not in {m.__tablename__ for m in _models()}:
         return
     if state.is_insert:
