@@ -45,11 +45,12 @@ from sop_manager.routers.ops_center_core import (
 )
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/ops-center", tags=["ops-center"])
 
 def _dir(sub: str):
     d = resolved_ai_memory_root() / "ops_center" / sub
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -98,9 +99,11 @@ def _load_all(sub: str) -> list[dict]:
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
-    import json
-    attach_scope(item)
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _dir(sub).mkdir(parents=True, exist_ok=True)
+        import json
+        attach_scope(item)
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
 
 def _load_scoped_item(sub: str, item_id: str, missing: str) -> dict:
     import json
@@ -459,7 +462,8 @@ def update_pipeline_status(pipeline_id: str, body: PipelineStatus):
 def delete_pipeline(pipeline_id: str):
     _load_scoped_item("pipelines", pipeline_id, "pipeline not found")
     p = _dir("pipelines") / f"{pipeline_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": pipeline_id}
 
 @router.get("/rca")
@@ -1311,7 +1315,8 @@ def toggle_alert_noise_policy(policy_id: str, body: AlertNoiseToggleIn):
 @router.delete("/alert-noise/policies/{policy_id}")
 def delete_alert_noise_policy(policy_id: str):
     _load_scoped_item("alert_noise_policies", policy_id, "alert noise policy not found")
-    (_dir("alert_noise_policies") / f"{policy_id}.json").unlink()
+    with project_file_write_scope():
+        (_dir("alert_noise_policies") / f"{policy_id}.json").unlink()
     return {**_scope(), "deleted": policy_id}
 
 @router.post("/alert-noise/evaluate")
@@ -1348,7 +1353,8 @@ def toggle_alert_silence(silence_id: str, body: AlertNoiseToggleIn):
 @router.delete("/alert-noise/silences/{silence_id}")
 def delete_alert_silence(silence_id: str):
     _load_scoped_item("alert_silences", silence_id, "alert silence not found")
-    (_dir("alert_silences") / f"{silence_id}.json").unlink()
+    with project_file_write_scope():
+        (_dir("alert_silences") / f"{silence_id}.json").unlink()
     return {**_scope(), "deleted": silence_id}
 
 @router.put("/alert-sources/{source_id}")
@@ -1385,7 +1391,8 @@ def toggle_alert_source(source_id: str, body: AlertSourceToggleIn):
 def delete_alert_source(source_id: str):
     _load_scoped_item("alert_sources", source_id, "alert source not found")
     p = _dir("alert_sources") / f"{source_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": source_id}
 
 def _rca_insight_payload(body: RcaInsightIn) -> dict:
@@ -1691,7 +1698,8 @@ def runbook_evidence_action(record_id: str, body: RunbookEvidenceActionIn):
 def delete_runbook(runbook_id: str):
     _load_scoped_item("runbooks", runbook_id, "runbook not found")
     p = _dir("runbooks") / f"{runbook_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": runbook_id}
 
 @router.get("/self-heal")
@@ -1829,7 +1837,8 @@ def self_heal_tasks(body: SelfHealTasksIn):
 def delete_self_heal(policy_id: str):
     _load_scoped_item("self_heal", policy_id, "policy not found")
     p = _dir("self_heal") / f"{policy_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": policy_id}
 
 @router.get("/summary")

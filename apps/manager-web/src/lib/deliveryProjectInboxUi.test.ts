@@ -213,6 +213,7 @@ describe("project inbox presentation", () => {
   it("renders compact overview with legacy resources and actual linked acceptance", () => {
     const html = renderToStaticMarkup(
       createElement(DeliveryProjectOverview, {
+        onMilestone: vi.fn(),
         data: workspace,
         inbox,
         onView: () => {},

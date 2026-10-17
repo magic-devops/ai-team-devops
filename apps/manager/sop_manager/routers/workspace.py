@@ -24,6 +24,8 @@ from sop_manager.path_config import (
 )
 from sop_manager.routers.db_sql_compat import rows, table, now
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1", tags=["workspace"])
 
 
@@ -153,14 +155,15 @@ def get_state() -> Any:
 
 @router.patch("/state")
 def update_state(body: dict[str, Any]) -> dict[str, str]:
-    f = resolved_project_path() / "memory" / "current_state.json"
-    if not f.exists():
-        raise HTTPException(404, "Not found")
-    state = json.loads(f.read_text())
-    state.update(body)
-    state["updated_at"] = now().isoformat() + "Z"
-    f.write_text(json.dumps(state, indent=2, ensure_ascii=False))
-    return {"ok": "true"}
+    with project_file_write_scope():
+        f = resolved_project_path() / "memory" / "current_state.json"
+        if not f.exists():
+            raise HTTPException(404, "Not found")
+        state = json.loads(f.read_text())
+        state.update(body)
+        state["updated_at"] = now().isoformat() + "Z"
+        f.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+        return {"ok": "true"}
 
 
 @router.get("/analytics")
@@ -433,13 +436,14 @@ class SpecContentBody(BaseModel):
 
 @router.put("/specs/content")
 def update_spec(path: str = Query(...), body: SpecContentBody = SpecContentBody()) -> dict[str, str]:
-    specs_dir = (sop_dir() / "specs").resolve()
-    target = (specs_dir / path).resolve()
-    if not str(target).startswith(str(specs_dir)):
-        raise HTTPException(403, "Access denied")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(body.content, encoding="utf-8")
-    return {"ok": "true"}
+    with project_file_write_scope():
+        specs_dir = (sop_dir() / "specs").resolve()
+        target = (specs_dir / path).resolve()
+        if not str(target).startswith(str(specs_dir)):
+            raise HTTPException(403, "Access denied")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body.content, encoding="utf-8")
+        return {"ok": "true"}
 
 
 @router.get("/custom")

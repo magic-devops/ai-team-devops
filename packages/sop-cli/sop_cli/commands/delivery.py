@@ -20,6 +20,29 @@ class ProgressScope(str, Enum):
     sprint = "sprint"
 
 
+class ProjectState(str, Enum):
+    planning = "planning"
+    active = "active"
+    paused = "paused"
+    archived = "archived"
+
+
+@app.command("lifecycle-preview")
+def lifecycle_preview(
+    target: Annotated[ProjectState, typer.Option("--target")],
+    reason: Annotated[str, typer.Option("--reason")],
+):
+    """读取指定状态及理由的固定预览；保存时沿用原版本、依据和幂等键。"""
+    try:
+        if not reason.strip() or len(reason.strip()) > 2000:
+            raise ValueError("reason must contain between 1 and 2000 characters")
+        with get_client() as client:
+            console.print_json(data=client.delivery_project_lifecycle_preview({"target_status": target.value, "reason": reason.strip()}))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 @app.command("team-runtime")
 def team_runtime(
     json_out: Annotated[bool, typer.Option("--json", help="保留固定版本、不可用原因及操作权限")] = False,

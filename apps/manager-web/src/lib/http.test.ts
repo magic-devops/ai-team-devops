@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearSession, getToken, getWorkspaceScope, setSession } from "./authStorage";
+import { clearSession, getToken, getWorkspaceScope, setSession, setWorkspaceScope } from "./authStorage";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -113,35 +113,32 @@ describe("HTTP session consistency", () => {
     expect(await result).toBeInstanceOf(Error);
   });
 
-  it("does not adopt a default project or retry an old mutation after switching accounts", async () => {
-    setSession("session-a", null, "tenant-a");
-    const projects = deferred<Response>();
-    const lookupStarted = deferred<void>();
-    fetcher.mockResolvedValueOnce(reply({ tenant_code: "tenant-a" }))
-      .mockResolvedValueOnce(reply({ detail: "X-Project-Id required" }, 400))
-      .mockImplementationOnce(() => { lookupStarted.resolve(); return projects.promise; })
-      .mockImplementation(() => Promise.resolve(reply({ ok: true })));
-    const { request } = await import("./http");
-    const result = request("/api/v1/tasks", { method: "POST", body: "draft-a" }).catch((e: Error) => e);
-    await lookupStarted.promise;
-    setSession("session-b", "project-b", "tenant-b");
-    projects.resolve(reply([{ id: "project-a", tenant_code: "tenant-a" }]));
-    expect(await result).toBeInstanceOf(Error);
-    expect(getWorkspaceScope().projectId).toBe("project-b");
-    expect(fetcher).toHaveBeenCalledTimes(3);
-  });
-
-  it("retries a current unbound request once with the selected project and original body", async () => {
+  it("does not choose the first project or retry an unbound mutation", async () => {
     setSession("session-a", null, "tenant-a");
     fetcher.mockResolvedValueOnce(reply({ tenant_code: "tenant-a" }))
       .mockResolvedValueOnce(reply({ detail: "X-Project-Id required" }, 400))
       .mockResolvedValueOnce(reply([{ id: "project-a", tenant_code: "tenant-a" }]))
+      .mockImplementation(() => Promise.resolve(reply({ ok: true })));
+    const { request } = await import("./http");
+    const result = request("/api/v1/tasks", { method: "POST", body: "draft-a" }).catch((e: Error) => e);
+    expect(await result).toBeInstanceOf(Error);
+    expect(getWorkspaceScope().projectId).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves an explicitly cleared project while still hydrating identity and a refreshed token", async () => {
+    setSession("session-a", null, "tenant-a");
+    setWorkspaceScope({ projectId: null, projectCode: null, businessCode: "chosen-business" });
+    fetcher.mockResolvedValueOnce(reply({ user_id: "account-a", token: "refreshed", default_project_id: "project-a", tenant_code: "tenant-a" }))
       .mockResolvedValueOnce(reply({ ok: true }));
     const { request } = await import("./http");
     const body = JSON.stringify({ idempotency_key: "stable", draft: "original" });
     expect(await request("/api/v1/tasks", { method: "POST", body })).toEqual({ ok: true });
-    expect(fetcher).toHaveBeenCalledTimes(4);
-    expect(fetcher.mock.calls[3][1]).toMatchObject({ body, headers: { Authorization: "Bearer session-a", "X-Project-Id": "project-a" } });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(getToken()).toBe("refreshed");
+    expect(getWorkspaceScope()).toMatchObject({ projectId: null, businessCode: "chosen-business" });
+    expect(new Headers(fetcher.mock.calls[1][1].headers).has("X-Project-Id")).toBe(false);
+    expect(fetcher.mock.calls[1][1]).toMatchObject({ body, headers: { Authorization: "Bearer refreshed" } });
   });
 
   it("does not restore a logged-out session from a late hydration response", async () => {

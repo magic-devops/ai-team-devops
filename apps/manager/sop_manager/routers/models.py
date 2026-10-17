@@ -44,15 +44,18 @@ def _load():
             "role_models": {}}  # role -> model_id
 
 def _save(d):
-    path = _models_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    d["revision"] = uuid4().hex
-    pending = path.with_name(f"models.{uuid4().hex}.tmp")
-    try:
-        pending.write_text(json.dumps(d, indent=2), encoding="utf-8")
-        pending.replace(path)
-    finally:
-        pending.unlink(missing_ok=True)
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _models_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        d["revision"] = uuid4().hex
+        pending = path.with_name(f"models.{uuid4().hex}.tmp")
+        try:
+            pending.write_text(json.dumps(d, indent=2), encoding="utf-8")
+            pending.replace(path)
+        finally:
+            pending.unlink(missing_ok=True)
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -9,6 +9,7 @@ _BUSY = "delivery_progress_capturing"
 _ACTORS = "delivery_progress_actors"
 _CORE_ROWS = "delivery_progress_core_rows"
 _IDENTITY_USERS = "delivery_progress_identity_users"
+_TRUSTED_SCOPES = "delivery_progress_identity_scopes"
 _RESERVED_VERSIONS = "delivery_reserved_workspace_versions"
 
 
@@ -27,9 +28,11 @@ def _models():
     return Requirement, Task, Issue, Sprint, Project, DeliveryWorkspace, DeliveryEvent, DeliveryTaskReview
 
 
-def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
+def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=(), trusted=False):
     """Actual stable responsibility scopes affected by account or membership changes."""
-    from .sql_models import DeliveryTaskReview, Project, Task
+    from .sql_models import DeliveryTaskReview, Project, ProjectMember, Task
+
+    affected = set()
 
     if tenant_ids and user_ids:
         owner_ids = {"user:" + value for value in user_ids}
@@ -38,7 +41,7 @@ def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
             .where(Task.tenant_id.in_(tenant_ids), Task.owner_id.in_(owner_ids))
             .distinct()
         ):
-            mark_progress(db, tenant_id, project_id)
+            affected.add((tenant_id, project_id))
         for tenant_id, project_id in db.connection().execute(
             select(DeliveryTaskReview.tenant_id, DeliveryTaskReview.project_id)
             .where(
@@ -49,12 +52,26 @@ def _identity_scopes(db, *, tenant_ids=(), user_ids=(), project_ids=()):
             )
             .distinct()
         ):
-            mark_progress(db, tenant_id, project_id)
+            affected.add((tenant_id, project_id))
+        if trusted:
+            affected.update(db.connection().execute(
+                select(Project.tenant_id, Project.id).join(ProjectMember, ProjectMember.project_id == Project.id)
+                .where(Project.tenant_id.in_(tenant_ids), ProjectMember.user_id.in_(user_ids))
+            ).all())
     if project_ids:
         for tenant_id, project_id in db.connection().execute(
             select(Project.tenant_id, Project.id).where(Project.id.in_(project_ids))
         ):
-            mark_progress(db, tenant_id, project_id)
+            affected.add((tenant_id, project_id))
+    if trusted and affected:
+        from sop_manager.project_write_guard import lock_project_scopes
+
+        lock_project_scopes(db, affected)
+    for tenant_id, project_id in sorted(affected):
+        mark_progress(db, tenant_id, project_id)
+    if trusted and affected:
+        transaction = db.get_nested_transaction() or db.get_transaction()
+        db.info.setdefault(_TRUSTED_SCOPES, {}).setdefault(transaction, set()).update(affected)
 
 
 def _identity_object_scopes(db, obj):
@@ -71,7 +88,7 @@ def _identity_object_scopes(db, obj):
             )
             if original:
                 tenants.add(original)
-        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id})
+        _identity_scopes(db, tenant_ids=tenants, user_ids={obj.id}, trusted=True)
     elif isinstance(obj, ProjectMember):
         projects = {obj.project_id}
         if state.persistent:
@@ -199,6 +216,7 @@ def _core_identity_write(state, table):
                     state.session,
                     tenant_ids={value["tenant_id"]},
                     user_ids={value["id"]},
+                    trusted=True,
                 )
             elif not is_user and value.get("project_id"):
                 _identity_scopes(state.session, project_ids={value["project_id"]})
@@ -211,7 +229,7 @@ def _core_identity_write(state, table):
             row[0] for row in rows
         )
         for user_id, tenant_id in rows:
-            _identity_scopes(state.session, tenant_ids={tenant_id}, user_ids={user_id})
+            _identity_scopes(state.session, tenant_ids={tenant_id}, user_ids={user_id}, trusted=True)
     else:
         _identity_scopes(state.session, project_ids={row[0] for row in rows})
     return True
@@ -263,7 +281,7 @@ def _before_commit(db):
         for user_id, tenant_id in db.connection().execute(
             select(User.id, User.tenant_id).where(User.id.in_(changed_users))
         ):
-            _identity_scopes(db, tenant_ids={tenant_id}, user_ids={user_id})
+            _identity_scopes(db, tenant_ids={tenant_id}, user_ids={user_id}, trusted=True)
     # Core UPDATE may move rows across projects/tenants without any dirty ORM
     # object. Resolve the same actual primary keys after all writes finish,
     # rather than guessing destinations from literal UPDATE parameters.
@@ -290,10 +308,20 @@ def _before_commit(db):
     try:
         actors = {key: actor for group in db.info.get(_ACTORS, {}).values() for key, actor in group.items()}
         for tenant_id, project_id in sorted(scopes):
+            from contextlib import nullcontext
+
+            from sop_manager.project_write_guard import identity_capture_scope, in_lifecycle_scope
+
             project = db.get(Project, project_id)
             if not project or project.tenant_id != tenant_id:
                 continue
-            record_observation(db, project, actor=actors.get((tenant_id, project_id), ""))
+            identity_scopes = set().union(*db.info.get(_TRUSTED_SCOPES, {}).values()) if db.info.get(_TRUSTED_SCOPES) else set()
+            identity = (tenant_id, project_id) in identity_scopes
+            if in_lifecycle_scope(db, tenant_id, project_id) and not identity:
+                continue
+            context = identity_capture_scope(db, tenant_id, project_id) if identity else nullcontext()
+            with context:
+                record_observation(db, project, actor=actors.get((tenant_id, project_id), ""))
     finally:
         db.info.pop(_BUSY, None)
 
@@ -313,20 +341,21 @@ def _after_commit(db):
         core_groups = db.info.get(_CORE_ROWS, {})
         for table_name, ids in core_groups.pop(nested, {}).items():
             core_groups.setdefault(nested.parent, {}).setdefault(table_name, set()).update(ids)
-        identity_groups = db.info.get(_IDENTITY_USERS, {})
-        identity_groups.setdefault(nested.parent, set()).update(identity_groups.pop(nested, set()))
+        for key in (_IDENTITY_USERS, _TRUSTED_SCOPES):
+            identity_groups = db.info.get(key, {})
+            identity_groups.setdefault(nested.parent, set()).update(identity_groups.pop(nested, set()))
 
 
 def _after_soft_rollback(db, previous):
     if previous.nested:
         db.info.get(_SCOPES, {}).pop(previous, None)
-        for key in (_RECORDED, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _RESERVED_VERSIONS):
+        for key in (_RECORDED, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS):
             db.info.get(key, {}).pop(previous, None)
 
 
 def _after_transaction_end(db, transaction):
     if transaction.parent is None:
-        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _RESERVED_VERSIONS):
+        for key in (_SCOPES, _RECORDED, _BUSY, _ACTORS, _CORE_ROWS, _IDENTITY_USERS, _TRUSTED_SCOPES, _RESERVED_VERSIONS):
             db.info.pop(key, None)
 
 

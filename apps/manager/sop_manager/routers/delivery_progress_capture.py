@@ -50,6 +50,11 @@ def record_observation(
     db, project, source="transaction", actor="", source_version=None, force=False, now=None
 ):
     """Append facts in the caller's transaction; never commit, edit a task or backfill a day."""
+    from sop_manager.project_write_guard import require_project_operation
+
+    # Every writer shares Project -> Workspace lock order. An archived identity
+    # invalidation is admitted only by the observer's precise internal capability.
+    require_project_operation(db, project.tenant_id, project.id)
     db.flush()
     # SQL Core CAS intentionally avoids identity-map synchronization. Read its final
     # database state, after flushing all pending ORM edits, not a cached workspace.
@@ -156,9 +161,17 @@ def daily_once(sessions=SessionLocal, now=None, page_size=100):
         for (project_id,) in ids:
             cursor = project_id
             with sessions() as db:
+                from sop_manager.project_write_guard import lock_project_scopes
+
                 project = db.get(Project, project_id)
+                if not project:
+                    continue
+                status = lock_project_scopes(db, [(project.tenant_id, project.id)])[
+                    (project.tenant_id, project.id)
+                ]
+                db.refresh(project)
                 tenant = db.get(Tenant, project.tenant_id) if project else None
-                if not project or project.status != "active" or not tenant or tenant.status != "active":
+                if status != "active" or not tenant or tenant.status != "active":
                     continue
                 key = (project.tenant_id, project.id, day)
                 if db.get(DeliveryProgressCheckpoint, key):

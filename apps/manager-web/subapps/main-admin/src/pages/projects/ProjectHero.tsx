@@ -1,6 +1,7 @@
 import { RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Metric } from "./ui";
+import { portfolioHash } from "@/lib/projectPortfolioRoute";
 
 export function ProjectHero({ summary, onRefresh, busy }: { summary: any; onRefresh: () => void; busy?: boolean }) {
   const { t } = useTranslation();
@@ -28,15 +29,15 @@ export function ProjectHero({ summary, onRefresh, busy }: { summary: any; onRefr
         <Metric label={t("page.projects.metricTemplates")} value={summary?.templates ?? 0} />
         <Metric label={t("page.projects.metricDelivery")} value={`${totals.requirements ?? 0}/${totals.tasks ?? 0}`} />
       </div>
-      {summary?.risks?.length ? (
+      {summary?.risks_total > 0 ? (
         <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
           <div className="inline-flex items-center gap-2 font-medium">
             <Sparkles className="h-4 w-4" />
-            {t("page.projects.aiSuggestions")}
+            {t("projectPortfolio.risks")} · {summary.risks_total}
           </div>
           <ul className="mt-2 grid gap-1 text-xs">
             {summary.risks.slice(0, 3).map((risk: any, idx: number) => (
-              <li key={`${risk.project_id}-${idx}`}>{risk.project_id}: {risk.message}</li>
+              <li key={`${risk.project_id}-${idx}`}><a className="underline" href={portfolioHash({ projectId: risk.project_id })}>{risk.project_id}: {risk.title}</a></li>
             ))}
           </ul>
         </div>

@@ -10,11 +10,12 @@ from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_cod
 from sop_manager.routers.metrics import current_trace_context, trace_context
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/data-ingest", tags=["data-ingest"])
 
 def _dir(sub: str):
     d = resolved_ai_memory_root() / "data_ingest" / sub
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -35,8 +36,10 @@ def _load_all(sub: str) -> list[dict]:
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
-    attach_scope(item, overwrite=False)
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _dir(sub).mkdir(parents=True, exist_ok=True)
+        attach_scope(item, overwrite=False)
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
 
 def _load_item(sub: str, item_id: str, label: str) -> dict:
     p = _dir(sub) / f"{item_id}.json"
@@ -140,7 +143,8 @@ def delete_connector(connector_id: str):
     active_jobs = [j for j in _load_all("jobs") if j.get("connector_id") == connector_id and j.get("status") in {"running", "idle"}]
     if active_jobs:
         raise HTTPException(409, "connector has active jobs; delete or stop jobs first")
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": connector_id}
 
 @router.post("/connectors/{connector_id}/test")
@@ -288,7 +292,8 @@ def update_job_status(job_id: str, body: JobStatusUpdate):
 def delete_job(job_id: str):
     _load_item("jobs", job_id, "job")
     p = _dir("jobs") / f"{job_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": job_id}
 
 @router.get("/runs")

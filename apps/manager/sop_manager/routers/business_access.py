@@ -67,6 +67,18 @@ def _authorize(request: Request, user: User, db: Session, permission: str):
     }
     if not allowed[permission]:
         raise HTTPException(403, f"Project {permission} permission required")
+    if permission != "read":
+        # Do not keep a SQLite writer lock in the dependency: legacy adapters
+        # open their own SQL sessions. Actual SQL/file writers acquire the lock
+        # in their own mutation transaction and recheck this same state.
+        from sqlalchemy import select
+
+        status = db.connection().scalar(select(Project.status).where(Project.id == project_id))
+        if status == "archived":
+            raise HTTPException(409, {
+                "code": "project_archived",
+                "message": "Archived projects are read-only; restore the project before editing",
+            })
     override = (request.query_params.get("project_id") or "").strip()
     if override and override != project_id:
         raise HTTPException(400, "project_id must match X-Project-Id")

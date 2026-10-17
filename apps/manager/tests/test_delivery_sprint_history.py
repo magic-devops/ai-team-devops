@@ -91,7 +91,7 @@ def test_current_live_point_does_not_masquerade_as_persisted_history(env):
     _dates(sessions)
     _task(client)
     with sessions() as db:
-        db.query(DeliveryProgressObservation).delete()
+        db.query(DeliveryProgressObservation).filter_by(tenant_id="team", project_id="selected").delete()
         db.commit()
     body = client.get("/api/v1/sprints/SPRINT-selected/burndown", headers=headers()).json()
     assert body["history_available"] is False and body["actual"] == []
@@ -121,7 +121,7 @@ def test_utc_daily_last_and_missing_days_use_only_this_sprints_facts(env):
         )
         db.commit()
         facts = capture_facts(db, db.get(Project, "selected"))
-        db.query(DeliveryProgressObservation).delete()
+        db.query(DeliveryProgressObservation).filter_by(tenant_id="team", project_id="selected").delete()
         _observe(db, "sprint-first", datetime(2026, 10, 11, 9), facts)
         last = deepcopy(facts)
         next(task for task in last["tasks"] if task["id"] == task_id).update(

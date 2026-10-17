@@ -28,9 +28,22 @@ _ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{1,63}$")
 
 
 def _agents_dir() -> Path:
-    d = resolved_ai_memory_root() / "agents"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return resolved_ai_memory_root() / "agents"
+
+
+def _save_definition(path: Path, definition: dict) -> None:
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(definition, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _delete_definition(path: Path) -> None:
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path.unlink(missing_ok=True)
 
 
 def _safe_id(value: str, label: str = "ID") -> str:
@@ -505,7 +518,7 @@ def agents_summary():
 def create_agent(body: AgentDef):
     body.id = _safe_id(body.id, "Agent ID")
     f = _agent_path(body.id)
-    f.write_text(json.dumps(_dump_model(body), ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_definition(f, _dump_model(body))
     _emit("agent.upserted", {"agent_id": body.id, "role": body.role})
     return {"ok": True, "id": body.id}
 
@@ -514,7 +527,7 @@ def update_agent(agent_id: str, body: AgentDef):
     agent_id = _safe_id(agent_id, "Agent ID")
     body.id = agent_id
     f = _agent_path(agent_id)
-    f.write_text(json.dumps(_dump_model(body), ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_definition(f, _dump_model(body))
     _emit("agent.upserted", {"agent_id": agent_id, "role": body.role})
     return {"ok": True}
 
@@ -522,8 +535,7 @@ def update_agent(agent_id: str, body: AgentDef):
 def delete_agent(agent_id: str):
     agent_id = _safe_id(agent_id, "Agent ID")
     f = _agent_path(agent_id)
-    if f.exists():
-        f.unlink()
+    _delete_definition(f)
     _emit("agent.deleted", {"agent_id": agent_id})
     return {"ok": True}
 
@@ -536,7 +548,7 @@ def create_group(body: AgentGroup):
     body.id = _safe_id(body.id, "Group ID")
     body.agents = [_safe_id(a, "Agent ID") for a in body.agents]
     f = _group_path(body.id)
-    f.write_text(json.dumps(_dump_model(body), ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_definition(f, _dump_model(body))
     _emit("agent.group_upserted", {"group_id": body.id, "agents": body.agents, "mode": body.mode})
     return {"ok": True, "id": body.id}
 
@@ -545,8 +557,7 @@ def create_group(body: AgentGroup):
 def delete_group(group_id: str):
     group_id = _safe_id(group_id, "Group ID")
     f = _group_path(group_id)
-    if f.exists():
-        f.unlink()
+    _delete_definition(f)
     _emit("agent.group_deleted", {"group_id": group_id})
     return {"ok": True}
 
@@ -565,7 +576,7 @@ def bootstrap_builtin(overwrite: bool = False):
         if path.exists() and not overwrite:
             skipped.append(item["id"])
             continue
-        path.write_text(json.dumps(item, ensure_ascii=False, indent=2), encoding="utf-8")
+        _save_definition(path, item)
         created.append(item["id"])
     group = AgentGroup(
         id="delivery-squad",
@@ -577,7 +588,7 @@ def bootstrap_builtin(overwrite: bool = False):
     )
     gpath = _group_path(group.id)
     if overwrite or not gpath.exists():
-        gpath.write_text(json.dumps(_dump_model(group), ensure_ascii=False, indent=2), encoding="utf-8")
+        _save_definition(gpath, _dump_model(group))
     _emit("agent.bootstrap_builtin", {"created": created, "skipped": skipped, "overwrite": overwrite})
     return {"ok": True, "created": created, "skipped": skipped, "group": group.id}
 

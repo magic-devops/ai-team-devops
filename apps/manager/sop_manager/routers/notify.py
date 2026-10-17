@@ -22,6 +22,8 @@ from sop_manager.routers.im_integration_core import (
     inbound_dedupe_key,
 )
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/notify", tags=["notify"])
 
 
@@ -31,9 +33,10 @@ def _notify_file() -> Path:
 
 def _load(): return json.loads(_notify_file().read_text()) if _notify_file().exists() else {"channels": {}, "rules": []}
 def _save(d):
-    p = _notify_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(d, indent=2))
+    with project_file_write_scope():
+        p = _notify_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(d, indent=2))
 
 def _ledger_file() -> Path:
     return resolved_ai_memory_root() / "notify-events.jsonl"
@@ -50,14 +53,15 @@ def _scope() -> dict[str, str]:
     }
 
 def _append_event(row: dict[str, Any]) -> dict[str, Any]:
-    row.setdefault("id", f"msg-{uuid.uuid4().hex[:12]}")
-    row.setdefault("ts", _now())
-    attach_scope(row)
-    p = _ledger_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return row
+    with project_file_write_scope():
+        row.setdefault("id", f"msg-{uuid.uuid4().hex[:12]}")
+        row.setdefault("ts", _now())
+        attach_scope(row)
+        p = _ledger_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return row
 
 def _read_events(limit: int = 100, direction: str = "") -> list[dict[str, Any]]:
     p = _ledger_file()
@@ -151,19 +155,21 @@ def _load_subscriptions() -> list[dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict) and scope_matches(row)]
 
 def _save_subscriptions(rows: list[dict[str, Any]]) -> None:
-    p = _subscriptions_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        p = _subscriptions_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def _append_report_run(row: dict[str, Any]) -> dict[str, Any]:
-    row.setdefault("id", f"notify-report-run-{uuid.uuid4().hex[:12]}")
-    row.setdefault("ts", _now())
-    attach_scope(row)
-    p = _report_runs_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return row
+    with project_file_write_scope():
+        row.setdefault("id", f"notify-report-run-{uuid.uuid4().hex[:12]}")
+        row.setdefault("ts", _now())
+        attach_scope(row)
+        p = _report_runs_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return row
 
 def _read_report_runs(limit: int = 50) -> list[dict[str, Any]]:
     p = _report_runs_file()

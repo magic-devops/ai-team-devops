@@ -34,10 +34,9 @@ export function TemplatesModule(props: {
   clonePreview?: any;
   clonePreviewPending?: boolean;
   clonePreviewError?: Error | null;
-  togglePending: boolean;
   initialPanel?: TemplatePanelKey;
   embedded?: boolean;
-  onToggle: (projectId: string, value: boolean) => void;
+  onConfigureProject: (projectId: string) => void;
   onPreviewClone: () => void;
   onClone: () => void;
 }) {
@@ -117,8 +116,8 @@ export function TemplatesModule(props: {
                     </p>
                     <p className={entityMeta} title={p.id}>{p.id}</p>
                   </div>
-                  <Button size="small" disabled={props.togglePending} onClick={() => props.onToggle(p.id, !p.is_template)}>
-                    {p.is_template ? t("page.projects.unsetTemplate") : t("page.projects.setTemplate")}
+                  <Button size="small" onClick={() => props.onConfigureProject(p.id)}>
+                    {t("projectPortfolio.configure")}
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-[var(--muted)]">{p.description || t("page.projects.noDescription")}</p>

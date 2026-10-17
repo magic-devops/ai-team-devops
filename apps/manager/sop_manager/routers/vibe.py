@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/vibe", tags=["vibe"])
 
 
@@ -54,8 +56,9 @@ def _load_history():
 
 
 def _save_history(h):
-    _history_file().parent.mkdir(parents=True, exist_ok=True)
-    _history_file().write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _history_file().parent.mkdir(parents=True, exist_ok=True)
+        _history_file().write_text(json.dumps(h[-100:], ensure_ascii=False, indent=2))
 
 
 def _load_sessions() -> Dict[str, Any]:
@@ -68,8 +71,9 @@ def _load_sessions() -> Dict[str, Any]:
 
 
 def _save_sessions(db: Dict[str, Any]):
-    _sessions_file().parent.mkdir(parents=True, exist_ok=True)
-    _sessions_file().write_text(json.dumps(db, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _sessions_file().parent.mkdir(parents=True, exist_ok=True)
+        _sessions_file().write_text(json.dumps(db, ensure_ascii=False, indent=2))
 
 
 def _resolve_upload_path(rel: str) -> Optional[Path]:
@@ -267,8 +271,8 @@ async def upload_vibe(session: str = Form("default"), files: List[UploadFile] = 
         raise HTTPException(400, "未选择文件")
     sid = _safe_session(session)
     dirp = _upload_root() / sid
-    dirp.mkdir(parents=True, exist_ok=True)
     out = []
+    prepared = []
     for uf in files[:12]:
         raw = await uf.read()
         if len(raw) > _MAX_FILE_SIZE:
@@ -276,9 +280,13 @@ async def upload_vibe(session: str = Form("default"), files: List[UploadFile] = 
         fn = _safe_filename(uf.filename)
         dest_name = f"{uuid.uuid4().hex[:10]}_{fn}"
         dest = dirp / dest_name
-        dest.write_bytes(raw)
+        prepared.append((dest, raw))
         mime = uf.content_type or mimetypes.guess_type(fn)[0] or "application/octet-stream"
         out.append({"path": f"{sid}/{dest_name}", "name": fn, "mime": mime, "size": len(raw)})
+    with project_file_write_scope():
+        dirp.mkdir(parents=True, exist_ok=True)
+        for dest, raw in prepared:
+            dest.write_bytes(raw)
     return {"ok": True, "files": out}
 
 

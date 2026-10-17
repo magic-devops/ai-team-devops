@@ -1790,23 +1790,32 @@ paths:
         Empty arrays explicitly clear associations. Stale task scope is rejected.
 
 
-        project.update changes only explicitly supplied fields, retaining untouched owner/goal/dates. name/description
-        edit the canonical Project and require configure; other project metadata keeps write. resource.save/archive
-        require configure and share workspace CAS, receipts and audit events. Archiving retains the record; saving
-        the same id with archived=false restores it. Resources never fetch links.
+        project.update changes only explicitly supplied fields, retaining untouched owner/goal/dates. name/description edit
+        the canonical Project and require configure; other project metadata keeps write. resource.save/archive require configure
+        and share workspace CAS, receipts and audit events. Archiving retains the record; saving the same id with archived=false
+        restores it. Resources never fetch links.
 
-        progress.record requires write and records current UTC facts. baseline.create requires approve and freezes
-        an immutable plan after checking complete task IDs and content basis. Both use the same CAS, idempotency receipts
-        and atomic business transaction; failures retain no successful observation.
+        progress.record requires write and records current UTC facts. baseline.create requires approve and freezes an immutable
+        plan after checking complete task IDs and content basis. Both use the same CAS, idempotency receipts and atomic business
+        transaction; failures retain no successful observation.
 
-        task.manual_review requires approve and fixed task basis, project version and idempotency identity. A changed
-        basis returns structured 409 code task_review_basis_changed without saving a decision. Manual acceptance,
-        permanent invalidation and progress observations share the business transaction.
+        task.manual_review requires approve and fixed task basis, project version and idempotency identity. A changed basis
+        returns structured 409 code task_review_basis_changed without saving a decision. Manual acceptance, permanent invalidation
+        and progress observations share the business transaction.
 
-        member.calendar.save requires configure and a complete calendar. tasks.schedule requires write and applies
-        an explicit final batch atomically. Both pin planning_basis/CAS/retry identity. task.update dates/reservations
-        share the same validator and require planning_basis. Changed planning returns structured 409 planning_basis_changed.
-        kind is immutable and member.save has no capacity field.'
+        member.calendar.save requires configure and a complete calendar. tasks.schedule requires write and applies an explicit
+        final batch atomically. Both pin planning_basis/CAS/retry identity. task.update dates/reservations share the same validator
+        and require planning_basis. Changed planning returns structured 409 planning_basis_changed. kind is immutable and member.save
+        has no capacity field.
+
+
+        Project lifecycle uses the same workspace CAS and scoped successful-request receipt as other delivery commands. Current
+        role access is checked before replay; identical successful requests can replay after archive. New archived business
+        writes are rejected, and only explicit restore is accepted. Planning and paused permit business maintenance and handed-off
+        run sync/review/cancel, but reject new queue/dispatch. Receipt recovery precedes the fresh-dispatch gate; a committed
+        Hermes receipt or run, including planned, is the handoff boundary. Only active allows a new execution handoff. Every
+        archive stores its complete result in event data; current portfolio evidence stays live. Project status has a single
+        SQL source; project.update configuration fields require configure and retain omitted values.'
       security:
       - bearerAuth: []
       parameters:
@@ -1831,9 +1840,9 @@ paths:
         '403':
           description: Project or execution permission denied
         '409':
-          description: Version conflict
-          changed evidence: null
-          active execution or invalid stage transition: null
+          description: CAS/idempotency or evidence conflict, project_archived, project_not_active, project_state_unchanged,
+            project_lifecycle_basis_changed or project_archive_blocked. Re-read and explicitly adopt a new proposal; retry unknown
+            outcomes with the identical original body/key.
         '422':
           description: Invalid action payload
         '503':
@@ -1915,35 +1924,59 @@ paths:
 
   /api/v1/projects:
     get:
+      tags:
+      - projects
+      summary: List Projects
       operationId: listProjects
-      tags: [projects]
-      parameters:
-        - { name: tenant_id, in: query, schema: { type: string } }
-        - { $ref: "#/components/parameters/PageParam" }
-        - { $ref: "#/components/parameters/SizeParam" }
       responses:
-        "200":
-          description: ok
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+      security:
+      - bearerAuth: []
+      description: Read the authorized canonical selector list without initializing projects. Use /projects/portfolio for accurate
+        filtered delivery facts and cursor pagination.
+    post:
+      tags:
+      - projects
+      summary: Create Project
+      operationId: createProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
           content:
             application/json:
               schema:
                 type: object
+                required:
+                - ok
+                - id
                 properties:
-                  items: { type: array, items: { $ref: "#/components/schemas/Project" } }
-                  total: { type: integer }
-    post:
-      operationId: createProject
-      tags: [projects]
-      requestBody:
-        required: true
-        content:
-          application/json: { schema: { $ref: "#/components/schemas/ProjectCreate" } }
-      responses:
-        "201":
-          description: created
+                  ok:
+                    type: boolean
+                  id:
+                    type: string
+        '422':
+          description: Validation Error
           content:
-            application/json: { schema: { $ref: "#/components/schemas/Project" } }
-
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - bearerAuth: []
+      description: Create a project with initial planning, active or paused state. Initial archived is rejected; archive and
+        restore require the explicit lifecycle preview/command.
   /api/v1/tasks:
     get:
       operationId: listTasks
@@ -4779,6 +4812,185 @@ paths:
           description: Project access denied
       description: Read-only saved Agent configuration associations and accessible pinned profiles. Current means an association
         is valid, not that a device, credentials or execute permissions are ready.
+  /api/v1/projects/portfolio:
+    get:
+      tags:
+      - projects
+      summary: Project Portfolio
+      operationId: projectPortfolio
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: business_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+          title: Business Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              enum:
+              - planning
+              - active
+              - paused
+              - archived
+              type: string
+          - type: 'null'
+          title: Status
+      - name: risk
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              enum:
+              - blocked
+              - awaiting_review
+              - recorded_completed
+              - overdue_unverified
+              - acceptance_unavailable
+              - owner_unavailable
+              - open_issues
+              type: string
+          - type: 'null'
+          title: Risk
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 1024
+          default: ''
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 30
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPortfolioResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: Authentication required
+        '403':
+          description: Project access or lifecycle authority denied
+      description: Read current delivery facts for the full authorized filtered set, then page by stable Project.id. Repeated
+        status/risk filters are supported; q matches name or ID. Risk categories overlap, while total_items counts unique entities.
+        summary_scope is filtered_projects, never just the current page. All states use live facts; archived historical facts
+        are provenance only. Viewing never selects the working project. Cursors bind the normalized query, tenant and caller;
+        each request recomputes current facts and does not freeze later pages.
+  /api/v1/projects/{project_id}/portfolio:
+    get:
+      tags:
+      - projects
+      summary: Project Portfolio Detail
+      operationId: projectPortfolioDetail
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Project Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectPortfolioDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: Authentication required
+        '403':
+          description: Project access or lifecycle authority denied
+        '404':
+          description: Project not found in the current tenant and membership scope
+      description: Read one authorized canonical project with current evidence, complete deduplicated risks, exact targets and
+        last_archive provenance. Unknown or inaccessible IDs never select another project. facts_source is always live; a historical
+        archive snapshot cannot substitute for current verified counts. Risk targets include the project ID.
+  /api/v1/delivery/project-lifecycle-preview:
+    post:
+      tags:
+      - delivery
+      summary: Project Lifecycle Preview
+      operationId: deliveryProjectLifecyclePreview
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: X-Project-Id
+        in: header
+        required: true
+        schema:
+          type: string
+          title: X-Project-Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectLifecyclePreviewInput'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectLifecyclePreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '401':
+          description: Authentication required
+        '403':
+          description: Project access or lifecycle authority denied
+      description: Pure read requiring project lifecycle/configure authority and X-Project-Id. Freeze the returned version and
+        preview_basis with the proposed target_status and reason for project.lifecycle. The basis covers canonical configuration,
+        complete membership, current evidence, all Manager execution intents and the UTC day; it excludes the outer CAS version
+        and transient as_of clock. Archive returns every unclosed Manager intent as a blocker, including missing-task and pending
+        intents. Unfinished work is a warning, not an archive blocker. No workspace or preview row is created. Archive does
+        not revoke independent Hermes authority or stop external processes.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -6516,12 +6728,43 @@ components:
           maxLength: 100
           title: Owner Id
           type: string
+        business_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 1
+            type: string
+          - type: 'null'
+          default: null
+          title: Business Id
+        project_path:
+          default: ''
+          maxLength: 512
+          title: Project Path
+          type: string
+        vector_db:
+          default: lance
+          enum:
+          - lance
+          - milvus
+          - qdrant
+          - oceanbase
+          title: Vector Db
+          type: string
+        vector_db_config:
+          additionalProperties: true
+          title: Vector Db Config
+          type: object
+        is_template:
+          default: false
+          title: Is Template
+          type: boolean
       title: ProjectEdit
       type: object
-      description: Patch only supplied fields. name and description change the canonical SQL Project and require configure
-        permission. Goal, owner and planned dates retain their existing write permission. Omitted fields retain stored
-        values; empty description clears it, and explicit null dates clear planned dates. Date validation uses the combined
-        stored and submitted range. No duplicate project entity is created.
+      description: Patch supplied fields only through project.update. SQL name, description, business_id, project_path, vector_db,
+        vector_db_config and is_template require configure; goal, owner and planned dates keep write. Omitted fields retain values;
+        empty description clears text, nullable business_id clears the business, and null dates clear planned dates. Business
+        references must belong to the project tenant. Current status is changed only by project.lifecycle. Archived projects reject
+        new configuration writes. Configuration contents are excluded from public portfolio rows and redacted in delivery activity.
     ResourceSave:
       additionalProperties: false
       properties:
@@ -6667,6 +6910,10 @@ components:
       - name
       - description
       - status
+      - business_id
+      - project_path
+      - vector_db
+      - is_template
       properties:
         id:
           type: string
@@ -6677,10 +6924,13 @@ components:
           - string
           - 'null'
         status:
-          type:
-          - string
-          - 'null'
-          description: Canonical Project status, e.g. active or archived
+          type: string
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          description: Canonical SQL current state; transition only through project.lifecycle.
         goal:
           type: string
         owner_id:
@@ -6695,7 +6945,18 @@ components:
           - string
           - 'null'
           format: date
-      description: Canonical SQL fields take precedence over historical delivery metadata copies.
+        business_id:
+          type:
+          - string
+          - 'null'
+        project_path:
+          type: string
+        vector_db:
+          type: string
+        is_template:
+          type: boolean
+      description: Canonical SQL identity, state and nonsecret configuration; goal, owner and dates are delivery metadata. No
+        duplicate project status is stored in workspace JSON.
     DeliveryInboxTarget:
       type: object
       additionalProperties: false
@@ -9109,6 +9370,7 @@ components:
           - baseline.create
           - member.runtime.bind
           - member.runtime.unbind
+          - project.lifecycle
         payload:
           type: object
           description: "Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.\
@@ -9116,7 +9378,9 @@ components:
             \ test_nodes, or command nodes with test_node_ids. Agent test IDs are server-derived. No implicit local fallback.\
             \ sync/cancel require id.\nreview requires id, decision (accept/request_changes), comment and run_version.\n Team\
             \ runtime binding requires project configure and accessible same-tenant runtime read; it does not grant execute. Executor\
-            \ association is optional, explicit and fixed before handoff."
+            \ association is optional, explicit and fixed before handoff. project.lifecycle requires target_status, a nonblank\
+            \ reason, a current preview_basis and outer CAS/idempotency identity. Restore explicitly chooses planning, active\
+            \ or paused."
         expected_version:
           type: integer
           minimum: 0
@@ -9275,6 +9539,16 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/MemberRuntimeUnbind'
+      - if:
+          properties:
+            action:
+              const: project.lifecycle
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/ProjectLifecycleCommand'
     TaskEdit:
       additionalProperties: false
       properties:
@@ -9805,6 +10079,22 @@ components:
                 type: object
         permissions:
           type: object
+          properties:
+            write:
+              type: boolean
+            approve:
+              type: boolean
+            configure:
+              type: boolean
+            lifecycle:
+              type: boolean
+              description: Raw project configure authority retained for explicit restore; it grants no runtime permission.
+          required:
+          - write
+          - approve
+          - configure
+          - lifecycle
+          description: Archived masks write, approve and configure. Lifecycle remains independently authorized.
         replayed:
           type: boolean
         applied_version:
@@ -9813,8 +10103,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryResource'
-          description: Includes archived resources. Legacy absent metadata returns an empty collection without read-side
-            writes.
+          description: Includes archived resources. Legacy absent metadata returns an empty collection without read-side writes.
     Problem:
       type: object
       description: RFC 9457 Problem Details
@@ -9894,30 +10183,92 @@ components:
 
     Project:
       type: object
-      required: [id, tenant_id, name, status]
+      required:
+      - id
+      - tenant_id
+      - name
+      - status
       properties:
-        id: { type: string }
-        tenant_id: { type: string }
-        business_id: { type: string }
-        name: { type: string }
-        description: { type: string }
-        project_path: { type: string }
-        vector_db: { type: string, enum: [lance, qdrant, milvus, pgvector] }
-        is_template: { type: boolean, default: false }
-        status: { type: string, enum: [active, archived] }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-
+        id:
+          type: string
+        tenant_id:
+          type: string
+        business_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        project_path:
+          type: string
+        vector_db:
+          type: string
+        is_template:
+          type: boolean
+          default: false
+        status:
+          type: string
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          description: Canonical SQL current state; transition only through project.lifecycle.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     ProjectCreate:
-      type: object
-      required: [name]
+      additionalProperties: false
       properties:
-        name: { type: string }
-        description: { type: string }
-        business_id: { type: string }
-        project_path: { type: string }
-        template_id: { type: string }
-
+        name:
+          maxLength: 128
+          minLength: 1
+          title: Name
+          type: string
+        description:
+          default: ''
+          maxLength: 20000
+          title: Description
+          type: string
+        business_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Business Id
+        project_path:
+          default: ''
+          maxLength: 512
+          title: Project Path
+          type: string
+        vector_db:
+          default: lance
+          enum:
+          - lance
+          - milvus
+          - qdrant
+          - oceanbase
+          title: Vector Db
+          type: string
+        vector_db_config:
+          additionalProperties: true
+          title: Vector Db Config
+          type: object
+        status:
+          default: active
+          enum:
+          - planning
+          - active
+          - paused
+          title: Status
+          type: string
+      required:
+      - name
+      title: ProjectCreate
+      type: object
     Task:
       type: object
       required:
@@ -14269,4 +14620,680 @@ components:
       - workspaces
       - members
       title: TeamRuntimeBindingsResponse
+      type: object
+    ProjectLifecyclePreviewInput:
+      additionalProperties: false
+      properties:
+        target_status:
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          title: Target Status
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+      required:
+      - target_status
+      - reason
+      title: ProjectLifecyclePreviewInput
+      type: object
+    ProjectLifecycleCommand:
+      additionalProperties: false
+      properties:
+        target_status:
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          title: Target Status
+          type: string
+        reason:
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+          type: string
+        preview_basis:
+          pattern: ^[0-9a-f]{64}$
+          title: Preview Basis
+          type: string
+      required:
+      - target_status
+      - reason
+      - preview_basis
+      title: ProjectLifecycleCommand
+      type: object
+    PortfolioRiskCounts:
+      additionalProperties: false
+      properties:
+        blocked:
+          title: Blocked
+          type: integer
+        awaiting_review:
+          title: Awaiting Review
+          type: integer
+        recorded_completed:
+          title: Recorded Completed
+          type: integer
+        overdue_unverified:
+          title: Overdue Unverified
+          type: integer
+        acceptance_unavailable:
+          title: Acceptance Unavailable
+          type: integer
+        owner_unavailable:
+          title: Owner Unavailable
+          type: integer
+        open_issues:
+          title: Open Issues
+          type: integer
+        total_items:
+          title: Total Items
+          type: integer
+      required:
+      - blocked
+      - awaiting_review
+      - recorded_completed
+      - overdue_unverified
+      - acceptance_unavailable
+      - owner_unavailable
+      - open_issues
+      - total_items
+      title: PortfolioRiskCounts
+      type: object
+    PortfolioTarget:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        kind:
+          enum:
+          - project
+          - task
+          - requirement
+          - issue
+          - milestone
+          - execution
+          title: Kind
+          type: string
+        view:
+          title: View
+          type: string
+        detail:
+          default: details
+          title: Detail
+          type: string
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Requirement Id
+        task_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Task Id
+        issue_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Issue Id
+        milestone_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Milestone Id
+        execution_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          title: Execution Id
+      required:
+      - project_id
+      - kind
+      - view
+      title: PortfolioTarget
+      type: object
+    ProjectLifecycleBlocker:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+        target:
+          $ref: '#/components/schemas/PortfolioTarget'
+        status:
+          title: Status
+          type: string
+        run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Run Id
+      required:
+      - code
+      - message
+      - target
+      - status
+      - run_id
+      title: ProjectLifecycleBlocker
+      type: object
+    ProjectLifecycleFacts:
+      additionalProperties: false
+      properties:
+        as_of:
+          title: As Of
+          type: string
+        basis:
+          title: Basis
+          type: string
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        risk_counts:
+          $ref: '#/components/schemas/PortfolioRiskCounts'
+        unclosed_intents_total:
+          title: Unclosed Intents Total
+          type: integer
+      required:
+      - as_of
+      - basis
+      - metrics
+      - risk_counts
+      - unclosed_intents_total
+      title: ProjectLifecycleFacts
+      type: object
+    ProjectLifecycleWarning:
+      additionalProperties: false
+      properties:
+        code:
+          title: Code
+          type: string
+        message:
+          title: Message
+          type: string
+        count:
+          title: Count
+          type: integer
+      required:
+      - code
+      - message
+      - count
+      title: ProjectLifecycleWarning
+      type: object
+    ProjectLifecyclePreviewResponse:
+      additionalProperties: false
+      properties:
+        project_id:
+          title: Project Id
+          type: string
+        version:
+          title: Version
+          type: integer
+        from_status:
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          title: From Status
+          type: string
+        target_status:
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          title: Target Status
+          type: string
+        reason:
+          title: Reason
+          type: string
+        preview_basis:
+          title: Preview Basis
+          type: string
+        allowed:
+          title: Allowed
+          type: boolean
+        blockers:
+          items:
+            $ref: '#/components/schemas/ProjectLifecycleBlocker'
+          title: Blockers
+          type: array
+        warnings:
+          items:
+            $ref: '#/components/schemas/ProjectLifecycleWarning'
+          title: Warnings
+          type: array
+        facts:
+          $ref: '#/components/schemas/ProjectLifecycleFacts'
+        permissions:
+          additionalProperties:
+            type: boolean
+          propertyNames:
+            const: can_transition
+          title: Permissions
+          type: object
+      required:
+      - project_id
+      - version
+      - from_status
+      - target_status
+      - reason
+      - preview_basis
+      - allowed
+      - blockers
+      - warnings
+      - facts
+      - permissions
+      title: ProjectLifecyclePreviewResponse
+      type: object
+    PortfolioMilestone:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        title:
+          title: Title
+          type: string
+        starts_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Starts On
+        ends_on:
+          title: Ends On
+          type: string
+        target:
+          $ref: '#/components/schemas/PortfolioTarget'
+      required:
+      - id
+      - title
+      - starts_on
+      - ends_on
+      - target
+      title: PortfolioMilestone
+      type: object
+    PortfolioProject:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        tenant_id:
+          title: Tenant Id
+          type: string
+        tenant_code:
+          title: Tenant Code
+          type: string
+        business_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Business Id
+        business_code:
+          title: Business Code
+          type: string
+        business_name:
+          title: Business Name
+          type: string
+        project_code:
+          title: Project Code
+          type: string
+        name:
+          title: Name
+          type: string
+        description:
+          title: Description
+          type: string
+        project_path:
+          title: Project Path
+          type: string
+        vector_db:
+          title: Vector Db
+          type: string
+        is_template:
+          title: Is Template
+          type: boolean
+        template_id:
+          title: Template Id
+          type: string
+        status:
+          enum:
+          - planning
+          - active
+          - paused
+          - archived
+          title: Status
+          type: string
+        version:
+          title: Version
+          type: integer
+        created_at:
+          title: Created At
+          type: string
+        updated_at:
+          title: Updated At
+          type: string
+        permissions:
+          $ref: '#/components/schemas/ProjectCapabilities'
+      required:
+      - id
+      - tenant_id
+      - tenant_code
+      - business_id
+      - business_code
+      - business_name
+      - project_code
+      - name
+      - description
+      - project_path
+      - vector_db
+      - is_template
+      - template_id
+      - status
+      - version
+      - created_at
+      - updated_at
+      - permissions
+      title: PortfolioProject
+      type: object
+    PortfolioRow:
+      additionalProperties: false
+      properties:
+        project:
+          $ref: '#/components/schemas/PortfolioProject'
+        facts_source:
+          const: live
+          title: Facts Source
+          type: string
+        facts_as_of:
+          title: Facts As Of
+          type: string
+        basis:
+          title: Basis
+          type: string
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        risk_counts:
+          $ref: '#/components/schemas/PortfolioRiskCounts'
+        unclosed_intents_total:
+          title: Unclosed Intents Total
+          type: integer
+        nearest_milestone:
+          anyOf:
+          - $ref: '#/components/schemas/PortfolioMilestone'
+          - type: 'null'
+        primary_target:
+          $ref: '#/components/schemas/PortfolioTarget'
+      required:
+      - project
+      - facts_source
+      - facts_as_of
+      - basis
+      - metrics
+      - risk_counts
+      - unclosed_intents_total
+      - nearest_milestone
+      - primary_target
+      title: PortfolioRow
+      type: object
+    PortfolioSummary:
+      additionalProperties: false
+      properties:
+        projects_total:
+          title: Projects Total
+          type: integer
+        status_counts:
+          additionalProperties:
+            type: integer
+          title: Status Counts
+          type: object
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        risk_counts:
+          $ref: '#/components/schemas/PortfolioRiskCounts'
+      required:
+      - projects_total
+      - status_counts
+      - metrics
+      - risk_counts
+      title: PortfolioSummary
+      type: object
+    ProjectCapabilities:
+      additionalProperties: false
+      properties:
+        can_enter:
+          title: Can Enter
+          type: boolean
+        can_write:
+          title: Can Write
+          type: boolean
+        can_dispatch:
+          title: Can Dispatch
+          type: boolean
+        can_configure:
+          title: Can Configure
+          type: boolean
+        can_transition:
+          title: Can Transition
+          type: boolean
+        can_archive:
+          title: Can Archive
+          type: boolean
+        can_restore:
+          title: Can Restore
+          type: boolean
+      required:
+      - can_enter
+      - can_write
+      - can_dispatch
+      - can_configure
+      - can_transition
+      - can_archive
+      - can_restore
+      title: ProjectCapabilities
+      type: object
+    ProjectPortfolioResponse:
+      additionalProperties: false
+      properties:
+        as_of:
+          title: As Of
+          type: string
+        rows:
+          items:
+            $ref: '#/components/schemas/PortfolioRow'
+          title: Rows
+          type: array
+        total:
+          title: Total
+          type: integer
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        limit:
+          title: Limit
+          type: integer
+        summary:
+          $ref: '#/components/schemas/PortfolioSummary'
+        summary_scope:
+          const: filtered_projects
+          title: Summary Scope
+          type: string
+        permissions:
+          additionalProperties:
+            type: boolean
+          propertyNames:
+            const: can_create
+          title: Permissions
+          type: object
+      required:
+      - as_of
+      - rows
+      - total
+      - next_cursor
+      - limit
+      - summary
+      - summary_scope
+      - permissions
+      title: ProjectPortfolioResponse
+      type: object
+    PortfolioRisk:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        entity_kind:
+          enum:
+          - task
+          - requirement
+          - issue
+          - milestone
+          title: Entity Kind
+          type: string
+        entity_id:
+          title: Entity Id
+          type: string
+        title:
+          title: Title
+          type: string
+        categories:
+          items:
+            enum:
+            - blocked
+            - awaiting_review
+            - recorded_completed
+            - overdue_unverified
+            - acceptance_unavailable
+            - owner_unavailable
+            - open_issues
+            type: string
+          title: Categories
+          type: array
+        due_on:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Due On
+        target:
+          $ref: '#/components/schemas/PortfolioTarget'
+      required:
+      - id
+      - entity_kind
+      - entity_id
+      - title
+      - categories
+      - due_on
+      - target
+      title: PortfolioRisk
+      type: object
+    ProjectArchiveRecord:
+      additionalProperties: false
+      properties:
+        id:
+          title: Id
+          type: string
+        at:
+          title: At
+          type: string
+        actor_id:
+          title: Actor Id
+          type: string
+        actor_name:
+          title: Actor Name
+          type: string
+        reason:
+          title: Reason
+          type: string
+        preview_basis:
+          title: Preview Basis
+          type: string
+        facts:
+          $ref: '#/components/schemas/ProjectLifecycleFacts'
+      required:
+      - id
+      - at
+      - actor_id
+      - actor_name
+      - reason
+      - preview_basis
+      - facts
+      title: ProjectArchiveRecord
+      type: object
+    ProjectLifecycleProvenance:
+      additionalProperties: false
+      properties:
+        last_archive:
+          anyOf:
+          - $ref: '#/components/schemas/ProjectArchiveRecord'
+          - type: 'null'
+      required:
+      - last_archive
+      title: ProjectLifecycleProvenance
+      type: object
+    ProjectPortfolioDetail:
+      additionalProperties: false
+      properties:
+        project:
+          $ref: '#/components/schemas/PortfolioProject'
+        facts_source:
+          const: live
+          title: Facts Source
+          type: string
+        facts_as_of:
+          title: Facts As Of
+          type: string
+        basis:
+          title: Basis
+          type: string
+        metrics:
+          $ref: '#/components/schemas/ProgressMetrics'
+        risk_counts:
+          $ref: '#/components/schemas/PortfolioRiskCounts'
+        unclosed_intents_total:
+          title: Unclosed Intents Total
+          type: integer
+        nearest_milestone:
+          anyOf:
+          - $ref: '#/components/schemas/PortfolioMilestone'
+          - type: 'null'
+        primary_target:
+          $ref: '#/components/schemas/PortfolioTarget'
+        risks:
+          items:
+            $ref: '#/components/schemas/PortfolioRisk'
+          title: Risks
+          type: array
+        lifecycle:
+          $ref: '#/components/schemas/ProjectLifecycleProvenance'
+      required:
+      - project
+      - facts_source
+      - facts_as_of
+      - basis
+      - metrics
+      - risk_counts
+      - unclosed_intents_total
+      - nearest_milestone
+      - primary_target
+      - risks
+      - lifecycle
+      title: ProjectPortfolioDetail
       type: object

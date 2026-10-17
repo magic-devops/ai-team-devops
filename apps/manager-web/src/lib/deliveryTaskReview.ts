@@ -7,6 +7,7 @@ import { planError } from "./deliveryTaskPlan";
 import { request } from "./http";
 import type { TaskAcceptance } from "./taskAcceptance";
 import { safeExecutionReturn } from "./executionCommands";
+import { preserveProjectContext } from "./projectPortfolioRoute";
 import { deliveryInboxHref } from "./deliveryProjectInbox";
 
 export type ReviewTask = {
@@ -112,7 +113,7 @@ export function manualTaskHref(
     task_id: task.id,
   });
   const safe = safeExecutionReturn(background);
-  return safe ? `${href}&return_to=${encodeURIComponent(safe)}` : href;
+  return preserveProjectContext(safe ? `${href}&return_to=${encodeURIComponent(safe)}` : href, background);
 }
 
 export function taskRecordStatusLabel(

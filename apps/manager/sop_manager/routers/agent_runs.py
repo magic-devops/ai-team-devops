@@ -9,12 +9,13 @@ from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_cod
 from sop_manager.routers.metrics import current_trace_context, trace_context
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/agent-runs", tags=["agent-runs"])
 TERMINAL_STATUSES = {"success", "failed", "cancelled"}
 
 def _runs_dir():
     d = resolved_ai_memory_root() / "agent_runs"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -36,9 +37,11 @@ def _all_runs() -> list[dict]:
     return sorted(runs, key=lambda x: x.get("started_at", ""), reverse=True)
 
 def _save_run(run: dict):
-    import json
-    attach_scope(run)
-    (_runs_dir() / f"run_{run['id']}.json").write_text(json.dumps(run, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _runs_dir().mkdir(parents=True, exist_ok=True)
+        import json
+        attach_scope(run)
+        (_runs_dir() / f"run_{run['id']}.json").write_text(json.dumps(run, ensure_ascii=False, indent=2))
 
 def _load_run(run_id: str) -> dict[str, Any]:
     import json
@@ -190,7 +193,8 @@ def cancel_run(run_id: str, body: CancelIn = CancelIn()):
 def delete_run(run_id: str):
     p = _runs_dir() / f"run_{run_id}.json"
     _load_run(run_id)
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": run_id}
 
 @router.post("/{run_id}/evidence")

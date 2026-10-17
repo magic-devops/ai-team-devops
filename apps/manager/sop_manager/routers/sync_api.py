@@ -468,46 +468,49 @@ def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str,
 
 
 def _sync_push_asset(body: SyncPushIn, pid: str) -> dict[str, Any]:
-    rec = dict(body.record or {})
-    target, rel = _asset_target_path(body.module, rec)
-    if body.action == "delete":
-        if target.exists():
-            target.unlink()
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        rec = dict(body.record or {})
+        target, rel = _asset_target_path(body.module, rec)
+        if body.action == "delete":
+            if target.exists():
+                target.unlink()
+            evt = append_event(
+                module=body.module,
+                action="delete",
+                record_id=rel,
+                idempotency_key=body.idempotency_key,
+            )
+            _ws_sync_event(pid, body.module, "delete", rel)
+            return {"ok": True, "action": "delete", "id": rel, "event_id": evt["id"]}
+
+        content = rec.get("content")
+        if content is None:
+            raise HTTPException(400, "资产 upsert 需要 record.content")
+        text = str(content)
+        if len(text.encode("utf-8")) > 512_000:
+            raise HTTPException(400, "资产内容超过 512KB")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
         evt = append_event(
             module=body.module,
-            action="delete",
+            action="upsert",
             record_id=rel,
             idempotency_key=body.idempotency_key,
+            payload={"path": rel, "size": len(text.encode("utf-8"))},
         )
-        _ws_sync_event(pid, body.module, "delete", rel)
-        return {"ok": True, "action": "delete", "id": rel, "event_id": evt["id"]}
-
-    content = rec.get("content")
-    if content is None:
-        raise HTTPException(400, "资产 upsert 需要 record.content")
-    text = str(content)
-    if len(text.encode("utf-8")) > 512_000:
-        raise HTTPException(400, "资产内容超过 512KB")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8")
-    evt = append_event(
-        module=body.module,
-        action="upsert",
-        record_id=rel,
-        idempotency_key=body.idempotency_key,
-        payload={"path": rel, "size": len(text.encode("utf-8"))},
-    )
-    _ws_sync_event(pid, body.module, "upsert", rel)
-    return {
-        "ok": True,
-        "action": "upsert",
-        "id": rel,
-        "event_id": evt["id"],
-        "record": {
+        _ws_sync_event(pid, body.module, "upsert", rel)
+        return {
+            "ok": True,
+            "action": "upsert",
             "id": rel,
-            "module": body.module,
-            "path": rel,
-            "size": target.stat().st_size,
-            "updated_at": _iso(datetime.fromtimestamp(target.stat().st_mtime)),
-        },
-    }
+            "event_id": evt["id"],
+            "record": {
+                "id": rel,
+                "module": body.module,
+                "path": rel,
+                "size": target.stat().st_size,
+                "updated_at": _iso(datetime.fromtimestamp(target.stat().st_mtime)),
+            },
+        }

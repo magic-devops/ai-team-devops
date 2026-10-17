@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import (
     resolved_ai_memory_root,
     resolved_business_code,
@@ -64,7 +66,6 @@ def _scope() -> dict[str, str]:
 
 def _kg_dir() -> Path:
     root = resolved_ai_memory_root() / "knowledge_graph"
-    root.mkdir(parents=True, exist_ok=True)
     return root
 
 
@@ -320,7 +321,10 @@ def _load_graph() -> dict[str, Any]:
 
 
 def _save_graph(graph: dict[str, Any]) -> None:
-    _graph_path().write_text(json.dumps(graph, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        path = _graph_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(graph, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _entity_evidence(entity: dict[str, Any]) -> list[dict[str, Any]]:
@@ -488,13 +492,15 @@ def merge_entity_profile(body: EntityProfileMergeIn) -> dict[str, Any]:
         },
     }
 
-    profiles: dict[str, Any] = {}
-    path = _profiles_path()
-    if path.exists():
-        try:
-            profiles = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            profiles = {}
-    profiles[body.entity_id] = profile
-    path.write_text(json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        profiles: dict[str, Any] = {}
+        path = _profiles_path()
+        if path.exists():
+            try:
+                profiles = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                profiles = {}
+        profiles[body.entity_id] = profile
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(profiles, ensure_ascii=False, indent=2), encoding="utf-8")
     return _response(graph, profile=profile)

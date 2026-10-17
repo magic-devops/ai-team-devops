@@ -14,6 +14,28 @@ from .._util import console, get_client, get_config, kv, warn
 app = typer.Typer(help="项目：list/review/ops-plan/ops-tasks/onboarding/clone-preview")
 
 
+@app.command("portfolio")
+def portfolio(
+    q: str = typer.Option("", "--query"),
+    business_id: str | None = typer.Option(None, "--business-id"),
+    status: list[str] | None = typer.Option(None, "--status"),
+    risk: list[str] | None = typer.Option(None, "--risk"),
+    cursor: str = typer.Option("", "--cursor"),
+    limit: int = typer.Option(30, "--limit", min=1, max=100),
+    json_out: bool = typer.Option(False, "--json"),
+):
+    """查看完整筛选范围的真实交付统计；分页不改变当前工作项目。"""
+    try:
+        result = get_client().project_portfolio(q=q, business_id=business_id, status=status,
+                                               risk=risk, cursor=cursor, limit=limit)
+        if not json_out:
+            console.print("项目组合 · 分类可重叠，总数按实际对象去重", markup=False)
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 def _project_id(value: str) -> str:
     pid = (value or "").strip() or (get_config().project_id or "").strip()
     if not pid:

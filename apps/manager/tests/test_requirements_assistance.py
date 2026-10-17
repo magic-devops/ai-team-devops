@@ -573,9 +573,10 @@ def test_project_removed_during_provider_request_returns_scope_error_without_cra
     client, sessions = app_env
 
     def remove_project():
-        with sessions() as db:
-            db.query(Project).filter_by(id="selected").delete()
-            db.commit()
+        # Simulate out-of-band database loss. Application Sessions deliberately
+        # reject physical project deletion and require explicit archival.
+        with sessions.kw["bind"].begin() as connection:
+            connection.execute(Project.__table__.delete().where(Project.id == "selected"))
 
     calls = stub(monkeypatch, during=remove_project)
     result = client.post("/api/v1/requirements/parse-document", json=parse_body())

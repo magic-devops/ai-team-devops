@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path
 
 router = APIRouter(prefix="/api/v1/orchestration", tags=["orchestration"])
@@ -22,7 +24,6 @@ router = APIRouter(prefix="/api/v1/orchestration", tags=["orchestration"])
 
 def _orch_dir() -> Path:
     d = resolved_ai_memory_root() / "orchestration"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -193,7 +194,10 @@ def _load_dev_tools_state() -> Dict[str, Any]:
 
 
 def _save_dev_tools_state(d: Dict[str, Any]) -> None:
-    _dev_tools_state().write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        path = _dev_tools_state()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _builtin_ids() -> set:
@@ -241,19 +245,13 @@ def _merged_tool_ids() -> List[str]:
     return [t["id"] for t in _merged_tools()]
 
 
-def _fix_config_default_tool() -> None:
+def _config_projection() -> Dict[str, Any]:
     f = _orch_dir() / "config.json"
-    cfg = json.loads(f.read_text()) if f.exists() else {}
+    cfg = json.loads(f.read_text()) if f.exists() else {"quality_config": {}, "version": "1.0.0"}
     ids = set(_merged_tool_ids())
     dt = str(cfg.get("default_tool") or "claude")
-    if dt not in ids:
-        if "claude" in ids:
-            cfg["default_tool"] = "claude"
-        elif ids:
-            cfg["default_tool"] = sorted(ids)[0]
-        else:
-            cfg["default_tool"] = "claude"
-    f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    cfg["default_tool"] = dt if dt in ids else ("claude" if "claude" in ids else next(iter(sorted(ids)), "claude"))
+    return cfg
 
 
 def _enrich_cmd_result(res: Dict[str, Any]) -> Dict[str, Any]:
@@ -299,12 +297,13 @@ def _run_cmd(cmd: List[str], timeout: int = 600, cwd: Optional[str] = None) -> D
 
 def _append_install_log(entry: Dict[str, Any]) -> None:
     """追加 JSONL 安装日志，供管理端「安装控制台」查看。"""
-    _orch_dir().mkdir(parents=True, exist_ok=True)
     path = _orch_dir() / "install_logs.jsonl"
     row = {**entry, "ts": datetime.now(timezone.utc).isoformat()}
     try:
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        with project_file_write_scope():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     except OSError:
         pass
 
@@ -472,7 +471,6 @@ def dev_tools_meta():
 @router.get("/tools")
 def list_tools():
     """合并内置 + 自定义 + 覆盖；返回 available 与可选 guard_install_recipe"""
-    _fix_config_default_tool()
     result = []
     for t in _merged_tools():
         cmd = t.get("cmd") or ""
@@ -555,7 +553,6 @@ def delete_dev_tool(tool_id: str):
         raise HTTPException(404, "未找到自定义工具")
     st["custom"] = nxt
     _save_dev_tools_state(st)
-    _fix_config_default_tool()
     return {"ok": True}
 
 
@@ -569,7 +566,6 @@ def hide_builtin_tool(body: DevToolHideBody):
     if tid not in h:
         h.append(tid)
     _save_dev_tools_state(st)
-    _fix_config_default_tool()
     return {"ok": True}
 
 
@@ -583,7 +579,6 @@ def unhide_one_builtin_tool(body: DevToolHideBody):
     h = st.setdefault("hidden", [])
     st["hidden"] = [x for x in h if str(x) != tid]
     _save_dev_tools_state(st)
-    _fix_config_default_tool()
     return {"ok": True}
 
 
@@ -593,7 +588,6 @@ def unhide_all_builtin_tools():
     st = _load_dev_tools_state()
     st["hidden"] = []
     _save_dev_tools_state(st)
-    _fix_config_default_tool()
     return {"ok": True}
 
 
@@ -806,35 +800,40 @@ def create_workflow(body: WorkflowDef):
     except AttributeError:
         payload = body.dict()
     payload["id"] = wid
-    f.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        if f.is_file():
+            raise HTTPException(409, "该工作流 id 已存在")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     return {"ok": True, "id": wid}
 
 
 @router.delete("/workflows/{wf_id}")
 def delete_workflow(wf_id: str):
     f = _orch_dir() / f"wf_{wf_id}.json"
-    if f.exists():
-        f.unlink()
+    with project_file_write_scope():
+        if f.exists():
+            f.unlink()
     return {"ok": True}
 
 
 @router.get("/config")
 def get_config():
-    _fix_config_default_tool()
-    f = _orch_dir() / "config.json"
-    return json.loads(f.read_text()) if f.exists() else {"default_tool": "claude", "quality_config": {}, "version": "1.0.0"}
+    return _config_projection()
 
 
 @router.put("/config")
 def update_config(body: dict):
     f = _orch_dir() / "config.json"
-    cfg = json.loads(f.read_text()) if f.exists() else {}
-    cfg.update(body or {})
-    ids = set(_merged_tool_ids())
-    dt = str(cfg.get("default_tool") or "")
-    if dt and dt not in ids:
-        cfg["default_tool"] = "claude" if "claude" in ids else next(iter(ids), "claude")
-    f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    with project_file_write_scope():
+        cfg = json.loads(f.read_text()) if f.exists() else {}
+        cfg.update(body or {})
+        ids = set(_merged_tool_ids())
+        dt = str(cfg.get("default_tool") or "")
+        if dt and dt not in ids:
+            cfg["default_tool"] = "claude" if "claude" in ids else next(iter(ids), "claude")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
     return {"ok": True}
 
 

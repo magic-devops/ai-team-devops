@@ -19,7 +19,7 @@ env = business_env
 
 
 @pytest.fixture
-def scope(tmp_path, monkeypatch):
+def scope(tmp_path, monkeypatch, isolated_project_sql):
     tokens = set_request_scope("tenant-model", "project-model", tmp_path)
     gateway._cache._d.clear()
     monkeypatch.setattr(gateway, "_enforce_llm_quota", lambda *args: None)
@@ -437,7 +437,7 @@ def test_authenticated_http_configuration_chat_cache_and_ledger_use_same_project
     assert {row["tenant_id"] for row in ledger} == {"team"}
 
 
-@pytest.mark.parametrize("tenant,project", [("tenant-model", "another-project"), ("another-tenant", "project-model")])
+@pytest.mark.parametrize("tenant,project", [("tenant-model", "another-project"), ("another-tenant", "foreign-project")])
 def test_shared_project_root_keeps_model_settings_credentials_and_cache_separate(scope, openai_calls, tenant, project):
     configured(key="original-project-key")
     chat(cache_ttl=60)

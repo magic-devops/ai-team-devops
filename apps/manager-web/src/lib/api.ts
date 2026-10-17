@@ -37,18 +37,7 @@ export const api = {
   projectsSummary: () => request<any>("/api/v1/projects/summary"),
   createProject: (body: Record<string, unknown>) =>
     request<any>("/api/v1/projects", { method: "POST", body: JSON.stringify(body) }),
-  updateProject: (projectId: string, body: Record<string, unknown>) =>
-    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    }),
-  deleteProject: (projectId: string) =>
-    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" }),
   projectTemplates: () => request<any[]>("/api/v1/projects/templates"),
-  projectSetTemplate: (projectId: string, isTemplate: boolean) =>
-    request<any>(`/api/v1/projects/${encodeURIComponent(projectId)}/set-template?is_template=${isTemplate ? "true" : "false"}`, {
-      method: "PATCH",
-    }),
   cloneProject: (templateId: string, body: Record<string, unknown>) =>
     request<any>(`/api/v1/projects/${encodeURIComponent(templateId)}/clone`, {
       method: "POST",
@@ -1665,7 +1654,7 @@ export const api = {
   opsProfileEnv: (profile: string) =>
     request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/env`),
   opsProfileBundle: (profile: string) =>
-    request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/bundle`),
+    request<any>(`/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/bundle`, { method: "POST" }),
   opsProfileComposeUrl: (profile: string) =>
     `/api/v1/system/ops/profiles/${encodeURIComponent(profile)}/compose.override.yml`,
   opsDeploymentPackages: (profile: string, limit = 20) =>

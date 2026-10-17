@@ -46,7 +46,7 @@ describe("access review i18n helpers", () => {
     expect(translateAccessRecommendation(t, "优先处理 high 风险", 0)).toContain("page.organization.accessRecommendation.0");
   });
 
-  it("binds the first project and retries once when a scoped API reports missing X-Project-Id", async () => {
+  it("preserves an unselected project and reports missing scope without guessing a project", async () => {
     const store = new Map<string, string>([["sop-token", "token-1"]]);
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => store.get(key) ?? null,
@@ -69,12 +69,10 @@ describe("access review i18n helpers", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(api.syncSummary()).resolves.toMatchObject({ ok: true, project_id: "p1" });
-    expect(store.get("sop-current-project-id")).toBe("p1");
+    await expect(api.syncSummary()).rejects.toThrow("X-Project-Id");
+    expect(store.get("sop-current-project-id")).toBeUndefined();
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       "/api/v1/auth/me",
-      "/api/v1/sync/summary",
-      "/api/v1/projects",
       "/api/v1/sync/summary",
     ]);
   });

@@ -220,9 +220,7 @@ _WORKFLOWS: dict[str, WorkflowDef] = {}
 
 
 def _wf_dir() -> Path:
-    d = resolved_ai_memory_root() / "workflow-runs"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return resolved_ai_memory_root() / "workflow-runs"
 
 
 def _runs_file() -> Path:
@@ -245,14 +243,18 @@ def _load_runs() -> list[dict[str, Any]]:
 
 
 def _save_runs(rows: list[dict[str, Any]]) -> None:
-    with _JOURNAL_LOCK:
-        path = _runs_file()
-        # Shared project paths still require explicit tenant/project row isolation.
-        existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-        foreign = [row for row in existing if isinstance(row, dict) and not _in_scope(row)] if isinstance(existing, list) else []
-        temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
-        temporary.write_text(json.dumps(foreign + rows, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, path)
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        with _JOURNAL_LOCK:
+            path = _runs_file()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # Shared project paths still require explicit tenant/project row isolation.
+            existing = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+            foreign = [row for row in existing if isinstance(row, dict) and not _in_scope(row)] if isinstance(existing, list) else []
+            temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+            temporary.write_text(json.dumps(foreign + rows, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, path)
 
 
 def _in_scope(row: dict[str, Any]) -> bool:
@@ -271,12 +273,17 @@ def _validate_context_payload(value: dict[str, Any]) -> None:
 
 
 def _record_event(row: dict[str, Any]) -> dict[str, Any]:
-    row.update(tenant_id=resolved_tenant_id(), project_id=resolved_project_id())
-    row.setdefault("id", f"wf-evt-{uuid.uuid4().hex[:12]}")
-    row.setdefault("ts", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
-    with _JOURNAL_LOCK, _events_file().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return row
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        row.update(tenant_id=resolved_tenant_id(), project_id=resolved_project_id())
+        row.setdefault("id", f"wf-evt-{uuid.uuid4().hex[:12]}")
+        row.setdefault("ts", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        path = _events_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _JOURNAL_LOCK, path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return row
 
 
 def _upsert_run(row: dict[str, Any]) -> dict[str, Any]:
@@ -478,6 +485,32 @@ class _InMemoryEngine(Engine):
             h.status = "timeout_pending"
             self._persist(h, "review_timeout")
 
+    def _projection(self, handle: WorkflowHandle, *, recovered: bool = False) -> WorkflowHandle:
+        h = deepcopy(handle)
+        if h.status not in _TERMINAL:
+            state = h.result or {}
+            if recovered and state.get("phase") in {"ai_reviewing", "classifying", "planning", "running"}:
+                state.update(pending_phase=state.get("phase"), phase="timeout_pending", recovery="worker_interrupted")
+                if h.type == "code_review":
+                    state["review"] = {"source": "llm_gateway", "status": "interrupted", "error": "Worker stopped before model review completed; human review remains required"}
+                h.status = "timeout_pending"
+            elif state.get("review_deadline", float("inf")) <= time.time() and h.status not in {"paused", "timeout_pending"}:
+                state.update(pending_phase=state.get("phase"), phase="timeout_pending")
+                h.status = "timeout_pending"
+            h.result = state
+        return h
+
+    def _remember_mutation(self, h: WorkflowHandle) -> WorkflowHandle:
+        key = self._key(h.workflow_id)
+        current = self._handles.get(key)
+        if current is None:
+            self._handles[key] = h
+            return h
+        # The running worker keeps this handle. Update it after the persisted
+        # command so its later timeout cannot overwrite a human decision.
+        current.__dict__.update(deepcopy(h.__dict__))
+        return current
+
     async def start(self, workflow_type: str, workflow_id: str, args: dict) -> WorkflowHandle:
         key = self._key(workflow_id)
         try:
@@ -542,7 +575,7 @@ class _InMemoryEngine(Engine):
         h.status = _state_status(result)
         h.signals.append({"signal": signal, "payload": deepcopy(payload), "signal_id": signal_id, "fingerprint": fingerprint, "at": time.time()})
         self._persist(h, "signal_applied")
-        self._expire(h)
+        self._expire(self._remember_mutation(h))
 
     async def query(self, workflow_id: str, query: str) -> Any:
         h = await self.describe(workflow_id)
@@ -565,13 +598,13 @@ class _InMemoryEngine(Engine):
         if task:
             task.cancel()
         self._persist(h, "cancelled")
+        self._remember_mutation(h)
 
     async def describe(self, workflow_id: str) -> WorkflowHandle:
         key = self._key(workflow_id)
         h = self._handles.get(key)
         if h:
-            self._expire(h)
-            return h
+            return self._projection(h)
         row = next((r for r in _load_runs() if r.get("workflow_id") == workflow_id), None)
         if not row:
             raise HTTPException(404, "Workflow not found in the selected project")
@@ -579,19 +612,7 @@ class _InMemoryEngine(Engine):
                            result=row.get("result"), error=row.get("error", ""), started_at=row.get("started_at", time.time()),
                            tenant_id=key[0], project_id=key[1], created_by=row.get("created_by", ""),
                            args=row.get("args", {}), signals=row.get("signals", []))
-        if h.status not in _TERMINAL:
-            state = h.result or {}
-            if state.get("phase") in {"ai_reviewing", "classifying", "planning", "running"}:
-                state.update(pending_phase=state.get("phase"), phase="timeout_pending", recovery="worker_interrupted")
-                if h.type == "code_review":
-                    state["review"] = {"source": "llm_gateway", "status": "interrupted", "error": "Worker stopped before model review completed; human review remains required"}
-                h.status = "timeout_pending"
-            elif state.get("review_deadline", float("inf")) <= time.time() and h.status != "paused":
-                state.update(pending_phase=state.get("phase"), phase="timeout_pending")
-                h.status = "timeout_pending"
-            h.result = state
-        self._handles[key] = h
-        return h
+        return self._projection(h, recovered=True)
 
 
 # ── Temporal 适配器（M8 完整化时启用） ─────────────────────────
@@ -788,7 +809,6 @@ async def _current_runs(limit: int = 100) -> list[dict[str, Any]]:
         try:
             h = await eng.describe(wid)
             row = {**row, **_handle_to_row(h, eng.name)}
-            _upsert_run(row)
         except Exception:
             _log.warning("Workflow snapshot unavailable; retaining the scoped journal record")
         out.append(row)
@@ -983,6 +1003,7 @@ async def signal_wf(workflow_id: str, body: SignalIn, user: UserDependency, db: 
     if body.signal in {"approve", "request_changes", "reject", "complete_task", "complete_review", "resolve"} and not permissions["approve"]:
         raise HTTPException(403, "Project approval permission required")
     await get_engine().signal(workflow_id, body.signal, {**body.payload, "actor_id": user.id})
+    h = await _scoped_handle(workflow_id)
     return {"ok": True, "workflow_id": workflow_id, **_progress(h), "permissions": permissions}
 
 
@@ -1028,7 +1049,7 @@ async def workflow_detail(workflow_id: str, user: UserDependency, db: SessionDep
 @router.get("/{workflow_id}/status")
 async def status_wf(workflow_id: str, user: UserDependency, db: SessionDependency) -> dict[str, Any]:
     h = await _scoped_handle(workflow_id)
-    row = _upsert_run(_handle_to_row(h, get_engine().name))
+    row = {**next((row for row in _load_runs() if row.get("workflow_id") == workflow_id), {}), **_handle_to_row(h, get_engine().name)}
     return {
         "workflow_id": h.workflow_id, "run_id": h.run_id, "type": h.type,
         **_progress(h), "error": h.error or "", "permissions": _permissions(user, db),
@@ -1042,7 +1063,7 @@ async def result_wf(workflow_id: str) -> dict[str, Any]:
     h = await _scoped_handle(workflow_id)
     if h.status not in ("completed", "failed", "cancelled"):
         raise HTTPException(409, f"未完成：{h.status}")
-    row = _upsert_run(_handle_to_row(h, get_engine().name))
+    row = {**next((row for row in _load_runs() if row.get("workflow_id") == workflow_id), {}), **_handle_to_row(h, get_engine().name)}
     return {"workflow_id": workflow_id, "status": h.status, "result": h.result,
             "error": h.error, "record": row}
 

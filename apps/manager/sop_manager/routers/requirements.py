@@ -86,9 +86,12 @@ def _ui_with_import_assignments(state):
 
 
 def _ui_save(d: Dict[str, Any]) -> None:
-    sp = _ui_state_path()
-    sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        sp = _ui_state_path()
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        sp.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _ui_rebuild_columns(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> None:
@@ -141,7 +144,6 @@ def _ui_ordered_list(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> List
     row_by_id = {r["id"]: r for r in rows_all if r.get("id")}
     if not any(st.get("columns", {}).get(p) for p in _PRIOS) and rows_all:
         _ui_rebuild_columns(rows_all, st)
-        _ui_save(st)
     out: List[Dict[str, Any]] = []
     seen: set[str] = set()
     for p in _PRIOS:
@@ -1570,12 +1572,11 @@ def delete_req(req_id: str):
     st = _ui_load()
     _ui_delete_id(st, req_id)
     _ui_save(st)
-    p = _prototype_path(req_id)
-    if p.exists():
-        try:
-            p.unlink()
-        except OSError:
-            pass
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        p = _prototype_path(req_id)
+        p.unlink(missing_ok=True)
     notify_webhook(
         "requirement.deleted",
         {"requirement_id": req_id},

@@ -21,6 +21,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import (
     resolved_ai_memory_root,
     resolved_business_code,
@@ -279,7 +281,6 @@ def _safe_id(value: str, prefix: str) -> str:
 
 def _copilot_dir() -> Path:
     base = resolved_ai_memory_root() / "copilot-v1"
-    base.mkdir(parents=True, exist_ok=True)
     return base
 
 
@@ -301,7 +302,6 @@ def _command_approvals_file() -> Path:
 def _turns_file(session_id: str) -> Path:
     sid = _safe_id(session_id, "cp")
     d = _copilot_dir() / _scope_key()
-    d.mkdir(parents=True, exist_ok=True)
     return d / f"{sid}.jsonl"
 
 
@@ -324,36 +324,39 @@ def _read_jsonl(path: Path, limit: int = 500) -> list[dict[str, Any]]:
 
 
 def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    with project_file_write_scope():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
 def _upsert_session(session_id: str, *, title: str, run_id: str) -> None:
-    path = _sessions_file()
-    rows = _read_jsonl(path, limit=5000)
-    now = _now()
-    found = False
-    for row in rows:
-        if str(row.get("session_id") or "") == session_id:
-            row["updated_at"] = now
-            row["last_run_id"] = run_id
-            row["title"] = row.get("title") or title
-            found = True
-            break
-    if not found:
-        rows.append({
-            "session_id": session_id,
-            "title": title[:120] or session_id,
-            "created_at": now,
-            "updated_at": now,
-            "last_run_id": run_id,
-            "tenant_code": resolved_tenant_code(),
-            "business_code": resolved_business_code(),
-            "project_id": resolved_project_id(),
-            "project_code": resolved_project_code(),
-        })
-    path.write_text("".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in rows[-1000:]), encoding="utf-8")
+    with project_file_write_scope():
+        path = _sessions_file()
+        rows = _read_jsonl(path, limit=5000)
+        now = _now()
+        found = False
+        for row in rows:
+            if str(row.get("session_id") or "") == session_id:
+                row["updated_at"] = now
+                row["last_run_id"] = run_id
+                row["title"] = row.get("title") or title
+                found = True
+                break
+        if not found:
+            rows.append({
+                "session_id": session_id,
+                "title": title[:120] or session_id,
+                "created_at": now,
+                "updated_at": now,
+                "last_run_id": run_id,
+                "tenant_code": resolved_tenant_code(),
+                "business_code": resolved_business_code(),
+                "project_id": resolved_project_id(),
+                "project_code": resolved_project_code(),
+            })
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in rows[-1000:]), encoding="utf-8")
 
 
 def _record_turn(session_id: str, row: dict[str, Any]) -> None:
@@ -372,10 +375,11 @@ def _load_command_approvals() -> list[dict[str, Any]]:
 
 
 def _save_command_approvals(rows: list[dict[str, Any]]) -> None:
-    path = _command_approvals_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    recent = rows[-1000:]
-    path.write_text(json.dumps(recent, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _command_approvals_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        recent = rows[-1000:]
+        path.write_text(json.dumps(recent, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _public_command_approval(item: dict[str, Any]) -> dict[str, Any]:

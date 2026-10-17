@@ -1,6 +1,7 @@
 """Typed SQL writers cannot bypass the canonical Task acceptance contract."""
 
 import pytest
+from fastapi import HTTPException
 from sop_manager.routers.sql_models import Base, Project, Task, Tenant
 from sqlalchemy import bindparam, create_engine, func, insert, select, update
 from sqlalchemy.exc import StatementError
@@ -115,14 +116,38 @@ def test_insert_select_and_upsert_cannot_hide_invalid_criteria_expressions(sessi
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
     with sessions() as db:
-        with pytest.raises(ValueError, match="acceptance_criteria.*expression"):
+        with pytest.raises(HTTPException) as raised:
             db.execute(insert(Task).from_select(["id", "tenant_id", "project_id", "title", "acceptance_criteria"],
                        select(Task.id, Task.tenant_id, Task.project_id, Task.title, func.json_array(0))))
+        assert raised.value.status_code == 422
+        assert raised.value.detail["code"] == "project_sql_scope_unproven"
         statement = sqlite_insert(Task).values(**row("T-one", ["Valid insert"]))
-        with pytest.raises(ValueError, match="acceptance_criteria.*expression"):
+        with pytest.raises(HTTPException) as raised:
             db.execute(statement.on_conflict_do_update(index_elements=[Task.id], set_={"acceptance_criteria": func.json_array(0)}))
+        assert raised.value.detail["code"] == "project_sql_scope_unproven"
         db.rollback()
         assert db.get(Task, "T-one").acceptance_criteria == ["Original one"]
+
+
+def test_acceptance_guard_itself_still_rejects_expressions_in_unsupported_sql_forms():
+    """The project guard must not hide a regression in the intrinsic AC guard."""
+    from types import SimpleNamespace
+
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    from sop_manager.task_sql_guard import _validate_task_write
+
+    bad_select = insert(Task).from_select(
+        ["id", "tenant_id", "project_id", "title", "acceptance_criteria"],
+        select(Task.id, Task.tenant_id, Task.project_id, Task.title, func.json_array(0)),
+    )
+    bad_upsert = sqlite_insert(Task).values(**row("T-one", ["Valid insert"]))
+    bad_upsert = bad_upsert.on_conflict_do_update(
+        index_elements=[Task.id], set_={"acceptance_criteria": func.json_array(0)},
+    )
+    for statement in (bad_select, bad_upsert):
+        state = SimpleNamespace(is_insert=True, is_update=False, statement=statement, parameters=None)
+        with pytest.raises(ValueError, match="acceptance_criteria.*expression"):
+            _validate_task_write(state)
 
 
 def test_normalized_criteria_are_visible_to_same_transaction_progress_observers(sessions):
@@ -146,16 +171,20 @@ def test_rejected_batch_does_not_partially_write_even_if_caller_commits_other_wo
         assert db.get(Task, "T-two").acceptance_criteria == ["Original two"]
 
 
-def test_verifiable_upsert_and_bound_default_remain_usable(sessions):
+def test_conflict_writes_are_explicitly_rejected_and_bound_default_remains_usable(sessions):
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
     with sessions() as db:
         statement = sqlite_insert(Task).values(**row("T-one", ["Unused insert condition"]))
-        db.execute(statement.on_conflict_do_update(index_elements=[Task.id], set_={"title": "Renamed"}))
+        with pytest.raises(HTTPException) as raised:
+            db.execute(statement.on_conflict_do_update(index_elements=[Task.id], set_={"title": "Renamed"}))
+        assert raised.value.detail["code"] == "project_sql_scope_unproven"
         statement = sqlite_insert(Task).values(**row("T-two", ["Unused insert condition"]))
-        db.execute(statement.on_conflict_do_update(index_elements=[Task.id], set_={"acceptance_criteria": ["  Verified upsert  "]}))
+        with pytest.raises(HTTPException) as raised:
+            db.execute(statement.on_conflict_do_update(index_elements=[Task.id], set_={"acceptance_criteria": ["  Verified upsert  "]}))
+        assert raised.value.detail["code"] == "project_sql_scope_unproven"
         db.execute(update(Task).where(Task.id == "T-one").values(acceptance_criteria=bindparam("criteria", value=["  Verified default  "])))
         db.commit()
-        assert db.get(Task, "T-one").title == "Renamed"
+        assert db.get(Task, "T-one").title == "One"
         assert db.get(Task, "T-one").acceptance_criteria == ["Verified default"]
-        assert db.get(Task, "T-two").acceptance_criteria == ["Verified upsert"]
+        assert db.get(Task, "T-two").acceptance_criteria == ["Original two"]

@@ -210,9 +210,12 @@ def test_missing_linked_requirement_cannot_turn_into_independent_task(env, mutat
         row = db.get(Requirement, rid)
         if mutation == "deleted":
             db.delete(row)
+            db.commit()
         else:
-            row.project_id = "other"
-        db.commit()
+            # Simulate external database tampering, which is outside the
+            # application Session guard; ordinary reparenting is now forbidden.
+            with db.get_bind().begin() as connection:
+                connection.execute(update(Requirement).where(Requirement.id == rid).values(project_id="other"))
     task = client.get("/api/v1/delivery/workspace").json()["tasks"][0]
     assert not task["acceptance"]["available"]
     assert task["execution_gate"]["reasons"][0]["code"] == "task_requirement_missing"
@@ -601,7 +604,12 @@ def test_stale_completed_intent_can_close_without_changing_terminal_run_or_curre
     parent = requirement(client) if mutation == "requirement" else None
     with sessions() as db:
         row = db.get(Task, task["id"])
-        if mutation == "deleted":
+        if mutation == "foreign":
+            # Deliberate out-of-band corruption must still not let an old run
+            # overwrite a task now stored under a different project.
+            with db.get_bind().begin() as connection:
+                connection.execute(update(Task).where(Task.id == task["id"]).values(project_id="other", status="pending"))
+        elif mutation == "deleted":
             db.delete(row)
         else:
             row.status = "pending"
@@ -609,8 +617,6 @@ def test_stale_completed_intent_can_close_without_changing_terminal_run_or_curre
                 row.acceptance_criteria = ["Changed condition"]
             elif mutation == "requirement":
                 row.req_id = parent
-            else:
-                row.project_id = "other"
         db.commit()
     execution = sync(bridge, intent)
     assert execution["stale"] and execution["status"] == "awaiting_review"

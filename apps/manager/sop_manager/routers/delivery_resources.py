@@ -13,15 +13,19 @@ PROJECT_METADATA = {"goal", "owner_id", "starts_on", "ends_on"}
 def project_view(project, data):
     """Canonical fields always win over historical metadata copies."""
     return {
-        **data.get("project", {}),
+        **{key: value for key, value in data.get("project", {}).items() if key in PROJECT_METADATA},
         "id": project.id,
         "name": project.name,
         "description": project.description,
         "status": project.status,
+        "business_id": project.business_id,
+        "project_path": project.project_path or "",
+        "vector_db": project.vector_db or "lance",
+        "is_template": bool(project.is_template),
     }
 
 
-def update_project(project, data, body):
+def update_project(db, project, data, body):
     before = deepcopy(project_view(project, data))
     changes = body.model_dump(mode="json", exclude_unset=True)
     metadata = {k: v for k, v in data.get("project", {}).items() if k in PROJECT_METADATA}
@@ -30,7 +34,21 @@ def update_project(project, data, body):
         Dated.model_validate({k: metadata.get(k) for k in ("starts_on", "ends_on")})
     except ValidationError as exc:
         raise HTTPException(422, exc.errors(include_context=False)) from exc
-    for field in ("name", "description"):
+    if changes.get("business_id"):
+        from .sql_models import Business
+
+        business = db.get(Business, changes["business_id"])
+        if not business or business.tenant_id != project.tenant_id:
+            raise HTTPException(422, "Choose a business in this project's tenant")
+    for field in (
+        "name",
+        "description",
+        "business_id",
+        "project_path",
+        "vector_db",
+        "vector_db_config",
+        "is_template",
+    ):
         if field in changes:
             setattr(project, field, changes[field])
     data["project"] = metadata

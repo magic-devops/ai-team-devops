@@ -9,6 +9,7 @@ import { api } from "../../../../../src/lib/api";
 import { getToken } from "../../../../../src/lib/authStorage";
 import { WorkbenchShell } from "../../../../../src/pages/shared/WorkbenchShell";
 import { WorkbenchPanel, WorkbenchStats } from "../../../../../src/pages/shared/workbenchUi";
+import { portfolioHash, portfolioRiskCodes } from "../../../../../src/lib/projectPortfolioRoute";
 
 const EChartsDonutLazy = lazy(() =>
   import("../../../../../src/components/charts/EChartsDonut").then((m) => ({ default: m.EChartsDonut })),
@@ -65,11 +66,12 @@ export function ProjectsHub() {
               { label: t("page.projects.hubTemplates"), value: summary.templates ?? 0 },
               { label: t("page.projects.hubMembers"), value: summary.members ?? 0 },
               { label: t("page.projects.hubTasks"), value: summary.tasks ?? 0 },
-              { label: t("page.projects.hubRisks"), value: summary.risks ?? 0 },
+              { label: t("page.projects.hubRisks"), value: summary.risks_total ?? "—" },
             ]}
           />
         }
       >
+        {summary.risk_counts && <div className="flex flex-wrap gap-2">{portfolioRiskCodes.filter((code) => summary.risk_counts[code] > 0).map((code) => <a key={code} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--brand)]" href={portfolioHash({ risks: [code] })}>{t(`projectPortfolio.risk.${code}`)} {summary.risk_counts[code]}</a>)}</div>}
         {Object.keys(statusPie).length ? (
           <WorkbenchPanel title={t("page.projects.hubStatusChart")}>
             <Suspense fallback={<LoadingBlock />}>

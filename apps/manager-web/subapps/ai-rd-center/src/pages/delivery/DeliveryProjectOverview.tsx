@@ -7,10 +7,12 @@ export function DeliveryProjectOverview({
   data,
   inbox,
   onView,
+  onMilestone,
 }: {
   data: DeliveryWorkspace;
   inbox?: DeliveryInbox;
   onView: (view: string) => void;
+  onMilestone: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tp = (key: string) => t(`deliveryProject.${key}`);
@@ -43,7 +45,7 @@ export function DeliveryProjectOverview({
                 <button
                   type="button"
                   key={milestone.id}
-                  onClick={() => onView("timeline")}
+                  onClick={() => onMilestone(milestone.id)}
                 >
                   <div>
                     <strong>{milestone.title}</strong>

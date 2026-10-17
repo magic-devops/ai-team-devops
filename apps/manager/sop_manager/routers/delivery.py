@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from contextlib import nullcontext
 from datetime import date
 from typing import Annotated, Literal
 
@@ -35,6 +36,8 @@ from .delivery_scheduling_contract import (
     ScheduleResponse,
 )
 from .delivery_team_runtime_contract import TeamRuntimeBindingsResponse
+from .project_lifecycle_contract import ProjectLifecyclePreviewInput
+from .project_portfolio_contract import ProjectLifecyclePreviewResponse
 from .delivery_service import (
     apply_action,
     identifier,
@@ -68,7 +71,7 @@ def _project(db, user, pid):
     return project
 
 
-def _permissions(db, user, project):
+def _role_permissions(db, user, project):
     member = db.get(ProjectMember, (project.id, user.id))
     role = _norm_role(member.role if member else user.role)
     user_role = _norm_role(user.role)
@@ -77,7 +80,15 @@ def _permissions(db, user, project):
         "write": admin or role in {"project_admin", "developer", "devops", "product_manager"},
         "approve": admin or role in {"project_admin", "devops", "product_manager"},
         "configure": admin or role == "project_admin",
+        "lifecycle": admin or role == "project_admin",
     }
+
+
+def _permissions(db, user, project):
+    permissions = _role_permissions(db, user, project)
+    if project.status == "archived":
+        permissions.update(write=False, approve=False, configure=False)
+    return permissions
 
 
 def _snapshot(db, project, user):
@@ -126,8 +137,9 @@ def delivery_schedule_preview(
     from .delivery_scheduling import preview
 
     project = _project(db, user, project_id)
-    if not _permissions(db, user, project)["write"]:
+    if not _role_permissions(db, user, project)["write"]:
         raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
     return preview(db, project, body)
 
 
@@ -239,7 +251,7 @@ def execution_targets(
         user,
         getattr(request.app.state, "hermes_execution", None),
         project_id=project.id,
-        project_write=_permissions(db, user, project)["write"],
+        project_write=_permissions(db, user, project)["write"] and project.status == "active",
         project_configure=_permissions(db, user, project)["configure"],
     )
 
@@ -257,8 +269,9 @@ def execution_preview(
     from .delivery_execution import prepare_plan
 
     project = _project(db, user, project_id)
-    if not _permissions(db, user, project)["write"]:
+    if not _role_permissions(db, user, project)["write"]:
         raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
     row = db.get(DeliveryWorkspace, project.id)
     state = reconcile(db, project, row.data) if row else initial_state()
     try:
@@ -346,16 +359,21 @@ def task_plan_preview(
     from .delivery_plan import create_preview
 
     project = _project(db, user, project_id)
-    if not _permissions(db, user, project)["write"]:
+    if not _role_permissions(db, user, project)["write"]:
         raise HTTPException(403, "Project write permission required")
+    _require_writable_state(project)
     return create_preview(db, project, user, body, request)
 
 
 def _command_permission(action, payload):
+    if action == "project.lifecycle":
+        return "lifecycle"
     if action in {"member.runtime.bind", "member.runtime.unbind"}:
         return "configure"
     if action in {"member.save", "member.calendar.save", "resource.save", "resource.archive"} or (
-        action == "project.update" and {"name", "description"} & payload.keys()
+        action == "project.update" and {
+            "name", "description", "business_id", "project_path", "vector_db", "vector_db_config", "is_template"
+        } & payload.keys()
     ):
         return "configure"
     if action in {
@@ -370,6 +388,28 @@ def _command_permission(action, payload):
     return "write"
 
 
+def _require_writable_state(project):
+    if project.status == "archived":
+        raise HTTPException(409, {"code": "project_archived", "message": "Restore the project before editing."})
+
+
+@router.post("/project-lifecycle-preview", response_model=ProjectLifecyclePreviewResponse)
+def project_lifecycle_preview(
+    body: ProjectLifecyclePreviewInput,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .project_lifecycle import preview
+
+    project = _project(db, user, project_id)
+    if not _role_permissions(db, user, project)["lifecycle"]:
+        raise HTTPException(403, "Project lifecycle permission required")
+    row = db.get(DeliveryWorkspace, project.id)
+    return preview(db, project, user, row.data if row else initial_state(), body,
+                   version=row.version if row else 0)
+
+
 @router.post("/commands")
 def execute(
     body: Command,
@@ -379,7 +419,7 @@ def execute(
     request: Request = None,
 ):
     project = _project(db, user, project_id)
-    permissions = _permissions(db, user, project)
+    permissions = _role_permissions(db, user, project)
     needed = _command_permission(body.action, body.payload)
     if not permissions[needed]:
         raise HTTPException(403, f"Project {needed} permission required")
@@ -396,6 +436,35 @@ def execute(
         if receipt.request_hash != fingerprint:
             raise HTTPException(409, "Idempotency key already used with different input")
         return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
+    from ..project_write_guard import lifecycle_scope, require_project_operation
+
+    scope = lifecycle_scope(db, project.tenant_id, project.id) if body.action == "project.lifecycle" else nullcontext()
+    try:
+        with scope:
+            require_project_operation(db, project.tenant_id, project.id)
+            # Membership and account state may have changed while waiting for
+            # the Project lock. Cached authorization cannot authorize a write.
+            actor_id = user.id
+            db.expire_all()
+            locked_actor = db.get(User, actor_id, populate_existing=True)
+            if not locked_actor or locked_actor.status != "active":
+                raise HTTPException(403, "An active account is required")
+            check_project_access(locked_actor, project.id, db)
+            if not _role_permissions(db, locked_actor, project)[needed]:
+                raise HTTPException(403, f"Project {needed} permission required")
+            user = locked_actor
+            receipt = db.get(DeliveryReceipt, key, populate_existing=True)
+            if receipt:
+                if receipt.request_hash != fingerprint:
+                    raise HTTPException(409, "Idempotency key already used with different input")
+                return {**_snapshot(db, project, user), "replayed": True, "applied_version": receipt.version}
+            return _commit_command(db, project, user, body, payload, key, fingerprint, request)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _commit_command(db, project, user, body, payload, key, fingerprint, request):
     reservation = None
     try:
         row = db.get(DeliveryWorkspace, project.id)
@@ -426,9 +495,16 @@ def execute(
 
         reservation = reserve_workspace_version(db, project, next_version)
         data = reconcile(db, project, row.data)
-        resource_id, before = _apply(db, project, user, data, body.action, payload, request)
+        applied = _apply(db, project, user, data, body.action, payload, request)
+        resource_id, before = applied[:2]
+        event_data = {"before": before, "input": payload.model_dump(mode="json", exclude_unset=body.action == "project.update")}
+        if body.action == "project.update" and "vector_db_config" in event_data["input"]:
+            event_data["input"]["vector_db_config"] = {"changed": True}
+        if len(applied) == 3:
+            event_data["result"] = applied[2]
         db.flush()
-        remember_basis(db, project, data)
+        if body.action != "project.lifecycle":
+            remember_basis(db, project, data)
         updated = db.execute(
             update(DeliveryWorkspace)
             .where(
@@ -452,7 +528,7 @@ def execute(
                 actor=user.username,
                 action=body.action,
                 resource_id=resource_id,
-                data={"snapshot": summary, "before": before, "input": payload.model_dump(mode="json")},
+                data={"snapshot": summary, **event_data},
             )
         )
         db.add(
@@ -483,6 +559,10 @@ def execute(
 
 
 def _apply(db, project, user, data, action, payload, request):
+    if action == "project.lifecycle":
+        from .project_lifecycle import apply_lifecycle
+
+        return apply_lifecycle(db, project, user, data, payload)
     if action in {"member.runtime.bind", "member.runtime.unbind"}:
         from .delivery_team_runtime import apply_runtime_binding
 

@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/metrics-service", tags=["metrics-service"])
 
 ALLOWED_FUNCTIONS = {"sum", "count", "avg", "min", "max", "ratio", "distinct_count"}
@@ -19,7 +21,6 @@ UNSAFE_FORMULA_PATTERN = re.compile(r"(;|--|/\*|\*/|\bdrop\b|\bdelete\b|\binsert
 
 def _dir(sub: str = "catalog"):
     d = resolved_ai_memory_root() / "metrics_service" / sub
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -40,8 +41,10 @@ def _load_all(sub: str) -> list[dict]:
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
-    attach_scope(item, overwrite=False)
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _dir(sub).mkdir(parents=True, exist_ok=True)
+        attach_scope(item, overwrite=False)
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
 
 def _load_item(sub: str, item_id: str, label: str) -> dict:
     p = _dir(sub) / f"{item_id}.json"
@@ -324,7 +327,8 @@ def delete_metric(metric_id: str):
     _load_item("catalog", metric_id, "metric")
     p = _dir("catalog") / f"{metric_id}.json"
     if p.exists():
-        p.unlink()
+        with project_file_write_scope():
+            p.unlink()
     return {**_scope(), "deleted": metric_id}
 
 @router.get("/catalog/{metric_id}/versions")

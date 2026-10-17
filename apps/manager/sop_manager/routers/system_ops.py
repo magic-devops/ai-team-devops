@@ -1,6 +1,8 @@
 """系统运维配置：环境 Profile、部署模式与运行时自检。"""
 from __future__ import annotations
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 import hashlib
 import hmac
 import json
@@ -345,9 +347,10 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    path = _profiles_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _profiles_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_packages() -> dict[str, Any]:
@@ -362,9 +365,10 @@ def _load_deployment_packages() -> dict[str, Any]:
 
 
 def _save_deployment_packages(data: dict[str, Any]) -> None:
-    path = _deployment_packages_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_packages_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_pipeline_runs() -> dict[str, Any]:
@@ -379,9 +383,10 @@ def _load_deployment_pipeline_runs() -> dict[str, Any]:
 
 
 def _save_deployment_pipeline_runs(data: dict[str, Any]) -> None:
-    path = _deployment_pipeline_runs_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_pipeline_runs_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_executor_targets() -> dict[str, Any]:
@@ -396,9 +401,10 @@ def _load_deployment_executor_targets() -> dict[str, Any]:
 
 
 def _save_deployment_executor_targets(data: dict[str, Any]) -> None:
-    path = _deployment_executor_targets_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_executor_targets_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_package_approvals() -> dict[str, Any]:
@@ -413,9 +419,10 @@ def _load_deployment_package_approvals() -> dict[str, Any]:
 
 
 def _save_deployment_package_approvals(data: dict[str, Any]) -> None:
-    path = _deployment_package_approvals_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_package_approvals_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_canary_policies() -> dict[str, Any]:
@@ -430,9 +437,10 @@ def _load_deployment_canary_policies() -> dict[str, Any]:
 
 
 def _save_deployment_canary_policies(data: dict[str, Any]) -> None:
-    path = _deployment_canary_policies_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_canary_policies_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_canary_metric_sources() -> dict[str, Any]:
@@ -447,9 +455,10 @@ def _load_deployment_canary_metric_sources() -> dict[str, Any]:
 
 
 def _save_deployment_canary_metric_sources(data: dict[str, Any]) -> None:
-    path = _deployment_canary_metric_sources_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_canary_metric_sources_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_rollback_drills() -> dict[str, Any]:
@@ -464,9 +473,10 @@ def _load_deployment_rollback_drills() -> dict[str, Any]:
 
 
 def _save_deployment_rollback_drills(data: dict[str, Any]) -> None:
-    path = _deployment_rollback_drills_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_rollback_drills_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_rollback_runbooks() -> dict[str, Any]:
@@ -481,9 +491,10 @@ def _load_deployment_rollback_runbooks() -> dict[str, Any]:
 
 
 def _save_deployment_rollback_runbooks(data: dict[str, Any]) -> None:
-    path = _deployment_rollback_runbooks_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_rollback_runbooks_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _load_deployment_execution_audits() -> dict[str, Any]:
@@ -498,9 +509,10 @@ def _load_deployment_execution_audits() -> dict[str, Any]:
 
 
 def _save_deployment_execution_audits(data: dict[str, Any]) -> None:
-    path = _deployment_execution_audits_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    with project_file_write_scope():
+        path = _deployment_execution_audits_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _audit_change(action: str, profile: str, details: dict[str, Any]) -> None:
@@ -734,56 +746,57 @@ def _replace_deployment_package(item: dict[str, Any]) -> None:
 
 
 def _create_deployment_package(profile: str, row: dict[str, Any], body: DeploymentPackageIn) -> dict[str, Any]:
-    version = _safe_version(body.version)
-    package_id = f"{profile}-{version}"
-    data = _load_deployment_packages()
-    items = [item for item in data.get("items", []) if isinstance(item, dict)] if isinstance(data.get("items"), list) else []
-    if any(item.get("id") == package_id for item in items):
-        package_id = f"{package_id}-{uuid.uuid4().hex[:8]}"
-    out_dir = _runtime_dir() / "deploy" / profile / "packages" / package_id
-    out_dir.mkdir(parents=True, exist_ok=True)
-    files = _deployment_bundle_files(profile, row)
-    file_rows = []
-    for filename, content in files.items():
-        path = out_dir / filename
-        path.write_text(content, encoding="utf-8")
-        file_rows.append({
-            "name": filename,
-            "path": str(path),
-            "size": len(content.encode("utf-8")),
-            "sha256": _sha256_text(content),
+    with project_file_write_scope():
+        version = _safe_version(body.version)
+        package_id = f"{profile}-{version}"
+        data = _load_deployment_packages()
+        items = [item for item in data.get("items", []) if isinstance(item, dict)] if isinstance(data.get("items"), list) else []
+        if any(item.get("id") == package_id for item in items):
+            package_id = f"{package_id}-{uuid.uuid4().hex[:8]}"
+        out_dir = _runtime_dir() / "deploy" / profile / "packages" / package_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        files = _deployment_bundle_files(profile, row)
+        file_rows = []
+        for filename, content in files.items():
+            path = out_dir / filename
+            path.write_text(content, encoding="utf-8")
+            file_rows.append({
+                "name": filename,
+                "path": str(path),
+                "size": len(content.encode("utf-8")),
+                "sha256": _sha256_text(content),
+            })
+        manifest = {
+            "id": package_id,
+            "profile": profile,
+            "version": version,
+            "channel": body.channel,
+            "created_at": _now(),
+            "created_by": body.created_by or "ops-admin",
+            "release_notes": body.release_notes,
+            "dir": str(out_dir),
+            "mode": row.get("mode", "single"),
+            "database": row.get("database", "sqlite"),
+            "features": row.get("features", {}) if isinstance(row.get("features"), dict) else {},
+            "files": file_rows,
+            "checksum": _sha256_text("\n".join(f"{item['name']}:{item['sha256']}" for item in file_rows)),
+            "agent_consumption": {
+                "surface": "settings.profiles.deployment_packages",
+                "api": f"/api/v1/system/ops/profiles/{profile}/deployment-packages",
+                "purpose": "Versioned deployment package manifest for rollout, rollback, audit, and AI operations planning.",
+            },
+        }
+        (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        manifest["files"].append({
+            "name": "manifest.json",
+            "path": str(out_dir / "manifest.json"),
+            "size": (out_dir / "manifest.json").stat().st_size,
+            "sha256": _sha256_text((out_dir / "manifest.json").read_text(encoding="utf-8")),
         })
-    manifest = {
-        "id": package_id,
-        "profile": profile,
-        "version": version,
-        "channel": body.channel,
-        "created_at": _now(),
-        "created_by": body.created_by or "ops-admin",
-        "release_notes": body.release_notes,
-        "dir": str(out_dir),
-        "mode": row.get("mode", "single"),
-        "database": row.get("database", "sqlite"),
-        "features": row.get("features", {}) if isinstance(row.get("features"), dict) else {},
-        "files": file_rows,
-        "checksum": _sha256_text("\n".join(f"{item['name']}:{item['sha256']}" for item in file_rows)),
-        "agent_consumption": {
-            "surface": "settings.profiles.deployment_packages",
-            "api": f"/api/v1/system/ops/profiles/{profile}/deployment-packages",
-            "purpose": "Versioned deployment package manifest for rollout, rollback, audit, and AI operations planning.",
-        },
-    }
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    manifest["files"].append({
-        "name": "manifest.json",
-        "path": str(out_dir / "manifest.json"),
-        "size": (out_dir / "manifest.json").stat().st_size,
-        "sha256": _sha256_text((out_dir / "manifest.json").read_text(encoding="utf-8")),
-    })
-    data["items"] = [manifest, *items][:100]
-    _save_deployment_packages(data)
-    _audit_change("system_ops.deployment_package.create", profile, {"package_id": package_id, "version": version, "channel": body.channel})
-    return manifest
+        data["items"] = [manifest, *items][:100]
+        _save_deployment_packages(data)
+        _audit_change("system_ops.deployment_package.create", profile, {"package_id": package_id, "version": version, "channel": body.channel})
+        return manifest
 
 
 def _approval_event(kind: str, actor: str, note: str = "", extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -3616,34 +3629,35 @@ def export_profile_env(profile: str, _: Any = Depends(current_user)) -> dict[str
     return {"ok": True, "profile": name, "env": _mask_env(env), "shell": _env_shell(name, row)}
 
 
-@router.get("/profiles/{profile}/bundle")
+@router.post("/profiles/{profile}/bundle")
 def export_profile_bundle(profile: str, _: Any = Depends(current_user)) -> dict[str, Any]:
-    name = _safe_name(profile)
-    row = _merge_profiles().get(name)
-    if not row:
-        raise HTTPException(404, f"unknown profile: {name}")
-    out_dir = _runtime_dir() / "deploy" / name
-    out_dir.mkdir(parents=True, exist_ok=True)
-    env_file = out_dir / "profile.env"
-    compose_file = out_dir / "docker-compose.override.yml"
-    runbook_file = out_dir / "README.md"
-    env_file.write_text(_env_shell(name, row) + "\n", encoding="utf-8")
-    compose_file.write_text(_compose_override(name, row), encoding="utf-8")
-    runbook_file.write_text(_runbook(name, row), encoding="utf-8")
-    _audit_change("system_ops.profile.export_bundle", name, {"dir": str(out_dir)})
-    return {
-        "ok": True,
-        "profile": name,
-        "dir": str(out_dir),
-        "files": {
-            "env": str(env_file),
-            "compose": str(compose_file),
-            "runbook": str(runbook_file),
-        },
-        "shell": _env_shell(name, row),
-        "compose": _compose_override(name, row),
-        "runbook": _runbook(name, row),
-    }
+    with project_file_write_scope():
+        name = _safe_name(profile)
+        row = _merge_profiles().get(name)
+        if not row:
+            raise HTTPException(404, f"unknown profile: {name}")
+        out_dir = _runtime_dir() / "deploy" / name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        env_file = out_dir / "profile.env"
+        compose_file = out_dir / "docker-compose.override.yml"
+        runbook_file = out_dir / "README.md"
+        env_file.write_text(_env_shell(name, row) + "\n", encoding="utf-8")
+        compose_file.write_text(_compose_override(name, row), encoding="utf-8")
+        runbook_file.write_text(_runbook(name, row), encoding="utf-8")
+        _audit_change("system_ops.profile.export_bundle", name, {"dir": str(out_dir)})
+        return {
+            "ok": True,
+            "profile": name,
+            "dir": str(out_dir),
+            "files": {
+                "env": str(env_file),
+                "compose": str(compose_file),
+                "runbook": str(runbook_file),
+            },
+            "shell": _env_shell(name, row),
+            "compose": _compose_override(name, row),
+            "runbook": _runbook(name, row),
+        }
 
 
 @router.get("/profiles/{profile}/compose.override.yml")

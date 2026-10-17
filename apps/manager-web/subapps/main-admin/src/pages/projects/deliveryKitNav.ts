@@ -4,6 +4,7 @@ import type { OnboardingPanelKey } from "./OnboardingModule";
 import type { DeliveryPhase } from "./ProjectDeliveryKitShell";
 import type { TemplatePanelKey } from "./TemplatesModule";
 import type { TabKey } from "./types";
+import { parsePortfolioRoute, type PortfolioRoute } from "../../../../../src/lib/projectPortfolioRoute";
 
 export type ProjectsRouteState = {
   tab: TabKey;
@@ -11,6 +12,7 @@ export type ProjectsRouteState = {
   templatePanel: TemplatePanelKey;
   governancePanel: GovernancePanelKey;
   focused: boolean;
+  portfolio: PortfolioRoute;
 };
 
 const ONBOARDING_PANELS: OnboardingPanelKey[] = ["overview", "commands", "env", "agent", "profiles", "context"];
@@ -24,6 +26,9 @@ function pickPanel<T extends string>(segment: string | undefined, allowed: reado
 
 /** 从 hash 解析项目管理页（含 AI 交付套件三阶段子路径）。 */
 export function parseProjectsDeliveryHash(hash: string): ProjectsRouteState {
+  return { ...parseProjectsPanelHash(hash), portfolio: parsePortfolioRoute(hash) };
+}
+function parseProjectsPanelHash(hash: string): Omit<ProjectsRouteState, "portfolio"> {
   const h = (hash || "#/projects").split("?")[0];
 
   if (h === "#/projects/delivery-kit" || h === "#/projects/delivery-kit/") {

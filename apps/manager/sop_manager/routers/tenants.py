@@ -5,18 +5,21 @@ from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
 from collections import Counter
 from datetime import datetime
-from typing import Any, Optional, List
+from typing import Any, Optional, List, Literal
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from .sql_models import get_session, Tenant, Business, Project, ProjectMember, User, Requirement, Task, Issue, Sprint
 from .auth_sql import current_user, require_role, ADMIN_MODE, assert_project_member_role, check_project_access
 from .webhook import notify_webhook
+from .project_lifecycle_contract import WorkingProjectStatus
+from .project_portfolio_routes import router as portfolio_router
 
 router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 proj_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+proj_router.include_router(portfolio_router)
 
 
 # ── 租户管理 (super_admin only, saas 模式) ────────────────────────
@@ -123,23 +126,14 @@ def delete_business(biz_id: str, user: User = Depends(require_role("tenant_admin
 
 # ── 项目管理 ──────────────────────────────────────────────────────
 class ProjectCreate(BaseModel):
-    name: str
-    description: str = ""
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    name: str = Field(strict=True, min_length=1, max_length=128)
+    description: str = Field(default="", strict=True, max_length=20000)
     business_id: Optional[str] = None
-    project_path: str = ""
-    vector_db: str = "lance"
-    vector_db_config: dict = {}
-    status: str = "active"
-
-
-_PROJECT_STATUSES = {"active", "planning", "paused", "archived"}
-
-
-def _normalize_project_status(status: str | None) -> str:
-    value = (status or "active").strip().lower()
-    if value not in _PROJECT_STATUSES:
-        raise HTTPException(400, f"项目状态不合法：{value}")
-    return value
+    project_path: str = Field(default="", strict=True, max_length=512)
+    vector_db: Literal["lance", "milvus", "qdrant", "oceanbase"] = "lance"
+    vector_db_config: dict = Field(default_factory=dict)
+    status: WorkingProjectStatus = "active"
 
 
 def _project_counts(db: Session, project_id: str) -> dict:
@@ -167,7 +161,6 @@ def _project_row(db: Session, p: Project) -> dict:
         "project_code": p.id,
         "project_path": p.project_path,
         "vector_db": p.vector_db,
-        "vector_db_config": p.vector_db_config or {},
         "is_template": bool(p.is_template),
         "template_id": p.template_id or "",
         "status": p.status,
@@ -178,41 +171,36 @@ def _project_row(db: Session, p: Project) -> dict:
 
 
 def _visible_projects(user: User, db: Session):
-    q = db.query(Project).filter_by(tenant_id=user.tenant_id)
-    if user.role not in ("super_admin", "tenant_admin"):
-        member_pids = [m.project_id for m in user.memberships]
-        q = q.filter(Project.id.in_(member_pids))
-    return q
+    from .project_portfolio import visible_projects
+
+    return visible_projects(db, user)
 
 @proj_router.get("")
 def list_projects(user: User = Depends(current_user), db: Session = Depends(get_session)):
-    import os
-    from sop_manager.project_provision import ensure_project_for_user, local_project_id_from_memory
-
-    if (os.getenv("ADMIN_MODE", "single") or "single").strip().lower() == "single":
-        pid = local_project_id_from_memory()
-        if pid:
-            ensure_project_for_user(db, pid, user)
     return [_project_row(db, p) for p in _visible_projects(user, db).order_by(Project.updated_at.desc()).all()]
 
 
 @proj_router.get("/summary")
 def projects_summary(user: User = Depends(current_user), db: Session = Depends(get_session)):
+    from .project_portfolio import portfolio, project_facts
+
     projects = _visible_projects(user, db).all()
+    delivery = portfolio(db, user, limit=1)["summary"]
     status_counts = Counter([p.status or "unknown" for p in projects])
     vector_counts = Counter([p.vector_db or "unknown" for p in projects])
     totals = {"members": 0, "requirements": 0, "tasks": 0, "issues": 0, "sprints": 0}
+    readiness_risks = []
     risks = []
     for p in projects:
         counts = _project_counts(db, p.id)
         for key, value in counts.items():
             totals[key] += value
+        if len(risks) < 12:
+            risks.extend({"project_id": p.id, **item} for item in project_facts(db, p)["risks"])
         if not p.project_path:
-            risks.append({"project_id": p.id, "level": "medium", "message": "未配置项目路径，Agent 本地操作与接入包可用性受限"})
+            readiness_risks.append({"project_id": p.id, "level": "medium", "message": "未配置项目路径，Agent 本地操作与接入包可用性受限"})
         if counts["members"] <= 1:
-            risks.append({"project_id": p.id, "level": "low", "message": "项目成员较少，建议补齐产品、研发、运维或 Agent 责任人"})
-        if p.status not in ("active", "planning"):
-            risks.append({"project_id": p.id, "level": "medium", "message": f"项目状态为 {p.status or 'unknown'}，请确认是否仍需出现在默认工作区"})
+            readiness_risks.append({"project_id": p.id, "level": "low", "message": "项目成员较少，建议补齐产品、研发、运维或 Agent 责任人"})
     try:
         from .system_pages import LEGACY_PAGES, _enrich_pages
         project_legacy = [
@@ -234,6 +222,10 @@ def projects_summary(user: User = Depends(current_user), db: Session = Depends(g
         "vector_counts": dict(vector_counts),
         "entity_totals": totals,
         "risks": risks[:12],
+        "risks_total": delivery["risk_counts"]["total_items"],
+        "risk_counts": delivery["risk_counts"],
+        "delivery_metrics": delivery["metrics"],
+        "readiness_risks": readiness_risks,
         "legacy_coverage": {
             "total": len(project_legacy),
             "covered": len(migrated),
@@ -266,7 +258,8 @@ def projects_hub(user: User = Depends(current_user), db: Session = Depends(get_s
             "members": totals.get("members", 0),
             "requirements": totals.get("requirements", 0),
             "tasks": totals.get("tasks", 0),
-            "risks": len(raw.get("risks") or []),
+            "risks_total": raw["risks_total"],
+            "risk_counts": raw["risk_counts"],
         },
         "charts": {"by_status": _pie(status_counts)},
         "domains": [
@@ -413,7 +406,7 @@ def create_project(body: ProjectCreate, user: User = Depends(require_role("proje
         business_id=body.business_id, name=body.name, description=body.description,
         project_path=body.project_path, vector_db=body.vector_db,
         vector_db_config=body.vector_db_config,
-        status=_normalize_project_status(body.status),
+        status=body.status,
     )
     db.add(p)
     # 创建者自动成为 project_admin
@@ -426,41 +419,6 @@ def create_project(body: ProjectCreate, user: User = Depends(require_role("proje
         project_id=p.id,
     )
     return {"ok": True, "id": p.id}
-
-@proj_router.patch("/{project_id}")
-def update_project(project_id: str, body: dict,
-                   user: User = Depends(current_user), db: Session = Depends(get_session)):
-    check_project_access(user, project_id, db, min_role="project_admin")
-    p = db.get(Project, project_id)
-    if not p or p.tenant_id != user.tenant_id:
-        raise HTTPException(404, "项目不存在")
-    for k in ("name", "description", "business_id", "project_path", "vector_db", "vector_db_config", "status"):
-        if k in body:
-            if k == "business_id" and body[k]:
-                b = db.get(Business, body[k])
-                if not b or b.tenant_id != user.tenant_id:
-                    raise HTTPException(404, "业务线不存在")
-            if k == "status":
-                body[k] = _normalize_project_status(body[k])
-            setattr(p, k, body[k])
-    p.updated_at = datetime.utcnow()
-    db.commit()
-    notify_webhook(
-        "project.updated",
-        {"project_id": project_id, "fields": list(body.keys())},
-        tenant_id=user.tenant_id,
-        project_id=project_id,
-    )
-    return {"ok": True}
-
-@proj_router.delete("/{project_id}")
-def delete_project(project_id: str, user: User = Depends(require_role("tenant_admin")),
-                   db: Session = Depends(get_session)):
-    p = db.get(Project, project_id)
-    if not p or p.tenant_id != user.tenant_id:
-        raise HTTPException(404, "项目不存在")
-    db.delete(p); db.commit()
-    return {"ok": True}
 
 # 项目成员管理
 @proj_router.get("/{project_id}/members")
@@ -1030,7 +988,7 @@ timeout_seconds = 30
 @proj_router.get("/templates")
 def list_templates(user: User = Depends(current_user), db: Session = Depends(get_session)):
     """列出当前租户下所有模板项目"""
-    tpls = db.query(Project).filter_by(tenant_id=user.tenant_id, is_template=True).all()
+    tpls = _visible_projects(user, db).filter_by(is_template=True).all()
     return [{"id": p.id, "name": p.name, "description": p.description,
              "vector_db": p.vector_db, "created_at": p.created_at.isoformat(),
              "req_count": db.query(Requirement).filter_by(project_id=p.id).count(),
@@ -1038,22 +996,8 @@ def list_templates(user: User = Depends(current_user), db: Session = Depends(get
             for p in tpls]
 
 
-@proj_router.patch("/{project_id}/set-template")
-def set_template(project_id: str, is_template: bool = True,
-                 user: User = Depends(require_role("project_admin")),
-                 db: Session = Depends(get_session)):
-    """将项目标记为/取消模板"""
-    check_project_access(user, project_id, db, min_role="project_admin")
-    p = db.get(Project, project_id)
-    if not p or p.tenant_id != user.tenant_id:
-        raise HTTPException(404, "项目不存在")
-    p.is_template = is_template
-    p.updated_at = datetime.utcnow()
-    db.commit()
-    return {"ok": True, "is_template": is_template}
-
-
 class CloneProjectBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str
     description: str = ""
     business_id: Optional[str] = None
@@ -1063,7 +1007,6 @@ class CloneProjectBody(BaseModel):
     clone_tasks: bool = False          # 复制任务模板
     clone_knowledge: bool = True       # 复制向量知识库
     clone_rules: bool = True           # 复制规则库
-    clone_specs: bool = False          # 复制规范文档（文件系统）
 
 
 def _template_clone_preview(db: Session, tpl: Project, body: CloneProjectBody) -> dict[str, Any]:
@@ -1073,7 +1016,6 @@ def _template_clone_preview(db: Session, tpl: Project, body: CloneProjectBody) -
         "tasks": counts["tasks"] if body.clone_tasks else 0,
         "knowledge": 1 if body.clone_knowledge else 0,
         "rules": 1 if body.clone_rules else 0,
-        "specs": 1 if body.clone_specs else 0,
     }
     warnings: list[dict[str, str]] = []
     if not body.name.strip():
@@ -1125,6 +1067,7 @@ def preview_clone_project(template_id: str, body: CloneProjectBody,
                           user: User = Depends(current_user),
                           db: Session = Depends(get_session)):
     """预览模板克隆影响：供 UI/CLI/Agent 在真实创建前评估资产、风险和后续治理步骤。"""
+    check_project_access(user, template_id, db)
     tpl = db.get(Project, template_id)
     if not tpl or tpl.tenant_id != user.tenant_id:
         raise HTTPException(404, "模板项目不存在")
@@ -1138,11 +1081,19 @@ def clone_project(template_id: str, body: CloneProjectBody,
                   user: User = Depends(require_role("project_admin")),
                   db: Session = Depends(get_session)):
     """从模板项目克隆新项目"""
+    check_project_access(user, template_id, db)
     tpl = db.get(Project, template_id)
     if not tpl or tpl.tenant_id != user.tenant_id:
         raise HTTPException(404, "模板项目不存在")
     if not tpl.is_template:
         raise HTTPException(400, "该项目未标记为模板，请先设置为模板")
+
+    if not body.name.strip() or len(body.name) > 128:
+        raise HTTPException(422, "Project name must contain between 1 and 128 characters")
+    if body.business_id:
+        business = db.get(Business, body.business_id)
+        if not business or business.tenant_id != user.tenant_id:
+            raise HTTPException(422, "Choose a business in this project's tenant")
 
     new_id = f"proj-{uuid.uuid4().hex[:12]}"
     new_proj = Project(
@@ -1182,35 +1133,39 @@ def clone_project(template_id: str, body: CloneProjectBody,
 
     db.commit()
 
-    # 克隆向量知识库（异步，不阻塞）
+    warnings = []
+    # Count only rows actually copied into the new destination project.
     if body.clone_knowledge or body.clone_rules:
         try:
-            _clone_vector_data(template_id, new_id, tpl.vector_db,
+            copied = _clone_vector_data(template_id, new_id, tpl.vector_db,
                                tpl.vector_db_config or {},
                                clone_knowledge=body.clone_knowledge,
-                               clone_rules=body.clone_rules)
-            cloned["knowledge"] = 1 if body.clone_knowledge else 0
-            cloned["rules"] = 1 if body.clone_rules else 0
+                               clone_rules=body.clone_rules, tenant_id=user.tenant_id)
+            cloned.update(copied)
+        except HTTPException:
+            raise
         except Exception:
-            pass  # 向量库克隆失败不影响项目创建
+            warnings.append({"code": "vector_clone_unavailable", "message": "The project was created, but vector assets could not be copied completely. Inspect the destination before using it."})
 
-    return {"ok": True, "id": new_id, "cloned": cloned}
+    return {"ok": True, "id": new_id, "cloned": cloned, "warnings": warnings}
 
 
 def _clone_vector_data(src_id: str, dst_id: str, vector_db: str,
-                       vector_cfg: dict, clone_knowledge: bool, clone_rules: bool):
+                       vector_cfg: dict, clone_knowledge: bool, clone_rules: bool, *, tenant_id: str):
     """复制向量库数据到新项目命名空间"""
     from .vector_store import get_vector_store, _ns
+    from sop_manager.project_write_guard import project_file_write_scope
     store = get_vector_store(project_vector_db=vector_db, project_vector_config=vector_cfg)
     tables = []
     if clone_knowledge: tables.append("knowledge")
     if clone_rules: tables.append("rules")
-    for tbl in tables:
-        src_rows = store.rows(_ns(src_id, tbl), limit=2000)
-        for row in src_rows:
-            new_row = {k: v for k, v in row.items() if k != "vector"}
-            new_row["id"] = f"{tbl[:3]}-{uuid.uuid4().hex[:12]}"
-            try:
+    copied = {"knowledge": 0, "rules": 0}
+    with project_file_write_scope(tenant_id=tenant_id, project_id=dst_id):
+        for tbl in tables:
+            src_rows = store.rows(_ns(src_id, tbl), limit=2000)
+            for row in src_rows:
+                new_row = {k: v for k, v in row.items() if k != "vector"}
+                new_row["id"] = f"{tbl[:3]}-{uuid.uuid4().hex[:12]}"
                 store.upsert(_ns(dst_id, tbl), new_row)
-            except Exception:
-                pass
+                copied[tbl] += 1
+    return copied

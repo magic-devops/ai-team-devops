@@ -27,6 +27,7 @@ from sop_manager.task_acceptance import normalize_task_acceptance
 from sop_manager.task_owner import normalize_task_owner_id
 from sop_manager.task_owner_sql import install_task_owner_guard
 from sop_manager.task_sql_guard import TaskAcceptanceJSON, install_task_sql_guard
+from sop_manager.project_write_guard import ManagerSession, install_project_write_guard
 
 _DB_TYPE = os.getenv("DB_TYPE", "sqlite")
 _DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sop.db")
@@ -54,7 +55,7 @@ def make_engine():
     return engine
 
 engine = make_engine()
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+SessionLocal = sessionmaker(bind=engine, class_=ManagerSession, autocommit=False, autoflush=False)
 
 def get_session() -> Session:
     db = SessionLocal()
@@ -438,6 +439,7 @@ def create_all():
 # Imports are late because hook handlers lazily use the complete model registry.
 from .delivery_progress_hooks import install_progress_hooks
 
+install_project_write_guard()
 install_task_sql_guard()
 install_task_owner_guard()
 install_progress_hooks()

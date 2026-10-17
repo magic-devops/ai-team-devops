@@ -14,6 +14,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import (
     request_scope_active,
     resolved_ai_memory_root,
@@ -67,7 +69,6 @@ class JobEnqueue(BaseModel):
 
 def _jobs_dir() -> Path:
     d = resolved_ai_memory_root() / "worker-jobs"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -76,7 +77,10 @@ def _job_path(job_id: str) -> Path:
 
 
 def _write_job(job_id: str, data: dict[str, Any]) -> None:
-    _job_path(job_id).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope(tenant_id=data.get("tenant_id") or resolved_tenant_id(), project_id=data.get("project_id") or resolved_project_id()):
+        path = _job_path(job_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _read_job(job_id: str) -> dict[str, Any] | None:

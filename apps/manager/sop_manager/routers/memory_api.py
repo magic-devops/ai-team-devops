@@ -7,11 +7,13 @@ from __future__ import annotations
 import os
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from sop_manager.memory_store import get_memory_store
 from sop_manager.path_config import request_scope_active
+
+from .business_access import require_business_access
 
 router = APIRouter(prefix="/api/v1/memory", tags=["memory"])
 
@@ -73,7 +75,7 @@ def memory_health() -> dict[str, Any]:
     }
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_business_access)])
 def memory_create(body: MemoryCreate) -> dict[str, Any]:
     _require_scope()
     try:
@@ -84,7 +86,7 @@ def memory_create(body: MemoryCreate) -> dict[str, Any]:
     return {"ok": True, "item": rec.to_json()}
 
 
-@router.get("/search")
+@router.get("/search", dependencies=[Depends(require_business_access)])
 def memory_search(
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),
@@ -99,7 +101,7 @@ def memory_search(
     return {"ok": True, "items": items, "lifecycle_state": lifecycle_state}
 
 
-@router.get("/recent")
+@router.get("/recent", dependencies=[Depends(require_business_access)])
 def memory_recent(limit: int = Query(30, ge=1, le=200), lifecycle_state: str = Query("active", max_length=40)) -> dict[str, Any]:
     _require_scope()
     try:
@@ -110,7 +112,7 @@ def memory_recent(limit: int = Query(30, ge=1, le=200), lifecycle_state: str = Q
     return {"ok": True, "items": items, "lifecycle_state": lifecycle_state}
 
 
-@router.post("/forget")
+@router.post("/forget", dependencies=[Depends(require_business_access)])
 def memory_forget(body: MemoryForget) -> dict[str, Any]:
     _require_scope()
     if not body.ids and not body.query.strip():
@@ -122,7 +124,7 @@ def memory_forget(body: MemoryForget) -> dict[str, Any]:
     return store.forget(ids=body.ids, query=body.query, kind=body.kind)
 
 
-@router.post("/summarize")
+@router.post("/summarize", dependencies=[Depends(require_business_access)])
 def memory_summarize(body: MemorySummarize) -> dict[str, Any]:
     _require_scope()
     try:
@@ -133,7 +135,7 @@ def memory_summarize(body: MemorySummarize) -> dict[str, Any]:
     return {"ok": True, "item": rec.to_json()}
 
 
-@router.post("/{memory_id}/attach-run")
+@router.post("/{memory_id}/attach-run", dependencies=[Depends(require_business_access)])
 def memory_attach_run(memory_id: str, body: MemoryAttachRun) -> dict[str, Any]:
     _require_scope()
     try:
@@ -143,7 +145,7 @@ def memory_attach_run(memory_id: str, body: MemoryAttachRun) -> dict[str, Any]:
     return store.attach_run(memory_id, body.run_id, body.metadata)
 
 
-@router.post("/{memory_id}/lifecycle")
+@router.post("/{memory_id}/lifecycle", dependencies=[Depends(require_business_access)])
 def memory_lifecycle(memory_id: str, body: MemoryLifecycleUpdate) -> dict[str, Any]:
     _require_scope()
     try:

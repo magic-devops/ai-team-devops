@@ -7,12 +7,13 @@ import json, os
 from sop_manager.path_config import resolved_ai_memory_root
 from sop_manager.routers.productization_contract import summarize_items, unified_payload
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/skills", tags=["skills"])
 
 
 def _skills_dir() -> Path:
     d = resolved_ai_memory_root() / "skills"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 class SkillDef(BaseModel):
@@ -129,12 +130,15 @@ def skills_runtime() -> dict[str, Any]:
 
 @router.post("")
 def create_skill(body: SkillDef):
-    f = _skills_dir() / f"{body.skill_id}.json"
-    f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
-    return {"ok": True, "skill_id": body.skill_id}
+    with project_file_write_scope():
+        _skills_dir().mkdir(parents=True, exist_ok=True)
+        f = _skills_dir() / f"{body.skill_id}.json"
+        f.write_text(json.dumps(body.dict(), ensure_ascii=False, indent=2))
+        return {"ok": True, "skill_id": body.skill_id}
 
 @router.delete("/{skill_id}")
 def delete_skill(skill_id: str):
-    f = _skills_dir() / f"{skill_id}.json"
-    if f.exists(): f.unlink()
-    return {"ok": True}
+    with project_file_write_scope():
+        f = _skills_dir() / f"{skill_id}.json"
+        if f.exists(): f.unlink()
+        return {"ok": True}

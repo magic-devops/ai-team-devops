@@ -33,13 +33,10 @@ def _safe_name(value: str) -> str:
     return name
 
 
-def _load_cfg(create: bool = True) -> dict[str, Any]:
+def _load_cfg() -> dict[str, Any]:
     p = _settings_file()
     if not p.exists():
-        if not create:
-            return {"mcpServers": {}}
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"mcpServers": {}}, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"mcpServers": {}}
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
@@ -53,9 +50,12 @@ def _load_cfg(create: bool = True) -> dict[str, Any]:
 
 
 def _save_cfg(cfg: dict[str, Any]) -> None:
-    p = _settings_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        p = _settings_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _mask_env(env: dict[str, str] | None) -> dict[str, str]:
@@ -117,7 +117,7 @@ def _row(name: str, item: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("")
 def list_mcp():
-    cfg = _load_cfg(create=True)
+    cfg = _load_cfg()
     servers = cfg.get("mcpServers", {})
     return [_row(k, v) for k, v in sorted(servers.items())]
 
@@ -137,7 +137,7 @@ def mcp_summary():
 @router.post("")
 def add_mcp(body: McpServer):
     name = _safe_name(body.name)
-    cfg = _load_cfg(create=True)
+    cfg = _load_cfg()
     item: dict[str, Any] = {
         "command": body.command.strip(),
         "args": [str(x) for x in (body.args or [])],
@@ -159,7 +159,7 @@ def install_builtin(name: str):
     item = next((x for x in _builtin_items() if x.get("name") == name), None)
     if not item:
         raise HTTPException(404, "未知内置 MCP Server")
-    cfg = _load_cfg(create=True)
+    cfg = _load_cfg()
     cfg.setdefault("mcpServers", {})[name] = {k: v for k, v in item.items() if k != "name"}
     _save_cfg(cfg)
     _emit("mcp.builtin_installed", {"name": name})
@@ -168,7 +168,7 @@ def install_builtin(name: str):
 
 @router.post("/install-builtin")
 def install_all_builtin():
-    cfg = _load_cfg(create=True)
+    cfg = _load_cfg()
     created: list[str] = []
     skipped: list[str] = []
     servers = cfg.setdefault("mcpServers", {})
@@ -186,7 +186,7 @@ def install_all_builtin():
 @router.delete("/{name}")
 def remove_mcp(name: str):
     name = _safe_name(name)
-    cfg = _load_cfg(create=False)
+    cfg = _load_cfg()
     removed = cfg.get("mcpServers", {}).pop(name, None) is not None
     _save_cfg(cfg)
     if removed:
@@ -200,7 +200,7 @@ def builtin_mcp():
 
 @router.get("/profile")
 def mcp_profile():
-    cfg = _load_cfg(create=True)
+    cfg = _load_cfg()
     enabled = {
         name: item
         for name, item in cfg.get("mcpServers", {}).items()

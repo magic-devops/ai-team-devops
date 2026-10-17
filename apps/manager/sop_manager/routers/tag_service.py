@@ -11,11 +11,12 @@ from pydantic import BaseModel, Field
 from sop_manager.path_config import resolved_ai_memory_root, resolved_tenant_code, resolved_business_code, resolved_project_id
 from sop_manager.routers.scope_guard import attach_scope, scope_matches
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/tag-service", tags=["tag-service"])
 
 def _dir(sub: str):
     d = resolved_ai_memory_root() / "tag_service" / sub
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -36,8 +37,10 @@ def _load_all(sub: str) -> list[dict]:
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
-    attach_scope(item, overwrite=False)
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _dir(sub).mkdir(parents=True, exist_ok=True)
+        attach_scope(item, overwrite=False)
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
 
 def _load_item(sub: str, item_id: str, label: str) -> dict:
     p = _dir(sub) / f"{item_id}.json"
@@ -371,7 +374,8 @@ def delete_tag(tag_id: str):
     _load_item("tags", tag_id, "tag")
     p = _dir("tags") / f"{tag_id}.json"
     if p.exists():
-        p.unlink()
+        with project_file_write_scope():
+            p.unlink()
     return {**_scope(), "deleted": tag_id}
 
 @router.get("/rules")
@@ -389,7 +393,8 @@ def create_rule(body: RuleCreate):
 def delete_rule(rule_id: str):
     _load_item("rules", rule_id, "rule")
     p = _dir("rules") / f"{rule_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": rule_id}
 
 @router.post("/rules/evaluate")
@@ -436,7 +441,8 @@ def create_entity(body: EntityCreate):
 def delete_entity(entity_id: str):
     _load_item("ontology_entities", entity_id, "entity")
     p = _dir("ontology_entities") / f"{entity_id}.json"
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": entity_id}
 
 @router.get("/profiles/builds")

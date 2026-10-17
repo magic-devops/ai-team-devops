@@ -491,21 +491,15 @@ def _utc_now() -> str:
 
 
 def _reports_file() -> Path:
-    p = resolved_runtime_dir() / "analytics" / "reports.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return resolved_runtime_dir() / "analytics" / "reports.jsonl"
 
 
 def _subscriptions_file() -> Path:
-    p = resolved_runtime_dir() / "analytics" / "report-subscriptions.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return resolved_runtime_dir() / "analytics" / "report-subscriptions.json"
 
 
 def _governance_file() -> Path:
-    p = resolved_runtime_dir() / "analytics" / "data-governance.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    return resolved_runtime_dir() / "analytics" / "data-governance.json"
 
 
 def _default_governance() -> dict[str, Any]:
@@ -582,10 +576,15 @@ def _normalize_governance(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_governance_store(store: dict[str, Any]) -> None:
+    from sop_manager.project_write_guard import project_file_write_scope
+
     store["version"] = 2
     store["scoped_governance"] = True
     store["updated_at"] = _utc_now()
-    _governance_file().write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        path = _governance_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_governance() -> dict[str, Any]:
@@ -595,8 +594,6 @@ def _load_governance() -> dict[str, Any]:
     data = scopes.get(key) if isinstance(scopes.get(key), dict) else None
     if data is None:
         data = _default_governance()
-        scopes[key] = data
-        _write_governance_store(store)
     return _normalize_governance(dict(data))
 
 
@@ -775,7 +772,12 @@ def _save_subscription(data: dict[str, Any]) -> dict[str, Any]:
         "event": "analytics_report_published",
         "updated_at": _utc_now(),
     }
-    _subscriptions_file().write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _subscriptions_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
     return row
 
 
@@ -825,10 +827,24 @@ def _read_reports(limit: int = 30, status: str = "", source: str = "", q: str = 
 
 
 def _rewrite_reports(items: list[dict[str, Any]]) -> None:
-    path = _reports_file()
-    with path.open("w", encoding="utf-8") as f:
-        for item in items:
-            f.write(json.dumps(item, ensure_ascii=False, default=str) + "\n")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _reports_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            for item in items:
+                f.write(json.dumps(item, ensure_ascii=False, default=str) + "\n")
+
+
+def _append_report(report: dict[str, Any]) -> None:
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _reports_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
 
 
 def _find_scoped_report(report_id: str) -> dict[str, Any] | None:
@@ -3384,8 +3400,7 @@ def create_analytics_report(
         "archived_at": "",
     }
     attach_scope(report, overwrite=True)
-    path = _reports_file()
-    path.open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
+    _append_report(report)
     return {"ok": True, "report": report}
 
 
@@ -3419,7 +3434,7 @@ def create_analytics_insight_report(
         "archived_at": "",
     }
     attach_scope(report, overwrite=True)
-    _reports_file().open("a", encoding="utf-8").write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
+    _append_report(report)
     return {"ok": True, "report": report, "attribution": insight["attribution"]}
 
 

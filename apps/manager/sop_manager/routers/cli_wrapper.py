@@ -5,6 +5,8 @@ from typing import Optional, List, Dict, Any
 import subprocess, shutil, os, json, re
 from pathlib import Path
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import resolved_project_path
 
 router = APIRouter(prefix="/api/v1/cli", tags=["cli"])
@@ -44,7 +46,6 @@ class CliToolUpsert(BaseModel):
 
 def _state_path() -> Path:
     p = resolved_project_path() / "memory" / "cli_tools_config.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -64,10 +65,13 @@ def _load_state() -> Dict[str, Any]:
 
 
 def _save_state(st: Dict[str, Any]) -> None:
-    _state_path().write_text(
-        json.dumps(st, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    with project_file_write_scope():
+        path = _state_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(st, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
 
 def _hint(tool: str) -> str:

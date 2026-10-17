@@ -12,14 +12,13 @@ import {
 } from "lucide-react";
 import { NeedLogin, RefreshButton } from "../../../../src/components/PageStates";
 import { api } from "../../../../src/lib/api";
-import { getProjectId, getToken, setProjectId } from "../../../../src/lib/authStorage";
+import { getProjectId, getToken } from "../../../../src/lib/authStorage";
 import { BusinessModule } from "./projects/BusinessModule";
 import { GovernanceModule, type GovernancePanelKey } from "./projects/GovernanceModule";
 import { MembersModule } from "./projects/MembersModule";
 import { OnboardingModule, type OnboardingPanelKey } from "./projects/OnboardingModule";
 import { PortfolioModule } from "./projects/PortfolioModule";
 import { ProjectHero } from "./projects/ProjectHero";
-import { ProjectInspector } from "./projects/ProjectInspector";
 import { TenantModule } from "./projects/TenantModule";
 import { TemplatesModule, type TemplatePanelKey } from "./projects/TemplatesModule";
 import { UsersModule } from "./projects/UsersModule";
@@ -31,7 +30,8 @@ import {
   templateSubNav,
 } from "./projects/deliveryKitNav";
 import { ProjectDeliveryKitShell, type DeliveryPhase } from "./projects/ProjectDeliveryKitShell";
-import { defaultDraft, type Project, type ProjectTab, type TabKey } from "./projects/types";
+import { type Project, type ProjectTab, type TabKey } from "./projects/types";
+import { portfolioHash } from "../../../../src/lib/projectPortfolioRoute";
 
 const coreTabs: ProjectTab[] = [
   { key: "portfolio", icon: LayoutGrid },
@@ -62,15 +62,12 @@ export function Projects({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const authed = Boolean(getToken());
-  const [activeProjectId, setActiveProjectId] = useState(getProjectId() ?? "");
   const [selectedProjectId, setSelectedProjectId] = useState(getProjectId() ?? "");
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [onboardingPanelState, setOnboardingPanelState] = useState<OnboardingPanelKey>(onboardingPanel);
   const [templatePanelState, setTemplatePanelState] = useState<TemplatePanelKey>(templatePanel);
   const [governancePanelState, setGovernancePanelState] = useState<GovernancePanelKey>(governancePanel);
   const [routeFocused, setRouteFocused] = useState(focused);
-  const [keyword, setKeyword] = useState("");
-  const [draft, setDraft] = useState(defaultDraft);
   const [businessDraft, setBusinessDraft] = useState({ name: "", description: "" });
   const [tenantDraft, setTenantDraft] = useState({ name: "", slug: "", plan: "free" });
   const [userDraft, setUserDraft] = useState({ username: "", email: "", password: "", role: "developer" });
@@ -107,6 +104,7 @@ export function Projects({
 
   useEffect(() => {
     applyRoute({
+      portfolio: parseProjectsDeliveryHash(window.location.hash).portfolio,
       tab: initialTab,
       onboardingPanel,
       templatePanel,
@@ -162,16 +160,6 @@ export function Projects({
     enabled: prefetchDelivery || (authed && Boolean(selectedProjectId) && tab === "governance"),
   });
 
-  const filtered = useMemo(() => {
-    const list = (projects.data ?? []) as Project[];
-    const k = keyword.trim().toLowerCase();
-    if (!k) return list;
-    return list.filter((p) =>
-      [p.id, p.name, p.description, p.business_name, p.status, p.vector_db]
-        .map((x) => String(x ?? "").toLowerCase())
-        .some((x) => x.includes(k)),
-    );
-  }, [projects.data, keyword]);
 
   const refreshAll = () => {
     void qc.invalidateQueries({ queryKey: ["projects"] });
@@ -188,21 +176,6 @@ export function Projects({
     }
   };
 
-  const createProject = useMutation({
-    mutationFn: () => api.createProject({ ...draft, business_id: draft.business_id || null }),
-    onSuccess: (res) => {
-      setDraft(defaultDraft);
-      setSelectedProjectId(res.id);
-      setActiveProjectId(res.id);
-      setProjectId(res.id);
-      refreshAll();
-    },
-  });
-
-  const updateProject = useMutation({
-    mutationFn: (patch: Record<string, unknown>) => api.updateProject(selectedProjectId, patch),
-    onSuccess: refreshAll,
-  });
 
   const createBusiness = useMutation({
     mutationFn: () => api.createBusiness(businessDraft),
@@ -258,18 +231,6 @@ export function Projects({
     onSuccess: refreshAll,
   });
 
-  const deleteProject = useMutation({
-    mutationFn: (projectId: string) => api.deleteProject(projectId),
-    onSuccess: () => {
-      setSelectedProjectId("");
-      refreshAll();
-    },
-  });
-
-  const toggleTemplate = useMutation({
-    mutationFn: ({ projectId, value }: { projectId: string; value: boolean }) => api.projectSetTemplate(projectId, value),
-    onSuccess: refreshAll,
-  });
 
   const cloneProject = useMutation({
     mutationFn: () =>
@@ -297,8 +258,7 @@ export function Projects({
       });
       setClonePreviewResult(null);
       setSelectedProjectId(res.id);
-      setActiveProjectId(res.id);
-      setProjectId(res.id);
+      window.location.hash = portfolioHash({ projectId: res.id });
       refreshAll();
     },
   });
@@ -369,8 +329,6 @@ export function Projects({
   const userRoles = roles.data?.user_roles?.length
     ? roles.data.user_roles
     : ["developer", "devops", "project_admin", "tenant_admin"];
-  const fullWidthTabs = new Set<TabKey>(["tenants", "users"]);
-  const showInspector = !fullWidthTabs.has(tab) && !deliveryKitActive;
 
   const onboardingReady = (onboarding.data?.readiness ?? []).filter((item: { ok?: boolean }) => item.ok).length;
   const onboardingTotal = (onboarding.data?.readiness ?? []).length;
@@ -378,8 +336,6 @@ export function Projects({
 
   const selectProject = (projectId: string) => {
     setSelectedProjectId(projectId);
-    setActiveProjectId(projectId);
-    if (projectId) setProjectId(projectId);
   };
 
   const renderDeliveryKit = (phase: DeliveryPhase, body: ReactNode) => (
@@ -439,11 +395,11 @@ export function Projects({
 
   return (
     <div className="w-full space-y-5">
-      {!deliveryKitActive || !showFocusedChrome ? (
+      {tab !== "portfolio" && (!deliveryKitActive || !showFocusedChrome) ? (
         <ProjectHero summary={summary.data} onRefresh={refreshAll} busy={busy} />
       ) : null}
 
-      <div className={showInspector ? "grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[minmax(0,1fr)_28rem]" : "grid gap-4"}>
+      <div className="grid gap-4">
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
             {!showFocusedChrome ? (
@@ -464,28 +420,7 @@ export function Projects({
             <RefreshButton onClick={refreshAll} pending={busy} />
           </div>
 
-          {tab === "portfolio" ? (
-            <PortfolioModule
-              projects={filtered}
-              keyword={keyword}
-              setKeyword={setKeyword}
-              loading={projects.isLoading}
-              error={projects.error as Error | null}
-              activeProjectId={activeProjectId}
-              selectedProjectId={selectedProjectId}
-              setSelectedProject={(projectId) => {
-                setSelectedProjectId(projectId);
-                setActiveProjectId(projectId);
-                setProjectId(projectId);
-              }}
-              draft={draft}
-              setDraft={setDraft}
-              businesses={businesses.data ?? []}
-              createPending={createProject.isPending}
-              createError={createProject.error as Error | null}
-              onCreate={() => createProject.mutateAsync()}
-            />
-          ) : null}
+          {tab === "portfolio" ? <PortfolioModule /> : null}
 
           {tab === "business" ? (
             <BusinessModule
@@ -501,8 +436,7 @@ export function Projects({
               onDelete={(businessId) => deleteBusiness.mutate(businessId)}
               onSelectProject={(projectId) => {
                 setSelectedProjectId(projectId);
-                setActiveProjectId(projectId);
-                setProjectId(projectId);
+                window.location.hash = portfolioHash({ projectId });
               }}
             />
           ) : null}
@@ -596,10 +530,9 @@ export function Projects({
                   clonePreview={clonePreviewResult}
                   clonePreviewPending={clonePreview.isPending}
                   clonePreviewError={clonePreview.error as Error | null}
-                  togglePending={toggleTemplate.isPending}
                   initialPanel={templatePanelState}
                   embedded
-                  onToggle={(projectId, value) => toggleTemplate.mutate({ projectId, value })}
+                  onConfigureProject={(projectId) => { window.location.hash = portfolioHash({ projectId }); }}
                   onPreviewClone={() => clonePreview.mutate()}
                   onClone={() => cloneProject.mutate()}
                 />,
@@ -634,23 +567,6 @@ export function Projects({
 
         </section>
 
-        {showInspector ? (
-          <ProjectInspector
-            project={selectedProject}
-            membersCount={(projectMembers.data ?? []).length || selectedProject?.counts?.members || 0}
-            onSelectTab={setTab}
-            onPatch={(patch) => updateProject.mutate(patch)}
-            patchPending={updateProject.isPending}
-            patchError={updateProject.error as Error | null}
-            onDelete={() => {
-              if (selectedProject && window.confirm(t("page.projects.confirmDelete", { name: selectedProject.name }))) {
-                deleteProject.mutate(selectedProject.id);
-              }
-            }}
-            deletePending={deleteProject.isPending}
-            businesses={businesses.data ?? []}
-          />
-        ) : null}
       </div>
     </div>
   );

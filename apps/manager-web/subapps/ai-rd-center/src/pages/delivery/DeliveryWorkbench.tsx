@@ -85,6 +85,9 @@ import { DeliveryTaskDetail, TaskDetailContent } from "./DeliveryTaskDetail";
 import { DeliveryActivityAction } from "./DeliveryActivityAction";
 import { useMemberIdentity } from "@/components/DeliveryMemberIdentity";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
+import { ProjectContextGate } from "@/components/ProjectContextGate";
+import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
+import { DeliveryExecutionInspector } from "./DeliveryExecutionInspector";
 
 const subscribe = (cb: () => void) => {
   window.addEventListener("sop-session", cb);
@@ -105,7 +108,7 @@ const dateValue = (value: unknown) => value || null;
 
 export function DeliveryWorkbench() {
   const scope = useSyncExternalStore(subscribe, sessionSnapshot);
-  return <ProjectDelivery key={scope} />;
+  return <ProjectContextGate><ProjectDelivery key={scope} /></ProjectContextGate>;
 }
 
 function ProjectDelivery() {
@@ -162,6 +165,7 @@ function ProjectDelivery() {
   const [selectedIssueId, setSelectedIssueId] = useState(
     () => parseDeliveryRoute(location.hash).issue,
   );
+  const [selectedExecutionId, setSelectedExecutionId] = useState(() => new URLSearchParams(location.hash.split("?")[1]).get("execution_id") || "");
   const [inboxScope, setInboxScope] = useState<InboxScope>(
     () => parseDeliveryRoute(location.hash).inboxScope,
   );
@@ -179,6 +183,7 @@ function ProjectDelivery() {
   useEffect(() => {
     const syncRoute = () => {
       const route = parseDeliveryRoute(location.hash);
+      setSelectedExecutionId(new URLSearchParams(location.hash.split("?")[1]).get("execution_id") || "");
       setView(route.view);
       setSelectedId(route.requirement);
       setDetailTab(route.detail);
@@ -298,7 +303,7 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash)}`,
+      `${location.pathname}${location.search}${preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash)}`,
     );
     if (["progress", "team", "timeline"].includes(nextView))
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -328,7 +333,7 @@ function ProjectDelivery() {
       !target.requirement_id &&
       !["team", "timeline"].includes(target.view)
     ) {
-      location.hash = deliveryInboxHref(target);
+      location.hash = preserveProjectContext(deliveryInboxHref(target), location.hash);
       return;
     }
     navigate(
@@ -843,6 +848,8 @@ function ProjectDelivery() {
   ];
   return (
     <section className="delivery-workbench" aria-label={tr("title")}>
+      {data.project.status === "archived" && <Alert type="info" title={t("projectPortfolio.archivedReadOnly")} description={t("projectPortfolio.archivedHint")} action={<Button href={`#/projects/portfolio?project_id=${encodeURIComponent(projectId)}`}>{t("projectPortfolio.inspect")}</Button>} />}
+      {["planning", "paused"].includes(data.project.status || "") && <Alert type="info" title={t("projectPortfolio.pausedHint")} />}
       <header className="delivery-header">
         <div>
           <div className="delivery-eyebrow">
@@ -987,6 +994,7 @@ function ProjectDelivery() {
       {view === "overview" && (
         <>
           <DeliveryProjectOverview
+            onMilestone={(id) => { location.hash = preserveProjectContext(`#/dev-flow?view=timeline&milestone_id=${encodeURIComponent(id)}`, location.hash); }}
             data={data}
             inbox={inboxQuery.data}
             onView={(nextView) => navigate(nextView, "")}
@@ -1337,6 +1345,7 @@ function ProjectDelivery() {
           />
         )}
       </Drawer>
+      <DeliveryExecutionInspector executionId={selectedExecutionId} sessionId={sessionId} workspace={data} onCommand={(action, payload) => commit(action, payload, false)} onClose={() => { const params = new URLSearchParams(location.hash.split("?")[1]); params.delete("execution_id"); location.hash = `#/dev-flow?${params}`; }} />
       <Drawer
         open={Boolean(selected)}
         onClose={() => navigate(view, "")}

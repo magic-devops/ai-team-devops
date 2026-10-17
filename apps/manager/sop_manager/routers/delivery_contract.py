@@ -14,6 +14,7 @@ from sop_manager.task_owner import TaskOwnerId
 
 from .delivery_execution_contract import ExecutionQueue
 from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
+from .project_lifecycle_contract import ProjectLifecycleCommand
 from .delivery_scheduling_contract import (
     AllocationInput,
     CalendarSave,
@@ -70,6 +71,7 @@ class TaskAcceptance(BaseModel):
 class Command(Input):
     action: Literal[
         "project.update",
+        "project.lifecycle",
         "resource.save",
         "resource.archive",
         "member.save",
@@ -118,6 +120,11 @@ class ProjectEdit(Dated):
     description: str | None = Field(default=None, max_length=20000)
     goal: str = Field(default="", max_length=10000)
     owner_id: str = Field(default="", max_length=100)
+    business_id: str | None = Field(default=None, min_length=1, max_length=64)
+    project_path: str = Field(default="", max_length=512)
+    vector_db: Literal['lance', 'milvus', 'qdrant', 'oceanbase'] = 'lance'
+    vector_db_config: dict = Field(default_factory=dict)
+    is_template: bool = Field(default=False, strict=True)
 
     @field_validator("name", "description")
     @classmethod
@@ -718,6 +725,7 @@ class ExecutionReview(ExecutionSync):
 
 
 PAYLOADS = {
+    "project.lifecycle": ProjectLifecycleCommand,
     "tasks.schedule": ScheduleChanges,
     "member.calendar.save": CalendarSave,
     "task.manual_review": TaskManualReview,

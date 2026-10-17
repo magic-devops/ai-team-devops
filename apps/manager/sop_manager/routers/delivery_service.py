@@ -307,7 +307,7 @@ def apply_action(db, project, user, data, action, body):
 
         if "owner_id" in body.model_fields_set:
             validate_owner(body.owner_id, roster)
-        return update_project(project, data, body)
+        return update_project(db, project, data, body)
     elif action.startswith("resource."):
         from .delivery_resources import apply_resource
 

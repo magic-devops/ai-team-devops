@@ -11,7 +11,7 @@ from hermes_core.models import CoreError
 from .delivery import execute
 from .delivery_contract import Command
 from .delivery_execution import CLOSED, context
-from .sql_models import DeliveryWorkspace, SessionLocal, User
+from .sql_models import DeliveryWorkspace, Project, SessionLocal, User
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,9 @@ def sync_once(app, sessions=SessionLocal):
         rows = db.query(DeliveryWorkspace.project_id).all()
     for (project_id,) in rows:
         with sessions() as db:
+            project = db.get(Project, project_id)
+            if not project or project.status == "archived":
+                continue
             row = db.get(DeliveryWorkspace, project_id)
             ids = [
                 e["id"]

@@ -26,9 +26,7 @@ _CONTENT_MAX = 500_000
 
 
 def _root() -> Path:
-    d = resolved_ai_memory_root() / "tech_design"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return resolved_ai_memory_root() / "tech_design"
 
 
 def _index_path() -> Path:
@@ -50,7 +48,12 @@ def _load_index() -> Dict[str, Any]:
 
 
 def _save_index(data: Dict[str, Any]) -> None:
-    _index_path().write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _index_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _doc_dir(doc_id: str) -> Path:
@@ -69,7 +72,12 @@ def _load_meta(doc_id: str) -> Dict[str, Any]:
 
 
 def _save_meta(doc_id: str, meta: Dict[str, Any]) -> None:
-    _meta_path(doc_id).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path = _meta_path(doc_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _safe_id(doc_id: str) -> str:
@@ -195,27 +203,30 @@ def list_docs():
 
 @router.post("")
 def create_doc(body: DocCreate):
-    doc_id = f"TDS-{uuid.uuid4().hex[:12]}"
-    ddir = _doc_dir(doc_id)
-    ddir.mkdir(parents=True, exist_ok=True)
-    ts = _utc_iso()
-    v = 1
-    content = (body.initial_content or _default_template(body.title)).strip() + "\n"
-    (ddir / "v1.md").write_text(content, encoding="utf-8")
-    (ddir / "current.md").write_text(content, encoding="utf-8")
-    meta = {
-        "id": doc_id,
-        "title": body.title.strip(),
-        "category": body.category.strip() or "general",
-        "tags": body.tags[:24] if body.tags else [],
-        "created_at": ts,
-        "updated_at": ts,
-        "current_version": v,
-        "versions": [{"v": v, "created_at": ts, "note": body.version_note.strip() or "创建"}],
-    }
-    _save_meta(doc_id, meta)
-    _sync_index_entry(meta)
-    return {"ok": True, "id": doc_id}
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        doc_id = f"TDS-{uuid.uuid4().hex[:12]}"
+        ddir = _doc_dir(doc_id)
+        ddir.mkdir(parents=True, exist_ok=True)
+        ts = _utc_iso()
+        v = 1
+        content = (body.initial_content or _default_template(body.title)).strip() + "\n"
+        (ddir / "v1.md").write_text(content, encoding="utf-8")
+        (ddir / "current.md").write_text(content, encoding="utf-8")
+        meta = {
+            "id": doc_id,
+            "title": body.title.strip(),
+            "category": body.category.strip() or "general",
+            "tags": body.tags[:24] if body.tags else [],
+            "created_at": ts,
+            "updated_at": ts,
+            "current_version": v,
+            "versions": [{"v": v, "created_at": ts, "note": body.version_note.strip() or "创建"}],
+        }
+        _save_meta(doc_id, meta)
+        _sync_index_entry(meta)
+        return {"ok": True, "id": doc_id}
 
 
 def _default_template(title: str) -> str:
@@ -308,40 +319,46 @@ def get_version(doc_id: str, version: int):
 
 @router.patch("/{doc_id}")
 def patch_meta(doc_id: str, body: DocMetaUpdate):
-    doc_id = _safe_id(doc_id)
-    meta = _load_meta(doc_id)
-    if body.title is not None:
-        meta["title"] = body.title.strip()
-    if body.category is not None:
-        meta["category"] = body.category.strip()
-    if body.tags is not None:
-        meta["tags"] = body.tags[:24]
-    meta["updated_at"] = _utc_iso()
-    _save_meta(doc_id, meta)
-    _sync_index_entry(meta)
-    return {"ok": True}
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        doc_id = _safe_id(doc_id)
+        meta = _load_meta(doc_id)
+        if body.title is not None:
+            meta["title"] = body.title.strip()
+        if body.category is not None:
+            meta["category"] = body.category.strip()
+        if body.tags is not None:
+            meta["tags"] = body.tags[:24]
+        meta["updated_at"] = _utc_iso()
+        _save_meta(doc_id, meta)
+        _sync_index_entry(meta)
+        return {"ok": True}
 
 
 @router.post("/{doc_id}/versions")
 def add_version(doc_id: str, body: VersionCreate):
-    doc_id = _safe_id(doc_id)
-    meta = _load_meta(doc_id)
-    nv = int(meta.get("current_version", 0)) + 1
-    ts = _utc_iso()
-    content = body.content
-    if len(content) > _CONTENT_MAX:
-        raise HTTPException(400, "内容过长")
-    ddir = _doc_dir(doc_id)
-    (ddir / f"v{nv}.md").write_text(content, encoding="utf-8")
-    (ddir / "current.md").write_text(content, encoding="utf-8")
-    vers = list(meta.get("versions") or [])
-    vers.append({"v": nv, "created_at": ts, "note": body.note.strip() or "保存"})
-    meta["versions"] = vers
-    meta["current_version"] = nv
-    meta["updated_at"] = ts
-    _save_meta(doc_id, meta)
-    _sync_index_entry(meta)
-    return {"ok": True, "version": nv}
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        doc_id = _safe_id(doc_id)
+        meta = _load_meta(doc_id)
+        nv = int(meta.get("current_version", 0)) + 1
+        ts = _utc_iso()
+        content = body.content
+        if len(content) > _CONTENT_MAX:
+            raise HTTPException(400, "内容过长")
+        ddir = _doc_dir(doc_id)
+        (ddir / f"v{nv}.md").write_text(content, encoding="utf-8")
+        (ddir / "current.md").write_text(content, encoding="utf-8")
+        vers = list(meta.get("versions") or [])
+        vers.append({"v": nv, "created_at": ts, "note": body.note.strip() or "保存"})
+        meta["versions"] = vers
+        meta["current_version"] = nv
+        meta["updated_at"] = ts
+        _save_meta(doc_id, meta)
+        _sync_index_entry(meta)
+        return {"ok": True, "version": nv}
 
 
 @router.post("/{doc_id}/ai-improve")
@@ -371,10 +388,13 @@ def restore_version(doc_id: str, body: RestoreBody):
 
 @router.delete("/{doc_id}")
 def delete_doc(doc_id: str):
-    doc_id = _safe_id(doc_id)
-    _load_meta(doc_id)  # 404 if missing
-    shutil.rmtree(_doc_dir(doc_id), ignore_errors=True)
-    idx = _load_index()
-    idx["documents"] = [d for d in (idx.get("documents") or []) if d.get("id") != doc_id]
-    _save_index(idx)
-    return {"ok": True}
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        doc_id = _safe_id(doc_id)
+        _load_meta(doc_id)  # 404 if missing
+        shutil.rmtree(_doc_dir(doc_id), ignore_errors=True)
+        idx = _load_index()
+        idx["documents"] = [d for d in (idx.get("documents") or []) if d.get("id") != doc_id]
+        _save_index(idx)
+        return {"ok": True}

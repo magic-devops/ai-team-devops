@@ -87,6 +87,9 @@ def catalog(store, user, execution=None, *, project_id="", project_write=True, p
 
 
 def prepare_plan(db, project, user, state, body, store, execution=None):
+    from .project_lifecycle import require_active
+
+    require_active(project)
     """Pure proposal validation shared by preview and the versioned write."""
     from hermes_core.execution_targets import select_execution_target
 
@@ -468,6 +471,9 @@ def _handoff_pending(db, project, state, entry, store, principal, execution):
         store, replace(principal, actor=entry["requested_by"]), entry
     ):
         return
+    from .project_lifecycle import require_active
+
+    require_active(project)
     originator = db.get(User, entry["requested_by"])
     if not originator or originator.status != "active":
         raise HTTPException(403, "Original dispatcher is no longer active; cancel and prepare a new plan")

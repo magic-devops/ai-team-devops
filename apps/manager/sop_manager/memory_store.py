@@ -21,12 +21,11 @@ from sop_manager.path_config import (
     resolved_project_code,
     resolved_tenant_code,
 )
+from sop_manager.project_write_guard import project_file_write_scope
 
 
 def _scope_dir() -> Path:
-    base = resolved_ai_memory_root() / "memory-v4"
-    base.mkdir(parents=True, exist_ok=True)
-    return base
+    return resolved_ai_memory_root() / "memory-v4"
 
 
 def _scope_file() -> Path:
@@ -102,7 +101,7 @@ class FileJsonlMemoryStore(MemoryStore):
         )
         line = json.dumps(rec.to_json(), ensure_ascii=False) + "\n"
         path = _scope_file()
-        with self._lock:
+        with project_file_write_scope(), self._lock:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as f:
                 f.write(line)
@@ -119,7 +118,10 @@ class FileJsonlMemoryStore(MemoryStore):
         if len(lines) <= self._max_lines:
             return
         keep = lines[-self._max_lines :]
-        path.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+        # append already owns Project -> thread locks. The project scope is
+        # reentrant; trimming never reacquires the non-reentrant thread lock.
+        with project_file_write_scope():
+            path.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
 
     def _read_all(self) -> list[dict[str, Any]]:
         path = _scope_file()
@@ -142,7 +144,7 @@ class FileJsonlMemoryStore(MemoryStore):
 
     def _write_all(self, rows: list[dict[str, Any]]) -> None:
         path = _scope_file()
-        with self._lock:
+        with project_file_write_scope(), self._lock:
             path.parent.mkdir(parents=True, exist_ok=True)
             lines = [json.dumps(r, ensure_ascii=False) for r in rows]
             path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")

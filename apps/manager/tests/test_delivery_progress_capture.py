@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from fastapi import HTTPException
 from sop_manager.routers import sql_models as models
 from sqlalchemy import create_engine, delete, insert, update
 from sqlalchemy.orm import sessionmaker
@@ -149,12 +150,15 @@ def test_daily_checkpoint_skips_inactive_tenant_and_project_without_stopping_oth
         db.flush()
         db.add_all(
             [
-                models.Project(id="p-archived", tenant_id="tenant", name="Archived", status="archived"),
+                models.Project(id="p-archived", tenant_id="tenant", name="Archived"),
                 models.Project(id="p-other", tenant_id="tenant", name="Other"),
                 models.Project(id="p-inactive", tenant_id="inactive", name="Inactive tenant"),
             ]
         )
         db.commit()
+        # Seed an existing archived project outside application write channels.
+        with db.get_bind().begin() as connection:
+            connection.execute(update(models.Project).where(models.Project.id == "p-archived").values(status="archived"))
     now = datetime(2026, 10, 21, tzinfo=timezone.utc)
     assert daily_once(sessions=sessions, now=now, page_size=1) == 2
     with sessions() as db:
@@ -288,7 +292,7 @@ def test_compatibility_table_and_sync_writers_are_observed(sessions, monkeypatch
 
 @pytest.mark.parametrize("writer", ["core", "bulk", "orm", "expired_orm"])
 @pytest.mark.parametrize("other_tenant", [False, True])
-def test_moving_tasks_records_both_actual_project_scopes(sessions, writer, other_tenant):
+def test_task_scope_move_is_rejected_without_changing_data_or_observations(sessions, writer, other_tenant):
     with sessions() as db:
         target_tenant = "target-tenant" if other_tenant else "tenant"
         if other_tenant:
@@ -302,25 +306,26 @@ def test_moving_tasks_records_both_actual_project_scopes(sessions, writer, other
             pid: db.query(model).filter_by(project_id=pid).count() for pid in ("project", "target-project")
         }
         changes = {"project_id": "target-project", "tenant_id": target_tenant}
-        if writer == "core":
-            db.execute(
-                update(models.Task).where(models.Task.id == "T-1").values(**changes),
-                execution_options={"synchronize_session": False},
-            )
-        elif writer == "bulk":
-            db.execute(update(models.Task), [{"id": "T-1", **changes}])
-        else:
-            task = db.get(models.Task, "T-1")
-            if writer == "expired_orm":
-                db.expire(task, ["project_id", "tenant_id"])
-            task.project_id, task.tenant_id = changes["project_id"], changes["tenant_id"]
-        db.commit()
+        with pytest.raises(HTTPException) as raised:
+            if writer == "core":
+                db.execute(
+                    update(models.Task).where(models.Task.id == "T-1").values(**changes),
+                    execution_options={"synchronize_session": False},
+                )
+            elif writer == "bulk":
+                db.execute(update(models.Task), [{"id": "T-1", **changes}])
+            else:
+                task = db.get(models.Task, "T-1")
+                if writer == "expired_orm":
+                    db.expire(task, ["project_id", "tenant_id"])
+                task.project_id, task.tenant_id = changes["project_id"], changes["tenant_id"]
+            db.commit()
+        assert raised.value.detail["code"] == "project_scope_immutable"
+        db.rollback()
+        assert (db.get(models.Task, "T-1").tenant_id, db.get(models.Task, "T-1").project_id) == ("tenant", "project")
         for pid, tenant in (("project", "tenant"), ("target-project", target_tenant)):
             rows = db.query(model).filter_by(project_id=pid, tenant_id=tenant).order_by(model.seq).all()
-            assert len(rows) == before[pid] + 1
-            assert [task["id"] for task in rows[-1].data["tasks"]] == (
-                ["T-1"] if pid == "target-project" else []
-            )
+            assert len(rows) == before[pid]
 
 
 def test_core_workspace_updates_use_project_primary_key_and_capture_final_data(sessions):

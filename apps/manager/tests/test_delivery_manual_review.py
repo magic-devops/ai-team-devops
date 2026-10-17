@@ -178,7 +178,13 @@ def test_deleted_and_moved_tasks_keep_original_project_read_only_history(env):  
     task = completed(client)
     assert review(client, task["id"]).status_code == 200
     with sessions() as db:
-        db.execute(update(models.Task).where(models.Task.id == task["id"]).values(project_id="other"))
+        # Application reparenting is forbidden. Simulate out-of-band database
+        # damage, then explicitly capture the resulting proof invalidation.
+        with db.get_bind().begin() as connection:
+            connection.execute(update(models.Task).where(models.Task.id == task["id"]).values(project_id="other"))
+        from sop_manager.routers.delivery_progress_capture import record_observation
+
+        record_observation(db, db.get(models.Project, "project"))
         db.commit()
     original = reviews(client, task["id"])
     assert original.status_code == 200 and original.json()["current"] is None

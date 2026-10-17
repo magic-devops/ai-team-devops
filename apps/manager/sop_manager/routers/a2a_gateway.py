@@ -20,12 +20,13 @@ from sop_manager.routers.a2a_gateway_core import (
 )
 from sop_manager.routers.im_integration_core import build_im_briefing, build_im_delivery_plan
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/a2a", tags=["a2a"])
 RETRYABLE_DISPATCH_STATUSES = {"failed", "blocked", "cancelled", "retrying"}
 
 def _dir(sub: str):
     d = resolved_ai_memory_root() / "a2a" / sub
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 def _now() -> str:
@@ -47,9 +48,11 @@ def _load_all(sub: str) -> list[dict]:
     return sorted(items, key=lambda x: x.get("created_at", ""), reverse=True)
 
 def _save(sub: str, item: dict):
-    import json
-    attach_scope(item)
-    (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        _dir(sub).mkdir(parents=True, exist_ok=True)
+        import json
+        attach_scope(item)
+        (_dir(sub) / f"{item['id']}.json").write_text(json.dumps(item, ensure_ascii=False, indent=2))
 
 def _load_item(sub: str, item_id: str, *, label: str) -> dict:
     import json
@@ -1034,7 +1037,8 @@ def update_agent(agent_id: str, body: AgentRegister):
 def deregister_agent(agent_id: str):
     p = _dir("registry") / f"{agent_id}.json"
     _load_item("registry", agent_id, label="agent")
-    p.unlink()
+    with project_file_write_scope():
+        p.unlink()
     return {**_scope(), "deleted": agent_id}
 
 @router.put("/registry/{agent_id}/status")

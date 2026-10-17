@@ -86,9 +86,12 @@ def _ui_load() -> Dict[str, Any]:
 
 
 def _ui_save(d: Dict[str, Any]) -> None:
-    p = _task_ui_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        p = _task_ui_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _ui_rebuild_columns(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> None:
@@ -143,7 +146,6 @@ def _ui_ordered_list(rows_all: List[Dict[str, Any]], st: Dict[str, Any]) -> List
     row_by_id = {r["id"]: r for r in rows_all if r.get("id")}
     if not any(st.get("columns", {}).get(p) for p in _PRIOS) and rows_all:
         _ui_rebuild_columns(rows_all, st)
-        _ui_save(st)
     out: List[Dict[str, Any]] = []
     seen: set[str] = set()
     for p in _PRIOS:
@@ -393,10 +395,13 @@ def _parse_utc(value: Any) -> datetime | None:
 
 
 def _append_jsonl(path, row: Dict[str, Any]) -> None:
-    attach_scope(row)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        attach_scope(row)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
 def _read_jsonl(path, limit: int = 5000) -> List[Dict[str, Any]]:
@@ -416,9 +421,12 @@ def _read_jsonl(path, limit: int = 5000) -> List[Dict[str, Any]]:
 
 
 def _write_jsonl(path, rows_in: List[Dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = "\n".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows_in)
-    path.write_text((text + "\n") if text else "", encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = "\n".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) for row in rows_in)
+        path.write_text((text + "\n") if text else "", encoding="utf-8")
 
 
 def _scope_payload() -> Dict[str, str]:
@@ -449,15 +457,18 @@ def _load_agent_claims() -> Dict[str, Any]:
 
 
 def _save_agent_claims(data: Dict[str, Any]) -> None:
-    claims = data.setdefault("claims", {})
-    data["claims"] = {
-        str(claim_id): attach_scope(dict(claim))
-        for claim_id, claim in claims.items()
-        if isinstance(claim, dict)
-    }
-    p = _agent_claims_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        claims = data.setdefault("claims", {})
+        data["claims"] = {
+            str(claim_id): attach_scope(dict(claim))
+            for claim_id, claim in claims.items()
+            if isinstance(claim, dict)
+        }
+        p = _agent_claims_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _claim_active(row: Dict[str, Any], *, at: datetime | None = None) -> bool:
@@ -510,9 +521,12 @@ def _load_quality_policy() -> Dict[str, Any]:
 
 
 def _save_quality_policy(data: Dict[str, Any]) -> None:
-    p = _quality_policy_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        p = _quality_policy_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _gate_result_map(gate_results: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

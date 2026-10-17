@@ -224,7 +224,10 @@ def observations(db, project, user, state, entry, store, execution, permissions,
             else "passed",
         },
         "permissions": {
-            "can_start": permissions["write"] and "execute" in principal.permissions and target_ready,
+            "can_start": project.status == "active"
+            and permissions["write"]
+            and "execute" in principal.permissions
+            and target_ready,
             "can_cancel": permissions["write"]
             and "execute" in principal.permissions
             and bool(run_id or "requirement" in entry.get("snapshot", {}))

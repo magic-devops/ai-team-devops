@@ -103,7 +103,7 @@ def test_legacy_admin_alias_keeps_existing_tenant_authority_without_changing_dat
         db.query(sql_models.ProjectMember).filter_by(user_id="writer").delete()
         db.commit()
         assert _permissions(db, user, db.get(sql_models.Project, "selected")) == {
-            "write": True, "approve": True, "configure": True,
+            "write": True, "approve": True, "configure": True, "lifecycle": True,
         }
     response = client.post("/api/v1/requirements", headers=headers(), json={"title": "Existing admin authority"})
     assert response.status_code == 200, response.text

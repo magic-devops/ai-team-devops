@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 import json
 import threading
 import uuid
@@ -61,7 +63,6 @@ class UsageAlertTasksIn(TaskOwnerInput):
 
 def _usage_dir() -> Path:
     base = resolved_ai_memory_root() / "usage-v1"
-    base.mkdir(parents=True, exist_ok=True)
     return base
 
 
@@ -128,6 +129,7 @@ def record_usage_event(body: UsageIn | dict[str, Any]) -> dict[str, Any]:
     path = _ledger_file()
     line = json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
     with _lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(line)
     return row
@@ -243,11 +245,13 @@ def check_usage_quota(metric: str, delta: float = 0.0, *, limit_rows: int = 2000
 
 
 def write_quota(limits: dict[str, float]) -> dict[str, Any]:
-    payload = {"limits": limits, "updated_at": _now()}
-    path = _quota_file()
-    with _lock:
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return payload
+    with project_file_write_scope():
+        payload = {"limits": limits, "updated_at": _now()}
+        path = _quota_file()
+        with _lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return payload
 
 
 def usage_summary_payload(limit: int = 5000, since: str = "", until: str = "") -> dict[str, Any]:

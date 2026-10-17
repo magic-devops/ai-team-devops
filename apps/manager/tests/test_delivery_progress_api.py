@@ -81,8 +81,9 @@ def test_progress_get_is_pure_and_has_no_manufactured_initial_history(env):
     client, sessions, _ = env
     with sessions() as db:
         # Simulate a pre-existing project whose history predates this feature.
-        db.query(_models()[0]).delete()
+        db.query(_models()[0]).filter_by(tenant_id="tenant", project_id="project").delete()
         db.commit()
+        before = {model: db.query(model).count() for model in (*_models(), DeliveryWorkspace, DeliveryEvent, DeliveryReceipt)}
     response = client.get("/api/v1/delivery/progress")
     assert response.status_code == 200, response.text
     body = response.json()
@@ -94,7 +95,8 @@ def test_progress_get_is_pure_and_has_no_manufactured_initial_history(env):
     assert body["baselines"] == [] and body["baseline"] is None and body["ideal"] == []
     with sessions() as db:
         for model in (*_models(), DeliveryWorkspace, DeliveryEvent, DeliveryReceipt):
-            assert db.query(model).count() == 0
+            assert db.query(model).filter_by(tenant_id="tenant", project_id="project").count() == 0
+            assert db.query(model).count() == before[model]
 
 
 def test_daily_series_selects_latest_actual_observation_and_retains_gaps(env):
@@ -102,7 +104,7 @@ def test_daily_series_selects_latest_actual_observation_and_retains_gaps(env):
     today = datetime.now(timezone.utc).date()
     first = today - timedelta(days=2)
     with sessions() as db:
-        db.query(_models()[0]).delete()
+        db.query(_models()[0]).filter_by(tenant_id="tenant", project_id="project").delete()
         _observe(db, "observation-first", datetime.combine(first, datetime.min.time()), _facts("First"))
         _observe(
             db,

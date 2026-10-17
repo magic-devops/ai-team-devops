@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { appShellApi } from "../lib/appShellApi";
 import { getBusinessCode, getProjectId, getTenantCode, getToken, setWorkspaceScope } from "../lib/authStorage";
+import { portfolioHash, projectWorkspaceHash } from "../lib/projectPortfolioRoute";
 
 type ProjectRow = {
   id: string;
@@ -13,6 +14,7 @@ type ProjectRow = {
   business_code?: string;
   business_name?: string;
   project_code?: string;
+  status: string;
 };
 
 type BusinessRow = {
@@ -51,7 +53,7 @@ export function ProjectSelector() {
   const tenantCode = String(currentProject?.tenant_code || getTenantCode() || me.data?.tenant_slug || me.data?.tenant_id || "").trim();
   const currentBusinessCode = String(currentProject?.business_code || currentProject?.business_id || getBusinessCode() || "").trim();
   const visibleProjects = useMemo(
-    () => projectItems.filter((item) => !currentBusinessCode || item.business_id === currentBusinessCode || item.business_code === currentBusinessCode),
+    () => projectItems.filter((item) => item.status !== "archived" && (!currentBusinessCode || item.business_id === currentBusinessCode || item.business_code === currentBusinessCode)),
     [currentBusinessCode, projectItems],
   );
 
@@ -68,7 +70,8 @@ export function ProjectSelector() {
 
   useEffect(() => {
     if (!authed || projects.isLoading || !projectItems.length) return;
-    const next = currentProject ?? projectItems[0];
+    if (!currentProject) return;
+    const next = currentProject;
     const nextTenantCode = String(next.tenant_code || tenantCode || "").trim();
     const nextBusinessCode = String(next.business_code || next.business_id || "").trim();
     const inSync =
@@ -79,12 +82,15 @@ export function ProjectSelector() {
   }, [authed, currentProject?.id, currentProjectId, projectItems, projects.isLoading, tenantCode]);
 
   const chooseBusiness = (businessCode: string) => {
-    const candidates = projectItems.filter((item) => !businessCode || item.business_id === businessCode || item.business_code === businessCode);
-    syncProjectScope(candidates[0] ?? null, businessCode);
+    syncProjectScope(null, businessCode);
+    window.location.hash = "#/dev-flow?view=overview";
   };
 
   const chooseProject = (projectId: string) => {
-    syncProjectScope(projectItems.find((item) => item.id === projectId) ?? null, currentBusinessCode);
+    const project = projectItems.find((item) => item.id === projectId && item.status !== "archived");
+    if (!project) return;
+    syncProjectScope(project, currentBusinessCode);
+    window.location.hash = projectWorkspaceHash(project.id);
   };
 
   if (!authed) return null;
@@ -122,12 +128,16 @@ export function ProjectSelector() {
         disabled={projects.isLoading}
       >
         <option value="">{t("projectSelector.placeholder")}</option>
+        {currentProjectId && !currentProject ? <option value={currentProjectId} disabled>{t("projectPortfolio.unavailableProject")} · {currentProjectId}</option> : null}
+        {currentProject?.status === "archived" ? <option value={currentProject.id} disabled>{currentProject.name} · {t("projectPortfolio.archivedReadOnly")}</option> : null}
         {visibleProjects.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
           </option>
         ))}
       </select>
+      {projects.isError ? <span role="alert" className="max-w-full text-xs text-[var(--danger)]">{t("projectPortfolio.selectorFailed")}</span> : null}
+      <a className="text-xs text-[var(--brand)]" href={portfolioHash({ statuses: ["archived"], projectId: currentProject?.status === "archived" ? currentProject.id : "" })}>{t("projectPortfolio.viewArchived")}</a>
     </div>
   );
 }

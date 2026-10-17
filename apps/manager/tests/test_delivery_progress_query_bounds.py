@@ -40,7 +40,7 @@ def test_one_day_project_loads_only_daily_latest_snapshot_and_aggregates_lifetim
     today = datetime.now(timezone.utc).date()
     old = today - timedelta(days=500)
     with sessions() as db:
-        db.query(DeliveryProgressObservation).delete()
+        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
         for index in range(250):
             _observe(
                 db,
@@ -76,7 +76,7 @@ def test_named_scope_uses_light_projection_and_last_valid_scope_point_after_dele
         ]
         db.add(DeliveryWorkspace(project_id="project", tenant_id="tenant", data=state, version=0))
         db.commit()
-        db.query(DeliveryProgressObservation).delete()
+        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
         absent = deepcopy(_facts())
         absent["scopes"]["milestones"] = []
         absent["tasks"] = []
@@ -132,7 +132,7 @@ def test_legacy_sprint_reuses_bounded_snapshot_loading_for_long_history(env):
             )
         )
         db.commit()
-        db.query(DeliveryProgressObservation).delete()
+        db.query(DeliveryProgressObservation).filter_by(tenant_id="tenant", project_id="project").delete()
         facts = _facts()
         facts["scopes"]["sprints"] = [
             {

@@ -1,6 +1,8 @@
 """系统页面能力地图：新平台模块、细粒度能力权限与 legacy 能力承接注册表。"""
 from __future__ import annotations
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 import json
 import hashlib
 import gzip
@@ -39,31 +41,26 @@ def _utc_now() -> str:
 
 def _action_runs_file():
     d = resolved_ai_memory_root() / "system-pages-v4"
-    d.mkdir(parents=True, exist_ok=True)
     return d / "module_action_runs.jsonl"
 
 
 def _action_policy_file():
     d = resolved_ai_memory_root() / "system-pages-v4"
-    d.mkdir(parents=True, exist_ok=True)
     return d / "module_action_policy.json"
 
 
 def _action_approvals_file():
     d = resolved_ai_memory_root() / "system-pages-v4"
-    d.mkdir(parents=True, exist_ok=True)
     return d / "module_action_approvals.jsonl"
 
 
 def _isolation_scan_runs_file() -> Path:
     d = resolved_ai_memory_root() / "system-pages-v4"
-    d.mkdir(parents=True, exist_ok=True)
     return d / "isolation_scan_runs.jsonl"
 
 
 def _menu_prefs_dir() -> Path:
     d = resolved_ai_memory_root() / "system-pages-v4" / "menu_prefs"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -105,27 +102,31 @@ def _read_action_policy() -> dict[str, Any]:
 
 
 def _write_action_policy(policy: dict[str, Any]) -> dict[str, Any]:
-    current = _read_action_policy()
-    merged = {**current, **policy, "updated_at": _utc_now()}
-    path = _action_policy_file()
-    path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
-    return merged
+    with project_file_write_scope():
+        current = _read_action_policy()
+        merged = {**current, **policy, "updated_at": _utc_now()}
+        path = _action_policy_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        return merged
 
 
 def _append_action_run(row: dict[str, Any]) -> dict[str, Any]:
-    path = _action_runs_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-    return row
+    with project_file_write_scope():
+        path = _action_runs_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+        return row
 
 
 def _append_approval(row: dict[str, Any]) -> dict[str, Any]:
-    path = _action_approvals_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-    return row
+    with project_file_write_scope():
+        path = _action_approvals_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+        return row
 
 
 def _read_approvals(status: str = "", limit: int = 100) -> list[dict[str, Any]]:
@@ -176,28 +177,30 @@ def _create_approval_request(run: dict[str, Any], *, reason: str) -> dict[str, A
 
 
 def _review_approval(approval_id: str, *, status: str, reviewer: str, note: str = "") -> dict[str, Any] | None:
-    rows = _read_approvals(status="all", limit=500)
-    target: dict[str, Any] | None = None
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if str(row.get("id")) == approval_id:
-            row = {
-                **row,
-                "status": status,
-                "reviewer": reviewer,
-                "review_note": note,
-                "updated_at": _utc_now(),
-            }
-            target = row
-        out.append(row)
-    if target is None:
-        return None
-    path = _action_approvals_file()
-    path.write_text(
-        "".join(json.dumps(row, ensure_ascii=False, default=str) + "\n" for row in sorted(out, key=lambda item: str(item.get("created_at") or ""))),
-        encoding="utf-8",
-    )
-    return target
+    with project_file_write_scope():
+        rows = _read_approvals(status="all", limit=500)
+        target: dict[str, Any] | None = None
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            if str(row.get("id")) == approval_id:
+                row = {
+                    **row,
+                    "status": status,
+                    "reviewer": reviewer,
+                    "review_note": note,
+                    "updated_at": _utc_now(),
+                }
+                target = row
+            out.append(row)
+        if target is None:
+            return None
+        path = _action_approvals_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "".join(json.dumps(row, ensure_ascii=False, default=str) + "\n" for row in sorted(out, key=lambda item: str(item.get("created_at") or ""))),
+            encoding="utf-8",
+        )
+        return target
 
 
 def _risk_level(score: int) -> str:
@@ -3610,9 +3613,11 @@ def _read_isolation_scan_runs(limit: int = 20) -> list[dict[str, Any]]:
 
 
 def _append_isolation_scan_run(run: dict[str, Any]) -> None:
-    path = _isolation_scan_runs_file()
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(run, ensure_ascii=False) + "\n")
+    with project_file_write_scope():
+        path = _isolation_scan_runs_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(run, ensure_ascii=False) + "\n")
 
 
 def _isolation_scan_run_by_id(run_id: str, runs: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
@@ -4766,6 +4771,7 @@ def _write_menu_preferences(user: User, body: MenuPreferencesIn) -> dict[str, An
             current[key] = {str(k): bool(v) for k, v in raw[key].items()}
     current["updated_at"] = _utc_now()
     path = _menu_prefs_file(user)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
     return _menu_preferences_payload(user)
 

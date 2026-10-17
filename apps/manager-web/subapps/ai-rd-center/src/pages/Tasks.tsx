@@ -14,6 +14,8 @@ import { manualTaskHref, taskRecordStatusLabel } from "@/lib/deliveryTaskReview"
 import { safeExecutionReturn } from "@/lib/executionCommands";
 import { DeliveryTaskDetail } from "./delivery/DeliveryTaskDetail";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
+import { ProjectContextGate } from "@/components/ProjectContextGate";
+import { preserveProjectContext } from "@/lib/projectPortfolioRoute";
 
 const STATUSES = ["pending", "in_progress", "blocked", "completed"] as const;
 const PRIORITIES = ["P0", "P1", "P2", "P3"] as const;
@@ -174,7 +176,11 @@ function TaskCard({
   );
 }
 
-export function Tasks({
+type TasksProps = { initialTab?: Tab; focused?: boolean; initialSchedulerPanel?: SchedulerPanel | string };
+export function Tasks(props: TasksProps) {
+  return <ProjectContextGate><ProjectTasks {...props} /></ProjectContextGate>;
+}
+function ProjectTasks({
   initialTab = "list",
   focused = false,
   initialSchedulerPanel = "ops",
@@ -741,7 +747,7 @@ export function Tasks({
   }
   const taskBackground = () => {
     const params = new URLSearchParams(); if (taskQuery) params.set("q", taskQuery); if (statusFilter) params.set("status", statusFilter); if (priorityFilter) params.set("priority", priorityFilter); if (sourceFilter) params.set("source", sourceFilter);
-    return `#/tasks/execution${params.size ? `?${params}` : ""}`;
+    return preserveProjectContext(`#/tasks/execution${params.size ? `?${params}` : ""}`, window.location.hash);
   };
   const tabs: { key: Tab; label: string }[] = [
     { key: "list", label: t("page.tasks.tabList") },

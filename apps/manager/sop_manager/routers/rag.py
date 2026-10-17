@@ -118,8 +118,11 @@ def index(body: IndexIn) -> dict:
     if not emb_out.vectors:
         raise HTTPException(503, "嵌入服务不可用")
     dim = len(emb_out.vectors[0])
-    store.ensure_collection(body.collection, dim)
-    store.upsert(body.collection, flat_docs, emb_out.vectors)
+    from sop_manager.project_write_guard import project_file_write_scope
+
+    with project_file_write_scope():
+        store.ensure_collection(body.collection, dim)
+        store.upsert(body.collection, flat_docs, emb_out.vectors)
     return {"ok": True, "count": len(flat_docs), "dim": dim}
 
 

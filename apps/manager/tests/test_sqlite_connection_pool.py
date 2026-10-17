@@ -5,7 +5,7 @@ from threading import Event
 
 import pytest
 from sop_manager.routers import sql_models
-from sqlalchemy import text
+from sqlalchemy import column, select, table, text, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -25,16 +25,17 @@ def test_file_sqlite_simultaneous_sessions_have_separate_connections(file_engine
 
 
 def test_file_sqlite_reader_cannot_observe_or_rollback_another_request_transaction(file_engine):
+    probe = table("request_probe", column("id"), column("value"))
     with file_engine.begin() as connection:
         connection.execute(text("CREATE TABLE request_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL)"))
         connection.execute(text("INSERT INTO request_probe VALUES (1, 'committed')"))
     with Session(file_engine) as writer:
-        writer.execute(text("UPDATE request_probe SET value='pending' WHERE id=1"))
+        writer.execute(update(probe).where(probe.c.id == 1).values(value="pending"))
         with Session(file_engine) as reader:
-            assert reader.scalar(text("SELECT value FROM request_probe WHERE id=1")) == "committed"
+            assert reader.scalar(select(probe.c.value).where(probe.c.id == 1)) == "committed"
         writer.commit()
     with Session(file_engine) as observer:
-        assert observer.scalar(text("SELECT value FROM request_probe WHERE id=1")) == "pending"
+        assert observer.scalar(select(probe.c.value).where(probe.c.id == 1)) == "pending"
 
 
 def test_file_sqlite_checkout_remains_available_during_overlapping_requests(file_engine):
@@ -73,6 +74,7 @@ def test_memory_sqlite_keeps_shared_connection_and_database_semantics(monkeypatc
             connection.execute(text("CREATE TABLE shared_probe (value TEXT)"))
             connection.execute(text("INSERT INTO shared_probe VALUES ('same database')"))
         with Session(engine) as session:
-            assert session.scalar(text("SELECT value FROM shared_probe")) == "same database"
+            probe = table("shared_probe", column("value"))
+            assert session.scalar(select(probe.c.value)) == "same database"
     finally:
         engine.dispose()

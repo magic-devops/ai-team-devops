@@ -287,3 +287,27 @@ root最终Manager全量 **904通过**（295.54秒），Web全量 **384项/69文�
 证据 `.sop-runtime/delivery-evidence/team-runtime/`：validation/actual-loop/final-http/ui/contract、唯一审查、RED/GREEN与完整日志、原三库before-stage一致备份、截图、源码/证据散列及清理/commit回执。无新schema迁移。阶段全部非忽略改动统一commit，不push；依赖store、凭据、隔离数据库保持忽略。
 
 完整目标继续active，production_integration_complete=false。下一阶段推进项目组合与项目归档治理，再补质量/版本发布、可信CI提交证据、真实部署灰度回滚、问题智能处理与运维闭环、节点内部日志/干预、生产账户/模型及规模验证。参考平台按实际能力吸收，不以本阶段局部交付缩减全链路范围。
+
+## 项目组合与生命周期增量（2026-10-17）
+
+设计 `docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md`，计划 `docs/superpowers/plans/2026-10-17-project-portfolio-lifecycle.md`。SQL Project.status 是唯一当前状态，复用 DeliveryWorkspace.version、Receipt/Event；没有新增 schema 或重复项目实体。普通项目 PATCH、DELETE 和 set-template 写入口退出，配置统一使用固定版本 project.update；状态使用明确目标、理由、预览依据和幂等键的 project.lifecycle。
+
+项目组合按完整授权及筛选范围计算实时有效进度和七类风险，然后分页；风险分类可重叠，总数按对象去重，不按登记完成当已验证。详情提供规范项目定位、精确任务/需求/问题/执行意图入口和真实日期里程碑。归档时点的事实单独保留为历史，每次完整结果进入事件，当前有效验收继续实时核算，不从旧归档数制造成功。
+
+四态按业务能力执行：planning/paused 可维护计划，禁止新的 queue/尚未交接 dispatch；外部 receipt/run 包括 planned 是交接边界，暂停后先恢复已有回执并允许收尾。archived 只读，恢复必须明确选择目标；所有非 CLOSED Manager 意图均阻止归档，包括已失去 Task 的意图。未完成任务仅提示，不自动完成或抹除；归档不撤销独立执行平台权限或终止外部进程。
+
+写入锁序固定 Project→Workspace→实际修改/交接。ORM、可证明有限范围的 typed/Core/bound/batch SQL 共用项目锁；不可变项目归属与主键、无法证明的 SQL、文本 Session、INSERT SELECT、冲突 upsert 和旧 bulk_* 明确拒绝。合法批量使用固定标量 PK 围栏，普通内容表达式保留原领域条件/归属校验。直接 Engine/离线修改不属于应用保护，不添加生产兼容豁免。
+
+已核实的项目文件、配置、模板发布、工作流、记忆与向量实际写段使用可重入短锁，避免持锁跨独立 SQL 会话；默认读取不再建目录或保存初始化值。项目向量克隆只报告实际复制条数，失败返回明确提示，删除未实现的 clone_specs 声明。个人菜单偏好、真实请求/用量审计、租户计费和固定主机市场目录按实际归属区分；它们不被当作项目内容修改。全局身份停用/恢复仍永久作废旧证明，受限 capture 不能借归档权限修改任意业务内容。
+
+组合查看与显式进入分开；业务、项目、任务与返回筛选使用完整上下文。失效或未知项目不再回退首项，切换业务后明确待选项目。详情、配置和生命周期草稿保持固定依据，冲突明确重读并采用，网络未知使用原 key。孤立执行意图可精确查看并取消。三语窄屏、键盘确认、退场身份及不透明详情背景均核验，保持现有主题和组件。
+
+唯一一次独立增量审查发现一项 P1（等锁后使用旧权限）和一项 P2（历史工作流 GET 持久化导致归档读取失败），均修复并独立复验。锁内重读真实 User/成员权限；所有工作流 GET 使用深拷贝期限/恢复投影，不改文件、原 handle 或缓存，已超时的原 pending_phase 保持不变。
+
+root最终Manager完整 **1118通过**（316.30秒），Web完整 **405项/75文件**（44.08秒），SDK/CLI相关 **72项**（3.21秒），TypeScript noEmit与最终生产构建通过（24.44秒）。初次Manager完整1035通过/64失败，包含真实项目fixture缺失、合法有界批量/内容表达式回归及旧文本/移动/删除假设，逐项修复后在最终完整运行消除；初次Web一项旧首项目回退断言按明确选择契约修正。完整运行后仅记忆2个生产模块收口另跑 **15项**（12新增+3既有，4.73秒），RED11失败→GREEN；另有格式后37项回归通过，未冒称最终完整包含新增记忆案例。旧路由193、模型路由53、Copilot/知识图谱12项通过，统计有重叠不相加。修改旧Python文件64个E9/F对比新增0，新Python文件26个全规则0；既有弃用与大包提示留档。
+
+最终记忆公开HTTP验证活动写入200、归档后5类写入409、内容不变且可读；实际公开 HTTP 验证归档/恢复、固定版本冲突、重复请求、规范及旧通道拒绝、暂停不授予执行、有效人工验收保持；此前真实原生 Agent 测试和人审任务仍有效。本阶段外部模型调用为 0。最终只读测量 10 个 GET 前后 28 张 Manager/运行/检查点表散列相同；没有关闭失败请求审计。实际 GUI 完成归档和键盘恢复，跨项目门禁→精确任务→返回原组合筛选，390px 中英日 document/drawer 均390，无横向溢出。
+
+SDK/CLI/OpenAPI 同步：项目 portfolio/detail、固定 lifecycle preview，写入复用原固定版本命令；757处引用及严格无重复 YAML 验证。证据位于 `.sop-runtime/delivery-evidence/project-portfolio/`，包含停止预览后的三库一致备份、实际 HTTP/只读/UI、审查、RED/GREEN/完整日志、源码与证据散列及清理/commit回执。缓存与依赖 store 不提交，阶段全部非忽略源码、测试、契约、文档和记忆统一 commit，不 push。
+
+完整目标继续 active，production_integration_complete=false。下一阶段继续质量与版本发布、可信 CI/提交级证据、实际部署灰度回滚、问题智能处理与运维闭环、节点内部日志/干预、生产账户/模型与规模验证；不以本阶段项目管理交付缩减用户全链路要求。

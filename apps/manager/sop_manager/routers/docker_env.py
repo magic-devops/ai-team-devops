@@ -54,6 +54,8 @@ from pydantic import BaseModel, Field
 
 from sop_manager.path_config import resolved_ai_memory_root, resolved_project_path, sop_ops_dir
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 router = APIRouter(prefix="/api/v1/env", tags=["env"])
 
 _COMPOSE_MAX_BYTES = 512 * 1024
@@ -201,8 +203,9 @@ def _compose_manifest_load() -> Dict[str, Any]:
 
 
 def _compose_manifest_save(data: Dict[str, Any]) -> None:
-    _path_compose_managed_root().mkdir(parents=True, exist_ok=True)
-    (_path_compose_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        _path_compose_managed_root().mkdir(parents=True, exist_ok=True)
+        (_path_compose_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _compose_store_dir(sid: str) -> Path:
@@ -285,8 +288,9 @@ def _managed_manifest_load() -> Dict[str, Any]:
 
 
 def _managed_manifest_save(data: Dict[str, Any]) -> None:
-    _path_docker_managed_root().mkdir(parents=True, exist_ok=True)
-    (_path_docker_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        _path_docker_managed_root().mkdir(parents=True, exist_ok=True)
+        (_path_docker_managed_root() / "manifest.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _managed_store_dir(sid: str) -> Path:
@@ -407,8 +411,9 @@ def _load_pins() -> Dict[str, Any]:
 
 
 def _save_pins(d: Dict[str, Any]) -> None:
-    _path_version_pins().parent.mkdir(parents=True, exist_ok=True)
-    _path_version_pins().write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        _path_version_pins().parent.mkdir(parents=True, exist_ok=True)
+        _path_version_pins().write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_custom_catalog() -> List[Dict[str, Any]]:
@@ -422,8 +427,9 @@ def _load_custom_catalog() -> List[Dict[str, Any]]:
 
 
 def _save_custom_catalog(items: List[Dict[str, Any]]) -> None:
-    _path_env_custom_checks().parent.mkdir(parents=True, exist_ok=True)
-    _path_env_custom_checks().write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    with project_file_write_scope():
+        _path_env_custom_checks().parent.mkdir(parents=True, exist_ok=True)
+        _path_env_custom_checks().write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _load_docker_custom_presets() -> List[Dict[str, Any]]:
@@ -438,10 +444,11 @@ def _load_docker_custom_presets() -> List[Dict[str, Any]]:
 
 
 def _save_docker_custom_presets(items: List[Dict[str, Any]]) -> None:
-    _path_docker_custom_presets().parent.mkdir(parents=True, exist_ok=True)
-    _path_docker_custom_presets().write_text(
-        json.dumps({"presets": items}, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    with project_file_write_scope():
+        _path_docker_custom_presets().parent.mkdir(parents=True, exist_ok=True)
+        _path_docker_custom_presets().write_text(
+            json.dumps({"presets": items}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 def _parse_mm(text: str) -> Optional[tuple]:
@@ -724,22 +731,23 @@ def put_version_pins(body: VersionPinsBody):
 
 @router.post("/exec-allowlist/append")
 def append_exec_allowlist(body: ExecAllowlistAppendBody):
-    b = body.binary.strip()
-    if not re.match(r"^[a-zA-Z0-9._-]{1,48}$", b):
-        raise HTTPException(400, "binary 格式非法")
-    extra: List[str] = []
-    if _path_exec_allow_extra().exists():
-        try:
-            x = json.loads(_path_exec_allow_extra().read_text(encoding="utf-8"))
-            if isinstance(x, list):
-                extra = [str(s) for s in x if isinstance(s, str)]
-        except Exception:
-            extra = []
-    if b not in extra:
-        extra.append(b)
-    _path_exec_allow_extra().parent.mkdir(parents=True, exist_ok=True)
-    _path_exec_allow_extra().write_text(json.dumps(extra, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "extra": extra}
+    with project_file_write_scope():
+        b = body.binary.strip()
+        if not re.match(r"^[a-zA-Z0-9._-]{1,48}$", b):
+            raise HTTPException(400, "binary 格式非法")
+        extra: List[str] = []
+        if _path_exec_allow_extra().exists():
+            try:
+                x = json.loads(_path_exec_allow_extra().read_text(encoding="utf-8"))
+                if isinstance(x, list):
+                    extra = [str(s) for s in x if isinstance(s, str)]
+            except Exception:
+                extra = []
+        if b not in extra:
+            extra.append(b)
+        _path_exec_allow_extra().parent.mkdir(parents=True, exist_ok=True)
+        _path_exec_allow_extra().write_text(json.dumps(extra, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "extra": extra}
 
 
 @router.post("/ai-plan")
@@ -1532,63 +1540,66 @@ def managed_dockerfiles_get(store_id: str, version: Optional[int] = Query(None, 
 
 @router.post("/docker/managed-dockerfiles")
 def managed_dockerfiles_create(body: ManagedDockerfileCreate):
-    nm = body.name.strip().lower()
-    if not _MANAGED_NAME_RE.match(nm):
-        raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
-    man = _managed_manifest_load()
-    stores = list(man.get("stores") or [])
-    if any(str(s.get("name")) == nm for s in stores):
-        raise HTTPException(400, "name 已存在")
-    sid = f"mf-{uuid.uuid4().hex[:10]}"
-    root = _managed_store_dir(sid)
-    root.mkdir(parents=True, exist_ok=True)
-    vdir = root / "v1"
-    vdir.mkdir(parents=True, exist_ok=True)
-    (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
-    ts = _utc_now()
-    stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
-    man["stores"] = stores
-    _managed_manifest_save(man)
-    return {"ok": True, "id": sid, "version": 1, "dockerfile_param": f"managed:{sid}"}
+    with project_file_write_scope():
+        nm = body.name.strip().lower()
+        if not _MANAGED_NAME_RE.match(nm):
+            raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
+        man = _managed_manifest_load()
+        stores = list(man.get("stores") or [])
+        if any(str(s.get("name")) == nm for s in stores):
+            raise HTTPException(400, "name 已存在")
+        sid = f"mf-{uuid.uuid4().hex[:10]}"
+        root = _managed_store_dir(sid)
+        root.mkdir(parents=True, exist_ok=True)
+        vdir = root / "v1"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+        ts = _utc_now()
+        stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
+        man["stores"] = stores
+        _managed_manifest_save(man)
+        return {"ok": True, "id": sid, "version": 1, "dockerfile_param": f"managed:{sid}"}
 
 
 @router.put("/docker/managed-dockerfiles/{store_id}")
 def managed_dockerfiles_update(store_id: str, body: ManagedDockerfileUpdate):
-    sid = (store_id or "").strip()
-    _managed_store_dir(sid)
-    man = _managed_manifest_load()
-    stores = list(man.get("stores") or [])
-    idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
-    if idx < 0:
-        raise HTTPException(404, "未找到")
-    cur = max(1, int(stores[idx].get("latest") or 1))
-    if body.bump_version:
-        nxt = cur + 1
-        vdir = _managed_store_dir(sid) / f"v{nxt}"
-        vdir.mkdir(parents=True, exist_ok=True)
-        (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
-        stores[idx]["latest"] = nxt
-    else:
-        vdir = _managed_store_dir(sid) / f"v{cur}"
-        vdir.mkdir(parents=True, exist_ok=True)
-        (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
-    stores[idx]["updated_at"] = _utc_now()
-    man["stores"] = stores
-    _managed_manifest_save(man)
-    return {"ok": True, "latest": stores[idx]["latest"]}
+    with project_file_write_scope():
+        sid = (store_id or "").strip()
+        _managed_store_dir(sid)
+        man = _managed_manifest_load()
+        stores = list(man.get("stores") or [])
+        idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
+        if idx < 0:
+            raise HTTPException(404, "未找到")
+        cur = max(1, int(stores[idx].get("latest") or 1))
+        if body.bump_version:
+            nxt = cur + 1
+            vdir = _managed_store_dir(sid) / f"v{nxt}"
+            vdir.mkdir(parents=True, exist_ok=True)
+            (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+            stores[idx]["latest"] = nxt
+        else:
+            vdir = _managed_store_dir(sid) / f"v{cur}"
+            vdir.mkdir(parents=True, exist_ok=True)
+            (vdir / "Dockerfile").write_text(body.content, encoding="utf-8")
+        stores[idx]["updated_at"] = _utc_now()
+        man["stores"] = stores
+        _managed_manifest_save(man)
+        return {"ok": True, "latest": stores[idx]["latest"]}
 
 
 @router.delete("/docker/managed-dockerfiles/{store_id}")
 def managed_dockerfiles_delete(store_id: str):
-    sid = (store_id or "").strip()
-    root = _managed_store_dir(sid)
-    if not root.is_dir():
-        raise HTTPException(404, "未找到")
-    shutil.rmtree(root, ignore_errors=True)
-    man = _managed_manifest_load()
-    man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
-    _managed_manifest_save(man)
-    return {"ok": True}
+    with project_file_write_scope():
+        sid = (store_id or "").strip()
+        root = _managed_store_dir(sid)
+        if not root.is_dir():
+            raise HTTPException(404, "未找到")
+        shutil.rmtree(root, ignore_errors=True)
+        man = _managed_manifest_load()
+        man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
+        _managed_manifest_save(man)
+        return {"ok": True}
 
 
 def _read_upload_text_limited(file: UploadFile, max_bytes: int) -> str:
@@ -1634,63 +1645,66 @@ def managed_compose_get(store_id: str, version: Optional[int] = Query(None, ge=1
 
 @router.post("/docker/managed-compose")
 def managed_compose_create(body: ManagedComposeCreate):
-    nm = body.name.strip().lower()
-    if not _MANAGED_NAME_RE.match(nm):
-        raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
-    man = _compose_manifest_load()
-    stores = list(man.get("stores") or [])
-    if any(str(s.get("name")) == nm for s in stores):
-        raise HTTPException(400, "name 已存在")
-    sid = f"cf-{uuid.uuid4().hex[:10]}"
-    root = _compose_store_dir(sid)
-    root.mkdir(parents=True, exist_ok=True)
-    vdir = root / "v1"
-    vdir.mkdir(parents=True, exist_ok=True)
-    (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
-    ts = _utc_now()
-    stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
-    man["stores"] = stores
-    _compose_manifest_save(man)
-    return {"ok": True, "id": sid, "version": 1, "compose_file_param": f"managed:{sid}"}
+    with project_file_write_scope():
+        nm = body.name.strip().lower()
+        if not _MANAGED_NAME_RE.match(nm):
+            raise HTTPException(400, "name 须为小写字母开头，仅 a-z0-9_-")
+        man = _compose_manifest_load()
+        stores = list(man.get("stores") or [])
+        if any(str(s.get("name")) == nm for s in stores):
+            raise HTTPException(400, "name 已存在")
+        sid = f"cf-{uuid.uuid4().hex[:10]}"
+        root = _compose_store_dir(sid)
+        root.mkdir(parents=True, exist_ok=True)
+        vdir = root / "v1"
+        vdir.mkdir(parents=True, exist_ok=True)
+        (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+        ts = _utc_now()
+        stores.append({"id": sid, "name": nm, "latest": 1, "created_at": ts, "updated_at": ts})
+        man["stores"] = stores
+        _compose_manifest_save(man)
+        return {"ok": True, "id": sid, "version": 1, "compose_file_param": f"managed:{sid}"}
 
 
 @router.put("/docker/managed-compose/{store_id}")
 def managed_compose_update(store_id: str, body: ManagedComposeUpdate):
-    sid = (store_id or "").strip()
-    _compose_store_dir(sid)
-    man = _compose_manifest_load()
-    stores = list(man.get("stores") or [])
-    idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
-    if idx < 0:
-        raise HTTPException(404, "未找到")
-    cur = max(1, int(stores[idx].get("latest") or 1))
-    if body.bump_version:
-        nxt = cur + 1
-        vdir = _compose_store_dir(sid) / f"v{nxt}"
-        vdir.mkdir(parents=True, exist_ok=True)
-        (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
-        stores[idx]["latest"] = nxt
-    else:
-        vdir = _compose_store_dir(sid) / f"v{cur}"
-        vdir.mkdir(parents=True, exist_ok=True)
-        (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
-    stores[idx]["updated_at"] = _utc_now()
-    man["stores"] = stores
-    _compose_manifest_save(man)
-    return {"ok": True, "latest": stores[idx]["latest"]}
+    with project_file_write_scope():
+        sid = (store_id or "").strip()
+        _compose_store_dir(sid)
+        man = _compose_manifest_load()
+        stores = list(man.get("stores") or [])
+        idx = next((i for i, s in enumerate(stores) if str(s.get("id")) == sid), -1)
+        if idx < 0:
+            raise HTTPException(404, "未找到")
+        cur = max(1, int(stores[idx].get("latest") or 1))
+        if body.bump_version:
+            nxt = cur + 1
+            vdir = _compose_store_dir(sid) / f"v{nxt}"
+            vdir.mkdir(parents=True, exist_ok=True)
+            (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+            stores[idx]["latest"] = nxt
+        else:
+            vdir = _compose_store_dir(sid) / f"v{cur}"
+            vdir.mkdir(parents=True, exist_ok=True)
+            (vdir / "compose.yaml").write_text(body.content, encoding="utf-8")
+        stores[idx]["updated_at"] = _utc_now()
+        man["stores"] = stores
+        _compose_manifest_save(man)
+        return {"ok": True, "latest": stores[idx]["latest"]}
 
 
 @router.delete("/docker/managed-compose/{store_id}")
 def managed_compose_delete(store_id: str):
-    sid = (store_id or "").strip()
-    root = _compose_store_dir(sid)
-    if not root.is_dir():
-        raise HTTPException(404, "未找到")
-    shutil.rmtree(root, ignore_errors=True)
-    man = _compose_manifest_load()
-    man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
-    _compose_manifest_save(man)
-    return {"ok": True}
+    with project_file_write_scope():
+        sid = (store_id or "").strip()
+        root = _compose_store_dir(sid)
+        if not root.is_dir():
+            raise HTTPException(404, "未找到")
+        shutil.rmtree(root, ignore_errors=True)
+        man = _compose_manifest_load()
+        man["stores"] = [s for s in (man.get("stores") or []) if str(s.get("id")) != sid]
+        _compose_manifest_save(man)
+        return {"ok": True}
 
 
 @router.post("/docker/managed-compose/{store_id}/upload")

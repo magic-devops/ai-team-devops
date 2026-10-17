@@ -11,7 +11,7 @@ from sop_manager.routers import workflow
 
 
 @pytest.fixture
-def scoped_engine(tmp_path, monkeypatch):
+def scoped_engine(tmp_path, monkeypatch, isolated_project_sql):
     tokens = set_request_scope("tenant", "project", tmp_path)
     monkeypatch.setattr(workflow, "resolved_ai_memory_root", lambda: tmp_path)
     engine = workflow._InMemoryEngine()
@@ -106,7 +106,8 @@ def test_journal_recovers_waiting_review_and_scopes_same_id(scoped_engine, tmp_p
         restored = await restarted.describe("shared-id")
         assert restored.status == "timeout_pending"
         await restarted.signal("shared-id", "request_changes", {"comment": "Add regression coverage", "actor_id": "reviewer"})
-        assert restored.result["human_decision"] == "request_changes"
+        assert restored.result["human_decision"] is None
+        assert (await restarted.describe("shared-id")).result["human_decision"] == "request_changes"
         tokens = set_request_scope("foreign", "other", tmp_path)
         try:
             with pytest.raises(HTTPException) as error:

@@ -281,6 +281,7 @@ export type DeliveryWorkspace = {
   executions?: DeliveryExecution[];
 };
 export type DeliveryAction =
+  | "project.lifecycle"
   | "project.update"
   | "progress.record"
   | "baseline.create"

@@ -26,6 +26,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import nullcontext
 import json
 import logging
 import os
@@ -41,6 +42,9 @@ from typing import Any, Optional
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from sop_manager.path_config import resolved_project_path
+from sop_manager.project_write_guard import project_file_write_scope
 
 _log = logging.getLogger("sop.marketplace")
 router = APIRouter(prefix="/api/v1/marketplace", tags=["marketplace"])
@@ -418,57 +422,56 @@ def install(body: InstallIn) -> dict[str, Any]:
         raise HTTPException(404, "package not found")
     if body.version and body.version != pkg.version:
         raise HTTPException(409, f"only latest ({pkg.version}) currently available")
-    target = Path(body.target_dir or _INSTALL_DIR / pkg.name)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        shutil.rmtree(target)
-
-    if not pkg.repo:
-        if pkg.registry.startswith("builtin://"):
-            _write_builtin_package(pkg, target)
+    target = Path(os.path.abspath(Path(body.target_dir or _INSTALL_DIR / pkg.name).expanduser()))
+    project_root = resolved_project_path().resolve()
+    project_target = bool(body.target_dir) and (
+        target.is_relative_to(project_root) or target.resolve().is_relative_to(project_root)
+    )
+    # The process-wide catalogue/ratings are global. Only an explicit destination
+    # in the selected project publishes project business assets.
+    with tempfile.TemporaryDirectory(prefix="marketplace-stage-") as tmp:
+        staged = Path(tmp) / "package"
+        if not pkg.repo:
+            if not pkg.registry.startswith("builtin://"):
+                raise HTTPException(400, "package 缺少 repo 字段（无法下载）")
+            _write_builtin_package(pkg, staged)
         else:
-            raise HTTPException(400, "package 缺少 repo 字段（无法下载）")
-    else:
-        with tempfile.TemporaryDirectory() as tmp:
             rc = subprocess.call(
-                ["git", "clone", "--depth", "1", "--branch", "v" + pkg.version, pkg.repo, tmp],
+                ["git", "clone", "--depth", "1", "--branch", "v" + pkg.version, pkg.repo, str(staged)],
                 stdout=subprocess.DEVNULL,
             )
             if rc != 0:
-                # 尝试 main 分支
-                shutil.rmtree(tmp, ignore_errors=True)
-                os.makedirs(tmp, exist_ok=True)
-                rc = subprocess.call(["git", "clone", "--depth", "1", pkg.repo, tmp],
-                                     stdout=subprocess.DEVNULL)
+                if staged.exists():
+                    shutil.rmtree(staged)
+                rc = subprocess.call(["git", "clone", "--depth", "1", pkg.repo, str(staged)], stdout=subprocess.DEVNULL)
                 if rc != 0:
                     raise HTTPException(502, "git clone 失败")
-
-            # 签名校验：sha256 over 所有 files 的连接
             if body.verify_signature and pkg.signature.get("alg") == "sha256":
-                digest = _sha256_of_files(Path(tmp), pkg.files)
-                expect = pkg.signature.get("digest", "")
-                if expect and digest != expect:
-                    raise HTTPException(400, f"签名不匹配 expected={expect} got={digest}")
+                digest = _sha256_of_files(staged, pkg.files)
+                expected = pkg.signature.get("digest", "")
+                if expected and digest != expected:
+                    raise HTTPException(400, f"签名不匹配 expected={expected} got={digest}")
+        return _publish_package(pkg, staged, target, project_target=project_target)
 
-            shutil.copytree(tmp, target, dirs_exist_ok=True)
 
-    # 写入安装记录
-    record = {
-        "name": pkg.name, "version": pkg.version, "type": pkg.type,
-        "installed_at": time.time(), "target": str(target),
-        "registry": pkg.registry, "signature_status": _signature_status(pkg),
-    }
-    rec_path = _INSTALL_DIR / "_installed.json"
-    rec_path.parent.mkdir(parents=True, exist_ok=True)
-    existing = []
-    if rec_path.exists():
-        try:
-            existing = json.loads(rec_path.read_text(encoding="utf-8"))
-        except Exception:
-            existing = []
-    existing = [r for r in existing if r["name"] != pkg.name] + [record]
-    rec_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
-
+def _publish_package(pkg: Package, staged: Path, target: Path, *, project_target: bool) -> dict[str, Any]:
+    with project_file_write_scope() if project_target else nullcontext():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.is_symlink():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(staged, target)
+        record = {
+            "name": pkg.name, "version": pkg.version, "type": pkg.type,
+            "installed_at": time.time(), "target": str(target),
+            "registry": pkg.registry, "signature_status": _signature_status(pkg),
+        }
+        rec_path = _INSTALL_DIR / "_installed.json"
+        rec_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = _installed_records()
+        existing = [item for item in existing if item["name"] != pkg.name] + [record]
+        rec_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
     return record
 
 

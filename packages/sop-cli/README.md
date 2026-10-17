@@ -118,6 +118,28 @@ sop ops health              # health-check.sh
 sop ops stack doctor        # 本地栈 + sop doctor
 ```
 
+## 项目组合、归档与恢复
+
+```bash
+sop project portfolio --status active --status paused --risk blocked --limit 30 --json
+sop project portfolio --query "项目名称或ID" --risk recorded_completed --json
+sop delivery lifecycle-preview --target archived --reason "阶段交付结束，保留资料与验收历史"
+```
+
+组合读取不会切换当前工作项目。`summary_scope=filtered_projects` 的统计来自完整筛选结果，`next_cursor` 用 `--cursor` 原样续读，并保持原筛选条件；不是只统计当前页。风险分类可重叠，`total_items` 按实体去重；登记完成不等于已验证完成。全部项目状态都显示实时 `live` 事实，归档时点记录单独保存在详情来源中。
+
+预览后审阅全部阻止项，将输出的 `version`、`target_status`、`reason`、`preview_basis` 与一次生成的幂等键写入 JSON 文件，然后提交：
+
+```bash
+sop delivery command --file .sop-runtime/lifecycle-command.json
+```
+
+文件顶层必须是 `action/payload/expected_version/idempotency_key`，其中 `action` 为 `project.lifecycle`，`payload` 为预览的 `target_status/reason/preview_basis`。完整保存示例见 [SDK 生命周期说明](../sop-sdk-python/README.md#项目组合与生命周期)。网络结果未知时重试同一文件；收到 `409` 后明确审阅新事实，采用新预览并生成新请求，不能自动替换版本或依据。
+
+只有 `active` 可以创建新执行。`planning/paused` 允许业务维护以及已交接执行的同步、人工验收和取消；已提交的 Hermes receipt/run（含 `planned`）算已交接。归档会阻止所有尚未关闭的 Manager 执行意图，包括任务已删除的意图；未完成任务只作为警示。归档后业务只读；恢复使用新的固定预览并明确选择 `planning/active/paused`，不隐式恢复历史状态。归档不撤销独立 Hermes 权限，也不停止外部进程。
+
+项目配置统一通过 `project.update` 固定版本命令。原项目 PATCH、物理 DELETE、set-template 入口已移除；配置写入需要权限，状态只能走 `project.lifecycle`。创建项目初态限 `planning/active/paused`。
+
 ## 数据平面与向量后端
 
 CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECTOR_DB_TYPE`、`DATABASE_URL` 等）。  
@@ -131,6 +153,8 @@ CLI / Agent 与具体向量实现解耦；由 Manager 环境变量控制（`VECT
 | `sop register` | 一键初始化、注册 Manager、生成各 CLI/IDE/Agent 接入配置并刷新 Agent 上下文 |
 | `sop login`   | 用户名密码登录 / OAuth 配对 |
 | `sop status`  | 本地 + Manager 状态总览；支持 `--json/--out` 输出 Agent 健康快照 |
+| `sop project portfolio` | 完整筛选范围的实时项目事实、风险与游标分页；查看不切换工作项目 |
+| `sop delivery lifecycle-preview` / `command` | 固定项目状态预览与 CAS/幂等提交；归档/显式恢复使用同一命令协议 |
 | `sop agentd`  | 守护进程：start/stop/status/logs/install |
 | `sop requirement` | 需求：list/create/update/delete；Manager 不可用时写本地离线队列 |
 | `sop issue`   | 问题/缺陷：list/create/update/resolve/delete；支持本地离线队列 |

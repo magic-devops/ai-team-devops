@@ -1,4 +1,4 @@
-import { clearSession, getSessionRevision, getToken, getWorkspaceScope, setUserSession, setWorkspaceScope, type SessionPayload } from "./authStorage";
+import { clearSession, getSessionRevision, getToken, getWorkspaceScope, setUserSession, type SessionPayload } from "./authStorage";
 
 export const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
@@ -29,14 +29,6 @@ function authHeaders(context: SessionContext): Record<string, string> {
   return h;
 }
 
-function isMissingProjectScopeError(status: number, body: string) {
-  return status === 400 && (
-    body.includes("X-Project-Id") ||
-    body.includes("绑定同步分区") ||
-    body.includes("绑定项目作用域")
-  );
-}
-
 function isSessionUnauthorized(status: number, body: string) {
   return status === 401 && (
     body.includes("Token 已过期") ||
@@ -61,31 +53,6 @@ function redirectToLogin() {
   if (window.location.pathname.endsWith("/login.html")) return;
   const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
   window.location.replace(`/login.html?redirect=${encodeURIComponent(redirect)}`);
-}
-
-async function bindDefaultProjectScope(context: SessionContext): Promise<SessionContext | null> {
-  assertCurrent(context);
-  if (context.scope.projectId || !context.token) return null;
-  const r = await fetch(API_BASE + "/api/v1/projects", { headers: authHeaders(context) });
-  assertCurrent(context);
-  if (!r.ok) return null;
-  const projects = await r.json().catch(() => []) as Array<{
-    id?: string;
-    tenant_code?: string;
-    business_code?: string;
-    business_id?: string;
-    project_code?: string;
-  }>;
-  assertCurrent(context);
-  const first = Array.isArray(projects) ? projects.find((item) => item?.id) : undefined;
-  if (!first?.id) return null;
-  setWorkspaceScope({
-    tenantCode: first.tenant_code || null,
-    businessCode: first.business_code || first.business_id || null,
-    projectId: first.id,
-    projectCode: first.project_code || first.id,
-  });
-  return sessionContext();
 }
 
 const sessionHydrations = new Map<string, Promise<SessionContext>>();
@@ -113,7 +80,7 @@ async function hydrateSessionScope(context: SessionContext): Promise<SessionCont
       const data = await r.json().catch(() => null) as SessionPayload | null;
       assertCurrent(context);
       if (!data) return context;
-      setUserSession(data);
+      setUserSession(data, { preserveWorkspace: true });
       return sessionContext();
     })().finally(() => {
       if (sessionHydrations.get(key) === hydration) sessionHydrations.delete(key);
@@ -123,11 +90,11 @@ async function hydrateSessionScope(context: SessionContext): Promise<SessionCont
   return hydration;
 }
 
-export async function request<T>(path: string, init?: RequestInit, retriedProjectScope = false): Promise<T> {
-  return requestInSession<T>(path, init, sessionContext(), retriedProjectScope);
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return requestInSession<T>(path, init, sessionContext());
 }
 
-async function requestInSession<T>(path: string, init: RequestInit | undefined, context: SessionContext, retriedProjectScope: boolean): Promise<T> {
+async function requestInSession<T>(path: string, init: RequestInit | undefined, context: SessionContext): Promise<T> {
   if (!path.startsWith("/api/v1/auth/") && context.token && !context.scope.projectId) {
     context = await hydrateSessionScope(context);
   }
@@ -148,10 +115,6 @@ async function requestInSession<T>(path: string, init: RequestInit | undefined, 
     const shouldRedirectLogin = usesCurrentToken && isAuthProbePath(path) && isSessionUnauthorized(r.status, txt);
     if (usesCurrentToken) clearStaleSessionOnUnauthorized(context, path, r.status, txt);
     if (shouldRedirectLogin) redirectToLogin();
-    if (!retriedProjectScope && path !== "/api/v1/projects" && isMissingProjectScopeError(r.status, txt)) {
-      const bound = await bindDefaultProjectScope(context);
-      if (bound) return requestInSession<T>(path, init, bound, true);
-    }
     throw new Error(`HTTP ${r.status}: ${txt}`);
   }
   const data = await r.json() as T;

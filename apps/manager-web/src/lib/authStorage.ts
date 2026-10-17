@@ -6,6 +6,7 @@ export const BUSINESS_CODE_KEY = "sop-current-business-code";
 export const PROJECT_CODE_KEY = "sop-current-project-code";
 export const USER_KEY = "sop-user";
 const SESSION_REVISION_KEY = "sop-session-revision";
+const WORKSPACE_CHOICE_KEY = "sop-workspace-choice";
 
 export type WorkspaceScope = {
   tenantCode?: string | null;
@@ -133,7 +134,12 @@ function setOrRemove(key: string, value: string | null | undefined): boolean {
   }
 }
 
-export function setWorkspaceScope(scope: WorkspaceScope) {
+export function hasExplicitWorkspaceSelection() {
+  return getStoredValue(WORKSPACE_CHOICE_KEY) === "explicit";
+}
+
+export function setWorkspaceScope(scope: WorkspaceScope, options: { explicit?: boolean } = {}) {
+  if (options.explicit !== false) localStorage.setItem(WORKSPACE_CHOICE_KEY, "explicit");
   let changed = false;
   if ("tenantCode" in scope) changed = setOrRemove(TENANT_CODE_KEY, scope.tenantCode) || changed;
   if ("businessCode" in scope) changed = setOrRemove(BUSINESS_CODE_KEY, scope.businessCode) || changed;
@@ -152,6 +158,7 @@ export function setProjectId(projectId: string | null) {
 
 export function setSession(token: string, projectId: string | null | undefined, tenantCode?: string | null) {
   try {
+    localStorage.removeItem(WORKSPACE_CHOICE_KEY);
     localStorage.setItem(TOKEN_KEY, token);
     renewSessionRevision();
     const scope: WorkspaceScope = {
@@ -159,7 +166,7 @@ export function setSession(token: string, projectId: string | null | undefined, 
       projectCode: projectId ? String(projectId) : null,
     };
     if (tenantCode !== undefined) scope.tenantCode = tenantCode;
-    setWorkspaceScope(scope);
+    setWorkspaceScope(scope, { explicit: false });
     notifySession();
   } catch {
     notifySession();
@@ -187,14 +194,14 @@ export function setUserSession(payload: SessionPayload, options: { preserveWorks
         session_status: payload.session_status || "active",
       }));
     }
-    if (!options.preserveWorkspace || !getProjectId()) {
+    if (!options.preserveWorkspace || (!getProjectId() && !hasExplicitWorkspaceSelection())) {
       const ws = payload.workspace_scope || {};
       setWorkspaceScope({
         tenantCode: ws.tenant_code || payload.tenant_code || payload.tenant_slug || payload.tenant_id || null,
         businessCode: ws.business_code || payload.default_business_code || null,
         projectId: ws.project_id || payload.default_project_id || null,
         projectCode: ws.project_code || payload.default_project_code || ws.project_id || payload.default_project_id || null,
-      });
+      }, { explicit: false });
     }
     if (token) notifySession();
   } catch {
@@ -210,5 +217,6 @@ export function clearSession() {
   localStorage.removeItem(TENANT_CODE_KEY);
   localStorage.removeItem(BUSINESS_CODE_KEY);
   localStorage.removeItem(PROJECT_CODE_KEY);
+  localStorage.removeItem(WORKSPACE_CHOICE_KEY);
   notifySession();
 }

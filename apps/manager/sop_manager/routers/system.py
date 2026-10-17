@@ -1,4 +1,5 @@
 """系统管理：脚本、配置、记忆、SOP 文档、工作区上下文与产出物书签"""
+from sop_manager.project_write_guard import project_file_write_scope
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -158,13 +159,14 @@ class ScriptUpdate(BaseModel):
 
 @router.put("/scripts/{name}")
 def update_script(name: str, body: ScriptUpdate):
-    tools_dir = _try_sop_ops()
-    if tools_dir is None:
-        raise HTTPException(503, "ai-sop-ops 未就绪")
-    f = (tools_dir / name).resolve()
-    if not str(f).startswith(str(tools_dir.resolve())):
-        raise HTTPException(403, "Access denied")
-    f.write_text(body.content); return {"ok": True}
+    with project_file_write_scope():
+        tools_dir = _try_sop_ops()
+        if tools_dir is None:
+            raise HTTPException(503, "ai-sop-ops 未就绪")
+        f = (tools_dir / name).resolve()
+        if not str(f).startswith(str(tools_dir.resolve())):
+            raise HTTPException(403, "Access denied")
+        f.write_text(body.content); return {"ok": True}
 
 @router.post("/scripts/{name}/run")
 def run_script(name: str):
@@ -197,10 +199,11 @@ def get_config():
 
 @router.patch("/config/claude")
 def update_claude_config(body: dict):
-    f = resolved_project_path() / ".claude" / "settings.json"
-    if not f.exists(): raise HTTPException(404, "settings.json not found")
-    cfg = json.loads(f.read_text()); cfg.update(body)
-    f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False)); return {"ok": True}
+    with project_file_write_scope():
+        f = resolved_project_path() / ".claude" / "settings.json"
+        if not f.exists(): raise HTTPException(404, "settings.json not found")
+        cfg = json.loads(f.read_text()); cfg.update(body)
+        f.write_text(json.dumps(cfg, indent=2, ensure_ascii=False)); return {"ok": True}
 
 # ── 记忆管理 ──────────────────────────────────────────────────────
 @router.get("/memory")
@@ -225,9 +228,10 @@ def get_rule_file(filename: str):
 
 @router.delete("/memory/snapshots/{filename}")
 def delete_snapshot(filename: str):
-    f = resolved_project_path() / "memory" / "snapshots" / filename
-    if f.exists(): f.unlink()
-    return {"ok": True}
+    with project_file_write_scope():
+        f = resolved_project_path() / "memory" / "snapshots" / filename
+        if f.exists(): f.unlink()
+        return {"ok": True}
 
 @router.get("/memory/lancedb/{table}/stats")
 def table_stats(table: str):
@@ -253,10 +257,11 @@ def _load_workspace_artifacts() -> List[Dict[str, Any]]:
 
 
 def _save_workspace_artifacts(items: List[Dict[str, Any]]) -> None:
-    _workspace_artifacts_path().parent.mkdir(parents=True, exist_ok=True)
-    _workspace_artifacts_path().write_text(
-        json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    with project_file_write_scope():
+        _workspace_artifacts_path().parent.mkdir(parents=True, exist_ok=True)
+        _workspace_artifacts_path().write_text(
+            json.dumps({"items": items}, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 def _safe_rel_under_project(rel: str) -> Path:
@@ -408,14 +413,15 @@ def _load_release() -> Dict[str, Any]:
 
 
 def _save_release(display_version: str, notes: str) -> Dict[str, Any]:
-    row = {
-        "displayVersion": display_version.strip()[:64],
-        "notes": (notes or "")[:2000],
-        "updatedAt": _utc_iso(),
-    }
-    _admin_release_path().parent.mkdir(parents=True, exist_ok=True)
-    _admin_release_path().write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
-    return row
+    with project_file_write_scope():
+        row = {
+            "displayVersion": display_version.strip()[:64],
+            "notes": (notes or "")[:2000],
+            "updatedAt": _utc_iso(),
+        }
+        _admin_release_path().parent.mkdir(parents=True, exist_ok=True)
+        _admin_release_path().write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
+        return row
 
 
 class AdminReleasePut(BaseModel):
@@ -471,7 +477,6 @@ class BackupCreateBody(BaseModel):
 @router.get("/backups")
 def backups_list():
     """列出运行时 ai-memory/admin_backups 下由本接口生成的 tar.gz。"""
-    _backup_dir().mkdir(parents=True, exist_ok=True)
     items: List[Dict[str, Any]] = []
     root = _backup_dir().resolve()
     for f in sorted(_backup_dir().glob("backup-*.tar.gz"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -494,38 +499,39 @@ def backups_list():
 @router.post("/backups")
 def backup_create(body: BackupCreateBody):
     """打包备份：admin_state=运行时 ai-memory 内配置与托管 Dockerfile 等（跳过大库表目录）；manager_web=apps/manager-web 前端（跳过 node_modules）。"""
-    prof = (body.profile or "admin_state").strip().lower()
-    if prof not in ("admin_state", "manager_web"):
-        raise HTTPException(400, "profile 仅支持 admin_state | manager_web")
-    _backup_dir().mkdir(parents=True, exist_ok=True)
-    ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
-    name = f"backup-{prof}-{ts}.tar.gz"
-    out = (_backup_dir() / name).resolve()
-    root_b = _backup_dir().resolve()
-    if not str(out).startswith(str(root_b) + os.sep):
-        raise HTTPException(500, "备份路径异常")
-    added = 0
-    with tarfile.open(out, "w:gz") as tf:
-        if prof == "admin_state":
-            mem = resolved_ai_memory_root()
-            if mem.is_dir():
-                added += _tar_add_filtered(tf, mem, "ai-memory")
-            for extra in (".cursorrules", "ARCHITECTURE.md", "README.md"):
-                p = resolved_project_path() / extra
-                if p.is_file():
-                    try:
-                        if p.stat().st_size <= _BACKUP_MAX_FILE_BYTES:
-                            tf.add(p, arcname=f"project-root/{extra}", recursive=False)
-                            added += 1
-                    except OSError:
-                        pass
-        else:
-            root = repo_root()
-            mw = root / "apps" / "manager-web"
-            if mw.is_dir():
-                added += _tar_add_filtered(tf, mw, "apps/manager-web")
-    st = out.stat()
-    return {"ok": True, "file": name, "size": st.st_size, "fileCount": added, "createdAt": _utc_iso()}
+    with project_file_write_scope():
+        prof = (body.profile or "admin_state").strip().lower()
+        if prof not in ("admin_state", "manager_web"):
+            raise HTTPException(400, "profile 仅支持 admin_state | manager_web")
+        _backup_dir().mkdir(parents=True, exist_ok=True)
+        ts = dt.utcnow().strftime("%Y%m%d-%H%M%S")
+        name = f"backup-{prof}-{ts}.tar.gz"
+        out = (_backup_dir() / name).resolve()
+        root_b = _backup_dir().resolve()
+        if not str(out).startswith(str(root_b) + os.sep):
+            raise HTTPException(500, "备份路径异常")
+        added = 0
+        with tarfile.open(out, "w:gz") as tf:
+            if prof == "admin_state":
+                mem = resolved_ai_memory_root()
+                if mem.is_dir():
+                    added += _tar_add_filtered(tf, mem, "ai-memory")
+                for extra in (".cursorrules", "ARCHITECTURE.md", "README.md"):
+                    p = resolved_project_path() / extra
+                    if p.is_file():
+                        try:
+                            if p.stat().st_size <= _BACKUP_MAX_FILE_BYTES:
+                                tf.add(p, arcname=f"project-root/{extra}", recursive=False)
+                                added += 1
+                        except OSError:
+                            pass
+            else:
+                root = repo_root()
+                mw = root / "apps" / "manager-web"
+                if mw.is_dir():
+                    added += _tar_add_filtered(tf, mw, "apps/manager-web")
+        st = out.stat()
+        return {"ok": True, "file": name, "size": st.st_size, "fileCount": added, "createdAt": _utc_iso()}
 
 
 @router.get("/backups/download")
@@ -541,14 +547,15 @@ def backup_download(name: str = Query(..., max_length=120)):
 
 @router.delete("/backups/{filename}")
 def backup_delete(filename: str):
-    fn = (filename or "").strip()
-    if not _backup_safe_name(fn):
-        raise HTTPException(400, "非法文件名")
-    p = (_backup_dir() / fn).resolve()
-    if not str(p).startswith(str(_backup_dir().resolve()) + os.sep) or not p.is_file():
-        raise HTTPException(404, "不存在")
-    p.unlink()
-    return {"ok": True}
+    with project_file_write_scope():
+        fn = (filename or "").strip()
+        if not _backup_safe_name(fn):
+            raise HTTPException(400, "非法文件名")
+        p = (_backup_dir() / fn).resolve()
+        if not str(p).startswith(str(_backup_dir().resolve()) + os.sep) or not p.is_file():
+            raise HTTPException(404, "不存在")
+        p.unlink()
+        return {"ok": True}
 
 
 @router.get("/ops/process")

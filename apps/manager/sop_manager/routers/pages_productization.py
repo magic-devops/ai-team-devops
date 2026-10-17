@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 import json
 from sop_manager.task_owner import TaskOwnerId, TaskOwnerInput
 
@@ -238,19 +240,19 @@ def _existing_interaction_ops_task_ids() -> set[str]:
 
 def _memory_ledger_path() -> Any:
     path = resolved_ai_memory_root() / "interaction_ops_memory.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _export_dir() -> Any:
     path = resolved_ai_memory_root() / "interaction_ops_exports"
-    path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def _append_jsonl(path: Any, row: dict[str, Any]) -> None:
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    with project_file_write_scope():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
 def _read_jsonl(path: Any) -> list[dict[str, Any]]:
@@ -906,7 +908,9 @@ def pages_interaction_ops_export(body: InteractionOpsExportIn) -> dict[str, Any]
     out_path = _export_dir() / f"{package_id}.json"
     written = False
     if not body.dry_run:
-        out_path.write_text(json.dumps(audit_package, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+        with project_file_write_scope():
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(audit_package, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
         written = True
     return unified_payload(
         summary={"ok": True, "package_id": package_id, "items": len(items), "written": written, "dry_run": body.dry_run},

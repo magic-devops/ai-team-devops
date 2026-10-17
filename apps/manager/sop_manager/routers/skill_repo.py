@@ -17,6 +17,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 
+from sop_manager.project_write_guard import project_file_write_scope
+
 from sop_manager.path_config import resolved_ai_memory_root
 
 router = APIRouter(prefix="/api/v1/skill-repo", tags=["skill-repo"])
@@ -24,7 +26,6 @@ router = APIRouter(prefix="/api/v1/skill-repo", tags=["skill-repo"])
 
 def _repo_dir() -> Path:
     d = resolved_ai_memory_root() / "skill-repos"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -38,9 +39,10 @@ def _load_installed():
 
 
 def _save_installed(d):
-    p = _installed_file()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(d, indent=2, ensure_ascii=False))
+    with project_file_write_scope():
+        p = _installed_file()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(d, indent=2, ensure_ascii=False))
 
 
 class RepoConfig(BaseModel):
@@ -69,42 +71,61 @@ def list_repos():
 @router.post("/repos")
 def add_repo(body: RepoConfig):
     f = _repo_dir() / f"repo_{body.id}.json"
-    f.write_text(json.dumps(body.model_dump(), ensure_ascii=False, indent=2))
+    with project_file_write_scope():
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(body.model_dump(), ensure_ascii=False, indent=2))
     return {"ok": True, "id": body.id}
 
 @router.delete("/repos/{repo_id}")
 def remove_repo(repo_id: str):
     f = _repo_dir() / f"repo_{repo_id}.json"
-    if f.exists(): f.unlink()
+    with project_file_write_scope():
+        if f.exists():
+            f.unlink()
     return {"ok": True}
 
 @router.post("/repos/{repo_id}/sync")
 def sync_repo(repo_id: str):
-    """从 git 仓库同步技能列表"""
+    """Download outside the project lock; publish only after an archival recheck."""
+    repo_id = _validate_skill_id(repo_id)
     f = _repo_dir() / f"repo_{repo_id}.json"
-    if not f.exists(): raise HTTPException(404, "Repo not found")
+    if not f.exists():
+        raise HTTPException(404, "Repo not found")
     repo = json.loads(f.read_text())
     clone_dir = _repo_dir() / f"clone_{repo_id}"
     try:
-        if clone_dir.exists():
-            r = subprocess.run(["git","pull"], capture_output=True, text=True, cwd=str(clone_dir), timeout=30)
-        else:
-            r = subprocess.run(["git","clone","--depth=1","-b",repo.get("branch","main"),repo["url"],str(clone_dir)],
-                               capture_output=True, text=True, timeout=60)
-        if r.returncode != 0: return {"ok": False, "error": r.stderr[:300]}
-        # 扫描技能文件
-        skills = []
-        for sf in sorted(clone_dir.rglob("skill.json")):
-            try:
-                s = json.loads(sf.read_text())
-                s["_path"] = str(sf.relative_to(clone_dir))
-                s["_repo"] = repo_id
-                skills.append(s)
-            except Exception: pass
-        repo["skills"] = skills; repo["synced"] = True
-        f.write_text(json.dumps(repo, ensure_ascii=False, indent=2))
+        with tempfile.TemporaryDirectory(prefix="skill-repo-sync-") as tmp:
+            staged = Path(tmp) / "repository"
+            result = subprocess.run(
+                ["git", "clone", "--depth=1", "-b", repo.get("branch", "main"), repo["url"], str(staged)],
+                capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode != 0:
+                return {"ok": False, "error": result.stderr[:300]}
+            skills = []
+            for sf in sorted(staged.rglob("skill.json")):
+                try:
+                    skill = json.loads(sf.read_text())
+                    skill["_path"] = str(sf.relative_to(staged))
+                    skill["_repo"] = repo_id
+                    skills.append(skill)
+                except (OSError, ValueError, TypeError):
+                    continue
+            repo["skills"] = skills
+            repo["synced"] = True
+            with project_file_write_scope():
+                if clone_dir.is_symlink():
+                    clone_dir.unlink()
+                elif clone_dir.exists():
+                    shutil.rmtree(clone_dir)
+                clone_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(staged, clone_dir)
+                f.write_text(json.dumps(repo, ensure_ascii=False, indent=2))
         return {"ok": True, "skills_found": len(skills)}
-    except Exception as e: return {"ok": False, "error": str(e)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 @router.get("/installed")
 def list_installed():

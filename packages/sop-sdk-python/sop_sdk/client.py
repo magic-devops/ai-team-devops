@@ -71,6 +71,34 @@ def _progress_date(value: str) -> date:
 class ManagerClient:
     """同步 HTTP 客户端；如需异步用 AsyncManagerClient（M3+ 提供）。"""
 
+    def project_portfolio(self, *, q: str = "", business_id: str | None = None,
+                          status: list[str] | None = None, risk: list[str] | None = None,
+                          cursor: str = "", limit: int = 30) -> dict[str, Any]:
+        """Inspect authorized projects without changing the client's working scope."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("portfolio limit must be between 1 and 100")
+        if set(status or []) - {"planning", "active", "paused", "archived"}:
+            raise ValueError("invalid project status")
+        if set(risk or []) - {"blocked", "awaiting_review", "recorded_completed", "overdue_unverified",
+                              "acceptance_unavailable", "owner_unavailable", "open_issues"}:
+            raise ValueError("invalid portfolio risk")
+        if not isinstance(cursor, str) or len(cursor) > 1024 or any(ord(char) < 32 for char in cursor):
+            raise ValueError("invalid opaque portfolio cursor")
+        params: dict[str, Any] = {"q": q, "status": status or [], "risk": risk or [], "cursor": cursor, "limit": limit}
+        if business_id is not None:
+            params["business_id"] = business_id
+        return self._request("GET", "/api/v1/projects/portfolio", params=params,
+                             extra_headers={"X-Project-Id": "", "X-Project-Code": "", "X-Business-Code": ""})
+
+    def project_portfolio_detail(self, project_id: str) -> dict[str, Any]:
+        resource = _resource_segment(project_id)
+        return self._request("GET", f"/api/v1/projects/{resource}/portfolio",
+                             extra_headers={"X-Project-Id": project_id, "X-Project-Code": project_id, "X-Business-Code": ""})
+
+    def delivery_project_lifecycle_preview(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        """Read a fixed lifecycle proposal; submitting still requires an explicit command."""
+        return self._request("POST", "/api/v1/delivery/project-lifecycle-preview", json_body=dict(body))
+
     def delivery_workspace(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/workspace")
 
