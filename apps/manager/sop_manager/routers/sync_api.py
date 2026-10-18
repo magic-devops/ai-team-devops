@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 
@@ -361,10 +361,29 @@ def sync_pull(
 class SyncPushIn(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     module: Literal["tasks", "requirements", "issues", "sprints", "rules", "specs", "templates"]
-    action: Literal["upsert", "delete"] = "upsert"
+    action: Literal["create", "update", "upsert", "delete"] = "upsert"
     record: dict[str, Any]
     expected_version: int = Field(ge=0, strict=True)
     idempotency_key: str = Field(min_length=1, max_length=128)
+    task_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    requirement_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    change_preview_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_operation(self):
+        if self.module in _STRUCTURED_MODULES:
+            from .delivery_contract import SyncRecordApply
+
+            SyncRecordApply.model_validate(
+                self.model_dump(exclude={"expected_version", "idempotency_key"}, exclude_unset=True)
+            )
+        elif self.action not in {"upsert", "delete"} or self.model_fields_set & {
+            "task_basis",
+            "requirement_basis",
+            "change_preview_basis",
+        }:
+            raise ValueError("Asset operations require upsert/delete and a record.expected_sha256")
+        return self
 
 
 def _ws_sync_event(pid: str, module: str, action: str, record_id: str) -> None:
@@ -421,7 +440,7 @@ def sync_push(
         "subject": str(body.record.get("id") or ""),
         "time": previous.event_time if previous else date(now()),
         "datacontenttype": "application/json",
-        "data": body.model_dump(exclude={"idempotency_key"}),
+        "data": body.model_dump(exclude={"idempotency_key"}, exclude_none=True),
     }
     raw = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
     incoming = IngestIn(expected_tenant_id=project.tenant_id, expected_project_id=project.id, expected_producer_id=actor.id, events=[{"id":eid,"event_json":raw,"digest":digest(raw)}])

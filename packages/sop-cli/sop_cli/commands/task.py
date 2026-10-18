@@ -1,14 +1,10 @@
 """
 @module: sop_cli.commands.task
-@purpose: 任务管理：远端 Manager 优先，本地离线可写，并进入 sync push 队列
+@purpose: 任务原版本意图与只读Manager缓存
 """
 from __future__ import annotations
 
 import json
-import re
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Annotated, Any
 
 import typer
@@ -21,137 +17,75 @@ app = typer.Typer(help="任务：list/show/schedule/feed/report/create/pull/done
 app.add_typer(hermes_cmd.build_resource_app("tasks"), name="v1", help="Hermes 任务：list/get/create/patch")
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
 def _acceptance_criteria(values: list[str]) -> list[str]:
     if len(values) > 80 or any(not value.strip() or len(value.strip()) > 2000 for value in values):
         raise typer.BadParameter("Use at most 80 nonblank criteria of at most 2000 characters", param_hint="--criterion")
     return [value.strip() for value in values]
 
 
-def _slug(s: str) -> str:
-    out = re.sub(r"[^a-zA-Z0-9._-]+", "-", s.strip()).strip("-").lower()
-    return out[:80] or "task"
+def _submit(record, *, action, expected_version, key, event_time, local, **basis):
+    from ..local_intents import submit_record
 
-
-def _runtime_dir() -> Path:
-    return get_config().project_path / ".sop-runtime"
-
-
-def _local_path() -> Path:
-    return _runtime_dir() / "local" / "tasks.json"
-
-
-def _deleted_path() -> Path:
-    return _runtime_dir() / "local" / "tasks_deleted.json"
-
-
-def _sync_entities_path() -> Path:
-    return _runtime_dir() / "sync" / "entities" / "tasks.json"
-
-
-def _queue_path() -> Path:
-    return _runtime_dir() / "sync" / "push_queue.jsonl"
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    if not path.is_file():
-        return default
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def _write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _load_local() -> dict[str, dict[str, Any]]:
-    raw = _read_json(_local_path(), {})
-    return raw if isinstance(raw, dict) else {}
-
-
-def _save_local(data: dict[str, dict[str, Any]]) -> None:
-    _write_json(_local_path(), data)
-
-
-def _deleted_ids() -> set[str]:
-    raw = _read_json(_deleted_path(), [])
-    return {str(x) for x in raw} if isinstance(raw, list) else set()
-
-
-def _save_deleted(ids: set[str]) -> None:
-    _write_json(_deleted_path(), sorted(ids))
+        result = submit_record(
+            get_config(),
+            "tasks",
+            record,
+            action=action,
+            expected_version=expected_version,
+            key=key,
+            event_time=event_time,
+            local=local,
+            **basis,
+        )
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+    console.print_json(data=result)
+    if not result["ok"]:
+        raise typer.Exit(2)
 
 
 def _load_synced() -> dict[str, dict[str, Any]]:
-    raw = _read_json(_sync_entities_path(), {})
-    return raw if isinstance(raw, dict) else {}
-
-
-def _enqueue(module: str, record: dict[str, Any], *, action: str = "upsert") -> None:
-    _queue_path().parent.mkdir(parents=True, exist_ok=True)
-    item = {
-        "module": module,
-        "action": action,
-        "record": record,
-        "idempotency_key": f"cli-{module}-{action}-{record.get('id', uuid.uuid4().hex)}-{uuid.uuid4().hex[:8]}",
-    }
-    with _queue_path().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
-
-
-def _write_task_doc(row: dict[str, Any]) -> None:
-    tid = str(row.get("id") or "")
-    title = str(row.get("title") or tid)
-    path = get_config().project_path / "sop" / "custom" / "tasks" / f"{tid}-{_slug(title)}.md"
-    lines = [
-        "---",
-        f"id: {tid}",
-        f"status: {row.get('status', 'pending')}",
-        f"priority: {row.get('priority', 'P1')}",
-        f"estimate: {row.get('estimate', 'M')}",
-        f"owner_id: {row.get('owner_id', '')}",
-        f"req_id: {row.get('req_id', '')}",
-        f"sprint_id: {row.get('sprint_id', '')}",
-        f"created_at: {row.get('created_at', '')}",
-        "---",
-        "",
-        f"# {title}",
-        "",
-        str(row.get("description") or "").strip(),
-        "",
-        "## Acceptance criteria",
-        *[f"- {criterion}" for criterion in row.get("acceptance_criteria", [])],
-        "",
-        "## Notes",
-        str(row.get("human_notes") or "待补充").strip(),
-        "",
-    ]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    """Read only the selected project's last Manager pull; never merge drafts."""
+    cfg = get_config()
+    runtime = cfg.project_path / ".sop-runtime"
+    path = runtime / "sync" / "entities" / "tasks.json"
+    if not path.is_file():
+        return {}
+    try:
+        state = json.loads((runtime / "sync_state.json").read_text(encoding="utf-8"))
+        if not isinstance(state, dict) or state.get("project_id") != cfg.project_id:
+            raise ValueError("缓存不属于当前项目；请明确拉取当前项目后查看")
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, dict) or any(not isinstance(row, dict) for row in rows.values()):
+            raise ValueError("Manager缓存格式无效")
+        for row in rows.values():
+            if (
+                "project_id" in row
+                and row["project_id"] != cfg.project_id
+                or "tenant_id" in row
+                and row["tenant_id"] != cfg.tenant_id
+            ):
+                raise ValueError("缓存作用域与当前项目/租户不符")
+        return rows
+    except (OSError, ValueError, TypeError) as exc:
+        warn(f"不能读取只读Manager缓存: {exc}")
+        raise typer.Exit(2) from exc
 
 
 def _local_items(*, status: str | None = None, priority: str | None = None) -> list[dict[str, Any]]:
-    deleted = _deleted_ids()
-    merged = _load_synced()
-    merged.update(_load_local())
-    items = [dict(v) for k, v in merged.items() if k not in deleted]
+    items = [dict(row) for row in _load_synced().values()]
     if status:
-        items = [x for x in items if str(x.get("status") or "") == status]
+        items = [row for row in items if row.get("status") == status]
     if priority:
-        pu = priority.upper()
-        items = [x for x in items if str(x.get("priority") or "").upper() == pu]
-    return sorted(items, key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""), reverse=True)
+        items = [row for row in items if str(row.get("priority", "")).upper() == priority.upper()]
+    return sorted(items, key=lambda row: str(row.get("created_at") or ""), reverse=True)
 
 
 def _render(items: list[dict[str, Any]], title: str) -> None:
     tbl = Table(title=title, show_header=True, header_style="bold")
-    for col in ("id", "status", "priority", "assigned_to", "confidence", "title"):
+    for col in ("id", "status", "priority", "owner_id", "confidence", "title"):
         tbl.add_column(col)
     for t in items:
         try:
@@ -162,7 +96,7 @@ def _render(items: list[dict[str, Any]], title: str) -> None:
             str(t.get("id", "")),
             str(t.get("status", "")),
             str(t.get("priority", "")),
-            str(t.get("assigned_to", "")),
+            str(t.get("owner_id", "")),
             confidence,
             (str(t.get("title") or ""))[:80],
         )
@@ -204,48 +138,6 @@ def _parse_gate_results(items: list[str] | None) -> list[dict[str, Any]]:
             "evidence": parts[2].strip() if len(parts) > 2 else "",
         })
     return out
-
-
-def _new_row(
-    title: str,
-    *,
-    description: str,
-    priority: str,
-    estimate: str,
-    owner_id: str,
-    sprint_id: str,
-    req_id: str,
-    acceptance_criteria: list[str],
-) -> dict[str, Any]:
-    ts = _now()
-    return {
-        "id": f"T-local-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}",
-        "req_id": req_id,
-        "sprint_id": sprint_id,
-        "title": title,
-        "description": description,
-        "acceptance_criteria": acceptance_criteria,
-        "status": "pending",
-        "priority": priority.upper(),
-        "estimate": estimate,
-        "owner_id": owner_id,
-        "actual_hours": 0.0,
-        "confidence": 0.0,
-        "human_notes": "",
-        "created_at": ts,
-        "updated_at": ts,
-    }
-
-
-def _save_and_queue(row: dict[str, Any]) -> None:
-    data = _load_local()
-    data[str(row["id"])] = row
-    _save_local(data)
-    deleted = _deleted_ids()
-    deleted.discard(str(row["id"]))
-    _save_deleted(deleted)
-    _enqueue("tasks", row)
-    _write_task_doc(row)
 
 
 @app.command(name="show")
@@ -678,8 +570,6 @@ def agent_claims(
     console.print(tbl)
 
 
-
-
 @app.command(name="agent-plan")
 def agent_plan(
     task_id: str = typer.Option("", "--task-id", help="任务 ID"),
@@ -723,10 +613,6 @@ def agent_plan(
         for gate in gates:
             gt.add_row(str(gate.get("id", "")), str(gate.get("severity", "")), str(gate.get("type", "")), str(gate.get("evidence", ""))[:80])
         console.print(gt)
-
-
-
-
 
 
 @app.command(name="reports")
@@ -947,169 +833,172 @@ def quality_tasks(
 
 @app.command(name="list")
 def list_tasks(
-    status: str = typer.Option(None, "--status"),
-    priority: str = typer.Option(None, "--priority"),
-    page: int = typer.Option(1, "--page"),
-    size: int = typer.Option(50, "--size"),
-    local: bool = typer.Option(False, "--local", help="只读取本地物化/离线任务"),
+    status: str | None = typer.Option(None, "--status"),
+    priority: str | None = typer.Option(None, "--priority"),
+    page: int = typer.Option(1, "--page", min=1),
+    size: int = typer.Option(50, "--size", min=1, max=100),
+    local: bool = typer.Option(False, "--local", help="显式查看当前项目只读Manager拉取缓存"),
 ) -> None:
-    if not local:
-        try:
-            data = get_client().list_tasks(status=status, priority=priority, page=page, size=size)
-            _render(list(data.get("items", [])), f"tasks total={data.get('total','?')}")
-            return
-        except Exception as e:
-            warn(f"Manager tasks 不可用，回退本地: {e}")
-    items = _local_items(status=status, priority=priority)
-    start = max(page - 1, 0) * size
-    _render(items[start : start + size], f"local tasks total={len(items)}")
+    if local:
+        items = _local_items(status=status, priority=priority)
+        warn("只读Manager拉取缓存，可能过期；不含未处理本地意图")
+        start = (page - 1) * size
+        _render(items[start : start + size], f"Manager cache tasks total={len(items)}")
+        return
+    try:
+        data = get_client().list_tasks(status=status, priority=priority, page=page, size=size)
+        _render(list(data.get("items", [])), f"tasks total={data.get('total', '?')}")
+    except Exception as exc:
+        warn(f"Manager tasks读取失败: {exc}")
+        raise typer.Exit(1) from exc
 
 
 @app.command(name="create")
 def create_task(
-    title: str = typer.Argument(..., help="任务标题"),
-    description: str = typer.Option("", "--desc", help="任务描述"),
-    priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    estimate: str = typer.Option("M", "--estimate", help="XS|S|M|L|XL 或团队自定义"),
-    owner_id: str = typer.Option("", "--owner-id", help="项目成员稳定 ID；留空表示未分配"),
-    sprint_id: str = typer.Option("", "--sprint", help="Sprint ID"),
-    req_id: str = typer.Option("", "--requirement", help="需求 ID"),
-    criterion: Annotated[list[str] | None, typer.Option("--criterion", help="任务自身验收标准，可重复指定（最多80项，每项2000字）")] = None,
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    title: str = typer.Argument(...),
+    record_id: str = typer.Option(..., "--record-id", help="固定新任务ID"),
+    description: str | None = typer.Option(None, "--desc"),
+    priority: str | None = typer.Option(None, "--priority"),
+    estimate: str | None = typer.Option(None, "--estimate"),
+    owner_id: str | None = typer.Option(None, "--owner-id", help="稳定成员ID；空字符串表示未分配"),
+    sprint_id: str | None = typer.Option(None, "--sprint"),
+    req_id: str | None = typer.Option(None, "--requirement"),
+    criterion: Annotated[
+        list[str] | None, typer.Option("--criterion", help="任务自身验收标准，可重复指定")
+    ] = None,
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """创建任务；离线时写 .sop-runtime/local 并追加 push_queue。"""
-    criteria = _acceptance_criteria(criterion or [])
-    body = {
-        "title": title,
+    """先冻结固定任务创建原件；不创建本地业务副本。"""
+    record = {"id": record_id, "title": title}
+    for name, value in {
         "description": description,
-        "priority": priority,
+        "priority": priority.upper() if priority is not None else None,
         "estimate": estimate,
         "owner_id": owner_id,
         "sprint_id": sprint_id,
         "req_id": req_id,
-        "acceptance_criteria": criteria,
-    }
-    if not local:
-        try:
-            out = get_client().create_task(body)
-            ok(f"created task {out.get('id', '-')}")
-            return
-        except Exception as e:
-            warn(f"Manager create task 不可用，写入本地队列: {e}")
-    row = _new_row(
-        title,
-        description=description,
-        priority=priority,
-        estimate=estimate,
-        owner_id=owner_id,
-        sprint_id=sprint_id,
-        req_id=req_id,
-        acceptance_criteria=criteria,
+    }.items():
+        if value is not None:
+            record[name] = value
+    if criterion is not None:
+        record["acceptance_criteria"] = _acceptance_criteria(criterion)
+    _submit(
+        record,
+        action="create",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
     )
-    _save_and_queue(row)
-    ok(f"local task queued {row['id']}")
 
 
 @app.command()
-def pull(task_id: str, local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列")) -> None:
-    """认领任务（状态置 in_progress）。"""
-    if not local:
-        try:
-            t = get_client().pull_task(task_id)
-            ok(f"pulled {task_id}")
-            kv("status", t.get("status"))
-            kv("title", t.get("title"))
-            return
-        except Exception as e:
-            warn(f"Manager pull task 不可用，写入本地队列: {e}")
-    data = _load_local()
-    base = dict(_load_synced().get(task_id) or data.get(task_id) or {"id": task_id, "title": task_id})
-    base.update({"status": "in_progress", "updated_at": _now()})
-    _save_and_queue(base)
-    ok(f"local task pull queued {task_id}")
+def pull(
+    task_id: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
+) -> None:
+    """提交任务进入in_progress的原状态意图；执行领取使用正式执行流程。"""
+    _submit(
+        {"id": task_id, "status": "in_progress"},
+        action="update",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+    )
 
 
 @app.command()
 def done(
     task_id: str,
-    notes: str = typer.Option("", "--notes"),
-    confidence: float = typer.Option(0.8, "--confidence"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    notes: str | None = typer.Option(None, "--notes"),
+    confidence: float | None = typer.Option(None, "--confidence", min=0, max=1),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """完成任务；离线时标记 completed 并追加 upsert 队列。"""
-    patch = {"status": "completed", "human_notes": notes, "confidence": confidence}
-    if not local:
-        try:
-            get_client().update_task(task_id, patch)
-            ok(f"{task_id} → completed (confidence={confidence})")
-            return
-        except Exception as e:
-            warn(f"Manager done task 不可用，写入本地队列: {e}")
-    data = _load_local()
-    base = dict(_load_synced().get(task_id) or data.get(task_id) or {"id": task_id, "title": task_id})
-    base.update(patch)
-    base["updated_at"] = _now()
-    _save_and_queue(base)
-    ok(f"local task done queued {task_id}")
+    """提交原完成状态意图；受管执行仍须证据审查，不代表已验收。"""
+    record = {"id": task_id, "status": "completed"}
+    if notes is not None:
+        record["human_notes"] = notes
+    if confidence is not None:
+        record["confidence"] = confidence
+    _submit(
+        record,
+        action="update",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+    )
 
 
 @app.command()
 def fail(
     task_id: str,
-    notes: str = typer.Option("", "--notes"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    notes: str | None = typer.Option(None, "--notes"),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """阻塞任务；离线时标记 blocked 并追加 upsert 队列。"""
-    patch = {"status": "blocked", "human_notes": notes}
-    if not local:
-        try:
-            get_client().update_task(task_id, patch)
-            ok(f"{task_id} → blocked")
-            return
-        except Exception as e:
-            warn(f"Manager fail task 不可用，写入本地队列: {e}")
-    data = _load_local()
-    base = dict(_load_synced().get(task_id) or data.get(task_id) or {"id": task_id, "title": task_id})
-    base.update(patch)
-    base["updated_at"] = _now()
-    _save_and_queue(base)
-    ok(f"local task fail queued {task_id}")
+    """提交原阻塞状态意图，未处理时不修改当前状态。"""
+    record = {"id": task_id, "status": "blocked"}
+    if notes is not None:
+        record["human_notes"] = notes
+    _submit(
+        record,
+        action="update",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+    )
 
 
 @app.command(name="update")
 def update_task(
-    task_id: str = typer.Argument(..., help="任务 ID"),
+    task_id: str = typer.Argument(...),
     title: str | None = typer.Option(None, "--title"),
     description: str | None = typer.Option(None, "--desc"),
-    status: str | None = typer.Option(None, "--status", help="pending|in_progress|completed|blocked"),
-    priority: str | None = typer.Option(None, "--priority", help="P0|P1|P2|P3"),
+    status: str | None = typer.Option(
+        None, "--status", help="pending|in_progress|completed|blocked；不替代验收"
+    ),
+    priority: str | None = typer.Option(None, "--priority"),
     estimate: str | None = typer.Option(None, "--estimate"),
-    owner_id: str | None = typer.Option(None, "--owner-id", help="稳定成员 ID；显式空字符串清空负责人"),
-    actual_hours: float | None = typer.Option(None, "--hours"),
-    confidence: float | None = typer.Option(None, "--confidence"),
+    owner_id: str | None = typer.Option(None, "--owner-id", help="稳定成员ID；空字符串明确清空"),
+    actual_hours: float | None = typer.Option(None, "--hours", min=0),
+    confidence: float | None = typer.Option(None, "--confidence", min=0, max=1),
     sprint_id: str | None = typer.Option(None, "--sprint"),
     req_id: str | None = typer.Option(None, "--requirement"),
     human_notes: str | None = typer.Option(None, "--notes"),
-    dev_tool: str | None = typer.Option(None, "--tool", help="codex/cursor/claude 等"),
-    artifact_url: str | None = typer.Option(None, "--artifact-url"),
-    artifact_path: str | None = typer.Option(None, "--artifact-path"),
-    debug_notes: str | None = typer.Option(None, "--debug-notes"),
-    branch: str | None = typer.Option(None, "--branch"),
-    criterion: Annotated[list[str] | None, typer.Option("--criterion", help="完整替换任务自身验收标准，可重复指定")] = None,
-    clear_criteria: bool = typer.Option(False, "--clear-criteria", help="明确清空任务自身验收标准"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    criterion: Annotated[
+        list[str] | None, typer.Option("--criterion", help="完整替换任务自身验收标准，可重复指定")
+    ] = None,
+    clear_criteria: bool = typer.Option(False, "--clear-criteria"),
+    task_basis: str | None = typer.Option(None, "--task-basis", help="明确核对的原任务范围摘要"),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """更新任务；离线时对本地副本打补丁并追加 upsert 队列。"""
     if criterion is not None and clear_criteria:
         raise typer.BadParameter("--criterion and --clear-criteria cannot be used together")
-    patch: dict[str, Any] = {}
+    record = {"id": task_id}
     if criterion is not None or clear_criteria:
-        patch["acceptance_criteria"] = _acceptance_criteria(criterion or [])
-    for k, v in {
+        record["acceptance_criteria"] = _acceptance_criteria(criterion or [])
+    for name, value in {
         "title": title,
         "description": description,
         "status": status,
-        "priority": priority.upper() if priority else None,
+        "priority": priority.upper() if priority is not None else None,
         "estimate": estimate,
         "owner_id": owner_id,
         "actual_hours": actual_hours,
@@ -1117,54 +1006,41 @@ def update_task(
         "sprint_id": sprint_id,
         "req_id": req_id,
         "human_notes": human_notes,
-        "dev_tool": dev_tool,
-        "artifact_url": artifact_url,
-        "artifact_path": artifact_path,
-        "debug_notes": debug_notes,
-        "branch": branch,
     }.items():
-        if v is not None:
-            patch[k] = v
-    if not patch:
-        warn("没有可更新字段")
-        return
-    if not local:
-        try:
-            get_client().update_task(task_id, patch)
-            ok(f"updated task {task_id}")
-            return
-        except Exception as e:
-            warn(f"Manager update task 不可用，写入本地队列: {e}")
-    data = _load_local()
-    base = dict(_load_synced().get(task_id) or data.get(task_id) or {"id": task_id, "title": task_id})
-    base.update(patch)
-    base.setdefault("created_at", _now())
-    base["updated_at"] = _now()
-    _save_and_queue(base)
-    ok(f"local task update queued {task_id}")
+        if value is not None:
+            record[name] = value
+    if len(record) == 1:
+        raise typer.BadParameter("没有明确的更新字段")
+    if {"owner_id", "acceptance_criteria"} & record.keys() and not task_basis:
+        raise typer.BadParameter("修改负责人或验收标准需要 --task-basis；先核对原任务范围")
+    _submit(
+        record,
+        action="update",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+        task_basis=task_basis,
+    )
 
 
 @app.command(name="delete")
 def delete_task(
-    task_id: str = typer.Argument(..., help="任务 ID"),
-    local: bool = typer.Option(False, "--local", help="只写本地删除标记并进入同步队列"),
+    task_id: str = typer.Argument(..., help="稳定记录ID"),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """删除任务；离线时写 tombstone 并追加 delete 队列。"""
-    if not local:
-        try:
-            get_client().delete_task(task_id)
-            ok(f"deleted task {task_id}")
-            return
-        except Exception as e:
-            warn(f"Manager delete task 不可用，写入本地队列: {e}")
-    data = _load_local()
-    data.pop(task_id, None)
-    _save_local(data)
-    deleted = _deleted_ids()
-    deleted.add(task_id)
-    _save_deleted(deleted)
-    _enqueue("tasks", {"id": task_id}, action="delete")
-    ok(f"local task delete queued {task_id}")
+    """持久提交原删除意图；处理完成前不隐藏当前记录。"""
+    _submit(
+        {"id": task_id},
+        action="delete",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+    )
 
 
 @app.command()

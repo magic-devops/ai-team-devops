@@ -244,11 +244,10 @@ COMMAND_TREE: dict[str, CmdEntry] = {
             "enqueue": "离线入队",
             "push-file": "推送文件",
             "enqueue-file": "文件离线入队",
-            "watch": "监听规则/规约/模板文件并入队",
+            "enqueue-plan": "明确选择快照原操作入队",
+            "watch": "只读文件审阅快照",
             "flush": "冲刷本地队列",
-            "compact": "压缩本地队列",
             "doctor": "本地同步自检",
-            "repair": "修复本地队列",
             "status": "本地游标/队列",
         },
     },
@@ -290,11 +289,9 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         [
             ("sop sync", "经 agentd 同步；失败可用 sop sync --direct"),
             ("sop sync doctor", "本地同步自检"),
-            ("sop sync repair --dry-run", "预览队列修复"),
-            ("sop sync compact", "压缩离线队列，减少重复上送"),
             ("sop sync flush", "不依赖 agentd，直连冲刷离线队列"),
             ("sop sync pull --direct --materialize", "直连拉取并物化远端实体"),
-            ("sop sync watch --once", "扫描规则/规约/模板变更并写入队列"),
+            ("sop sync watch --once", "只读生成规则/规约/模板快照，审查后明确enqueue-plan"),
         ],
     ),
     (
@@ -309,9 +306,9 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
             ("sop workflow start code_review --id review-example-001 --args '{}' --json", "启动固定 ID 的审查；传入真实 diff 后审查，缺少 diff 不会自动通过"),
             ("sop workflow detail review-example-001 --json", "先核对真实阶段、自动审查结果和权限"),
             ('sop workflow review review-example-001 --decision request_changes --comment "缺少测试证据，请补齐后重新审查" --request-id review-decision-001 --json', "明确提交人工意见；重试保持相同 ID、结论和意见"),
-            ('sop requirement create "统一项目注册流程" --priority P1', "创建需求"),
-            ('sop issue create "登录回调异常" --severity P1', "创建问题"),
-            ('sop sprint create "MVP 闭环" --points 20', "创建迭代"),
+            ('sop requirement create "统一项目注册流程" --priority P1 --record-id REQ-example --expected-version <原版本> --key req-create-001 --time <原时间>', "创建需求"),
+            ('sop issue create "登录回调异常" --severity P1 --record-id ISSUE-example --expected-version <原版本> --key issue-create-001 --time <原时间>', "创建问题"),
+            ('sop sprint create "MVP 闭环" --points 20 --record-id SPRINT-example --expected-version <原版本> --key sprint-create-001 --time <原时间>', "创建迭代"),
             ("sop task list --status pending", "查看待处理任务"),
             ("sop task schedule --json", "生成 AI/CLI 可消费 DAG 调度计划"),
             ("sop task feed --json", "Agent 自动拉取下一批任务包"),
@@ -331,7 +328,7 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
             ),
             ("sop kb flush", "冲刷知识库 outbox"),
             (
-                'sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env" --local',
+                'sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env"',
                 "提交规则提案",
             ),
             ("sop rule list --local --proposals", "查看本地规则提案"),
@@ -342,7 +339,7 @@ QUICK_START_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
         [
             ('sop copilot ask "下一步该做什么？" --remember', "带记忆提问"),
             ("sop copilot sessions", "查看会话"),
-            ("sop event emit sop.agent.run.completed --data run_id=demo", "上报事件"),
+            ("sop event emit sop.agent.heartbeat --id heartbeat-example --time <原时间> --data uptime_ms=123", "上报事件"),
             ("sop event subscribe --json", "订阅 Manager 实时事件"),
             ("sop usage summary --json", "查看用量汇总"),
             ("sop usage check llm_tokens 1000", "配额预检查"),
@@ -378,16 +375,14 @@ QUICK_START = """
   sop status --json              # 给 CLI/IDE/Agent 的机器可读健康快照
   sop sync                        # 经 agentd；失败可 sop sync --direct
   sop sync doctor                 # 本地同步自检
-  sop sync repair --dry-run       # 预览队列修复
-  sop sync compact                # 压缩离线队列，减少重复上送
   sop sync flush                  # 不依赖 agentd，直连冲刷离线队列
   sop sync pull --direct --materialize
-  sop sync watch --once           # 扫描规则/规约/模板变更并写入队列
+  sop sync watch --once           # 只读生成规则/规约/模板快照，审查后明确enqueue-plan
   sop context manifest --write    # 给各 CLI/Agent 生成机器可读接入清单
   sop context env --out .sop-runtime/sop.env
   sop context prepare --flush     # 刷新上下文、远端 DB 配置并冲刷 sync/memory/kb/event/usage outbox
   sop platforms init all          # 生成各 CLI/IDE/Agent 接入配置
-  sop requirement create "统一项目注册流程" --priority P1
+  sop requirement create "统一项目注册流程" --priority P1 --record-id REQ-example --expected-version <原版本> --key req-create-001 --time <原时间>
   sop requirement parse-doc --file prd.md --generator ai --request-id intake-preview-001 --json
   sop requirement review REQ-EXAMPLE --generator rules --request-id review-preview-001 --json
   sop requirement prototype REQ-EXAMPLE --generator ai --mode wireframe --request-id prototype-preview-001 --json
@@ -396,8 +391,8 @@ QUICK_START = """
   sop workflow start code_review --id review-example-001 --args '{}' --json
   sop workflow detail review-example-001 --json
   sop workflow review review-example-001 --decision request_changes --comment "缺少测试证据，请补齐后重新审查" --request-id review-decision-001 --json
-  sop issue create "登录回调异常" --severity P1
-  sop sprint create "MVP 闭环" --points 20
+  sop issue create "登录回调异常" --severity P1 --record-id ISSUE-example --expected-version <原版本> --key issue-create-001 --time <原时间>
+  sop sprint create "MVP 闭环" --points 20 --record-id SPRINT-example --expected-version <原版本> --key sprint-create-001 --time <原时间>
   sop work next --local
   sop work export --local          # 给 CLI/IDE/Agent 导出工作台快照
   sop memory add "项目采用本地优先、远端增强" --local
@@ -405,11 +400,11 @@ QUICK_START = """
   sop memory flush
   sop kb add "项目接入规范" "CLI/Agent 读取 .sop-runtime/sop.env 接入。" --local
   sop kb flush
-  sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env" --local
+  sop rule propose "所有 CLI/Agent 先读取 .sop-runtime/sop.env"
   sop rule list --local --proposals
   sop copilot ask "下一步该做什么？" --remember
   sop copilot sessions
-  sop event emit sop.agent.run.completed --data run_id=demo
+  sop event emit sop.agent.heartbeat --id heartbeat-example --time <原时间> --data uptime_ms=123
   sop event subscribe --json       # 订阅 Manager 实时事件
   sop usage summary --json
   sop usage check llm_tokens 1000

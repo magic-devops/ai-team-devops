@@ -19,7 +19,7 @@ def flow_client(env):
     return client
 
 
-def push(client, sessions, module, record, action="upsert", eid="sync-change"):
+def push(client, sessions, module, record, action="upsert", eid="sync-change", **metadata):
     return result(
         send(
             client,
@@ -31,6 +31,7 @@ def push(client, sessions, module, record, action="upsert", eid="sync-change"):
                     "action": action,
                     "record": record,
                     "expected_version": version(sessions),
+                    **metadata,
                 },
             ),
         )
@@ -105,7 +106,11 @@ def test_sync_task_scope_reopens_testing_before_remembering_basis(env, change):
     ).json()
     tid = next(row["id"] for row in made["tasks"] if row["req_id"] == rid)
     set_stage(env[1], rid, "acceptance")
-    receipt = push(client, env[1], "tasks", {"id": tid, **change})
+    metadata = {}
+    if {"owner_id", "acceptance_criteria"} & change.keys():
+        current = client.get(f"/api/v1/delivery/tasks/{tid}").json()["task"]
+        metadata["task_basis"] = current["basis"]
+    receipt = push(client, env[1], "tasks", {"id": tid, **change}, **metadata)
     assert receipt["processing"]["state"] == "processed", receipt
     with env[1]() as db:
         flow = db.get(m.DeliveryWorkspace, "project").data["flows"][rid]

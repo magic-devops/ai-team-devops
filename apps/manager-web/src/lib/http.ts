@@ -94,6 +94,16 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return requestInSession<T>(path, init, sessionContext());
 }
 
+export function bindSessionRequest(expected: { projectId: string; revision: string }): typeof request {
+  const context = sessionContext();
+  return <T>(path: string, init?: RequestInit): Promise<T> => {
+    if (context.scope.projectId !== expected.projectId || context.revision !== expected.revision) {
+      return Promise.reject(new Error("账号或项目已切换，请在当前工作区重新操作"));
+    }
+    return requestInSession<T>(path, init, context);
+  };
+}
+
 async function requestInSession<T>(path: string, init: RequestInit | undefined, context: SessionContext): Promise<T> {
   if (!path.startsWith("/api/v1/auth/") && context.token && !context.scope.projectId) {
     context = await hydrateSessionScope(context);

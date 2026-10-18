@@ -149,37 +149,30 @@ def _check_sync_api(cfg) -> tuple[bool, str]:
 
 
 def _check_sync_local(cfg) -> tuple[bool, str]:
-    try:
-        from .sync import _compact_queue_items, _load_queue_items
+    from .event import _legacy_files, queue_health
 
-        items, bad = _load_queue_items()
-        compacted = _compact_queue_items(items)
-    except Exception as e:
-        return False, f"队列检查失败：{e}"
-
-    entities = cfg.project_path / ".sop-runtime" / "sync" / "entities"
-    entity_bad: list[str] = []
+    observed = queue_health(cfg.project_path, cfg.outbox_path)
+    entities = cfg.project_path / ".sop-runtime/sync/entities"
+    entity_bad = []
     entity_ok = 0
     if entities.is_dir():
-        for f in sorted(entities.glob("*.json")):
+        for path in sorted(entities.glob("*.json")):
             try:
-                d = json.loads(f.read_text(encoding="utf-8"))
-                if isinstance(d, dict):
-                    entity_ok += 1
+                if not isinstance(json.loads(path.read_bytes().decode("utf-8")), dict):
+                    entity_bad.append(path.name)
                 else:
-                    entity_bad.append(f.name)
-            except Exception:
-                entity_bad.append(f.name)
-    state = cfg.project_path / ".sop-runtime" / "sync_state.json"
-    duplicates = max(0, len(items) - len(compacted))
-    detail = f"queue={len(items)} bad={bad} duplicates={duplicates} entities_ok={entity_ok} state={'✓' if state.is_file() else '—'}"
-    if bad or entity_bad:
-        if entity_bad:
-            detail += f" bad_entities={','.join(entity_bad)}"
-        return False, detail
-    if duplicates:
-        return True, detail + "（建议 sop sync compact）"
-    return True, detail
+                    entity_ok += 1
+            except (ValueError, OSError):
+                entity_bad.append(path.name)
+    detail = (
+        f"SQLite={observed['storage_state']} pending={observed['pending']} "
+        f"dead_letter={observed['dead_letter']} acked={observed['acked']} "
+        f"entities_ok={entity_ok} legacy_read_only={len(_legacy_files(cfg.project_path))}"
+    )
+    if entity_bad:
+        detail += f" bad_entities={','.join(entity_bad)}"
+    healthy = observed['storage_state'] in {'ready', 'not_initialized'} and not observed['dead_letter'] and not entity_bad
+    return healthy, detail
 
 
 def _check_project_manifest(cfg) -> tuple[bool, str]:
@@ -261,7 +254,7 @@ _FIX_HINTS: dict[str, str] = {
     "项目接入 manifest": "sop context manifest --write",
     "Agent 上下文包": "sop context prepare",
     "Agent outbox": "事件用 sop event stats/show 检查，明确修复原因后 requeue；旧 JSONL 须先核对原意与版本，不会自动发送",
-    "sync 本地状态": "坏队列行: sop sync repair；重复队列: sop sync compact；缺本地数据: sop sync pull --direct --materialize",
+    "sync 本地状态": "SQLite原件: sop event stats/list/show；死信明确requeue；旧文件仅盘点；缓存: sop sync pull --direct --materialize",
     "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
     "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",
     "基础依赖": "安装 python3、git（macOS: xcode-select --install）",

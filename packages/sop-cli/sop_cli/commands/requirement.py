@@ -1,14 +1,11 @@
 """
 @module: sop_cli.commands.requirement
-@purpose: 需求管理：远端 Manager 优先，本地离线可写，并进入 sync push 队列
+@purpose: 需求原版本意图与只读Manager缓存
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import re
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -18,7 +15,7 @@ from rich.table import Table
 from .._util import console, err, get_client, get_config, ok, warn
 from . import hermes as hermes_cmd
 
-app = typer.Typer(help="需求：list/create/update/delete（本地优先，远端增强）")
+app = typer.Typer(help="需求：list/create/update/delete（原版本写入、只读缓存）")
 app.add_typer(hermes_cmd.build_resource_app("requirements"), name="v1", help="Hermes 需求：list/get/create/patch")
 
 
@@ -49,123 +46,64 @@ def _adoption_fields(result: dict[str, Any], operation: str, *, requirement: boo
     return fields
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def _submit(record, *, action, expected_version, key, event_time, local, **basis):
+    from ..local_intents import submit_record
 
-
-def _slug(s: str) -> str:
-    out = re.sub(r"[^a-zA-Z0-9._-]+", "-", s.strip()).strip("-").lower()
-    return out[:80] or "requirement"
-
-
-def _runtime_dir() -> Path:
-    return get_config().project_path / ".sop-runtime"
-
-
-def _local_path() -> Path:
-    return _runtime_dir() / "local" / "requirements.json"
-
-
-def _deleted_path() -> Path:
-    return _runtime_dir() / "local" / "requirements_deleted.json"
-
-
-def _sync_entities_path() -> Path:
-    return _runtime_dir() / "sync" / "entities" / "requirements.json"
-
-
-def _queue_path() -> Path:
-    return _runtime_dir() / "sync" / "push_queue.jsonl"
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    if not path.is_file():
-        return default
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def _write_json(path: Path, data: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _load_local() -> dict[str, dict[str, Any]]:
-    raw = _read_json(_local_path(), {})
-    return raw if isinstance(raw, dict) else {}
-
-
-def _save_local(data: dict[str, dict[str, Any]]) -> None:
-    _write_json(_local_path(), data)
-
-
-def _deleted_ids() -> set[str]:
-    raw = _read_json(_deleted_path(), [])
-    return {str(x) for x in raw} if isinstance(raw, list) else set()
-
-
-def _save_deleted(ids: set[str]) -> None:
-    _write_json(_deleted_path(), sorted(ids))
+        result = submit_record(
+            get_config(),
+            "requirements",
+            record,
+            action=action,
+            expected_version=expected_version,
+            key=key,
+            event_time=event_time,
+            local=local,
+            **basis,
+        )
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+    console.print_json(data=result)
+    if not result["ok"]:
+        raise typer.Exit(2)
 
 
 def _load_synced() -> dict[str, dict[str, Any]]:
-    raw = _read_json(_sync_entities_path(), {})
-    return raw if isinstance(raw, dict) else {}
-
-
-def _enqueue(module: str, record: dict[str, Any], *, action: str = "upsert") -> None:
-    _queue_path().parent.mkdir(parents=True, exist_ok=True)
-    item = {
-        "module": module,
-        "action": action,
-        "record": record,
-        "idempotency_key": f"cli-{module}-{action}-{record.get('id', uuid.uuid4().hex)}-{uuid.uuid4().hex[:8]}",
-    }
-    with _queue_path().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(item, ensure_ascii=False, separators=(",", ":")) + "\n")
-
-
-def _write_requirement_doc(row: dict[str, Any]) -> None:
-    rid = str(row.get("id") or "")
-    title = str(row.get("title") or rid)
-    path = get_config().project_path / "sop" / "custom" / "requirements" / f"{rid}-{_slug(title)}.md"
-    ac = row.get("acceptance_criteria") or []
-    tags = row.get("tags") or []
-    lines = [
-        "---",
-        f"id: {rid}",
-        f"priority: {row.get('priority', 'P1')}",
-        f"status: {row.get('status', 'pending')}",
-        f"created_at: {row.get('created_at', '')}",
-        "---",
-        "",
-        f"# {title}",
-        "",
-        str(row.get("description") or "").strip(),
-        "",
-        "## Acceptance Criteria",
-    ]
-    lines.extend(f"- {x}" for x in ac)
-    if not ac:
-        lines.append("- 待补充")
-    lines.extend(["", "## Tags", ", ".join(str(x) for x in tags) or "无", ""])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    """Read only the selected project's last Manager pull; never merge drafts."""
+    cfg = get_config()
+    runtime = cfg.project_path / ".sop-runtime"
+    path = runtime / "sync" / "entities" / "requirements.json"
+    if not path.is_file():
+        return {}
+    try:
+        state = json.loads((runtime / "sync_state.json").read_text(encoding="utf-8"))
+        if not isinstance(state, dict) or state.get("project_id") != cfg.project_id:
+            raise ValueError("缓存不属于当前项目；请明确拉取当前项目后查看")
+        rows = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(rows, dict) or any(not isinstance(row, dict) for row in rows.values()):
+            raise ValueError("Manager缓存格式无效")
+        for row in rows.values():
+            if (
+                "project_id" in row
+                and row["project_id"] != cfg.project_id
+                or "tenant_id" in row
+                and row["tenant_id"] != cfg.tenant_id
+            ):
+                raise ValueError("缓存作用域与当前项目/租户不符")
+        return rows
+    except (OSError, ValueError, TypeError) as exc:
+        warn(f"不能读取只读Manager缓存: {exc}")
+        raise typer.Exit(2) from exc
 
 
 def _local_items(*, status: str | None = None, priority: str | None = None) -> list[dict[str, Any]]:
-    deleted = _deleted_ids()
-    merged = _load_synced()
-    merged.update(_load_local())
-    items = [dict(v) for k, v in merged.items() if k not in deleted]
+    items = [dict(row) for row in _load_synced().values()]
     if status:
-        items = [x for x in items if str(x.get("status") or "") == status]
+        items = [row for row in items if row.get("status") == status]
     if priority:
-        pu = priority.upper()
-        items = [x for x in items if str(x.get("priority") or "").upper() == pu]
-    return sorted(items, key=lambda x: str(x.get("updated_at") or x.get("created_at") or ""), reverse=True)
+        items = [row for row in items if str(row.get("priority", "")).upper() == priority.upper()]
+    return sorted(items, key=lambda row: str(row.get("created_at") or ""), reverse=True)
 
 
 def _render(items: list[dict[str, Any]], title: str) -> None:
@@ -198,107 +136,59 @@ def _render_intake(items: list[dict[str, Any]], title: str) -> None:
     console.print(tbl)
 
 
-def _new_row(
-    title: str,
-    *,
-    description: str,
-    priority: str,
-    acceptance: list[str],
-    tags: list[str],
-    assigned_agent: str = "",
-    dev_tool: str = "",
-) -> dict[str, Any]:
-    ts = _now()
-    return {
-        "id": f"REQ-local-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}",
-        "title": title,
-        "description": description,
-        "status": "pending",
-        "priority": priority.upper(),
-        "sprint_id": "",
-        "story_points": 0,
-        "acceptance_criteria": acceptance,
-        "tags": tags,
-        "human_notes": "",
-        "confidence": 0.0,
-        "assigned_agent": assigned_agent,
-        "dev_tool": dev_tool,
-        "created_at": ts,
-        "updated_at": ts,
-    }
-
-
-def _local_create(row: dict[str, Any]) -> None:
-    data = _load_local()
-    data[str(row["id"])] = row
-    _save_local(data)
-    deleted = _deleted_ids()
-    deleted.discard(str(row["id"]))
-    _save_deleted(deleted)
-    _enqueue("requirements", row)
-    _write_requirement_doc(row)
-
-
 @app.command(name="list")
 def list_requirements(
-    status: str = typer.Option(None, "--status", help="pending|in_progress|completed|blocked"),
-    priority: str = typer.Option(None, "--priority", help="P0|P1|P2|P3"),
-    page: int = typer.Option(1, "--page"),
-    size: int = typer.Option(50, "--size"),
-    local: bool = typer.Option(False, "--local", help="只读取本地物化/离线需求"),
+    status: str | None = typer.Option(None, "--status"),
+    priority: str | None = typer.Option(None, "--priority"),
+    page: int = typer.Option(1, "--page", min=1),
+    size: int = typer.Option(50, "--size", min=1, max=100),
+    local: bool = typer.Option(False, "--local", help="显式查看当前项目只读Manager拉取缓存"),
 ) -> None:
-    """列出需求；Manager 不可用时回退本地。"""
-    if not local:
-        try:
-            data = get_client().list_requirements(status=status, priority=priority, page=page, size=size)
-            _render(list(data.get("items", [])), f"requirements total={data.get('total', '?')}")
-            return
-        except Exception as e:
-            warn(f"Manager requirements 不可用，回退本地: {e}")
-    items = _local_items(status=status, priority=priority)
-    start = max(page - 1, 0) * size
-    _render(items[start : start + size], f"local requirements total={len(items)}")
+    if local:
+        items = _local_items(status=status, priority=priority)
+        warn("只读Manager拉取缓存，可能过期；不含未处理本地意图")
+        start = (page - 1) * size
+        _render(items[start : start + size], f"Manager cache requirements total={len(items)}")
+        return
+    try:
+        data = get_client().list_requirements(status=status, priority=priority, page=page, size=size)
+        _render(list(data.get("items", [])), f"requirements total={data.get('total', '?')}")
+    except Exception as exc:
+        warn(f"Manager requirements读取失败: {exc}")
+        raise typer.Exit(1) from exc
 
 
 @app.command(name="create")
 def create_requirement(
     title: str = typer.Argument(..., help="需求标题"),
-    description: str = typer.Option("", "--desc", help="需求描述"),
-    priority: str = typer.Option("P1", "--priority", help="P0|P1|P2|P3"),
-    acceptance: list[str] | None = typer.Option(None, "--acceptance", "-a", help="验收标准，可重复"),
-    tag: list[str] | None = typer.Option(None, "--tag", help="标签，可重复"),
-    assigned_agent: str = typer.Option("", "--agent", help="建议处理 Agent/角色"),
-    dev_tool: str = typer.Option("", "--tool", help="建议开发工具，如 codex/cursor/claude"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    record_id: str = typer.Option(..., "--record-id", help="固定新需求ID；未知结果时不可更换"),
+    description: str | None = typer.Option(None, "--desc"),
+    priority: str | None = typer.Option(None, "--priority"),
+    acceptance: list[str] | None = typer.Option(None, "--acceptance", "-a"),
+    tag: list[str] | None = typer.Option(None, "--tag"),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """创建需求；离线时写 .sop-runtime/local 并追加 push_queue。"""
-    body = {
-        "title": title,
+    """固定创建原件；不在网络失败后另造需求。"""
+    record = {"id": record_id, "title": title}
+    for name, value in {
         "description": description,
-        "priority": priority.upper(),
-        "acceptance_criteria": acceptance or [],
-        "tags": tag or [],
-        "assigned_agent": assigned_agent,
-        "dev_tool": dev_tool,
-    }
-    if not local:
-        try:
-            out = get_client().create_requirement(body)
-            ok(f"created requirement {out.get('id', '-')}")
-            return
-        except Exception as e:
-            warn(f"Manager create requirement 不可用，写入本地队列: {e}")
-    row = _new_row(
-        title,
-        description=description,
-        priority=priority,
-        acceptance=acceptance or [],
-        tags=tag or [],
-        assigned_agent=assigned_agent,
-        dev_tool=dev_tool,
+        "priority": priority.upper() if priority is not None else None,
+        "acceptance_criteria": acceptance,
+        "tags": tag,
+    }.items():
+        if value is not None:
+            record[name] = value
+    _submit(
+        record,
+        action="create",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
     )
-    _local_create(row)
-    ok(f"local requirement queued {row['id']}")
 
 
 @app.command(name="parse-doc")
@@ -367,55 +257,60 @@ def parse_requirement_document(
 
 @app.command(name="update")
 def update_requirement(
-    req_id: str = typer.Argument(..., help="需求 ID"),
+    req_id: str = typer.Argument(...),
     title: str | None = typer.Option(None, "--title"),
     description: str | None = typer.Option(None, "--desc"),
-    status: str | None = typer.Option(None, "--status"),
     priority: str | None = typer.Option(None, "--priority"),
-    story_points: int | None = typer.Option(None, "--points"),
+    story_points: int | None = typer.Option(None, "--points", min=0),
     human_notes: str | None = typer.Option(None, "--notes"),
-    acceptance: list[str] | None = typer.Option(None, "--acceptance", "-a", help="覆盖验收标准，可重复"),
-    tag: list[str] | None = typer.Option(None, "--tag", help="覆盖标签，可重复"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    acceptance: list[str] | None = typer.Option(None, "--acceptance", "-a"),
+    clear_acceptance: bool = typer.Option(False, "--clear-acceptance"),
+    tag: list[str] | None = typer.Option(None, "--tag"),
+    clear_tags: bool = typer.Option(False, "--clear-tags"),
+    requirement_basis: str | None = typer.Option(None, "--requirement-basis", help="核对的原需求定义摘要"),
+    change_preview_basis: str | None = typer.Option(
+        None, "--change-preview-basis", help="实际审查的变更影响预览摘要"
+    ),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """更新需求；离线时对本地副本打补丁并追加 upsert 队列。"""
-    patch: dict[str, Any] = {}
-    for k, v in {
+    """只提交明确字段；定义修改保留原预览，状态变更使用交付阶段评审。"""
+    if acceptance is not None and clear_acceptance or tag is not None and clear_tags:
+        raise typer.BadParameter("不能同时指定替换列表和清空列表")
+    record = {"id": req_id}
+    for name, value in {
         "title": title,
         "description": description,
-        "status": status,
-        "priority": priority.upper() if priority else None,
+        "priority": priority.upper() if priority is not None else None,
         "story_points": story_points,
         "human_notes": human_notes,
     }.items():
-        if v is not None:
-            patch[k] = v
-    if acceptance:
-        patch["acceptance_criteria"] = acceptance
-    if tag:
-        patch["tags"] = tag
-    if not patch:
-        warn("没有可更新字段")
-        return
-    if not local:
-        try:
-            get_client().update_requirement(req_id, patch)
-            ok(f"updated requirement {req_id}")
-            return
-        except Exception as e:
-            warn(f"Manager update requirement 不可用，写入本地队列: {e}")
-    data = _load_local()
-    base = dict(_load_synced().get(req_id) or data.get(req_id) or {"id": req_id, "title": req_id, "status": "pending"})
-    base.update(patch)
-    base["updated_at"] = _now()
-    data[req_id] = base
-    _save_local(data)
-    deleted = _deleted_ids()
-    deleted.discard(req_id)
-    _save_deleted(deleted)
-    _enqueue("requirements", base)
-    _write_requirement_doc(base)
-    ok(f"local requirement update queued {req_id}")
+        if value is not None:
+            record[name] = value
+    if acceptance is not None or clear_acceptance:
+        record["acceptance_criteria"] = acceptance or []
+    if tag is not None or clear_tags:
+        record["tags"] = tag or []
+    if len(record) == 1:
+        raise typer.BadParameter("没有明确的更新字段")
+    if {"title", "description", "acceptance_criteria"} & record.keys() and not (
+        requirement_basis and change_preview_basis
+    ):
+        raise typer.BadParameter(
+            "定义修改需要 --requirement-basis 和 --change-preview-basis；先核对 requirement-change-preview"
+        )
+    _submit(
+        record,
+        action="update",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+        requirement_basis=requirement_basis,
+        change_preview_basis=change_preview_basis,
+    )
 
 
 def _render_review(data: dict[str, Any]) -> None:
@@ -626,22 +521,18 @@ def assistance_history(req_id: str = typer.Argument(...), json_out: bool = typer
 
 @app.command(name="delete")
 def delete_requirement(
-    req_id: str = typer.Argument(..., help="需求 ID"),
-    local: bool = typer.Option(False, "--local", help="只写本地删除标记并进入同步队列"),
+    req_id: str = typer.Argument(..., help="稳定记录ID"),
+    expected_version: int = typer.Option(..., "--expected-version", min=0, help="实际核对的原项目版本"),
+    key: str = typer.Option(..., "--key", help="固定原操作键；重发保持一致"),
+    event_time: str = typer.Option(..., "--time", help="原操作RFC3339时间；重发保持一致"),
+    local: bool = typer.Option(False, "--local", help="仅持久入同一SQLite队列，不修改业务副本"),
 ) -> None:
-    """删除需求；离线时写 tombstone 并追加 delete 队列。"""
-    if not local:
-        try:
-            get_client().delete_requirement(req_id)
-            ok(f"deleted requirement {req_id}")
-            return
-        except Exception as e:
-            warn(f"Manager delete requirement 不可用，写入本地队列: {e}")
-    data = _load_local()
-    data.pop(req_id, None)
-    _save_local(data)
-    deleted = _deleted_ids()
-    deleted.add(req_id)
-    _save_deleted(deleted)
-    _enqueue("requirements", {"id": req_id}, action="delete")
-    ok(f"local requirement delete queued {req_id}")
+    """持久提交原删除意图；处理完成前不隐藏当前记录。"""
+    _submit(
+        {"id": req_id},
+        action="delete",
+        expected_version=expected_version,
+        key=key,
+        event_time=event_time,
+        local=local,
+    )

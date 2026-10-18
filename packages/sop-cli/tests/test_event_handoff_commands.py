@@ -34,7 +34,7 @@ def test_bad_200_keeps_last_copy_and_never_creates_old_jsonl(monkeypatch, tmp_pa
         def events_ingest(self, *args, **kwargs):
             return {"accepted": ["E"], "duplicated": []}
 
-    monkeypatch.setattr(event, "get_client", lambda: Client())
+    monkeypatch.setattr(event, "get_client", lambda cfg=None: Client())
     result = CliRunner().invoke(
         event.app, ["emit", "generic.fact", "--id", "E", "--time", "2026-10-18T00:00:00Z"]
     )
@@ -53,7 +53,7 @@ def test_remote_list_failure_does_not_claim_local_is_remote(monkeypatch, tmp_pat
         def events_list(self, **kwargs):
             raise RuntimeError("Access denied")
 
-    monkeypatch.setattr(event, "get_client", lambda: Client())
+    monkeypatch.setattr(event, "get_client", lambda cfg=None: Client())
     result = CliRunner().invoke(event.app, ["list", "--json"])
     assert result.exit_code == 2 and "Access denied" in result.stdout
     assert not (tmp_path / ".sop-runtime/outbox.sqlite").exists()

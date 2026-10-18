@@ -19,8 +19,8 @@ from .._util import console, get_client, get_config, ok, warn
 app = typer.Typer(help="事件：持久入队、送达回执、处理记录和明确重试")
 
 
-def _outbox_path() -> Path:
-    cfg = get_config()
+def _outbox_path(config=None) -> Path:
+    cfg = config or get_config()
     return cfg.project_path / cfg.outbox_path
 
 
@@ -47,9 +47,9 @@ def queue_health(project_path: Path, outbox_path: str = ".sop-runtime/outbox.sql
     return {"pending": None, "dead_letter": None, "acked": None, "bad": 1, "storage_state": error}
 
 
-def _legacy_files():
-    root = get_config().project_path / ".sop-runtime"
-    names = ("events/outbox.jsonl", "events/sent.jsonl", "sync/push_queue.jsonl", "dlq")
+def _legacy_files(project_path: Path | None = None):
+    root = (project_path or get_config().project_path) / ".sop-runtime"
+    names = ("events/outbox.jsonl", "events/sent.jsonl", "sync/push_queue.jsonl", "dlq", "local", "rules/proposals.jsonl", "sync/watch_state.json")
     return [
         {
             "path": str(root / name),
@@ -61,13 +61,13 @@ def _legacy_files():
     ]
 
 
-def _flush(limit):
-    cfg = get_config()
+def _flush(limit, *, config=None):
+    cfg = config or get_config()
     retries = integer(cfg.outbox_max_retries, "outbox_max_retries", 0, 999)
-    with EventOutbox(_outbox_path()) as box:
+    with EventOutbox(_outbox_path(cfg)) as box:
         return flush_outbox(
             box,
-            get_client(),
+            get_client(cfg),
             intended_project_id=cfg.project_id,
             manager_url=cfg.manager_url,
             limit=limit,

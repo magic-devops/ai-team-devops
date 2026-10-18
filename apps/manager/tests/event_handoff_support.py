@@ -8,7 +8,7 @@ from sop_manager.routers import sync_api
 from sqlalchemy import select
 
 
-def direct_sync(db, project_id, *, module="tasks", action="upsert", record, key=None):
+def direct_sync(db, project_id, *, module="tasks", action="upsert", record, key=None, **metadata):
     unusable_hash = "not-a-login"
     project = db.get(m.Project, project_id)
     user = (
@@ -41,6 +41,7 @@ def direct_sync(db, project_id, *, module="tasks", action="upsert", record, key=
         record=record,
         expected_version=expected,
         idempotency_key=key or uuid4().hex,
+        **metadata,
     )
     request = Request(
         {

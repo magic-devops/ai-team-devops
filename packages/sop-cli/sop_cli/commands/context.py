@@ -21,9 +21,9 @@ from .._util import console, get_client, get_config, ok, warn
 app = typer.Typer(help="v4 上下文：三码 + project_path（默认子命令 show）")
 
 
-def build_project_manifest() -> dict[str, Any]:
+def build_project_manifest(*, config=None) -> dict[str, Any]:
     """Build a secret-free manifest for IDEs, CLIs, and agents."""
-    cfg = get_config()
+    cfg = config or get_config()
     rt = cfg.project_path / ".sop-runtime"
     sync_dir = rt / "sync"
     manifest: dict[str, Any] = {
@@ -45,11 +45,10 @@ def build_project_manifest() -> dict[str, Any]:
         "local": {
             "agent_toml": str(rt / "agent.toml"),
             "sync_state": str(rt / "sync_state.json"),
-            "push_queue": str(sync_dir / "push_queue.jsonl"),
             "entities_dir": str(sync_dir / "entities"),
-            "local_dir": str(rt / "local"),
             "rules_dir": str(cfg.project_path / ".ai-memory" / "rules"),
-            "rule_proposals": str(rt / "rules" / "proposals.jsonl"),
+            "rule_proposals": str(rt / "rules" / "proposals"),
+            "asset_plans": str(rt / "sync" / "plans"),
             "custom_dir": str(cfg.project_path / "sop" / "custom"),
             "memory_state": str(cfg.project_path / "memory" / "current_state.json"),
             "platform_onboarding": str(rt / "platforms" / "onboarding.json"),
@@ -72,6 +71,7 @@ def build_project_manifest() -> dict[str, Any]:
                 "sop sync flush",
                 "sop sync pull --direct --materialize",
                 "sop sync watch --once",
+                "sop sync enqueue-plan --help",
                 "sop sync status",
             ],
             "work_items": [
@@ -123,6 +123,16 @@ def build_project_manifest() -> dict[str, Any]:
             "a2a_port": cfg.a2a_port,
             "mcp_servers": cfg.mcp_servers,
         },
+        "write_contract": {
+            "delivery_queue": str(cfg.project_path / cfg.outbox_path),
+            "required": ["expected_version", "key", "time"],
+            "create_requires": ["record_id"],
+            "task_definition_changes_require": ["task_basis"],
+            "requirement_definition_changes_require": ["requirement_basis", "change_preview_basis"],
+            "asset_changes_require": ["expected_sha256"],
+            "watch": "read_only_snapshot_then_explicit_enqueue_plan",
+            "remote_failure": "retain_original_event_without_creating_local_business_state",
+        },
     }
     onboarding_path = rt / "platforms" / "onboarding.json"
     if onboarding_path.is_file():
@@ -133,17 +143,17 @@ def build_project_manifest() -> dict[str, Any]:
     return manifest
 
 
-def write_project_manifest(path: Path | None = None) -> Path:
-    cfg = get_config()
+def write_project_manifest(path: Path | None = None, *, config=None) -> Path:
+    cfg = config or get_config()
     target = path or (cfg.project_path / ".sop-runtime" / "project_manifest.json")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(build_project_manifest(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    target.write_text(json.dumps(build_project_manifest(config=cfg), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target
 
 
-def write_pages_context_cache(path: Path | None = None, capabilities_path: Path | None = None) -> tuple[Path | None, Path | None]:
+def write_pages_context_cache(path: Path | None = None, capabilities_path: Path | None = None, *, config=None) -> tuple[Path | None, Path | None]:
     """Cache Manager page manifest/capability maps so agents can route work without guessing menus."""
-    cfg = get_config()
+    cfg = config or get_config()
     rt = cfg.project_path / ".sop-runtime"
     manifest_target = path or (rt / "pages_manifest.json")
     capability_target = capabilities_path or (rt / "pages_capabilities.json")
@@ -167,9 +177,9 @@ def write_pages_context_cache(path: Path | None = None, capabilities_path: Path 
     return manifest_target, capability_target
 
 
-def write_db_connections_cache(path: Path | None = None) -> Path | None:
+def write_db_connections_cache(path: Path | None = None, *, config=None) -> Path | None:
     """Cache secret-free Manager data source configs for local agents."""
-    cfg = get_config()
+    cfg = config or get_config()
     target = path or (cfg.project_path / ".sop-runtime" / "db_connections.json")
     try:
         data = get_client(cfg).db_connections()
@@ -197,9 +207,10 @@ def write_agent_context(
     work_snapshot_path: Path,
     out: Path | None = None,
     prepared: dict[str, bool] | None = None,
+    config=None,
 ) -> Path:
     """Write a secret-free context index for generic CLI/IDE/Agent consumers."""
-    cfg = get_config()
+    cfg = config or get_config()
     rt = cfg.project_path / ".sop-runtime"
     target = out or (rt / "agent_context.json")
     payload = {
@@ -217,9 +228,9 @@ def write_agent_context(
             "env": str(rt / "sop.env"),
             "work_snapshot": str(work_snapshot_path),
             "sync_entities": str(rt / "sync" / "entities"),
-            "push_queue": str(rt / "sync" / "push_queue.jsonl"),
             "rules": str(cfg.project_path / ".ai-memory" / "rules"),
-            "rule_proposals": str(rt / "rules" / "proposals.jsonl"),
+            "rule_proposals": str(rt / "rules" / "proposals"),
+            "asset_plans": str(rt / "sync" / "plans"),
             "custom": str(cfg.project_path / "sop" / "custom"),
             "memory_state": str(cfg.project_path / "memory" / "current_state.json"),
             "platform_onboarding": str(rt / "platforms" / "onboarding.json"),
@@ -380,9 +391,9 @@ def _shell_quote(value: object) -> str:
     return "'" + s.replace("'", "'\"'\"'") + "'"
 
 
-def build_env_lines(*, export: bool = True) -> list[str]:
+def build_env_lines(*, export: bool = True, config=None) -> list[str]:
     """Build secret-free SOP_* env lines for generic CLI/Agent bootstrapping."""
-    cfg = get_config()
+    cfg = config or get_config()
     rt = cfg.project_path / ".sop-runtime"
     values = {
         "SOP_PROJECT_PATH": cfg.project_path,
@@ -400,7 +411,8 @@ def build_env_lines(*, export: bool = True) -> list[str]:
         "SOP_PAGES_MANIFEST": rt / "pages_manifest.json",
         "SOP_PAGES_CAPABILITIES": rt / "pages_capabilities.json",
         "SOP_COPILOT_SESSIONS": rt / "copilot" / "sessions.jsonl",
-        "SOP_RULE_PROPOSALS": rt / "rules" / "proposals.jsonl",
+        "SOP_RULE_PROPOSALS": rt / "rules" / "proposals",
+        "SOP_ASSET_PLANS": rt / "sync" / "plans",
         "SOP_MEMORY_LOCAL": rt / "memory" / "local.jsonl",
         "SOP_MEMORY_OUTBOX": rt / "memory" / "outbox.jsonl",
         "SOP_KB_OUTBOX": rt / "kb" / "outbox.jsonl",
@@ -452,27 +464,23 @@ def prepare_cmd(
     if platforms:
         prepared["platforms"] = _run_sop_optional(["platforms", "init", "all"], "平台接入刷新")
 
-    manifest_path = write_project_manifest()
+    manifest_path = write_project_manifest(config=cfg)
     prepared["manifest"] = True
     ok(f"manifest written: {manifest_path}")
 
-    from .work import _build_snapshot
+    from .work import write_cache_snapshot
 
     work_snapshot_path = cfg.project_path / ".sop-runtime" / "work_snapshot.json"
-    work_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-    work_snapshot_path.write_text(
-        json.dumps(_build_snapshot(local=True, limit=20), ensure_ascii=False, indent=2, default=str) + "\n",
-        encoding="utf-8",
-    )
+    write_cache_snapshot(cfg, work_snapshot_path)
     prepared["work_snapshot"] = True
     ok(f"work snapshot written: {work_snapshot_path}")
     if db_config:
-        db_path = write_db_connections_cache()
+        db_path = write_db_connections_cache(config=cfg)
         prepared["db_config"] = bool(db_path and db_path.is_file())
         if db_path and db_path.is_file():
             ok(f"db connections written: {db_path}")
     if pages:
-        pages_manifest_path, pages_capabilities_path = write_pages_context_cache()
+        pages_manifest_path, pages_capabilities_path = write_pages_context_cache(config=cfg)
         prepared["pages_manifest"] = bool(pages_manifest_path and pages_manifest_path.is_file())
         prepared["pages_capabilities"] = bool(pages_capabilities_path and pages_capabilities_path.is_file())
         if pages_manifest_path and pages_manifest_path.is_file():
@@ -480,7 +488,7 @@ def prepare_cmd(
         if pages_capabilities_path and pages_capabilities_path.is_file():
             ok(f"pages capabilities written: {pages_capabilities_path}")
     env_path = cfg.project_path / ".sop-runtime" / "sop.env"
-    env_path.write_text("\n".join(build_env_lines(export=True)) + "\n", encoding="utf-8")
+    env_path.write_text("\n".join(build_env_lines(export=True, config=cfg)) + "\n", encoding="utf-8")
     prepared["env"] = True
     ok(f"env written: {env_path}")
 
@@ -492,6 +500,7 @@ def prepare_cmd(
         work_snapshot_path=work_snapshot_path,
         out=target,
         prepared=prepared,
+        config=cfg,
     )
     ok(f"agent context written: {agent_context_path}")
 

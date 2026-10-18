@@ -181,8 +181,12 @@ def test_native_scope_change_and_restore_permanently_invalidates_receipt(bridge,
             elif writer == "sync":
                 from event_handoff_support import direct_sync
 
+                observed = client.get(f"/api/v1/delivery/tasks/{task['id']}").json()["task"]
                 result = direct_sync(
-                    db, "project", record={"id": task["id"], "acceptance_criteria": criteria}
+                    db,
+                    "project",
+                    record={"id": task["id"], "acceptance_criteria": criteria},
+                    task_basis=observed["basis"],
                 )
                 assert result["processing"]["state"] == "processed", result
             else:

@@ -493,3 +493,19 @@ Manager不可变Inbox、Processing及追加Attempt为权威；真实身份/项�
 原失败完整保留：Go原测试受TEMP正斜线影响、真实Python首次WAL竞争、离线UV缓存缺构建依赖、native RUN2夹具帧9000字节不足分别记明；只将真实产品边界计入finding。工具链/模块来自原锁定版本，在任务目录校验；最终wheel复用已缓存纯Python构建依赖，未全局安装或改环境。所有重要源/唯一证据先盘点散列保留，清理不遍历链接；清理与实际commit以独立回执为准，.pnpm-store保持忽略且零跟踪。
 
 继续工作：旧实体/规则/watch草稿生产端的明确原版本事件意图；通用跨存储活动与reflection处理器；显式完整progress、人工评审、历史影响、quality/release详情的有界读取；当前390px中英日实机视觉，生产身份/模型/数据库/基础设施和长期可靠性。既有浏览器协议及12ui安装/上传审批拒绝不绕过，SSR/状态/结构/HTTP证据不冒充实际视觉。
+
+## 本地原意图、审阅资产与接入一致性增量（2026-10-18）
+
+阶段T-local-intents，基线90e47f6。设计 `docs/LOCAL_INTENTS_DESIGN.md`、使用 `docs/LOCAL_INTENTS_GUIDE.md`、接入 `docs/playbooks/PROJECT_ONBOARDING.md`。17类需求/任务/问题/迭代写命令要求原版本/键/时间，创建还需稳定业务ID；先入唯一SQLite，再可选送达。create/update明确存在性，更新仅传指定字段；保留原需求preview/Task basis及验收门禁，不再造第二套local实体、Markdown、tombstone或JSONL。旧文件只读盘点，不自动发送、压缩或修复。
+
+watch仅输出UTF-8/CRLF原快照，单次50条/1MiB、单文件60KiB，格式与Manager五种保持一致；审阅后enqueue-plan明确一条、原版本及远端SHA/absent，不重读变化后的源。输出与扫描根重叠被拒绝，pull原子替换目录项保护硬链接其他原件。规则提案完整写入后唯一发布，稳定marker及项目锁覆盖重复/并发和正文先落盘恢复。SDK/IPC/HTTP透传原basis，已ACK旧原件不能冒充另一个Manager/用户的成功。
+
+work v2不再合并legacy overlay。实时需求/任务/问题各最多100条并核同代，Sprint为独立首页；loaded、实际total、continuation与统计范围分开。缓存总数/当前验收未知，不把完成当通过。context.prepare及init接入helper采用同一配置和新的原子缓存快照writer；旧私有导入退出。浏览器高级资产同步提供准备/审阅/处理、会话内持久原件、唯一键、未知锁与原件重放、三语/当前主题及退出保护；实际HTTP头绑定审阅会话，保存后复核scope，不能把A正文带B头发送。实际canonical target独立展示，Windows合法大小写差异不误判未知。
+
+完整Manager1562、SDK/CLI633通过，前后319/122项源与契约稳定；Web定向108项/10文件、TypeScript与Vite构建通过，主壳和全部子应用500项源稳定。本阶段未重复原完整678项前端套件。Go75主项+38子例/6包通过，3项原Windows符号链接跳过；vet、离线SDK wheel全部Python/SQL字节与OpenAPI仅2schema变更、187路径/467无关schema及1211引用核验通过。44个Python变更文件无新增或恶化诊断。
+
+真实HTTP Run1验证17命令及原键重放、实际preview/Task basis/活动原新关联、断ACK+Manager重启、旧版本/403和18GET全35表零写；Run2/3验证真实103–104实体的work分页、规则、实际prepare和全新init helper；Run4验证最终五格式发现/拒绝与原SHA文件；Run9编译真实前端helper，经真实Manager验证3个中文/Emoji标识向量、4次处理、3次重复回执、2次明确失败及文件不变。各轮受影响来源分别冻结，没有将后续helper改动冒充早期全源相同。所有owned进程已停止，模型调用0。Node Run5–8的Vite环境、散列脚本及资产不递增业务workspace版本的夹具假设失败完整保留，不计作产品缺陷。
+
+独立复核的任务删除/转属活动遗漏、已ACK跨origin误成功、提案半写发布、work旧overlay、pull硬链接覆盖、watch自反馈，以及浏览器canonical路径/错scope请求头均有原RED、修复和原探针GREEN。额外真实接入遗留导入及不支持格式也有回归。证据 `.sop-runtime/delivery-evidence/local-intents/`；先保全重要源/唯一文件及散列再精确清理，不遍历链接。清理与实际本地提交以各自receipt为准，不push，.pnpm-store零跟踪。
+
+完整目标保持active，production_integration_complete=false。generic/reflection真实处理、Issue反向全来源、显式quality/release/progress/人审/历史影响详情有界化，当前390px中英日实际视觉、生产身份/模型/数据库/基础设施及长期规模仍待完善。已独立审计大详情成本；既有浏览器协议与12ui安装/上传审批限制不绕过，SSR/控制器/HTTP及构建不能代替实机视觉。

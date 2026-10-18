@@ -155,8 +155,6 @@ def _jsonl_count(path: Path) -> dict[str, int]:
 def _read_outboxes(project_path: Path, outbox_path=".sop-runtime/outbox.sqlite") -> dict[str, dict[str, Any]]:
     from .event import queue_health
     return {
-        "sync": {**_jsonl_count(project_path / ".sop-runtime" / "sync" / "push_queue.jsonl"),
-                 "storage_state": "legacy_draft", "auto_flush": False},
         "memory": _jsonl_count(project_path / ".sop-runtime" / "memory" / "outbox.jsonl"),
         "kb": _jsonl_count(project_path / ".sop-runtime" / "kb" / "outbox.jsonl"),
         "events": queue_health(project_path, outbox_path),
@@ -172,14 +170,21 @@ def _read_artifacts(project_path: Path) -> dict[str, Any]:
         "work_snapshot": project_path / ".sop-runtime" / "work_snapshot.json",
         "pages_manifest": project_path / ".sop-runtime" / "pages_manifest.json",
         "pages_capabilities": project_path / ".sop-runtime" / "pages_capabilities.json",
-        "rule_proposals": project_path / ".sop-runtime" / "rules" / "proposals.jsonl",
         "copilot_sessions": project_path / ".sop-runtime" / "copilot" / "sessions.jsonl",
         "memory_local": project_path / ".sop-runtime" / "memory" / "local.jsonl",
         "kb_outbox": project_path / ".sop-runtime" / "kb" / "outbox.jsonl",
         "db_connections": project_path / ".sop-runtime" / "db_connections.json",
-        "watch_state": project_path / ".sop-runtime" / "sync" / "watch_state.json",
     }
-    return {k: {"path": str(v), "exists": v.is_file()} for k, v in files.items()}
+    result = {k: {"path": str(v), "exists": v.is_file()} for k, v in files.items()}
+    for key, directory in {
+        "rule_proposals": project_path / ".sop-runtime/rules/proposals",
+        "asset_plans": project_path / ".sop-runtime/sync/plans",
+    }.items():
+        result[key] = {"path": str(directory), "exists": directory.is_dir()}
+    from .event import _legacy_files
+
+    result["legacy_read_only"] = _legacy_files(project_path)
+    return result
 
 
 def _read_sync_state(project_path: Path) -> dict[str, Any]:

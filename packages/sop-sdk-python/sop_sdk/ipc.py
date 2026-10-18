@@ -332,15 +332,16 @@ class AgentdIpcClient:
         event_id: str,
         time: str,
         action="upsert",
+        task_basis: str | None = None,
+        requirement_basis: str | None = None,
+        change_preview_basis: str | None = None,
     ) -> dict[str, Any]:
-        from .event_envelope import FrozenEvent, integer
+        from .record_intents import freeze_record_intent
 
-        integer(expected_version, "expected_version")
-        event = FrozenEvent.create(
-            "sop.sync.push",
-            {"expected_version": expected_version, "module": module, "action": action, "record": record},
-            event_id=event_id,
-            time=time,
+        event = freeze_record_intent(
+            module, record, action=action, expected_version=expected_version, key=event_id,
+            event_time=time, source="sop-sdk", task_basis=task_basis,
+            requirement_basis=requirement_basis, change_preview_basis=change_preview_basis,
         )
         return self.enqueue_event(event, intended_project_id=intended_project_id)
 

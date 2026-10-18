@@ -764,9 +764,24 @@ class IssueCreateCommand(Input):
 
 
 class SyncRecordApply(Input):
+    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=False)
     module: Literal["tasks", "requirements", "issues", "sprints"]
-    action: Literal["upsert", "delete"] = "upsert"
+    action: Literal["create", "update", "upsert", "delete"] = "upsert"
     record: dict
+    task_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    requirement_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    change_preview_basis: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def basis_matches_module(self):
+        supplied = self.model_fields_set & {"task_basis", "requirement_basis", "change_preview_basis"}
+        allowed = {
+            "tasks": {"task_basis"},
+            "requirements": {"requirement_basis", "change_preview_basis"},
+        }.get(self.module, set())
+        if supplied - allowed:
+            raise ValueError("Basis metadata does not apply to this module")
+        return self
 
 
 PAYLOADS = {

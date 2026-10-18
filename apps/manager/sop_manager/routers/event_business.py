@@ -89,7 +89,7 @@ def _task_guard(db, project, data, row, values, *, deleting=False):
         _require_task_transition(db, project, data, row, SimpleNamespace(status=values.get("status")))
 
 
-def _requirement_guard(db, project, data, row, values):
+def _requirement_guard(db, project, data, row, values, body):
     if "status" in values and values["status"] != (row.status if row else "pending"):
         fail(
             "event_requirement_stage_required", "Change requirement status through delivery stage review", 422
@@ -101,7 +101,53 @@ def _requirement_guard(db, project, data, row, values):
         definition = {
             key: values[key] for key in ("title", "description", "acceptance_criteria") if key in values
         }
-        require_change_preview(db, project, data, row, RequirementEdit(id=row.id, **definition))
+        require_change_preview(
+            db,
+            project,
+            data,
+            row,
+            RequirementEdit(
+                id=row.id,
+                **definition,
+                requirement_basis=body.requirement_basis,
+                change_preview_basis=body.change_preview_basis,
+            ),
+        )
+
+
+def _record_basis(db, project, data, row, values, body):
+    supplied = (body.task_basis, body.requirement_basis, body.change_preview_basis)
+    if row is None and any(value is not None for value in supplied):
+        fail("event_target_missing", "An original basis requires an existing target", 404)
+    if row is None:
+        return
+    if body.module == "tasks":
+        if (
+            body.action != "delete"
+            and {"owner_id", "acceptance_criteria"} & values.keys()
+            and body.task_basis is None
+        ):
+            fail("task_basis_required", "Task definition edits require the original task basis", 422)
+        if body.task_basis is not None:
+            from .delivery_verification import VerificationContext
+
+            if body.task_basis != VerificationContext(db, project, data).basis(row.id):
+                fail("task_basis_changed", "Task scope changed; review its current definition")
+    elif body.module == "requirements":
+        from .delivery_plan import requirement_basis
+        from .delivery_requirement_history import change_facts
+
+        if body.requirement_basis is not None and body.requirement_basis != requirement_basis(row):
+            fail("requirement_basis_changed", "Requirement changed; review its current definition")
+        if body.change_preview_basis is not None:
+            definition = {
+                key: values[key] for key in ("title", "description", "acceptance_criteria") if key in values
+            }
+            if body.change_preview_basis != change_facts(db, project, data, row, definition)[1]:
+                fail(
+                    "requirement_change_preview_changed",
+                    "Definition or impact changed; review a fresh preview",
+                )
 
 
 def _reconcile_sync(db, project, data):
@@ -149,6 +195,15 @@ def _assign_record(db, user, row, model, values):
             row.reported_by = user.username
 
 
+def _record_target(db, project, model, rid, action):
+    row = db.query(model).filter(*scope(project, model), model.id == rid).first()
+    if action == "create" and row is not None:
+        fail("event_target_exists", "Create requires an absent target")
+    if action == "update" and row is None:
+        fail("event_target_missing", "Update requires an existing target", 404)
+    return row
+
+
 def apply_sync_record(db, project, user, data, body):
     model = MODELS[body.module]
     values = dict(body.record)
@@ -161,7 +216,11 @@ def apply_sync_record(db, project, user, data, body):
 
     values = validate_values(model, values)
     _references(db, project, values)
-    row = db.query(model).filter(*scope(project, model), model.id == rid).first()
+    row = _record_target(db, project, model, rid, body.action)
+    _record_basis(db, project, data, row, values, body)
+    from .delivery_service import serialize
+
+    before = serialize(row) if row is not None else None
     if body.action == "delete":
         if values:
             fail("event_record_invalid", "Delete accepts only record.id", 422)
@@ -170,14 +229,14 @@ def apply_sync_record(db, project, user, data, body):
                 _task_guard(db, project, data, row, {}, deleting=True)
             db.delete(row)
             _reconcile_sync(db, project, data)
-        return rid, None, {"record_id": rid, "module": body.module, "action": "delete"}
+        return rid, before, {"record_id": rid, "module": body.module, "action": "delete"}
     if model is m.Task:
         values = validate_task_owner_values(db, project, values)
         if "acceptance_criteria" in values:
             values["acceptance_criteria"] = normalize_task_acceptance(values["acceptance_criteria"])
         _task_guard(db, project, data, row, values)
     if model is m.Requirement:
-        _requirement_guard(db, project, data, row, values)
+        _requirement_guard(db, project, data, row, values, body)
     if row is None:
         row = _new_record(db, project, model, rid, values)
     _assign_record(db, user, row, model, values)
@@ -189,7 +248,7 @@ def apply_sync_record(db, project, user, data, body):
         db.flush()
         _require_task_transition(db, project, data, row, SimpleNamespace(status=values.get("status")))
     _reconcile_sync(db, project, data)
-    return rid, None, {"record_id": rid, "module": body.module, "action": "upsert"}
+    return rid, before, {"record_id": rid, "module": body.module, "action": body.action}
 
 
 def apply_canonical(db, project, user, data, action, body, command_key):

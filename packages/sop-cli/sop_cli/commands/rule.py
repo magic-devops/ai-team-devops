@@ -1,174 +1,82 @@
-"""
-@module: sop_cli.commands.rule
-@purpose: 规则操作：list / propose / apply
-"""
+"""Rule review documents, explicit local application and frozen remote file intents."""
+
 from __future__ import annotations
 
-import json
-import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Any
+from datetime import datetime, timezone
 
 import typer
 from rich.table import Table
 
+from .. import rule_store
 from .._util import console, get_client, get_config, ok, warn
 
-app = typer.Typer(help="规则库操作")
+app = typer.Typer(help="规则：本地提案、明确应用与原依据推送")
 
 
-def _rules_file() -> Path:
-    return get_config().project_path / ".ai-memory" / "rules" / "RULES.md"
+def _now():
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _proposals_path() -> Path:
-    return get_config().project_path / ".sop-runtime" / "rules" / "proposals.jsonl"
+def _rules_file(config=None):
+    return rule_store.rules_target(config or get_config())
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
+def _proposals_path():
+    return rule_store.proposal_directory(get_config())
+
+
+def _proposal_by_id(rule_id):
+    return rule_store.proposal(get_config(), rule_id)
+
+
+def _local_rules(config=None):
+    target = _rules_file(config)
+    if not target.is_file():
         return []
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict):
-            rows.append(obj)
+    rows = []
+    for number, line in enumerate(target.read_bytes().decode("utf-8").splitlines(), 1):
+        if line.strip().startswith("- "):
+            rows.append(
+                {"id": f"local-{number}", "rule": line.strip()[2:], "category": "local", "confidence": 1.0}
+            )
     return rows
-
-
-def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in rows),
-        encoding="utf-8",
-    )
-
-
-def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-
-
-def _now() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-
-def _local_rules() -> list[dict]:
-    f = _rules_file()
-    if not f.is_file():
-        return []
-    rows: list[dict] = []
-    for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
-        s = line.strip()
-        if s.startswith("- ") and "规则数" not in s and "活跃规则" not in s:
-            category = "local"
-            rule = s[2:].strip()
-            if rule.startswith("[") and "]" in rule:
-                category = rule[1:rule.index("]")].strip() or "local"
-            rows.append({"id": f"local-{i}", "category": category, "confidence": 1.0, "rule": rule})
-    return rows
-
-
-def _append_local_rule(rule: str, category: str, source: str, confidence: float) -> Path:
-    f = _rules_file()
-    f.parent.mkdir(parents=True, exist_ok=True)
-    if not f.exists():
-        f.write_text("# 项目规则库\n\n## 活跃规则\n\n", encoding="utf-8")
-    text = f.read_text(encoding="utf-8")
-    entry = (
-        f"- [{category}] {rule} "
-        f"(source={source}, confidence={confidence:.2f}, created_at={_now()})"
-    )
-    if entry in text:
-        return f
-    if "## 活跃规则" in text:
-        text = text.replace("## 活跃规则", "## 活跃规则\n\n" + entry, 1)
-    else:
-        text += "\n## 活跃规则\n\n" + entry + "\n"
-    f.write_text(text, encoding="utf-8")
-    return f
-
-
-def _enqueue_rules_file() -> None:
-    from .sync import _enqueue_item
-
-    f = _rules_file()
-    if not f.is_file():
-        return
-    rel = f.relative_to(get_config().project_path).as_posix()
-    _enqueue_item("rules", {"path": rel, "content": f.read_text(encoding="utf-8")}, action="upsert")
-
-
-def _build_proposal(rule: str, category: str, source: str, confidence: float) -> dict[str, Any]:
-    cfg = get_config()
-    return {
-        "id": f"rule-local-{uuid.uuid4().hex}",
-        "rule": rule,
-        "category": category,
-        "source": source,
-        "confidence": confidence,
-        "status": "proposed",
-        "created_at": _now(),
-        "tenant_code": cfg.tenant_code or cfg.tenant_id,
-        "business_code": cfg.business_code,
-        "project_code": cfg.project_code or cfg.project_id,
-        "project_id": cfg.project_id,
-    }
-
-
-def _proposal_by_id(rule_id: str) -> dict[str, Any] | None:
-    rid = rule_id.strip()
-    for row in _read_jsonl(_proposals_path()):
-        if str(row.get("id") or "") == rid:
-            return row
-    return None
 
 
 @app.command(name="list")
 def list_rules(
-    local: bool = typer.Option(False, "--local", help="只读取本地 RULES.md 与 proposals"),
-    proposals: bool = typer.Option(False, "--proposals", help="同时列出本地待审核提案"),
-    json_output: bool = typer.Option(False, "--json", help="输出 JSON"),
-) -> None:
-    """列出当前活跃规则（GET /api/v1/rules）。"""
+    local: bool = typer.Option(False, "--local", help="明确读取本地规则，不自动回落"),
+    proposals: bool = typer.Option(False, "--proposals", help="同时显示当前本地提案"),
+    json_output: bool = typer.Option(False, "--json"),
+):
     try:
-        if local:
-            raise RuntimeError("--local")
-        rows = get_client()._request("GET", "/api/v1/rules")
-        source = "Manager"
-    except Exception as e:
-        if str(e) != "--local":
-            warn(f"Manager 规则接口不可用，回退本地 RULES.md：{e}")
-        rows = _local_rules()
-        source = "local"
-    rows = rows if isinstance(rows, list) else []
-    proposal_rows = _read_jsonl(_proposals_path()) if proposals or local else []
-    if json_output:
-        console.print_json(data={"ok": True, "source": source, "items": rows, "proposals": proposal_rows})
-        return
-    tbl = Table(title=f"rules total={len(rows)} source={source}", show_header=True, header_style="bold")
-    for col in ("id", "category", "confidence", "rule"):
-        tbl.add_column(col)
-    for r in rows[:200]:
-        tbl.add_row(str(r.get("id", "")), str(r.get("category", "")),
-                    f"{r.get('confidence', 0):.2f}", (r.get("rule", "") or "")[:100])
-    console.print(tbl)
-    if proposal_rows:
-        pt = Table(title=f"proposals total={len(proposal_rows)}", show_header=True, header_style="bold")
-        for col in ("id", "status", "category", "confidence", "rule"):
-            pt.add_column(col)
-        for r in proposal_rows[:200]:
-            pt.add_row(str(r.get("id", "")), str(r.get("status", "")), str(r.get("category", "")),
-                       f"{float(r.get('confidence') or 0):.2f}", str(r.get("rule", ""))[:100])
-        console.print(pt)
+        config = get_config()
+        rows = _local_rules(config) if local else get_client(config)._request("GET", "/api/v1/rules")
+        documents = (
+            rule_store.list_proposals(config) if proposals else {"items": [], "total": 0, "has_more": False}
+        )
+        if json_output:
+            console.print_json(
+                data={
+                    "ok": True,
+                    "source": "local" if local else "Manager",
+                    "items": rows,
+                    "proposals": documents["items"],
+                    "proposals_total": documents["total"],
+                    "proposals_has_more": documents["has_more"],
+                }
+            )
+            return
+        table = Table(title=f"rules · {'local' if local else 'Manager'}", show_header=True)
+        for name in ("id", "category", "rule"):
+            table.add_column(name)
+        for row in rows[:200]:
+            table.add_row(str(row.get("id", "")), str(row.get("category", "")), str(row.get("rule", "")))
+        console.print(table)
+        if proposals:
+            console.print_json(data=documents)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
 
 @app.command()
@@ -177,80 +85,39 @@ def propose(
     category: str = typer.Option("coding"),
     source: str = typer.Option("human"),
     confidence: float = typer.Option(0.75),
-    local: bool = typer.Option(False, "--local", help="只写本地 proposal/RULES.md/sync 队列"),
-    apply: bool = typer.Option(True, "--apply/--no-apply", help="提案后立即应用到本地 RULES.md"),
-    json_output: bool = typer.Option(False, "--json", help="输出 JSON"),
-) -> None:
-    proposal = _build_proposal(rule, category, source, confidence)
-    _append_jsonl(_proposals_path(), proposal)
+    apply: bool = typer.Option(False, "--apply/--no-apply", help="明确把此提案应用到本地RULES.md"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """保存独立提案文档；不会调用远端写入或发送同步。"""
     try:
-        if local:
-            raise RuntimeError("--local")
-        out = get_client()._request(
-            "POST",
-            "/api/v1/rules",
-            json_body={
-                "rule": rule,
-                "category": category,
-                "source": source,
-                "confidence": confidence,
-            },
-        )
-    except Exception as e:
-        if str(e) != "--local":
-            warn(f"Manager 规则写入失败，落本地 proposal/RULES.md：{e}")
-        p = None
+        config = get_config()
+        row = rule_store.create_proposal(config, rule, category, source, confidence, _now())
+        target = None
         if apply:
-            p = _append_local_rule(rule, category, source, confidence)
-            _mark_proposal(proposal["id"], "applied")
-            _enqueue_rules_file()
+            row, target = rule_store.apply_proposal(config, row["id"], _now())
+        result = {"ok": True, "item": row, "applied": bool(target), "queued": False}
         if json_output:
-            console.print_json(data={"ok": True, "item": proposal, "applied": bool(p), "queued": apply})
-            return
-        ok(f"rule proposed locally: {proposal['id']}")
-        if p:
-            ok(f"rule applied locally: {p.relative_to(get_config().project_path)}")
-            warn("连接 Manager 后可执行 sop sync flush 或 sop rule flush")
-        return
-    _mark_proposal(proposal["id"], "remote")
-    if json_output:
-        console.print_json(data={"ok": True, "remote": out, "local": proposal})
-    else:
-        ok(f"rule proposed: {out.get('id', '-')}")
-
-
-def _mark_proposal(rule_id: str, status: str) -> None:
-    rows = _read_jsonl(_proposals_path())
-    changed = False
-    for row in rows:
-        if str(row.get("id") or "") == rule_id:
-            row["status"] = status
-            row["updated_at"] = _now()
-            changed = True
-    if changed:
-        _write_jsonl(_proposals_path(), rows)
+            console.print_json(data=result)
+        else:
+            ok(f"local rule proposal: {row['id']}")
+            if target:
+                ok("已明确应用到本地RULES.md；远端尚未提交")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
 
 @app.command()
-def apply(
-    rule_id: str = typer.Argument(..., help="本地 proposal id；可用 sop rule list --local --proposals 查看"),
-    enqueue: bool = typer.Option(True, "--enqueue/--no-enqueue", help="应用后写入 sync push_queue"),
-) -> None:
-    """把本地规则提案应用到 .ai-memory/rules/RULES.md。"""
-    row = _proposal_by_id(rule_id)
-    if not row:
-        warn(f"未找到 proposal: {rule_id}")
-        raise typer.Exit(2)
-    p = _append_local_rule(
-        str(row.get("rule") or ""),
-        str(row.get("category") or "coding"),
-        str(row.get("source") or "human"),
-        float(row.get("confidence") or 0.75),
-    )
-    _mark_proposal(rule_id, "applied")
-    if enqueue:
-        _enqueue_rules_file()
-    ok(f"rule applied: {p.relative_to(get_config().project_path)}")
+def apply(rule_id: str = typer.Argument(..., help="当前本地提案ID")):
+    """按稳定提案标识应用一次；不会入队或修改远端。"""
+    try:
+        row, target = rule_store.apply_proposal(get_config(), rule_id, _now())
+        console.print_json(
+            data={"ok": True, "id": row["id"], "status": row["status"], "path": str(target), "queued": False}
+        )
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
 
 @app.command()
@@ -258,23 +125,35 @@ def flush(
     expected_version: int = typer.Option(..., "--expected-version", min=0),
     key: str = typer.Option(..., "--key"),
     event_time: str = typer.Option(..., "--time"),
-) -> None:
-    """明确版本与原始操作后持久推送当前规则。"""
-    from .event import _flush
-    from .sync import _frozen_sync
+    expected_sha256: str = typer.Option(
+        ..., "--expected-sha256", help="原远端SHA256；原不存在明确填写absent"
+    ),
+    local: bool = typer.Option(False, "--local", help="仅持久入队，不尝试送达"),
+):
+    """固定当前原始文件、原项目版本及原远端摘要后推送。"""
+    from ..local_intents import submit_record
 
-    target = _rules_file()
-    if not target.is_file():
-        ok("RULES.md empty")
-        return
-    console.print_json(
-        data=_frozen_sync(
+    try:
+        config = get_config()
+        target = _rules_file(config)
+        if not target.is_file():
+            raise ValueError("RULES.md not found; no remote write was queued")
+        basis = None if expected_sha256 == "absent" else expected_sha256
+        result = submit_record(
+            config,
             "rules",
-            {"path": target.name, "content": target.read_bytes().decode("utf-8")},
-            "upsert",
-            key,
-            event_time,
-            expected_version,
+            {"path": "RULES.md", "content": target.read_bytes().decode("utf-8"), "expected_sha256": basis},
+            action="upsert",
+            expected_version=expected_version,
+            key=key,
+            event_time=event_time,
+            local=local,
         )
-    )
-    console.print_json(data=_flush(20))
+        console.print_json(data=result)
+        if not result["ok"]:
+            raise typer.Exit(2)
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc

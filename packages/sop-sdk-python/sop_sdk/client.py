@@ -2007,21 +2007,22 @@ class ManagerClient:
         action: str = "upsert",
         idempotency_key: str,
         expected_version: int,
+        task_basis: str | None = None,
+        requirement_basis: str | None = None,
+        change_preview_basis: str | None = None,
     ) -> dict[str, Any]:
-        from .event_envelope import integer, text_field
+        from .event_envelope import text_field
+        from .record_intents import sync_record_data
 
-        integer(expected_version, "expected_version")
         text_field(idempotency_key, "idempotency_key")
+        body = sync_record_data(
+            module, record, action=action, expected_version=expected_version,
+            task_basis=task_basis, requirement_basis=requirement_basis, change_preview_basis=change_preview_basis,
+        )
         return self._request(
             "POST",
             "/api/v1/sync/push",
-            json_body={
-                "module": module,
-                "action": action,
-                "record": dict(record),
-                "idempotency_key": idempotency_key,
-                "expected_version": expected_version,
-            },
+            json_body={**body, "idempotency_key": idempotency_key},
         )
 
     def sync_journal(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:

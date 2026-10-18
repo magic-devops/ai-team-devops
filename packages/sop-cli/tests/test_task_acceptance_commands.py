@@ -1,62 +1,97 @@
-"""Task criteria are explicit in remote requests and offline synchronization."""
+"""Task criteria remain explicit in one immutable SQLite operation."""
 
 import json
-from types import SimpleNamespace
+import sqlite3
 
 import pytest
 from sop_cli.commands import task
+from sop_sdk.config import AgentConfig
 from typer.testing import CliRunner
 
+COMMON = ["--expected-version", "4", "--key", "criteria-one", "--time", "2026-10-18T00:00:00Z", "--local"]
+BASIS = "a" * 64
 
-def test_task_create_sends_repeated_criteria_without_requirement(monkeypatch):
-    seen = []
 
-    class Client:
-        def create_task(self, body):
-            seen.append(body)
-            return {"id": "T-created"}
+def setup(monkeypatch, tmp_path):
+    monkeypatch.setattr(task, "get_config", lambda: AgentConfig(project_path=tmp_path, project_id="P"))
 
-    monkeypatch.setattr(task, "get_client", Client)
-    output = CliRunner().invoke(task.app, ["create", "Independent", "--criterion", " Real test passes ", "--criterion", "Review output"])
+
+def records(tmp_path):
+    with sqlite3.connect(tmp_path / ".sop-runtime/outbox.sqlite") as db:
+        return [
+            json.loads(raw)["data"]["record"]
+            for (raw,) in db.execute("SELECT event_json FROM events ORDER BY id")
+        ]
+
+
+def test_task_create_sends_repeated_criteria_without_requirement(monkeypatch, tmp_path):
+    setup(monkeypatch, tmp_path)
+    output = CliRunner().invoke(
+        task.app,
+        [
+            "create",
+            "Independent",
+            "--record-id",
+            "T-created",
+            "--criterion",
+            " Real test passes ",
+            "--criterion",
+            "Review output",
+        ]
+        + COMMON,
+    )
     assert output.exit_code == 0, output.output
-    assert seen[0]["req_id"] == ""
-    assert seen[0]["acceptance_criteria"] == ["Real test passes", "Review output"]
+    (record,) = records(tmp_path)
+    assert "req_id" not in record
+    assert record["acceptance_criteria"] == ["Real test passes", "Review output"]
 
 
-def test_task_update_keeps_criteria_unless_replaced_or_explicitly_cleared(monkeypatch):
-    seen = []
-
-    class Client:
-        def update_task(self, task_id, body):
-            seen.append((task_id, body))
-
-    monkeypatch.setattr(task, "get_client", Client)
+def test_task_update_keeps_criteria_unless_replaced_or_explicitly_cleared(monkeypatch, tmp_path):
+    setup(monkeypatch, tmp_path)
     runner = CliRunner()
-    assert runner.invoke(task.app, ["update", "T-owned", "--title", "Renamed"]).exit_code == 0
-    changed = runner.invoke(task.app, ["update", "T-owned", "--criterion", " Real evidence "])
+    assert runner.invoke(task.app, ["update", "T-owned", "--title", "Renamed"] + COMMON).exit_code == 0
+    changed_common = ["criteria-two" if value == "criteria-one" else value for value in COMMON]
+    changed = runner.invoke(
+        task.app,
+        ["update", "T-owned", "--criterion", " Real evidence ", "--task-basis", BASIS] + changed_common,
+    )
     assert changed.exit_code == 0, changed.output
-    cleared = runner.invoke(task.app, ["update", "T-owned", "--clear-criteria"])
+    cleared_common = ["criteria-three" if value == "criteria-one" else value for value in COMMON]
+    cleared = runner.invoke(
+        task.app, ["update", "T-owned", "--clear-criteria", "--task-basis", BASIS] + cleared_common
+    )
     assert cleared.exit_code == 0, cleared.output
-    assert seen == [("T-owned", {"title": "Renamed"}), ("T-owned", {"acceptance_criteria": ["Real evidence"]}),
-                    ("T-owned", {"acceptance_criteria": []})]
+    assert records(tmp_path) == [
+        {"id": "T-owned", "title": "Renamed"},
+        {"id": "T-owned", "acceptance_criteria": []},
+        {"id": "T-owned", "acceptance_criteria": ["Real evidence"]},
+    ]
 
 
-@pytest.mark.parametrize("args", [["create", "Independent", "--criterion", " "],
-                                  ["update", "T-owned", "--criterion", "x" * 2001],
-                                  ["update", "T-owned", "--criterion", "Pass", "--clear-criteria"]])
-def test_invalid_criteria_never_contact_manager_or_write_offline_queue(monkeypatch, args):
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["create", "Independent", "--record-id", "T-created", "--criterion", " "],
+        ["update", "T-owned", "--criterion", "x" * 2001],
+        ["update", "T-owned", "--criterion", "Pass", "--clear-criteria"],
+    ],
+)
+def test_invalid_criteria_never_contact_manager_or_write_offline_queue(monkeypatch, tmp_path, args):
+    setup(monkeypatch, tmp_path)
     monkeypatch.setattr(task, "get_client", lambda: pytest.fail("Invalid criteria must not contact Manager"))
-    monkeypatch.setattr(task, "_save_and_queue", lambda row: pytest.fail("Invalid criteria must not enter sync"))
-    output = CliRunner().invoke(task.app, args)
+    output = CliRunner().invoke(task.app, args + COMMON)
     assert output.exit_code == 2, output.output
+    assert not (tmp_path / ".sop-runtime").exists()
 
 
-def test_offline_task_and_push_queue_keep_text_criteria(monkeypatch, tmp_path):
-    monkeypatch.setattr(task, "get_config", lambda: SimpleNamespace(project_path=tmp_path))
-    output = CliRunner().invoke(task.app, ["create", "Independent", "--local", "--criterion", "Test passes"])
+def test_offline_task_keeps_text_criteria_without_speculative_business_files(monkeypatch, tmp_path):
+    setup(monkeypatch, tmp_path)
+    output = CliRunner().invoke(
+        task.app, ["create", "Independent", "--record-id", "T-created", "--criterion", "Test passes"] + COMMON
+    )
     assert output.exit_code == 0, output.output
-    record = next(iter(json.loads((tmp_path / ".sop-runtime/local/tasks.json").read_text(encoding="utf-8")).values()))
-    queued = json.loads((tmp_path / ".sop-runtime/sync/push_queue.jsonl").read_text(encoding="utf-8"))
+    (record,) = records(tmp_path)
     assert record["acceptance_criteria"] == ["Test passes"]
-    assert queued["record"]["acceptance_criteria"] == ["Test passes"]
-    assert "Test passes" in next((tmp_path / "sop/custom/tasks").glob("*.md")).read_text(encoding="utf-8")
+    assert not (tmp_path / ".sop-runtime/local/tasks.json").exists()
+    assert not (tmp_path / ".sop-runtime/sync/push_queue.jsonl").exists()
+    assert not (tmp_path / "sop/custom/tasks").exists()

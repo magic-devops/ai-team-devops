@@ -644,7 +644,10 @@ def agent_profile(agent_id: str):
             "prepare_context": "sop context prepare --flush",
             "work_next": "sop work next --json",
             "sync_flush": "sop sync flush",
-            "emit_event": f"sop event emit agent.{agent_id}.heartbeat --source agent/{agent_id}",
+            "emit_event": (
+                f"sop event emit sop.agent.heartbeat --subject {agent_id} --source agent/{agent_id} "
+                '--id "ORIGINAL_EVENT_ID" --time "ORIGINAL_RFC3339_TIME"'
+            ),
         },
         "mcp": {
             "servers": item.get("mcp_servers") or [],
@@ -656,6 +659,8 @@ def agent_profile(agent_id: str):
             "protocol": "json-rpc-over-http",
         },
         "guardrails": [
+            "事件首次发送前固定原 ID、原时间和内容；重发复用同一原件，不重新生成 ID 或时间。",
+            "心跳命令中的 ORIGINAL_EVENT_ID 和 ORIGINAL_RFC3339_TIME 由首次事实发生时的原 ID 和时间替换。",
             "先读取 .sop-runtime/agent_context.json 与项目规则，再执行开发任务。",
             "写入需求、任务、问题、记忆、知识和事件时优先使用 sop CLI，离线时进入 outbox。",
             "不得输出或持久化明文密钥；Provider/API Key 仅使用 SecretRef 或本地环境变量。",

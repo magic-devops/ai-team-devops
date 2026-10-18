@@ -7,6 +7,19 @@ import type { SessionPayload } from "./authStorage";
 import type { PrototypeMode, WorkflowReviewDetail } from "./requirementsAssistance";
 import { API_BASE, request } from "./http";
 
+type SyncWriteBasis = { expected_version: number; idempotency_key: string };
+type RecordIntent = { action: "create" | "update" | "upsert" | "delete"; record: Record<string, unknown> & { id: string } };
+export type SyncPushBody = SyncWriteBasis & (
+  | (RecordIntent & { module: "tasks"; task_basis?: string })
+  | (RecordIntent & { module: "requirements"; requirement_basis?: string; change_preview_basis?: string })
+  | (RecordIntent & { module: "issues" | "sprints" })
+  | {
+    module: "rules" | "specs" | "templates";
+    action: "upsert" | "delete";
+    record: Record<string, unknown> & { path: string; expected_sha256: string | null };
+  }
+);
+
 export const api = {
   health: () => request<{ ok: boolean; version?: string }>("/api/v1/health"),
   dashboardSummary: () => request<any>("/api/v1/dashboard/summary"),
@@ -1518,8 +1531,8 @@ export const api = {
     const qs = new URLSearchParams({ since, limit: String(limit) });
     return request<any>(`/api/v1/sync/journal?${qs}`);
   },
-  syncPush: (body: { module: string; action?: "upsert" | "delete"; record?: Record<string, unknown>; idempotency_key?: string }) =>
-    request<any>("/api/v1/sync/push", { method: "POST", body: JSON.stringify(body) }),
+  syncPush: (body: SyncPushBody, send: typeof request = request) =>
+    send<any>("/api/v1/sync/push", { method: "POST", body: JSON.stringify(body) }),
   login: (body: { username: string; password: string; tenant_slug?: string }) =>
     request<SessionPayload>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }),
   authMe: () =>

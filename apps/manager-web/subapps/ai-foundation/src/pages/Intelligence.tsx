@@ -1,8 +1,9 @@
 import { EventReceiptWorkbench } from "./intelligence/events/EventReceiptWorkbench";
+import { AssetSyncWorkbench } from "./intelligence/sync/AssetSyncWorkbench";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Modal, Progress, Space, Table, Tag } from "antd";
-import { Activity, Ban, Brain, CheckCircle2, Cpu, Database, Gauge, GitBranch, Library, PlayCircle, Plus, RotateCw, Search, ShieldCheck, Sparkles, UploadCloud, XCircle } from "lucide-react";
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Activity, Ban, Brain, CheckCircle2, Cpu, Database, Gauge, GitBranch, Library, PlayCircle, Plus, RotateCw, Search, ShieldCheck, Sparkles, XCircle } from "lucide-react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
@@ -79,6 +80,7 @@ const inputClass =
 export function Intelligence({ initialTab = "kb", focused = false }: { initialTab?: Tab; focused?: boolean }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const syncCanLeave = useRef<() => boolean>(() => true);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [qKb, setQKb] = useState("");
   const [qRag, setQRag] = useState("");
@@ -93,13 +95,12 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
   const [workerDraft, setWorkerDraft] = useState({ type: "kb.index", payload: "{}" });
   const [workerFilter, setWorkerFilter] = useState({ status: "", type: "" });
   const [syncDraft, setSyncDraft] = useState({ modules: "tasks,requirements,issues,sprints,rules,specs,templates", cursor: "", limit: "50" });
-  const [syncAssetDraft, setSyncAssetDraft] = useState({ module: "rules", path: "RULES.md", content: "" });
   const [usageTaskPreview, setUsageTaskPreview] = useState<any[]>([]);
   const authed = Boolean(getToken());
   const hasProject = Boolean(getProjectId());
 
   useEffect(() => {
-    setTab(initialTab);
+    if (syncCanLeave.current()) setTab(initialTab);
   }, [initialTab]);
 
   const memHealth = useQuery({ queryKey: ["memHealth"], queryFn: api.memoryHealth, enabled: authed });
@@ -253,19 +254,6 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
       void qc.invalidateQueries({ queryKey: ["syncJournal"] });
     },
   });
-  const pushSyncAsset = useMutation({
-    mutationFn: () =>
-      api.syncPush({
-        module: syncAssetDraft.module,
-        action: "upsert",
-        record: { path: syncAssetDraft.path, content: syncAssetDraft.content },
-        idempotency_key: `web-${syncAssetDraft.module}-${syncAssetDraft.path}`,
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["syncSummary"] });
-      void qc.invalidateQueries({ queryKey: ["syncJournal"] });
-    },
-  });
 
   if (!authed) return <NeedLogin />;
 
@@ -290,7 +278,7 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
               key={key}
               type="button"
               className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${tab === key ? "bg-brand-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
-              onClick={() => setTab(key)}
+              onClick={() => { if (syncCanLeave.current()) setTab(key); }}
             >
               <Icon className="h-4 w-4" strokeWidth={1.75} />
               {t(labelKey)}
@@ -624,21 +612,10 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
               </Card>
             </div>
             <div className="space-y-4">
-              <Card title={t("page.intelligence.syncAssetPush")}>
-                <div className="space-y-2">
-                  <select className={`${inputClass} w-full`} value={syncAssetDraft.module} onChange={(e) => setSyncAssetDraft((v) => ({ ...v, module: e.target.value }))}>
-                    {["rules", "specs", "templates"].map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <input className={`${inputClass} w-full`} value={syncAssetDraft.path} onChange={(e) => setSyncAssetDraft((v) => ({ ...v, path: e.target.value }))} placeholder="RULES.md" />
-                  <textarea className={`${inputClass} min-h-[10rem] w-full font-mono text-xs`} value={syncAssetDraft.content} onChange={(e) => setSyncAssetDraft((v) => ({ ...v, content: e.target.value }))} placeholder={t("page.intelligence.syncAssetContent")} />
-                  <PrimaryButton disabled={pushSyncAsset.isPending || !syncAssetDraft.path.trim() || !syncAssetDraft.content.trim()} onClick={() => pushSyncAsset.mutate()}>
-                    <UploadCloud className="h-4 w-4" />
-                    {t("page.intelligence.syncPushRun")}
-                  </PrimaryButton>
-                  {pushSyncAsset.isError ? <Err message={(pushSyncAsset.error as Error).message} /> : null}
-                  {pushSyncAsset.data ? <pre className="max-h-40 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(pushSyncAsset.data, null, 2)}</pre> : null}
-                </div>
-              </Card>
+              <AssetSyncWorkbench onPending={(pending, canNavigate) => {
+                if (pending) syncCanLeave.current = canNavigate;
+                else if (syncCanLeave.current === canNavigate) syncCanLeave.current = () => true;
+              }} />
               <Card title={t("page.intelligence.syncJournalList")}>
                 {syncJournal.isError ? <Err message={(syncJournal.error as Error).message} /> : null}
                 <ul className="space-y-2 text-sm">

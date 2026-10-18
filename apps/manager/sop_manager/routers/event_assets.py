@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -18,6 +19,19 @@ def _asset_base(root, module):
         "specs": root / "sop" / "custom" / "specs",
         "templates": root / "sop" / "custom",
     }[module].resolve()
+
+
+def _original_asset_basis(record, target):
+    if "expected_sha256" not in record:
+        fail("event_asset_basis_required", "Original target digest or explicit null is required", 422)
+    expected = record["expected_sha256"]
+    if expected is not None and (
+        not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None
+    ):
+        fail("event_asset_invalid", "Original target digest must be lowercase SHA-256 or null", 422)
+    if expected != _basis(target):
+        fail("event_asset_basis_changed", "Asset differs from the reviewed original target")
+    return expected
 
 
 def plan_asset(project, event):
@@ -55,15 +69,16 @@ def plan_asset(project, event):
     content = record.get("content") if action == "upsert" else None
     if action == "upsert" and not isinstance(content, str):
         fail("event_asset_invalid", "Asset content must be text", 422)
-    if set(record) - {"id", "path", "content"}:
+    if set(record) - {"id", "path", "content", "expected_sha256"}:
         fail("event_asset_invalid", "Unsupported asset fields", 422)
+    expected = _original_asset_basis(record, target)
     return {
         "root": str(root),
         "module": module,
         "module_base": str(base),
         "resolved_target": str(target),
         "target": target.relative_to(root).as_posix(),
-        "before": _basis(target),
+        "before": expected,
         "desired": digest(content) if content is not None else None,
         "content": content,
         "action": action,

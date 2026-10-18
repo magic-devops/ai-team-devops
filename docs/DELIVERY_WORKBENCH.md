@@ -121,7 +121,7 @@ SDK 提供 `delivery_workspace()`、`delivery_execution_targets()`、`delivery_c
 6. 依赖时间线、成员每日容量/日历、显式资源预留、原子批量排期、真实每日观测及不可变计划基线已实现。安全活动导航和需求观测版本/变更预览、万级需求/任务/引用定向分页已验证；概览与待办已采用有界查询。更完整跨存储/通用业务活动、主动打开的人工评审/质量/历史影响等专属详情有界化仍待完善。不能补造此前未采集的历史，长期生产覆盖及规模验证继续积累。
 7. 完整生产压测、MySQL/OceanBase 验证，以及所有主题、浏览器和屏幕尺寸的视觉回归。
 8. 对象讨论、固定结论及明确采纳到原需求/任务编辑器、来源问题及诊断摘要已实现，详见 `DELIVERY_DISCUSSION_GUIDE.md`；更完整通用跨存储活动和reflection处理器仍待实现，未配置处理器仅保存待处理。已保留 Multica 本地实现审计和四条关键 flow。
-9. 原生SDK/CLI/Go端点、实例停止、单SQLite原子死信/回执交接、真实任务/问题/同步处理及双端重启恢复已验证，详见 `DURABLE_EVENT_HANDOFF_GUIDE.md`。旧实体离线编辑、规则提案和watch仍产生隔离JSONL草稿，尚未统一为原版本事件意图；旧文件不再自动发送，生产长时运行仍待验证。
+9. 原生SDK/CLI/Go端点、实例停止、单SQLite原子死信/回执交接、真实任务/问题/同步处理及双端重启恢复已验证，详见 `DURABLE_EVENT_HANDOFF_GUIDE.md`。实体写入、规则提案和watch已统一为明确原版本的持久意图/可审阅快照，详见 `LOCAL_INTENTS_GUIDE.md`；旧JSONL仅盘点。通用/reflection处理、Issue反向事件来源链和生产长时运行仍待完善。
 10. 项目组合、四态归档恢复、当前风险定位及归档写保护已实现；保留策略与更深入跨模块整合继续完善。旧业务作用域、会话竞态和需求辅助已修复；工作流结论仍不等于业务任务完成。Temporal worker及其作用域审查合约尚未实现，接口明确返回不可用。
 
 ## 权限与有效模型增量（2026-10-16）
@@ -505,3 +505,19 @@ Go与Python共用唯一SQLite规范，pending/dead_letter/acked原子转移，�
 最终Manager1532项、Web678项/128文件、SDK/CLI426项、Go75主项+38子例/6包通过；Go三个原Windows符号链接用例跳过。类型、Vite最终构建、vet、SDK wheel源码/SQL打包、OpenAPI6路径/6操作/23schema和1211引用校验通过。真实原认证HTTP验证原回执跨进程重启/凭据轮换、逐条拒绝与实际业务效果、读取零写；真实Windows执行器验证70,465字节IPC帧、Python/Go共享队列、实际心跳、任务回写、SDK问题上报、离线保留与双端重启。
 
 证据 `.sop-runtime/delivery-evidence/event-handoff/`；完整验证、原RED/修复、独立审查、产物及清理/提交回执分开留档。真实390px三语、生产身份/模型/数据库/基础设施、长期规模，以及通用活动、旧草稿生产端和专属详情读取继续待办。历史增量段落记录当时状态，以本节及当前待办为准；完整目标保持active。
+
+## 本地原意图、审阅资产与接入一致性增量（2026-10-18）
+
+阶段T-local-intents，基线90e47f6。设计 `docs/LOCAL_INTENTS_DESIGN.md`、使用 `docs/LOCAL_INTENTS_GUIDE.md`、接入 `docs/playbooks/PROJECT_ONBOARDING.md`。17类需求/任务/问题/迭代写命令要求原版本/键/时间，创建还需稳定业务ID；先入唯一SQLite，再可选送达。create/update明确存在性，更新仅传指定字段；保留原需求preview/Task basis及验收门禁，不再造第二套local实体、Markdown、tombstone或JSONL。旧文件只读盘点，不自动发送、压缩或修复。
+
+watch仅输出UTF-8/CRLF原快照，单次50条/1MiB、单文件60KiB，格式与Manager五种保持一致；审阅后enqueue-plan明确一条、原版本及远端SHA/absent，不重读变化后的源。输出与扫描根重叠被拒绝，pull原子替换目录项保护硬链接其他原件。规则提案完整写入后唯一发布，稳定marker及项目锁覆盖重复/并发和正文先落盘恢复。SDK/IPC/HTTP透传原basis，已ACK旧原件不能冒充另一个Manager/用户的成功。
+
+work v2不再合并legacy overlay。实时需求/任务/问题各最多100条并核同代，Sprint为独立首页；loaded、实际total、continuation与统计范围分开。缓存总数/当前验收未知，不把完成当通过。context.prepare及init接入helper采用同一配置和新的原子缓存快照writer；旧私有导入退出。浏览器高级资产同步提供准备/审阅/处理、会话内持久原件、唯一键、未知锁与原件重放、三语/当前主题及退出保护；实际HTTP头绑定审阅会话，保存后复核scope，不能把A正文带B头发送。实际canonical target独立展示，Windows合法大小写差异不误判未知。
+
+完整Manager1562、SDK/CLI633通过，前后319/122项源与契约稳定；Web定向108项/10文件、TypeScript与Vite构建通过，主壳和全部子应用500项源稳定。本阶段未重复原完整678项前端套件。Go75主项+38子例/6包通过，3项原Windows符号链接跳过；vet、离线SDK wheel全部Python/SQL字节与OpenAPI仅2schema变更、187路径/467无关schema及1211引用核验通过。44个Python变更文件无新增或恶化诊断。
+
+真实HTTP Run1验证17命令及原键重放、实际preview/Task basis/活动原新关联、断ACK+Manager重启、旧版本/403和18GET全35表零写；Run2/3验证真实103–104实体的work分页、规则、实际prepare和全新init helper；Run4验证最终五格式发现/拒绝与原SHA文件；Run9编译真实前端helper，经真实Manager验证3个中文/Emoji标识向量、4次处理、3次重复回执、2次明确失败及文件不变。各轮受影响来源分别冻结，没有将后续helper改动冒充早期全源相同。所有owned进程已停止，模型调用0。Node Run5–8的Vite环境、散列脚本及资产不递增业务workspace版本的夹具假设失败完整保留，不计作产品缺陷。
+
+独立复核的任务删除/转属活动遗漏、已ACK跨origin误成功、提案半写发布、work旧overlay、pull硬链接覆盖、watch自反馈，以及浏览器canonical路径/错scope请求头均有原RED、修复和原探针GREEN。额外真实接入遗留导入及不支持格式也有回归。证据 `.sop-runtime/delivery-evidence/local-intents/`；先保全重要源/唯一文件及散列再精确清理，不遍历链接。清理与实际本地提交以各自receipt为准，不push，.pnpm-store零跟踪。
+
+完整目标保持active，production_integration_complete=false。generic/reflection真实处理、Issue反向全来源、显式quality/release/progress/人审/历史影响详情有界化，当前390px中英日实际视觉、生产身份/模型/数据库/基础设施及长期规模仍待完善。已独立审计大详情成本；既有浏览器协议与12ui安装/上传审批限制不绕过，SSR/控制器/HTTP及构建不能代替实机视觉。

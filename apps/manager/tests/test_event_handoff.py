@@ -268,7 +268,7 @@ def test_asset_written_before_status_failure_recovers_same_plan_and_exact_bytes(
             "expected_version": version(sessions),
             "module": "specs",
             "action": "upsert",
-            "record": {"path": "note.md", "content": "line1\r\nline2\r\n"},
+            "record": {"path": "note.md", "content": "line1\r\nline2\r\n", "expected_sha256": None},
         },
     )
     first = result(send(client, item))
@@ -306,7 +306,7 @@ def test_asset_changed_by_other_writer_is_not_overwritten_on_retry(env, monkeypa
             "expected_version": version(sessions),
             "module": "templates",
             "action": "upsert",
-            "record": {"path": "note.md", "content": "desired"},
+            "record": {"path": "note.md", "content": "desired", "expected_sha256": None},
         },
     )
     first = result(send(client, item))
@@ -910,7 +910,10 @@ def test_fixed_asset_plan_rejects_module_junction_retarget_inside_project(tmp_pa
         (base / "example.md").write_bytes(b"original")
     project = SimpleNamespace(project_path=str(root))
     intent = SimpleNamespace(
-        data={"module": "rules", "record": {"path": "example.md", "content": "new rule bytes"}}
+        data={"module": "rules", "record": {
+            "path": "example.md", "content": "new rule bytes",
+            "expected_sha256": hashlib.sha256(b"original").hexdigest(),
+        }}
     )
     plan = plan_asset(project, intent)
     allowed.rename(root / ".ai-memory/rules-original")

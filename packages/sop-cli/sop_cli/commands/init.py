@@ -191,21 +191,17 @@ def _init_platform_onboarding(repo_tools: Path, project_path: Path, project_name
 
 def _write_project_manifest() -> None:
     try:
+        from .._util import get_config
         from .context import write_agent_context, write_db_connections_cache, write_pages_context_cache, write_project_manifest
-        from .work import _build_snapshot
+        from .work import write_cache_snapshot
 
-        p = write_project_manifest()
+        config = get_config()
+        p = write_project_manifest(config=config)
         ok(f"项目接入 manifest 已生成（{p}）")
-        ws = Path.cwd() / ".sop-runtime" / "work_snapshot.json"
-        ws.parent.mkdir(parents=True, exist_ok=True)
-        import json
-
-        ws.write_text(
-            json.dumps(_build_snapshot(local=True, limit=20), ensure_ascii=False, indent=2, default=str) + "\n",
-            encoding="utf-8",
-        )
-        db_path = write_db_connections_cache()
-        pages_manifest_path, pages_capabilities_path = write_pages_context_cache()
+        ws = config.project_path / ".sop-runtime" / "work_snapshot.json"
+        write_cache_snapshot(config, ws)
+        db_path = write_db_connections_cache(config=config)
+        pages_manifest_path, pages_capabilities_path = write_pages_context_cache(config=config)
         ctx = write_agent_context(
             manifest_path=p,
             work_snapshot_path=ws,
@@ -216,6 +212,7 @@ def _write_project_manifest() -> None:
                 "pages_manifest": bool(pages_manifest_path and pages_manifest_path.is_file()),
                 "pages_capabilities": bool(pages_capabilities_path and pages_capabilities_path.is_file()),
             },
+            config=config,
         )
         ok(f"Agent 上下文索引已生成（{ctx}）")
     except Exception as e:

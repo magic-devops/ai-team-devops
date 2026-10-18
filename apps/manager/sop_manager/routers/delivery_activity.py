@@ -45,7 +45,18 @@ class _RecordedTargets:
             self.add("issue", entry.get("issue_id"))
 
     def primary(self, action, rid, payload):
-        if action.startswith("requirement.") or action in {
+        if action == "issue.create":
+            self.add("issue", rid)
+        elif action == "sync.record.apply":
+            kind = {
+                "tasks": "task",
+                "requirements": "requirement",
+                "issues": "issue",
+                "sprints": "sprint",
+            }.get(payload.get("module"))
+            if kind:
+                self.add(kind, rid)
+        elif action.startswith("requirement.") or action in {
             "artifact.add",
             "stage.advance",
             "stage.reopen",
@@ -84,6 +95,17 @@ class _RecordedTargets:
             for id in result.get("ids", []):
                 self.add("requirement", id)
 
+    def previous(self, action, rid, payload, before):
+        if (
+            action == "sync.record.apply"
+            and payload.get("module") == "tasks"
+            and isinstance(before, dict)
+            and before.get("id") == rid
+            and before.get("tenant_id") == self.project.tenant_id
+            and before.get("project_id") == self.project.id
+        ):
+            self.add("requirement", before.get("req_id"))
+
     def release(self, id):
         candidate = next((row for row in self.state.get("release_candidates", []) if row["id"] == id), None)
         if candidate:
@@ -114,6 +136,7 @@ def record_activity(db, project, user, state, event):
     payload = event.data.get("input", {})
     targets = _RecordedTargets(db, project, state)
     targets.primary(event.action, event.resource_id, payload)
+    targets.previous(event.action, event.resource_id, payload, event.data.get("before"))
     targets.additional(event.action, payload, event.data.get("result", {}))
     targets.expand()
     before = requirement_definition(event.data.get("before") or {})

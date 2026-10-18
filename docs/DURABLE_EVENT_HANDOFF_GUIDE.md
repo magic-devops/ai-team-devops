@@ -62,7 +62,7 @@ sop sync flush --limit 20
 
 非空旧版 SQLite 必须明确选择项目，执行 `sop event migrate-v0 --project-id <project>`。迁移保留全部合法行号范围的原 ID、原文和重试信息；无效原件保留为不可自动执行的死信。未知库不会被覆盖。
 
-旧 JSONL 仅作为待审查草稿盘点，不自动绑定、发送、压成另一事件或删除。已有实体离线编辑、规则提案及 watch 的旧草稿生产端仍待整体收敛；`sync flush` 和执行器已停止投递旧文件。不要向 SQLite 文件追加 JSONL。当前 schema 规范为 `apis/sqlite/event_outbox_v1.sql`，两个打包副本逐字一致。
+旧 JSONL 仅作为待审查草稿盘点，不自动绑定、发送、压成另一事件或删除。实体、规则提案及 watch 已按[本地操作指南](LOCAL_INTENTS_GUIDE.md)统一为明确原意图；`sync flush` 和执行器已停止投递旧文件。不要向 SQLite 文件追加 JSONL。当前 schema 规范为 `apis/sqlite/event_outbox_v1.sql`，两个打包副本逐字一致。
 
 ## 已验证范围与继续工作
 
@@ -70,4 +70,4 @@ sop sync flush --limit 20
 
 完成后端 1532 项、前端 678 项、SDK/CLI 426 项及完整 Go 回归；Go 三个原有 Windows 符号链接场景仍跳过。类型检查、生产构建、SDK wheel 的 schema 打包及独立边界复核均留有证据。
 
-证据目录为 `.sop-runtime/delivery-evidence/event-handoff/`。当前 390px 三语实机视觉、生产身份/模型/数据库/基础设施和长期运行验证仍未完成。通用跨存储活动、reflection 真实处理、旧本地草稿生产端，以及主动打开的专属大详情读取仍列入完整平台待办。本阶段通过不代表完整平台目标结束。
+证据目录为 `.sop-runtime/delivery-evidence/event-handoff/`。当前 390px 三语实机视觉、生产身份/模型/数据库/基础设施和长期运行验证仍未完成。通用跨存储活动、reflection 真实处理、问题反向事件来源链，以及主动打开的专属大详情读取仍列入完整平台待办。本阶段通过不代表完整平台目标结束。

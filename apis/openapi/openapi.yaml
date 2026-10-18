@@ -25792,6 +25792,8 @@ components:
         action:
           type: string
           enum:
+          - create
+          - update
           - upsert
           - delete
           title: Action
@@ -25809,6 +25811,24 @@ components:
           maxLength: 128
           minLength: 1
           title: Idempotency Key
+        task_basis:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Task Basis
+        requirement_basis:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Requirement Basis
+        change_preview_basis:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Change Preview Basis
       additionalProperties: false
       type: object
       required:
@@ -25899,6 +25919,8 @@ components:
         action:
           default: upsert
           enum:
+          - create
+          - update
           - upsert
           - delete
           title: Action
@@ -25907,6 +25929,27 @@ components:
           additionalProperties: true
           title: Record
           type: object
+        task_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Task Basis
+        requirement_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Requirement Basis
+        change_preview_basis:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          default: null
+          title: Change Preview Basis
       required:
       - module
       - record
