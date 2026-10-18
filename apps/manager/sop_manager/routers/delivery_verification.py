@@ -24,34 +24,37 @@ def fingerprint(value):
 class VerificationContext:
     """One authorized project's canonical rows and effective approval facts."""
 
-    def __init__(self, db, project, data):
+    def __init__(
+        self, db, project, data, *, tasks=None, requirements=None, issues=None, reviews=None, team=None
+    ):
         self.project, self.data = project, data
 
         def scoped(model):
             return db.query(model).filter_by(tenant_id=project.tenant_id, project_id=project.id).all()
 
-        self.tasks = {row.id: row for row in scoped(Task)}
-        self.requirements = {row.id: row for row in scoped(Requirement)}
-        self.issues = scoped(Issue)
+        self.tasks = {row.id: row for row in (scoped(Task) if tasks is None else tasks)}
+        self.requirements = {
+            row.id: row for row in (scoped(Requirement) if requirements is None else requirements)
+        }
+        self.issues = scoped(Issue) if issues is None else issues
         self.tasks_by_requirement = defaultdict(list)
         self.issues_by_task = defaultdict(list)
         for task in self.tasks.values():
             self.tasks_by_requirement[task.req_id].append(task)
         for issue in self.issues:
             self.issues_by_task[issue.task_id].append(issue)
-        self.team = TeamContext(db, project, data)
+        self.team = team if team is not None else TeamContext(db, project, data)
         self.roster = self.team.roster
         self.executions = {entry["task_id"]: entry for entry in data.get("executions", [])}
-        latest = (
-            db.query(func.max(DeliveryTaskReview.seq).label("seq"))
-            .filter_by(tenant_id=project.tenant_id, project_id=project.id)
-            .group_by(DeliveryTaskReview.task_id)
-            .subquery()
-        )
-        self.reviews = {
-            row.task_id: row
-            for row in db.query(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq)
-        }
+        if reviews is None:
+            latest = (
+                db.query(func.max(DeliveryTaskReview.seq).label("seq"))
+                .filter_by(tenant_id=project.tenant_id, project_id=project.id)
+                .group_by(DeliveryTaskReview.task_id)
+                .subquery()
+            )
+            reviews = db.query(DeliveryTaskReview).join(latest, DeliveryTaskReview.seq == latest.c.seq)
+        self.reviews = {row.task_id: row for row in reviews}
         self.reset_proof()
 
     def reset_proof(self):

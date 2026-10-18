@@ -40,14 +40,24 @@ def test_old_operations_stage_is_a_record_not_verified_deployment(env):
 
 def test_quality_and_release_reads_do_not_provision_workspace(env):
     client, sessions, _ = env
-    from sop_manager.routers.sql_models import DeliveryWorkspace
+    from sop_manager.routers.sql_models import DeliveryQueryState, DeliveryWorkspace
+    from sqlalchemy import delete
 
-    for path in ["/api/v1/delivery/quality", "/api/v1/delivery/releases"]:
+    # Project creation already captures its empty disposable index. Reads must
+    # not create a canonical workspace even when that current index is present.
+    for path in ["/api/v1/delivery/quality/catalogue", "/api/v1/delivery/releases"]:
         response = client.get(path)
         assert response.status_code == 200, response.text
-        assert response.json()["project_id"] == "project"
     with sessions() as db:
         assert db.query(DeliveryWorkspace).count() == 0
+    with sessions.kw["bind"].begin() as connection:
+        connection.execute(delete(DeliveryQueryState))
+    for path in ["/api/v1/delivery/quality/catalogue", "/api/v1/delivery/releases"]:
+        response = client.get(path)
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["code"] == "delivery_query_rebuild_required"
+    with sessions() as db:
+        assert db.query(DeliveryWorkspace).count() == db.query(DeliveryQueryState).count() == 0
 
 
 def test_policy_configuration_requires_configuration_permission(env):

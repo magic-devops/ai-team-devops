@@ -6,7 +6,7 @@ import {
   ReleaseDetailContent,
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryReleaseDetail";
 import { submitReleaseCommand } from "./deliveryRelease";
-import { releaseDetail } from "./deliveryReleaseFixtures";
+import { releaseAck, releaseDetail } from "./deliveryReleaseFixtures";
 const hooks = vi.hoisted(() => ({
   state: [] as unknown[],
   next: 0,
@@ -20,7 +20,18 @@ vi.mock("react", async () => ({
   useEffect: (effect: () => void) => {
     hooks.effects.push(effect);
   },
-  useRef: (value: unknown) => ({ current: value }),
+  useRef: (value: unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = { current: value };
+    return hooks.state[i];
+  },
+  useMemo: (factory: () => unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = factory();
+    return hooks.state[i];
+  },
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
+    snapshot(),
   useState: (initial: unknown) => {
     const i = hooks.next++;
     if (!(i in hooks.state))
@@ -53,6 +64,7 @@ vi.mock("./deliveryRelease", async () => ({
   submitReleaseCommand: vi.fn(),
 }));
 vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ invalidateQueries: async () => {} }),
   useQuery: () => ({
     data: hooks.data,
     error: hooks.error,
@@ -99,9 +111,23 @@ beforeEach(() => {
   hooks.error = null;
   vi.mocked(submitReleaseCommand)
     .mockReset()
-    .mockResolvedValue({} as never);
+    .mockImplementation(async (projectId, action, payload, intent) =>
+      releaseAck(projectId, action, payload, intent),
+    );
 });
 describe("candidate review remains tied to the visible receipt", () => {
+  it("locks the captured review comment and cancellation after an unknown result", async () => {
+    button("reject").onClick();
+    find(render(), Input.TextArea, "comment")!.onChange({
+      target: { value: "original review" },
+    });
+    vi.mocked(submitReleaseCommand).mockRejectedValueOnce(
+      new Error("reply lost"),
+    );
+    await button("confirm").onClick();
+    expect(find(render(), Input.TextArea, "comment")!.disabled).toBe(true);
+    expect(button("cancel").disabled).toBe(true);
+  });
   it("submits the captured review basis rather than a background refetch", async () => {
     button("approve").onClick();
     find(render(), Input.TextArea, "comment")!.onChange({
@@ -172,7 +198,7 @@ describe("candidate review remains tied to the visible receipt", () => {
       "Needs additional evidence",
     );
     const original = vi.mocked(submitReleaseCommand).mock.calls[0];
-    await button("confirm").onClick();
+    await button("replayOriginal").onClick();
     expect(vi.mocked(submitReleaseCommand).mock.calls[1]).toEqual(original);
   });
 });

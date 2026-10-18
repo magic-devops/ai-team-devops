@@ -25,6 +25,16 @@ describe("explicit quality scope and exact release navigation", () => {
       requirementIds: ["R&1"],
       taskIds: ["T-one"],
       releaseId: "REL one",
+      qualityCursor: "quality/next+",
+      releaseCursor: "release/next+",
+      evidenceCursor: "ci/next+",
+      legacyCursor: "legacy/next+",
+      directory: "evidence" as const,
+      qualityId: "R-exact",
+      qualityKind: "requirement" as const,
+      releaseQuery: "v2",
+      evidenceQuery: "run 21",
+      legacyQuery: "old",
     };
     const hash = releaseHash(
       route,
@@ -56,6 +66,27 @@ describe("explicit quality scope and exact release navigation", () => {
     expect(params.get("return_to")).toBe(
       releaseHash(parseReleaseRoute(background), background),
     );
+  });
+  it("restores a valid opaque cursor longer than the generic execution return limit", () => {
+    const background = releaseHash(
+      {
+        ...parseReleaseRoute("#/dev-flow?view=quality"),
+        qualityCursor: "x".repeat(4000),
+        qualityId: "R-1",
+      },
+      "#/dev-flow?project_id=P",
+    );
+    const href = releaseTargetHref(
+      {
+        view: "list",
+        requirement_id: "R-1",
+        detail: "details",
+        task_id: "",
+        issue_id: "",
+      },
+      background,
+    );
+    expect(releaseReturnFromHash(href)).toBe(background);
   });
   it("maps backend task targets to the task tab and retains the portfolio return chain", () => {
     const background = releaseHash(

@@ -4,8 +4,8 @@ import type { ReleaseTarget } from "./deliveryRelease";
 import {
   preserveProjectContext,
   routeProjectId,
+  safePortfolioReturn,
 } from "./projectPortfolioRoute";
-import { safeExecutionReturn } from "./executionCommands";
 
 export type ReleaseRoute = {
   view: "quality" | "releases";
@@ -17,6 +17,16 @@ export type ReleaseRoute = {
   state: "all" | "ready" | "attention";
   requirementIds: string[];
   taskIds: string[];
+  qualityCursor: string;
+  releaseCursor: string;
+  evidenceCursor: string;
+  legacyCursor: string;
+  releaseQuery: string;
+  evidenceQuery: string;
+  legacyQuery: string;
+  qualityId: string;
+  qualityKind: "requirement" | "task";
+  directory: "candidate" | "evidence" | "legacy";
 };
 const clean = (value: string | null, max = 200) =>
   value && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value)
@@ -32,6 +42,22 @@ export function parseReleaseRoute(hash: string): ReleaseRoute {
     deploymentId: clean(p.get("deployment_id"), 128),
     evidenceId: clean(p.get("ci_evidence_id"), 128),
     query: clean(p.get("quality_q")),
+    qualityCursor: clean(p.get("quality_cursor"), 4096),
+    releaseCursor: clean(p.get("release_cursor"), 4096),
+    evidenceCursor: clean(p.get("evidence_cursor"), 4096),
+    legacyCursor: clean(p.get("legacy_cursor"), 4096),
+    releaseQuery: clean(p.get("release_q")),
+    evidenceQuery: clean(p.get("evidence_q")),
+    legacyQuery: clean(p.get("legacy_q")),
+    qualityId: clean(p.get("quality_id"), 128),
+    qualityKind:
+      p.get("quality_detail_kind") === "task" ? "task" : "requirement",
+    directory:
+      p.get("release_directory") === "evidence"
+        ? "evidence"
+        : p.get("release_directory") === "legacy"
+          ? "legacy"
+          : "candidate",
     kind: kind === "requirement" || kind === "task" ? kind : "all",
     state: state === "ready" || state === "attention" ? state : "all",
     requirementIds: [
@@ -58,6 +84,20 @@ export function releaseHash(route: ReleaseRoute, background = "") {
   if (route.deploymentId) p.set("deployment_id", route.deploymentId);
   if (route.evidenceId) p.set("ci_evidence_id", route.evidenceId);
   if (route.query) p.set("quality_q", route.query);
+  for (const [field, param] of Object.entries({
+    qualityCursor: "quality_cursor",
+    releaseCursor: "release_cursor",
+    evidenceCursor: "evidence_cursor",
+    legacyCursor: "legacy_cursor",
+    releaseQuery: "release_q",
+    evidenceQuery: "evidence_q",
+    legacyQuery: "legacy_q",
+    qualityId: "quality_id",
+  }) as [keyof ReleaseRoute, string][])
+    if (route[field]) p.set(param, String(route[field]));
+  if (route.qualityId) p.set("quality_detail_kind", route.qualityKind);
+  if (route.directory !== "candidate")
+    p.set("release_directory", route.directory);
   if (route.kind !== "all") p.set("quality_kind", route.kind);
   if (route.state !== "all") p.set("quality_state", route.state);
   for (const id of route.requirementIds) p.append("requirement_ids", id);
@@ -92,9 +132,23 @@ export function releaseTargetHref(
 }
 export function releaseReturnFromHash(hash: string) {
   const value = new URLSearchParams(hash.split("?")[1]).get("return_to") || "";
-  const safe = safeExecutionReturn(value);
-  const view = new URLSearchParams(safe?.split("?")[1]).get("view");
-  return safe && (view === "quality" || view === "releases")
-    ? releaseHash(parseReleaseRoute(safe), safe)
+  if (
+    !/^#\/dev-flow\?/.test(value) ||
+    value.length > 65536 ||
+    /[\u0000-\u001f\u007f\\]/.test(value)
+  )
+    return null;
+  const params = new URLSearchParams(value.split("?")[1]),
+    view = params.get("view"),
+    parent = params.get("return_to");
+  if (parent && !safePortfolioReturn(parent)) return null;
+  if (
+    routeProjectId(hash) &&
+    routeProjectId(value) &&
+    routeProjectId(hash) !== routeProjectId(value)
+  )
+    return null;
+  return view === "quality" || view === "releases"
+    ? releaseHash(parseReleaseRoute(value), value)
     : null;
 }

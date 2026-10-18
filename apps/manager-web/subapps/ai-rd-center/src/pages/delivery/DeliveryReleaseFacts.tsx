@@ -175,6 +175,9 @@ export function CiEvidenceFacts({ evidence }: { evidence: ReleaseCiEvidence }) {
   const tr = (key: string) => t(`deliveryRelease.${key}`);
   const p = evidence.statement.predicate,
     subject = evidence.statement.subject[0];
+  const incomplete = evidence.reasons.some(
+    (reason) => reason.code === "release_scope_check_incomplete",
+  );
   return (
     <section className="delivery-release-ci-facts">
       <div className="delivery-release-inline">
@@ -182,7 +185,13 @@ export function CiEvidenceFacts({ evidence }: { evidence: ReleaseCiEvidence }) {
           {tr(evidence.passed ? "ready" : "blocked")}
         </Tag>
         <Tag>
-          {tr(evidence.current ? "evidenceCurrent" : "evidenceHistorical")}
+          {tr(
+            incomplete
+              ? "unverified"
+              : evidence.current
+                ? "evidenceCurrent"
+                : "evidenceHistorical",
+          )}
         </Tag>
         <span className="delivery-release-id">{evidence.id}</span>
       </div>

@@ -86,6 +86,8 @@ export type QualityRequirement = {
 };
 export type DeliveryQuality = {
   project_id: string;
+  version: number;
+  query_generation: number;
   as_of: string;
   requirements: QualityRequirement[];
   tasks: QualityTask[];
@@ -183,7 +185,13 @@ export type ReleaseCandidate = {
   id: string;
   created_at: string;
   created_by: ReleaseActor;
-  status: "pending" | "approved" | "rejected" | "revoked" | "stale";
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "revoked"
+    | "stale"
+    | "unverified";
   decision: "pending" | "approved" | "rejected" | "revoked";
   snapshot: ReleaseSnapshot;
   reviews: ReleaseDecision[];
@@ -213,22 +221,67 @@ export type ReleasePermissions = {
 export type DeliveryReleases = {
   project_id: string;
   version: number;
+  query_generation: number;
   as_of: string;
   policy: ReleasePolicy | null;
-  evidence: ReleaseCiEvidence[];
-  candidates: ReleaseCandidate[];
-  legacy_history: {
-    requirement_id: string;
-    requirement_title: string | null;
-    record: Record<string, unknown>;
-    source: "manual_history";
-    deployment_verified: false;
-  }[];
+  permissions: ReleasePermissions;
+  totals: { candidate: number; evidence: number; legacy: number };
+};
+export type ReleasePageKind = "candidate" | "evidence" | "legacy";
+export type ReleaseListRow = {
+  kind: ReleasePageKind;
+  id: string;
+  title: string;
+  at: string | null;
+  status: string;
+  version: string | null;
+  environment: string | null;
+  commit_sha: string | null;
+  passed: boolean | null;
+  requirement_id: string | null;
+  requirement_title: string | null;
+  scope_requirements: number;
+  scope_tasks: number;
+  summary: string | null;
+};
+export type QualityCatalogueRow = {
+  kind: "requirement" | "task";
+  id: string;
+  title: string;
+  ready: boolean;
+  attention: boolean;
+  reasons: ReleaseReason[];
+  issue_count: number;
+  target: ReleaseTarget;
+  revision: number | null;
+  task_count: number;
+};
+export type ReleasePage<T> = {
+  project_id: string;
+  version: number;
+  query_generation: number;
+  as_of: string;
+  items: T[];
+  total: number;
+  limit: number;
+  next_cursor: string | null;
+};
+export type QualityCataloguePage = ReleasePage<QualityCatalogueRow> & {
+  totals: { requirements: number; independent_tasks: number };
+};
+export type ReleaseEvidenceDetail = {
+  project_id: string;
+  version: number;
+  query_generation: number;
+  as_of: string;
+  evidence: ReleaseCiEvidence;
+  envelope: string;
   permissions: ReleasePermissions;
 };
 export type DeliveryReleaseDetail = {
   project_id: string;
   version: number;
+  query_generation: number;
   as_of: string;
   candidate: ReleaseCandidate;
   evidence: ReleaseCiEvidence;
@@ -272,33 +325,115 @@ const scope = (projectId: string) => {
 };
 export function fetchDeliveryQuality(
   projectId: string,
-  selected: ReleaseScope = { requirement_ids: [], task_ids: [] },
+  selected: ReleaseScope,
   signal?: AbortSignal,
+  generation?: number | null,
 ) {
+  if (!selected.requirement_ids.length && !selected.task_ids.length)
+    throw new Error("scopeRequired");
   const p = new URLSearchParams();
-  for (const id of selected.requirement_ids) p.append("requirement_ids", id);
-  for (const id of selected.task_ids) p.append("task_ids", id);
+  for (const id of ids(selected.requirement_ids))
+    p.append("requirement_ids", id);
+  for (const id of ids(selected.task_ids)) p.append("task_ids", id);
   return request<DeliveryQuality>(
     `/api/v1/delivery/quality${p.size ? `?${p}` : ""}`,
     { signal, headers: scope(projectId) },
-  );
+  ).then((value) => assertReleaseRead(projectId, value, generation));
 }
-export function fetchDeliveryReleases(projectId: string, signal?: AbortSignal) {
+export function fetchDeliveryReleases(
+  projectId: string,
+  signal?: AbortSignal,
+  generation?: number | null,
+) {
   return request<DeliveryReleases>("/api/v1/delivery/releases", {
     signal,
     headers: scope(projectId),
-  });
+  }).then((value) => assertReleaseRead(projectId, value, generation));
 }
 export function fetchDeliveryRelease(
   projectId: string,
   id: string,
   signal?: AbortSignal,
+  generation?: number | null,
 ) {
   if (!id) throw new Error("releaseMissing");
   return request<DeliveryReleaseDetail>(
     `/api/v1/delivery/releases/${encodeURIComponent(id)}`,
     { signal, headers: scope(projectId) },
-  );
+  ).then((value) => {
+    assertReleaseRead(projectId, value, generation);
+    if (value.candidate.id !== id) throw new Error("releaseMissing");
+    return value;
+  });
+}
+export function assertReleaseRead<
+  T extends { project_id: string; version: number; query_generation: number },
+>(projectId: string, value: T, generation?: number | null): T {
+  if (value.project_id !== projectId) throw new Error("scopeChanged");
+  if (
+    !Number.isSafeInteger(value.version) ||
+    value.version < 0 ||
+    !Number.isSafeInteger(value.query_generation) ||
+    value.query_generation < 0 ||
+    (generation != null && value.query_generation !== generation)
+  )
+    throw new Error("generationChanged");
+  return value;
+}
+export function fetchQualityCatalogue(
+  projectId: string,
+  query: {
+    kind?: "all" | "requirement" | "task";
+    q?: string;
+    readiness?: "all" | "ready" | "attention";
+    cursor?: string;
+    limit?: number;
+  } = {},
+  signal?: AbortSignal,
+  generation?: number | null,
+) {
+  const p = new URLSearchParams({
+    kind: query.kind || "all",
+    readiness: query.readiness || "all",
+    limit: String(query.limit ?? 20),
+  });
+  if (query.q) p.set("q", query.q);
+  if (query.cursor) p.set("cursor", query.cursor);
+  return request<QualityCataloguePage>(
+    `/api/v1/delivery/quality/catalogue?${p}`,
+    { headers: scope(projectId), signal },
+  ).then((value) => assertReleaseRead(projectId, value, generation));
+}
+export function fetchReleasePage(
+  projectId: string,
+  kind: ReleasePageKind,
+  query: { q?: string; cursor?: string; limit?: number } = {},
+  signal?: AbortSignal,
+  generation?: number | null,
+) {
+  const p = new URLSearchParams({ kind, limit: String(query.limit ?? 20) });
+  if (query.q) p.set("q", query.q);
+  if (query.cursor) p.set("cursor", query.cursor);
+  return request<ReleasePage<ReleaseListRow>>(
+    `/api/v1/delivery/release-pages?${p}`,
+    { headers: scope(projectId), signal },
+  ).then((value) => assertReleaseRead(projectId, value, generation));
+}
+export function fetchReleaseEvidence(
+  projectId: string,
+  id: string,
+  signal?: AbortSignal,
+  generation?: number | null,
+) {
+  if (!id) throw new Error("evidenceMissing");
+  return request<ReleaseEvidenceDetail>(
+    `/api/v1/delivery/release-evidence/${encodeURIComponent(id)}`,
+    { headers: scope(projectId), signal },
+  ).then((value) => {
+    assertReleaseRead(projectId, value, generation);
+    if (value.evidence.id !== id) throw new Error("evidenceMissing");
+    return value;
+  });
 }
 const ids = (values: string[]) => {
   if (

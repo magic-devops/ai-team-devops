@@ -36,6 +36,32 @@
   gap: 8px;
   min-width: 0;
 }
+.delivery-release-directory-tabs,
+.delivery-release-pager,
+.delivery-release-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.delivery-release-pager {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+.delivery-release-pager > span {
+  margin-right: auto;
+}
+.delivery-release-directory-tabs > button[aria-pressed="true"] {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.delivery-release-selected {
+  max-height: 160px;
+  overflow: auto;
+}
 .delivery-release-actions {
   justify-content: flex-end;
 }

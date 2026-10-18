@@ -7,7 +7,39 @@ import type {
   ReleaseForm,
   ReleasePreview,
   ReleaseSnapshot,
+  ReleaseCommand,
 } from "./deliveryRelease";
+import type { DeliveryCommandAck, DeliveryIntent } from "./delivery";
+export function releaseAck(
+  projectId: string,
+  action: ReleaseCommand,
+  payload: Record<string, unknown>,
+  intent: DeliveryIntent,
+): DeliveryCommandAck {
+  const resource = {
+    kind:
+      action === "release.policy.save"
+        ? "release_policy"
+        : action === "release.ci.import"
+          ? "ci_evidence"
+          : "release_candidate",
+    id:
+      action === "release.policy.save"
+        ? projectId
+        : String(payload.id || "new"),
+  };
+  return {
+    project_id: projectId,
+    action,
+    resource,
+    applied_version: intent.version + 1,
+    version: intent.version + 1,
+    query_generation: 8,
+    replayed: false,
+    affected_refs: [resource],
+    result: null,
+  };
+}
 const digest = "b".repeat(64);
 export const releaseForm: ReleaseForm = {
   requirement_ids: ["R-1"],
@@ -21,6 +53,8 @@ export const releaseForm: ReleaseForm = {
 };
 export const releaseQuality: DeliveryQuality = {
   project_id: "P",
+  version: 7,
+  query_generation: 7,
   as_of: "2026-10-17T10:00:00Z",
   requirements: [
     {
@@ -189,6 +223,7 @@ export const releaseCandidate: ReleaseCandidate = {
 export const releaseIndex: DeliveryReleases = {
   project_id: "P",
   version: 7,
+  query_generation: 7,
   as_of: "2026-10-17T10:00:00Z",
   policy: {
     generation: 1,
@@ -198,9 +233,7 @@ export const releaseIndex: DeliveryReleases = {
     updated_at: "2026-10-17T09:00:00Z",
     updated_by: { id: "user:lead", name: "Lead" },
   },
-  evidence: [ciEvidence],
-  candidates: [releaseCandidate],
-  legacy_history: [],
+  totals: { candidate: 1, evidence: 1, legacy: 0 },
   permissions,
 };
 export const releasePreview: ReleasePreview = {
@@ -216,6 +249,7 @@ export const releasePreview: ReleasePreview = {
 export const releaseDetail: DeliveryReleaseDetail = {
   project_id: "P",
   version: 7,
+  query_generation: 7,
   as_of: "2026-10-17T10:00:00Z",
   candidate: releaseCandidate,
   evidence: ciEvidence,

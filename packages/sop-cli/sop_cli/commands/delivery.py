@@ -380,23 +380,59 @@ def deployment_preview(file: Annotated[Path, typer.Option("--file", exists=True,
 def quality(
     requirement_ids: Annotated[list[str] | None, typer.Option("--requirement-id")] = None,
     task_ids: Annotated[list[str] | None, typer.Option("--task-id")] = None,
+    kind: Annotated[str, typer.Option("--kind", help="all / requirement / task")] = "all",
+    readiness: Annotated[str, typer.Option("--readiness", help="all / ready / attention")] = "all",
+    query: Annotated[str, typer.Option("--query")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
 ):
-    """读取当前项目质量；可明确选择需求及独立任务取得固定范围依据。"""
+    """浏览一页质量目录；指定需求/独立任务时检查完整范围，不自动翻页。"""
     try:
+        selected = bool(requirement_ids or task_ids)
+        if selected and (kind != "all" or readiness != "all" or query or cursor or limit != 20):
+            raise ValueError("Explicit proof scope cannot be combined with catalogue filters")
         with get_client() as client:
-            console.print_json(data=client.delivery_quality(requirement_ids=requirement_ids or [], task_ids=task_ids or []))
+            result = (
+                client.delivery_quality(requirement_ids=requirement_ids or [], task_ids=task_ids or [])
+                if selected else client.delivery_quality_catalogue(kind=kind, readiness=readiness, q=query, limit=limit, cursor=cursor)
+            )
+        console.print_json(data=result)
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc
 
 
 @app.command("releases")
-def releases(release_id: Annotated[str, typer.Option("--id")] = ""):
-    """读取发布候选或明确ID详情；批准候选不代表部署完成。"""
+def releases(
+    release_id: Annotated[str, typer.Option("--id")] = "",
+    kind: Annotated[str, typer.Option("--kind", help="candidate / evidence / legacy")] = "candidate",
+    query: Annotated[str, typer.Option("--query")] = "",
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+    cursor: Annotated[str, typer.Option("--cursor")] = "",
+):
+    """浏览一页候选/CI/手工历史摘要；--id 读取明确候选或 CI 原件。"""
+    try:
+        if kind not in {"candidate", "evidence", "legacy"}:
+            raise ValueError("kind must be candidate, evidence or legacy")
+        if release_id and (kind == "legacy" or query or cursor or limit != 20):
+            raise ValueError("Exact detail requires candidate/evidence and no catalogue filters")
+        with get_client() as client:
+            if release_id:
+                result = client.delivery_release_evidence(release_id) if kind == "evidence" else client.delivery_release(release_id)
+            else:
+                result = client.delivery_release_page(kind=kind, q=query, limit=limit, cursor=cursor)
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("release-context")
+def release_context():
+    """读取当前发布信任策略与权限上下文，不加载候选或 CI 目录。"""
     try:
         with get_client() as client:
-            result = client.delivery_release(release_id) if release_id else client.delivery_releases()
-        console.print_json(data=result)
+            console.print_json(data=client.delivery_releases())
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc

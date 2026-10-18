@@ -25,7 +25,7 @@ def semantic_owner(owner):
 class TeamContext:
     """Resolve only stable IDs against actual project membership and registry."""
 
-    def __init__(self, db, project, data=None):
+    def __init__(self, db, project, data=None, *, owner_ids=None):
         self.db, self.project = db, project
         with db.no_autoflush:
             if data is None:
@@ -40,19 +40,19 @@ class TeamContext:
                     .scalar()
                 )
             self.data = data or {}
-            humans = (
-                db.connection()
-                .execute(
-                    self._humans().where(
-                        or_(
-                            ProjectMember.project_id == project.id,
-                            User.role.in_(["tenant_admin", "super_admin"]),
-                        )
+            query = self._humans()
+            if owner_ids is not None:
+                query = query.where(
+                    User.id.in_([value[5:] for value in owner_ids if value.startswith("user:")])
+                )
+            else:
+                query = query.where(
+                    or_(
+                        ProjectMember.project_id == project.id,
+                        User.role.in_(["tenant_admin", "super_admin"]),
                     )
                 )
-                .mappings()
-                .all()
-            )
+            humans = db.connection().execute(query).mappings().all()
         self._humans_by_id = {"user:" + row["id"]: self._human(row) for row in humans}
         self._resources = {}
         for row in self.data.get("members", []):

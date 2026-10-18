@@ -7,9 +7,11 @@ import {
   submitReleaseCommand,
 } from "./deliveryRelease";
 import {
+  releaseAck,
   releaseForm,
   releaseIndex,
   releasePreview,
+  ciEvidence,
 } from "./deliveryReleaseFixtures";
 const hooks = vi.hoisted(() => ({
   state: [] as unknown[],
@@ -18,7 +20,19 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("react", async () => ({
   ...(await vi.importActual<typeof import("react")>("react")),
-  useRef: (value: unknown) => ({ current: value }),
+  useEffect: () => {},
+  useRef: (value: unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = { current: value };
+    return hooks.state[i];
+  },
+  useMemo: (factory: () => unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = factory();
+    return hooks.state[i];
+  },
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
+    snapshot(),
   useState: (initial: unknown) => {
     const i = hooks.next++;
     if (!(i in hooks.state))
@@ -36,6 +50,28 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: { language: "en-US" },
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({
+    data: {
+      project_id: "P",
+      version: 7,
+      query_generation: 7,
+      items: [
+        {
+          id: "CI-one",
+          title: "Signed build",
+          commit_sha: "abc",
+          passed: true,
+        },
+      ],
+      total: 1,
+      next_cursor: null,
+    },
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
   }),
 }));
 vi.mock("./projectPortfolio", async () => ({
@@ -62,7 +98,8 @@ export function find(
   if (node.type === type && predicate(node.props)) return node.props;
   return (
     find(node.props.children, type, predicate) ||
-    find(node.props.footer, type, predicate)
+    find(node.props.footer, type, predicate) ||
+    find(node.props.action, type, predicate)
   );
 }
 const onClose = vi.fn(),
@@ -72,7 +109,7 @@ const render = () => {
   return DeliveryReleaseEditor({
     projectId: "P",
     initial: releaseIndex,
-    selected: releaseIndex.evidence[0].selected,
+    selected: ciEvidence.selected,
     onClose,
     onSaved,
   });
@@ -122,9 +159,28 @@ beforeEach(() => {
     .mockResolvedValue(releasePreview);
   vi.mocked(submitReleaseCommand)
     .mockReset()
-    .mockResolvedValue({} as never);
+    .mockImplementation(async (projectId, action, payload, intent) =>
+      releaseAck(projectId, action, payload, intent),
+    );
 });
 describe("candidate compilation uses a fixed preview", () => {
+  it("locks the original after an unknown write instead of allowing editing, repreview or closing", async () => {
+    fill();
+    await button("preview").onClick();
+    vi.mocked(submitReleaseCommand).mockRejectedValueOnce(
+      new Error("reply lost after commit"),
+    );
+    await button("confirm").onClick();
+    expect(
+      find(
+        render(),
+        Input,
+        (p) => p["aria-label"] === "deliveryRelease.version",
+      )!.disabled,
+    ).toBe(true);
+    expect(button("preview").disabled).toBe(true);
+    expect(button("cancel").disabled).toBe(true);
+  });
   it("starts with no evidence selected and only closes after a successful fixed submission", async () => {
     expect(
       find(
@@ -141,7 +197,7 @@ describe("candidate compilation uses a fixed preview", () => {
     await button("confirm").onClick();
     expect(onClose).not.toHaveBeenCalled();
     const original = vi.mocked(submitReleaseCommand).mock.calls[0];
-    await button("confirm").onClick();
+    await button("replayOriginal").onClick();
     expect(vi.mocked(submitReleaseCommand).mock.calls[1]).toEqual(original);
     expect(original).toMatchObject([
       "P",
@@ -158,7 +214,9 @@ describe("candidate compilation uses a fixed preview", () => {
     fill();
     await button("preview").onClick();
     vi.mocked(submitReleaseCommand).mockRejectedValueOnce(
-      new Error("HTTP 409"),
+      new Error(
+        'HTTP 409: {"detail":{"code":"version_conflict","message":"version conflict"}}',
+      ),
     );
     await button("confirm").onClick();
     expect(button("confirm").disabled).toBe(true);
@@ -176,6 +234,7 @@ describe("candidate compilation uses a fixed preview", () => {
     });
     await button("readLatest").onClick();
     expect(submitReleaseCommand).toHaveBeenCalledOnce();
+    button("adopt").onClick();
     await button("confirm").onClick();
     expect(vi.mocked(submitReleaseCommand).mock.calls[1][3].version).toBe(9);
   });
@@ -211,7 +270,7 @@ describe("candidate compilation uses a fixed preview", () => {
     const tree = DeliveryReleaseEditor({
       projectId: "P",
       initial: releaseIndex,
-      selected: releaseIndex.evidence[0].selected,
+      selected: ciEvidence.selected,
       onClose,
       onSaved,
       readOnly: true,

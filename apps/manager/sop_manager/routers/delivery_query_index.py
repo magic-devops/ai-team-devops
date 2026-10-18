@@ -9,7 +9,7 @@ from .delivery_progress_facts import metrics
 from .delivery_scheduling import planning_basis
 from .sql_models import DeliveryQueryFact, DeliveryQueryState, DeliveryWorkspace
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 FLOW_FIELDS = (
     "stage",
     "revision",
@@ -51,6 +51,7 @@ def _requirement_facts(project, evaluation):
     rows = []
     for requirement in evaluation.snapshot["requirements"]:
         flow = requirement["flow"]
+        source = evaluation.state.get("flows", {}).get(requirement["id"], {})
         linked = grouped[requirement["id"]]
         data = {
             "basis": requirement["basis"],
@@ -61,6 +62,12 @@ def _requirement_facts(project, evaluation):
             "deployment_verified": requirement.get("deployment_verified", False),
             "flow": {key: flow.get(key) for key in FLOW_FIELDS},
             "gates": flow["gates"],
+            "quality_positions": {
+                "test": next((i for i in range(len(source.get("artifacts", [])) - 1, -1, -1)
+                    if source["artifacts"][i].get("revision") == source.get("revision") and source["artifacts"][i].get("kind") == "test"), None),
+                "acceptance": next((i for i in range(len(source.get("reviews", [])) - 1, -1, -1)
+                    if source["reviews"][i].get("revision") == source.get("revision") and source["reviews"][i].get("stage") == "acceptance" and source["reviews"][i].get("decision") == "approved"), None),
+            },
         }
         rows.append(
             _fact(
@@ -165,13 +172,20 @@ def _reference_facts(project, evaluation):
     owners = Counter(task.get("owner_id") for task in evaluation.snapshot["tasks"])
     counts = _milestone_counts(evaluation)
     rows = []
-    for member in evaluation.snapshot["members"]:
+    registry = defaultdict(list)
+    for position, member in enumerate(evaluation.state.get("members", [])):
+        if isinstance(member, dict) and isinstance(member.get("id"), str) and not member["id"].startswith("user:"):
+            registry[member["id"]].append(position)
+    roster = {member["id"]: member for member in evaluation.snapshot["members"]}
+    for member_id in registry.keys() - roster.keys():
+        roster[member_id] = evaluation.verification.team.resolve_owner(member_id)
+    for member in roster.values():
         rows.append(
             _fact(
                 project,
                 "member",
                 member["id"],
-                {**member, "task_count": owners[member["id"]]},
+                {**member, "task_count": owners[member["id"]], "registry_positions": registry.get(member["id"], [])},
                 label=member.get("name") or member["id"],
                 status="active" if member["active"] else "inactive",
             )
@@ -247,6 +261,71 @@ def _inbox_facts(project, evaluation):
     return rows
 
 
+def _quality_release_facts(project, evaluation):
+    """Small disposable catalogue rows; never substitute these for command proof."""
+    from .delivery_deployment_facts import release_deployment_view
+    from .delivery_release import _requirement_quality, _task_quality
+    from .delivery_verification import fingerprint
+
+    context = evaluation.verification
+    grouped, rows = defaultdict(list), []
+    for task in sorted(context.tasks.values(), key=lambda value: value.id):
+        value = _task_quality(context, task)
+        grouped[value["requirement_id"]].append(value)
+        if not value["requirement_id"]:
+            item = _quality_item("task", value, [value])
+            rows.append(_fact(project, "quality_catalogue", fingerprint(["task", task.id]), {"item": item},
+                parent_id="task", status="ready" if item["ready"] else "attention", label=task.title[:256]))
+    for requirement in sorted(context.requirements.values(), key=lambda value: value.id):
+        linked = grouped[requirement.id]
+        value = _requirement_quality(context, requirement, linked)
+        item = _quality_item("requirement", value, linked)
+        rows.append(_fact(project, "quality_catalogue", fingerprint(["requirement", requirement.id]), {"item": item},
+            parent_id="requirement", status="ready" if item["ready"] else "attention", label=requirement.title[:256]))
+    data = evaluation.state
+    upper = {}
+    for evidence in data.get("ci_evidence", []):
+        predicate = evidence["statement"]["predicate"]
+        key = tuple(predicate[name] for name in ("policy_generation", "repository", "workflow", "commit_sha"))
+        upper[key] = max(upper.get(key, (0, 0)), (predicate["run_number"], predicate["run_attempt"]))
+    for position, evidence in enumerate(data.get("ci_evidence", [])):
+        predicate = evidence["statement"]["predicate"]
+        key = tuple(predicate[name] for name in ("policy_generation", "repository", "workflow", "commit_sha"))
+        item = _release_item("evidence", evidence["id"], predicate["workflow"] + " #" + str(predicate["run_number"]) + "." + str(predicate["run_attempt"]))
+        item.update(at=evidence["imported_at"], status="passed" if evidence["passed"] else "failed", passed=evidence["passed"], commit_sha=predicate["commit_sha"],
+            scope_requirements=len(evidence["selected"]["requirement_ids"]), scope_tasks=len(evidence["quality_snapshot"]["tasks"]))
+        metadata = {"item": item, "position": position, "latest_sequence": list(upper[key])}
+        rows.append(_fact(project, "release_evidence", evidence["id"], metadata, label=item["title"][:256], status=item["status"]))
+    for position, candidate in enumerate(data.get("release_candidates", [])):
+        snapshot = candidate["snapshot"]
+        item = _release_item("candidate", candidate["id"], snapshot["version"])
+        status = "stale" if candidate.get("invalidated") and candidate["decision"] in {"pending", "approved"} else candidate["decision"]
+        item.update(at=candidate["created_at"], status=status, version=snapshot["version"], environment=snapshot["environment"], commit_sha=snapshot["ci"]["commit_sha"],
+            scope_requirements=len(snapshot["selected"]["requirement_ids"]), scope_tasks=len(snapshot["quality"]["tasks"]))
+        metadata = {"item": item, "position": position, "deployment": release_deployment_view(data, candidate["id"], business_valid=True)}
+        rows.append(_fact(project, "release_candidate", candidate["id"], metadata, label=(snapshot["version"] + " " + snapshot["environment"])[:256], status=status))
+    for requirement_id, flow in data.get("flows", {}).items():
+        requirement = context.requirements.get(requirement_id)
+        for position, record in enumerate(flow.get("releases", [])):
+            locator = fingerprint([requirement_id, position, record])
+            item = _release_item("legacy", locator, str(record.get("version") or "Manual history"))
+            item.update(at=record.get("at"), status="manual_history", version=record.get("version"), requirement_id=requirement_id,
+                requirement_title=requirement.title if requirement else None, scope_requirements=1, summary=str(record.get("summary") or record.get("verification") or "")[:240] or None)
+            rows.append(_fact(project, "release_legacy", locator, {"item": item, "position": position}, parent_id=requirement_id, label=item["title"][:256], status="manual_history"))
+    return rows
+
+
+def _quality_item(kind, value, tasks):
+    reasons = list({reason["code"]: reason for reason in [*value["reasons"], *(reason for task in tasks for reason in task["reasons"])]}.values())
+    return {"kind": kind, "id": value["id"], "title": value["title"], "ready": not reasons, "attention": bool(reasons), "reasons": reasons,
+        "issue_count": len({issue["id"] for task in tasks for issue in task["issues"]}), "target": value["target"], "revision": value.get("revision"), "task_count": len(tasks)}
+
+
+def _release_item(kind, entity_id, title):
+    return {"kind": kind, "id": entity_id, "title": title, "at": None, "status": "", "version": None, "environment": None, "commit_sha": None,
+        "passed": None, "requirement_id": None, "requirement_title": None, "scope_requirements": 0, "scope_tasks": 0, "summary": None}
+
+
 def replace_from_evaluation(db, project, evaluation):
     """Caller owns Project lock and canonical transaction; no commit or history write."""
     connection = db.connection()
@@ -257,6 +336,7 @@ def replace_from_evaluation(db, project, evaluation):
     rows = _requirement_facts(project, evaluation) + _task_facts(project, evaluation)
     rows += _execution_facts(project, evaluation) + _reference_facts(project, evaluation)
     rows += _inbox_facts(project, evaluation)
+    rows += _quality_release_facts(project, evaluation)
     linked_issues = {
         flow["source_issue_id"]: requirement_id
         for requirement_id, flow in evaluation.state.get("flows", {}).items()

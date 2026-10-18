@@ -4973,8 +4973,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: Pure current quality. Repeated requirement_ids/task_ids select complete requirements and independent tasks.
-        Empty selection has no scope basis; no implicit first item.
+      description: Pure complete proof for an explicit requirement/independent task scope. Empty scope is 422; proof exceeding
+        500 tasks or depth 64 is 413. No truncation, GET repair or implicit project scope.
   /api/v1/delivery/releases:
     get:
       tags:
@@ -5004,8 +5004,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: Pure project release trust policy, signed evidence, immutable candidates and explicitly unverified manual
-        history.
+      description: Small current release trust policy and permission context with catalogue totals. No evidence statements,
+        candidates, snapshots or history collections.
   /api/v1/delivery/releases/{release_id}:
     get:
       tags:
@@ -5041,8 +5041,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      description: Read the exact candidate, original signed envelope and current validity. Missing IDs never fall back to the
-        first release.
+      description: Read the exact immutable candidate and signed original, rechecking current complete scope and permissions
+        through narrow canonical paths. Missing IDs never fall back to the first release.
   /api/v1/delivery/release-preview:
     post:
       tags:
@@ -8350,6 +8350,188 @@ paths:
       description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
         grants authority.
 
+  /api/v1/delivery/quality/catalogue:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Quality Catalogue
+      operationId: deliveryQualityCatalogue
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - all
+          - requirement
+          - task
+          type: string
+          default: all
+          title: Kind
+      - name: readiness
+        in: query
+        required: false
+        schema:
+          enum:
+          - all
+          - ready
+          - attention
+          type: string
+          default: all
+          title: Readiness
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityCatalogueResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: One SQL page of lightweight quality summaries, with complete filtered total. Cursor binds tenant, project,
+        reader, filters, limit and query generation. No proof documents or linked task arrays.
+  /api/v1/delivery/release-pages:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Release Page
+      operationId: deliveryReleasePage
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: kind
+        in: query
+        required: false
+        schema:
+          enum:
+          - candidate
+          - evidence
+          - legacy
+          type: string
+          default: candidate
+          title: Kind
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+          default: ''
+          title: Q
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 4000
+          default: ''
+          title: Cursor
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleasePageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: One independent candidate, CI evidence or manual history summary page. Recorded decisions/results are not
+        current approval authority. Default 20, maximum 100; generation-bound cursor.
+  /api/v1/delivery/release-evidence/{evidence_id}:
+    get:
+      tags:
+      - delivery
+      summary: Delivery Release Evidence
+      operationId: deliveryReleaseEvidence
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: evidence_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Evidence Id
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleaseEvidenceDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Read one original signed CI statement and envelope with its current complete scoped proof. Missing IDs never
+        fall back to another evidence.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -19561,72 +19743,68 @@ components:
       title: QualityTask
       type: object
     ReleaseReason:
-      additionalProperties: false
       properties:
         code:
+          type: string
           title: Code
-          type: string
         message:
-          title: Message
           type: string
+          title: Message
         target:
           anyOf:
           - $ref: '#/components/schemas/ReleaseTarget'
           - type: 'null'
-          default: null
+      additionalProperties: false
+      type: object
       required:
       - code
       - message
       title: ReleaseReason
-      type: object
     ReleaseTarget:
-      additionalProperties: false
       properties:
         project_id:
-          title: Project Id
           type: string
+          title: Project Id
         kind:
+          type: string
           enum:
           - requirement
           - task
           - issue
           title: Kind
-          type: string
         view:
+          type: string
           enum:
           - requirements
           - tasks
           - issues
           title: View
-          type: string
         detail:
-          default: details
-          title: Detail
           type: string
+          title: Detail
+          default: details
         requirement_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Requirement Id
         task_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Task Id
         issue_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Issue Id
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - kind
       - view
       title: ReleaseTarget
-      type: object
     SelectedReleaseScope:
       additionalProperties: false
       properties:
@@ -19646,29 +19824,34 @@ components:
       title: SelectedReleaseScope
       type: object
     DeliveryQualityResponse:
-      additionalProperties: false
       properties:
         project_id:
+          type: string
           title: Project Id
-          type: string
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
         as_of:
-          title: As Of
           type: string
+          title: As Of
         requirements:
           items:
             $ref: '#/components/schemas/QualityRequirement'
-          title: Requirements
           type: array
+          title: Requirements
         tasks:
           items:
             $ref: '#/components/schemas/QualityTask'
-          title: Tasks
           type: array
+          title: Tasks
         independent_tasks:
           items:
             $ref: '#/components/schemas/QualityTask'
-          title: Independent Tasks
           type: array
+          title: Independent Tasks
         selected:
           $ref: '#/components/schemas/SelectedReleaseScope'
         scope_basis:
@@ -19677,17 +19860,21 @@ components:
           - type: 'null'
           title: Scope Basis
         eligible:
-          title: Eligible
           type: boolean
+          title: Eligible
         reasons:
           items:
             $ref: '#/components/schemas/ReleaseReason'
-          title: Reasons
           type: array
+          title: Reasons
         summary:
           $ref: '#/components/schemas/QualitySummary'
+      additionalProperties: false
+      type: object
       required:
       - project_id
+      - version
+      - query_generation
       - as_of
       - requirements
       - tasks
@@ -19698,7 +19885,6 @@ components:
       - reasons
       - summary
       title: DeliveryQualityResponse
-      type: object
     LegacyReleaseRecord:
       additionalProperties: false
       properties:
@@ -19745,43 +19931,43 @@ components:
       title: ReleaseActor
       type: object
     ReleaseCandidate:
-      additionalProperties: false
       properties:
         id:
+          type: string
           title: Id
-          type: string
         created_at:
-          title: Created At
           type: string
+          title: Created At
         created_by:
           $ref: '#/components/schemas/ReleaseActor'
         status:
+          type: string
           enum:
           - pending
           - approved
           - rejected
           - revoked
           - stale
+          - unverified
           title: Status
-          type: string
         decision:
+          type: string
           enum:
           - pending
           - approved
           - rejected
           - revoked
           title: Decision
-          type: string
         snapshot:
           $ref: '#/components/schemas/ReleaseSnapshot'
         reviews:
           items:
             $ref: '#/components/schemas/ReleaseDecision'
-          title: Reviews
           type: array
+          title: Reviews
         invalidated:
-          title: Invalidated
           type: boolean
+          title: Invalidated
         invalidated_at:
           anyOf:
           - type: string
@@ -19790,23 +19976,25 @@ components:
         invalidated_reasons:
           items:
             $ref: '#/components/schemas/ReleaseReason'
-          title: Invalidated Reasons
           type: array
+          title: Invalidated Reasons
         valid:
-          title: Valid
           type: boolean
+          title: Valid
         reasons:
           items:
             $ref: '#/components/schemas/ReleaseReason'
-          title: Reasons
           type: array
+          title: Reasons
         review_basis:
-          title: Review Basis
           type: string
+          title: Review Basis
         permissions:
           $ref: '#/components/schemas/ReleaseCandidatePermissions'
         deployment:
           $ref: '#/components/schemas/ReleaseDeployment'
+      additionalProperties: false
+      type: object
       required:
       - id
       - created_at
@@ -19824,7 +20012,6 @@ components:
       - permissions
       - deployment
       title: ReleaseCandidate
-      type: object
     ReleaseCandidatePermissions:
       additionalProperties: false
       properties:
@@ -19972,10 +20159,9 @@ components:
       title: ReleaseDecision
       type: object
     ReleaseDeployment:
-      additionalProperties: false
       properties:
         status:
-          default: not_handed_off
+          type: string
           enum:
           - not_handed_off
           - pending_dispatch
@@ -19990,19 +20176,19 @@ components:
           - rolled_back
           - superseded
           title: Status
-          type: string
+          default: not_handed_off
         verified:
-          default: false
-          title: Verified
           type: boolean
+          title: Verified
+          default: false
         deployment_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Deployment Id
-      title: ReleaseDeployment
+      additionalProperties: false
       type: object
+      title: ReleaseDeployment
     ReleaseKey:
       additionalProperties: false
       properties:
@@ -20128,80 +20314,81 @@ components:
       title: ReleaseSnapshot
       type: object
     DeliveryReleasesResponse:
-      additionalProperties: false
       properties:
         project_id:
+          type: string
           title: Project Id
-          type: string
         version:
-          title: Version
           type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
         as_of:
-          title: As Of
           type: string
+          title: As Of
         policy:
           anyOf:
           - $ref: '#/components/schemas/ReleasePolicy'
           - type: 'null'
-        evidence:
-          items:
-            $ref: '#/components/schemas/ReleaseCiEvidence'
-          title: Evidence
-          type: array
-        candidates:
-          items:
-            $ref: '#/components/schemas/ReleaseCandidate'
-          title: Candidates
-          type: array
-        legacy_history:
-          items:
-            $ref: '#/components/schemas/LegacyReleaseRecord'
-          title: Legacy History
-          type: array
         permissions:
           $ref: '#/components/schemas/ReleasePermissions'
+        totals:
+          additionalProperties:
+            type: integer
+          propertyNames:
+            enum:
+            - candidate
+            - evidence
+            - legacy
+          type: object
+          title: Totals
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - version
+      - query_generation
       - as_of
       - policy
-      - evidence
-      - candidates
-      - legacy_history
       - permissions
+      - totals
       title: DeliveryReleasesResponse
-      type: object
     DeliveryReleaseDetail:
-      additionalProperties: false
       properties:
         project_id:
+          type: string
           title: Project Id
-          type: string
         version:
-          title: Version
           type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
         as_of:
-          title: As Of
           type: string
+          title: As Of
         candidate:
           $ref: '#/components/schemas/ReleaseCandidate'
         evidence:
           $ref: '#/components/schemas/ReleaseCiEvidence'
         envelope:
-          title: Envelope
           type: string
+          title: Envelope
         permissions:
           $ref: '#/components/schemas/ReleasePermissions'
+      additionalProperties: false
+      type: object
       required:
       - project_id
       - version
+      - query_generation
       - as_of
       - candidate
       - evidence
       - envelope
       - permissions
       title: DeliveryReleaseDetail
-      type: object
     ReleasePreviewInput:
       additionalProperties: false
       properties:
@@ -23346,28 +23533,27 @@ components:
       title: CommandAck
       type: object
     QueryState:
-      additionalProperties: false
       properties:
         status:
+          type: string
           enum:
           - ready
           - rebuild_required
           title: Status
-          type: string
         schema_version:
-          default: 2
-          title: Schema Version
           type: integer
+          title: Schema Version
+          default: 3
         computed_at:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Computed At
+      additionalProperties: false
+      type: object
       required:
       - status
       title: QueryState
-      type: object
     DeliveryContext:
       additionalProperties: false
       properties:
@@ -25955,3 +26141,263 @@ components:
       - record
       title: SyncRecordApply
       type: object
+    QualityCatalogueResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        items:
+          items:
+            $ref: '#/components/schemas/QualityCatalogueRow'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        totals:
+          additionalProperties:
+            type: integer
+          propertyNames:
+            enum:
+            - requirements
+            - independent_tasks
+          type: object
+          title: Totals
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - items
+      - total
+      - totals
+      - limit
+      - next_cursor
+      title: QualityCatalogueResponse
+    QualityCatalogueRow:
+      properties:
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          title: Kind
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        ready:
+          type: boolean
+          title: Ready
+        attention:
+          type: boolean
+          title: Attention
+        reasons:
+          items:
+            $ref: '#/components/schemas/ReleaseReason'
+          type: array
+          title: Reasons
+        issue_count:
+          type: integer
+          title: Issue Count
+        target:
+          $ref: '#/components/schemas/ReleaseTarget'
+        revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Revision
+        task_count:
+          type: integer
+          title: Task Count
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - title
+      - ready
+      - attention
+      - reasons
+      - issue_count
+      - target
+      - revision
+      - task_count
+      title: QualityCatalogueRow
+    ReleasePageResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        items:
+          items:
+            $ref: '#/components/schemas/ReleaseListRow'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - items
+      - total
+      - limit
+      - next_cursor
+      title: ReleasePageResponse
+    ReleaseListRow:
+      properties:
+        kind:
+          type: string
+          enum:
+          - candidate
+          - evidence
+          - legacy
+          title: Kind
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: At
+        status:
+          type: string
+          title: Status
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+        environment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Environment
+        commit_sha:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Commit Sha
+        passed:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Passed
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Id
+        requirement_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Title
+        scope_requirements:
+          type: integer
+          title: Scope Requirements
+        scope_tasks:
+          type: integer
+          title: Scope Tasks
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - title
+      - at
+      - status
+      - version
+      - environment
+      - commit_sha
+      - passed
+      - requirement_id
+      - requirement_title
+      - scope_requirements
+      - scope_tasks
+      - summary
+      title: ReleaseListRow
+    ReleaseEvidenceDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        evidence:
+          $ref: '#/components/schemas/ReleaseCiEvidence'
+        envelope:
+          type: string
+          title: Envelope
+        permissions:
+          $ref: '#/components/schemas/ReleasePermissions'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - version
+      - query_generation
+      - as_of
+      - evidence
+      - envelope
+      - permissions
+      title: ReleaseEvidenceDetail

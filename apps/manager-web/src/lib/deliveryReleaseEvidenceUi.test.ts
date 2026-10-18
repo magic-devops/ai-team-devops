@@ -10,7 +10,11 @@ import {
   fetchDeliveryReleases,
   submitReleaseCommand,
 } from "./deliveryRelease";
-import { releaseIndex, releaseQuality } from "./deliveryReleaseFixtures";
+import {
+  releaseAck,
+  releaseIndex,
+  releaseQuality,
+} from "./deliveryReleaseFixtures";
 const hooks = vi.hoisted(() => ({
   state: [] as unknown[],
   next: 0,
@@ -18,7 +22,19 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("react", async () => ({
   ...(await vi.importActual<typeof import("react")>("react")),
-  useRef: (value: unknown) => ({ current: value }),
+  useEffect: () => {},
+  useRef: (value: unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = { current: value };
+    return hooks.state[i];
+  },
+  useMemo: (factory: () => unknown) => {
+    const i = hooks.next++;
+    if (!(i in hooks.state)) hooks.state[i] = factory();
+    return hooks.state[i];
+  },
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
+    snapshot(),
   useState: (initial: unknown) => {
     const i = hooks.next++;
     if (!(i in hooks.state))
@@ -91,7 +107,9 @@ beforeEach(() => {
   close.mockClear();
   vi.mocked(submitReleaseCommand)
     .mockReset()
-    .mockResolvedValue({} as never);
+    .mockImplementation(async (projectId, action, payload, intent) =>
+      releaseAck(projectId, action, payload, intent),
+    );
   vi.mocked(fetchDeliveryReleases)
     .mockReset()
     .mockResolvedValue({ ...releaseIndex, version: 9 });
@@ -122,7 +140,9 @@ describe("signed CI input keeps original text and explicit trust", () => {
       target: { value: '{"original":true}' },
     });
     vi.mocked(submitReleaseCommand).mockRejectedValueOnce(
-      new Error("HTTP 409"),
+      new Error(
+        'HTTP 409: {"detail":{"code":"version_conflict","message":"version conflict"}}',
+      ),
     );
     await button("import").onClick();
     expect(close).not.toHaveBeenCalled();

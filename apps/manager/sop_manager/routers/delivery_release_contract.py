@@ -166,6 +166,8 @@ class QualitySummary(ReleaseContract):
 
 class DeliveryQualityResponse(ReleaseContract):
     project_id: str
+    version: int
+    query_generation: int
     as_of: str
     requirements: list[QualityRequirement]
     tasks: list[QualityTask]
@@ -264,7 +266,7 @@ class ReleaseCandidate(ReleaseContract):
     id: str
     created_at: str
     created_by: ReleaseActor
-    status: Literal["pending", "approved", "rejected", "revoked", "stale"]
+    status: Literal["pending", "approved", "rejected", "revoked", "stale", "unverified"]
     decision: Literal["pending", "approved", "rejected", "revoked"]
     snapshot: ReleaseSnapshot
     reviews: list[ReleaseDecision]
@@ -296,19 +298,82 @@ class LegacyReleaseRecord(ReleaseContract):
 class DeliveryReleasesResponse(ReleaseContract):
     project_id: str
     version: int
+    query_generation: int
     as_of: str
     policy: ReleasePolicy | None
-    evidence: list[ReleaseCiEvidence]
-    candidates: list[ReleaseCandidate]
-    legacy_history: list[LegacyReleaseRecord]
     permissions: ReleasePermissions
+    totals: dict[Literal["candidate", "evidence", "legacy"], int]
 
 
 class DeliveryReleaseDetail(ReleaseContract):
     project_id: str
     version: int
+    query_generation: int
     as_of: str
     candidate: ReleaseCandidate
+    evidence: ReleaseCiEvidence
+    envelope: str
+    permissions: ReleasePermissions
+
+
+class QualityCatalogueRow(ReleaseContract):
+    kind: Literal["requirement", "task"]
+    id: str
+    title: str
+    ready: bool
+    attention: bool
+    reasons: list[ReleaseReason]
+    issue_count: int
+    target: ReleaseTarget
+    revision: int | None
+    task_count: int
+
+
+class QualityCatalogueResponse(ReleaseContract):
+    project_id: str
+    version: int
+    query_generation: int
+    as_of: str
+    items: list[QualityCatalogueRow]
+    total: int
+    totals: dict[Literal["requirements", "independent_tasks"], int]
+    limit: int
+    next_cursor: str | None
+
+
+class ReleaseListRow(ReleaseContract):
+    kind: Literal["candidate", "evidence", "legacy"]
+    id: str
+    title: str
+    at: str | None
+    status: str
+    version: str | None
+    environment: str | None
+    commit_sha: str | None
+    passed: bool | None
+    requirement_id: str | None
+    requirement_title: str | None
+    scope_requirements: int
+    scope_tasks: int
+    summary: str | None
+
+
+class ReleasePageResponse(ReleaseContract):
+    project_id: str
+    version: int
+    query_generation: int
+    as_of: str
+    items: list[ReleaseListRow]
+    total: int
+    limit: int
+    next_cursor: str | None
+
+
+class ReleaseEvidenceDetail(ReleaseContract):
+    project_id: str
+    version: int
+    query_generation: int
+    as_of: str
     evidence: ReleaseCiEvidence
     envelope: str
     permissions: ReleasePermissions

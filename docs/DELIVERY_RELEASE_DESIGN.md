@@ -24,7 +24,7 @@
 
 ## 当前质量与范围
 
-GET quality 返回当前项目所有需求和独立任务的可行动事实，以及可选明确范围的 scope_basis。requirement_ids/task_ids 各至多200、非空、无重复；task_ids 只接受独立任务，需求范围自然包含全部关联任务，不能遗漏失败任务。非法/跨项目/缺失 ID 明确拒绝。未选范围仍返回目录，scope_basis=null。
+GET quality 只检查明确范围的完整证明及 scope_basis；目录使用独立的 quality/catalogue SQL 分页。requirement_ids/task_ids 各至多200、非空、无重复；task_ids 只接受独立任务，需求范围自然包含全部关联任务，不能遗漏失败任务。非法/跨项目/缺失 ID 明确拒绝。空范围422；必要证明闭包最多500个任务和64层依赖，超额413，不截断验收。详见 `DELIVERY_BOUNDED_READS_DESIGN.md`。
 
 需求质量复用 VerificationContext.requirement_accepted；独立任务复用 verified。展示登记状态、有效状态、任务自身条件、真实验收来源、有效/失效原因及未解决 P0/P1 问题，不从 raw completed 推算通过。范围 basis 固定需求修订/定义、完整任务身份/定义/验收依据/状态/负责人语义以及高优问题。姓名改动不失效，范围、任务定义、身份可用性、验收及问题变化需要重新核对；已有永久作废机制继续防止 A→B→A 复活。
 
@@ -40,7 +40,7 @@ CI 的 scope_basis 必须与明确范围当前质量一致；质量快照本身�
 - release.candidate.review（approve）：id、decision=approve|reject、comment（1..4000）、review_basis（64hex）。只评审 pending、当前有效且完整候选；拒绝允许说明。记录真实 User/时间/固定 basis，审批不执行部署。
 - release.candidate.revoke（approve）：id、comment、review_basis；pending/approved 可撤回，终态不再改写。
 
-GET `/delivery/quality`（目录和明确范围）、GET `/delivery/releases`（policy+证据摘要+候选目录）、GET `/delivery/releases/{id}`（稳定ID详情）；POST `/delivery/release-preview`（纯预览）。检查权限后才预览，无业务写入/目录创建/计费；正常请求审计仍记录POST预览。读取保留 archived 历史；所有新写入继承 archived409，planning/paused 可编制和评审、不能因此派发。
+GET `/delivery/quality/catalogue`（轻量目录）、GET `/delivery/quality`（完整明确范围）、GET `/delivery/releases`（policy/权限/总数小上下文）、GET `/delivery/release-pages?kind=candidate|evidence|legacy`（三类独立分页）、GET `/delivery/releases/{id}` 与 `/delivery/release-evidence/{id}`（稳定ID原件及当前证明）；POST `/delivery/release-preview`（纯预览）。检查权限后才预览，无业务写入/目录创建/计费；正常请求审计仍记录POST预览。读取保留 archived 历史；所有新写入继承 archived409，planning/paused 可编制和评审、不能因此派发。普通GET不修查询索引，代次变化要求重新读取首页。
 
 预览固定 scope、完整语义输入、所选 CI、policy generation、当前质量、权限；basis 不含 as_of 或外层 workspace version。提交同时校验预览 basis 和 CAS。评审 basis 包括当前候选完整内容、有效性及审查历史，避免两人覆盖。保存失败保留草稿；409 显式读取、核对后重预览；未知结果重试原 key。
 

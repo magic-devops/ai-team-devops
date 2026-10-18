@@ -8,11 +8,11 @@ import {
   fetchDeliveryQuality,
   fetchDeliveryReleases,
   releaseProblem,
-  submitReleaseCommand,
   type DeliveryQuality,
   type DeliveryReleases,
 } from "@/lib/deliveryRelease";
 import { ReleaseDigest } from "./DeliveryReleaseFacts";
+import { useReleaseCommand } from "@/lib/deliveryReleaseCommand";
 
 export async function readEnvelopeFile(file: Pick<File, "size" | "text">) {
   if (file.size > 131072) throw new Error("fileTooLarge");
@@ -48,6 +48,7 @@ export function DeliveryReleaseEvidenceEditor({
   onSaved,
   onClose,
   readOnly = false,
+  onPending,
 }: {
   projectId: string;
   initial: DeliveryReleases;
@@ -56,21 +57,40 @@ export function DeliveryReleaseEvidenceEditor({
   onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   readOnly?: boolean;
+  onPending?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
   const origin = useRef(projectSessionKey());
+  const command = useReleaseCommand(projectId, mode, onPending);
+  const restored = command.state.original?.payload;
   const [repository, setRepository] = useState(
-    initial.policy?.repository || "",
+    typeof restored?.repository === "string"
+      ? restored.repository
+      : initial.policy?.repository || "",
   );
-  const [workflow, setWorkflow] = useState(initial.policy?.workflow || "");
+  const [workflow, setWorkflow] = useState(
+    typeof restored?.workflow === "string"
+      ? restored.workflow
+      : initial.policy?.workflow || "",
+  );
   const [keys, setKeys] = useState(
-    initial.policy?.keys.map((key) => key.public_key).join("\n") || "",
+    Array.isArray(restored?.public_keys)
+      ? restored.public_keys.join("\n")
+      : initial.policy?.keys.map((key) => key.public_key).join("\n") || "",
   );
-  const [envelope, setEnvelope] = useState("");
+  const [envelope, setEnvelope] = useState(
+    typeof restored?.envelope === "string" ? restored.envelope : "",
+  );
   const [captured, setCaptured] = useState(() => ({
     selected: structuredClone(
-      quality?.selected || { requirement_ids: [], task_ids: [] },
+      Array.isArray(restored?.requirement_ids) &&
+        Array.isArray(restored?.task_ids)
+        ? {
+            requirement_ids: restored.requirement_ids as string[],
+            task_ids: restored.task_ids as string[],
+          }
+        : quality?.selected || { requirement_ids: [], task_ids: [] },
     ),
     basis: quality?.scope_basis || null,
   }));
@@ -83,15 +103,18 @@ export function DeliveryReleaseEvidenceEditor({
   const [conflict, setConflict] = useState(false);
   const [latest, setLatest] = useState<{
     index: DeliveryReleases;
-    quality: DeliveryQuality;
+    quality?: DeliveryQuality;
   } | null>(null);
   const allowed =
     !readOnly &&
     (mode === "policy"
       ? initial.permissions.can_configure
       : initial.permissions.can_import);
+  const locked = Boolean(busy) || command.locked;
+  const refused = conflict || command.state.phase === "refused";
   const check = () => {
-    if (origin.current !== projectSessionKey()) throw new Error("scopeChanged");
+    if (!command.current() || origin.current !== projectSessionKey())
+      throw new Error("scopeChanged");
   };
   const failure = (problem: unknown) => {
     const info = releaseProblem(problem);
@@ -105,7 +128,7 @@ export function DeliveryReleaseEvidenceEditor({
     );
   };
   const save = async () => {
-    if (busy || conflict || !allowed) return;
+    if (busy || command.state.phase !== "idle" || conflict || !allowed) return;
     setBusy("save");
     setError("");
     try {
@@ -140,15 +163,12 @@ export function DeliveryReleaseEvidenceEditor({
       }
       const pinned = prepareDeliveryIntent(intent, action, payload);
       setIntent(pinned);
-      const updated = await submitReleaseCommand(
-        projectId,
-        action,
-        payload,
-        pinned,
-      );
+      const updated = await command.run({ action, payload, intent: pinned });
       check();
-      onSaved(updated);
-      onClose();
+      if (updated) {
+        onSaved(updated);
+        onClose();
+      }
     } catch (problem) {
       failure(problem);
     } finally {
@@ -156,14 +176,23 @@ export function DeliveryReleaseEvidenceEditor({
     }
   };
   const read = async () => {
-    if (busy) return;
+    if (busy || command.unresolved) return;
     setBusy("read");
     setError("");
     setLatest(null);
     try {
       check();
       const index = await fetchDeliveryReleases(projectId);
-      const current = await fetchDeliveryQuality(projectId, captured.selected);
+      check();
+      const current =
+        mode === "ci"
+          ? await fetchDeliveryQuality(
+              projectId,
+              captured.selected,
+              undefined,
+              index.query_generation,
+            )
+          : undefined;
       check();
       setLatest({ index, quality: current });
     } catch (problem) {
@@ -173,11 +202,12 @@ export function DeliveryReleaseEvidenceEditor({
     }
   };
   const adopt = () => {
-    if (!latest) return;
+    if (!latest || command.unresolved || !command.current()) return;
+    command.reset();
     setIntent({ version: latest.index.version, key: crypto.randomUUID() });
     setCaptured({
-      selected: structuredClone(latest.quality.selected),
-      basis: latest.quality.scope_basis,
+      selected: structuredClone(latest.quality?.selected || captured.selected),
+      basis: latest.quality?.scope_basis || captured.basis,
     });
     setConflict(false);
     setLatest(null);
@@ -186,29 +216,69 @@ export function DeliveryReleaseEvidenceEditor({
   return (
     <Drawer
       open
-      width="min(760px, 100vw)"
+      size="min(760px, 100vw)"
       title={tr(mode === "policy" ? "trust" : "import")}
       rootClassName="delivery-release-drawer"
-      onClose={() => !busy && onClose()}
-      maskClosable={!busy}
-      keyboard={!busy}
+      onClose={() => !busy && !command.unresolved && onClose()}
+      mask={{ closable: !busy && !command.unresolved }}
+      keyboard={!busy && !command.unresolved}
       footer={
         <div className="delivery-release-actions">
-          <Button onClick={onClose} disabled={Boolean(busy)}>
+          <Button
+            onClick={onClose}
+            disabled={Boolean(busy) || command.unresolved}
+          >
             {tr("cancel")}
           </Button>
           <Button
             type="primary"
             onClick={save}
             loading={busy === "save"}
-            disabled={Boolean(busy) || conflict || !allowed}
+            disabled={
+              Boolean(busy) ||
+              command.state.phase !== "idle" ||
+              conflict ||
+              !allowed
+            }
           >
             {tr(mode === "policy" ? "save" : "import")}
           </Button>
+          {command.state.phase === "unknown" && (
+            <Button
+              type="primary"
+              onClick={async () => {
+                const ack = await command.replay();
+                if (ack) {
+                  onSaved(ack);
+                  onClose();
+                }
+              }}
+            >
+              {tr("replayOriginal")}
+            </Button>
+          )}
         </div>
       }
     >
       <div className="delivery-release-editor">
+        {command.state.error && (
+          <Alert
+            type="error"
+            title={tr(
+              command.state.phase === "unknown"
+                ? "unknownRequest"
+                : "saveFailed",
+            )}
+            description={t(`deliveryRelease.${command.state.error}`, {
+              defaultValue: command.state.error,
+            })}
+          />
+        )}
+        {command.state.original && command.unresolved && (
+          <pre className="delivery-release-raw">
+            {JSON.stringify(command.state.original, null, 2)}
+          </pre>
+        )}
         <Alert
           type="info"
           showIcon
@@ -230,7 +300,7 @@ export function DeliveryReleaseEvidenceEditor({
                 aria-label={tr("repository")}
                 value={repository}
                 maxLength={2000}
-                disabled={Boolean(busy)}
+                disabled={locked}
                 onChange={(event) => setRepository(event.target.value)}
               />
             </label>
@@ -240,7 +310,7 @@ export function DeliveryReleaseEvidenceEditor({
                 aria-label={tr("workflow")}
                 value={workflow}
                 maxLength={200}
-                disabled={Boolean(busy)}
+                disabled={locked}
                 onChange={(event) => setWorkflow(event.target.value)}
               />
             </label>
@@ -250,7 +320,7 @@ export function DeliveryReleaseEvidenceEditor({
                 aria-label={tr("publicKeys")}
                 value={keys}
                 rows={5}
-                disabled={Boolean(busy)}
+                disabled={locked}
                 onChange={(event) => setKeys(event.target.value)}
               />
             </label>
@@ -272,7 +342,7 @@ export function DeliveryReleaseEvidenceEditor({
                 type="file"
                 accept=".json,application/json"
                 aria-label={tr("envelopeFile")}
-                disabled={Boolean(busy)}
+                disabled={locked}
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
@@ -294,7 +364,7 @@ export function DeliveryReleaseEvidenceEditor({
               <Input.TextArea
                 aria-label={tr("envelope")}
                 value={envelope}
-                disabled={Boolean(busy)}
+                disabled={locked}
                 rows={10}
                 maxLength={131072}
                 onChange={(event) => setEnvelope(event.target.value)}
@@ -302,9 +372,9 @@ export function DeliveryReleaseEvidenceEditor({
             </label>
           </>
         )}
-        {conflict && (
+        {refused && (
           <Button
-            disabled={Boolean(busy)}
+            disabled={Boolean(busy) || command.unresolved}
             loading={busy === "read"}
             onClick={read}
           >
@@ -327,7 +397,7 @@ export function DeliveryReleaseEvidenceEditor({
             </p>
             <ReleaseDigest
               title={tr("scopeBasis")}
-              value={latest.quality.scope_basis}
+              value={latest.quality?.scope_basis || null}
             />
             <Button
               onClick={adopt}

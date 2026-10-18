@@ -343,7 +343,15 @@ def quality(db, project, data, *, requirement_ids=None, task_ids=None, verificat
 
 
 def _scope_quality(db, project, data, selected, *, verification=None):
+    if getattr(verification, "scope_check_incomplete", False):
+        _deny(413, "release_scope_check_incomplete", "The current quality proof exceeds the synchronous inspection budget.")
     return quality(db, project, data, **selected, verification=verification)
+
+
+def _scope_problem(error):
+    if isinstance(error.detail, dict) and error.detail.get("code") == "release_scope_check_incomplete":
+        return _reason("release_scope_check_incomplete", "Current quality proof was not completed within the inspection budget.")
+    return _reason("release_scope_unavailable", "The original release scope is unavailable.")
 
 
 def _snapshot_quality(value):
@@ -380,13 +388,13 @@ def _ci_reasons(db, project, data, evidence, current_quality=None, *, verificati
         current_quality = current_quality or _scope_quality(db, project, data, evidence["selected"], verification=verification)
         if predicate["scope_basis"] != current_quality["scope_basis"]:
             reasons.append(_reason("release_scope_changed", "The selected quality scope changed."))
-    except HTTPException:
-        reasons.append(_reason("release_scope_unavailable", "The original release scope is unavailable."))
+    except HTTPException as error:
+        reasons.append(_scope_problem(error))
     return reasons
 
 
-def _evidence_view(db, project, data, evidence):
-    reasons = _ci_reasons(db, project, data, evidence)
+def _evidence_view(db, project, data, evidence, *, verification=None):
+    reasons = _ci_reasons(db, project, data, evidence, verification=verification)
     return {
         key: deepcopy(evidence[key])
         for key in (
@@ -440,8 +448,8 @@ def _candidate_reasons(db, project, data, candidate, *, verification=None):
                     "The selected work no longer has effective quality acceptance.",
                 )
             )
-    except HTTPException:
-        reasons.append(_reason("release_scope_unavailable", "The original release scope is unavailable."))
+    except HTTPException as error:
+        reasons.append(_scope_problem(error))
     if candidate["decision"] == "approved" and any(
         not _approver_available(db, project, row["actor"]["id"])
         for row in candidate["reviews"]
@@ -459,7 +467,8 @@ def _candidate_reasons(db, project, data, candidate, *, verification=None):
 def reconcile_releases(db, project, data, *, verification=None):
     """Only latch the three invalidation fields; original content and decisions stay immutable."""
     for candidate in data.get("release_candidates", []):
-        reasons = _candidate_reasons(db, project, data, candidate, verification=verification)
+        reasons = [reason for reason in _candidate_reasons(db, project, data, candidate, verification=verification)
+            if reason["code"] != "release_scope_check_incomplete"]
         if reasons and not candidate.get("invalidated"):
             candidate["invalidated"] = True
             candidate["invalidated_at"] = _now()
@@ -468,9 +477,10 @@ def reconcile_releases(db, project, data, *, verification=None):
 
 def _semantic_candidate(candidate):
     value = deepcopy(candidate)
-    # A pure reconciled view may discover staleness before its capture commits.
-    # The discovery timestamp is not part of the fixed decision's meaning.
-    value.pop("invalidated_at", None)
+    # Current validity is rechecked by the approval command, not frozen into the
+    # identity of the original content, decision and immutable review history.
+    for field in ("invalidated", "invalidated_at", "invalidated_reasons"):
+        value.pop(field, None)
     value["created_by"].pop("name", None)
     for review in value["reviews"]:
         review["actor"].pop("name", None)
@@ -480,58 +490,39 @@ def _semantic_candidate(candidate):
     return value
 
 
-def _candidate_view(db, project, data, user, candidate):
+def _candidate_view(db, project, data, user, candidate, *, verification=None, deployment=None):
     from .delivery_deployment_facts import release_deployment_view
 
     value = deepcopy(candidate)
-    reasons = _candidate_reasons(db, project, data, candidate)
+    reasons = _candidate_reasons(db, project, data, candidate, verification=verification)
     valid = not candidate.get("invalidated") and not reasons
     allowed = _permissions(db, project, user)["can_review"]
     pending = candidate["decision"] == "pending"
+    incomplete = any(reason["code"] == "release_scope_check_incomplete" for reason in reasons)
+    if deployment is not None:
+        deployment = deepcopy(deployment)
+        deployment["verified"] = deployment["verified"] and valid and candidate["decision"] == "approved"
+        if deployment["status"] in {"verified", "rolled_back"} and not deployment["verified"]:
+            deployment["status"] = "superseded"
     value.update(
-        status="stale"
+        status="unverified"
+        if incomplete and not candidate.get("invalidated") and candidate["decision"] in {"pending", "approved"}
+        else "stale"
         if not valid and candidate["decision"] in {"pending", "approved"}
         else candidate["decision"],
         valid=valid,
         reasons=reasons,
-        review_basis=fingerprint({"candidate": _semantic_candidate(candidate), "reasons": reasons}),
+        review_basis=fingerprint(_semantic_candidate(candidate)),
         permissions={
             "can_approve": allowed and pending and valid,
             "can_reject": allowed and pending,
             "can_revoke": allowed and candidate["decision"] in {"pending", "approved"},
         },
-        deployment=release_deployment_view(
+        deployment=deployment if deployment is not None else release_deployment_view(
             data, candidate["id"], business_valid=valid and candidate["decision"] == "approved",
         ),
     )
     return value
-
-
-def release_index(db, project, data, user, *, version):
-    requirements = VerificationContext(db, project, data).requirements
-    return {
-        "project_id": project.id,
-        "version": version,
-        "as_of": _now(),
-        "policy": deepcopy(data.get("release_policy")),
-        "evidence": [_evidence_view(db, project, data, row) for row in reversed(data.get("ci_evidence", []))],
-        "candidates": [
-            _candidate_view(db, project, data, user, row)
-            for row in reversed(data.get("release_candidates", []))
-        ],
-        "legacy_history": [
-            {
-                "requirement_id": rid,
-                "requirement_title": requirements[rid].title if rid in requirements else None,
-                "record": deepcopy(record),
-                "source": "manual_history",
-                "deployment_verified": False,
-            }
-            for rid, flow in data.get("flows", {}).items()
-            for record in flow.get("releases", [])
-        ],
-        "permissions": _permissions(db, project, user),
-    }
 
 
 def release_detail(db, project, data, user, id, *, version):

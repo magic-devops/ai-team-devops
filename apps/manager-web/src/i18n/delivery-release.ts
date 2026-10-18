@@ -138,6 +138,32 @@ const zh = {
   close: "关闭",
   backQuality: "返回质量检查",
   noDeployment: "尚无经过验证的部署",
+  boundedIntro: "按页查看质量与候选摘要；明确选中后再读取原始质量和签名证据。",
+  recordedPassed: "已登记通过",
+  recordedFailed: "已登记失败",
+  directoryValidityHint:
+    "目录只显示已登记的决定和结果；当前有效性与可审批状态在详情中重新核验。",
+  unverified: "当前范围核验未完成（非失效结论）",
+  projectTotals: "项目目录总量（未筛选）",
+  crossPageSelection:
+    "选择会跨页保留；列表中未出现不代表不存在。需求包含全部关联任务，超过 500 项任务会明确拒绝。",
+  firstPage: "重新读取首屏",
+  nextPage: "下一页",
+  pageCoverage: "本页 {{loaded}} 项 · 筛选匹配 {{total}} 项",
+  generationChanged: "读取依据已变化，当前禁止提交",
+  refreshContext: "请刷新当前项目与首屏，再明确读取所选对象。",
+  forbiddenRead: "当前身份无权读取此内容",
+  qualityMissing: "指定质量对象不存在或不可访问",
+  retainedSelection: "跨页保留的选择",
+  evidencePickerHint:
+    "分页搜索已导入证明；编制预览会重新核对签名、当前有效性与交付范围。",
+  unknownRequest: "请求结果未知；原件已固定，确认前请勿离开或另建请求。",
+  replayOriginal: "重放固定原请求",
+  retainedOriginalInvalid:
+    "保留的原件无法验证，已阻止新请求。请保留当前会话并检查原始会话存储。",
+  retainedOriginalUnavailable:
+    "无法持久保存原请求，尚未开始新的送达。请恢复会话存储后重试。",
+  ackMismatch: "返回确认与原请求不匹配，结果仍未知。",
   requirementsCount: "需求 {{count}}",
   tasksCount: "任务 {{count}}",
   verifiedCount: "有效验收 {{count}}",
@@ -297,6 +323,36 @@ const en: typeof zh = {
   close: "Close",
   backQuality: "Back to quality",
   noDeployment: "No verified deployment",
+  boundedIntro:
+    "Browse bounded quality and candidate summaries; load original quality and signed evidence only after an explicit selection.",
+  recordedPassed: "Recorded pass",
+  recordedFailed: "Recorded failure",
+  directoryValidityHint:
+    "The directory shows recorded decisions and results. Current validity and review permissions are rechecked in exact details.",
+  unverified: "Current scope check incomplete (no invalidation conclusion)",
+  projectTotals: "Project catalogue totals (unfiltered)",
+  crossPageSelection:
+    "Selections persist across pages; absence from a page does not mean missing. Requirements include all linked tasks; more than 500 tasks is explicitly refused.",
+  firstPage: "Read first page again",
+  nextPage: "Next page",
+  pageCoverage: "{{loaded}} on this page · {{total}} matching the filters",
+  generationChanged: "Read basis changed; submission is blocked",
+  refreshContext:
+    "Refresh the project and first page, then explicitly read the selected object.",
+  forbiddenRead: "Your identity cannot read this content",
+  qualityMissing: "The exact quality object is missing or unavailable",
+  retainedSelection: "Selection retained across pages",
+  evidencePickerHint:
+    "Search imported evidence by page. The candidate preview rechecks signatures, current validity and delivery scope.",
+  unknownRequest:
+    "The request outcome is unknown. Its original is fixed; confirm it before leaving or starting another request.",
+  replayOriginal: "Replay fixed original request",
+  retainedOriginalInvalid:
+    "The retained original cannot be verified. New requests are blocked. Preserve the session and inspect the original session storage.",
+  retainedOriginalUnavailable:
+    "The original request could not be retained; no new delivery was started. Restore session storage and retry.",
+  ackMismatch:
+    "The acknowledgement does not match the original request. Its outcome remains unknown.",
   requirementsCount: "Requirements {{count}}",
   tasksCount: "Tasks {{count}}",
   verifiedCount: "Valid acceptance {{count}}",
@@ -452,6 +508,35 @@ const ja: typeof zh = {
   close: "閉じる",
   backQuality: "品質確認に戻る",
   noDeployment: "検証済みのデプロイはありません",
+  boundedIntro:
+    "品質と候補の概要をページ単位で表示し、明示的な選択後に品質の原本と署名証明を取得します。",
+  recordedPassed: "合格の登録記録",
+  recordedFailed: "失敗の登録記録",
+  directoryValidityHint:
+    "一覧は登録済みの判断と結果を表示します。現在の有効性と承認権限は詳細で再確認します。",
+  unverified: "現在の範囲確認が未完了（無効化の結論ではありません）",
+  projectTotals: "プロジェクト全体の件数（未絞り込み）",
+  crossPageSelection:
+    "選択はページを移動しても保持します。ページにないだけでは不存在を意味しません。要件は関連タスク全体を含み、500件を超える場合は明示的に拒否します。",
+  firstPage: "先頭ページを再取得",
+  nextPage: "次のページ",
+  pageCoverage: "このページ {{loaded}} 件 · 絞り込み一致 {{total}} 件",
+  generationChanged: "取得の根拠が変わったため送信を停止",
+  refreshContext:
+    "プロジェクトと先頭ページを更新してから、選択した対象を明示的に再取得してください。",
+  forbiddenRead: "この内容を読む権限がありません",
+  qualityMissing: "指定した品質対象が存在しないか参照できません",
+  retainedSelection: "ページをまたいで保持した選択",
+  evidencePickerHint:
+    "証明をページ単位で検索します。候補のプレビュー時に署名、現在の有効性、交付範囲を再確認します。",
+  unknownRequest:
+    "リクエスト結果が不明です。原本は固定済みです。確認前に画面を離れたり別のリクエストを作成しないでください。",
+  replayOriginal: "固定した原本を再送",
+  retainedOriginalInvalid:
+    "保持した原本を検証できず、新しいリクエストを停止しました。セッションを保持して元の保存内容を確認してください。",
+  retainedOriginalUnavailable:
+    "原本を保持できず、新しい送達を開始していません。セッションストレージを復旧して再試行してください。",
+  ackMismatch: "確認応答が元のリクエストと一致しません。結果は未確認です。",
   requirementsCount: "要件 {{count}}",
   tasksCount: "タスク {{count}}",
   verifiedCount: "有効な検収 {{count}}",
@@ -460,6 +545,8 @@ const ja: typeof zh = {
 export const releaseTranslations = { "zh-CN": zh, "en-US": en, "ja-JP": ja };
 
 const reasonsZh = {
+  release_scope_check_incomplete:
+    "当前范围超过单次核验预算，尚未完成完整检查；保留原候选与证据，禁止批准和部署，仍可拒绝或撤回。",
   release_scope_missing: "请选择至少一项需求或独立任务。",
   release_scope_invalid: "范围必须为无重复的有效身份。",
   release_scope_not_found: "所选范围不存在或不属于当前项目。",
@@ -508,6 +595,8 @@ const reasonsZh = {
   ci_statement_invalid: "签名声明缺少有效构建、测试或制品事实。",
 };
 const reasonsEn: typeof reasonsZh = {
+  release_scope_check_incomplete:
+    "The current scope exceeds the bounded check budget. Original candidates and evidence remain available; approval and deployment are blocked, while rejection or revocation remains possible.",
   release_scope_missing: "Select at least one requirement or independent task.",
   release_scope_invalid: "Choose distinct valid scope identities.",
   release_scope_not_found:
@@ -579,6 +668,8 @@ const reasonsEn: typeof reasonsZh = {
     "The signed statement lacks valid build, test or artifact facts.",
 };
 const reasonsJa: typeof reasonsZh = {
+  release_scope_check_incomplete:
+    "現在の対象が確認上限を超え、全体の確認が未完了です。元の候補と証明は保持し、承認と配備を停止します。却下や撤回は引き続き可能です。",
   release_scope_missing: "要件または独立タスクを 1 件以上選択してください。",
   release_scope_invalid: "重複のない有効な対象 ID を選択してください。",
   release_scope_not_found:

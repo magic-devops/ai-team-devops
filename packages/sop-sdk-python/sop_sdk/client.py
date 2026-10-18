@@ -481,7 +481,7 @@ class ManagerClient:
         )
 
     def delivery_quality(self, *, requirement_ids: Sequence[str] = (), task_ids: Sequence[str] = ()) -> dict[str, Any]:
-        """Inspect current quality or an explicitly selected release scope, without writing."""
+        """Inspect the complete proof of an explicit scope; never an implicit project catalogue."""
         if isinstance(requirement_ids, (str, bytes)) or isinstance(task_ids, (str, bytes)):
             raise ValueError("Scope IDs must be explicit sequences, not one string")
         selection = {"requirement_ids": list(requirement_ids), "task_ids": list(task_ids)}
@@ -490,10 +490,35 @@ class ManagerClient:
                 not isinstance(item, str) or not item or item != item.strip() or len(item) > 200 for item in ids
             ) or len(ids) != len(set(ids)):
                 raise ValueError("Choose at most 200 distinct nonempty IDs per scope")
+        if not any(selection.values()):
+            raise ValueError("Select a requirement or independent task; browse delivery_quality_catalogue otherwise")
         return self._request("GET", "/api/v1/delivery/quality", params=selection)
 
+    def delivery_quality_catalogue(
+        self, *, kind: str = "all", readiness: str = "all", q: str = "", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one quality summary page; total describes all matching items."""
+        if kind not in {"all", "requirement", "task"} or readiness not in {"all", "ready", "attention"}:
+            raise ValueError("Invalid quality kind or readiness")
+        params = _delivery_query_params(limit=limit, cursor=cursor, kind=kind, readiness=readiness, q=q)
+        return self._request("GET", "/api/v1/delivery/quality/catalogue", params=params)
+
     def delivery_releases(self) -> dict[str, Any]:
+        """Read the small release trust/permission context, without loading any catalogue."""
         return self._request("GET", "/api/v1/delivery/releases")
+
+    def delivery_release_page(
+        self, *, kind: str = "candidate", q: str = "", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one candidate, CI evidence or historical summary page."""
+        if kind not in {"candidate", "evidence", "legacy"}:
+            raise ValueError("kind must be candidate, evidence or legacy")
+        params = _delivery_query_params(limit=limit, cursor=cursor, kind=kind, q=q)
+        return self._request("GET", "/api/v1/delivery/release-pages", params=params)
+
+    def delivery_release_evidence(self, evidence_id: str) -> dict[str, Any]:
+        """Inspect only this original signed CI evidence and its current scoped proof."""
+        return self._request("GET", f"/api/v1/delivery/release-evidence/{_resource_segment(evidence_id)}")
 
     def delivery_release(self, release_id: str) -> dict[str, Any]:
         return self._request("GET", f"/api/v1/delivery/releases/{_resource_segment(release_id)}")

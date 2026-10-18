@@ -1,19 +1,22 @@
 import { Alert, Button, Drawer, Input, Select } from "antd";
 import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import {
   prepareReleaseCandidate,
   previewDeliveryRelease,
   releaseProblem,
-  submitReleaseCommand,
+  fetchReleasePage,
   type DeliveryReleases,
   type ReleaseDraft,
   type ReleaseForm,
   type ReleaseScope,
+  type ReleasePreview,
 } from "@/lib/deliveryRelease";
 import type { DeliveryCommandAck } from "@/lib/delivery";
 import { ReleaseReasons, ReleaseSnapshotFacts } from "./DeliveryReleaseFacts";
+import { useReleaseCommand } from "@/lib/deliveryReleaseCommand";
 
 export function DeliveryReleaseEditor({
   projectId,
@@ -22,6 +25,7 @@ export function DeliveryReleaseEditor({
   onSaved,
   onClose,
   readOnly = false,
+  onPending,
 }: {
   projectId: string;
   initial: DeliveryReleases;
@@ -29,10 +33,36 @@ export function DeliveryReleaseEditor({
   onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   readOnly?: boolean;
+  onPending?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
   const origin = useRef(projectSessionKey());
+  const command = useReleaseCommand(projectId, "candidate", onPending);
+  const [latestPreview, setLatestPreview] = useState<ReleasePreview | null>(
+    null,
+  );
+  const [ciQuery, setCiQuery] = useState(""),
+    [ciCursor, setCiCursor] = useState("");
+  const ciPage = useQuery({
+    queryKey: [
+      "delivery-release-ci-picker",
+      projectId,
+      initial.query_generation,
+      ciQuery,
+      ciCursor,
+    ],
+    queryFn: ({ signal }) =>
+      fetchReleasePage(
+        projectId,
+        "evidence",
+        { q: ciQuery, cursor: ciCursor },
+        signal,
+        initial.query_generation,
+      ),
+    retry: false,
+    gcTime: 0,
+  });
   const [draft, setDraft] = useState<ReleaseDraft>(() => ({
     projectId,
     form: {
@@ -43,6 +73,9 @@ export function DeliveryReleaseEditor({
       artifact_url: "",
       release_notes: "",
       rollback_plan: "",
+      ...(command.state.original?.action === "release.candidate.create"
+        ? (command.state.original.payload as unknown as ReleaseForm)
+        : {}),
     },
     preview: null,
     intent: { version: initial.version, key: crypto.randomUUID() },
@@ -50,9 +83,15 @@ export function DeliveryReleaseEditor({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
-  const allowed = !readOnly && initial.permissions.can_create;
+  const allowed =
+    !readOnly && initial.permissions.can_create && !ciPage.isError;
+  const locked = command.locked || busy !== "";
   const check = () => {
-    if (origin.current !== projectSessionKey() || projectId !== draft.projectId)
+    if (
+      !command.current() ||
+      origin.current !== projectSessionKey() ||
+      projectId !== draft.projectId
+    )
       throw new Error("scopeChanged");
   };
   const showError = (problem: unknown) => {
@@ -67,19 +106,24 @@ export function DeliveryReleaseEditor({
     );
   };
   const change = (patch: Partial<ReleaseForm>) => {
+    if (locked) return;
     setDraft({ ...draft, form: { ...draft.form, ...patch }, preview: null });
     setError("");
     setConflict(false);
   };
   const read = async () => {
-    if (busy || !allowed) return;
+    if (busy || command.unresolved || !allowed) return;
     setBusy("preview");
     setError("");
-    setDraft({ ...draft, preview: null });
+    if (command.state.phase === "idle") setDraft({ ...draft, preview: null });
     try {
       check();
       const preview = await previewDeliveryRelease(projectId, draft.form);
       check();
+      if (command.state.phase === "refused") {
+        setLatestPreview(preview);
+        return;
+      }
       setDraft({
         ...draft,
         preview,
@@ -93,22 +137,23 @@ export function DeliveryReleaseEditor({
     }
   };
   const save = async () => {
-    if (busy || conflict || !allowed) return;
+    if (busy || command.state.phase !== "idle" || conflict || !allowed) return;
     setBusy("save");
     setError("");
     try {
       check();
       const prepared = prepareReleaseCandidate(draft);
       setDraft(prepared.draft);
-      const updated = await submitReleaseCommand(
-        projectId,
-        "release.candidate.create",
-        prepared.payload,
-        { version: prepared.version, key: prepared.key },
-      );
+      const updated = await command.run({
+        action: "release.candidate.create",
+        payload: prepared.payload,
+        intent: { version: prepared.version, key: prepared.key },
+      });
       check();
-      onSaved(updated);
-      onClose();
+      if (updated) {
+        onSaved(updated);
+        onClose();
+      }
     } catch (problem) {
       showError(problem);
     } finally {
@@ -122,46 +167,54 @@ export function DeliveryReleaseEditor({
     ["release_notes", "notes", 10000],
     ["rollback_plan", "rollback", 10000],
   ] as const;
-  const evidenceOptions = initial.evidence.map((item) => ({
+  const evidenceOptions = (ciPage.data?.items || []).map((item) => ({
     value: item.id,
-    label: `${item.id} · ${item.statement.predicate.commit_sha.slice(0, 12)} · ${item.statement.predicate.run_number}.${item.statement.predicate.run_attempt}${item.current && item.passed ? "" : ` · ${tr("evidenceHistorical")}`}`,
-    disabled: !item.current || !item.passed,
+    label: `${item.title} · ${item.commit_sha?.slice(0, 12) || item.id}`,
+    disabled: item.passed !== true,
   }));
   if (
     draft.form.ci_evidence_id &&
-    !initial.evidence.some((item) => item.id === draft.form.ci_evidence_id)
+    !ciPage.data?.items.some((item) => item.id === draft.form.ci_evidence_id)
   )
     evidenceOptions.push({
       value: draft.form.ci_evidence_id,
-      label: `${draft.form.ci_evidence_id} · ${tr("evidenceMissing")}`,
-      disabled: true,
+      label: `${draft.form.ci_evidence_id} · ${tr("retainedSelection")}`,
+      disabled: false,
     });
   return (
     <Drawer
       open
       title={tr("create")}
-      width="min(940px, 100vw)"
+      size="min(940px, 100vw)"
       rootClassName="delivery-release-drawer"
-      onClose={() => !busy && onClose()}
-      maskClosable={!busy}
-      keyboard={!busy}
+      onClose={() => !busy && !command.unresolved && onClose()}
+      mask={{ closable: !busy && !command.unresolved }}
+      keyboard={!busy && !command.unresolved}
       footer={
         <div className="delivery-release-actions">
-          <Button disabled={Boolean(busy)} onClick={onClose}>
+          <Button
+            disabled={Boolean(busy) || command.unresolved}
+            onClick={onClose}
+          >
             {tr("cancel")}
           </Button>
           <Button
             loading={busy === "preview"}
-            disabled={Boolean(busy) || !allowed}
+            disabled={Boolean(busy) || command.unresolved || !allowed}
             onClick={read}
           >
-            {tr(conflict ? "readLatest" : "preview")}
+            {tr(
+              conflict || command.state.phase === "refused"
+                ? "readLatest"
+                : "preview",
+            )}
           </Button>
           <Button
             type="primary"
             loading={busy === "save"}
             disabled={
               Boolean(busy) ||
+              command.state.phase !== "idle" ||
               !allowed ||
               conflict ||
               !draft.preview?.allowed ||
@@ -171,11 +224,68 @@ export function DeliveryReleaseEditor({
           >
             {tr("confirm")}
           </Button>
+          {command.state.phase === "unknown" && (
+            <Button
+              type="primary"
+              onClick={async () => {
+                const ack = await command.replay();
+                if (ack) {
+                  onSaved(ack);
+                  onClose();
+                }
+              }}
+            >
+              {tr("replayOriginal")}
+            </Button>
+          )}
         </div>
       }
     >
       <div className="delivery-release-editor">
         <Alert type="info" showIcon title={tr("previewHint")} />
+        {command.state.error && (
+          <Alert
+            type="error"
+            title={tr(
+              command.state.phase === "unknown"
+                ? "unknownRequest"
+                : "saveFailed",
+            )}
+            description={t(`deliveryRelease.${command.state.error}`, {
+              defaultValue: command.state.error,
+            })}
+          />
+        )}
+        {command.state.original && command.unresolved && (
+          <pre className="delivery-release-raw">
+            {JSON.stringify(command.state.original, null, 2)}
+          </pre>
+        )}
+        {latestPreview && (
+          <Alert
+            type="info"
+            title={tr("latest")}
+            action={
+              <Button
+                onClick={() => {
+                  command.reset();
+                  setDraft({
+                    ...draft,
+                    preview: latestPreview,
+                    intent: {
+                      version: latestPreview.version,
+                      key: crypto.randomUUID(),
+                    },
+                  });
+                  setLatestPreview(null);
+                  setConflict(false);
+                }}
+              >
+                {tr("adopt")}
+              </Button>
+            }
+          />
+        )}
         {error && (
           <Alert
             type="error"
@@ -206,7 +316,7 @@ export function DeliveryReleaseEditor({
                 <Input.TextArea
                   aria-label={tr(label)}
                   value={draft.form[key]}
-                  disabled={Boolean(busy)}
+                  disabled={locked}
                   maxLength={max}
                   rows={3}
                   onChange={(event) => change({ [key]: event.target.value })}
@@ -215,7 +325,7 @@ export function DeliveryReleaseEditor({
                 <Input
                   aria-label={tr(label)}
                   value={draft.form[key]}
-                  disabled={Boolean(busy)}
+                  disabled={locked}
                   maxLength={max}
                   onChange={(event) => change({ [key]: event.target.value })}
                 />
@@ -228,14 +338,41 @@ export function DeliveryReleaseEditor({
               aria-label={tr("chooseEvidence")}
               value={draft.form.ci_evidence_id}
               onChange={(value: string) => change({ ci_evidence_id: value })}
-              disabled={Boolean(busy)}
+              disabled={locked}
               showSearch
+              filterOption={false}
+              onSearch={(query) => {
+                setCiQuery(query);
+                setCiCursor("");
+              }}
               optionFilterProp="label"
               options={[
                 { value: "", label: tr("chooseEvidence"), disabled: true },
                 ...evidenceOptions,
               ]}
             />
+            <p className="delivery-release-meta">{tr("evidencePickerHint")}</p>
+            {ciPage.error && (
+              <Alert
+                type="warning"
+                title={tr("readFailed")}
+                description={String(ciPage.error)}
+              />
+            )}
+            <div className="delivery-release-pager">
+              <Button
+                disabled={!ciCursor || locked}
+                onClick={() => setCiCursor("")}
+              >
+                {tr("firstPage")}
+              </Button>
+              <Button
+                disabled={!ciPage.data?.next_cursor || locked}
+                onClick={() => setCiCursor(ciPage.data!.next_cursor!)}
+              >
+                {tr("nextPage")}
+              </Button>
+            </div>
           </label>
         </div>
         {draft.preview && (

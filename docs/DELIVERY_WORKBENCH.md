@@ -521,3 +521,17 @@ work v2不再合并legacy overlay。实时需求/任务/问题各最多100条并
 独立复核的任务删除/转属活动遗漏、已ACK跨origin误成功、提案半写发布、work旧overlay、pull硬链接覆盖、watch自反馈，以及浏览器canonical路径/错scope请求头均有原RED、修复和原探针GREEN。额外真实接入遗留导入及不支持格式也有回归。证据 `.sop-runtime/delivery-evidence/local-intents/`；先保全重要源/唯一文件及散列再精确清理，不遍历链接。清理与实际本地提交以各自receipt为准，不push，.pnpm-store零跟踪。
 
 完整目标保持active，production_integration_complete=false。generic/reflection真实处理、Issue反向全来源、显式quality/release/progress/人审/历史影响详情有界化，当前390px中英日实际视觉、生产身份/模型/数据库/基础设施及长期规模仍待完善。已独立审计大详情成本；既有浏览器协议与12ui安装/上传审批限制不绕过，SSR/控制器/HTTP及构建不能代替实机视觉。
+
+## 质量与版本有界目录、完整范围和按需原件（2026-10-18）
+
+阶段T-bounded-delivery，基线8a42018。设计 `docs/DELIVERY_BOUNDED_READS_DESIGN.md`，使用 `docs/DELIVERY_QUALITY_RELEASE_GUIDE.md`。schema3查询投影在同一写事务维护，质量、候选、CI和人工历史各自SQL分页；列表不携带全工作区、证明正文、CI声明或候选快照。当前视图只请求所需目录，筛选/代次/返回与跨页范围选择明确，详情主动展开。
+
+范围检查复用canonical验收，加载必要前驱及其父需求完整兄弟；只读原路径、当前真实身份及最新证明，不截断宣布通过。500任务、64层依赖、500关键Issue及单JSON源1MiB为同步检查边界，超限quality413。已有原件在预算不足时仍可查看并明确unverified；批准禁止，拒绝/撤回使用固定原件/决定/历史依据，批准继续锁内完整验算；预算不足不永久锁存业务失效。删除范围仍保留原件可管理，未捕获失效与完整canonical依据一致。
+
+Web原意图保存在会话内，未知仅重放原正文/版本/键；明确拒绝后显式重读采用，父context刷新和混代禁写、项目/会话ABA、严格真实ACK类型/版本/资源匹配、三语及SSR均有回归。独立后端预算原件不可管理与前端畸形ACK假成功两项P2已真实复现并修复，原探针分别12/34项通过；读失败采用缓存与refused重开疑点已在最终实现修正，未作未证实finding。
+
+最终Manager完整1602、Web完整761/133文件、SDK/CLI完整637通过，来源前后324/501/124项精确一致；TypeScript/Vite通过，20个Python变更文件Ruff零诊断。OpenAPI6个相关路径（新增3）/13schema与1220引用核验，184无关路径不变；SDK wheel12个Python与共享SQL原字节一致。本阶段Go源未变，未重复Go测试。
+
+真实HTTP最终Run6使用原登录/权限/中间件/会话和120需求、241项目任务，验证分页/精确范围、真实人工验收、签名CI、预览、创建、批准、取代失效及撤回。直接编译实际TS控制器并经真实HTTP制造成功后丢ACK，再以同原键重放，严格接收原receipt且业务版本只增加1。8直接GET+4SDK+4CLI读取覆盖35表零写，所有自有服务已停止，外部模型调用0。Run1缺fixture导入、Run2空Bearer启动、Run3未等正常POST异步审计、Run5误用缺失顶层esbuild路径均保留为夹具错误；Run4 Python链已成功，Run6是最终新源及TS控制器验证。Manager首轮1598通过，但3个测试仅导入格式变化导致来源检查失败；此后又修复独立边界，本节使用包含最终修复的完整复跑。
+
+证据 `.sop-runtime/delivery-evidence/bounded-delivery/`；源码、唯一测试文件和产物先盘点/散列保留，再清理精确任务scratch，不遍历链接。实际全部本地commit以commit-receipt为准，不push，.pnpm-store保持忽略及零跟踪。真实390px中英日浏览器视觉、PG/MySQL/MariaDB连接、生产身份/模型/数据库/基础设施和长期规模尚未验证；既有大chunk/非本阶段Deployment Drawer告警保留。完整目标active，production_integration_complete=false；人工评审/进度/基线/需求影响详情、Issue反向事件来源与generic/reflection真实处理继续待办。

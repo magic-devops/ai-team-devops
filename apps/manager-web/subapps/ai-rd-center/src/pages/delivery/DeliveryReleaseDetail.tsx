@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Empty, Input, Skeleton, Tag } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,6 @@ import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import {
   fetchDeliveryRelease,
   releaseProblem,
-  submitReleaseCommand,
   type DeliveryReleaseDetail,
 } from "@/lib/deliveryRelease";
 import {
@@ -22,6 +21,7 @@ import {
   releaseTime,
 } from "./DeliveryReleaseFacts";
 import { DeliveryDeploymentHandoff } from "./DeliveryDeploymentWorkbench";
+import { useReleaseCommand } from "@/lib/deliveryReleaseCommand";
 type ReviewSession = {
   captured: DeliveryReleaseDetail;
   action: "approve" | "reject" | "revoke";
@@ -38,6 +38,8 @@ export function DeliveryReleaseDetail({
   onSaved,
   onPrepareDeployment,
   onOpenDeployment,
+  generation,
+  onPending,
 }: {
   releaseId: string;
   projectId: string;
@@ -47,6 +49,8 @@ export function DeliveryReleaseDetail({
   onSaved: (workspace: DeliveryCommandAck) => void;
   onPrepareDeployment?: (id: string) => void;
   onOpenDeployment?: (id: string) => void;
+  generation?: number | null;
+  onPending?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
   const identity = useDrawerIdentity(
@@ -57,14 +61,14 @@ export function DeliveryReleaseDetail({
     <Drawer
       open={Boolean(releaseId)}
       title={t("deliveryRelease.releases")}
-      width="min(1000px, 100vw)"
+      size="min(1000px, 100vw)"
       rootClassName="delivery-release-drawer"
       onClose={onClose}
       afterOpenChange={identity.afterOpenChange}
     >
       {identity.displayId && (
         <ReleaseDetailContent
-          key={`${projectId}:${identity.displayId}`}
+          key={`${projectId}:${sessionId}:${identity.displayId}`}
           projectId={projectId}
           releaseId={identity.displayId}
           sessionId={sessionId}
@@ -72,6 +76,8 @@ export function DeliveryReleaseDetail({
           onSaved={onSaved}
           onPrepareDeployment={onPrepareDeployment}
           onOpenDeployment={onOpenDeployment}
+          generation={generation}
+          onPending={onPending}
         />
       )}
     </Drawer>
@@ -85,6 +91,8 @@ export function ReleaseDetailContent({
   onSaved,
   onPrepareDeployment,
   onOpenDeployment,
+  generation,
+  onPending,
 }: {
   projectId: string;
   releaseId: string;
@@ -93,26 +101,42 @@ export function ReleaseDetailContent({
   onSaved: (workspace: DeliveryCommandAck) => void;
   onPrepareDeployment?: (id: string) => void;
   onOpenDeployment?: (id: string) => void;
+  generation?: number | null;
+  onPending?: (pending: boolean) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const qc = useQueryClient();
   const tr = (key: string) => t(`deliveryRelease.${key}`);
   const origin = useRef(projectSessionKey());
+  const command = useReleaseCommand(
+    projectId,
+    "review:" + releaseId,
+    onPending,
+  );
   const [review, setReview] = useState<ReviewSession | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
   const [latest, setLatest] = useState<DeliveryReleaseDetail | null>(null);
   const query = useQuery({
-    queryKey: ["delivery-release-detail", projectId, sessionId, releaseId],
-    queryFn: ({ signal }) => fetchDeliveryRelease(projectId, releaseId, signal),
+    queryKey: [
+      "delivery-release-detail",
+      projectId,
+      sessionId,
+      releaseId,
+      generation,
+    ],
+    queryFn: ({ signal }) =>
+      fetchDeliveryRelease(projectId, releaseId, signal, generation),
     enabled: Boolean(releaseId),
     gcTime: 0,
     retry: false,
-    refetchInterval: review ? false : 5000,
+    refetchInterval: false,
   });
   const data = query.data;
   const check = () => {
-    if (origin.current !== projectSessionKey()) throw new Error("scopeChanged");
+    if (!command.current() || origin.current !== projectSessionKey())
+      throw new Error("scopeChanged");
   };
   const fail = (problem: unknown) => {
     const info = releaseProblem(problem);
@@ -151,7 +175,14 @@ export function ReleaseDetailContent({
         ? candidate.permissions.can_reject
         : candidate.permissions.can_revoke);
   const begin = (action: ReviewSession["action"]) => {
-    if (!can(action) || busy) return;
+    if (
+      !can(action) ||
+      busy ||
+      command.unresolved ||
+      command.state.phase === "refused"
+    )
+      return;
+    if (command.state.phase === "succeeded") command.reset();
     setReview({
       captured: structuredClone(data),
       action,
@@ -167,6 +198,7 @@ export function ReleaseDetailContent({
       !review ||
       busy ||
       conflict ||
+      command.state.phase !== "idle" ||
       !can(review.action) ||
       !review.comment.trim()
     )
@@ -187,16 +219,13 @@ export function ReleaseDetailContent({
       };
       const intent = prepareDeliveryIntent(review.intent, action, payload);
       setReview({ ...review, intent });
-      const updated = await submitReleaseCommand(
-        projectId,
-        action,
-        payload,
-        intent,
-      );
+      const updated = await command.run({ action, payload, intent });
       check();
-      onSaved(updated);
-      setReview(null);
-      await query.refetch();
+      if (updated) {
+        onSaved(updated);
+        setReview(null);
+        await query.refetch();
+      }
     } catch (problem) {
       fail(problem);
     } finally {
@@ -204,14 +233,18 @@ export function ReleaseDetailContent({
     }
   };
   const read = async () => {
-    if (busy) return;
+    if (busy || command.unresolved) return;
     setBusy("read");
     setLatest(null);
     try {
       check();
-      const result = await query.refetch();
+      await qc.invalidateQueries({
+        queryKey: ["delivery-context", projectId, sessionId],
+        exact: true,
+      });
+      const result = await fetchDeliveryRelease(projectId, releaseId);
       check();
-      if (result.data?.candidate.id === releaseId) setLatest(result.data);
+      if (result.candidate.id === releaseId) setLatest(result);
     } catch (problem) {
       fail(problem);
     } finally {
@@ -257,6 +290,68 @@ export function ReleaseDetailContent({
         />
       )}
       <Alert type="info" showIcon title={tr("approvalHint")} />
+      {command.state.error && (
+        <Alert
+          type="error"
+          title={tr(
+            command.state.phase === "unknown" ? "unknownRequest" : "saveFailed",
+          )}
+          description={t(`deliveryRelease.${command.state.error}`, {
+            defaultValue: command.state.error,
+          })}
+        />
+      )}
+      {command.unresolved && command.state.original && (
+        <pre className="delivery-release-raw">
+          {JSON.stringify(command.state.original, null, 2)}
+        </pre>
+      )}
+      {command.state.phase === "unknown" && (
+        <Button
+          type="primary"
+          onClick={async () => {
+            const ack = await command.replay();
+            if (ack) {
+              onSaved(ack);
+              setReview(null);
+              void query.refetch();
+            }
+          }}
+        >
+          {tr("replayOriginal")}
+        </Button>
+      )}
+      {!review && command.state.phase === "refused" && (
+        <Button disabled={Boolean(busy)} onClick={read}>
+          {tr("readLatest")}
+        </Button>
+      )}
+      {!review && latest && command.state.phase === "refused" && (
+        <Button
+          onClick={() => {
+            const original = command.state.original!;
+            command.reset();
+            setReview({
+              captured: structuredClone(latest),
+              action:
+                original.action === "release.candidate.revoke"
+                  ? "revoke"
+                  : original.payload.decision === "reject"
+                    ? "reject"
+                    : "approve",
+              comment:
+                typeof original.payload.comment === "string"
+                  ? original.payload.comment
+                  : "",
+              intent: { version: latest.version, key: crypto.randomUUID() },
+            });
+            setLatest(null);
+            setConflict(false);
+          }}
+        >
+          {tr("adopt")}
+        </Button>
+      )}
       {!data.permissions.can_review && (
         <p className="delivery-release-meta">{tr("restricted")}</p>
       )}
@@ -264,7 +359,7 @@ export function ReleaseDetailContent({
         <Alert
           type="warning"
           showIcon
-          title={tr("stale")}
+          title={tr(candidate.status === "unverified" ? "unverified" : "stale")}
           description={
             <ReleaseReasons
               reasons={
@@ -347,7 +442,12 @@ export function ReleaseDetailContent({
             key={action}
             type={action === "approve" ? "primary" : "default"}
             danger={action === "revoke"}
-            disabled={Boolean(busy) || !can(action)}
+            disabled={
+              Boolean(busy) ||
+              command.unresolved ||
+              command.state.phase === "refused" ||
+              !can(action)
+            }
             onClick={() => begin(action)}
           >
             {tr(action)}
@@ -369,7 +469,7 @@ export function ReleaseDetailContent({
               value={review.comment}
               rows={3}
               maxLength={4000}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || command.locked}
               onChange={(event) =>
                 setReview({ ...review, comment: event.target.value })
               }
@@ -383,10 +483,10 @@ export function ReleaseDetailContent({
               description={error}
             />
           )}
-          {conflict && (
+          {(conflict || command.state.phase === "refused") && (
             <Button
               loading={busy === "read"}
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || command.unresolved}
               onClick={read}
             >
               {tr("readLatest")}
@@ -404,6 +504,8 @@ export function ReleaseDetailContent({
               <Button
                 disabled={Boolean(busy)}
                 onClick={() => {
+                  if (command.unresolved) return;
+                  command.reset();
                   setReview({
                     ...review,
                     captured: structuredClone(latest),
@@ -421,7 +523,10 @@ export function ReleaseDetailContent({
             </section>
           )}
           <div className="delivery-release-actions">
-            <Button disabled={Boolean(busy)} onClick={() => setReview(null)}>
+            <Button
+              disabled={Boolean(busy) || command.unresolved}
+              onClick={() => setReview(null)}
+            >
               {tr("cancel")}
             </Button>
             <Button
@@ -430,6 +535,7 @@ export function ReleaseDetailContent({
               loading={busy === "save"}
               disabled={
                 Boolean(busy) ||
+                command.state.phase !== "idle" ||
                 conflict ||
                 !review.comment.trim() ||
                 !can(review.action)

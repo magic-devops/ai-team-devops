@@ -68,6 +68,9 @@ from .delivery_release_contract import (
     DeliveryQualityResponse,
     DeliveryReleaseDetail,
     DeliveryReleasesResponse,
+    QualityCatalogueResponse,
+    ReleaseEvidenceDetail,
+    ReleasePageResponse,
     ReleasePreviewInput,
     ReleasePreviewResponse,
 )
@@ -500,12 +503,53 @@ def delivery_quality(
     task_ids: Annotated[list[str] | None, Query(max_length=200)] = None,
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_release import quality
+    from .delivery_release_query import quality_scope
 
-    project = _project(db, user, project_id)
-    row = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, row.data) if row else initial_state()
-    return quality(db, project, data, requirement_ids=requirement_ids, task_ids=task_ids)
+    return quality_scope(db, _project(db, user, project_id), requirement_ids=requirement_ids, task_ids=task_ids)
+
+
+@router.get("/quality/catalogue", response_model=QualityCatalogueResponse)
+def delivery_quality_catalogue(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    kind: Annotated[Literal["all", "requirement", "task"], Query()] = "all",
+    readiness: Annotated[Literal["all", "ready", "attention"], Query()] = "all",
+    q: Annotated[str, Query(max_length=200)] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release_query import quality_catalogue
+
+    return quality_catalogue(db, _project(db, user, project_id), user,
+        {"kind": kind, "readiness": readiness, "q": q}, limit=limit, cursor=cursor)
+
+
+@router.get("/release-pages", response_model=ReleasePageResponse)
+def delivery_release_page(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    kind: Annotated[Literal["candidate", "evidence", "legacy"], Query()] = "candidate",
+    q: Annotated[str, Query(max_length=200)] = "",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str, Query(max_length=4000)] = "",
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release_query import release_page
+
+    return release_page(db, _project(db, user, project_id), user, kind, limit=limit, cursor=cursor, q=q)
+
+
+@router.get("/release-evidence/{evidence_id}", response_model=ReleaseEvidenceDetail)
+def delivery_release_evidence(
+    evidence_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_release_query import evidence_detail
+
+    return evidence_detail(db, _project(db, user, project_id), user, evidence_id)
 
 
 @router.get("/releases", response_model=DeliveryReleasesResponse)
@@ -514,12 +558,9 @@ def delivery_releases(
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_release import release_index
+    from .delivery_release_query import release_context
 
-    project = _project(db, user, project_id)
-    row = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, row.data) if row else initial_state()
-    return release_index(db, project, data, user, version=row.version if row else 0)
+    return release_context(db, _project(db, user, project_id), user)
 
 
 @router.get("/releases/{release_id}", response_model=DeliveryReleaseDetail)
@@ -529,12 +570,9 @@ def delivery_release_detail(
     db: Annotated[Session, Depends(get_session)],
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_release import release_detail
+    from .delivery_release_query import candidate_detail
 
-    project = _project(db, user, project_id)
-    row = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, row.data) if row else initial_state()
-    return release_detail(db, project, data, user, release_id, version=row.version if row else 0)
+    return candidate_detail(db, _project(db, user, project_id), user, release_id)
 
 
 @router.post("/release-preview", response_model=ReleasePreviewResponse)

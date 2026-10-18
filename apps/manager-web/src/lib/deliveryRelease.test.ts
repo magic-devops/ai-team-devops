@@ -7,12 +7,30 @@ import {
   prepareReleaseCandidate,
   submitReleaseCommand,
   releaseInput,
+  fetchQualityCatalogue,
+  fetchReleasePage,
+  fetchReleaseEvidence,
   type ReleaseDraft,
 } from "./deliveryRelease";
 import { request } from "./http";
 import { releasePreview, releaseForm } from "./deliveryReleaseFixtures";
 vi.mock("./http", () => ({ request: vi.fn() }));
-beforeEach(() => vi.mocked(request).mockReset());
+beforeEach(() =>
+  vi
+    .mocked(request)
+    .mockReset()
+    .mockImplementation(
+      async (url) =>
+        ({
+          project_id: "P",
+          version: 7,
+          query_generation: 7,
+          as_of: "2026-10-18T12:00:00Z",
+          candidate: { id: decodeURIComponent(String(url).split("/").at(-1)!) },
+          evidence: { id: decodeURIComponent(String(url).split("/").at(-1)!) },
+        }) as never,
+    ),
+);
 describe("fixed release API and candidate intent", () => {
   it("uses repeated explicit scope fields and overrides conflicting project headers", async () => {
     const signal = new AbortController().signal;
@@ -33,14 +51,73 @@ describe("fixed release API and candidate intent", () => {
         "X-Business-Code": "",
       },
     });
-    await fetchDeliveryQuality("P", { requirement_ids: [], task_ids: [] });
-    expect(vi.mocked(request).mock.calls[1][0]).toBe(
-      "/api/v1/delivery/quality",
-    );
+    expect(() =>
+      fetchDeliveryQuality("P", { requirement_ids: [], task_ids: [] }),
+    ).toThrow("scopeRequired");
     await fetchDeliveryReleases("P", signal);
     await fetchDeliveryRelease("P", "REL&1", signal);
     expect(vi.mocked(request).mock.calls.at(-1)?.[0]).toBe(
       "/api/v1/delivery/releases/REL%261",
+    );
+  });
+  it("uses bounded server filters and independently scoped directories, rejecting wrong-generation data", async () => {
+    await fetchQualityCatalogue(
+      "P",
+      {
+        kind: "task",
+        readiness: "attention",
+        q: "Japanese 日本語",
+        cursor: "opaque/+",
+        limit: 20,
+      },
+      undefined,
+      7,
+    );
+    const query = new URLSearchParams(
+      String(vi.mocked(request).mock.calls[0][0]).split("?")[1],
+    );
+    expect(query.get("kind")).toBe("task");
+    expect(query.get("readiness")).toBe("attention");
+    expect(query.get("cursor")).toBe("opaque/+");
+    expect(query.get("limit")).toBe("20");
+    await fetchReleasePage(
+      "P",
+      "evidence",
+      { q: "sha", cursor: "page2" },
+      undefined,
+      7,
+    );
+    expect(vi.mocked(request).mock.calls[1][0]).toContain(
+      "/api/v1/delivery/release-pages?kind=evidence&limit=20&q=sha&cursor=page2",
+    );
+    await fetchReleaseEvidence("P", "CI&outside-page", undefined, 7);
+    expect(vi.mocked(request).mock.calls[2][0]).toBe(
+      "/api/v1/delivery/release-evidence/CI%26outside-page",
+    );
+    vi.mocked(request).mockResolvedValueOnce({
+      project_id: "P",
+      version: 8,
+      query_generation: 8,
+    } as never);
+    await expect(fetchQualityCatalogue("P", {}, undefined, 7)).rejects.toThrow(
+      "generationChanged",
+    );
+    vi.mocked(request).mockResolvedValueOnce({
+      project_id: "other",
+      version: 7,
+      query_generation: 7,
+    } as never);
+    await expect(fetchReleasePage("P", "candidate")).rejects.toThrow(
+      "scopeChanged",
+    );
+    vi.mocked(request).mockResolvedValueOnce({
+      project_id: "P",
+      version: 7,
+      query_generation: 7,
+      evidence: { id: "first" },
+    } as never);
+    await expect(fetchReleaseEvidence("P", "unknown")).rejects.toThrow(
+      "evidenceMissing",
     );
   });
   it("keeps original signed envelope bytes intact and pins CAS and key", async () => {

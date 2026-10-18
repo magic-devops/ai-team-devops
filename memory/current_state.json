@@ -1,12 +1,12 @@
 {
   "project_id": "sop-dev",
   "created_at": "2026-05-15T07:10:24Z",
-  "updated_at": "2026-10-18T13:21:13.985107+00:00",
+  "updated_at": "2026-10-18T14:14:52.098725+00:00",
   "phase": "INIT",
   "sprint": null,
   "delivery_workbench": {
-    "updated_at": "2026-10-18T13:21:13.985107+00:00",
-    "status": "canonical_local_intents_verified",
+    "updated_at": "2026-10-18T14:14:52.098725+00:00",
+    "status": "bounded_quality_release_reads_verified",
     "entry": "#/dev-flow?view=overview",
     "record": "memory/delivery-workbench-progress.md",
     "implementation_and_remaining_scope": "docs/DELIVERY_WORKBENCH.md",
@@ -15,73 +15,103 @@
     "model_access_design": "docs/DELIVERY_MODEL_ACCESS.md",
     "assistance_design": "docs/DELIVERY_ASSISTANCE_DESIGN.md",
     "project_inbox_design": "docs/DELIVERY_PROJECT_INBOX_DESIGN.md",
-    "evidence": ".sop-runtime/delivery-evidence/local-intents/",
+    "evidence": ".sop-runtime/delivery-evidence/bounded-delivery/",
     "verification_status": "passed_with_documented_limits",
-    "next_step": "bounded_explicit_quality_release_review_progress_reads_then_reverse_issue_event_origins",
+    "next_step": "bounded_explicit_manual_review_progress_baseline_requirement_impact_reads_then_reverse_issue_event_origins",
     "production_integration_complete": false,
     "commit_after_verified_stage": true,
     "progress_design": "docs/DELIVERY_PROGRESS_DESIGN.md",
     "verification": {
-      "stage": "canonical_local_delivery_intents_and_reviewed_assets",
-      "task_id": "T-local-intents",
-      "base": "90e47f6dcef46924e15d69a81e98ec1aa3d61c92",
-      "verified_at": "2026-10-18T13:21:13.985107+00:00",
-      "manager_passed": 1562,
-      "sdk_cli_full_passed": 633,
-      "web_focused_passed": 108,
-      "web_focused_files": 10,
-      "web_full_suite_repeated": false,
+      "stage": "bounded_quality_release_catalogues_and_explicit_complete_proof",
+      "task_id": "T-bounded-delivery",
+      "base": "8a4201815c5138517b4b26367095c73169dcff29",
+      "verified_at": "2026-10-18T14:14:52.098725+00:00",
+      "manager_passed": 1602,
+      "sdk_cli_full_passed": 637,
+      "web_full_passed": 761,
+      "web_full_files": 133,
+      "web_focused_passed": 66,
+      "web_independent_passed": 34,
+      "backend_independent_passed": 12,
       "typescript": "passed",
       "vite_build": "passed",
-      "go_top_level_passed": 75,
-      "go_subcases_passed": 38,
-      "go_packages_passed": 6,
-      "go_original_windows_symlink_skipped": 3,
-      "go_vet": "passed",
-      "sdk_wheel_schema_and_sources": "verified",
-      "shared_schema_sha256": "16a95d7fe6e1b4f02bd8cb22c50f2d303e49b688fdc7bc0b32632e3555122988",
-      "openapi_changed_schemas": 2,
-      "openapi_unchanged_paths": 187,
-      "openapi_resolved_refs": 1211,
-      "final_sources_verified": {
-        "manager_and_openapi": 319,
-        "sdk_cli": 122,
-        "go": 44,
-        "web_main_and_subapps": 500,
-        "current_http_python": 280
+      "sources_verified": {
+        "manager": 324,
+        "clients": 124,
+        "web": 501
       },
-      "python_lint_files": 44,
-      "python_lint_new_or_worsened": 0,
-      "actual_entity_cli_forms": 17,
+      "python_lint_files": 20,
+      "python_lint_diagnostics": 0,
+      "sdk_wheel_sha256": "0f2c2a44bb267fcf53a663ffa596c1f17bebf5fabbfd22d502cc58e8bc6dc5d7",
+      "shared_schema_sha256": "16a95d7fe6e1b4f02bd8cb22c50f2d303e49b688fdc7bc0b32632e3555122988",
+      "openapi": {
+        "changed_paths": [
+          "/api/v1/delivery/quality",
+          "/api/v1/delivery/quality/catalogue",
+          "/api/v1/delivery/releases",
+          "/api/v1/delivery/release-pages",
+          "/api/v1/delivery/release-evidence/{evidence_id}",
+          "/api/v1/delivery/releases/{release_id}"
+        ],
+        "changed_schemas": [
+          "QueryState",
+          "DeliveryQualityResponse",
+          "ReleaseTarget",
+          "ReleaseReason",
+          "QualityCatalogueResponse",
+          "QualityCatalogueRow",
+          "DeliveryReleasesResponse",
+          "ReleasePageResponse",
+          "ReleaseListRow",
+          "ReleaseEvidenceDetail",
+          "DeliveryReleaseDetail",
+          "ReleaseCandidate",
+          "ReleaseDeployment"
+        ],
+        "unrelated_paths_unchanged": 184,
+        "resolved_refs": 1220
+      },
       "actual_http_successful_runs": [
-        1,
-        2,
-        3,
         4,
-        9
+        6
       ],
-      "actual_node_compiled_helper_http": true,
-      "actual_node_helper_id_vectors": 3,
-      "actual_node_helper_processed": 4,
-      "actual_node_helper_duplicate": 3,
-      "all_owned_processes_stopped": true,
+      "actual_final_http": "http-6/receipt.json",
+      "actual_compiled_frontend_controller_original_replay": true,
       "pure_get_zero_sql_writes": true,
-      "legacy_drafts_retained_without_sending": true,
+      "actual_http_tables_unchanged": 35,
+      "all_owned_services_stopped": true,
       "external_model_calls": 0,
       "actual_390px_zh_en_ja_visual_verified": false,
       "production_integration_complete": false,
-      "goal_complete": false
+      "goal_complete": false,
+      "go_repeated_in_this_stage": false,
+      "limits": [
+        "Actual database verification is SQLite; PG/MySQL/MariaDB expressions not connected.",
+        "No current browser or 390px visual verification.",
+        "Existing large Vite chunks and unrelated Deployment Drawer width warning remain.",
+        "Manual review/progress/baseline/requirement-impact details and reverse Issue event origins remain pending."
+      ]
     },
     "manual_review_design": "docs/DELIVERY_MANUAL_REVIEW_DESIGN.md",
     "capacity_discovery": "docs/DELIVERY_CAPACITY_DISCOVERY.md",
     "compatibility_policy": "canonical_target_design_without_unnecessary_legacy_layers",
     "scheduling_design": "docs/DELIVERY_SCHEDULING_DESIGN.md",
     "external_execution_design": "docs/DELIVERY_EXTERNAL_EXECUTION_DESIGN.md",
-    "commit_receipt": ".sop-runtime/delivery-evidence/local-intents/commit-receipt.json",
+    "commit_receipt": ".sop-runtime/delivery-evidence/bounded-delivery/commit-receipt.json",
     "task_acceptance_design": "docs/DELIVERY_TASK_ACCEPTANCE_DESIGN.md",
     "team_identity_design": "docs/DELIVERY_TEAM_IDENTITY_DESIGN.md",
     "team_runtime_design": "docs/DELIVERY_TEAM_RUNTIME_DESIGN.md",
     "last_verified_stage": {
+      "stage": "bounded_quality_release_catalogues_and_explicit_complete_proof",
+      "verified_at": "2026-10-18T14:14:52.098725+00:00",
+      "manager_passed": 1602,
+      "sdk_cli_full_passed": 637,
+      "web_full_passed": 761,
+      "commit_receipt": ".sop-runtime/delivery-evidence/bounded-delivery/commit-receipt.json"
+    },
+    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
+    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
+    "previous_verified_stage": {
       "stage": "canonical_local_delivery_intents_and_reviewed_assets",
       "verified_at": "2026-10-18T13:21:13.985107+00:00",
       "manager_passed": 1562,
@@ -90,17 +120,6 @@
       "go_top_level_passed": 75,
       "commit_receipt": ".sop-runtime/delivery-evidence/local-intents/commit-receipt.json"
     },
-    "project_portfolio_design": "docs/PROJECT_PORTFOLIO_LIFECYCLE_DESIGN.md",
-    "release_design": "docs/DELIVERY_RELEASE_DESIGN.md",
-    "previous_verified_stage": {
-      "stage": "durable_event_handoff_and_explicit_receipt_recovery",
-      "verified_at": "2026-10-18T11:51:53.684020+00:00",
-      "commit_receipt": ".sop-runtime/delivery-evidence/event-handoff/commit-receipt.json",
-      "manager_passed": 1532,
-      "web_passed": 678,
-      "sdk_cli_full_passed": 426,
-      "go_top_level_passed": 75
-    },
     "deployment_design": "docs/DELIVERY_DEPLOYMENT_DESIGN.md",
     "deployment_guide": "docs/CONTROLLED_DEPLOYMENT_GUIDE.md",
     "issue_diagnosis_design": "docs/DELIVERY_ISSUE_DIAGNOSIS_DESIGN.md",
@@ -108,14 +127,14 @@
     "execution_runtime_design": "docs/DELIVERY_EXECUTION_RUNTIME_DESIGN.md",
     "collaboration_design": "docs/DELIVERY_COLLABORATION_DESIGN.md",
     "current_stage": {
-      "id": "T-local-intents",
-      "base": "90e47f6dcef46924e15d69a81e98ec1aa3d61c92",
+      "id": "T-bounded-delivery",
+      "base": "8a4201815c5138517b4b26367095c73169dcff29",
       "status": "verified",
-      "evidence": ".sop-runtime/delivery-evidence/local-intents/",
-      "design": "docs/LOCAL_INTENTS_DESIGN.md",
-      "plan": "docs/superpowers/plans/2026-10-18-local-intents.md",
-      "commit_receipt": ".sop-runtime/delivery-evidence/local-intents/commit-receipt.json",
-      "goal_complete": false
+      "evidence": ".sop-runtime/delivery-evidence/bounded-delivery/",
+      "design": "docs/DELIVERY_BOUNDED_READS_DESIGN.md",
+      "plan": "docs/superpowers/plans/2026-10-18-bounded-delivery.md",
+      "goal_complete": false,
+      "commit_receipt": ".sop-runtime/delivery-evidence/bounded-delivery/commit-receipt.json"
     },
     "query_design": "docs/DELIVERY_QUERY_DESIGN.md",
     "attention_design": "docs/DELIVERY_ATTENTION_DESIGN.md",
@@ -127,7 +146,9 @@
     "event_handoff_guide": "docs/DURABLE_EVENT_HANDOFF_GUIDE.md",
     "local_intents_design": "docs/LOCAL_INTENTS_DESIGN.md",
     "detail_read_audit": ".sop-runtime/delivery-evidence/detail-reads/audit/REPORT.md",
-    "local_intents_guide": "docs/LOCAL_INTENTS_GUIDE.md"
+    "local_intents_guide": "docs/LOCAL_INTENTS_GUIDE.md",
+    "bounded_reads_design": "docs/DELIVERY_BOUNDED_READS_DESIGN.md",
+    "quality_release_guide": "docs/DELIVERY_QUALITY_RELEASE_GUIDE.md"
   },
   "tasks": {
     "completed": [
@@ -560,17 +581,18 @@
       "有界个人/团队待办、人工验收遗漏修复、首页轻量指标及覆盖、当前任务读取和三语分页交互；完整相关回归和万级/真实HTTP验证。",
       "Windows SDK/CLI/Go项目原生IPC、真实实例安全停止、纯Go持久队列和终端单次关闭；完整客户端/Go、原生双项目与异常恢复验证。",
       "可靠事件交接：Go/Python单SQLite原件与身份、同库持久回执和真实业务处理、精确人工恢复及紧凑三语事件页；独立边界修复、完整回归和真实HTTP/Windows执行器重启验证。",
-      "T-local-intents：17类实体写入、规则提案/应用及文件审阅快照统一原版本SQLite意图；work v2真实覆盖和接入快照；浏览器高级资产同步固定原件/会话头及未知恢复；Manager1562、SDKCLI633、Web定向108、Go75主项+38子例、真实HTTP与Node联调验证。"
+      "T-local-intents：17类实体写入、规则提案/应用及文件审阅快照统一原版本SQLite意图；work v2真实覆盖和接入快照；浏览器高级资产同步固定原件/会话头及未知恢复；Manager1562、SDKCLI633、Web定向108、Go75主项+38子例、真实HTTP与Node联调验证。",
+      "T-bounded-delivery：质量/版本分页与按需完整证明；scope预算不足仍可控原件、不可误批；三语跨页/会话/unknown及严格ACK。Manager1602、Web761、SDKCLI637与实际HTTP/编译TS原件重放通过，完整目标active。"
     ],
     "in_progress": [
       "通用跨存储活动及reflection真实处理器，未配置者继续仅保存待处理",
       "Issue反向事件来源链与完整跨存储来源投影，保持实际原件/当前权限，不按任意payload猜关联",
-      "显式progress、人工评审、历史影响、quality/release专属详情读取有界化",
+      "显式progress、人工评审、基线和需求历史影响专属详情读取有界化；quality/release本阶段已验证。",
       "当前390px中英日实机视觉，以及生产身份/模型/数据库/基础设施、长期可靠性与规模验证"
     ],
     "blocked": [],
     "pending": [],
-    "current": "T-local-intents阶段已验证，全部本地commit以当前commit-receipt为准；完整目标active。下一步按已复现审计优先有界化显式quality/release等大详情，并完善Issue反向事件来源链。"
+    "current": "T-bounded-delivery已验证：质量/版本SQL分页、明确完整范围与按需原件、三语交互/原请求恢复；全部阶段源码本地提交，commit以receipt为准。完整目标active。"
   },
   "metrics": {
     "completion_rate": null,
@@ -578,5 +600,5 @@
     "blockers_count": 0,
     "completion_basis": "Full lifecycle scope remains active; see docs/DELIVERY_WORKBENCH.md."
   },
-  "current": "T-local-intents：收敛剩余实体/规则/文件发现生产端，原版本与原依据的单一SQLite意图、活动目标及接入命令；独立审计已保留，实施与验证中。完整目标继续。"
+  "current": "T-bounded-delivery已验证：质量/版本SQL分页、明确完整范围与按需原件、三语交互/原请求恢复；全部阶段源码本地提交，commit以receipt为准。完整目标active。"
 }

@@ -13,20 +13,22 @@ from sop_manager.routers.delivery_ci import pae
 from sop_manager.routers.delivery_ci_contract import ReleaseCiImport, ReleasePolicySave
 from sop_manager.routers.delivery_contract import default_flow
 from sop_manager.routers.delivery_release import (
+    _candidate_view,
+    _permissions,
     apply_release,
     preview,
     quality,
     reconcile_releases,
     release_detail,
-    release_index,
 )
 from sop_manager.routers.delivery_release_contract import (
-    DeliveryQualityResponse,
-    DeliveryReleaseDetail,
-    DeliveryReleasesResponse,
+    QualityRequirement,
+    QualityTask,
+    ReleaseCandidate,
     ReleaseCandidateCreate,
     ReleaseCandidateReview,
     ReleaseCandidateRevoke,
+    ReleaseCiEvidence,
     ReleasePreviewInput,
     ReleasePreviewResponse,
 )
@@ -291,7 +293,8 @@ def test_signed_ci_to_candidate_review_has_typed_history_and_never_deploys(trust
         release_id = create_candidate(db, project, user, data, ci_id)
         original = deepcopy(data["release_candidates"][0]["snapshot"])
         detail = release_detail(db, project, data, user, release_id, version=10)
-        DeliveryReleaseDetail.model_validate(detail)
+        ReleaseCandidate.model_validate(detail["candidate"])
+        ReleaseCiEvidence.model_validate(detail["evidence"])
         assert detail["candidate"]["permissions"]["can_approve"]
         apply_release(
             db,
@@ -306,10 +309,13 @@ def test_signed_ci_to_candidate_review_has_typed_history_and_never_deploys(trust
                 review_basis=detail["candidate"]["review_basis"],
             ),
         )
-        index = release_index(db, project, data, user, version=11)
-        DeliveryReleasesResponse.model_validate(index)
-        DeliveryQualityResponse.model_validate(quality(db, project, data, requirement_ids=["R-release"]))
-    candidate = index["candidates"][0]
+        candidate = _candidate_view(db, project, data, user, data["release_candidates"][0])
+        ReleaseCandidate.model_validate(candidate)
+        current = quality(db, project, data, requirement_ids=["R-release"])
+        for item in current["tasks"]:
+            QualityTask.model_validate(item)
+        for item in current["requirements"]:
+            QualityRequirement.model_validate(item)
     assert candidate["status"] == "approved" and candidate["valid"]
     assert candidate["snapshot"] == original
     assert candidate["deployment"] == {"status": "not_handed_off", "verified": False, "deployment_id": None}
@@ -546,15 +552,24 @@ def test_independent_task_requires_current_real_manual_acceptance(scope):
 
 
 def test_legacy_release_history_never_becomes_candidate_or_deployment(trusted):
+    from sop_manager.routers.delivery_progress_facts import evaluate_project
+    from sop_manager.routers.delivery_query_index import replace_from_evaluation
+    from sop_manager.routers.delivery_release_query import release_page
+
     sessions, data, _ = trusted
     data["flows"]["R-release"]["releases"] = [
         {"revision": 1, "version": "old", "verification": "Manual text"}
     ]
     with sessions() as db:
-        result = release_index(db, db.get(Project, "project"), data, db.get(User, "lead"), version=0)
-    assert result["candidates"] == []
-    assert result["legacy_history"][0]["source"] == "manual_history"
-    assert not result["legacy_history"][0]["deployment_verified"]
+        project, user = db.get(Project, "project"), db.get(User, "lead")
+        db.add(DeliveryWorkspace(project_id=project.id, tenant_id=project.tenant_id, data=deepcopy(data), version=0))
+        db.flush()
+        replace_from_evaluation(db, project, evaluate_project(db, project, data))
+        result = release_page(db, project, user, "legacy")
+        assert release_page(db, project, user, "candidate")["total"] == 0
+    assert result["total"] == 1
+    assert result["items"][0]["kind"] == "legacy"
+    assert not {"snapshot", "review_basis", "deployment", "record"} & result["items"][0].keys()
 
 
 def test_index_and_unknown_detail_are_pure_and_do_not_choose_first_candidate(trusted):
@@ -564,7 +579,7 @@ def test_index_and_unknown_detail_are_pure_and_do_not_choose_first_candidate(tru
         ci_id, _ = import_ci(db, project, user, data, key)
         create_candidate(db, project, user, data, ci_id)
         before = deepcopy(data)
-        release_index(db, project, data, user, version=0)
+        _candidate_view(db, project, data, user, data["release_candidates"][0])
         with pytest.raises(HTTPException) as missing:
             release_detail(db, project, data, user, "unknown-nonempty-id", version=0)
         assert missing.value.status_code == 404
@@ -648,9 +663,8 @@ def test_archived_direct_domain_write_is_409_and_history_remains_readable(truste
         assert denied.value.status_code == 409
         assert denied.value.detail["code"] == "project_archived"
         assert data == original
-        index = release_index(db, project, data, user, version=0)
-        assert not any(index["permissions"].values())
-        assert index["candidates"][0]["valid"]
+        assert not any(_permissions(db, project, user).values())
+        assert _candidate_view(db, project, data, user, data["release_candidates"][0])["valid"]
 
 
 def test_unrelated_commit_and_plain_date_change_preserve_candidate(trusted):
@@ -677,7 +691,7 @@ def test_release_permissions_never_grant_runtime_or_write_access_to_reader(trust
         create_candidate(db, project, user, data, ci_id)
         reader = db.get(User, "reader")
         original = deepcopy(data)
-        assert not any(release_index(db, project, data, reader, version=0)["permissions"].values())
+        assert not any(_permissions(db, project, reader).values())
         assert not preview(db, project, data, reader, candidate_input(ci_id), version=0)["allowed"]
         with pytest.raises(HTTPException) as denied:
             apply_release(db, project, reader, data, "release.policy.save", policy_body(key, "different"))

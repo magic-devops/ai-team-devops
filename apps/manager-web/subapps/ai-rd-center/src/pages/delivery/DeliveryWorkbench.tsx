@@ -375,7 +375,7 @@ function ProjectDelivery() {
     history[push ? "pushState" : "replaceState"](
       null,
       "",
-      `${location.pathname}${location.search}${preserveCollaborationRoute(["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash), location.hash)}`,
+      `${location.pathname}${location.search}${preserveCollaborationRoute(["quality", "releases"].includes(nextView) ? releaseHash({ ...parseReleaseRoute(location.hash), view: nextView as "quality" | "releases", releaseId: "", evidenceId: "", qualityId: "" }, location.hash) : preserveProjectContext(nextView === "progress" ? preserveProgressRoute(hash, location.hash) : preserveSchedulingRoute(hash, location.hash), location.hash), location.hash)}`,
     );
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
@@ -1140,6 +1140,9 @@ function ProjectDelivery() {
           workspace={data}
           sessionId={sessionId}
           onSaved={saveWorkspace}
+          onUnresolvedChange={(identity, value) =>
+            executionPending("release:" + identity, value)
+          }
         />
       )}
       {view === "discussions" && (
