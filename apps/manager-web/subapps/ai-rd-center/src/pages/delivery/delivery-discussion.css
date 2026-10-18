@@ -1,0 +1,126 @@
+.delivery-discussion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.discussion-heading,
+.discussion-message-heading,
+.discussion-actions,
+.discussion-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.discussion-heading {
+  justify-content: space-between;
+}
+.discussion-heading h3,
+.discussion-message h4 {
+  margin: 0;
+}
+.discussion-list,
+.discussion-messages,
+.discussion-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.discussion-row,
+.discussion-message,
+.discussion-source-row {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.discussion-row-trigger.ant-btn {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 0;
+}
+.discussion-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.discussion-meta,
+.discussion-help {
+  font-size: 12px;
+  opacity: 0.74;
+  overflow-wrap: anywhere;
+}
+.discussion-references blockquote,
+.discussion-fixed-source {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  border-inline-start: 3px solid var(--border-strong);
+  border-radius: 4px;
+  min-width: 0;
+}
+.discussion-resolution {
+  padding: 12px;
+  border: 1px solid var(--brand);
+  border-radius: 8px;
+}
+.discussion-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.discussion-composer label,
+.discussion-reference-form label,
+.discussion-adoption-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.discussion-reference-form,
+.discussion-adoption-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.discussion-source-row code,
+.discussion-message code {
+  overflow-wrap: anywhere;
+}
+.discussion-source-row .ant-btn {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+}
+.discussion-object-collaboration {
+  margin-top: 16px;
+  min-width: 0;
+}
+@media (max-width: 680px) {
+  .discussion-heading,
+  .discussion-pager {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .discussion-message-heading {
+    align-items: flex-start;
+  }
+  .discussion-actions {
+    align-items: stretch;
+  }
+  .discussion-actions > .ant-btn {
+    flex: 1 1 auto;
+    min-height: 32px;
+  }
+  .discussion-row,
+  .discussion-message,
+  .discussion-source-row {
+    padding: 10px;
+  }
+}

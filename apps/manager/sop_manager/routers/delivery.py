@@ -980,7 +980,7 @@ def execute(
     key = hashlib.sha256(
         json.dumps([project.tenant_id, project.id, user.id, body.idempotency_key]).encode()
     ).hexdigest()
-    fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
+    fingerprint = hashlib.sha256(body.model_dump_json(exclude_none=True).encode()).hexdigest()
     receipt = db.get(DeliveryReceipt, key)
     if receipt:
         from .delivery_query_commands import replay_ack
@@ -1083,6 +1083,9 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
 def _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks=None):
     reservation = None
     try:
+        from .delivery_discussion_adoption import prepare_adoption, record_adoption
+
+        source = prepare_adoption(db, project, user, body, request)
         row = db.get(DeliveryWorkspace, project.id)
         if not row:
             row = DeliveryWorkspace(
@@ -1122,7 +1125,10 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
 
         ack = recorded_ack(project, body.action, resource_id, event_data.get("result"), next_version)
         event_data["command_ack"] = ack
-        event_data["command_ack_access"] = command_access(data, body.action, resource_id)
+        event_data["command_ack_access"] = sorted(set(
+            command_access(data, body.action, resource_id)
+            + (list(source.runtime_scopes) if source is not None else [])
+        ))
         db.flush()
         if body.action != "project.lifecycle" and not body.action.startswith(("release.", "deployment.")):
             remember_basis(db, project, data)
@@ -1152,6 +1158,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
         from .delivery_activity import record_activity
 
         record_activity(db, project, user, data, event)
+        record_adoption(db, project, user, source, body, payload, ack, event)
         db.add(
             DeliveryReceipt(
                 id=key,

@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
-from typing import Any, Sequence
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -82,6 +82,173 @@ def _progress_date(value: str) -> date:
     if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
         raise ValueError("progress dates must use YYYY-MM-DD")
     return date.fromisoformat(value)
+
+
+_DISCUSSION_SUBJECTS = {"requirement", "task", "issue"}
+_SOURCE_ACTIONS = {
+    "requirement.update",
+    "task.update",
+    "tasks.plan",
+    "issue.promote",
+    "issue.diagnosis.adopt",
+}
+
+
+def _discussion_id(value: str) -> str:
+    if not isinstance(value, str) or len(value) > 64:
+        raise ValueError("discussion resource IDs must be strings of at most 64 characters")
+    return _resource_segment(value)
+
+
+def _discussion_integer(value: Any, name: str, minimum: int = 1) -> None:
+    if type(value) is not int or value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+
+
+def _discussion_page(limit: int, cursor: str, **filters: Any) -> dict[str, Any]:
+    if type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError("discussion limit must be an integer between 1 and 50")
+    return _delivery_query_params(limit=limit, cursor=cursor, **filters)
+
+
+def _discussion_kind(kind: str, *, runtime: bool = False) -> None:
+    allowed = _DISCUSSION_SUBJECTS | ({"execution"} if runtime else set())
+    if not isinstance(kind, str) or kind not in allowed:
+        raise ValueError("invalid discussion resource kind")
+
+
+def _discussion_basis(value: Any) -> None:
+    if not isinstance(value, str) or re.fullmatch(r"[a-f0-9]{64}", value) is None:
+        raise ValueError("content basis must be a lowercase 64-character hexadecimal digest")
+
+
+def _discussion_selection(kind, resource_id, field, criterion_index, basis=None, *, required_basis=False):
+    _discussion_kind(kind, runtime=True)
+    _discussion_id(resource_id)
+    if field not in ("title", "description", "acceptance_criteria", "summary"):
+        raise ValueError("invalid discussion reference field")
+    if (kind == "execution") != (field == "summary") or kind == "issue" and field == "acceptance_criteria":
+        raise ValueError("reference field does not belong to the selected kind")
+    if field == "acceptance_criteria":
+        _discussion_integer(criterion_index, "criterion_index", 0)
+    elif criterion_index is not None:
+        raise ValueError("criterion_index is only used for acceptance_criteria")
+    if required_basis or basis is not None:
+        _discussion_basis(basis)
+
+
+def _discussion_fields(body: Mapping[str, Any]) -> None:
+    for key in (
+        "subject_id",
+        "parent_message_id",
+        "thread_id",
+        "message_id",
+        "resolution_event_id",
+        "target_id",
+    ):
+        if key in body and not (key == "parent_message_id" and body[key] is None):
+            _discussion_id(body[key])
+    for key in ("expected_message_revision", "expected_thread_version", "message_revision"):
+        if key in body:
+            _discussion_integer(body[key], key)
+    for key in ("subject_kind", "target_kind"):
+        if key in body:
+            _discussion_kind(body[key])
+    if "target_content_basis" in body:
+        _discussion_basis(body["target_content_basis"])
+
+
+def _discussion_refs(refs: Any) -> None:
+    if not isinstance(refs, list) or len(refs) > 8:
+        raise ValueError("refs must be a list with at most 8 selections")
+    required = {"kind", "id", "field", "source_content_basis"}
+    for ref in refs:
+        if not isinstance(ref, Mapping) or not required <= set(ref) <= required | {"criterion_index"}:
+            raise ValueError(
+                "reference selections require server basis and cannot contain trusted text or identity"
+            )
+        _discussion_selection(
+            ref["kind"],
+            ref["id"],
+            ref["field"],
+            ref.get("criterion_index"),
+            ref["source_content_basis"],
+            required_basis=True,
+        )
+
+
+def _discussion_body(body: Mapping[str, Any], operation: str) -> dict[str, Any]:
+    schemas = {
+        "create": ({"subject_kind", "subject_id", "title", "body"}, {"refs"}),
+        "reply": ({"body"}, {"parent_message_id", "refs"}),
+        "edit": ({"expected_message_revision", "body"}, {"refs"}),
+        "withdraw": ({"expected_message_revision"}, {"reason"}),
+        "resolve": ({"expected_thread_version", "message_id", "message_revision"}, {"note"}),
+        "reopen": ({"expected_thread_version"}, {"reason"}),
+        "archive": ({"expected_thread_version"}, {"reason"}),
+        "restore": ({"expected_thread_version"}, {"reason"}),
+        "link": (
+            {
+                "expected_thread_version",
+                "resolution_event_id",
+                "message_id",
+                "message_revision",
+                "target_kind",
+                "target_id",
+                "target_content_basis",
+            },
+            set(),
+        ),
+    }
+    required, optional = schemas[operation]
+    required = required | {"idempotency_key"}
+    if not isinstance(body, Mapping) or not required <= set(body) <= required | optional:
+        raise ValueError(
+            f"invalid {operation} fields; original idempotency_key is required and extra fields are forbidden"
+        )
+    for key, limit in (
+        ("idempotency_key", 128),
+        ("title", 160),
+        ("body", 8000),
+        ("reason", 2000),
+        ("note", 2000),
+    ):
+        if key in body:
+            value = body[key]
+            if not isinstance(value, str) or len(value) > limit or key in required and not value.strip():
+                raise ValueError(f"invalid discussion {key}")
+    _discussion_fields(body)
+    if "refs" in body and not (operation == "edit" and body["refs"] is None):
+        _discussion_refs(body["refs"])
+    return dict(body)
+
+
+def _delivery_command_body(body: Mapping[str, Any]) -> dict[str, Any]:
+    required = {"action", "payload", "expected_version", "idempotency_key"}
+    if not isinstance(body, Mapping) or not required <= set(body) <= required | {"source_reference"}:
+        raise ValueError(
+            "command requires action/payload/expected_version/idempotency_key and only optional source_reference"
+        )
+    if not isinstance(body["action"], str) or not isinstance(body["payload"], dict):
+        raise ValueError("command action must be a string and payload an object")
+    _discussion_integer(body["expected_version"], "expected_version", 0)
+    if not isinstance(body["idempotency_key"], str) or not 8 <= len(body["idempotency_key"]) <= 100:
+        raise ValueError("command requires the original idempotency_key of 8 to 100 characters")
+    source = body.get("source_reference")
+    if source is not None:
+        keys = {
+            "thread_id",
+            "expected_thread_version",
+            "resolution_event_id",
+            "message_id",
+            "message_revision",
+        }
+        if body["action"] not in _SOURCE_ACTIONS or not isinstance(source, Mapping) or set(source) != keys:
+            raise ValueError(
+                "source_reference requires the exact fixed conclusion and an allowed adoption action"
+            )
+        _discussion_fields(source)
+    return dict(body)
 
 
 class ManagerClient:
@@ -514,9 +681,177 @@ class ManagerClient:
         """Preview an explicit generator; preserve version and retry identity verbatim."""
         return self._request("POST", "/api/v1/delivery/task-plan-preview", json_body=dict(body))
 
+    def delivery_discussions(
+        self,
+        *,
+        subject_kind: str = "",
+        subject_id: str = "",
+        state: str = "all",
+        limit: int = 20,
+        cursor: str = "",
+    ) -> dict[str, Any]:
+        if state not in ("all", "open", "resolved", "archived"):
+            raise ValueError("invalid discussion state")
+        if bool(subject_kind) != bool(subject_id):
+            raise ValueError("subject_kind and subject_id must be supplied together")
+        if subject_kind:
+            _discussion_kind(subject_kind)
+            _discussion_id(subject_id)
+        return self._request(
+            "GET",
+            "/api/v1/delivery/discussions",
+            params=_discussion_page(
+                limit, cursor, subject_kind=subject_kind, subject_id=subject_id, state=state
+            ),
+        )
+
+    def delivery_discussion(self, thread_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}")
+
+    def delivery_discussion_messages(
+        self, thread_id: str, *, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages",
+            params=_discussion_page(limit, cursor),
+        )
+
+    def delivery_discussion_message(self, thread_id: str, message_id: str) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages/{_discussion_id(message_id)}",
+        )
+
+    def delivery_discussion_message_versions(
+        self, thread_id: str, message_id: str, *, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages/{_discussion_id(message_id)}/versions",
+            params=_discussion_page(limit, cursor),
+        )
+
+    def delivery_discussion_message_version(
+        self, thread_id: str, message_id: str, revision: int
+    ) -> dict[str, Any]:
+        _discussion_integer(revision, "revision")
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages/{_discussion_id(message_id)}/versions/{revision}",
+        )
+
+    def delivery_discussion_reference(
+        self,
+        kind: str,
+        resource_id: str,
+        *,
+        field: str,
+        criterion_index: int | None = None,
+        source_content_basis: str | None = None,
+    ) -> dict[str, Any]:
+        _discussion_selection(kind, resource_id, field, criterion_index, source_content_basis)
+        params: dict[str, Any] = {"field": field}
+        if criterion_index is not None:
+            params["criterion_index"] = criterion_index
+        if source_content_basis is not None:
+            params["source_content_basis"] = source_content_basis
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussion-references/{kind}/{_discussion_id(resource_id)}",
+            params=params,
+        )
+
+    def delivery_discussion_links(
+        self, thread_id: str, *, resolution_event_id: str = "", limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        if resolution_event_id:
+            _discussion_id(resolution_event_id)
+        return self._request(
+            "GET",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/links",
+            params=_discussion_page(limit, cursor, resolution_event_id=resolution_event_id),
+        )
+
+    def delivery_sources(
+        self, target_kind: str, target_id: str, *, limit: int = 20, cursor: str = ""
+    ) -> dict[str, Any]:
+        _discussion_kind(target_kind)
+        _discussion_id(target_id)
+        return self._request(
+            "GET",
+            "/api/v1/delivery/sources",
+            params=_discussion_page(limit, cursor, target_kind=target_kind, target_id=target_id),
+        )
+
+    def delivery_discussion_create(self, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST", "/api/v1/delivery/discussions", json_body=_discussion_body(body, "create")
+        )
+
+    def delivery_discussion_reply(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages",
+            json_body=_discussion_body(body, "reply"),
+        )
+
+    def delivery_discussion_edit(
+        self, thread_id: str, message_id: str, body: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return self._request(
+            "PATCH",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages/{_discussion_id(message_id)}",
+            json_body=_discussion_body(body, "edit"),
+        )
+
+    def delivery_discussion_withdraw(
+        self, thread_id: str, message_id: str, body: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/messages/{_discussion_id(message_id)}/withdraw",
+            json_body=_discussion_body(body, "withdraw"),
+        )
+
+    def delivery_discussion_resolve(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/resolve",
+            json_body=_discussion_body(body, "resolve"),
+        )
+
+    def delivery_discussion_reopen(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/reopen",
+            json_body=_discussion_body(body, "reopen"),
+        )
+
+    def delivery_discussion_archive(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/archive",
+            json_body=_discussion_body(body, "archive"),
+        )
+
+    def delivery_discussion_restore(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/restore",
+            json_body=_discussion_body(body, "restore"),
+        )
+
+    def delivery_discussion_link(self, thread_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/api/v1/delivery/discussions/{_discussion_id(thread_id)}/links",
+            json_body=_discussion_body(body, "link"),
+        )
+
     def delivery_command(self, body: Mapping[str, Any]) -> dict[str, Any]:
         """Caller preserves expected_version and idempotency_key across retries."""
-        return self._request("POST", "/api/v1/delivery/commands", json_body=dict(body))
+        return self._request("POST", "/api/v1/delivery/commands", json_body=_delivery_command_body(body))
 
     def __init__(
         self,

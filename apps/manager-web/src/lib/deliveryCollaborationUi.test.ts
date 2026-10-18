@@ -83,7 +83,9 @@ vi.mock("./deliveryCollaboration", async () => ({
   saveRequirementChange: vi.fn(),
 }));
 vi.mock("./deliveryQuery", async () => ({
-  ...(await vi.importActual<typeof import("./deliveryQuery")>("./deliveryQuery")),
+  ...(await vi.importActual<typeof import("./deliveryQuery")>(
+    "./deliveryQuery",
+  )),
   fetchRequirementDetail: vi.fn(),
   fetchDeliveryContext: vi.fn(),
 }));
@@ -130,7 +132,17 @@ const workspace = {
   members: [],
   milestones: [],
 } as unknown as DeliveryDisplayContext;
-const ack: DeliveryCommandAck = { project_id: "P", action: "requirement.update", resource: { kind: "requirement", id: "R" }, result: null, affected_refs: [{ kind: "requirement", id: "R" }], applied_version: 8, version: 8, query_generation: 3, replayed: false };
+const ack: DeliveryCommandAck = {
+  project_id: "P",
+  action: "requirement.update",
+  resource: { kind: "requirement", id: "R" },
+  result: null,
+  affected_refs: [{ kind: "requirement", id: "R" }],
+  applied_version: 8,
+  version: 8,
+  query_generation: 3,
+  replayed: false,
+};
 const preview: RequirementChangePreview = {
   project_id: "P",
   requirement_id: "R",
@@ -325,6 +337,7 @@ describe("explicit requirement change preview", () => {
         requirement_basis: "basis",
         change_preview_basis: "fixed-preview",
       }),
+      undefined,
     );
     expect(saved).toHaveBeenCalledWith(ack);
   });
@@ -343,16 +356,20 @@ describe("explicit requirement change preview", () => {
         .value,
     ).toBe("My edited text");
     expect(button(editor(), "preview-change").disabled).toBe(true);
-    vi.mocked(fetchDeliveryContext).mockResolvedValue({ ...workspace, version: 8 });
+    vi.mocked(fetchDeliveryContext).mockResolvedValue({
+      ...workspace,
+      version: 8,
+    });
     vi.mocked(fetchRequirementDetail).mockResolvedValue({
-      project_id: "P", query_generation: 3,
+      project_id: "P",
+      query_generation: 3,
       version: 8,
       requirement: {
-          ...requirement,
-          basis: "latest-basis",
-          title: "Other user's edit",
-          description: "Fresh unedited scope",
-        },
+        ...requirement,
+        basis: "latest-basis",
+        title: "Other user's edit",
+        description: "Fresh unedited scope",
+      },
     });
     await button(editor(), "read-latest").onClick();
     expect(button(editor(), "preview-change").disabled).toBe(true);

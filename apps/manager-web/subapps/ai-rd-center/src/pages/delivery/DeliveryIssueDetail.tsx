@@ -14,6 +14,7 @@ import {
 import { projectSessionKey } from "@/lib/projectPortfolio";
 import { useDrawerIdentity } from "@/lib/useDrawerIdentity";
 import { IssueDiagnosisPanel } from "./DeliveryIssueDiagnosis";
+import { DeliveryCollaboration } from "./DeliveryDiscussionAdoption";
 import { IssueReviewPanel } from "./DeliveryIssueReview";
 import {
   IssueEvidenceList,
@@ -339,6 +340,16 @@ export function IssueDetailContent({
         )}
       </div>
       <IssueReasons reasons={data.reasons} />
+      <DeliveryCollaboration
+        key={`${projectId}:${sessionId}:${issueId}`}
+        projectId={projectId}
+        sessionId={sessionId}
+        subject={{ kind: "issue", id: issueId }}
+        object
+        readOnly={unavailable}
+        onSaved={saved}
+        onUnresolvedChange={setChildUnknown}
+      />
       <nav className="issue-section-tabs" aria-label={tr("detailSections")}>
         {(["facts", "generate", "proposal"] as const).map((value) => (
           <Button

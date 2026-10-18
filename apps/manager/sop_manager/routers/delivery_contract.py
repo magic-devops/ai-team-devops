@@ -31,6 +31,7 @@ from .delivery_scheduling_contract import (
     civil_date,
 )
 from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
+from .delivery_source_contract import SOURCE_ACTIONS, DiscussionSourceReference
 from .project_lifecycle_contract import ProjectLifecycleCommand
 
 STAGES = [
@@ -128,6 +129,13 @@ class Command(Input):
     expected_version: int = Field(ge=0)
     idempotency_key: str = Field(min_length=8, max_length=100)
     payload: dict
+    source_reference: DiscussionSourceReference | None = None
+
+    @model_validator(mode="after")
+    def explicit_source_action(self):
+        if self.source_reference is not None and self.action not in SOURCE_ACTIONS:
+            raise ValueError("Discussion provenance is only available for explicit business adoption actions")
+        return self
 
 
 class Dated(Input):

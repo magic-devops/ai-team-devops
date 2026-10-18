@@ -1,3 +1,4 @@
+import type { DiscussionSourceReference } from "./deliveryDiscussions";
 import { request } from "./http";
 import {
   prepareDeliveryIntent,
@@ -358,6 +359,7 @@ export function prepareRequirementChange(
   payload: Record<string, unknown>,
   definitionChanged: boolean,
   previewBasis: string | null,
+  source?: DiscussionSourceReference,
 ) {
   if (definitionChanged && !previewBasis) throw new Error("previewRequired");
   const fixed = {
@@ -366,7 +368,8 @@ export function prepareRequirementChange(
     ...(definitionChanged ? { change_preview_basis: previewBasis } : {}),
   };
   return {
-    intent: prepareDeliveryIntent(intent, "requirement.update", fixed),
+    intent: prepareDeliveryIntent(intent, "requirement.update", fixed, source),
+    ...(source ? { source_reference: structuredClone(source) } : {}),
     payload: fixed,
   };
 }
@@ -383,6 +386,7 @@ export function saveRequirementChange(
   projectId: string,
   intent: DeliveryIntent,
   payload: Record<string, unknown>,
+  source?: DiscussionSourceReference,
 ) {
   return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
@@ -392,6 +396,7 @@ export function saveRequirementChange(
       payload,
       expected_version: intent.version,
       idempotency_key: intent.key,
+      ...(source ? { source_reference: source } : {}),
     }),
   });
 }

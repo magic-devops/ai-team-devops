@@ -1,3 +1,4 @@
+import type { DiscussionSourceReference } from "./deliveryDiscussions";
 import { request } from "./http";
 import type { DeliveryCommandAck } from "./delivery";
 import { projectHeaders } from "./projectPortfolio";
@@ -152,6 +153,7 @@ export type IssueReviewCommand = {
   } & Partial<DiagnosisRequirement>;
   expected_version: number;
   idempotency_key: string;
+  source_reference?: DiscussionSourceReference;
 };
 const identity = (id: string) => {
   if (
@@ -289,6 +291,7 @@ export function prepareIssueReview(
   form: IssueReviewForm,
   previous?: IssueReviewCommand,
   makeKey: () => string = () => crypto.randomUUID(),
+  source?: DiscussionSourceReference,
 ): IssueReviewCommand {
   const comment = form.comment.trim();
   if (
@@ -336,9 +339,21 @@ export function prepareIssueReview(
     action: `issue.diagnosis.${decision}` as IssueReviewCommand["action"],
     payload,
     expected_version: detail.version,
+    ...(decision === "adopt" && source
+      ? { source_reference: structuredClone(source) }
+      : {}),
   };
   const signature = (value: Omit<IssueReviewCommand, "idempotency_key">) =>
-    JSON.stringify([value.action, value.payload, value.expected_version]);
+    JSON.stringify(
+      value.source_reference
+        ? [
+            value.action,
+            value.payload,
+            value.expected_version,
+            value.source_reference,
+          ]
+        : [value.action, value.payload, value.expected_version],
+    );
   return {
     ...command,
     idempotency_key:

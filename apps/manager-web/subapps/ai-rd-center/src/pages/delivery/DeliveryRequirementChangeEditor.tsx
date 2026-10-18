@@ -1,3 +1,9 @@
+import type { DiscussionAdoption } from "@/lib/deliveryDiscussions";
+import {
+  DiscussionAdoptionSource,
+  useDiscussionAdoptionSource,
+  applyDiscussionAdoption,
+} from "./DeliveryDiscussionAdoptionSource";
 import { DeliveryReferenceSelect } from "@/components/DeliveryReferenceSelect";
 import {
   fetchRequirementDetail,
@@ -151,6 +157,7 @@ export function DeliveryRequirementChangeEditor({
   onSaved,
   onClose,
   onUnresolvedChange = () => {},
+  initialSource,
 }: {
   workspace: DeliveryContext;
   requirement: DeliveryRequirement;
@@ -159,17 +166,38 @@ export function DeliveryRequirementChangeEditor({
   onSaved: (workspace: DeliveryCommandAck) => void;
   onClose: () => void;
   onUnresolvedChange?: (value: boolean) => void;
+  initialSource?: DiscussionAdoption;
 }) {
   const { t } = useTranslation();
   const tr = (key: string) => t(`deliveryCollaboration.${key}`);
   const origin = useRef(collaborationSessionKey());
+  const source = useDiscussionAdoptionSource(initialSource);
   const [pinned, setPinned] = useState(() => ({
     requirement: structuredClone(requirement),
     version: requirementVersion ?? workspace.version,
     writable: workspace.permissions.write,
   }));
-  const [draft, setDraft] = useState<Draft>(() => draftOf(requirement));
-  const dirty = useRef(new Set<keyof Draft>());
+  const [draft, setDraft] = useState<Draft>(() => {
+    const result = applyDiscussionAdoption(
+      {
+        description: requirement.description,
+        acceptance_criteria: requirement.acceptance_criteria,
+      },
+      initialSource,
+    );
+    return {
+      ...draftOf(requirement),
+      description: result.description,
+      criteria: result.acceptance_criteria.join("\n"),
+    };
+  });
+  const dirty = useRef(
+    new Set<keyof Draft>(
+      initialSource
+        ? [initialSource.field === "description" ? "description" : "criteria"]
+        : [],
+    ),
+  );
   const [preview, setPreview] = useState<RequirementChangePreview | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -182,10 +210,9 @@ export function DeliveryRequirementChangeEditor({
     version: requirementVersion ?? workspace.version,
     key: crypto.randomUUID(),
   });
-  const pending = useRef<{
-    intent: DeliveryIntent;
-    payload: Record<string, unknown>;
-  } | null>(null);
+  const pending = useRef<ReturnType<typeof prepareRequirementChange> | null>(
+    null,
+  );
   const current = () => {
     if (origin.current !== collaborationSessionKey())
       throw new Error(tr("scopeChanged"));
@@ -283,6 +310,7 @@ export function DeliveryRequirementChangeEditor({
             payload(),
             definitionChanged,
             preview?.preview_basis || null,
+            source.current.current?.reference,
           );
       if (!command) throw new Error(tr("previewRequired"));
       pending.current = command;
@@ -292,6 +320,7 @@ export function DeliveryRequirementChangeEditor({
         workspace.project.id,
         command.intent,
         command.payload,
+        command.source_reference,
       );
       current();
       if (result.project_id !== workspace.project.id)
@@ -408,6 +437,11 @@ export function DeliveryRequirementChangeEditor({
         </div>
       }
     >
+      <DiscussionAdoptionSource
+        projectId={workspace.project.id}
+        source={source}
+        disabled={locked}
+      />
       <p className="delivery-collaboration-help">
         {tr("fixedBasis")} ·{" "}
         {t("delivery.revision", { number: pinned.requirement.flow.revision })} ·

@@ -1,4 +1,13 @@
 import {
+  discussionFailure,
+  type DiscussionAdoption,
+} from "@/lib/deliveryDiscussions";
+import {
+  DiscussionAdoptionSource,
+  useDiscussionAdoptionSource,
+  applyDiscussionAdoption,
+} from "./DeliveryDiscussionAdoptionSource";
+import {
   fetchDeliveryTaskData,
   type DeliveryCommandAck,
 } from "@/lib/deliveryQuery";
@@ -40,6 +49,9 @@ export function DeliveryTaskPlanMaintenance({
   onSaved,
   canEdit,
   onEditingChange,
+  initialSource,
+  onClose,
+  onUnresolvedChange,
 }: {
   task: DeliveryTask;
   data: DeliveryTaskData;
@@ -47,9 +59,13 @@ export function DeliveryTaskPlanMaintenance({
   onSaved: (data: DeliveryCommandAck) => void;
   canEdit: boolean;
   onEditingChange?: (editing: boolean) => void;
+  initialSource?: DiscussionAdoption;
+  onClose?: () => void;
+  onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const source = useDiscussionAdoptionSource(initialSource);
   const identity = useMemberIdentity();
   const tr = (key: string) => t(`delivery.${key}`);
   const [editor, setEditor] = useState<EditorSpec | null>(null);
@@ -120,8 +136,13 @@ export function DeliveryTaskPlanMaintenance({
       hint: tr("taskPlan.editHint"),
       fields: fields(data),
       values: {
-        description: task.description,
-        acceptance_criteria: [...task.acceptance_criteria],
+        ...applyDiscussionAdoption(
+          {
+            description: task.description,
+            acceptance_criteria: [...task.acceptance_criteria],
+          },
+          initialSource,
+        ),
         requirement_criteria_indices: remapCriterionIndexes(
           task.planning?.requirement_criteria_indices || [],
           task.planning?.requirement_snapshot?.acceptance_criteria ||
@@ -135,7 +156,12 @@ export function DeliveryTaskPlanMaintenance({
       },
       submit: async (values) => {
         const payload = taskEditPayload(pinned, values);
-        intent = prepareDeliveryIntent(intent, "task.update", payload);
+        intent = prepareDeliveryIntent(
+          intent,
+          "task.update",
+          payload,
+          source.current.current?.reference,
+        );
         try {
           onSaved(
             await saveDelivery(
@@ -144,6 +170,7 @@ export function DeliveryTaskPlanMaintenance({
               payload,
               intent.version,
               intent.key,
+              source.current.current?.reference,
             ),
           );
           for (const name of [
@@ -156,9 +183,20 @@ export function DeliveryTaskPlanMaintenance({
         } catch (failure) {
           const parsed = planError(failure);
           const result = new Error(
-            parsed.conflict ? tr("conflict") : parsed.message,
+            parsed.conflict ||
+              (Boolean(source.current.current) &&
+                discussionFailure(failure).conflict)
+              ? tr("conflict")
+              : initialSource && failure instanceof Error
+                ? failure.message
+                : parsed.message,
           );
-          result.name = parsed.conflict ? "DeliveryConflict" : "Error";
+          result.name =
+            parsed.conflict ||
+            (Boolean(source.current.current) &&
+              discussionFailure(failure).conflict)
+              ? "DeliveryConflict"
+              : "Error";
           throw result;
         }
       },
@@ -232,39 +270,65 @@ export function DeliveryTaskPlanMaintenance({
       },
     });
   }
+  useEffect(() => {
+    if (initialSource) edit();
+  }, []);
   return (
     <>
       {error && <p role="alert">{error}</p>}
-      <DeliveryTaskPlanning
-        task={task}
-        requirement={requirement}
-        data={data}
-        onTask={onTask}
-        onEdit={edit}
-        canEdit={canEdit && Boolean(task.basis)}
-      />
-      <div className="delivery-task-reservation-link">
-        <Button
-          type="link"
-          size="small"
-          disabled={!canEdit}
-          onClick={() => {
-            location.hash = schedulingHash({
-              ...parseSchedulingRoute(location.hash),
-              view: "timeline",
-              timelineMode: "dependencies",
-              editTaskId: task.id,
-            });
-          }}
-        >
-          {t("deliverySchedule.adjustTask")}
-        </Button>
-        <p className="delivery-schedule-multiline">
-          {allocationSummary(task.planning?.allocations || [], data.members, t)}
-        </p>
-      </div>
+      {!initialSource && (
+        <>
+          <DeliveryTaskPlanning
+            task={task}
+            requirement={requirement}
+            data={data}
+            onTask={onTask}
+            onEdit={edit}
+            canEdit={canEdit && Boolean(task.basis)}
+          />
+          <div className="delivery-task-reservation-link">
+            <Button
+              type="link"
+              size="small"
+              disabled={!canEdit}
+              onClick={() => {
+                location.hash = schedulingHash({
+                  ...parseSchedulingRoute(location.hash),
+                  view: "timeline",
+                  timelineMode: "dependencies",
+                  editTaskId: task.id,
+                });
+              }}
+            >
+              {t("deliverySchedule.adjustTask")}
+            </Button>
+            <p className="delivery-schedule-multiline">
+              {allocationSummary(
+                task.planning?.allocations || [],
+                data.members,
+                t,
+              )}
+            </p>
+          </div>
+        </>
+      )}
       {editor && (
-        <DeliveryEditor spec={editor} onClose={() => setEditor(null)} />
+        <DeliveryEditor
+          spec={editor}
+          sourceAware={Boolean(initialSource)}
+          header={(blocked) => (
+            <DiscussionAdoptionSource
+              projectId={data.project.id}
+              source={source}
+              disabled={blocked}
+            />
+          )}
+          onUnresolvedChange={onUnresolvedChange}
+          onClose={() => {
+            setEditor(null);
+            onClose?.();
+          }}
+        />
       )}
     </>
   );

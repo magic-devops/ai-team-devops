@@ -1,4 +1,12 @@
 import {
+  discussionFailure,
+  type DiscussionAdoption,
+} from "@/lib/deliveryDiscussions";
+import {
+  DiscussionAdoptionSource,
+  useDiscussionAdoptionSource,
+} from "./DeliveryDiscussionAdoptionSource";
+import {
   fetchRequirementDetail,
   type RequirementDetail,
   type DeliveryCommandAck,
@@ -60,18 +68,23 @@ export function DeliveryTaskPlanEditor({
   requirementVersion,
   onClose,
   onSaved,
+  initialSource,
+  onUnresolvedChange,
 }: {
   data: DeliveryContext;
   requirement: DeliveryRequirement;
   requirementVersion?: number;
   onClose: () => void;
   onSaved: (updated: DeliveryCommandAck) => void;
+  initialSource?: DiscussionAdoption;
+  onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`delivery.taskPlan.${key}`, values);
   const common = (key: string) => t(`delivery.${key}`);
   const origin = useRef(scope());
+  const source = useDiscussionAdoptionSource(initialSource);
   const projectId = data.project.id;
   const [baseline, setBaseline] = useState<Baseline>(() => ({
     version: requirementVersion ?? data.version,
@@ -95,7 +108,21 @@ export function DeliveryTaskPlanEditor({
     ends_on: null,
     blocked_reason: "",
   });
-  const [rows, setRows] = useState<TaskPlanRow[]>(() => [newRow()]);
+  const [rows, setRows] = useState<TaskPlanRow[]>(() => [
+    {
+      ...newRow(),
+      ...(initialSource
+        ? {
+            title: initialSource.thread.title,
+            description: initialSource.message.body || "",
+            acceptance_criteria:
+              initialSource.field === "acceptance_criteria"
+                ? [initialSource.message.body || ""]
+                : [],
+          }
+        : {}),
+    },
+  ]);
   const [generator, setGenerator] = useState<"manual" | "template" | "ai">(
     "manual",
   );
@@ -117,6 +144,12 @@ export function DeliveryTaskPlanEditor({
   });
   const controller = useRef<AbortController>();
   useEffect(() => () => controller.current?.abort(), []);
+  const [unknown, setUnknown] = useState(false);
+  const pending = useRef<{
+    payload: Record<string, unknown>;
+    intent: DeliveryIntent;
+    source: DiscussionAdoption["reference"] | undefined;
+  }>();
   const criteria = baseline.requirement.acceptance_criteria;
   const items = selectedPlanItems(rows);
   const availableTasks: { id: string; title: string; req_id: string }[] = [];
@@ -198,9 +231,9 @@ export function DeliveryTaskPlanEditor({
       setGenerationFailed(false);
       setNotice("");
     });
-  const save = () =>
+  const save = (retry = false) =>
     void guarded(async () => {
-      if (problems.length || conflict) return;
+      if (!retry && (problems.length || conflict || unknown)) return;
       const payload = {
         requirement_id: requirement.id,
         requirement_revision: baseline.revision,
@@ -208,19 +241,51 @@ export function DeliveryTaskPlanEditor({
         ...(preview ? { preview_id: preview.id } : {}),
         items,
       };
-      submitIntent.current = prepareDeliveryIntent(
-        submitIntent.current,
-        "tasks.plan",
-        payload,
-      );
-      const result = await saveDelivery(
-        projectId,
-        "tasks.plan",
-        payload,
-        submitIntent.current.version,
-        submitIntent.current.key,
-      );
-      if (origin.current === scope()) onSaved(result);
+      if (!retry) {
+        submitIntent.current = prepareDeliveryIntent(
+          submitIntent.current,
+          "tasks.plan",
+          payload,
+          source.current.current?.reference,
+        );
+        pending.current = {
+          payload: structuredClone(payload),
+          intent: structuredClone(submitIntent.current),
+          source: source.current.current
+            ? structuredClone(source.current.current.reference)
+            : undefined,
+        };
+      }
+      const command = pending.current;
+      if (!command) return;
+      onUnresolvedChange?.(true);
+      try {
+        const result = await saveDelivery(
+          projectId,
+          "tasks.plan",
+          command.payload,
+          command.intent.version,
+          command.intent.key,
+          command.source,
+        );
+        if (origin.current === scope()) {
+          setUnknown(false);
+          onUnresolvedChange?.(false);
+          onSaved(result);
+        }
+      } catch (error) {
+        const problem = discussionFailure(error);
+        const unresolved = Boolean(initialSource) && problem.unknown;
+        setUnknown(unresolved);
+        if (!unresolved) onUnresolvedChange?.(false);
+        if (initialSource && problem.conflict) {
+          setConflict(true);
+          setLatest(null);
+          setError(problem.message);
+          return;
+        }
+        throw error;
+      }
     });
   const loadLatest = () =>
     void guarded(async () => {
@@ -274,26 +339,42 @@ export function DeliveryTaskPlanEditor({
       title={tr("title")}
       width={960}
       className="delivery-task-plan-editor"
-      onCancel={onClose}
-      closable={!busy}
+      onCancel={() => !unknown && !busy && onClose()}
+      closable={!busy && !unknown}
       maskClosable={false}
-      keyboard={!busy}
+      keyboard={!busy && !unknown}
       footer={
         <Space wrap>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={onClose} disabled={busy || unknown}>
             {common("cancel")}
           </Button>
           <Button
             type="primary"
-            onClick={save}
+            onClick={() => save()}
             loading={busy}
-            disabled={busy || conflict || Boolean(problems.length)}
+            disabled={busy || unknown || conflict || Boolean(problems.length)}
           >
             {tr("create")} · {items.length}
           </Button>
         </Space>
       }
     >
+      <DiscussionAdoptionSource
+        projectId={projectId}
+        source={source}
+        disabled={busy || unknown}
+      />
+      {unknown && (
+        <Alert
+          type="warning"
+          title={t("deliveryDiscussion.unknown")}
+          action={
+            <Button loading={busy} onClick={() => save(true)}>
+              {t("deliveryDiscussion.retryOriginal")}
+            </Button>
+          }
+        />
+      )}
       <p className="delivery-hint">{tr("hint")}</p>
       <section className="delivery-plan-context">
         <div>
@@ -353,7 +434,7 @@ export function DeliveryTaskPlanEditor({
           aria-label={tr("source")}
           value={generator}
           onChange={setGenerator}
-          disabled={busy}
+          disabled={busy || unknown}
           options={["manual", "template", "ai"].map((value) => ({
             value,
             label: tr(value),
@@ -365,7 +446,7 @@ export function DeliveryTaskPlanEditor({
               aria-label={tr("mode")}
               value={mode}
               onChange={setMode}
-              disabled={busy}
+              disabled={busy || unknown}
               options={["fullstack", "frontend", "backend", "testing"].map(
                 (value) => ({ value, label: tr(value) }),
               )}
@@ -376,12 +457,12 @@ export function DeliveryTaskPlanEditor({
               min={1}
               max={40}
               onChange={(value) => setMaxItems(value || 1)}
-              disabled={busy}
+              disabled={busy || unknown}
             />
             <Button
               icon={<Sparkles size={14} />}
               loading={busy}
-              disabled={conflict}
+              disabled={busy || unknown || conflict}
               onClick={() => generate(true)}
             >
               {tr(preview || generationFailed ? "regenerate" : "generate")}
@@ -389,14 +470,17 @@ export function DeliveryTaskPlanEditor({
           </>
         )}
         {generationFailed && previewRequest.current && (
-          <Button disabled={busy || conflict} onClick={() => generate(false)}>
+          <Button
+            disabled={busy || unknown || conflict}
+            onClick={() => generate(false)}
+          >
             {tr("retryRequest")}
           </Button>
         )}
         {previous && (
           <Button
             icon={<RotateCcw size={14} />}
-            disabled={busy}
+            disabled={busy || unknown}
             onClick={() => {
               const current = { rows, baseline, preview };
               setRows(previous.rows);
@@ -495,7 +579,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { selected: event.target.checked })
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                   aria-label={tr("selected", { number: index + 1 })}
                 >
                   {tr("item", { number: index + 1 })}
@@ -510,7 +594,7 @@ export function DeliveryTaskPlanEditor({
                       current.filter((item) => item.key !== row.key),
                     )
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                 />
               </header>
               <label>
@@ -522,7 +606,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { title: event.target.value })
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                 />
               </label>
               <label>
@@ -535,7 +619,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { description: event.target.value })
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                 />
               </label>
               <div className="delivery-plan-fields">
@@ -546,7 +630,7 @@ export function DeliveryTaskPlanEditor({
                     label={label(common("owner"))}
                     value={row.owner_id}
                     onChange={(value) => update(row.key, { owner_id: value })}
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
                 <label>
@@ -559,7 +643,7 @@ export function DeliveryTaskPlanEditor({
                       label: value,
                     }))}
                     onChange={(value) => update(row.key, { priority: value })}
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
                 <label>
@@ -572,7 +656,7 @@ export function DeliveryTaskPlanEditor({
                       label: value,
                     }))}
                     onChange={(value) => update(row.key, { estimate: value })}
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
               </div>
@@ -583,7 +667,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(acceptance_criteria) =>
                     update(row.key, { acceptance_criteria })
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                 />
               </div>
               <div className="delivery-plan-fields is-pair">
@@ -600,7 +684,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(value) =>
                       update(row.key, { requirement_criteria_indices: value })
                     }
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
                 <label>
@@ -613,7 +697,7 @@ export function DeliveryTaskPlanEditor({
                     value={row.depends_on}
                     options={dependencyOptions}
                     onChange={(value) => update(row.key, { depends_on: value })}
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
               </div>
@@ -627,7 +711,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(event) =>
                       update(row.key, { starts_on: event.target.value || null })
                     }
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
                 <label>
@@ -639,7 +723,7 @@ export function DeliveryTaskPlanEditor({
                     onChange={(event) =>
                       update(row.key, { ends_on: event.target.value || null })
                     }
-                    disabled={busy}
+                    disabled={busy || unknown}
                   />
                 </label>
               </div>
@@ -652,7 +736,7 @@ export function DeliveryTaskPlanEditor({
                   onChange={(event) =>
                     update(row.key, { blocked_reason: event.target.value })
                   }
-                  disabled={busy}
+                  disabled={busy || unknown}
                 />
               </label>
             </article>
@@ -661,7 +745,7 @@ export function DeliveryTaskPlanEditor({
       </div>
       <Button
         icon={<Plus size={14} />}
-        disabled={busy || rows.length >= 40}
+        disabled={busy || unknown || rows.length >= 40}
         onClick={() => setRows((current) => [...current, newRow()])}
       >
         {tr("add")}

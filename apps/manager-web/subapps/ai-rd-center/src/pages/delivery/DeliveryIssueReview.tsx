@@ -1,3 +1,9 @@
+import type { DiscussionAdoption } from "@/lib/deliveryDiscussions";
+import {
+  DiscussionAdoptionSource,
+  useDiscussionAdoptionSource,
+  applyDiscussionAdoption,
+} from "./DeliveryDiscussionAdoptionSource";
 import { Alert, Button, Input, Select, Tag } from "antd";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,6 +38,7 @@ export type IssueReviewPanelProps = {
   onSaved: (workspace: DeliveryCommandAck) => void;
   onBusyChange?: (busy: boolean) => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
+  initialSource?: DiscussionAdoption;
 };
 export function IssueReviewPanel({
   projectId,
@@ -43,18 +50,25 @@ export function IssueReviewPanel({
   onSaved,
   onBusyChange,
   onUnresolvedChange,
+  initialSource,
 }: IssueReviewPanelProps) {
   const qc = useQueryClient();
+  const source = useDiscussionAdoptionSource(initialSource);
   const { t } = useTranslation(),
     tr = (key: string) => t(`deliveryIssue.${key}`);
   const [base, setBase] = useState(() => structuredClone(detail)),
     [proposal, setProposal] = useState(() => structuredClone(diagnosis));
   const [form, setForm] = useState<IssueReviewForm>(() => ({
     title: diagnosis.result?.requirement.title || "",
-    description: diagnosis.result?.requirement.description || "",
+    ...applyDiscussionAdoption(
+      {
+        description: diagnosis.result?.requirement.description || "",
+        acceptance_criteria:
+          diagnosis.result?.requirement.acceptance_criteria || [],
+      },
+      initialSource,
+    ),
     priority: diagnosis.result?.requirement.priority || "P1",
-    acceptance_criteria:
-      diagnosis.result?.requirement.acceptance_criteria || [],
     comment: "",
   }));
   const [busy, setBusy] = useState(false),
@@ -131,6 +145,8 @@ export function IssueReviewPanel({
               decision,
               form,
               command.current,
+              undefined,
+              source.current.current?.reference,
             ),
       );
       setProblem(null);
@@ -140,6 +156,15 @@ export function IssueReviewPanel({
   };
   async function save(original = false) {
     const captured = original ? command.current : preview;
+    if (
+      !original &&
+      captured &&
+      JSON.stringify(captured.source_reference || null) !==
+        JSON.stringify(source.current.current?.reference || null)
+    ) {
+      setPreview(null);
+      return;
+    }
     if (
       !captured ||
       inFlight.current ||
@@ -298,6 +323,11 @@ export function IssueReviewPanel({
         <h3>{tr("reviewTitle")}</h3>
         <p className="issue-meta">{tr("reviewHint")}</p>
       </header>
+      <DiscussionAdoptionSource
+        projectId={projectId}
+        source={source}
+        disabled={locked}
+      />
       {requirementHref && (
         <Alert
           type="info"

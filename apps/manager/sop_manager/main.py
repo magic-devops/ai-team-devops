@@ -292,6 +292,9 @@ app.include_router(design_docs.router)
 app.include_router(dev_flow.router)
 from sop_manager.routers.delivery import router as delivery_router
 app.include_router(delivery_router)
+from sop_manager.routers.delivery_discussions import router as delivery_discussions_router  # noqa: E402 -- Router imports follow startup and request-scope configuration.
+
+app.include_router(delivery_discussions_router)
 app.include_router(notify.router)
 app.include_router(organization_router.router)
 app.include_router(cli_wrapper.router)

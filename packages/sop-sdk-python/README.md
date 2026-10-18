@@ -244,3 +244,28 @@ command = {
 ## 有界待办与概览进度
 
 `delivery_inbox(scope="mine", category="acceptance", limit=20, cursor="")` 先服务端筛选再分页；counts 是完整所选 scope，total 是分类匹配总数，items 仅当前页。下一页保持筛选/limit 并传 next_cursor；generation、审批资格或 UTC 日期变化返回 409，明确重载首屏。人工登记完成未通过当前验收仍为 recorded_completed，acceptance_kind=manual。`delivery_progress_summary(starts_on=None, ends_on=None)` 仅读取当前指标和 UTC 日期覆盖；完整历史使用原 progress。schema 2 缺失需有配置权限者显式重建，GET 无全量回退。见 [交付待办指南](../../docs/DELIVERY_ATTENTION_GUIDE.md)。
+
+
+## 对象讨论与固定来源
+
+讨论使用精确、有界接口，不读取完整 workspace。`delivery_discussions(subject_kind="task", subject_id="T-one", state="open", limit=20, cursor="")` 查询对象讨论；省略整对 subject 参数则读取当前项目讨论。state 为 all/open/resolved/archived，所有讨论列表 limit 为 1..50、默认20。游标原样续传；409 保留原稿并明确重读首屏，不自动回退或重建索引。
+
+精确读取方法：`delivery_discussion(thread_id)`、`delivery_discussion_messages(thread_id, ...)`、`delivery_discussion_message(thread_id, message_id)`、`delivery_discussion_message_versions(thread_id, message_id, ...)`、`delivery_discussion_message_version(thread_id, message_id, revision)`。revision 是正整数。`delivery_discussion_links(thread_id, resolution_event_id="", ...)` 读取原关联；`delivery_sources(target_kind, target_id, ...)` 读取精确需求/任务/问题的来源，包括服务端明确保留的未知、受限或后来改变的事实。
+
+`delivery_discussion_reference(kind, id, field=..., criterion_index=None, source_content_basis=None)` 首次读取服务端固定引用及 basis；execution 仅允许 summary，验收条件必须指定非负整数 criterion_index。写入 refs 只传选择字段 kind/id/field、必要的 criterion_index 及返回的 source_content_basis，不提交服务端返回的 text/status/runtime 或伪造作者。引用文本与真实运行身份由服务端解析，当前权限仍由服务端复核。
+
+写操作保留调用方的完整原 JSON 和 idempotency_key，不生成身份或重试键：
+
+- `delivery_discussion_create(body)`；`delivery_discussion_reply(thread_id, body)`。
+- `delivery_discussion_edit(thread_id, message_id, body)`；`delivery_discussion_withdraw(thread_id, message_id, body)`，均显式提供 expected_message_revision。
+- `delivery_discussion_resolve(thread_id, body)` 固定 message_id/message_revision 与 expected_thread_version；`delivery_discussion_reopen/archive/restore(thread_id, body)` 使用原 expected_thread_version。
+- `delivery_discussion_link(thread_id, body)` 仅把固定结论关联到已有对象；不改变业务定义或验收。
+
+```python
+# 先保存这个明确请求；未知结果继续重放同一份 body。
+body = {"subject_kind": "task", "subject_id": "T-one", "title": "核对交付条件",
+        "body": "请核对当前条件。", "idempotency_key": "discussion-create-001"}
+ack = client.delivery_discussion_create(body)
+```
+
+真正采用结论仍使用原 `delivery_command(body)`。可选根字段 source_reference 包含 thread_id、expected_thread_version、resolution_event_id、message_id、message_revision；仅适用于 requirement.update、task.update、tasks.plan、issue.promote、issue.diagnosis.adopt。原业务 payload/expected_version/basis/preview 与幂等键一并保留；来源不放进业务 payload。解决讨论不等于完成任务或通过验收。来源后来改变不重写原采用快照；同键重放以原回执及当前权限为准。

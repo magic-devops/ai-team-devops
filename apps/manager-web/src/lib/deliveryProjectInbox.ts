@@ -16,6 +16,7 @@ export const deliveryViews = [
   "resources",
   "team",
   "issues",
+  "discussions",
 ] as const;
 export const inboxCategories = [
   "work",
@@ -82,6 +83,7 @@ export function parseDeliveryRoute(hash: string): DeliveryRoute {
         "release",
         "activity",
         "history",
+        "discussion",
       ].includes(detail)
         ? detail
         : "details",
@@ -144,6 +146,15 @@ export function deliveryInboxHash(
   ) {
     params.delete("resource_cursor");
     params.delete("resource_page");
+  }
+  if (
+    (params.get("requirement") || "") !== target.requirement_id ||
+    (params.get("task") || "") !== target.task_id ||
+    (params.get("issue") || "") !== (target.issue_id || "") ||
+    (target.view !== "discussions" && params.get("view") === "discussions")
+  ) {
+    for (const key of [...params.keys()])
+      if (key.startsWith("discussion_")) params.delete(key);
   }
   params.set("view", target.view);
   for (const key of ["requirement", "detail", "task", "issue"])

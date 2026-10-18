@@ -146,6 +146,11 @@ def identity_capture_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "identity")
 
 
+def discussion_write_scope(db, tenant_id, project_id):
+    """Only discussion commands may advance their mutable support pointers."""
+    return _scope(db, tenant_id, project_id, "discussion")
+
+
 def in_lifecycle_scope(db, tenant_id, project_id):
     return _permission(db, (str(tenant_id), str(project_id)), "lifecycle") is not None
 
@@ -406,10 +411,27 @@ def _check_project_change(db, scope, operation, old, values):
         _deny("project_lifecycle_command_required", "Change project status through project.lifecycle")
 
 
+def _check_discussion_write(db, table, scope, operation, old, values):
+    immutable_facts = {"delivery_discussion_message_versions", "delivery_discussion_events", "delivery_discussion_receipts", "delivery_source_links"}
+    if table.name in immutable_facts and operation != "insert":
+        _deny("discussion_immutable", "Discussion evidence is append-only")
+    identities = {
+        "delivery_discussion_threads": {"subject_kind", "subject_id", "created_by_id", "created_by_name", "created_at", "created_seq"},
+        "delivery_discussion_messages": {"thread_id", "parent_message_id", "author_id", "author_name", "created_at", "created_seq"},
+    }
+    if table.name not in identities or operation not in {"update", "delete"}:
+        return
+    if any(key in values and values[key] != old.get(key) for key in identities[table.name]):
+        _deny("discussion_immutable", "Discussion subject, parent and authorship are immutable")
+    if operation == "delete" or not _permission(db, scope, "discussion"):
+        _deny("discussion_command_required", "Change discussion pointers through discussion commands")
+
+
 def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
+    _check_discussion_write(db, table, scope, operation, old, values)
     if operation == "update":
         immutable = {column.key for column in table.primary_key.columns} | {"id", "tenant_id", "project_id"}
         if any(key in values and values[key] != old.get(key) for key in immutable):

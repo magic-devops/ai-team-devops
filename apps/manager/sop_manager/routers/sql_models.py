@@ -281,6 +281,110 @@ class DeliveryReceipt(Base):
     version = Column(Integer, nullable=False)
 
 
+class DeliveryDiscussionThread(Base):
+    __tablename__ = "delivery_discussion_threads"
+    created_seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    subject_kind = Column(String(24), nullable=False)
+    subject_id = Column(String(64), nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    state = Column(String(16), nullable=False, default="open")
+    title = Column(String(160), nullable=False)
+    created_by_id = Column(String(64), nullable=False)
+    created_by_name = Column(String(128), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_activity_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    current_resolution_event_id = Column(String(64), nullable=True)
+    __table_args__ = (Index("ix_discussion_subject", "tenant_id", "project_id", "subject_kind", "subject_id", "state", "created_seq", "id"),)
+
+
+class DeliveryDiscussionMessage(Base):
+    __tablename__ = "delivery_discussion_messages"
+    created_seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(String(64), ForeignKey("delivery_discussion_threads.id"), nullable=False)
+    parent_message_id = Column(String(64), ForeignKey("delivery_discussion_messages.id"), nullable=True)
+    author_id = Column(String(64), nullable=False)
+    author_name = Column(String(128), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    current_revision = Column(Integer, nullable=False, default=1)
+    __table_args__ = (Index("ix_discussion_messages", "tenant_id", "project_id", "thread_id", "created_seq", "id"),)
+
+
+class DeliveryDiscussionMessageVersion(Base):
+    __tablename__ = "delivery_discussion_message_versions"
+    message_id = Column(String(64), ForeignKey("delivery_discussion_messages.id"), primary_key=True)
+    revision = Column(Integer, primary_key=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(String(64), ForeignKey("delivery_discussion_threads.id"), nullable=False)
+    body = Column(Text, nullable=True)
+    state = Column(String(16), nullable=False, default="active")
+    reason = Column(Text, nullable=True)
+    refs = Column(JSON, nullable=False, default=list)
+    editor_id = Column(String(64), nullable=False)
+    editor_name = Column(String(128), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class DeliveryDiscussionEvent(Base):
+    __tablename__ = "delivery_discussion_events"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    thread_id = Column(String(64), ForeignKey("delivery_discussion_threads.id"), nullable=False)
+    thread_version = Column(Integer, nullable=False)
+    subject_kind = Column(String(24), nullable=False)
+    subject_id = Column(String(64), nullable=False)
+    action = Column(String(40), nullable=False)
+    actor_id = Column(String(64), nullable=False)
+    actor_name = Column(String(128), nullable=False)
+    data = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("thread_id", "thread_version", name="uq_discussion_event_version"), Index("ix_discussion_events_scope", "tenant_id", "project_id", "subject_kind", "subject_id", "seq"))
+
+
+class DeliveryDiscussionReceipt(Base):
+    __tablename__ = "delivery_discussion_receipts"
+    id = Column(String(64), primary_key=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    event_id = Column(String(64), ForeignKey("delivery_discussion_events.id"), nullable=False)
+    original_ack = Column(JSON, nullable=False)
+    runtime_scopes = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class DeliverySourceLink(Base):
+    __tablename__ = "delivery_source_links"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    source_kind = Column(String(40), nullable=False)
+    source_id = Column(String(64), nullable=False)
+    thread_id = Column(String(64), ForeignKey("delivery_discussion_threads.id"), nullable=False)
+    thread_version = Column(Integer, nullable=False)
+    source_snapshot = Column(JSON, nullable=False)
+    source_digest = Column(String(64), nullable=False)
+    runtime_scopes = Column(JSON, nullable=False, default=list)
+    target_kind = Column(String(24), nullable=False)
+    target_id = Column(String(64), nullable=False)
+    business_event_id = Column(String(64), nullable=True)
+    applied_fields = Column(JSON, nullable=False, default=list)
+    applied_by_id = Column(String(64), nullable=False)
+    applied_by_name = Column(String(128), nullable=False)
+    relation = Column(String(16), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (Index("ix_discussion_source_target", "tenant_id", "project_id", "target_kind", "target_id", "seq"), Index("ix_discussion_source_thread", "tenant_id", "project_id", "thread_id", "seq"))
+
+
 class DeliveryQueryState(Base):
     """Current derived query generation; never an independent business entity."""
     __tablename__ = "delivery_query_states"

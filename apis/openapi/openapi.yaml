@@ -6645,6 +6645,1458 @@ paths:
           description: Query index requires explicit rebuild or cursor generation changed; do not mix pages
       description: Light project overview metrics from the current query generation and UTC coverage from observation date/time
         metadata. No task bodies, historical fact JSON, baseline lists or full-workspace evaluation.
+  /api/v1/delivery/discussions:
+    get:
+      tags:
+      - delivery
+      summary: Discussion List
+      operationId: discussion_list_api_v1_delivery_discussions_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: subject_kind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - requirement
+            - task
+            - issue
+            type: string
+          - type: 'null'
+          title: Subject Kind
+      - name: subject_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subject Id
+      - name: state
+        in: query
+        required: false
+        schema:
+          enum:
+          - all
+          - open
+          - resolved
+          - archived
+          type: string
+          default: all
+          title: State
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionPage'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+    post:
+      tags:
+      - delivery
+      summary: Discussion Create
+      operationId: discussion_create_api_v1_delivery_discussions_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussion-references/{kind}/{entity_id}:
+    get:
+      tags:
+      - delivery
+      summary: Reference Detail
+      operationId: reference_detail_api_v1_delivery_discussion_references__kind___entity_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          enum:
+          - requirement
+          - task
+          - issue
+          - execution
+          type: string
+          title: Kind
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entity Id
+      - name: field
+        in: query
+        required: true
+        schema:
+          enum:
+          - title
+          - description
+          - acceptance_criteria
+          - summary
+          type: string
+          title: Field
+      - name: criterion_index
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+          title: Criterion Index
+      - name: source_content_basis
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            pattern: ^[a-f0-9]{64}$
+          - type: 'null'
+          title: Source Content Basis
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionReferenceDetail'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/sources:
+    get:
+      tags:
+      - delivery
+      summary: Source List
+      operationId: source_list_api_v1_delivery_sources_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: target_kind
+        in: query
+        required: true
+        schema:
+          enum:
+          - requirement
+          - task
+          - issue
+          type: string
+          title: Target Kind
+      - name: target_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Target Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionSourcePage'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}:
+    get:
+      tags:
+      - delivery
+      summary: Discussion Detail
+      operationId: discussion_detail_api_v1_delivery_discussions__thread_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionDetail'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/links:
+    get:
+      tags:
+      - delivery
+      summary: Discussion Links
+      operationId: discussion_links_api_v1_delivery_discussions__thread_id__links_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: resolution_event_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolution Event Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionSourcePage'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+    post:
+      tags:
+      - delivery
+      summary: Discussion Link
+      operationId: discussion_link_api_v1_delivery_discussions__thread_id__links_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionLink'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/messages:
+    get:
+      tags:
+      - delivery
+      summary: Message List
+      operationId: message_list_api_v1_delivery_discussions__thread_id__messages_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionMessagePage'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+    post:
+      tags:
+      - delivery
+      summary: Message Create
+      operationId: message_create_api_v1_delivery_discussions__thread_id__messages_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionMessageCreate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/messages/{message_id}:
+    get:
+      tags:
+      - delivery
+      summary: Message Detail
+      operationId: message_detail_api_v1_delivery_discussions__thread_id__messages__message_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionMessageDetail'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+    patch:
+      tags:
+      - delivery
+      summary: Message Edit
+      operationId: message_edit_api_v1_delivery_discussions__thread_id__messages__message_id__patch
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionMessageEdit'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/messages/{message_id}/withdraw:
+    post:
+      tags:
+      - delivery
+      summary: Message Withdraw
+      operationId: message_withdraw_api_v1_delivery_discussions__thread_id__messages__message_id__withdraw_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionMessageWithdraw'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/messages/{message_id}/versions:
+    get:
+      tags:
+      - delivery
+      summary: Message Versions
+      operationId: message_versions_api_v1_delivery_discussions__thread_id__messages__message_id__versions_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Cursor
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionVersionPage'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/messages/{message_id}/versions/{revision}:
+    get:
+      tags:
+      - delivery
+      summary: Message Version
+      operationId: message_version_api_v1_delivery_discussions__thread_id__messages__message_id__versions__revision__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Message Id
+      - name: revision
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          title: Revision
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionVersionDetail'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/resolve:
+    post:
+      tags:
+      - delivery
+      summary: Discussion Resolve
+      operationId: discussion_resolve_api_v1_delivery_discussions__thread_id__resolve_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionResolve'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/restore:
+    post:
+      tags:
+      - delivery
+      summary: Discussion State
+      operationId: discussion_state_api_v1_delivery_discussions__thread_id__restore_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionStateChange'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/archive:
+    post:
+      tags:
+      - delivery
+      summary: Discussion State
+      operationId: discussion_state_api_v1_delivery_discussions__thread_id__archive_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionStateChange'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+  /api/v1/delivery/discussions/{thread_id}/reopen:
+    post:
+      tags:
+      - delivery
+      summary: Discussion State
+      operationId: discussion_state_api_v1_delivery_discussions__thread_id__reopen_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Thread Id
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryDiscussionStateChange'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionAck'
+        '422':
+          description: Invalid input or cursor scope
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/DeliveryDiscussionHTTPValidationError'
+                - $ref: '#/components/schemas/DeliveryDiscussionError'
+        '400':
+          description: An explicit project header is required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '403':
+          description: Current project, author or runtime authority is insufficient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '404':
+          description: The exact object is absent or outside the selected scope
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+        '409':
+          description: Version, source, idempotency, mutable cursor or lifecycle conflict; preserve the original input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryDiscussionError'
+      description: Requires the current authenticated project scope. Independent discussion facts never change business
+        progress, acceptance or query generations. Immutable history and original receipts retain their identifiers; quoted
+        runtime evidence is authorized against its original workspace on every read. Mutable cursors bind the exact actor,
+        selection and watermark; changed data returns 409, a different selection returns 422. Writes require current project
+        write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
+        projects remain readable.
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -11059,6 +12511,13 @@ components:
           type: string
           minLength: 8
           maxLength: 100
+        source_reference:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryDiscussionSourceReference'
+          - type: 'null'
+          default: null
+          description: Explicit fixed discussion conclusion used as provenance. Only the five adoption actions allow a non-null
+            value; business payload/CAS/acceptance gates still apply.
       allOf:
       - if:
           properties:
@@ -11420,6 +12879,22 @@ components:
           properties:
             payload:
               $ref: '#/components/schemas/RequirementEdit'
+      - if:
+          required:
+          - source_reference
+          properties:
+            source_reference:
+              not:
+                type: 'null'
+        then:
+          properties:
+            action:
+              enum:
+              - issue.diagnosis.adopt
+              - issue.promote
+              - requirement.update
+              - task.update
+              - tasks.plan
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
         Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
         and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay. Issue
@@ -22193,3 +23668,1252 @@ components:
       - coverage
       title: ProgressSummaryResponse
       type: object
+    DeliveryDiscussionActor:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      title: Actor
+    DeliveryDiscussionAck:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        thread_id:
+          type: string
+          title: Thread Id
+        thread_version:
+          type: integer
+          title: Thread Version
+        event_id:
+          type: string
+          title: Event Id
+        message_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message Id
+        message_revision:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Message Revision
+        link_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Link Id
+        replayed:
+          type: boolean
+          title: Replayed
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - thread_id
+      - thread_version
+      - event_id
+      - message_id
+      - message_revision
+      - link_id
+      - replayed
+      title: DiscussionAck
+    DeliveryDiscussionCreate:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        subject_kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Subject Kind
+        subject_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Subject Id
+        title:
+          type: string
+          maxLength: 160
+          minLength: 1
+          title: Title
+        body:
+          type: string
+          maxLength: 8000
+          minLength: 1
+          title: Body
+        refs:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionRefSelection'
+          type: array
+          maxItems: 8
+          title: Refs
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - subject_kind
+      - subject_id
+      - title
+      - body
+      title: DiscussionCreate
+    DeliveryDiscussionDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        discussion_stamp:
+          type: string
+          title: Discussion Stamp
+        as_of:
+          type: string
+          title: As Of
+        thread:
+          $ref: '#/components/schemas/DeliveryDiscussionThread'
+        permissions:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Permissions
+        capabilities:
+          additionalProperties:
+            type: boolean
+          type: object
+          title: Capabilities
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - discussion_stamp
+      - as_of
+      - thread
+      - permissions
+      - capabilities
+      title: DiscussionDetail
+    DeliveryDiscussionLink:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        expected_thread_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Thread Version
+        resolution_event_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Resolution Event Id
+        message_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Message Id
+        message_revision:
+          type: integer
+          minimum: 1.0
+          title: Message Revision
+        target_kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Target Kind
+        target_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Target Id
+        target_content_basis:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Target Content Basis
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - expected_thread_version
+      - resolution_event_id
+      - message_id
+      - message_revision
+      - target_kind
+      - target_id
+      - target_content_basis
+      title: DiscussionLink
+    DeliveryDiscussionMessage:
+      properties:
+        id:
+          type: string
+          title: Id
+        thread_id:
+          type: string
+          title: Thread Id
+        parent_message_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Parent Message Id
+        author:
+          $ref: '#/components/schemas/DeliveryDiscussionActor'
+        created_seq:
+          type: integer
+          title: Created Seq
+        created_at:
+          type: string
+          title: Created At
+        revision:
+          type: integer
+          title: Revision
+        state:
+          type: string
+          enum:
+          - active
+          - withdrawn
+          title: State
+        body:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Body
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        refs:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionFixedReference'
+          type: array
+          title: Refs
+        edited_at:
+          type: string
+          title: Edited At
+        can_edit:
+          type: boolean
+          title: Can Edit
+        can_withdraw:
+          type: boolean
+          title: Can Withdraw
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - thread_id
+      - parent_message_id
+      - author
+      - created_seq
+      - created_at
+      - revision
+      - state
+      - body
+      - reason
+      - refs
+      - edited_at
+      - can_edit
+      - can_withdraw
+      title: DiscussionMessage
+    DeliveryDiscussionPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        discussion_stamp:
+          type: string
+          title: Discussion Stamp
+        scope:
+          additionalProperties: true
+          type: object
+          title: Scope
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionThread'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - discussion_stamp
+      - scope
+      - items
+      title: DiscussionPage
+    DeliveryDiscussionResolve:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        expected_thread_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Thread Version
+        message_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Message Id
+        message_revision:
+          type: integer
+          minimum: 1.0
+          title: Message Revision
+        note:
+          type: string
+          maxLength: 2000
+          title: Note
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - expected_thread_version
+      - message_id
+      - message_revision
+      title: DiscussionResolve
+    DeliveryDiscussionStateChange:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        expected_thread_version:
+          type: integer
+          minimum: 1.0
+          title: Expected Thread Version
+        reason:
+          type: string
+          maxLength: 2000
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - expected_thread_version
+      title: DiscussionStateChange
+    DeliveryDiscussionThread:
+      properties:
+        id:
+          type: string
+          title: Id
+        subject:
+          $ref: '#/components/schemas/DeliveryDiscussionSubject'
+        title:
+          type: string
+          title: Title
+        state:
+          type: string
+          enum:
+          - open
+          - resolved
+          - archived
+          title: State
+        version:
+          type: integer
+          title: Version
+        created_seq:
+          type: integer
+          title: Created Seq
+        created_by:
+          $ref: '#/components/schemas/DeliveryDiscussionActor'
+        created_at:
+          type: string
+          title: Created At
+        last_activity_at:
+          type: string
+          title: Last Activity At
+        current_resolution:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryDiscussionResolution'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - subject
+      - title
+      - state
+      - version
+      - created_seq
+      - created_by
+      - created_at
+      - last_activity_at
+      - current_resolution
+      title: DiscussionThread
+    DeliveryDiscussionFixedReference:
+      properties:
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          - execution
+          title: Kind
+        id:
+          type: string
+          title: Id
+        status:
+          type: string
+          enum:
+          - available
+          - unavailable
+          title: Status
+        field:
+          anyOf:
+          - type: string
+            enum:
+            - title
+            - description
+            - acceptance_criteria
+            - summary
+          - type: 'null'
+          title: Field
+        criterion_index:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Criterion Index
+        source_content_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Content Basis
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        runtime:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryDiscussionRuntimeReference'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - status
+      title: FixedReference
+    DeliveryDiscussionHTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    DeliveryDiscussionLegacySource:
+      properties:
+        kind:
+          type: string
+          enum:
+          - issue
+          - diagnosis
+          - plan
+          title: Kind
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        label:
+          type: string
+          title: Label
+        target:
+          anyOf:
+          - $ref: '#/components/schemas/DeliveryDiscussionSourceNavigation'
+          - type: 'null'
+        unavailable:
+          type: boolean
+          title: Unavailable
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - label
+      - target
+      - unavailable
+      title: LegacySource
+    DeliveryDiscussionMessageCreate:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        body:
+          type: string
+          maxLength: 8000
+          minLength: 1
+          title: Body
+        refs:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionRefSelection'
+          type: array
+          maxItems: 8
+          title: Refs
+        parent_message_id:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 1
+          - type: 'null'
+          title: Parent Message Id
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - body
+      title: MessageCreate
+    DeliveryDiscussionMessageDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        thread_id:
+          type: string
+          title: Thread Id
+        thread_version:
+          type: integer
+          title: Thread Version
+        message:
+          $ref: '#/components/schemas/DeliveryDiscussionMessage'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - thread_id
+      - thread_version
+      - message
+      title: MessageDetail
+    DeliveryDiscussionMessageEdit:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        expected_message_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Message Revision
+        body:
+          type: string
+          maxLength: 8000
+          minLength: 1
+          title: Body
+        refs:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/DeliveryDiscussionRefSelection'
+            type: array
+            maxItems: 8
+          - type: 'null'
+          title: Refs
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - expected_message_revision
+      - body
+      title: MessageEdit
+    DeliveryDiscussionMessagePage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        thread_id:
+          type: string
+          title: Thread Id
+        thread_version:
+          type: integer
+          title: Thread Version
+        discussion_stamp:
+          type: string
+          title: Discussion Stamp
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionMessage'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - thread_id
+      - thread_version
+      - discussion_stamp
+      - items
+      title: MessagePage
+    DeliveryDiscussionMessageVersion:
+      properties:
+        revision:
+          type: integer
+          title: Revision
+        state:
+          type: string
+          enum:
+          - active
+          - withdrawn
+          title: State
+        body:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Body
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        refs:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionFixedReference'
+          type: array
+          title: Refs
+        editor:
+          $ref: '#/components/schemas/DeliveryDiscussionActor'
+        created_at:
+          type: string
+          title: Created At
+      additionalProperties: false
+      type: object
+      required:
+      - revision
+      - state
+      - body
+      - reason
+      - refs
+      - editor
+      - created_at
+      title: MessageVersion
+    DeliveryDiscussionMessageWithdraw:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        expected_message_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Message Revision
+        reason:
+          type: string
+          maxLength: 2000
+          title: Reason
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - idempotency_key
+      - expected_message_revision
+      title: MessageWithdraw
+    DeliveryDiscussionRefSelection:
+      properties:
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          - execution
+          title: Kind
+        id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Id
+        field:
+          type: string
+          enum:
+          - title
+          - description
+          - acceptance_criteria
+          - summary
+          title: Field
+        criterion_index:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Criterion Index
+        source_content_basis:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Source Content Basis
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - field
+      - source_content_basis
+      title: RefSelection
+    DeliveryDiscussionReferenceDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        reference:
+          $ref: '#/components/schemas/DeliveryDiscussionFixedReference'
+        target_content_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Content Basis
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - reference
+      - target_content_basis
+      title: ReferenceDetail
+    DeliveryDiscussionResolution:
+      properties:
+        event_id:
+          type: string
+          title: Event Id
+        message_id:
+          type: string
+          title: Message Id
+        message_revision:
+          type: integer
+          title: Message Revision
+        note:
+          type: string
+          title: Note
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - message_id
+      - message_revision
+      - note
+      title: Resolution
+    DeliveryDiscussionRuntimeReference:
+      properties:
+        workspace_id:
+          type: string
+          title: Workspace Id
+        run_id:
+          type: string
+          title: Run Id
+        attempt:
+          type: integer
+          title: Attempt
+        executor_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Executor Id
+      additionalProperties: false
+      type: object
+      required:
+      - workspace_id
+      - run_id
+      - attempt
+      - executor_id
+      title: RuntimeReference
+    DeliveryDiscussionSafeSourceSnapshot:
+      properties:
+        thread:
+          $ref: '#/components/schemas/DeliveryDiscussionSnapshotThread'
+        resolution:
+          $ref: '#/components/schemas/DeliveryDiscussionResolution'
+        message:
+          $ref: '#/components/schemas/DeliveryDiscussionSnapshotMessage'
+      additionalProperties: false
+      type: object
+      required:
+      - thread
+      - resolution
+      - message
+      title: SafeSourceSnapshot
+    DeliveryDiscussionSnapshotMessage:
+      properties:
+        id:
+          type: string
+          title: Id
+        revision:
+          type: integer
+          title: Revision
+        body:
+          type: string
+          title: Body
+        author:
+          $ref: '#/components/schemas/DeliveryDiscussionActor'
+        refs:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionFixedReference'
+          type: array
+          title: Refs
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - revision
+      - body
+      - author
+      - refs
+      title: SnapshotMessage
+    DeliveryDiscussionSnapshotSubject:
+      properties:
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Kind
+        id:
+          type: string
+          title: Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      title: SnapshotSubject
+    DeliveryDiscussionSnapshotThread:
+      properties:
+        id:
+          type: string
+          title: Id
+        title:
+          type: string
+          title: Title
+        version:
+          type: integer
+          title: Version
+        subject:
+          $ref: '#/components/schemas/DeliveryDiscussionSnapshotSubject'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - title
+      - version
+      - subject
+      title: SnapshotThread
+    DeliveryDiscussionSourceLink:
+      properties:
+        id:
+          type: string
+          title: Id
+        relation:
+          type: string
+          enum:
+          - reference
+          - adopted
+          title: Relation
+        source_kind:
+          type: string
+          const: discussion_resolution
+          title: Source Kind
+        source_id:
+          type: string
+          title: Source Id
+        thread_id:
+          type: string
+          title: Thread Id
+        thread_version:
+          type: integer
+          title: Thread Version
+        resolution_event_id:
+          type: string
+          title: Resolution Event Id
+        message_id:
+          type: string
+          title: Message Id
+        message_revision:
+          type: integer
+          title: Message Revision
+        source_snapshot:
+          $ref: '#/components/schemas/DeliveryDiscussionSafeSourceSnapshot'
+        source_digest:
+          type: string
+          title: Source Digest
+        target_kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Target Kind
+        target_id:
+          type: string
+          title: Target Id
+        target_missing:
+          type: boolean
+          title: Target Missing
+        target_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Title
+        business_event_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Business Event Id
+        applied_fields:
+          items:
+            type: string
+          type: array
+          title: Applied Fields
+        applied_by:
+          $ref: '#/components/schemas/DeliveryDiscussionActor'
+        created_at:
+          type: string
+          title: Created At
+        source_changed:
+          type: boolean
+          title: Source Changed
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - relation
+      - source_kind
+      - source_id
+      - thread_id
+      - thread_version
+      - resolution_event_id
+      - message_id
+      - message_revision
+      - source_snapshot
+      - source_digest
+      - target_kind
+      - target_id
+      - target_missing
+      - target_title
+      - business_event_id
+      - applied_fields
+      - applied_by
+      - created_at
+      - source_changed
+      title: SourceLink
+    DeliveryDiscussionSourceNavigation:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        view:
+          type: string
+          title: View
+        detail:
+          type: string
+          title: Detail
+        requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requirement Id
+        task_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Task Id
+        issue_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Issue Id
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - view
+      - detail
+      title: SourceNavigation
+    DeliveryDiscussionSourcePage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        discussion_stamp:
+          type: string
+          title: Discussion Stamp
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionSourceLink'
+          type: array
+          title: Items
+        legacy_sources:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionLegacySource'
+          type: array
+          title: Legacy Sources
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - discussion_stamp
+      - items
+      - legacy_sources
+      title: SourcePage
+    DeliveryDiscussionSubject:
+      properties:
+        kind:
+          type: string
+          enum:
+          - requirement
+          - task
+          - issue
+          title: Kind
+        id:
+          type: string
+          title: Id
+        missing:
+          type: boolean
+          title: Missing
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        current_requirement_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Current Requirement Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - missing
+      - title
+      - current_requirement_id
+      title: Subject
+    DeliveryDiscussionValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    DeliveryDiscussionVersionDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        thread_id:
+          type: string
+          title: Thread Id
+        message_id:
+          type: string
+          title: Message Id
+        version:
+          $ref: '#/components/schemas/DeliveryDiscussionMessageVersion'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - thread_id
+      - message_id
+      - version
+      title: VersionDetail
+    DeliveryDiscussionVersionPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        thread_id:
+          type: string
+          title: Thread Id
+        message_id:
+          type: string
+          title: Message Id
+        upper_revision:
+          type: integer
+          title: Upper Revision
+        items:
+          items:
+            $ref: '#/components/schemas/DeliveryDiscussionMessageVersion'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - thread_id
+      - message_id
+      - upper_revision
+      - items
+      title: VersionPage
+    DeliveryDiscussionSourceReference:
+      additionalProperties: false
+      properties:
+        thread_id:
+          maxLength: 64
+          minLength: 1
+          title: Thread Id
+          type: string
+        expected_thread_version:
+          minimum: 1
+          title: Expected Thread Version
+          type: integer
+        resolution_event_id:
+          maxLength: 64
+          minLength: 1
+          title: Resolution Event Id
+          type: string
+        message_id:
+          maxLength: 64
+          minLength: 1
+          title: Message Id
+          type: string
+        message_revision:
+          minimum: 1
+          title: Message Revision
+          type: integer
+      required:
+      - thread_id
+      - expected_thread_version
+      - resolution_event_id
+      - message_id
+      - message_revision
+      title: DiscussionSourceReference
+      type: object
+    DeliveryDiscussionError:
+      type: object
+      required:
+      - detail
+      additionalProperties: false
+      properties:
+        detail:
+          anyOf:
+          - type: string
+          - type: object
+          - type: array
+            items:
+              type: object

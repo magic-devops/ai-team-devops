@@ -8,7 +8,8 @@ import {
   Select,
   Switch,
 } from "antd";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { discussionFailure } from "@/lib/deliveryDiscussions";
 import { useTranslation } from "react-i18next";
 import { TaskCriteriaEditor } from "./TaskCriteriaEditor";
 import { normalizeTaskCriteria } from "@/lib/taskAcceptance";
@@ -47,9 +48,15 @@ export type EditorSpec = {
 export function DeliveryEditor({
   spec,
   onClose,
+  header,
+  sourceAware = false,
+  onUnresolvedChange,
 }: {
   spec: EditorSpec;
   onClose: () => void;
+  header?: ReactNode | ((blocked: boolean) => ReactNode);
+  sourceAware?: boolean;
+  onUnresolvedChange?: (value: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [form] = Form.useForm();
@@ -58,6 +65,11 @@ export function DeliveryEditor({
   const [conflict, setConflict] = useState(false);
   const [latest, setLatest] = useState<Awaited<
     ReturnType<EditorSpec["loadLatest"]>
+  > | null>(null);
+  const [unknown, setUnknown] = useState(false);
+  const [originalValues, setOriginalValues] = useState<Record<
+    string,
+    unknown
   > | null>(null);
   const loadLatest = async () => {
     setBusy(true);
@@ -70,25 +82,37 @@ export function DeliveryEditor({
       setBusy(false);
     }
   };
-  const save = async () => {
-    if (busy) return;
+  const save = async (retry = false) => {
+    if (busy || (unknown && !retry)) return;
     let values: Record<string, unknown>;
     try {
-      values = await form.validateFields();
+      values =
+        retry && originalValues ? originalValues : await form.validateFields();
     } catch {
       return;
     }
     setBusy(true);
     setError("");
+    setOriginalValues(structuredClone(values));
+    let unresolved = false;
+    if (sourceAware) onUnresolvedChange?.(true);
     try {
       await spec.submit(values);
+      setUnknown(false);
+      if (sourceAware) onUnresolvedChange?.(false);
       onClose();
     } catch (e) {
       setError((e as Error).message);
+      unresolved =
+        sourceAware &&
+        (e as Error).name !== "DeliveryConflict" &&
+        discussionFailure(e).unknown;
+      setUnknown(unresolved);
       setConflict((e as Error).name === "DeliveryConflict");
       setLatest(null);
     } finally {
       setBusy(false);
+      if (sourceAware && !unresolved) onUnresolvedChange?.(false);
     }
   };
   return (
@@ -96,18 +120,30 @@ export function DeliveryEditor({
       open
       className="delivery-editor"
       title={spec.title}
-      onCancel={onClose}
+      onCancel={() => !busy && !unknown && onClose()}
       onOk={() => void save()}
       confirmLoading={busy}
-      okButtonProps={{ disabled: conflict }}
-      cancelButtonProps={{ disabled: busy }}
-      closable={!busy}
+      okButtonProps={{ disabled: conflict || unknown }}
+      cancelButtonProps={{ disabled: busy || unknown }}
+      closable={!busy && !unknown}
       maskClosable={false}
-      keyboard={!busy}
+      keyboard={!busy && !unknown}
       okText={t("delivery.save")}
       cancelText={t("delivery.cancel")}
       width={620}
     >
+      {typeof header === "function" ? header(busy || unknown) : header}
+      {unknown && (
+        <Alert
+          type="warning"
+          title={t("deliveryDiscussion.unknown")}
+          action={
+            <Button loading={busy} onClick={() => void save(true)}>
+              {t("deliveryDiscussion.retryOriginal")}
+            </Button>
+          }
+        />
+      )}
       {spec.hint && <p className="delivery-hint">{spec.hint}</p>}
       {error && (
         <Alert
@@ -155,7 +191,7 @@ export function DeliveryEditor({
         form={form}
         layout="vertical"
         initialValues={spec.values}
-        disabled={busy}
+        disabled={busy || unknown}
       >
         {spec.fields.map((f) => (
           <Form.Item
@@ -195,7 +231,7 @@ export function DeliveryEditor({
               <ProjectOwnerSelect
                 members={f.members}
                 label={f.label}
-                disabled={busy}
+                disabled={busy || unknown}
               />
             ) : f.referenceKind ? (
               <DeliveryReferenceSelect
@@ -203,7 +239,7 @@ export function DeliveryEditor({
                 options={f.options}
                 multiple={f.multiple}
                 label={f.label}
-                disabled={busy}
+                disabled={busy || unknown}
               />
             ) : f.type === "criteria" ? (
               <TaskCriteriaEditor disabled={busy} />

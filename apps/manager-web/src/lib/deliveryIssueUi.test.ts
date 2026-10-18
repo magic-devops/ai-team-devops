@@ -20,6 +20,7 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock("react", async () => ({
   ...(await vi.importActual<typeof import("react")>("react")),
+  useEffect: () => {},
   useState: (initial: any) => {
     const i = hooks.next++;
     if (!(i in hooks.state))
@@ -146,8 +147,20 @@ beforeEach(() => {
     .mockImplementation(async (_projectId, command) => ({
       project_id: "P",
       action: command.action,
-      resource: { kind: command.action === "issue.diagnosis.adopt" ? "requirement" : "diagnosis", id: command.action === "issue.diagnosis.adopt" ? "REQ-adopted" : diagnosisFixture.id },
-      result: command.action === "issue.diagnosis.adopt" ? { requirement_id: "REQ-adopted" } : null,
+      resource: {
+        kind:
+          command.action === "issue.diagnosis.adopt"
+            ? "requirement"
+            : "diagnosis",
+        id:
+          command.action === "issue.diagnosis.adopt"
+            ? "REQ-adopted"
+            : diagnosisFixture.id,
+      },
+      result:
+        command.action === "issue.diagnosis.adopt"
+          ? { requirement_id: "REQ-adopted" }
+          : null,
       affected_refs: [],
       applied_version: command.expected_version + 1,
       version: command.expected_version + 1,

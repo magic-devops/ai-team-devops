@@ -1,3 +1,4 @@
+import type { DiscussionSourceReference } from "./deliveryDiscussions";
 import { request } from "./http";
 import type { TaskPlanning } from "./deliveryTaskPlan";
 import type { TaskAcceptance } from "./taskAcceptance";
@@ -381,8 +382,11 @@ export function prepareDeliveryIntent(
   intent: DeliveryIntent,
   action: DeliveryAction,
   payload: Record<string, unknown>,
+  source?: DiscussionSourceReference,
 ): DeliveryIntent {
-  const signature = JSON.stringify([action, payload]);
+  const signature = JSON.stringify(
+    source ? [action, payload, source] : [action, payload],
+  );
   return {
     version: intent.version,
     signature,
@@ -410,6 +414,7 @@ export function saveDelivery(
   payload: Record<string, unknown>,
   version: number,
   key: string,
+  source?: DiscussionSourceReference,
 ) {
   return request<DeliveryCommandAck>("/api/v1/delivery/commands", {
     method: "POST",
@@ -419,6 +424,7 @@ export function saveDelivery(
       payload,
       expected_version: version,
       idempotency_key: key,
+      ...(source ? { source_reference: source } : {}),
     }),
   });
 }

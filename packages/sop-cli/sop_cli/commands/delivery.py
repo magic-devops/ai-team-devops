@@ -8,10 +8,13 @@ from typing import Annotated
 import typer
 
 from .._util import console, get_client, warn
+from . import delivery_discussion
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
+
+app.add_typer(delivery_discussion.app, name="discussion")
 
 
 def _query_output(method, *args, **selection):
@@ -650,8 +653,12 @@ def command(file: Annotated[Path, typer.Option("--file", exists=True, dir_okay=F
     try:
         body = json.loads(file.read_text(encoding="utf-8"))
         required = {"action", "payload", "expected_version", "idempotency_key"}
-        if not isinstance(body, dict) or set(body) != required or not isinstance(body["payload"], dict):
-            raise ValueError("需要 action、payload、expected_version 和 idempotency_key")
+        if not isinstance(body, dict) or not required <= set(body) <= required | {"source_reference"} or not isinstance(body["payload"], dict):
+            raise ValueError("需要 action、payload、expected_version、idempotency_key；仅允许可选根source_reference")
+        if body.get("source_reference") is not None and body["action"] not in {
+            "requirement.update", "task.update", "tasks.plan", "issue.promote", "issue.diagnosis.adopt"
+        }:
+            raise ValueError("source_reference 仅用于明确的业务采纳动作")
         with get_client() as client:
             console.print_json(data=client.delivery_command(body))
     except Exception as exc:

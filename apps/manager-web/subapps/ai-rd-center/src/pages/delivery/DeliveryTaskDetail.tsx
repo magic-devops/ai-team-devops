@@ -19,6 +19,7 @@ import {
 import { DeliveryManualReviewPanel } from "./DeliveryManualReviewPanel";
 import { DeliveryTaskPlanMaintenance } from "./DeliveryTaskPlanMaintenance";
 import { DeliveryExecutionPanel } from "./DeliveryExecutionPanel";
+import { DeliveryCollaboration } from "./DeliveryDiscussionAdoption";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import "./task-acceptance.css";
 import { ProjectOwnerSelect } from "@/components/DeliveryMemberIdentity";
@@ -172,6 +173,16 @@ export function TaskDetailContent({
       )}
       <p className="runtime-help">{tr("executionOwner")}</p>
       <TaskAcceptanceFacts acceptance={task.acceptance} />
+      <DeliveryCollaboration
+        key={`${data.project.id}:${sessionId}:${task.id}`}
+        projectId={data.project.id}
+        sessionId={sessionId}
+        subject={{ kind: "task", id: task.id }}
+        object
+        readOnly={!editable}
+        onSaved={onSaved}
+        onUnresolvedChange={onUnresolvedChange}
+      />
       <DeliveryTaskPlanMaintenance
         task={task}
         data={data}

@@ -103,7 +103,7 @@ def command_access(state, action, resource_id):
 
 
 def replay_ack(db, project, version, *, user, store=None):
-    from .delivery_issue_evidence import assert_evidence_access
+    from .delivery_discussion_sources import assert_runtime_scopes
 
     rows = db.execute(
         select(DeliveryEvent.data["command_ack"], DeliveryEvent.data["command_ack_access"]).where(
@@ -118,5 +118,5 @@ def replay_ack(db, project, version, *, user, store=None):
                 "message": "This historical receipt has no recorded original command result.",
             },
         )
-    assert_evidence_access(store, user, project, rows[0][1])
+    assert_runtime_scopes(store, user, project, rows[0][1])
     return current_ack(db, project, rows[0][0], replayed=True)

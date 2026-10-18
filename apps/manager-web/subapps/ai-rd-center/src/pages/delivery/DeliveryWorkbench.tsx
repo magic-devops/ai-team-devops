@@ -94,6 +94,8 @@ import {
   DeliveryActivityFeed,
   DeliveryActivityDetail,
 } from "./DeliveryActivityFeed";
+import { DeliveryCollaboration } from "./DeliveryDiscussionAdoption";
+import { DeliverySourceSummary } from "./DeliverySourceSummary";
 import { DeliveryRequirementChangeEditor } from "./DeliveryRequirementChangeEditor";
 import { DeliveryRequirementHistory } from "./DeliveryRequirementHistory";
 import {
@@ -348,7 +350,7 @@ function ProjectDelivery() {
     filters: Partial<DeliveryRoute> = {},
   ) => {
     if (!executionExit.canNavigate()) return;
-    if (["quality", "releases"].includes(nextView)) {
+    if (["quality", "releases", "discussions"].includes(nextView)) {
       id = "";
       detail = "details";
       taskId = "";
@@ -1011,13 +1013,15 @@ function ProjectDelivery() {
         items={views.map((key) => ({
           key,
           label:
-            key === "quality" || key === "releases"
-              ? t(`deliveryRelease.${key}`)
-              : key === "progress"
-                ? t("deliveryProgress.title")
-                : ["resources", "inbox"].includes(key)
-                  ? tp(key)
-                  : tr(key),
+            key === "discussions"
+              ? t("deliveryDiscussion.title")
+              : key === "quality" || key === "releases"
+                ? t(`deliveryRelease.${key}`)
+                : key === "progress"
+                  ? t("deliveryProgress.title")
+                  : ["resources", "inbox"].includes(key)
+                    ? tp(key)
+                    : tr(key),
           icon:
             key === "list" ? (
               <List size={15} />
@@ -1121,6 +1125,19 @@ function ProjectDelivery() {
           workspace={data}
           sessionId={sessionId}
           onSaved={saveWorkspace}
+        />
+      )}
+      {view === "discussions" && (
+        <DeliveryCollaboration
+          key={`${projectId}:${sessionId}:project`}
+          projectId={projectId}
+          sessionId={sessionId}
+          readOnly={!data.permissions.write}
+          onSaved={saveWorkspace}
+          onNavigate={collaborationNavigate}
+          onUnresolvedChange={(value) =>
+            executionPending("discussion:project", value)
+          }
         />
       )}
       {view === "resources" && (
@@ -1362,6 +1379,13 @@ function ProjectDelivery() {
                           </strong>
                         </span>
                       </div>
+                      <DeliverySourceSummary
+                        key={`${projectId}:${sessionId}:${selected.id}`}
+                        projectId={projectId}
+                        sessionId={sessionId}
+                        target={{ kind: "requirement", id: selected.id }}
+                        onNavigate={collaborationNavigate}
+                      />
                       <h3>{tr("criteria")}</h3>
                       <ul className="delivery-criteria">
                         {selected.acceptance_criteria.map((c, i) => (
@@ -1437,6 +1461,24 @@ function ProjectDelivery() {
                         </Button>
                       </div>
                     </>
+                  ),
+                },
+                {
+                  key: "discussion",
+                  label: t("deliveryDiscussion.title"),
+                  children: (
+                    <DeliveryCollaboration
+                      key={`${projectId}:${sessionId}:${selected.id}`}
+                      projectId={projectId}
+                      sessionId={sessionId}
+                      subject={{ kind: "requirement", id: selected.id }}
+                      readOnly={!canWriteRequirement}
+                      onSaved={saveWorkspace}
+                      onNavigate={collaborationNavigate}
+                      onUnresolvedChange={(value) =>
+                        executionPending(`discussion:${selected.id}`, value)
+                      }
+                    />
                   ),
                 },
                 {

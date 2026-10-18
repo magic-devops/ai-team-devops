@@ -298,3 +298,36 @@ sop delivery references --kind task --ids T-example,T-predecessor
 ## 有界交付待办
 
 `sop delivery inbox --scope mine --category acceptance --limit 20 --json` 返回当前页和完整范围分类计数；后续页保留选项并提供 `--cursor <next_cursor>`。文字输出区分本页、匹配总数与是否还有下一页。`sop delivery progress-summary --starts-on 2026-10-01 --ends-on 2026-10-18 --json` 读取轻量项目概览，缺失历史与未来日期分别表达。409 返回首屏，不混合旧页；查询索引 schema 2 缺失时需明确 `sop delivery query-rebuild`，需要配置权限。见 [待办与概览指南](../../docs/DELIVERY_ATTENTION_GUIDE.md)。
+
+
+## 对象讨论与明确采纳
+
+`sop delivery discussion` 使用当前登录与项目范围，输出服务端完整 JSON。读取默认20项，`--limit` 为1..50；下一页传原 `--cursor`。不自动改项目、重建索引或回退列表首项。
+
+```bash
+sop delivery discussion list --subject-kind task --subject-id T-one --state open --limit 20
+sop delivery discussion show --thread thread-one
+sop delivery discussion messages --thread thread-one --cursor ORIGINAL_CURSOR
+sop delivery discussion message --thread thread-one --message message-one
+sop delivery discussion versions --thread thread-one --message message-one --revision 1
+sop delivery discussion reference --kind task --id T-one --field acceptance_criteria --criterion-index 0
+sop delivery discussion links --thread thread-one --resolution-event event-one
+sop delivery discussion sources --kind task --id T-one
+```
+
+`list` 的 --subject-kind/--subject-id 成对提供；省略整对表示当前项目。`versions` 不带 --revision 时分页读取历史；精确 --revision 不混用分页参数。`reference` 先读取服务端字段与 source_content_basis；写 refs 使用选择字段和该 basis，不复制 text/status/runtime 等可信返回字段。
+
+所有写入只接收原 JSON 文件：create、reply、edit、withdraw、resolve、reopen、archive、restore、link。线程操作提供 --thread；edit/withdraw 另提供 --message；每份文件显式保存原 idempotency_key。客户端不会生成作者、身份、依据或新重试键。
+
+```bash
+sop delivery discussion create --file discussion-create.json
+sop delivery discussion reply --thread thread-one --file discussion-reply.json
+sop delivery discussion edit --thread thread-one --message message-one --file discussion-edit.json
+sop delivery discussion resolve --thread thread-one --file discussion-resolve.json
+sop delivery discussion link --thread thread-one --file discussion-link.json
+sop delivery discussion restore --thread thread-one --file discussion-restore.json
+```
+
+创建文件示例：`{"subject_kind":"task","subject_id":"T-one","title":"核对条件","body":"请核对当前条件。","idempotency_key":"discussion-create-001"}`。编辑/撤回提供 expected_message_revision；解决/状态操作提供 expected_thread_version；解决还提供精确 message_id/message_revision。关联提供固定结论、target_kind/target_id/target_content_basis。409、403 或未知结果均保留文件，未知结果只重试原请求。
+
+真正采用结论使用 `sop delivery command --file original-command.json`：原 action/payload/expected_version/idempotency_key 之外，仅允许可选根 source_reference（thread_id、expected_thread_version、resolution_event_id、message_id、message_revision）。来源仅可用于 requirement.update、task.update、tasks.plan、issue.promote、issue.diagnosis.adopt，完整保留在原文件与请求中。`link` 仅关联已有对象，`resolve` 仅形成讨论结论，两者都不等于业务保存或验收。
