@@ -164,7 +164,6 @@ def _write_agent_toml_skeleton(project_path: Path, project_name: str, manager_ur
         outbox_path = ".sop-runtime/outbox.sqlite"
         batch_size = 50
         max_retries = 6
-        dlq_path = ".sop-runtime/dlq/"
         timeout_seconds = 30
 
         [security]

@@ -1,0 +1,42 @@
+{
+  "domain": "sop-outbox-requeue-v1\\0",
+  "length_prefix": "uint32 big-endian byte length",
+  "revision": "signed int64 big-endian positive",
+  "vectors": [
+    {
+      "id": "E",
+      "expected_revision": 1,
+      "reason": "retry",
+      "input_hex": "736f702d6f7574626f782d726571756575652d76310000000001450000000000000001000000057265747279",
+      "sha256": "8890a5b003fb4edf0d8975930634759feb9f62d353cf66d166f4125f18a51b6c"
+    },
+    {
+      "id": "01M000000000000000000000000",
+      "expected_revision": 8,
+      "reason": "manual retry after outage",
+      "input_hex": "736f702d6f7574626f782d726571756575652d7631000000001b30314d3030303030303030303030303030303030303030303030300000000000000008000000196d616e75616c207265747279206166746572206f7574616765",
+      "sha256": "08284ef79f29e9042a7fb180687f9db202e8a36d3d79c372f499bbf44866c993"
+    },
+    {
+      "id": "事件-Ω-🙂",
+      "expected_revision": 9223372036854775807,
+      "reason": "审批\n说明 中文 & < >  ",
+      "input_hex": "736f702d6f7574626f782d726571756575652d7631000000000ee4ba8be4bbb62dcea92df09f99827fffffffffffffff0000001ee5aea1e689b90ae8afb4e6988e20e4b8ade696872026203c203e20e280a8",
+      "sha256": "c1da8ce2326e9b1149038d78e5f16d5f8b502855e77fef34777a032f52b31dd5"
+    },
+    {
+      "id": "é",
+      "expected_revision": 2,
+      "reason": "é",
+      "input_hex": "736f702d6f7574626f782d726571756575652d76310000000002c3a900000000000000020000000365cc81",
+      "sha256": "a0101270c1fefdfd1c1ec950e3e13aa37b3b2e33b20a7d01f7722e3291cc4bb1"
+    },
+    {
+      "id": "é",
+      "expected_revision": 2,
+      "reason": "é",
+      "input_hex": "736f702d6f7574626f782d726571756575652d76310000000002c3a9000000000000000200000002c3a9",
+      "sha256": "52095e632615eea209f86dfbf8fe33a94cd93e06a54ac90df705e4c0ed7845c0"
+    }
+  ]
+}

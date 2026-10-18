@@ -30,8 +30,8 @@ from .delivery_scheduling_contract import (
     StoredAllocation,
     civil_date,
 )
-from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
 from .delivery_source_contract import SOURCE_ACTIONS, DiscussionSourceReference
+from .delivery_team_runtime_contract import MemberRuntimeBind, MemberRuntimeUnbind
 from .project_lifecycle_contract import ProjectLifecycleCommand
 
 STAGES = [
@@ -100,6 +100,8 @@ class Command(Input):
         "artifact.add",
         "stage.advance",
         "stage.reopen",
+        "issue.create",
+        "sync.record.apply",
         "issue.promote",
         "issue.diagnosis.adopt",
         "issue.diagnosis.dismiss",
@@ -751,7 +753,25 @@ class ExecutionReview(ExecutionSync):
     run_version: int = Field(ge=1)
 
 
+
+class IssueCreateCommand(Input):
+    title: str = Field(min_length=1, max_length=256)
+    description: str = Field(default="", max_length=10000)
+    type: str = Field(default="bug", min_length=1, max_length=32)
+    severity: Literal["P0", "P1", "P2", "P3"] = "P2"
+    task_id: str = Field(default="", max_length=64)
+    sprint_id: str = Field(default="", max_length=64)
+
+
+class SyncRecordApply(Input):
+    module: Literal["tasks", "requirements", "issues", "sprints"]
+    action: Literal["upsert", "delete"] = "upsert"
+    record: dict
+
+
 PAYLOADS = {
+    "issue.create": IssueCreateCommand,
+    "sync.record.apply": SyncRecordApply,
     "project.lifecycle": ProjectLifecycleCommand,
     "tasks.schedule": ScheduleChanges,
     "member.calendar.save": CalendarSave,

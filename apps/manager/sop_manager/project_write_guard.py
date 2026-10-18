@@ -151,6 +151,11 @@ def discussion_write_scope(db, tenant_id, project_id):
     return _scope(db, tenant_id, project_id, "discussion")
 
 
+def event_write_scope(db, tenant_id, project_id):
+    """Only event processing may advance its mutable pointer."""
+    return _scope(db, tenant_id, project_id, "event")
+
+
 def in_lifecycle_scope(db, tenant_id, project_id):
     return _permission(db, (str(tenant_id), str(project_id)), "lifecycle") is not None
 
@@ -427,11 +432,23 @@ def _check_discussion_write(db, table, scope, operation, old, values):
         _deny("discussion_command_required", "Change discussion pointers through discussion commands")
 
 
+def _check_event_write(db, table, scope, operation, old, values):
+    if table.name in {"event_inbox", "event_processing_attempts"} and operation != "insert":
+        _deny("event_immutable", "Event receipts and attempts are append-only")
+    if table.name != "event_processing" or operation == "insert":
+        return
+    if operation == "delete" or not _permission(db, scope, "event"):
+        _deny("event_command_required", "Change processing through event commands")
+    if any(key in values and values[key] != old.get(key) for key in {"plan", "handler", "operation_id"}):
+        _deny("event_immutable", "The original event operation plan is immutable")
+
+
 def _check_write(db, table, operation, old, values, *, user_cascade=False):
     scope = _scope_for_row(db, table, values if operation == "insert" else old)
     if scope is None:
         return
     _check_discussion_write(db, table, scope, operation, old, values)
+    _check_event_write(db, table, scope, operation, old, values)
     if operation == "update":
         immutable = {column.key for column in table.primary_key.columns} | {"id", "tenant_id", "project_id"}
         if any(key in values and values[key] != old.get(key) for key in immutable):

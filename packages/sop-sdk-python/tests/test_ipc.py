@@ -37,17 +37,21 @@ def test_agentd_ipc_missing_socket_returns_structured_error(tmp_path: Path) -> N
 
 
 def test_agentd_ipc_sends_ndjson_frame_and_reads_response(tmp_path: Path) -> None:
-    transport = FakeTransport(b'{"ok": true, "result": {"version": "test"}}\n')
+    transport = FakeTransport(b'')
     client = AgentdIpcClient(tmp_path / "agentd.sock", timeout=1, transport=transport)
 
-    result = client.event("tool.pre", tool="Bash", command="git status")
+    from sop_sdk.event_envelope import FrozenEvent
+    event = FrozenEvent.create("tool.pre", {"tool": "Bash", "command": "git status"}, event_id="fixed", time="2026-10-18T00:00:00Z")
+    expected = {"ok": True, "op": "event.enqueue", "id": event.id, "result": {"id": event.id, "digest": event.digest, "state": "pending", "revision": 1, "replayed": False}}
+    transport.response = json.dumps(expected).encode() + b"\n"
+    result = client.enqueue_event(event, intended_project_id="P")
 
-    assert result == {"ok": True, "result": {"version": "test"}}
+    assert result == expected
     assert json.loads(transport.sent.decode("utf-8")) == {
         "v": 1,
-        "op": "event",
-        "name": "tool.pre",
-        "data": {"tool": "Bash", "command": "git status"},
+        "op": "event.enqueue",
+        "name": "",
+        "data": {**event.item(), "intended_project_id": "P"},
     }
 
 
@@ -69,7 +73,7 @@ def test_agentd_ipc_diagnose_exposes_transport_state(tmp_path: Path) -> None:
         "transport": "fake",
         "endpoint": "memory://agentd",
         "timeout": 1.5,
-        "max_response_bytes": 65536,
+        "max_response_bytes": 524288,
     }
 
 

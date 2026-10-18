@@ -7,6 +7,7 @@
   - 接 Redis Streams：替换 _Bus 实现
 @deps_in: fastapi.WebSocket, jwt
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -74,66 +75,111 @@ def _decode_token(token: str) -> dict | None:
         return None
 
 
-@router.websocket("/ws/events")
-async def ws_events(
-    websocket: WebSocket,
-    project_id: str = Query(""),
-    token: str = Query(""),
-) -> None:
+def _authorized(token: str, project_id: str) -> bool:
+    from fastapi import HTTPException
+
+    from .auth_sql import check_project_access
+    from .sql_models import Project, SessionLocal, User
+
     payload = _decode_token(token)
     if not payload:
+        return False
+    with SessionLocal() as db:
+        user = db.get(User, payload.get("sub"))
+        project = db.get(Project, project_id)
+        if user is None or user.status != "active" or project is None:
+            return False
+        try:
+            check_project_access(user, project_id, db)
+            return True
+        except HTTPException:
+            return False
+
+
+class _Connection:
+    def __init__(self, websocket, project_id, token, queue):
+        self.websocket = websocket
+        self.project_id = project_id
+        self.token = token
+        self.queue = queue
+        self.last_pong = time.time()
+
+    async def send(self, frame):
+        if not _authorized(self.token, self.project_id):
+            await self.websocket.close(code=4403)
+            return False
+        await self.websocket.send_text(json.dumps(frame, ensure_ascii=False))
+        return True
+
+    async def reader(self):
+        while True:
+            message = await self.websocket.receive_text()
+            if not _authorized(self.token, self.project_id):
+                await self.websocket.close(code=4403)
+                return
+            try:
+                value = json.loads(message)
+            except ValueError:
+                continue
+            if isinstance(value, dict) and value.get("type") == "ping":
+                self.last_pong = time.time()
+                if not await self.send({"type": "pong"}):
+                    return
+
+    async def writer(self):
+        while True:
+            try:
+                frame = await asyncio.wait_for(self.queue.get(), timeout=30)
+            except asyncio.TimeoutError:
+                if not _authorized(self.token, self.project_id):
+                    await self.websocket.close(code=4403)
+                    return
+                if time.time() - self.last_pong > 90:
+                    await self.websocket.close(code=1011)
+                    return
+                continue
+            if not await self.send(frame):
+                return
+
+    async def run(self):
+        tasks = []
+        try:
+            if not await self.send(
+                {
+                    "specversion": "1.0",
+                    "type": "sop.ws.hello",
+                    "id": f"hello-{int(time.time() * 1000)}",
+                    "data": {"project_id": self.project_id},
+                }
+            ):
+                return
+            tasks = [asyncio.create_task(self.reader()), asyncio.create_task(self.writer())]
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+
+@router.websocket("/ws/events")
+async def ws_events(websocket: WebSocket, project_id: str = Query(""), token: str = Query("")) -> None:
+    if not _decode_token(token):
         await websocket.close(code=4401)
         return
     if not project_id:
         await websocket.close(code=4400)
         return
-
+    if not _authorized(token, project_id):
+        await websocket.close(code=4403)
+        return
     await websocket.accept()
-    q = await bus.subscribe(project_id)
-    last_pong = time.time()
-    _log.info("ws connect project=%s sub_total=%d", project_id, sum(len(v) for v in bus._subs.values()))
-
-    # 发送一条 hello
-    await websocket.send_text(json.dumps({
-        "specversion": "1.0", "type": "sop.ws.hello",
-        "id": f"hello-{int(time.time()*1000)}",
-        "data": {"project_id": project_id},
-    }))
-
-    async def reader() -> None:
-        nonlocal last_pong
-        while True:
-            try:
-                msg = await websocket.receive_text()
-            except WebSocketDisconnect:
-                return
-            try:
-                d = json.loads(msg)
-                if d.get("type") == "ping":
-                    last_pong = time.time()
-                    await websocket.send_text(json.dumps({"type": "pong"}))
-            except Exception:
-                continue
-
-    async def writer() -> None:
-        while True:
-            try:
-                evt = await asyncio.wait_for(q.get(), timeout=30)
-                await websocket.send_text(json.dumps(evt, ensure_ascii=False))
-            except asyncio.TimeoutError:
-                # 心跳检查
-                if time.time() - last_pong > 90:
-                    await websocket.close(code=1011)
-                    return
-                continue
-
+    queue = await bus.subscribe(project_id)
     try:
-        await asyncio.gather(reader(), writer())
-    except Exception:
-        pass
+        await _Connection(websocket, project_id, token, queue).run()
     finally:
-        await bus.unsubscribe(project_id, q)
-        _log.info("ws disconnect project=%s", project_id)
+        await bus.unsubscribe(project_id, queue)
 
 
 def broadcast(project_id: str, event: dict) -> None:

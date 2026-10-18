@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from datetime import date
 from typing import Annotated, Literal
 
@@ -1080,7 +1080,9 @@ def _schedule_committed_run(db, project, user, body, request, background_tasks, 
     background_tasks.add_task(execution.execute, principal, workspace_id, run["id"])
 
 
-def _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks=None):
+@contextmanager
+def stage_delivery_command(db, project, user, body, payload, key, fingerprint, request):
+    """Prepare one canonical command; caller owns commit and original result."""
     reservation = None
     try:
         from .delivery_discussion_adoption import prepare_adoption, record_adoption
@@ -1168,20 +1170,7 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
                 version=next_version,
             )
         )
-        db.commit()
-        db.expire_all()
-        _schedule_committed_run(db, project, user, body, request, background_tasks, next_version)
-        from .delivery_query_commands import current_ack
-
-        return current_ack(db, project, ack, replayed=False)
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            409, "Concurrent command. Reload and retry using the same idempotency key."
-        ) from exc
-    except Exception:
-        db.rollback()
-        raise
+        yield {"ack": ack, "version": next_version}
     finally:
         if reservation:
             from .delivery_progress_capture import release_workspace_version
@@ -1189,7 +1178,29 @@ def _commit_command(db, project, user, body, payload, key, fingerprint, request,
             release_workspace_version(db, reservation)
 
 
+
+def _commit_command(db, project, user, body, payload, key, fingerprint, request, background_tasks=None):
+    try:
+        with stage_delivery_command(db, project, user, body, payload, key, fingerprint, request) as staged:
+            db.commit()
+        db.expire_all()
+        _schedule_committed_run(db, project, user, body, request, background_tasks, staged["version"])
+        from .delivery_query_commands import current_ack
+
+        return current_ack(db, project, staged["ack"], replayed=False)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "Concurrent command. Reload and retry using the same idempotency key.") from exc
+    except Exception:
+        db.rollback()
+        raise
+
+
 def _apply(db, project, user, data, action, payload, request, *, command_key=""):
+    if action in {"issue.create", "sync.record.apply"}:
+        from .event_business import apply_canonical
+
+        return apply_canonical(db, project, user, data, action, payload, command_key)
     if action in {"execution.start", "execution.retry", "execution.cancel", "execution.approval"}:
         from .delivery_execution_runtime import apply_runtime_control
 

@@ -58,7 +58,7 @@ def build_project_manifest() -> dict[str, Any]:
             "memory_local": str(rt / "memory" / "local.jsonl"),
             "memory_outbox": str(rt / "memory" / "outbox.jsonl"),
             "kb_outbox": str(rt / "kb" / "outbox.jsonl"),
-            "event_outbox": str(rt / "events" / "outbox.jsonl"),
+            "event_outbox": str(cfg.project_path / cfg.outbox_path),
             "usage_outbox": str(rt / "usage" / "outbox.jsonl"),
             "db_connections": str(rt / "db_connections.json"),
             "pages_manifest": str(rt / "pages_manifest.json"),
@@ -226,7 +226,7 @@ def write_agent_context(
             "memory_local": str(rt / "memory" / "local.jsonl"),
             "memory_outbox": str(rt / "memory" / "outbox.jsonl"),
             "kb_outbox": str(rt / "kb" / "outbox.jsonl"),
-            "event_outbox": str(rt / "events" / "outbox.jsonl"),
+            "event_outbox": str(cfg.project_path / cfg.outbox_path),
             "usage_outbox": str(rt / "usage" / "outbox.jsonl"),
             "db_connections": str(rt / "db_connections.json"),
             "pages_manifest": str(rt / "pages_manifest.json"),
@@ -404,7 +404,7 @@ def build_env_lines(*, export: bool = True) -> list[str]:
         "SOP_MEMORY_LOCAL": rt / "memory" / "local.jsonl",
         "SOP_MEMORY_OUTBOX": rt / "memory" / "outbox.jsonl",
         "SOP_KB_OUTBOX": rt / "kb" / "outbox.jsonl",
-        "SOP_EVENT_OUTBOX": rt / "events" / "outbox.jsonl",
+        "SOP_EVENT_OUTBOX": cfg.project_path / cfg.outbox_path,
         "SOP_USAGE_OUTBOX": rt / "usage" / "outbox.jsonl",
     }
     prefix = "export " if export else ""

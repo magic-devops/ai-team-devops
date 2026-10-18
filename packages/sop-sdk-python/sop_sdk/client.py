@@ -924,13 +924,20 @@ class ManagerClient:
         if json_body is not None:
             body_bytes = json.dumps(json_body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
+        from copy import copy
+
+        auth = copy(self.auth)
+        scope_headers = self._scope_headers()
+        request_headers = dict(extra_headers or {})
+        signing_path = self._client.build_request(method, url_path).url.path
+
         def _do() -> Any:
-            headers: dict[str, str] = dict(extra_headers or {})
-            for k, v in self._scope_headers().items():
+            headers: dict[str, str] = dict(request_headers)
+            for k, v in scope_headers.items():
                 headers.setdefault(k, v)
             if body_bytes:
                 headers["Content-Type"] = "application/json"
-            self.auth.attach(method, url_path, headers, body_bytes)
+            auth.attach(method, signing_path, headers, body_bytes)
             try:
                 resp = self._client.request(
                     method,
@@ -946,6 +953,10 @@ class ManagerClient:
                 return None
             ct = resp.headers.get("content-type", "")
             if ct.startswith("application/json") or ct.startswith("application/problem+json"):
+                if url_path.startswith("/api/v1/events"):
+                    from .event_envelope import strict_json
+
+                    return strict_json(resp.text)
                 return resp.json()
             return resp.text
 
@@ -1994,8 +2005,13 @@ class ManagerClient:
         record: Mapping[str, Any],
         *,
         action: str = "upsert",
-        idempotency_key: str = "",
+        idempotency_key: str,
+        expected_version: int,
     ) -> dict[str, Any]:
+        from .event_envelope import integer, text_field
+
+        integer(expected_version, "expected_version")
+        text_field(idempotency_key, "idempotency_key")
         return self._request(
             "POST",
             "/api/v1/sync/push",
@@ -2004,17 +2020,87 @@ class ManagerClient:
                 "action": action,
                 "record": dict(record),
                 "idempotency_key": idempotency_key,
+                "expected_version": expected_version,
             },
         )
 
     def sync_journal(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:
         return self._request("GET", "/api/v1/sync/journal", params={"since": since, "limit": limit})
 
-    def events_ingest(self, events: list[Mapping[str, Any]]) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/events:ingest", json_body={"events": [dict(e) for e in events]})
+    def events_identity(self) -> dict[str, Any]:
+        return self._request("GET", "/api/v1/events:identity")
 
-    def events_list(self, *, since: str = "", limit: int = 100) -> dict[str, Any]:
-        return self._request("GET", "/api/v1/events", params={"since": since, "limit": limit})
+    def events_ingest(self, events, *, identity) -> dict[str, Any]:
+        from .event_envelope import EventIdentity, FrozenEvent, integer, manager_origin
+
+        if not isinstance(identity, EventIdentity):
+            raise ValueError("verified EventIdentity required")
+        if identity.manager_origin != manager_origin(self.base_url) or identity.project_id != self.project_id:
+            raise ValueError("frozen binding does not match current Manager/project")
+        integer(len(events), "batch size", 1, 50)
+        if any(not isinstance(event, FrozenEvent) for event in events):
+            raise ValueError("frozen events required")
+        if (
+            len({event.id for event in events}) != len(events)
+            or sum(len(event.event_json.encode("utf-8")) for event in events) > 1048576
+        ):
+            raise ValueError("invalid event batch")
+        return self._request(
+            "POST",
+            "/api/v1/events:ingest",
+            json_body={**identity.request_scope(), "events": [e.item() for e in events]},
+        )
+
+    def events_list(self, *, state="all", event_type="", producer_id="", cursor="", limit=20) -> dict[str, Any]:
+        from .event_envelope import integer
+
+        integer(limit, "limit", 1, 100)
+        if state not in {"all", "pending", "processed", "failed"}:
+            raise ValueError("invalid event state")
+        return self._request(
+            "GET",
+            "/api/v1/events",
+            params={
+                "state": state,
+                "type": event_type,
+                "producer_id": producer_id,
+                "cursor": cursor,
+                "limit": limit,
+            },
+        )
+
+    def event_receipt(self, receipt_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/api/v1/events/{_resource_segment(receipt_id)}")
+
+    def event_attempts(self, receipt_id: str, *, cursor="", limit=20) -> dict[str, Any]:
+        from .event_envelope import integer
+
+        integer(limit, "limit", 1, 100)
+        return self._request(
+            "GET",
+            f"/api/v1/events/{_resource_segment(receipt_id)}/attempts",
+            params={"cursor": cursor, "limit": limit},
+        )
+
+    def event_retry(
+        self, receipt_id: str, *, expected_revision: int, reason: str, idempotency_key: str
+    ) -> dict[str, Any]:
+        from .event_envelope import integer, text_field
+
+        integer(expected_revision, "expected_revision", 1)
+        text_field(reason, "reason", maximum=2000)
+        text_field(idempotency_key, "idempotency_key")
+        if not reason.strip():
+            raise ValueError("retry reason required")
+        return self._request(
+            "POST",
+            f"/api/v1/events/{_resource_segment(receipt_id)}:retry",
+            json_body={
+                "expected_revision": expected_revision,
+                "reason": reason,
+                "idempotency_key": idempotency_key,
+            },
+        )
 
     def usage_record(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/api/v1/usage/record", json_body=dict(body))

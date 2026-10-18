@@ -40,15 +40,35 @@ def test_missing_mcp_settings_get_does_not_create_a_file(tmp_path, monkeypatch):
 def test_missing_governance_get_is_a_pure_default_projection(tmp_path, monkeypatch):
     target = tmp_path / "analytics" / "data-governance.json"
     monkeypatch.setattr(data_analytics, "resolved_runtime_dir", lambda: tmp_path)
-    monkeypatch.setattr(data_analytics, "_data_scope", lambda: {"tenant_id": "tenant", "project_id": "archived"})
+    monkeypatch.setattr(
+        data_analytics, "_data_scope", lambda: {"tenant_id": "tenant", "project_id": "archived"}
+    )
     result = data_analytics._load_governance()
     assert isinstance(result, dict)
     assert not target.parent.exists()
 
 
-@pytest.mark.parametrize("writer", ["tasks", "requirements", "mcp", "governance", "sync", "design",
-                                   "agent", "workflow", "event", "model", "quality", "claim", "jsonl"])
-def test_actual_file_writer_rechecks_archived_project_under_project_lock(guarded, tmp_path, monkeypatch, writer):
+@pytest.mark.parametrize(
+    "writer",
+    [
+        "tasks",
+        "requirements",
+        "mcp",
+        "governance",
+        "sync",
+        "design",
+        "agent",
+        "workflow",
+        "event",
+        "model",
+        "quality",
+        "claim",
+        "jsonl",
+    ],
+)
+def test_actual_file_writer_rechecks_archived_project_under_project_lock(
+    guarded, tmp_path, monkeypatch, writer
+):
     sessions, _ = guarded
     from sop_manager import path_config
 
@@ -67,13 +87,21 @@ def test_actual_file_writer_rechecks_archived_project_under_project_lock(guarded
     monkeypatch.setattr(tasks, "_quality_policy_path", lambda: target)
     monkeypatch.setattr(tasks, "_agent_claims_path", lambda: target)
     monkeypatch.setattr(sync_api, "_asset_target_path", lambda *args: (target, "target.json"))
+    from event_handoff_support import direct_sync
+
+    def asset_sync():
+        with sessions() as db:
+            return direct_sync(
+                db, "archived", module="specs", record={"path": "target.json", "content": "do not write"}
+            )
+
     with pytest.raises(HTTPException) as raised:
         writers = {
             "tasks": lambda: tasks._ui_save({}),
             "requirements": lambda: requirements._ui_save({}),
             "mcp": lambda: mcp_mgr._save_cfg({}),
             "governance": lambda: data_analytics._write_governance_store({}),
-            "sync": lambda: sync_api._sync_push_asset(sync_api.SyncPushIn(module="design_docs", record={"content": "do not write"}), "archived"),
+            "sync": asset_sync,
             "design": lambda: design_docs._save_index({}),
             "agent": lambda: agents._save_definition(target, {}),
             "workflow": lambda: workflow._save_runs([]),
@@ -92,13 +120,20 @@ def test_archived_business_http_gate_rejects_file_only_task_patch_and_configurat
     client, sessions = env
     with sessions() as db:
         from sop_manager.project_write_guard import lifecycle_scope
+
         db.get(sql_models.ProjectMember, ("selected", "writer")).role = "project_admin"
         db.commit()
         with lifecycle_scope(db, "team", "selected"):
-            db.execute(update(sql_models.Project).where(sql_models.Project.id == "selected").values(status="archived"))
+            db.execute(
+                update(sql_models.Project)
+                .where(sql_models.Project.id == "selected")
+                .values(status="archived")
+            )
             db.commit()
     assert client.get("/api/v1/tasks", headers=headers()).status_code == 200
-    response = client.patch("/api/v1/tasks/T-selected", headers=headers(), json={"artifact_url": "https://example.test/proof"})
+    response = client.patch(
+        "/api/v1/tasks/T-selected", headers=headers(), json={"artifact_url": "https://example.test/proof"}
+    )
     assert response.status_code == 409, response.text
     response = client.put("/api/v1/models/default?model_id=test", headers=headers())
     assert response.status_code == 409, response.text
@@ -113,7 +148,9 @@ def test_actual_file_save_waits_for_archive_and_then_rejects(tmp_path, monkeypat
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    engine = create_engine("sqlite:///" + str(tmp_path / "race.sqlite"), connect_args={"check_same_thread": False})
+    engine = create_engine(
+        "sqlite:///" + str(tmp_path / "race.sqlite"), connect_args={"check_same_thread": False}
+    )
     sql_models.Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine, class_=ManagerSession, expire_on_commit=False)
     with sessions() as db:
@@ -139,7 +176,11 @@ def test_actual_file_save_waits_for_archive_and_then_rejects(tmp_path, monkeypat
     try:
         with sessions() as db, ThreadPoolExecutor(max_workers=1) as workers:
             with lifecycle_scope(db, "tenant", "project"):
-                db.execute(update(sql_models.Project).where(sql_models.Project.id == "project").values(status="archived"))
+                db.execute(
+                    update(sql_models.Project)
+                    .where(sql_models.Project.id == "project")
+                    .values(status="archived")
+                )
                 future = workers.submit(save)
                 assert started.wait(2)
                 assert not future.done()
@@ -150,7 +191,9 @@ def test_actual_file_save_waits_for_archive_and_then_rejects(tmp_path, monkeypat
         engine.dispose()
 
 
-@pytest.mark.parametrize("module,getter", [(design_docs, "_root"), (agents, "_agents_dir"), (workflow, "_wf_dir")])
+@pytest.mark.parametrize(
+    "module,getter", [(design_docs, "_root"), (agents, "_agents_dir"), (workflow, "_wf_dir")]
+)
 def test_missing_business_directories_are_not_created_by_reads(tmp_path, monkeypatch, module, getter):
     monkeypatch.setattr(module, "resolved_ai_memory_root", lambda: tmp_path)
     path = getattr(module, getter)()
@@ -167,8 +210,12 @@ def test_active_file_groups_can_nest_without_acquiring_a_second_sqlite_writer(gu
     monkeypatch.setattr(path_config, "resolved_project_id", lambda: "active")
     monkeypatch.setattr(design_docs, "resolved_ai_memory_root", lambda: tmp_path)
     with project_file_write_scope():
-        result = design_docs.create_doc(design_docs.DocCreate(title="Nested lock", initial_content="Real content"))
-    assert (tmp_path / "tech_design" / result["id"] / "current.md").read_text(encoding="utf-8").strip() == "Real content"
+        result = design_docs.create_doc(
+            design_docs.DocCreate(title="Nested lock", initial_content="Real content")
+        )
+    assert (tmp_path / "tech_design" / result["id"] / "current.md").read_text(
+        encoding="utf-8"
+    ).strip() == "Real content"
 
 
 def test_rag_external_vector_mutation_rechecks_archival_after_embedding(guarded, monkeypatch):
@@ -182,7 +229,9 @@ def test_rag_external_vector_mutation_rechecks_archival_after_embedding(guarded,
     monkeypatch.setattr(path_config, "resolved_tenant_id", lambda: "tenant")
     monkeypatch.setattr(path_config, "resolved_project_id", lambda: "archived")
     writes = []
-    store = SimpleNamespace(ensure_collection=lambda *args: writes.append(args), upsert=lambda *args: writes.append(args))
+    store = SimpleNamespace(
+        ensure_collection=lambda *args: writes.append(args), upsert=lambda *args: writes.append(args)
+    )
     monkeypatch.setattr(rag, "get_store", lambda: store)
     monkeypatch.setattr(llm_gateway, "llm_embeddings", lambda *args: SimpleNamespace(vectors=[[0.25, 0.75]]))
     with pytest.raises(HTTPException) as raised:

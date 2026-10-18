@@ -1,3 +1,4 @@
+import { EventReceiptReturn } from "@/components/EventReceiptReturn";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Drawer, Empty, Skeleton, Tag } from "antd";
 import { useEffect, useRef, useState } from "react";
@@ -57,6 +58,7 @@ export function DeliveryIssueDetail(
       keyboard={!blocked}
       afterOpenChange={identity.afterOpenChange}
     >
+      <EventReceiptReturn projectId={props.projectId} disabled={blocked} />
       {identity.displayId && (
         <IssueDetailContent
           key={`${props.projectId}:${props.sessionId}:${identity.displayId}`}

@@ -238,10 +238,12 @@ def _jsonl_count(path: Path) -> tuple[int, int]:
 def _check_agent_outboxes(cfg) -> tuple[bool, str]:
     memory_total, memory_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "memory" / "outbox.jsonl")
     kb_total, kb_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "kb" / "outbox.jsonl")
-    event_total, event_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "events" / "outbox.jsonl")
+    from .event import queue_health
+    event_queue = queue_health(cfg.project_path, cfg.outbox_path)
+    event_total, event_bad = event_queue["pending"], event_queue["bad"]
     usage_total, usage_bad = _jsonl_count(cfg.project_path / ".sop-runtime" / "usage" / "outbox.jsonl")
-    detail = f"memory={memory_total} bad={memory_bad} kb={kb_total} bad={kb_bad} events={event_total} bad={event_bad} usage={usage_total} bad={usage_bad}"
-    if memory_bad or kb_bad or event_bad or usage_bad:
+    detail = f"memory={memory_total} bad={memory_bad} kb={kb_total} bad={kb_bad} events={event_total} bad={event_bad} dead_letter={event_queue['dead_letter']} state={event_queue['storage_state']} usage={usage_total} bad={usage_bad}"
+    if memory_bad or kb_bad or event_bad or usage_bad or event_queue["dead_letter"]:
         return False, detail
     if memory_total or kb_total or event_total or usage_total:
         return True, detail + "（可执行 sop context prepare --flush）"
@@ -258,7 +260,7 @@ _FIX_HINTS: dict[str, str] = {
     "sync API": "sop login 后 sop sync 或 sop sync --direct；agentd 会自动热加载凭据",
     "项目接入 manifest": "sop context manifest --write",
     "Agent 上下文包": "sop context prepare",
-    "Agent outbox": "坏 JSONL 需手工修复；可先 sop context prepare --flush 冲刷可用记录",
+    "Agent outbox": "事件用 sop event stats/show 检查，明确修复原因后 requeue；旧 JSONL 须先核对原意与版本，不会自动发送",
     "sync 本地状态": "坏队列行: sop sync repair；重复队列: sop sync compact；缺本地数据: sop sync pull --direct --materialize",
     "RAG 向量后端": "检查 Manager 环境变量 VECTOR_DB_TYPE / DATABASE_URL，见 ai-sop-ops/DATA_AND_VECTOR.md",
     "sop-agentd IPC": "sop agentd start  或  make start-agentd（需先 make build-agentd）",

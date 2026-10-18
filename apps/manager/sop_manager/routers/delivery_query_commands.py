@@ -35,7 +35,10 @@ def resource_kind(action):
 
 
 def recorded_ack(project, action, resource_id, result, applied_version):
-    resource = {"kind": resource_kind(action), "id": resource_id}
+    kind = resource_kind(action)
+    if action == "sync.record.apply" and isinstance(result, dict):
+        kind = {"tasks": "task", "requirements": "requirement", "issues": "issue", "sprints": "sprint"}.get(result.get("module"), kind)
+    resource = {"kind": kind, "id": resource_id}
     refs = [resource]
     if isinstance(result, dict):
         refs.extend({"kind": "task", "id": task_id} for task_id in result.get("task_ids", []))

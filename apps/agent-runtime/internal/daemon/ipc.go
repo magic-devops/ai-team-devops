@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/outbox"
-	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/pusher"
 )
 
 // IPCRequest: { "v":1, "op":"...", "name":"...", "data":{...} }
@@ -32,6 +31,7 @@ type IPCResponse struct {
 	Op             string         `json:"op,omitempty"`
 	ID             string         `json:"id,omitempty"`
 	Error          string         `json:"error,omitempty"`
+	ErrorCode      string         `json:"error_code,omitempty"`
 	Result         map[string]any `json:"result,omitempty"`
 	stopAfterReply bool
 }
@@ -69,14 +69,17 @@ func (d *Daemon) serveIPC(ctx context.Context, ln net.Listener) error {
 
 func (d *Daemon) handleIPCConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
-	reader := bufio.NewReader(conn)
+	reader := bufio.NewReader(io.LimitReader(conn, 512*1024+1))
 	line, err := reader.ReadBytes('\n')
-	if err != nil {
+	if err != nil || len(line) > 512*1024 {
+		writeIPC(conn, IPCResponse{OK: false, ErrorCode: "payload_invalid", Error: "invalid or oversized IPC frame"})
 		return
 	}
 	var req IPCRequest
-	if err := json.Unmarshal(line, &req); err != nil {
+	if err := outbox.DecodeStrict(line, &req); err != nil || req.V != 1 {
 		writeIPC(conn, IPCResponse{OK: false, Error: "invalid json"})
 		return
 	}
@@ -117,50 +120,26 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 			"stopping": true, "instance_id": d.agentID, "project_path": d.cfg.ProjectPath,
 		}, stopAfterReply: true}
 	case "health":
-		depth, _ := d.outbox.Depth(ctx)
-		hasBearer := d.cfg.Auth.Bearer != ""
-		hasKey := d.cfg.Auth.APIKey != ""
-		return IPCResponse{OK: true, Result: map[string]any{
-			"agent_id":     d.agentID,
-			"instance_id":  d.agentID,
-			"pid":          os.Getpid(),
-			"project_path": d.cfg.ProjectPath,
-			"version":      d.version,
-			"outbox_depth": depth,
-			"project_id":   d.cfg.Manager.ProjectID,
-			"has_bearer":   hasBearer,
-			"has_api_key":  hasKey,
-			"manager_url":  d.cfg.Manager.URL,
-		}}
-	case "event":
-		e := outbox.NewEvent("sop."+req.Name, stringOr(req.Data, "subject", ""), req.Data)
-		if err := d.outbox.Append(ctx, e); err != nil {
-			return IPCResponse{OK: false, Error: err.Error()}
+		result := map[string]any{"agent_id": d.agentID, "instance_id": d.agentID, "pid": os.Getpid(), "project_path": d.cfg.ProjectPath, "version": d.version, "project_id": d.currentProjectID(), "manager_url": d.cfg.Manager.URL, "legacy_files": d.legacyFiles()}
+		hasBearer, hasKey := d.cfg.Auth.Bearer != "", d.cfg.Auth.APIKey != ""
+		if d.http != nil {
+			hasBearer, hasKey = d.http.AuthConfigured()
+			result["manager_url"] = d.http.BaseURL()
 		}
-		return IPCResponse{OK: true, ID: e.ID}
-	case "task.update":
-		if d.pusher == nil {
-			return IPCResponse{OK: false, Error: "pusher not initialized"}
+		result["has_bearer"] = hasBearer
+		result["has_api_key"] = hasKey
+		stats, err := d.outbox.Stats(ctx)
+		if err != nil {
+			result["outbox_error"] = err.Error()
+		} else {
+			result["outbox_depth"] = stats.Pending
+			result["outbox"] = stats
 		}
-		record := map[string]any{"id": req.Name}
-		for k, v := range req.Data {
-			record[k] = v
-		}
-		item := pusher.PushItem{Module: "tasks", Action: "upsert", Record: record}
-		_ = d.pusher.Enqueue(item)
-		e := outbox.NewEvent("sop.sync.push", req.Name, map[string]any{
-			"module": "tasks", "action": "upsert", "record": record,
-		})
-		if err := d.outbox.Append(ctx, e); err != nil {
-			return IPCResponse{OK: false, Error: err.Error()}
-		}
-		return IPCResponse{OK: true, ID: e.ID}
-	case "issue.report":
-		e := outbox.NewEvent("sop.issue.opened", "", req.Data)
-		if err := d.outbox.Append(ctx, e); err != nil {
-			return IPCResponse{OK: false, Error: err.Error()}
-		}
-		return IPCResponse{OK: true, ID: e.ID}
+		return IPCResponse{OK: true, Op: req.Op, Result: result}
+	case "event", "task.update", "issue.report", "sync.push":
+		return IPCResponse{OK: false, Op: req.Op, ErrorCode: "event_frozen_required", Error: "freeze the original event ID/bytes/digest then use event.enqueue"}
+	case "event.enqueue", "outbox.stats", "outbox.list", "outbox.inspect", "outbox.requeue":
+		return d.queueIPC(ctx, req)
 	case "sync.trigger":
 		modules := stringOr(req.Data, "modules", "")
 		cycle, err := d.runSyncCycle(ctx, modules)
@@ -171,7 +150,7 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 		cursor, _ := cycle["cursor"].(string)
 		return IPCResponse{OK: true, Result: map[string]any{
 			"queued":  true,
-			"summary": fmt.Sprintf("pull=%d push_sent=%v cursor=%s", total, cycle["push_sent"], cursor),
+			"summary": fmt.Sprintf("pull=%d pending=%v cursor=%s", total, cycle["outbox_pending"], cursor),
 			"cycle":   cycle,
 		}}
 	case "sync.pull":
@@ -187,39 +166,6 @@ func (d *Daemon) dispatchIPC(ctx context.Context, req IPCRequest) IPCResponse {
 			"snapshot_path": res.SnapshotPath,
 			"merged":        res.Merged,
 		}}
-	case "sync.push":
-		if d.pusher == nil {
-			return IPCResponse{OK: false, Error: "pusher not initialized"}
-		}
-		module := stringOr(req.Data, "module", "tasks")
-		action := stringOr(req.Data, "action", "upsert")
-		record, _ := req.Data["record"].(map[string]any)
-		if record == nil {
-			record = map[string]any{}
-			for k, v := range req.Data {
-				if k == "module" || k == "action" || k == "idempotency_key" {
-					continue
-				}
-				record[k] = v
-			}
-		}
-		item := pusher.PushItem{Module: module, Action: action, Record: record}
-		if k := stringOr(req.Data, "idempotency_key", ""); k != "" {
-			item.IdempotencyKey = k
-		}
-		if err := d.pusher.Enqueue(item); err != nil {
-			return IPCResponse{OK: false, Error: err.Error()}
-		}
-		if err := d.pusher.PushDirect(ctx, item); err != nil {
-			e := outbox.NewEvent("sop.sync.push", stringOr(record, "id", ""), map[string]any{
-				"module": module, "action": action, "record": record,
-			})
-			if err := d.outbox.Append(ctx, e); err != nil {
-				return IPCResponse{OK: false, Error: err.Error()}
-			}
-			return IPCResponse{OK: true, ID: e.ID, Result: map[string]any{"queued": true}}
-		}
-		return IPCResponse{OK: true, Result: map[string]any{"sent": true}}
 	default:
 		return IPCResponse{OK: false, Error: "unknown op: " + req.Op}
 	}

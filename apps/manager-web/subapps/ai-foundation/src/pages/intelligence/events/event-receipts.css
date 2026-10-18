@@ -1,0 +1,117 @@
+.event-receipts,
+.event-receipt-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.event-receipt-heading,
+.event-receipt-actions,
+.event-receipt-tags,
+.event-receipt-pager,
+.event-receipt-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.event-receipt-heading {
+  justify-content: space-between;
+}
+.event-receipt-heading h2,
+.event-receipt-heading h3 {
+  margin: 0;
+}
+.event-receipt-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.event-receipt-row,
+.event-receipt-result,
+.event-receipt-retry,
+.event-receipt-attempt {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.event-receipt-row h3 {
+  margin: 6px 0;
+}
+.event-receipt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.event-receipt-text,
+.event-receipt-detail dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.event-receipt-detail dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.event-receipt-detail dt,
+.event-receipt-note {
+  font-size: 12px;
+  color: var(--muted-strong);
+  overflow-wrap: anywhere;
+}
+.event-receipt-detail dd {
+  margin: 4px 0;
+}
+.event-receipt-raw {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  padding: 10px;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.event-receipt-retry label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.event-receipt-retry .event-receipt-actions {
+  margin-top: 10px;
+}
+.event-receipt-pager {
+  justify-content: flex-end;
+}
+.event-receipt-row .ant-btn {
+  white-space: normal;
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 680px) {
+  .event-receipt-heading,
+  .event-receipt-filters,
+  .event-receipt-pager {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .event-receipt-filters label {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .event-receipt-detail dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .event-receipt-actions > .ant-btn {
+    flex: 1 1 auto;
+    min-height: 32px;
+  }
+  .event-receipt-row {
+    padding: 10px;
+  }
+}

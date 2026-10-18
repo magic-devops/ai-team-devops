@@ -1,3 +1,4 @@
+import { EventReceiptReturn } from "@/components/EventReceiptReturn";
 import {
   fetchDeliveryTaskData,
   invalidateDeliveryQueries,
@@ -329,6 +330,10 @@ export function DeliveryTaskDetail({
   }
   return (
     <div className="delivery-task-detail">
+      <EventReceiptReturn
+        projectId={projectId}
+        disabled={executionExit.pending || busy}
+      />
       {query.isPending && <Skeleton active paragraph={{ rows: 3 }} />}
       {query.error && (
         <Alert

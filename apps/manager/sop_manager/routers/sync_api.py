@@ -7,10 +7,10 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import DateTime
 from sqlalchemy.orm import Session
 
@@ -21,9 +21,11 @@ from sop_manager.path_config import (
     resolved_tenant_id,
 )
 from sop_manager.routers.sql_models import Issue, Requirement, Sprint, Task, get_session
-from sop_manager.sync_journal import append_event, recent_events
-from sop_manager.task_acceptance import normalize_task_acceptance
-from sop_manager.task_owner import validate_task_owner_values
+from sop_manager.sync_journal import recent_events
+
+from .auth_sql import current_user_or_apikey
+from .event_contract import EventResult
+from .sql_models import User
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
@@ -357,10 +359,12 @@ def sync_pull(
 
 
 class SyncPushIn(BaseModel):
-    module: str
+    model_config = ConfigDict(extra="forbid", strict=True)
+    module: Literal["tasks", "requirements", "issues", "sprints", "rules", "specs", "templates"]
     action: Literal["upsert", "delete"] = "upsert"
-    record: dict[str, Any] = Field(default_factory=dict)
-    idempotency_key: str = ""
+    record: dict[str, Any]
+    expected_version: int = Field(ge=0, strict=True)
+    idempotency_key: str = Field(min_length=1, max_length=128)
 
 
 def _ws_sync_event(pid: str, module: str, action: str, record_id: str) -> None:
@@ -391,126 +395,37 @@ def sync_journal(
     return {"ok": True, "items": items, "total": len(items)}
 
 
-@router.post("/push")
-def sync_push(body: SyncPushIn, db: Session = Depends(get_session)) -> dict[str, Any]:
-    pid = _require_scope()
-    tid = resolved_tenant_id()
-    if body.module in _ASSET_MODULES:
-        return _sync_push_asset(body, pid)
-    if body.module not in _STRUCTURED_MODULES:
-        raise HTTPException(400, f"未知模块: {body.module}")
-    rec = dict(body.record or {})
-    rid = str(rec.get("id") or "").strip()
-    if body.action == "upsert" and not rid:
-        raise HTTPException(400, "upsert 需要 record.id")
+@router.post("/push", response_model=EventResult)
+def sync_push(
+    body: SyncPushIn,
+    request: Request,
+    user: Annotated[User, Depends(current_user_or_apikey)],
+    db: Session = Depends(get_session),
+    project_id: str = Header(default="", alias="X-Project-Id"),
+) -> dict[str, Any]:
+    """Direct sync shares the original durable inbox and canonical processor."""
+    import json
 
-    model_map = {
-        "tasks": Task,
-        "requirements": Requirement,
-        "issues": Issue,
-        "sprints": Sprint,
+    from sqlalchemy import select
+
+    from .event_common import authorize, date, digest, now, scope_key
+    from .event_contract import IngestIn
+    from .events_ingest import ingest
+    from .sql_models import EventInbox
+
+    project, actor, _, _ = authorize(db, user, project_id, request)
+    eid = "sync-" + digest(json.dumps([project.tenant_id, project.id, actor.id, body.idempotency_key]))
+    previous = db.scalar(select(EventInbox).where(EventInbox.scope_key == scope_key(project, actor.id, eid)))
+    event = {
+        "specversion": "1.0", "id": eid, "type": "sop.sync.push", "source": "manager.sync",
+        "subject": str(body.record.get("id") or ""),
+        "time": previous.event_time if previous else date(now()),
+        "datacontenttype": "application/json",
+        "data": body.model_dump(exclude={"idempotency_key"}),
     }
-    model = model_map[body.module]
-    if model is Task and body.action != "delete":
-        from .sql_models import Project
-        project = db.get(Project, pid)
-        if not project or project.tenant_id != tid:
-            raise HTTPException(422, "Task project scope does not exist")
-        rec = validate_task_owner_values(db, project, rec)
-
-    if body.action == "delete":
-        if not rid:
-            raise HTTPException(400, "delete 需要 record.id")
-        row = db.query(model).filter_by(id=rid, project_id=pid).first()
-        if row:
-            db.delete(row)
-            db.commit()
-        evt = append_event(
-            module=body.module,
-            action="delete",
-            record_id=rid,
-            idempotency_key=body.idempotency_key,
-        )
-        _ws_sync_event(pid, body.module, "delete", rid)
-        return {"ok": True, "action": "delete", "id": rid, "event_id": evt["id"]}
-
-    row = db.query(model).filter_by(id=rid, project_id=pid).first()
-    allowed = {c.name for c in model.__table__.columns}
-    cols = {c.name: c for c in model.__table__.columns}
-    patch = {
-        k: _coerce_column_value(cols[k], v)
-        for k, v in rec.items()
-        if k in allowed and k not in ("id", "tenant_id", "project_id")
-    }
-    if model is Task and "acceptance_criteria" in patch:
-        try:
-            patch["acceptance_criteria"] = normalize_task_acceptance(patch["acceptance_criteria"])
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-    if row is None:
-        row = model(id=rid, tenant_id=tid, project_id=pid)
-        db.add(row)
-    for k, v in patch.items():
-        setattr(row, k, v)
-    if hasattr(row, "updated_at"):
-        row.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(row)
-    evt = append_event(
-        module=body.module,
-        action="upsert",
-        record_id=rid,
-        idempotency_key=body.idempotency_key,
-        payload={"keys": list(patch.keys())},
-    )
-    _ws_sync_event(pid, body.module, "upsert", rid)
-    return {"ok": True, "action": "upsert", "id": rid, "event_id": evt["id"], "record": _row_dict(row)}
-
-
-def _sync_push_asset(body: SyncPushIn, pid: str) -> dict[str, Any]:
-    from sop_manager.project_write_guard import project_file_write_scope
-
-    with project_file_write_scope():
-        rec = dict(body.record or {})
-        target, rel = _asset_target_path(body.module, rec)
-        if body.action == "delete":
-            if target.exists():
-                target.unlink()
-            evt = append_event(
-                module=body.module,
-                action="delete",
-                record_id=rel,
-                idempotency_key=body.idempotency_key,
-            )
-            _ws_sync_event(pid, body.module, "delete", rel)
-            return {"ok": True, "action": "delete", "id": rel, "event_id": evt["id"]}
-
-        content = rec.get("content")
-        if content is None:
-            raise HTTPException(400, "资产 upsert 需要 record.content")
-        text = str(content)
-        if len(text.encode("utf-8")) > 512_000:
-            raise HTTPException(400, "资产内容超过 512KB")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding="utf-8")
-        evt = append_event(
-            module=body.module,
-            action="upsert",
-            record_id=rel,
-            idempotency_key=body.idempotency_key,
-            payload={"path": rel, "size": len(text.encode("utf-8"))},
-        )
-        _ws_sync_event(pid, body.module, "upsert", rel)
-        return {
-            "ok": True,
-            "action": "upsert",
-            "id": rel,
-            "event_id": evt["id"],
-            "record": {
-                "id": rel,
-                "module": body.module,
-                "path": rel,
-                "size": target.stat().st_size,
-                "updated_at": _iso(datetime.fromtimestamp(target.stat().st_mtime)),
-            },
-        }
+    raw = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    incoming = IngestIn(expected_tenant_id=project.tenant_id, expected_project_id=project.id, expected_producer_id=actor.id, events=[{"id":eid,"event_json":raw,"digest":digest(raw)}])
+    result = ingest(incoming, actor, db, request, project.id)["results"][0]
+    if result["outcome"] == "rejected":
+        raise HTTPException(409, result["error"])
+    return result

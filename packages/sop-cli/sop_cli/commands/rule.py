@@ -254,13 +254,27 @@ def apply(
 
 
 @app.command()
-def flush() -> None:
-    """直连 Manager 推送本地 RULES.md。"""
-    f = _rules_file()
-    if not f.is_file():
+def flush(
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    key: str = typer.Option(..., "--key"),
+    event_time: str = typer.Option(..., "--time"),
+) -> None:
+    """明确版本与原始操作后持久推送当前规则。"""
+    from .event import _flush
+    from .sync import _frozen_sync
+
+    target = _rules_file()
+    if not target.is_file():
         ok("RULES.md empty")
         return
-    rel = f.relative_to(get_config().project_path).as_posix()
-    out = get_client().sync_push("rules", {"path": rel, "content": f.read_text(encoding="utf-8")}, action="upsert")
-    console.print_json(data=out)
-    ok(f"rules flushed: {rel}")
+    console.print_json(
+        data=_frozen_sync(
+            "rules",
+            {"path": target.name, "content": target.read_bytes().decode("utf-8")},
+            "upsert",
+            key,
+            event_time,
+            expected_version,
+        )
+    )
+    console.print_json(data=_flush(20))

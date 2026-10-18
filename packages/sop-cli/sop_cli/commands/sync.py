@@ -558,212 +558,142 @@ def sync_compact(
 
 @app.command("flush")
 def sync_flush(
-    limit: int = typer.Option(0, "--limit", help="最多推送 N 条；0 表示全部"),
-    compact: bool = typer.Option(True, "--compact/--no-compact", help="推送前先压缩同一对象的重复变更"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="只预览队列，不实际推送"),
+    limit: int = typer.Option(20, "--limit", min=1, max=50),
+    dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
-    """直连 Manager 冲刷本地 push_queue，不依赖 sop-agentd。"""
-    import json
+    """冲刷唯一 SQLite 队列；旧 JSONL 仅保留待人工检查。"""
+    from sop_sdk.event_outbox import EventOutbox
 
-    from .._util import console, get_client, get_config, kv, ok, warn
+    from .._util import console
+    from .event import _flush, _legacy_files, _outbox_path
 
-    q = _queue_path()
-    if not q.is_file():
-        ok("push_queue 为空")
-        return
-    items, bad = _load_queue_items()
-    if not items:
-        ok("push_queue 为空")
-        return
-    if compact:
-        before = len(items)
-        items = _compact_queue_items(items)
-        if before != len(items) and not dry_run:
-            _write_queue_items(items)
-            ok(f"push_queue 已预压缩 {before} → {len(items)}")
-    selected = items[:limit] if limit and limit > 0 else items
-    remaining_unselected = items[len(selected) :]
+    try:
+        if dry_run:
+            with EventOutbox(_outbox_path()) as box:
+                console.print_json(
+                    data={"queue": box.list(state="pending", limit=limit), "legacy_files": _legacy_files()}
+                )
+        else:
+            console.print_json(data=_flush(limit))
+        if _legacy_files():
+            warn("发现旧文件；不会自动发送、改写或绑定。请检查原意和版本后以 event enqueue-file 明确入队。")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
-    kv("queue_total", len(items))
-    kv("selected", len(selected))
-    if bad:
-        warn(f"跳过无法解析/缺少 id 的队列行: {bad}")
-    if dry_run:
-        preview = [
-            {
-                "module": it.get("module"),
-                "action": it.get("action") or "upsert",
-                "id": (it.get("record") or {}).get("id") or (it.get("record") or {}).get("path"),
-            }
-            for it in selected[:50]
-        ]
-        console.print_json(data={"dry_run": True, "items": preview, "omitted": max(0, len(selected) - len(preview))})
-        return
-
-    cli = get_client(get_config())
-    sent = 0
-    failed = 0
-    pending: list[dict] = []
-    for it in selected:
-        module = str(it.get("module") or "")
-        action = str(it.get("action") or "upsert")
-        record = dict(it.get("record") or {})
-        idem = str(it.get("idempotency_key") or "")
-        try:
-            cli.sync_push(module, record, action=action, idempotency_key=idem)
-            sent += 1
-        except Exception as e:
-            failed += 1
-            pending.append(it)
-            warn(f"push 失败，保留队列: {module}/{record.get('id') or record.get('path') or '-'}: {e}")
-    pending.extend(remaining_unselected)
-    if pending:
-        _write_queue_items(pending)
-    else:
-        _write_queue_items([])
-    ok(f"sync flush 完成 sent={sent} failed={failed} pending={len(pending)}")
 
 
 @app.command("push")
 def sync_push_cmd(
-    module: str = typer.Argument(..., help="tasks|requirements|issues|sprints|rules|specs|templates"),
-    record_json: str = typer.Argument(..., help="JSON 记录；结构化须含 id，资产须含 path/content"),
-    action: str = typer.Option("upsert", "--action", help="upsert|delete"),
-    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    module: str,
+    record_json: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    event_time: str = typer.Option(..., "--time"),
+    action: str = typer.Option("upsert", "--action"),
 ) -> None:
-    """向 Manager 推送单条结构化变更或规约资产（幂等键可选）。"""
-    import json
+    """冻结原始版本与内容，先持久入队，再确认送达。"""
+    from sop_sdk.event_envelope import strict_json
 
-    from .._util import console, get_client, get_config, ok, warn
+    from .._util import console
+    from .event import _flush
 
     try:
-        rec = json.loads(record_json)
-        if not isinstance(rec, dict):
-            raise ValueError("record 须为 JSON object")
-        r = get_client(get_config()).sync_push(
-            module, rec, action=action, idempotency_key=idempotency_key
+        record = strict_json(record_json)
+        if not isinstance(record, dict):
+            raise ValueError("record must be JSON object")
+        console.print_json(
+            data=_frozen_sync(module, record, action, idempotency_key, event_time, expected_version)
         )
-        console.print_json(data=r)
-        ok(f"sync push {action} {module}/{rec.get('id', '-')}")
-    except json.JSONDecodeError:
-        warn("record 须为合法 JSON")
-        raise typer.Exit(2) from None
-    except Exception as e:
-        warn(str(e))
-        raise typer.Exit(2) from e
+        console.print_json(data=_flush(20))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
 
 
 @app.command("enqueue")
 def sync_enqueue_cmd(
-    module: str = typer.Argument(..., help="tasks|requirements|issues|sprints|rules|specs|templates"),
-    record_json: str = typer.Argument(..., help="JSON 记录；结构化须含 id，资产须含 path/content"),
-    action: str = typer.Option("upsert", "--action", help="upsert|delete"),
-    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    module: str,
+    record_json: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    event_time: str = typer.Option(..., "--time"),
+    action: str = typer.Option("upsert", "--action"),
 ) -> None:
-    """把单条变更写入本地 push_queue，不访问 Manager。"""
-    import json
+    from sop_sdk.event_envelope import strict_json
 
-    from .._util import console, ok, warn
+    from .._util import console
 
-    if module not in {"tasks", "requirements", "issues", "sprints", "rules", "specs", "templates"}:
-        warn("未知模块")
-        raise typer.Exit(2)
-    if action not in {"upsert", "delete"}:
-        warn("action 须为 upsert|delete")
-        raise typer.Exit(2)
     try:
-        rec = json.loads(record_json)
-        if not isinstance(rec, dict):
-            raise ValueError("record 须为 JSON object")
-        item = _enqueue_item(module, rec, action=action, idempotency_key=idempotency_key)
-        console.print_json(data=item)
-        ok(f"sync enqueue {action} {module}/{rec.get('id') or rec.get('path')}")
-    except json.JSONDecodeError:
-        warn("record 须为合法 JSON")
-        raise typer.Exit(2) from None
-    except Exception as e:
-        warn(str(e))
-        raise typer.Exit(2) from e
+        record = strict_json(record_json)
+        if not isinstance(record, dict):
+            raise ValueError("record must be JSON object")
+        console.print_json(
+            data=_frozen_sync(module, record, action, idempotency_key, event_time, expected_version)
+        )
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
 
 
 @app.command("push-file")
 def sync_push_file(
-    module: str = typer.Argument(..., help="rules|specs|templates"),
-    path: str = typer.Argument(..., help="本地文件路径"),
-    remote_path: str = typer.Option("", "--remote-path", help="写入 Manager 的相对路径；默认使用本地相对路径"),
-    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    module: str,
+    path: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    event_time: str = typer.Option(..., "--time"),
+    remote_path: str = typer.Option("", "--remote-path"),
 ) -> None:
-    """推送单个规约/规则/模板文件，不需要手写 JSON。"""
-    from pathlib import Path
+    from .._util import console
+    from .event import _flush
 
-    from .._util import console, get_client, get_config, ok, warn
-
-    if module not in {"rules", "specs", "templates"}:
-        warn("push-file 仅支持 rules|specs|templates")
-        raise typer.Exit(2)
-    cfg = get_config()
-    p = Path(path).expanduser()
-    if not p.is_absolute():
-        p = (cfg.project_path / p).resolve()
-    if not p.is_file():
-        warn(f"文件不存在: {p}")
-        raise typer.Exit(2)
     try:
-        rel = remote_path.strip() or p.relative_to(cfg.project_path).as_posix()
-    except ValueError:
-        rel = remote_path.strip() or p.name
-    content = p.read_text(encoding="utf-8")
-    try:
-        r = get_client(cfg).sync_push(
-            module,
-            {"path": rel, "content": content},
-            action="upsert",
-            idempotency_key=idempotency_key,
+        console.print_json(
+            data=_frozen_sync(
+                module,
+                _sync_file_record(module, path, remote_path),
+                "upsert",
+                idempotency_key,
+                event_time,
+                expected_version,
+            )
         )
-        console.print_json(data=r)
-        ok(f"sync push-file {module}/{rel}")
-    except Exception as e:
-        warn(str(e))
-        raise typer.Exit(2) from e
+        console.print_json(data=_flush(20))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
 
 
 @app.command("enqueue-file")
 def sync_enqueue_file(
-    module: str = typer.Argument(..., help="rules|specs|templates"),
-    path: str = typer.Argument(..., help="本地文件路径"),
-    remote_path: str = typer.Option("", "--remote-path", help="写入 Manager 的相对路径；默认使用本地相对路径"),
-    idempotency_key: str = typer.Option("", "--idempotency-key"),
+    module: str,
+    path: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    idempotency_key: str = typer.Option(..., "--idempotency-key"),
+    event_time: str = typer.Option(..., "--time"),
+    remote_path: str = typer.Option("", "--remote-path"),
 ) -> None:
-    """把单个规则/规约/模板文件写入本地 push_queue，不访问 Manager。"""
-    from pathlib import Path
+    from .._util import console
 
-    from .._util import console, get_config, ok, warn
+    try:
+        console.print_json(
+            data=_frozen_sync(
+                module,
+                _sync_file_record(module, path, remote_path),
+                "upsert",
+                idempotency_key,
+                event_time,
+                expected_version,
+            )
+        )
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
-    if module not in {"rules", "specs", "templates"}:
-        warn("enqueue-file 仅支持 rules|specs|templates")
-        raise typer.Exit(2)
-    cfg = get_config()
-    p = Path(path).expanduser()
-    if not p.is_absolute():
-        p = (cfg.project_path / p).resolve()
-    if not p.is_file():
-        warn(f"文件不存在: {p}")
-        raise typer.Exit(2)
-    try:
-        rel = remote_path.strip() or p.relative_to(cfg.project_path).as_posix()
-    except ValueError:
-        rel = remote_path.strip() or p.name
-    if rel.startswith("/") or ".." in Path(rel).parts:
-        warn("remote-path 必须是安全相对路径")
-        raise typer.Exit(2)
-    rec = {"path": rel, "content": p.read_text(encoding="utf-8")}
-    try:
-        item = _enqueue_item(module, rec, action="upsert", idempotency_key=idempotency_key)
-        console.print_json(data={"module": item["module"], "action": item["action"], "path": rel})
-        ok(f"sync enqueue-file {module}/{rel}")
-    except Exception as e:
-        warn(str(e))
-        raise typer.Exit(2) from e
 
 
 @app.command("watch")
@@ -789,7 +719,7 @@ def sync_watch(
         counts = _watch_once(selected, enqueue_deletes=not no_delete)
         console.print_json(data={"modules": sorted(selected), **counts})
         if flush and (counts["created"] or counts["updated"] or counts["deleted"]):
-            sync_flush(limit=0, compact=True, dry_run=False)
+            sync_flush(limit=20, dry_run=False)
         return counts
 
     if once:
@@ -806,42 +736,27 @@ def sync_watch(
 
 
 def _direct_sync_cycle() -> dict | None:
-    """直连 Manager 执行 pull+push（login 后立即可用，不依赖 agentd 内存中的旧 token）。"""
-    import json
-
+    """Read remote data and flush only frozen SQLite intents; never replay legacy JSONL."""
     from .._util import get_client, get_config
+    from .event import _flush, _legacy_files
 
     cfg = get_config()
     if not cfg.project_id:
-        warn("agent.toml 未配置 project_id；可执行 sop login 或编辑 .sop-runtime/agent.toml")
+        warn("请先明确项目")
         return None
-    cli = get_client(cfg)
-    q = _queue_path()
-    flushed = {"sent": 0, "failed": 0}
-    if q.is_file():
-        raw_items, _bad = _load_queue_items()
-        raw_items = _compact_queue_items(raw_items)
-        pending: list[dict] = []
-        for raw_item in raw_items:
-            it: dict | None = raw_item
-            try:
-                if not isinstance(it, dict):
-                    raise ValueError("bad queue item")
-                cli.sync_push(
-                    str(it.get("module") or ""),
-                    dict(it.get("record") or {}),
-                    action=str(it.get("action") or "upsert"),
-                    idempotency_key=str(it.get("idempotency_key") or ""),
-                )
-                flushed["sent"] += 1
-            except Exception:
-                flushed["failed"] += 1
-                if it is not None:
-                    pending.append(it)
-        _write_queue_items(pending)
-    pull = cli.sync_pull(cursor="", modules="tasks,requirements,issues,sprints,rules,specs,templates")
+    flushed = _flush(20)
+    pull = get_client(cfg).sync_pull(
+        cursor="", modules="tasks,requirements,issues,sprints,rules,specs,templates"
+    )
     materialized = _materialize_pull_result(pull, write_assets=True)
-    return {"pull": pull, "project_id": cfg.project_id, "flushed": flushed, "materialized": materialized}
+    return {
+        "pull": pull,
+        "project_id": cfg.project_id,
+        "flushed": flushed,
+        "materialized": materialized,
+        "legacy_files": _legacy_files(),
+    }
+
 
 
 @app.callback(invoke_without_command=True)
@@ -902,3 +817,49 @@ def sync(
     err(f"sync 失败：{err_msg}")
     warn("若刚 sop login：sop agentd stop && sop agentd start，或 sop sync --direct")
     raise typer.Exit(2)
+
+
+def _frozen_sync(module, record, action, key, event_time, expected_version):
+    from sop_sdk.event_envelope import FrozenEvent, integer, text_field
+    from sop_sdk.event_outbox import EventOutbox
+
+    from .._util import get_config
+    from .event import _outbox_path
+
+    integer(expected_version, "expected_version")
+    text_field(key, "idempotency_key")
+    if module not in {
+        "tasks",
+        "requirements",
+        "issues",
+        "sprints",
+        "rules",
+        "specs",
+        "templates",
+    } or action not in {"upsert", "delete"}:
+        raise ValueError("invalid sync module/action")
+    frozen = FrozenEvent.create(
+        "sop.sync.push",
+        {"expected_version": expected_version, "module": module, "action": action, "record": record},
+        event_id=key,
+        time=event_time,
+        source="sop-cli",
+    )
+    with EventOutbox(_outbox_path()) as box:
+        return box.enqueue(frozen, get_config().project_id)
+
+
+def _sync_file_record(module, path, remote_path):
+    from pathlib import Path
+
+    from .._util import get_config
+
+    if module not in {"rules", "specs", "templates"}:
+        raise ValueError("file sync requires rules/specs/templates")
+    cfg = get_config()
+    target = Path(path).expanduser()
+    if not target.is_absolute():
+        target = cfg.project_path / target
+    if not remote_path:
+        remote_path = target.relative_to(cfg.project_path).as_posix()
+    return {"path": remote_path, "content": target.read_bytes().decode("utf-8")}

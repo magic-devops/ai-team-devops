@@ -1,172 +1,326 @@
-"""
-@module: routers.events_ingest
-@purpose: 接收 sop-agentd outbox 推送的事件，统一进 audit + 触发内部 EventBus
-@stable: POST /api/v1/events:ingest 路径稳定；幂等键 = event_id
-@ai_safe_edit:
-  - 新增 event.type 处理：在 _HANDLERS 注册
-  - 改 EventBus：替换 _publish 实现（Redis Streams / NATS）
-"""
-from __future__ import annotations
+"""Durable authenticated frozen-event handoff, separate from business completion."""
 
+import json
 import logging
-import time
-from threading import RLock
-from typing import Any, Callable
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from sop_manager.sync_journal import append_event, recent_events
-from sop_manager.routers.metrics import current_trace_context
+from sop_manager.project_write_guard import require_project_operation
+
+from . import event_contract as c
+from . import sql_models as m
+from .auth_sql import current_user_or_apikey
+from .event_common import (
+    authorize,
+    date,
+    digest,
+    fail,
+    identifier,
+    inbox,
+    now,
+    parse,
+    processing,
+    scope_key,
+)
+from .event_contract import IngestIn as IngestIn
+from .event_contract import IngestOut as IngestOut
+from .event_processing import handler, original_version, process
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 _log = logging.getLogger("sop.events")
 
-# 进程级幂等表（30 分钟窗口）；M9 改 Redis SETNX EX
-_IDEMP: dict[str, float] = {}
-_IDEMP_LOCK = RLock()
-_IDEMP_TTL = 1800
+
+def _identity(project, user):
+    return {"tenant_id": project.tenant_id, "project_id": project.id, "producer_id": user.id}
 
 
-def _idempotent(event_id: str) -> bool:
-    """返回 True 表示首次见到；False 表示重复。"""
-    now = time.time()
-    with _IDEMP_LOCK:
-        # 顺便清理过期
-        if len(_IDEMP) > 10000:
-            for k in list(_IDEMP.keys()):
-                if _IDEMP[k] < now:
-                    _IDEMP.pop(k, None)
-        if event_id in _IDEMP and _IDEMP[event_id] > now:
-            return False
-        _IDEMP[event_id] = now + _IDEMP_TTL
-        return True
+@router.get(":identity", response_model=c.Identity)
+def identity(
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    project, actor, _, _ = authorize(db, user, project_id, request)
+    return _identity(project, actor)
 
 
-class CloudEvent(BaseModel):
-    specversion: str = "1.0"
-    id: str
-    type: str
-    source: str = ""
-    subject: str = ""
-    time: str | None = None
-    datacontenttype: str | None = "application/json"
-    data: dict[str, Any] = Field(default_factory=dict)
+def _intake(db, project, user, credential, item, event):
+    key = scope_key(project, user.id, item.id)
+    row = db.scalar(select(m.EventInbox).where(m.EventInbox.scope_key == key))
+    if row:
+        if row.digest != item.digest:
+            fail("event_digest_conflict", "This scoped ID already has different frozen bytes")
+        return row, "duplicate"
+    require_project_operation(db, project.tenant_id, project.id)
+    rid = identifier()
+    kind = handler(event)
+    plan = None
+    if kind == "sync.asset":
+        from .event_assets import plan_asset
 
-
-class IngestIn(BaseModel):
-    events: list[CloudEvent]
-
-
-class IngestOut(BaseModel):
-    accepted: list[str] = Field(default_factory=list)
-    duplicated: list[str] = Field(default_factory=list)
-    journal_ids: list[str] = Field(default_factory=list)
-
-
-# ── 事件类型处理表 ───────────────────────────────────────────────
-Handler = Callable[[CloudEvent], None]
-_HANDLERS: dict[str, Handler] = {}
-
-
-def register_handler(event_type: str) -> Callable[[Handler], Handler]:
-    def deco(fn: Handler) -> Handler:
-        _HANDLERS[event_type] = fn
-        return fn
-    return deco
-
-
-@register_handler("sop.agent.heartbeat")
-def _on_heartbeat(e: CloudEvent) -> None:
-    _log.info("heartbeat agent_id=%s outbox_depth=%s",
-              e.data.get("agent_id"), (e.data.get("telemetry") or {}).get("outbox_depth"))
-
-
-@register_handler("sop.tool.blocked")
-def _on_blocked(e: CloudEvent) -> None:
-    _log.warning("tool blocked: tool=%s reason=%s", e.data.get("tool"), e.data.get("reason"))
-
-
-@register_handler("sop.reflection.added")
-def _on_reflection(e: CloudEvent) -> None:
-    """转写到 LanceDB rules / 反思表（沿用现有 db.py）。"""
-    try:
-        from sop_manager.routers.db import LanceOps  # type: ignore[import-not-found]
-        LanceOps().add_rule(  # 暂复用 add_rule，M11 单独建 reflections 流
-            rule=e.data.get("content", ""),
-            category=e.data.get("category", "reflection"),
-            source="agentd",
-            confidence=float(e.data.get("confidence", 0.7)),
-        )
-    except Exception as err:  # pragma: no cover
-        _log.warning("write reflection: %s", err)
-
-
-@router.post(":ingest", response_model=IngestOut)
-def ingest(body: IngestIn) -> IngestOut:
-    if not body.events:
-        raise HTTPException(400, "events 不能为空")
-    out = IngestOut()
-    for e in body.events:
-        if not _idempotent(e.id):
-            out.duplicated.append(e.id)
-            continue
         try:
-            handler = _HANDLERS.get(e.type)
-            if handler:
-                handler(e)
-            journal = _publish(e)
-            out.accepted.append(e.id)
-            if journal.get("id"):
-                out.journal_ids.append(str(journal["id"]))
-        except Exception as err:  # pragma: no cover
-            _log.warning("event %s handle failed: %s", e.id, err)
-    return out
-
-
-@router.get("")
-def list_events(
-    since: str = Query("", description="只返回 ts 大于该值的事件"),
-    limit: int = Query(100, ge=1, le=500),
-) -> dict[str, Any]:
-    """查询统一事件流水，供 Web/CLI/Agent 断点续读。"""
-    if not isinstance(since, str):
-        since = ""
-    if not isinstance(limit, int):
-        limit = 100
-    items = recent_events(since_ts=since, limit=limit)
-    return {"items": items, "total": len(items), "cursor": items[-1]["ts"] if items else since}
-
-
-def _event_payload(e: CloudEvent) -> dict[str, Any]:
-    if hasattr(e, "model_dump"):
-        return e.model_dump()  # pydantic v2
-    return e.dict()  # pydantic v1
-
-
-def _publish(e: CloudEvent) -> dict[str, Any]:
-    """落入同步事件日志并转发给 WSS 订阅端。"""
-    payload = _event_payload(e)
-    trace = current_trace_context()
-    data = payload.setdefault("data", {})
-    if isinstance(data, dict):
-        data.setdefault("trace_id", trace["trace_id"])
-        data.setdefault("correlation_id", trace["correlation_id"])
-        if trace.get("agent_run_id"):
-            data.setdefault("agent_run_id", trace["agent_run_id"])
-    evt = append_event(
-        module="events",
-        action=e.type,
-        record_id=e.subject or e.id,
-        idempotency_key=e.id,
-        payload=payload,
+            expected = original_version(event.data)
+            workspace = db.get(m.DeliveryWorkspace, project.id)
+            if expected != (workspace.version if workspace else 0):
+                fail("event_business_conflict", "Original project version changed")
+            plan = plan_asset(project, event)
+        except HTTPException as exc:
+            plan = {
+                "error": exc.detail["code"] if isinstance(exc.detail, dict) else "event_asset_plan_invalid"
+            }
+        except (OSError, ValueError):
+            plan = {"error": "event_asset_plan_invalid"}
+    row = m.EventInbox(
+        id=rid,
+        scope_key=key,
+        tenant_id=project.tenant_id,
+        project_id=project.id,
+        producer_id=user.id,
+        credential_id=credential,
+        event_id=item.id,
+        event_json=item.event_json,
+        digest=item.digest,
+        event_type=event.type,
+        subject=event.subject,
+        source=event.source,
+        event_time=event.time,
     )
-    try:
-        from sop_manager.routers.ws_events import broadcast
+    db.add(row)
+    db.flush()
+    db.add(
+        m.EventProcessing(
+            id=rid,
+            tenant_id=project.tenant_id,
+            project_id=project.id,
+            handler=kind,
+            operation_id=rid if kind == "sync.asset" else None,
+            plan=plan,
+            state="pending",
+            reason_code=None if kind else "handler_not_configured",
+            retryable=bool(kind),
+        )
+    )
+    db.flush()
+    return row, "stored"
 
-        project_id = str(e.data.get("project_id") or e.data.get("project_code") or "")
-        broadcast(project_id, {"type": e.type, "id": e.id, "subject": e.subject, "data": e.data, "journal": evt})
-    except Exception as err:  # pragma: no cover
-        _log.debug("ws broadcast skipped type=%s id=%s err=%s", e.type, e.id, err)
-    _log.debug("event published type=%s id=%s subject=%s journal=%s", e.type, e.id, e.subject, evt.get("id"))
-    return evt
+
+def _hint(project, row, state):
+    try:
+        from .ws_events import broadcast
+
+        broadcast(
+            project.id,
+            {
+                "type": "sop.event.received",
+                "receipt_id": row.id,
+                "event_id": row.event_id,
+                "digest": row.digest,
+                "processing_state": state,
+            },
+        )
+    except Exception:
+        _log.warning("event notification failed after committed receipt")
+
+
+def _validate_batch(body, project, actor, permissions):
+    if not permissions["write"]:
+        fail("event_write_denied", "Project write permission required", 403)
+    expected = (body.expected_tenant_id, body.expected_project_id, body.expected_producer_id)
+    if expected != (project.tenant_id, project.id, actor.id):
+        fail("event_identity_mismatch", "Authenticated identity does not match the frozen queue binding")
+    if len({i.id for i in body.events}) != len(body.events):
+        fail("event_batch_invalid", "Duplicate event IDs in one batch", 422)
+    if sum(len(i.event_json.encode("utf-8", errors="surrogatepass")) for i in body.events) > 1048576:
+        fail("event_batch_too_large", "Batch exceeds 1MiB", 422)
+
+
+def _persist_batch(db, project, actor, credential, events):
+    results = []
+    accepted = []
+    try:
+        for item in events:
+            try:
+                event = parse(item, project)
+                with db.begin_nested():
+                    row, outcome = _intake(db, project, actor, credential, item, event)
+                accepted.append((row.id, outcome))
+                results.append(
+                    {
+                        "id": item.id,
+                        "digest": item.digest,
+                        "outcome": outcome,
+                        "receipt_id": row.id,
+                        "stored_at": date(row.stored_at),
+                        "processing": None,
+                        "error": None,
+                    }
+                )
+            except HTTPException as exc:
+                if exc.status_code >= 500:
+                    raise
+                detail = (
+                    exc.detail
+                    if isinstance(exc.detail, dict)
+                    else {"code": "event_invalid", "message": "Event rejected"}
+                )
+                results.append(
+                    {
+                        "id": item.id,
+                        "digest": item.digest,
+                        "outcome": "rejected",
+                        "receipt_id": None,
+                        "stored_at": None,
+                        "processing": None,
+                        "error": {**detail, "retryable": False},
+                    }
+                )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return results, accepted
+
+
+@router.post(":ingest", response_model=c.IngestOut)
+def ingest(
+    body: c.IngestIn,
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    project, actor, permissions, credential = authorize(db, user, project_id, request)
+    _validate_batch(body, project, actor, permissions)
+    # A duplicate-only request remains read-only even after project archive.
+    existing = {scope_key(project, actor.id, i.id) for i in body.events}
+    known = set(db.scalars(select(m.EventInbox.scope_key).where(m.EventInbox.scope_key.in_(existing))))
+    if existing - known:
+        require_project_operation(db, project.tenant_id, project.id)
+        project, actor, permissions, credential = authorize(db, actor, project.id, request)
+        if not permissions["write"]:
+            fail("event_write_denied", "Project write permission required", 403)
+    results, accepted = _persist_batch(db, project, actor, credential, body.events)
+    for rid, outcome in accepted:
+        row = db.get(m.EventProcessing, rid, populate_existing=True)
+        if row.state == "pending" and row.handler and project.status != "archived":
+            row = process(db, project, actor, rid, request)
+        for result in results:
+            if result["receipt_id"] == rid:
+                result["processing"] = processing(row)
+        if outcome == "stored":
+            _hint(project, inbox(db, project, rid), row.state)
+    return {
+        "tenant_id": project.tenant_id,
+        "project_id": project.id,
+        "producer": {"kind": "user", "id": actor.id},
+        "as_of": date(now()),
+        "results": results,
+    }
+
+
+@router.get("", response_model=c.EventPage)
+def list_events(
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+    state: Literal["all", "pending", "processed", "failed"] = "all",
+    type: str = Query(default="", max_length=160),
+    producer_id: str = Query(default="", max_length=64),
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = None,
+):
+    from .event_query import list_events as query
+
+    project, actor, permissions, _ = authorize(db, user, project_id, request)
+    return query(
+        db,
+        project,
+        actor,
+        permissions,
+        state=state,
+        event_type=type,
+        producer_id=producer_id,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@router.get("/{receipt_id}", response_model=c.EventDetail)
+def event_detail(
+    receipt_id: str,
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .event_query import detail
+
+    project, actor, permissions, _ = authorize(db, user, project_id, request)
+    return detail(db, project, actor, permissions, receipt_id)
+
+
+@router.get("/{receipt_id}/attempts", response_model=c.AttemptPage)
+def event_attempts(
+    receipt_id: str,
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = None,
+):
+    from .event_query import attempts
+
+    project, actor, _, _ = authorize(db, user, project_id, request)
+    return attempts(db, project, actor, receipt_id, limit, cursor)
+
+
+@router.post("/{receipt_id}:retry", response_model=c.RetryAck)
+def retry_event(
+    receipt_id: str,
+    body: c.RetryIn,
+    user: Annotated[m.User, Depends(current_user_or_apikey)],
+    db: Annotated[Session, Depends(m.get_session)],
+    request: Request,
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .event_query import capability
+
+    project, actor, permissions, _ = authorize(db, user, project_id, request)
+    if not permissions["configure"]:
+        fail("event_configure_required", "Project configure permission required", 403)
+    if not body.reason.strip():
+        fail("event_reason_required", "A reviewed recovery reason is required", 422)
+    original = inbox(db, project, receipt_id)
+    key = digest(json.dumps([project.tenant_id, project.id, actor.id, receipt_id, body.idempotency_key]))
+    fingerprint = digest(body.model_dump_json())
+    saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
+    if saved:
+        if saved.request_hash != fingerprint:
+            fail("event_idempotency_conflict", "Retry key already used with different input")
+        return {**saved.ack, "replayed": True}
+    require_project_operation(db, project.tenant_id, project.id)
+    project, actor, permissions, _ = authorize(db, actor, project.id, request)
+    saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
+    if saved:
+        if saved.request_hash != fingerprint:
+            fail("event_idempotency_conflict", "Retry key already used with different input")
+        return {**saved.ack, "replayed": True}
+    row = db.get(m.EventProcessing, receipt_id, populate_existing=True)
+    if not capability(db, project, actor, permissions, original, row)["retry"]:
+        fail("event_retry_denied", "This original operation cannot be retried", 403)
+    process(
+        db,
+        project,
+        actor,
+        receipt_id,
+        request,
+        retry={"key": key, "fingerprint": fingerprint, "revision": body.expected_revision},
+    )
+    saved = db.scalar(select(m.EventProcessingAttempt).where(m.EventProcessingAttempt.retry_key == key))
+    return saved.ack

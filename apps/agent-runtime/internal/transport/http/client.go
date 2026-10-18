@@ -12,12 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/magic-devops/ai-team-devops/apps/agent-runtime/internal/security"
 )
 
 type Client struct {
+	authMu     sync.RWMutex
 	baseURL    string
 	hc         *http.Client
 	apiKey     string
@@ -28,9 +30,9 @@ type Client struct {
 
 // SetAuth 热更新鉴权（sop login 后无需重启 agentd）。
 func (c *Client) SetAuth(projectID, bearer, apiKey string) {
-	if strings.TrimSpace(projectID) != "" {
-		c.projectID = strings.TrimSpace(projectID)
-	}
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+	c.projectID = strings.TrimSpace(projectID)
 	c.bearer = strings.TrimSpace(bearer)
 	c.apiKey = strings.TrimSpace(apiKey)
 }
@@ -43,8 +45,8 @@ func New(baseURL, projectID, bearer, apiKey string, timeout time.Duration, verif
 		TLSClientConfig:     &tls.Config{InsecureSkipVerify: !verifySSL},
 	}
 	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		hc:         &http.Client{Timeout: timeout, Transport: tr},
+		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		hc:         &http.Client{Timeout: timeout, Transport: tr, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		projectID:  projectID,
 		bearer:     strings.TrimSpace(bearer),
 		apiKey:     strings.TrimSpace(apiKey),
@@ -52,8 +54,21 @@ func New(baseURL, projectID, bearer, apiKey string, timeout time.Duration, verif
 	}
 }
 
+// Snapshot pins the identity/project across an identity lookup, retries and event POST.
+func (c *Client) Snapshot() *Client {
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	return &Client{baseURL: c.baseURL, hc: c.hc, apiKey: c.apiKey, projectID: c.projectID, bearer: c.bearer, maxRetries: c.maxRetries}
+}
+func (c *Client) BaseURL() string   { c.authMu.RLock(); defer c.authMu.RUnlock(); return c.baseURL }
+func (c *Client) ProjectID() string { c.authMu.RLock(); defer c.authMu.RUnlock(); return c.projectID }
+
 // Do 发送请求，含签名、重试、Problem 错误解析。
 func (c *Client) Do(ctx context.Context, method, path string, in any, out any) error {
+	c = c.Snapshot()
+	if _, err := NormalizeOrigin(c.baseURL); err != nil {
+		return err
+	}
 	var body []byte
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -67,7 +82,10 @@ func (c *Client) Do(ctx context.Context, method, path string, in any, out any) e
 	if !strings.HasPrefix(urlPath, "/") {
 		urlPath = "/" + urlPath
 	}
-	parsed, _ := url.Parse(c.baseURL + urlPath)
+	parsed, err := url.Parse(c.baseURL + urlPath)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; ; i++ {
 		if err := ctx.Err(); err != nil {
@@ -89,19 +107,22 @@ func (c *Client) Do(ctx context.Context, method, path string, in any, out any) e
 		case c.bearer != "":
 			req.Header.Set("Authorization", "Bearer "+c.bearer)
 		case c.apiKey != "":
-			security.Sign(c.apiKey, method, urlPath, body, req.Header)
+			security.Sign(c.apiKey, method, parsed.Path, body, req.Header)
 		}
 
 		resp, err := c.hc.Do(req)
 		lastErr := err
 		if err == nil {
-			raw, _ := io.ReadAll(resp.Body)
+			raw, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if readErr != nil {
+				return fmt.Errorf("read response: %w", readErr)
+			}
 			if resp.StatusCode < 500 {
-				if resp.StatusCode >= 400 {
+				if resp.StatusCode >= 300 {
 					return fmt.Errorf("manager %d: %s", resp.StatusCode, truncate(raw, 400))
 				}
 				if out != nil && len(raw) > 0 {
@@ -152,4 +173,28 @@ func truncate(b []byte, n int) string {
 		return string(b)
 	}
 	return string(b[:n]) + "..."
+}
+
+func (c *Client) AuthConfigured() (bool, bool) {
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	return c.bearer != "", c.apiKey != ""
+}
+func NormalizeOrigin(value string) (string, error) {
+	value = strings.TrimRight(strings.TrimSpace(value), "/")
+	u, err := url.Parse(value)
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("invalid Manager base URL")
+	}
+	return value, nil
+}
+
+// SetConfiguration atomically refreshes the endpoint together with its identity/project.
+func (c *Client) SetConfiguration(baseURL, projectID, bearer, apiKey string) {
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+	c.baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	c.projectID = strings.TrimSpace(projectID)
+	c.bearer = strings.TrimSpace(bearer)
+	c.apiKey = strings.TrimSpace(apiKey)
 }

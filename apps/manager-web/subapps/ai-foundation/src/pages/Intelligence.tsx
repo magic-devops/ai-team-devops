@@ -1,3 +1,4 @@
+import { EventReceiptWorkbench } from "./intelligence/events/EventReceiptWorkbench";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Modal, Progress, Space, Table, Tag } from "antd";
 import { Activity, Ban, Brain, CheckCircle2, Cpu, Database, Gauge, GitBranch, Library, PlayCircle, Plus, RotateCw, Search, ShieldCheck, Sparkles, UploadCloud, XCircle } from "lucide-react";
@@ -7,7 +8,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/Card";
 import { LoadingBlock, NeedLogin } from "@/components/PageStates";
 import { api } from "@/lib/api";
-import { getProjectId, getToken } from "@/lib/authStorage";
+import { getProjectId, getSessionRevision, getToken } from "@/lib/authStorage";
 import { WorkbenchPanel } from "@/pages/shared/workbenchUi";
 
 const EChartsDonutLazy = lazy(() =>
@@ -110,7 +111,6 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
   const proposals = useQuery({ queryKey: ["reflectionProposals"], queryFn: () => api.reflectionProposals(100), enabled: authed && tab === "distill" });
   const dbDrivers = useQuery({ queryKey: ["dbDrivers"], queryFn: api.dbDrivers, enabled: authed && tab === "db" });
   const dbConnections = useQuery({ queryKey: ["dbConnections"], queryFn: api.dbConnections, enabled: authed && tab === "db" });
-  const events = useQuery({ queryKey: ["events"], queryFn: () => api.eventsList(100), enabled: authed && tab === "events" });
   const usage = useQuery({ queryKey: ["usage"], queryFn: () => api.usageSummary(5000), enabled: authed && tab === "usage" });
   const usageCharts = useQuery({ queryKey: ["usageCharts"], queryFn: () => api.usageCharts(5000), enabled: authed && tab === "usage" });
   const quota = useQuery({ queryKey: ["quota"], queryFn: api.usageQuota, enabled: authed && tab === "usage" });
@@ -694,15 +694,10 @@ export function Intelligence({ initialTab = "kb", focused = false }: { initialTa
       ) : null}
 
       {tab === "events" ? (
-        <Card title={t("page.intelligence.eventsList")} actions={<MiniButton onClick={() => void events.refetch()}><RotateCw className="h-4 w-4" />{t("common.refresh")}</MiniButton>}>
-          {events.isError ? <Err message={(events.error as Error).message} /> : null}
-          <ul className="space-y-2 text-sm">
-            {(events.data?.items ?? []).map((row: any) => {
-              const payload = row.payload ?? row;
-              return <li key={String(row.id ?? payload.id)} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/50"><span className="text-xs text-slate-500">{row.ts ?? payload.time}</span><p className="font-medium">{payload.type ?? row.action}</p><pre className="mt-1 max-h-32 overflow-auto text-xs">{JSON.stringify(payload.data ?? payload, null, 2)}</pre></li>;
-            })}
-          </ul>
-        </Card>
+        <EventReceiptWorkbench
+          key={JSON.stringify([getProjectId(), getSessionRevision()])}
+          projectId={getProjectId() || ""}
+        />
       ) : null}
 
       {tab === "usage" ? (

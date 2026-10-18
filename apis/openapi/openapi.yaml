@@ -2513,25 +2513,35 @@ paths:
 
   /api/v1/sync/push:
     post:
-      operationId: syncPush
-      tags: [workflow]
-      summary: 推送单条结构化变更（幂等键可选）
-      parameters: [ { $ref: "#/components/parameters/XProjectId" } ]
+      tags:
+      - sync
+      summary: Sync Push
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+      operationId: sync_push_api_v1_sync_push_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [module, record]
-              properties:
-                module: { type: string, enum: [tasks, requirements, issues, sprints] }
-                action: { type: string, enum: [upsert, delete], default: upsert }
-                record: { type: object, additionalProperties: true }
-                idempotency_key: { type: string }
+              $ref: '#/components/schemas/EventHandoffSyncPushIn'
       responses:
-        "200": { description: ok }
-
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffEventResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
   /api/v1/sync/journal:
     get:
       operationId: syncJournal
@@ -8097,6 +8107,249 @@ paths:
         write permission, author/configure restrictions and explicit versions as defined by the request schema. Archived
         projects remain readable.
 
+  /api/v1/events:identity:
+    get:
+      tags:
+      - events
+      summary: Identity
+      operationId: identity_api_v1_events_identity_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffIdentity'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+  /api/v1/events:ingest:
+    post:
+      tags:
+      - events
+      summary: Ingest
+      operationId: ingest_api_v1_events_ingest_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventHandoffIngestIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffIngestOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+  /api/v1/events:
+    get:
+      tags:
+      - events
+      summary: List Events
+      operationId: list_events_api_v1_events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: state
+        in: query
+        required: false
+        schema:
+          enum:
+          - all
+          - pending
+          - processed
+          - failed
+          type: string
+          default: all
+          title: State
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 160
+          default: ''
+          title: Type
+      - name: producer_id
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+          default: ''
+          title: Producer Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffEventPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+  /api/v1/events/{receipt_id}:
+    get:
+      tags:
+      - events
+      summary: Event Detail
+      operationId: event_detail_api_v1_events__receipt_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: receipt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Receipt Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffEventDetail'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+  /api/v1/events/{receipt_id}/attempts:
+    get:
+      tags:
+      - events
+      summary: Event Attempts
+      operationId: event_attempts_api_v1_events__receipt_id__attempts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: receipt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Receipt Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cursor
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffAttemptPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+  /api/v1/events/{receipt_id}:retry:
+    post:
+      tags:
+      - events
+      summary: Retry Event
+      operationId: retry_event_api_v1_events__receipt_id__retry_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: receipt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Receipt Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventHandoffRetryIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffRetryAck'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventHandoffHTTPValidationError'
+      description: Authenticated explicit project. Immutable receipt and current processing are separate facts; no source field
+        grants authority.
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -12494,6 +12747,8 @@ components:
           - execution.approval
           - progress.record
           - baseline.create
+          - issue.create
+          - sync.record.apply
         payload:
           type: object
           description: "Validated per action. execution.queue requires task_id, task_basis, workspace_id, target_kind and target_basis.\
@@ -12895,6 +13150,26 @@ components:
               - requirement.update
               - task.update
               - tasks.plan
+      - if:
+          properties:
+            action:
+              const: issue.create
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeliveryIssueCreate'
+      - if:
+          properties:
+            action:
+              const: sync.record.apply
+          required:
+          - action
+        then:
+          properties:
+            payload:
+              $ref: '#/components/schemas/DeliverySyncRecordApply'
       description: Signed CI evidence and immutable release candidates use the same CAS and receipts. release.save is retired.
         Candidate approval never proves deployment. Controlled deployments use exact environment generations, immutable plans
         and explicit dispatch/start/advance/observe/cancel/sync. Unknown outcomes never permit automatic side-effect replay. Issue
@@ -24917,3 +25192,723 @@ components:
           - type: array
             items:
               type: object
+
+    EventHandoffAttempt:
+      properties:
+        id:
+          type: string
+          title: Id
+        seq:
+          type: integer
+          title: Seq
+        actor:
+          $ref: '#/components/schemas/EventHandoffProducer'
+        action:
+          type: string
+          enum:
+          - initial
+          - retry
+          - recover
+          title: Action
+        created_at:
+          type: string
+          title: Created At
+        from_state:
+          type: string
+          enum:
+          - pending
+          - processed
+          - failed
+          title: From State
+        to_state:
+          type: string
+          enum:
+          - pending
+          - processed
+          - failed
+          title: To State
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/EventHandoffEventError'
+          - type: 'null'
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/EventHandoffEffectResult'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - seq
+      - actor
+      - action
+      - created_at
+      - from_state
+      - to_state
+      - error
+      - result
+      title: Attempt
+    EventHandoffAttemptPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        receipt_id:
+          type: string
+          title: Receipt Id
+        items:
+          items:
+            $ref: '#/components/schemas/EventHandoffAttempt'
+          type: array
+          title: Items
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - receipt_id
+      - items
+      title: AttemptPage
+    EventHandoffCapabilities:
+      properties:
+        retry:
+          type: boolean
+          title: Retry
+        retry_reason_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Retry Reason Code
+      additionalProperties: false
+      type: object
+      required:
+      - retry
+      - retry_reason_code
+      title: Capabilities
+    EventHandoffEffectResult:
+      properties:
+        kind:
+          type: string
+          enum:
+          - fact_recorded
+          - task_updated
+          - issue_created
+          - record_upserted
+          - record_deleted
+          - asset_materialized
+          title: Kind
+        target_kind:
+          anyOf:
+          - type: string
+            enum:
+            - task
+            - issue
+            - requirement
+            - sprint
+            - asset
+          - type: 'null'
+          title: Target Kind
+        target_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - target_kind
+      - target_id
+      title: EffectResult
+    EventHandoffEventDetail:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        event:
+          $ref: '#/components/schemas/EventHandoffEventSummary'
+        event_json:
+          type: string
+          title: Event Json
+        attempts:
+          $ref: '#/components/schemas/EventHandoffAttemptPage'
+        permissions:
+          $ref: '#/components/schemas/EventHandoffPermissions'
+        capabilities:
+          $ref: '#/components/schemas/EventHandoffCapabilities'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - event
+      - event_json
+      - attempts
+      - permissions
+      - capabilities
+      title: EventDetail
+    EventHandoffEventError:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        retryable:
+          type: boolean
+          title: Retryable
+      additionalProperties: false
+      type: object
+      required:
+      - code
+      - message
+      - retryable
+      title: EventError
+    EventHandoffEventPage:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        as_of:
+          type: string
+          title: As Of
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        has_more:
+          type: boolean
+          title: Has More
+        next_cursor:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Cursor
+        items:
+          items:
+            $ref: '#/components/schemas/EventHandoffEventSummary'
+          type: array
+          title: Items
+        permissions:
+          $ref: '#/components/schemas/EventHandoffPermissions'
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - as_of
+      - total
+      - limit
+      - has_more
+      - next_cursor
+      - items
+      - permissions
+      title: EventPage
+    EventHandoffEventResult:
+      properties:
+        id:
+          type: string
+          title: Id
+        digest:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Digest
+        outcome:
+          type: string
+          enum:
+          - stored
+          - duplicate
+          - rejected
+          title: Outcome
+        receipt_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Receipt Id
+        stored_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stored At
+        processing:
+          anyOf:
+          - $ref: '#/components/schemas/EventHandoffProcessing'
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/EventHandoffEventError'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - digest
+      - outcome
+      - receipt_id
+      - stored_at
+      - processing
+      - error
+      title: EventResult
+    EventHandoffEventSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        event_id:
+          type: string
+          title: Event Id
+        digest:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Digest
+        type:
+          type: string
+          title: Type
+        subject:
+          type: string
+          title: Subject
+        source:
+          type: string
+          title: Source
+        producer:
+          $ref: '#/components/schemas/EventHandoffProducer'
+        stored_at:
+          type: string
+          title: Stored At
+        processing:
+          $ref: '#/components/schemas/EventHandoffProcessing'
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - event_id
+      - digest
+      - type
+      - subject
+      - source
+      - producer
+      - stored_at
+      - processing
+      title: EventSummary
+    EventHandoffFrozenEvent:
+      properties:
+        id:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Id
+        event_json:
+          type: string
+          title: Event Json
+        digest:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Digest
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - event_json
+      - digest
+      title: FrozenEvent
+    EventHandoffHTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/EventHandoffValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    EventHandoffIdentity:
+      properties:
+        tenant_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Tenant Id
+        project_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Project Id
+        producer_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Producer Id
+      additionalProperties: false
+      type: object
+      required:
+      - tenant_id
+      - project_id
+      - producer_id
+      title: Identity
+    EventHandoffIngestIn:
+      properties:
+        expected_tenant_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Expected Tenant Id
+        expected_project_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Expected Project Id
+        expected_producer_id:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Expected Producer Id
+        events:
+          items:
+            $ref: '#/components/schemas/EventHandoffFrozenEvent'
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Events
+      additionalProperties: false
+      type: object
+      required:
+      - expected_tenant_id
+      - expected_project_id
+      - expected_producer_id
+      - events
+      title: IngestIn
+    EventHandoffIngestOut:
+      properties:
+        tenant_id:
+          type: string
+          title: Tenant Id
+        project_id:
+          type: string
+          title: Project Id
+        producer:
+          $ref: '#/components/schemas/EventHandoffProducer'
+        as_of:
+          type: string
+          title: As Of
+        results:
+          items:
+            $ref: '#/components/schemas/EventHandoffEventResult'
+          type: array
+          title: Results
+      additionalProperties: false
+      type: object
+      required:
+      - tenant_id
+      - project_id
+      - producer
+      - as_of
+      - results
+      title: IngestOut
+    EventHandoffPermissions:
+      properties:
+        read:
+          type: boolean
+          title: Read
+        configure:
+          type: boolean
+          title: Configure
+      additionalProperties: false
+      type: object
+      required:
+      - read
+      - configure
+      title: Permissions
+    EventHandoffProcessing:
+      properties:
+        state:
+          type: string
+          enum:
+          - pending
+          - processed
+          - failed
+          title: State
+        revision:
+          type: integer
+          minimum: 1.0
+          title: Revision
+        handler:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Handler
+        operation_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operation Id
+        attempts:
+          type: integer
+          minimum: 0.0
+          title: Attempts
+        updated_at:
+          type: string
+          title: Updated At
+        processed_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processed At
+        reason_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason Code
+        retryable:
+          type: boolean
+          title: Retryable
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/EventHandoffEffectResult'
+          - type: 'null'
+      additionalProperties: false
+      type: object
+      required:
+      - state
+      - revision
+      - handler
+      - operation_id
+      - attempts
+      - updated_at
+      - processed_at
+      - reason_code
+      - retryable
+      - result
+      title: Processing
+    EventHandoffProducer:
+      properties:
+        kind:
+          type: string
+          const: user
+          title: Kind
+        id:
+          type: string
+          title: Id
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      title: Producer
+    EventHandoffRetryAck:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        receipt_id:
+          type: string
+          title: Receipt Id
+        event_id:
+          type: string
+          title: Event Id
+        digest:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+          title: Digest
+        processing:
+          $ref: '#/components/schemas/EventHandoffProcessing'
+        attempt_id:
+          type: string
+          title: Attempt Id
+        replayed:
+          type: boolean
+          title: Replayed
+      additionalProperties: false
+      type: object
+      required:
+      - project_id
+      - receipt_id
+      - event_id
+      - digest
+      - processing
+      - attempt_id
+      - replayed
+      title: RetryAck
+    EventHandoffRetryIn:
+      properties:
+        expected_revision:
+          type: integer
+          minimum: 1.0
+          title: Expected Revision
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+        reason:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Reason
+      additionalProperties: false
+      type: object
+      required:
+      - expected_revision
+      - idempotency_key
+      - reason
+      title: RetryIn
+    EventHandoffSyncPushIn:
+      properties:
+        module:
+          type: string
+          enum:
+          - tasks
+          - requirements
+          - issues
+          - sprints
+          - rules
+          - specs
+          - templates
+          title: Module
+        action:
+          type: string
+          enum:
+          - upsert
+          - delete
+          title: Action
+          default: upsert
+        record:
+          additionalProperties: true
+          type: object
+          title: Record
+        expected_version:
+          type: integer
+          minimum: 0.0
+          title: Expected Version
+        idempotency_key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - module
+      - record
+      - expected_version
+      - idempotency_key
+      title: SyncPushIn
+    EventHandoffValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    DeliveryIssueCreate:
+      additionalProperties: false
+      properties:
+        title:
+          maxLength: 256
+          minLength: 1
+          title: Title
+          type: string
+        description:
+          default: ''
+          maxLength: 10000
+          title: Description
+          type: string
+        type:
+          default: bug
+          maxLength: 32
+          minLength: 1
+          title: Type
+          type: string
+        severity:
+          default: P2
+          enum:
+          - P0
+          - P1
+          - P2
+          - P3
+          title: Severity
+          type: string
+        task_id:
+          default: ''
+          maxLength: 64
+          title: Task Id
+          type: string
+        sprint_id:
+          default: ''
+          maxLength: 64
+          title: Sprint Id
+          type: string
+      required:
+      - title
+      title: IssueCreateCommand
+      type: object
+    DeliverySyncRecordApply:
+      additionalProperties: false
+      properties:
+        module:
+          enum:
+          - tasks
+          - requirements
+          - issues
+          - sprints
+          title: Module
+          type: string
+        action:
+          default: upsert
+          enum:
+          - upsert
+          - delete
+          title: Action
+          type: string
+        record:
+          additionalProperties: true
+          title: Record
+          type: object
+      required:
+      - module
+      - record
+      title: SyncRecordApply
+      type: object

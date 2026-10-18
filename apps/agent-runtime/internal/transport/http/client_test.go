@@ -2,10 +2,16 @@ package httpx
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -142,5 +148,78 @@ func TestHTTPRetryStillRecoversAndDoesNotRetryClientErrors(t *testing.T) {
 				t.Fatalf("retry did not recover: %v result=%#v requests=%d", err, result, requests.Load())
 			}
 		})
+	}
+}
+
+func TestHTTPRetryKeepsOneCoherentAuthScope(t *testing.T) {
+	var client *Client
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := calls.Add(1)
+		if r.Header.Get("Authorization") != "Bearer original" || r.Header.Get("X-Project-Id") != "P-original" {
+			t.Errorf("retry changed original identity/project: %q %q", r.Header.Get("Authorization"), r.Header.Get("X-Project-Id"))
+		}
+		if n == 1 {
+			client.SetAuth("P-new", "replacement", "")
+			http.Error(w, "retry", 500)
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client = New(server.URL, "P-original", "original", "", time.Second, true, 1)
+	if err := client.Do(context.Background(), http.MethodGet, "/", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestHMACSignsActualBasePathWithoutQuery(t *testing.T) {
+	secret := "owned-test-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		sum := sha256.Sum256(body)
+		canonical := r.Method + "\n" + r.URL.Path + "\n" + r.Header.Get("X-Sop-Timestamp") + "\n" + r.Header.Get("X-Sop-Nonce") + "\n" + hex.EncodeToString(sum[:])
+		mac := hmac.New(sha256.New, []byte(secret))
+		_, _ = mac.Write([]byte(canonical))
+		if want := "sha256=" + hex.EncodeToString(mac.Sum(nil)); r.Header.Get("X-Sop-Signature") != want {
+			t.Error("signature did not cover the real request base path")
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := New(server.URL+"/prefix/", "P", "", secret, time.Second, true, 0)
+	if err := client.Do(context.Background(), http.MethodGet, "/api/v1/events:identity?read=1", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestTruncatedHTTPBodyCannotReturnSuccessfulReceipt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		_, _ = fmt.Fprintf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\nConnection: close\r\n\r\n%s", `{"receipt_id":"looks-valid"}`)
+	}))
+	defer server.Close()
+	client := New(server.URL, "P", "", "", time.Second, true, 0)
+	var out map[string]any
+	if err := client.Do(context.Background(), http.MethodGet, "/", nil, &out); err == nil || !strings.Contains(err.Error(), "EOF") {
+		t.Fatalf("truncated framing accepted: %#v %v", out, err)
+	}
+}
+
+func TestRedirectCannotMoveFrozenIdentityToAnotherOrigin(t *testing.T) {
+	var foreignCalls atomic.Int32
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { foreignCalls.Add(1); w.Write([]byte(`{"ok":true}`)) }))
+	defer foreign.Close()
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, foreign.URL+"/api/v1/events:ingest", http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+	client := New(origin.URL, "original-project", "", "key:secret", time.Second, true, 0)
+	err := client.Do(context.Background(), "POST", "/api/v1/events:ingest", map[string]any{"event_json": "original-private-bytes"}, nil)
+	if err == nil || foreignCalls.Load() != 0 {
+		t.Fatalf("redirect changed verified origin: err=%v foreign requests=%d", err, foreignCalls.Load())
 	}
 }

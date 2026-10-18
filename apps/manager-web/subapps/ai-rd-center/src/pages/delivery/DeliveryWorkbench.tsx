@@ -1,3 +1,4 @@
+import { currentEventHash, safeEventReturn } from "@/lib/eventReceipts";
 import {
   fetchDeliveryContext,
   fetchDeliveryReferences,
@@ -529,6 +530,11 @@ function ProjectDelivery() {
     onOpen: openTarget,
   });
   const releaseReturn = releaseReturnFromHash(location.hash);
+  const eventReturn = safeEventReturn(
+    new URLSearchParams(currentEventHash().split("?")[1]).get("event_return") ||
+      "",
+    projectId,
+  );
   const collaborationReturn = safeCollaborationReturn(
     new URLSearchParams(location.hash.split("?")[1]).get(
       "collaboration_return",
@@ -999,6 +1005,15 @@ function ProjectDelivery() {
               ? "deliveryRelease.backQuality"
               : "deliveryRelease.releases",
           )}
+        </Button>
+      )}
+      {eventReturn && (
+        <Button
+          onClick={() => {
+            if (executionExit.canNavigate()) location.hash = eventReturn;
+          }}
+        >
+          {t("eventReceipts.back")}
         </Button>
       )}
       {collaborationReturn && (

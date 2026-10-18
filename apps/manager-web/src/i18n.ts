@@ -1,3 +1,4 @@
+import { eventReceiptTranslations } from "./i18n/event-receipts";
 import { deliveryDiscussionTranslations } from "./i18n/delivery-discussion";
 import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
@@ -79,6 +80,7 @@ i18n
           deliveryProgress: progressTranslations["zh-CN"],
           deliveryAttention: deliveryAttentionTranslations["zh-CN"],
           deliveryDiscussion: deliveryDiscussionTranslations["zh-CN"],
+          eventReceipts: eventReceiptTranslations["zh-CN"],
           deliveryManualReview: manualReviewTranslations["zh-CN"],
           deliverySchedule: schedulingTranslations["zh-CN"],
           deliveryRuntime: runtimeTranslations["zh-CN"],
@@ -117,6 +119,7 @@ i18n
           deliveryProgress: progressTranslations["en-US"],
           deliveryAttention: deliveryAttentionTranslations["en-US"],
           deliveryDiscussion: deliveryDiscussionTranslations["en-US"],
+          eventReceipts: eventReceiptTranslations["en-US"],
           deliveryManualReview: manualReviewTranslations["en-US"],
           deliverySchedule: schedulingTranslations["en-US"],
           deliveryRuntime: runtimeTranslations["en-US"],
@@ -155,6 +158,7 @@ i18n
           deliveryProgress: progressTranslations["ja-JP"],
           deliveryAttention: deliveryAttentionTranslations["ja-JP"],
           deliveryDiscussion: deliveryDiscussionTranslations["ja-JP"],
+          eventReceipts: eventReceiptTranslations["ja-JP"],
           deliveryManualReview: manualReviewTranslations["ja-JP"],
           deliverySchedule: schedulingTranslations["ja-JP"],
           deliveryRuntime: runtimeTranslations["ja-JP"],

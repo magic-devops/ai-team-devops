@@ -52,13 +52,14 @@ _EXISTING_PROJECT_PREFIXES = (
     "/api/v1/projects",
     "/api/v1/requirements", "/api/v1/tasks", "/api/v1/issues",
     "/api/v1/sprints", "/api/v1/models", "/api/v1/llm",
+    "/api/v1/events", "/api/v1/sync",
     "/api/v1/delivery", "/api/v1/analytics/nlq", "/api/v1/workflows",
 )
 
 
 def existing_project_required(path: str) -> bool:
     """Protected business routes must never bootstrap projects from request headers."""
-    return any(path == p or path.startswith(p + "/") for p in _EXISTING_PROJECT_PREFIXES)
+    return path in {"/api/v1/events:ingest", "/api/v1/events:identity"} or any(path == p or path.startswith(p + "/") for p in _EXISTING_PROJECT_PREFIXES)
 
 
 def skip_scope(path: str) -> bool:

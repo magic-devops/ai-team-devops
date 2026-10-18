@@ -23,11 +23,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker, validates
 from sqlalchemy.pool import NullPool, StaticPool
 
+from sop_manager.project_write_guard import ManagerSession, install_project_write_guard
 from sop_manager.task_acceptance import normalize_task_acceptance
 from sop_manager.task_owner import normalize_task_owner_id
 from sop_manager.task_owner_sql import install_task_owner_guard
 from sop_manager.task_sql_guard import TaskAcceptanceJSON, install_task_sql_guard
-from sop_manager.project_write_guard import ManagerSession, install_project_write_guard
 
 _DB_TYPE = os.getenv("DB_TYPE", "sqlite")
 _DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sop.db")
@@ -280,6 +280,65 @@ class DeliveryReceipt(Base):
     request_hash = Column(String(64), nullable=False)
     version = Column(Integer, nullable=False)
 
+
+
+class EventInbox(Base):
+    __tablename__ = "event_inbox"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    scope_key = Column(String(64), nullable=False, unique=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    producer_id = Column(String(64), nullable=False)
+    credential_id = Column(String(64), nullable=True)
+    event_id = Column(String(128), nullable=False)
+    event_json = Column(Text, nullable=False)
+    digest = Column(String(64), nullable=False)
+    event_type = Column(String(160), nullable=False)
+    subject = Column(String(256), nullable=False)
+    source = Column(String(512), nullable=False)
+    event_time = Column(String(64), nullable=False)
+    stored_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (Index("ix_event_inbox_project_seq", "tenant_id", "project_id", "seq"),Index("ix_event_inbox_type_seq", "tenant_id", "project_id", "event_type", "seq"),Index("ix_event_inbox_producer_seq", "tenant_id", "project_id", "producer_id", "seq"))
+
+
+class EventProcessing(Base):
+    __tablename__ = "event_processing"
+    id = Column(String(64), ForeignKey("event_inbox.id", ondelete="CASCADE"), primary_key=True)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    state = Column(String(16), default="pending", nullable=False)
+    revision = Column(Integer, default=1, nullable=False)
+    handler = Column(String(64), nullable=True)
+    operation_id = Column(String(64), nullable=True)
+    plan = Column(JSON, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+    reason_code = Column(String(64), nullable=True)
+    retryable = Column(Boolean, default=False, nullable=False)
+    result = Column(JSON, nullable=True)
+    __table_args__ = (Index("ix_event_processing_project_state", "tenant_id", "project_id", "state"),)
+
+
+class EventProcessingAttempt(Base):
+    __tablename__ = "event_processing_attempts"
+    seq = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(String(64), nullable=False, unique=True)
+    receipt_id = Column(String(64), ForeignKey("event_inbox.id", ondelete="CASCADE"), nullable=False)
+    tenant_id = Column(String(64), nullable=False)
+    project_id = Column(String(64), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    actor_id = Column(String(64), nullable=False)
+    action = Column(String(16), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    from_state = Column(String(16), nullable=False)
+    to_state = Column(String(16), nullable=False)
+    error = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)
+    retry_key = Column(String(64), nullable=True, unique=True)
+    request_hash = Column(String(64), nullable=True)
+    ack = Column(JSON, nullable=True)
+    __table_args__ = (Index("ix_event_attempt_project_seq", "tenant_id", "project_id", "seq"),Index("ix_event_attempt_receipt_seq", "receipt_id", "seq"))
 
 class DeliveryDiscussionThread(Base):
     __tablename__ = "delivery_discussion_threads"

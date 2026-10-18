@@ -158,7 +158,9 @@ def test_daily_checkpoint_skips_inactive_tenant_and_project_without_stopping_oth
         db.commit()
         # Seed an existing archived project outside application write channels.
         with db.get_bind().begin() as connection:
-            connection.execute(update(models.Project).where(models.Project.id == "p-archived").values(status="archived"))
+            connection.execute(
+                update(models.Project).where(models.Project.id == "p-archived").values(status="archived")
+            )
     now = datetime(2026, 10, 21, tzinfo=timezone.utc)
     assert daily_once(sessions=sessions, now=now, page_size=1) == 2
     with sessions() as db:
@@ -270,7 +272,6 @@ def test_compatibility_table_and_sync_writers_are_observed(sessions, monkeypatch
     monkeypatch.setattr(db_sql_compat, "resolved_project_id", lambda: "project")
     monkeypatch.setattr(sync_api, "_require_scope", lambda: "project")
     monkeypatch.setattr(sync_api, "resolved_tenant_id", lambda: "tenant")
-    monkeypatch.setattr(sync_api, "append_event", lambda **kwargs: {"id": "event-test"})
     monkeypatch.setattr(sync_api, "_ws_sync_event", lambda *args: None)
     with sessions() as db:
         table = db_sql_compat._SqlTable(models.Task, db)
@@ -280,12 +281,16 @@ def test_compatibility_table_and_sync_writers_are_observed(sessions, monkeypatch
         assert observations(db)[-1].data["tasks"][0]["status"] == "in_progress"
         table.delete("id = 'old-api'")
         assert observations(db)[-1].data["tasks"] == []
-        sync_api.sync_push(
-            sync_api.SyncPushIn(module="tasks", record={"id": "synced", "title": "Synced task"}), db=db
+        from event_handoff_support import direct_sync
+
+        assert (
+            direct_sync(db, "project", record={"id": "synced", "title": "Synced task"})["processing"]["state"]
+            == "processed"
         )
         assert observations(db)[-1].data["tasks"][0]["title"] == "Synced task"
-        sync_api.sync_push(
-            sync_api.SyncPushIn(module="tasks", action="delete", record={"id": "synced"}), db=db
+        assert (
+            direct_sync(db, "project", action="delete", record={"id": "synced"})["processing"]["state"]
+            == "processed"
         )
         assert observations(db)[-1].data["tasks"] == []
 
@@ -322,7 +327,10 @@ def test_task_scope_move_is_rejected_without_changing_data_or_observations(sessi
             db.commit()
         assert raised.value.detail["code"] == "project_scope_immutable"
         db.rollback()
-        assert (db.get(models.Task, "T-1").tenant_id, db.get(models.Task, "T-1").project_id) == ("tenant", "project")
+        assert (db.get(models.Task, "T-1").tenant_id, db.get(models.Task, "T-1").project_id) == (
+            "tenant",
+            "project",
+        )
         for pid, tenant in (("project", "tenant"), ("target-project", target_tenant)):
             rows = db.query(model).filter_by(project_id=pid, tenant_id=tenant).order_by(model.seq).all()
             assert len(rows) == before[pid]

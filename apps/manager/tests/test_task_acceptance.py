@@ -1,16 +1,21 @@
 """Task acceptance belongs to the canonical task and survives every SQL writer."""
 
 import pytest
-from sop_manager.routers import db_sql_compat, sql_models, sync_api
+from sop_manager.routers import db_sql_compat, sql_models
 from test_business_access import env as env
 from test_business_access import headers
 
 
 def test_standalone_task_acceptance_round_trips_create_update_and_clear(env):
     client, sessions = env
-    response = client.post("/api/v1/tasks", headers=headers(), json={
-        "title": "Independent delivery", "acceptance_criteria": ["  Real tests pass  ", "Human reviews output"],
-    })
+    response = client.post(
+        "/api/v1/tasks",
+        headers=headers(),
+        json={
+            "title": "Independent delivery",
+            "acceptance_criteria": ["  Real tests pass  ", "Human reviews output"],
+        },
+    )
     assert response.status_code == 200, response.text
     task_id = response.json()["id"]
     stored = client.get(f"/api/v1/tasks/{task_id}", headers=headers()).json()
@@ -19,19 +24,33 @@ def test_standalone_task_acceptance_round_trips_create_update_and_clear(env):
     response = client.patch(f"/api/v1/tasks/{task_id}", headers=headers(), json={"title": "Renamed"})
     assert response.status_code == 200, response.text
     with sessions() as db:
-        assert db.get(sql_models.Task, task_id).acceptance_criteria == ["Real tests pass", "Human reviews output"]
-    assert client.patch(f"/api/v1/tasks/{task_id}", headers=headers(), json={"acceptance_criteria": []}).status_code == 200
+        assert db.get(sql_models.Task, task_id).acceptance_criteria == [
+            "Real tests pass",
+            "Human reviews output",
+        ]
+    assert (
+        client.patch(
+            f"/api/v1/tasks/{task_id}", headers=headers(), json={"acceptance_criteria": []}
+        ).status_code
+        == 200
+    )
     assert client.get(f"/api/v1/tasks/{task_id}", headers=headers()).json()["acceptance_criteria"] == []
 
 
-@pytest.mark.parametrize("value", [None, "Pass", [0], [True], [" "], ["x" * 2001], ["Pass"] * 81, {"criterion": "Pass"}])
+@pytest.mark.parametrize(
+    "value", [None, "Pass", [0], [True], [" "], ["x" * 2001], ["Pass"] * 81, {"criterion": "Pass"}]
+)
 @pytest.mark.parametrize("operation", ["create", "update"])
 def test_task_api_rejects_invalid_acceptance_without_changing_data(env, value, operation):
     client, sessions = env
     if operation == "create":
-        response = client.post("/api/v1/tasks", headers=headers(), json={"title": "Invalid", "acceptance_criteria": value})
+        response = client.post(
+            "/api/v1/tasks", headers=headers(), json={"title": "Invalid", "acceptance_criteria": value}
+        )
     else:
-        response = client.patch("/api/v1/tasks/T-selected", headers=headers(), json={"acceptance_criteria": value})
+        response = client.patch(
+            "/api/v1/tasks/T-selected", headers=headers(), json={"acceptance_criteria": value}
+        )
     assert response.status_code == 422, response.text
     with sessions() as db:
         assert db.query(sql_models.Task).count() == 2
@@ -54,30 +73,30 @@ def test_sql_compat_batch_rejects_mixed_indices_before_any_insert(env, monkeypat
     with sessions() as db:
         table = db_sql_compat._SqlTable(sql_models.Task, db)
         with pytest.raises(Exception) as failure:
-            table.add([
-                {"id": "T-good", "title": "Good", "acceptance_criteria": ["Pass"]},
-                {"id": "T-bad", "title": "Bad", "acceptance_criteria": [1]},
-            ])
+            table.add(
+                [
+                    {"id": "T-good", "title": "Good", "acceptance_criteria": ["Pass"]},
+                    {"id": "T-bad", "title": "Bad", "acceptance_criteria": [1]},
+                ]
+            )
         assert getattr(failure.value, "status_code", None) == 422
         assert db.query(sql_models.Task).count() == 2
 
 
 def test_sync_task_acceptance_is_normalized_and_invalid_upsert_is_atomic(env, monkeypatch):
+    from event_handoff_support import direct_sync
+
     _, sessions = env
-    monkeypatch.setattr(sync_api, "_require_scope", lambda: "selected")
-    monkeypatch.setattr(sync_api, "resolved_tenant_id", lambda: "team")
-    monkeypatch.setattr(sync_api, "append_event", lambda **kw: {"id": "event"})
-    monkeypatch.setattr(sync_api, "_ws_sync_event", lambda *args: None)
     with sessions() as db:
-        saved = sync_api.sync_push(sync_api.SyncPushIn(module="tasks", record={
-            "id": "T-synced", "title": "Synced", "acceptance_criteria": [" Pass "],
-        }), db=db)
-        assert saved["record"].get("acceptance_criteria") == ["Pass"]
-        with pytest.raises(Exception) as failure:
-            sync_api.sync_push(sync_api.SyncPushIn(module="tasks", record={
-                "id": "T-synced", "title": "Corrupted", "acceptance_criteria": [1],
-            }), db=db)
-        assert getattr(failure.value, "status_code", None) == 422
+        saved = direct_sync(
+            db, "selected", record={"id": "T-synced", "title": "Synced", "acceptance_criteria": [" Pass "]}
+        )
+        assert saved["processing"]["state"] == "processed", saved
+        assert db.get(sql_models.Task, "T-synced").acceptance_criteria == ["Pass"]
+        failed = direct_sync(
+            db, "selected", record={"id": "T-synced", "title": "Corrupted", "acceptance_criteria": [1]}
+        )
+        assert failed["processing"]["state"] == "failed"
         db.expire_all()
         assert db.get(sql_models.Task, "T-synced").title == "Synced"
 
@@ -89,7 +108,11 @@ def test_lance_import_preserves_task_criteria_without_requirement_copy(env, monk
 
     class Source:
         def rows(self, resource, limit):
-            return [{"id": "T-imported", "title": "Imported", "acceptance_criteria": [" Own criterion "]}] if resource == "tasks" else []
+            return (
+                [{"id": "T-imported", "title": "Imported", "acceptance_criteria": [" Own criterion "]}]
+                if resource == "tasks"
+                else []
+            )
 
     monkeypatch.setattr(migrate, "get_vector_store", Source)
     monkeypatch.setattr(migrate, "get_session", lambda: iter([sessions()]))
@@ -101,12 +124,17 @@ def test_lance_import_preserves_task_criteria_without_requirement_copy(env, monk
         assert row.req_id == ""
 
 
-@pytest.mark.parametrize("requirement_id,own_criteria", [
-    ("", ["Independent task output is reviewed"]),
-    ("REQ-selected", ["Only this task-specific condition"]),
-    ("REQ-selected", []),
-])
-def test_agent_plan_packet_preserves_own_task_criteria_without_requirement_inheritance(env, requirement_id, own_criteria):
+@pytest.mark.parametrize(
+    "requirement_id,own_criteria",
+    [
+        ("", ["Independent task output is reviewed"]),
+        ("REQ-selected", ["Only this task-specific condition"]),
+        ("REQ-selected", []),
+    ],
+)
+def test_agent_plan_packet_preserves_own_task_criteria_without_requirement_inheritance(
+    env, requirement_id, own_criteria
+):
     client, sessions = env
     with sessions() as db:
         requirement = db.get(sql_models.Requirement, "REQ-selected")

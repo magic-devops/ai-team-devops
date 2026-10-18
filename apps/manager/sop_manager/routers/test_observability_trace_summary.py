@@ -4,7 +4,7 @@ from sop_manager.path_config import reset_request_scope, set_request_scope
 from sop_manager.routers import agent_runs, data_ingest, llm_gateway_v2
 from sop_manager.routers.agent_runs import RunCreate, StatusUpdate
 from sop_manager.routers.data_ingest import ConnectorCreate, JobCreate, JobStatusUpdate
-from sop_manager.routers.events_ingest import CloudEvent, IngestIn, ingest
+from sop_manager.routers.events_ingest import IngestIn, ingest
 from sop_manager.routers.llm_gateway_v2 import UsageRecord
 
 
@@ -25,8 +25,40 @@ def scoped_project(root, *, tenant="tenant-ob", business="biz-ob", project="proj
 
 
 def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, tmp_path):
+    import hashlib
+    import json
+
+    from fastapi import Request
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from sop_manager.project_write_guard import ManagerSession
     from sop_manager.routers import audit_chain
+    from sop_manager.routers import sql_models as m
     from sop_manager.routers.system_ops import observability_trace_summary
+
+    unusable_hash = "not-a-login"
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    m.Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine, class_=ManagerSession, autoflush=False, expire_on_commit=False)
+    with sessions() as db:
+        db.add(m.Tenant(id="tenant-ob", name="Trace", slug="trace"))
+        db.flush()
+        db.add(
+            m.User(
+                id="trace-user",
+                tenant_id="tenant-ob",
+                username="Trace",
+                password_hash=unusable_hash,
+                role="tenant_admin",
+                status="active",
+            )
+        )
+        db.flush()
+        db.add(m.Project(id="project-ob", tenant_id="tenant-ob", name="Trace", project_path=str(tmp_path)))
+        db.commit()
+    monkeypatch.setattr(m, "SessionLocal", sessions)
 
     trace_id = "0123456789abcdef0123456789abcdef"
     correlation_id = "corr-observability-1"
@@ -52,24 +84,59 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
             )
         )
 
-        connector = data_ingest.create_connector(ConnectorCreate(name="ob-cdc", connector_type="oceanbase", database="hermes"))
-        job = data_ingest.create_job(JobCreate(connector_id=connector["id"], name="cdc-orders", ingest_mode="cdc", source_table="orders"))
-        with data_ingest.trace_context(trace_id=trace_id, correlation_id=correlation_id, agent_run_id=run["id"]):
-            data_ingest.run_job(job["id"])
-            data_ingest.update_job_status(job["id"], JobStatusUpdate(status="failed", error_msg="cursor lag", rows_ingested=0))
-
-        ingest(
-            IngestIn(
-                events=[
-                    CloudEvent(
-                        id="evt-ob-1",
-                        type="agent.run.failed",
-                        subject=run["id"],
-                        data={"trace_id": trace_id, "correlation_id": correlation_id, "agent_run_id": run["id"], "reason": "timeout"},
-                    )
-                ]
+        connector = data_ingest.create_connector(
+            ConnectorCreate(name="ob-cdc", connector_type="oceanbase", database="hermes")
+        )
+        job = data_ingest.create_job(
+            JobCreate(
+                connector_id=connector["id"], name="cdc-orders", ingest_mode="cdc", source_table="orders"
             )
         )
+        with data_ingest.trace_context(
+            trace_id=trace_id, correlation_id=correlation_id, agent_run_id=run["id"]
+        ):
+            data_ingest.run_job(job["id"])
+            data_ingest.update_job_status(
+                job["id"], JobStatusUpdate(status="failed", error_msg="cursor lag", rows_ingested=0)
+            )
+
+        raw = json.dumps(
+            {
+                "specversion": "1.0",
+                "id": "evt-ob-1",
+                "type": "agent.run.failed",
+                "source": "test",
+                "subject": run["id"],
+                "time": "2026-10-18T00:00:00Z",
+                "datacontenttype": "application/json",
+                "data": {
+                    "trace_id": trace_id,
+                    "correlation_id": correlation_id,
+                    "agent_run_id": run["id"],
+                    "reason": "timeout",
+                },
+            },
+            separators=(",", ":"),
+        )
+        body = IngestIn(
+            expected_tenant_id="tenant-ob",
+            expected_project_id="project-ob",
+            expected_producer_id="trace-user",
+            events=[
+                {"id": "evt-ob-1", "event_json": raw, "digest": hashlib.sha256(raw.encode()).hexdigest()}
+            ],
+        )
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/v1/events:ingest",
+                "headers": [(b"x-project-id", b"project-ob")],
+            }
+        )
+        with sessions() as db:
+            accepted = ingest(body, db.get(m.User, "trace-user"), db, request, "project-ob")
+            assert accepted["results"][0]["outcome"] == "stored"
         audit_chain.append_audit(
             "agent_run.failed",
             resource_type="agent_run",
@@ -79,6 +146,7 @@ def test_trace_context_attaches_to_agent_llm_data_event_and_audit(monkeypatch, t
 
         summary = observability_trace_summary(run_id=run["id"], trace_id="", limit=50)
 
+    engine.dispose()
     assert llm["trace_id"] == trace_id
     assert summary["ok"] is True
     assert summary["filters"]["run_id"] == run["id"]

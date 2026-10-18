@@ -1,188 +1,225 @@
-"""
-@module: sop_cli.commands.event
-@purpose: CloudEvent 事件上报/查询：本地 outbox 优先，远端 Manager 增强
-"""
+"""Project event receipts and one shared durable SQLite queue."""
+
 from __future__ import annotations
 
-import json
-import uuid
 import asyncio
-from datetime import datetime, timezone
+import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlencode, urlparse, urlunparse
 
 import typer
-from rich.table import Table
 
+from sop_sdk.event_envelope import FrozenEvent, integer, strict_json
+from sop_sdk.event_outbox import EventOutbox
+from sop_sdk.event_sender import flush_outbox
 from .._util import console, get_client, get_config, ok, warn
 
-app = typer.Typer(help="事件：emit/flush/list（CloudEvents + 本地 outbox）")
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+app = typer.Typer(help="事件：持久入队、送达回执、处理记录和明确重试")
 
 
 def _outbox_path() -> Path:
-    return get_config().project_path / ".sop-runtime" / "events" / "outbox.jsonl"
-
-
-def _sent_path() -> Path:
-    return get_config().project_path / ".sop-runtime" / "events" / "sent.jsonl"
-
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    out: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(obj, dict):
-            out.append(obj)
-    return out
-
-
-def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = "".join(json.dumps(r, ensure_ascii=False, separators=(",", ":")) + "\n" for r in rows)
-    path.write_text(text, encoding="utf-8")
-
-
-def _append_jsonl(path: Path, row: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-
-
-def _parse_data(data_json: str, data: list[str]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    if data_json:
-        try:
-            parsed = json.loads(data_json)
-        except json.JSONDecodeError as e:
-            raise typer.BadParameter(f"--data-json 不是合法 JSON: {e}") from e
-        if not isinstance(parsed, dict):
-            raise typer.BadParameter("--data-json 必须是 JSON object")
-        out.update(parsed)
-    for item in data:
-        k, sep, v = item.partition("=")
-        if not sep or not k.strip():
-            raise typer.BadParameter("--data 需使用 key=value")
-        out[k.strip()] = v
-    return out
-
-
-def _build_event(event_type: str, *, subject: str, source: str, data: dict[str, Any]) -> dict[str, Any]:
     cfg = get_config()
-    data = {
-        **data,
-        "tenant_code": cfg.tenant_code or cfg.tenant_id,
-        "business_code": cfg.business_code,
-        "project_code": cfg.project_code or cfg.project_id,
-        "project_id": cfg.project_id,
-    }
-    return {
-        "specversion": "1.0",
-        "id": f"evt-{uuid.uuid4().hex}",
-        "type": event_type,
-        "source": source or "sop-cli",
-        "subject": subject,
-        "time": _now(),
-        "datacontenttype": "application/json",
-        "data": data,
-    }
+    return cfg.project_path / cfg.outbox_path
 
 
-def _render(rows: list[dict[str, Any]], title: str) -> None:
-    tbl = Table(title=title, show_header=True, header_style="bold")
-    for col in ("time", "type", "id", "subject", "source"):
-        tbl.add_column(col)
-    for row in rows:
-        payload = row.get("payload") if isinstance(row.get("payload"), dict) else row
-        tbl.add_row(
-            str(payload.get("time") or row.get("ts") or ""),
-            str(payload.get("type") or row.get("action") or ""),
-            str(payload.get("id") or row.get("id") or ""),
-            str(payload.get("subject") or row.get("record_id") or ""),
-            str(payload.get("source") or ""),
+def queue_health(project_path: Path, outbox_path: str = ".sop-runtime/outbox.sqlite"):
+    """Observe current SQL counts without creating, migrating, binding or flushing a queue."""
+    path = project_path / outbox_path
+    if not path.exists():
+        return {"pending": 0, "dead_letter": 0, "acked": 0, "bad": 0, "storage_state": "not_initialized"}
+    error = "storage_unavailable"
+    try:
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
+            db.execute("BEGIN")
+            if db.execute("PRAGMA user_version").fetchone()[0] != 1:
+                error = "migration_required"
+            else:
+                counts = dict(db.execute("SELECT state,count(*) FROM events GROUP BY state"))
+                return {
+                    **{state: counts.get(state, 0) for state in ("pending", "dead_letter", "acked")},
+                    "bad": 0,
+                    "storage_state": "ready",
+                }
+    except (sqlite3.Error, OSError, ValueError):
+        pass
+    return {"pending": None, "dead_letter": None, "acked": None, "bad": 1, "storage_state": error}
+
+
+def _legacy_files():
+    root = get_config().project_path / ".sop-runtime"
+    names = ("events/outbox.jsonl", "events/sent.jsonl", "sync/push_queue.jsonl", "dlq")
+    return [
+        {
+            "path": str(root / name),
+            "kind": "directory" if (root / name).is_dir() else "file",
+            "size": (root / name).stat().st_size,
+        }
+        for name in names
+        if (root / name).exists()
+    ]
+
+
+def _flush(limit):
+    cfg = get_config()
+    retries = integer(cfg.outbox_max_retries, "outbox_max_retries", 0, 999)
+    with EventOutbox(_outbox_path()) as box:
+        return flush_outbox(
+            box,
+            get_client(),
+            intended_project_id=cfg.project_id,
+            manager_url=cfg.manager_url,
+            limit=limit,
+            max_attempts=retries + 1,
         )
-    console.print(tbl)
 
 
 @app.command("emit")
 def emit_event(
-    event_type: str = typer.Argument(..., help="CloudEvent type，例如 sop.agent.run.completed"),
-    subject: str = typer.Option("", "--subject", help="事件主题/资源 ID"),
-    source: str = typer.Option("sop-cli", "--source", help="事件来源"),
-    data_json: str = typer.Option("", "--data-json", help="事件 data JSON object"),
-    data: list[str] = typer.Option([], "--data", help="追加 data key=value，可重复"),
-    local: bool = typer.Option(False, "--local", help="只写本地 outbox"),
+    event_type: str = typer.Argument(...),
+    subject: str = typer.Option("", "--subject"),
+    source: str = typer.Option("sop-cli", "--source"),
+    data_json: str = typer.Option("{}", "--data-json"),
+    data: list[str] = typer.Option([], "--data"),
+    event_id: str = typer.Option(..., "--id", help="固定事件 ID；重发须使用原 ID 和原文"),
+    time: str = typer.Option(..., "--time", help="原始 RFC3339 时间；重发不可重新取当前时间"),
+    local: bool = typer.Option(False, "--local"),
 ) -> None:
-    """上报单个 CloudEvent；远端不可用时自动落本地 outbox。"""
-    event = _build_event(event_type, subject=subject, source=source, data=_parse_data(data_json, data))
-    if not local:
-        try:
-            out = get_client().events_ingest([event])
-            ok(f"event ingested {event['id']} accepted={len(out.get('accepted', []))}")
-            return
-        except Exception as e:
-            warn(f"Manager events ingest 不可用，写入本地 outbox: {e}")
-    _append_jsonl(_outbox_path(), event)
-    ok(f"local event queued {event['id']}")
+    """始终先写同一 SQLite；送达和业务处理分别确认。"""
+    try:
+        payload = strict_json(data_json)
+        if not isinstance(payload, dict):
+            raise ValueError("data must be JSON object")
+        for item in data:
+            key, sep, value = item.partition("=")
+            if not sep or not key:
+                raise ValueError("--data requires key=value")
+            payload[key] = value
+        frozen = FrozenEvent.create(
+            event_type, payload, event_id=event_id, time=time, subject=subject, source=source
+        )
+        with EventOutbox(_outbox_path()) as box:
+            queued = box.enqueue(frozen, get_config().project_id)
+        console.print_json(data={"queued": queued})
+        if not local:
+            console.print_json(data=_flush(20))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
+
+@app.command("enqueue-file")
+def enqueue_file(path: Path, local: bool = typer.Option(False, "--local")):
+    """从原始完整 CloudEvent UTF-8 文件持久入队；字节内容保持不变。"""
+    try:
+        frozen = FrozenEvent.from_json(path.read_bytes().decode("utf-8"))
+        with EventOutbox(_outbox_path()) as box:
+            console.print_json(data=box.enqueue(frozen, get_config().project_id))
+        if not local:
+            console.print_json(data=_flush(20))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
 
 @app.command("flush")
-def flush_events(limit: int = typer.Option(100, "--limit", "-n", help="本次最多发送数量")) -> None:
-    """冲刷本地事件 outbox 到 Manager。"""
-    rows = _read_jsonl(_outbox_path())
-    if not rows:
-        ok("event outbox empty")
-        return
-    batch = rows[: max(1, limit)]
-    out = get_client().events_ingest(batch)
-    done = set(out.get("accepted", []) or []) | set(out.get("duplicated", []) or [])
-    remain = [r for r in rows if str(r.get("id")) not in done]
-    sent = [r for r in batch if str(r.get("id")) in done]
-    _write_jsonl(_outbox_path(), remain)
-    for row in sent:
-        _append_jsonl(_sent_path(), row)
-    ok(f"events flushed accepted={len(out.get('accepted', []))} duplicated={len(out.get('duplicated', []))} remain={len(remain)}")
+def flush_events(limit: int = typer.Option(20, "--limit", "-n", min=1, max=50)):
+    try:
+        console.print_json(data=_flush(limit))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
 
 
 @app.command("list")
 def list_events(
-    since: str = typer.Option("", "--since", help="远端事件 ts 游标"),
-    limit: int = typer.Option(50, "--limit", "-n", help="返回数量"),
-    local: bool = typer.Option(False, "--local", help="只查看本地 outbox/sent"),
-    json_output: bool = typer.Option(False, "--json", help="输出 JSON"),
-) -> None:
-    """查看远端事件流水；Manager 不可用时回退本地。"""
-    rows: list[dict[str, Any]]
-    title = "events"
-    if not local:
-        try:
-            out = get_client().events_list(since=since, limit=limit)
-            rows = list(out.get("items", []))
-            if json_output:
-                console.print_json(data={"items": rows, "total": len(rows), "cursor": out.get("cursor", since)})
-                return
-            _render(rows, f"remote events total={len(rows)}")
-            return
-        except Exception as e:
-            warn(f"Manager events 不可用，回退本地: {e}")
-    rows = (_read_jsonl(_outbox_path()) + _read_jsonl(_sent_path()))[-max(1, limit):]
-    title = f"local events total={len(rows)}"
-    if json_output:
-        console.print_json(data={"items": rows, "total": len(rows)})
-        return
-    _render(rows, title)
+    state: str = typer.Option("all", "--state"),
+    event_type: str = typer.Option("", "--type"),
+    producer_id: str = typer.Option("", "--producer-id"),
+    cursor: str = typer.Option("", "--cursor"),
+    limit: int = typer.Option(20, "--limit", "-n", min=1, max=50),
+    local: bool = typer.Option(False, "--local"),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """有界查询；远端读取失败明确报错，避免把本地数据当作远端结果。"""
+    try:
+        if local:
+            with EventOutbox(_outbox_path()) as box:
+                result = box.list(state=state, limit=limit, cursor=cursor)
+        else:
+            result = get_client().events_list(
+                state=state, event_type=event_type, producer_id=producer_id, cursor=cursor, limit=limit
+            )
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
+
+@app.command("show")
+def show_event(event_id: str, local: bool = typer.Option(False, "--local")):
+    try:
+        if local:
+            with EventOutbox(_outbox_path()) as box:
+                result = box.inspect(event_id)
+        else:
+            result = get_client().event_receipt(event_id)
+        console.print_json(data=result)
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
+
+@app.command("attempts")
+def event_attempts(
+    receipt_id: str,
+    cursor: str = typer.Option("", "--cursor"),
+    limit: int = typer.Option(20, "--limit", min=1, max=100),
+):
+    console.print_json(data=get_client().event_attempts(receipt_id, cursor=cursor, limit=limit))
+
+
+@app.command("retry")
+def retry_event(
+    receipt_id: str,
+    revision: int = typer.Option(..., "--revision", min=1),
+    reason: str = typer.Option(..., "--reason"),
+    key: str = typer.Option(..., "--key"),
+):
+    """Manager 原业务操作重试；保留同一键、原修订与原因用于未知结果重放。"""
+    console.print_json(
+        data=get_client().event_retry(
+            receipt_id, expected_revision=revision, reason=reason, idempotency_key=key
+        )
+    )
+
+
+@app.command("requeue")
+def requeue_event(
+    event_id: str,
+    revision: int = typer.Option(..., "--revision", min=1),
+    reason: str = typer.Option(..., "--reason"),
+    key: str = typer.Option(..., "--key"),
+):
+    """仅将可重试本地死信恢复为待送达，保持原内容与身份。"""
+    try:
+        with EventOutbox(_outbox_path()) as box:
+            console.print_json(data=box.requeue(event_id, revision, reason, key))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc
+
+
+@app.command("stats")
+def queue_stats():
+    with EventOutbox(_outbox_path()) as box:
+        console.print_json(data={**box.stats(), "legacy_files": _legacy_files()})
+
+
+@app.command("migrate-v0")
+def migrate_v0(project_id: str = typer.Option(..., "--project-id", help="明确选择旧 SQLite 事件的目标项目")):
+    console.print_json(data=EventOutbox.migrate_legacy(_outbox_path(), project_id))
 
 
 def _ws_url(manager_url: str, *, project_id: str, token: str) -> str:
@@ -224,7 +261,9 @@ def subscribe_events(
         async with websockets.connect(url) as ws:  # type: ignore[attr-defined]
             while True:
                 try:
-                    raw = await asyncio.wait_for(ws.recv(), timeout=timeout if timeout > 0 and received == 0 else None)
+                    raw = await asyncio.wait_for(
+                        ws.recv(), timeout=timeout if timeout > 0 and received == 0 else None
+                    )
                 except asyncio.TimeoutError:
                     ok("event subscribe timeout")
                     return
@@ -238,7 +277,9 @@ def subscribe_events(
                 if json_output:
                     console.print_json(data=evt)
                 else:
-                    console.print(f"[bold]{evt.get('type', '-')}[/bold] {evt.get('id', '-')} {evt.get('subject', '')}")
+                    console.print(
+                        f"[bold]{evt.get('type', '-')}[/bold] {evt.get('id', '-')} {evt.get('subject', '')}"
+                    )
                 if limit and received >= limit:
                     return
 
@@ -257,4 +298,4 @@ def subscribe_events(
 def _root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is not None:
         return
-    list_events(local=True)
+    list_events(state="all", event_type="", producer_id="", cursor="", limit=20, local=True, json_output=True)

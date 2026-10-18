@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Protocol
 
-MAX_FRAME_BYTES = 65536
+MAX_FRAME_BYTES = 512 * 1024
 
 
 class IpcTransport(Protocol):
@@ -128,7 +128,7 @@ def _ipc_error(code: str, message: str, *, transport: IpcTransport, op: str) -> 
 class AgentdIpcClient:
     """Hook / CLI → sop-agentd 的轻量同步客户端。
 
-    协议：单 NDJSON 帧请求 → 单 NDJSON 帧响应（< 64 KB）。
+    协议：单 NDJSON 帧请求 → 单 NDJSON 帧响应（最多 512 KiB）。
     超时 1 秒，连接失败立即返回结构化错误（fall through，由调用方决定降级）。
     """
 
@@ -169,6 +169,8 @@ class AgentdIpcClient:
     def send(self, op: str, name: str = "", data: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = {"v": 1, "op": op, "name": name, "data": data or {}}
         frame = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+        if len(frame) > MAX_FRAME_BYTES:
+            return _ipc_error("frame_too_large", "IPC 请求超过 512 KiB", transport=self.transport, op=op)
         try:
             if not self.available():
                 return _ipc_error(
@@ -180,13 +182,21 @@ class AgentdIpcClient:
             buf = self.transport.request(frame, self.timeout, self.max_response_bytes)
             if not buf.strip():
                 return _ipc_error("empty_response", "agentd IPC 返回空响应", transport=self.transport, op=op)
+            if len(buf) > self.max_response_bytes or not buf.endswith(b"\n"):
+                return _ipc_error(
+                    "invalid_response", "agentd IPC 响应帧不完整或超过上限", transport=self.transport, op=op
+                )
             try:
-                out = json.loads(buf.decode("utf-8").strip())
-            except (UnicodeDecodeError, json.JSONDecodeError) as e:
-                return _ipc_error("invalid_response", f"agentd IPC 返回无法解析: {e}", transport=self.transport, op=op)
-            if isinstance(out, dict):
+                from .event_envelope import strict_json
+
+                out = strict_json(buf.decode("utf-8").strip())
+            except (UnicodeError, ValueError) as e:
+                return _ipc_error(
+                    "invalid_response", f"agentd IPC 返回无法解析: {e}", transport=self.transport, op=op
+                )
+            if isinstance(out, dict) and type(out.get("ok")) is bool:
                 return out
-            return _ipc_error("invalid_response", "agentd IPC 返回不是 JSON object", transport=self.transport, op=op)
+            return _ipc_error("invalid_response", "agentd IPC 响应必须含布尔 ok", transport=self.transport, op=op)
         except TimeoutError as e:
             return _ipc_error("timeout", str(e), transport=self.transport, op=op)
         except FileNotFoundError as e:
@@ -195,28 +205,116 @@ class AgentdIpcClient:
             return _ipc_error("transport_error", str(e), transport=self.transport, op=op)
 
     # 便捷方法
-    def event(self, name: str, **data: Any) -> dict[str, Any]:
-        return self.send("event", name=name, data=data)
+    def enqueue_event(self, event, *, intended_project_id: str) -> dict[str, Any]:
+        from .event_envelope import FrozenEvent, text_field
+
+        if not isinstance(event, FrozenEvent):
+            raise ValueError("FrozenEvent required")
+        text_field(intended_project_id, "intended_project_id", maximum=64)
+        out = self.send("event.enqueue", data={**event.item(), "intended_project_id": intended_project_id})
+        if out.get("ok") is True:
+            result = out.get("result")
+            if (
+                out.get("op") != "event.enqueue"
+                or out.get("id") != event.id
+                or not isinstance(result, dict)
+                or result.get("id") != event.id
+                or result.get("digest") != event.digest
+                or result.get("state") not in {"pending", "dead_letter", "acked"}
+                or type(result.get("revision")) is not int
+                or result["revision"] < 1
+                or type(result.get("replayed")) is not bool
+            ):
+                out = _ipc_error(
+                    "invalid_response", "agentd 未确认原事件入队", transport=self.transport, op="event.enqueue"
+                )
+        # Unknown transport outcome carries the exact original intent for a safe explicit retry.
+        if out.get("ok") is not True:
+            return {**out, "original_event": event.item(), "intended_project_id": intended_project_id}
+        return out
+
+    def event(
+        self, name: str, *, intended_project_id: str, event_id: str, time: str, **data: Any
+    ) -> dict[str, Any]:
+        from .event_envelope import FrozenEvent
+
+        return self.enqueue_event(
+            FrozenEvent.create(name, data, event_id=event_id, time=time), intended_project_id=intended_project_id
+        )
 
     def health(self) -> dict[str, Any]:
         return self.send("health")
 
-    def task_done(self, task_id: str, notes: str = "", confidence: float = 0.0) -> dict[str, Any]:
-        return self.send(
-            "task.update",
-            name=task_id,
-            data={
-                "status": "completed",
-                "notes": notes,
-                "confidence": confidence,
-            },
+    def task_done(
+        self,
+        task_id: str,
+        *,
+        expected_version: int,
+        intended_project_id: str,
+        event_id: str,
+        time: str,
+        notes="",
+        confidence=0.0,
+    ) -> dict[str, Any]:
+        return self._task_status(
+            task_id,
+            "completed",
+            expected_version,
+            intended_project_id,
+            event_id,
+            time,
+            notes=notes,
+            confidence=confidence,
         )
 
-    def task_fail(self, task_id: str, notes: str = "") -> dict[str, Any]:
-        return self.send("task.update", name=task_id, data={"status": "blocked", "notes": notes})
+    def task_fail(
+        self, task_id: str, *, expected_version: int, intended_project_id: str, event_id: str, time: str, notes=""
+    ) -> dict[str, Any]:
+        return self._task_status(
+            task_id, "blocked", expected_version, intended_project_id, event_id, time, notes=notes
+        )
 
-    def report_issue(self, title: str, severity: str = "P2", description: str = "") -> dict[str, Any]:
-        return self.send("issue.report", data={"title": title, "severity": severity, "description": description})
+    def _task_status(self, task_id, status, expected_version, project, event_id, time, **metadata):
+        from .event_envelope import FrozenEvent, integer
+
+        integer(expected_version, "expected_version")
+        event = FrozenEvent.create(
+            "sop.task.status_changed",
+            {"expected_version": expected_version, "status": status, **metadata},
+            subject=task_id,
+            event_id=event_id,
+            time=time,
+        )
+        return self.enqueue_event(event, intended_project_id=project)
+
+    def report_issue(
+        self,
+        title: str,
+        *,
+        expected_version: int,
+        intended_project_id: str,
+        event_id: str,
+        time: str,
+        severity="P2",
+        description="",
+        task_id="",
+    ) -> dict[str, Any]:
+        from .event_envelope import FrozenEvent, integer
+
+        integer(expected_version, "expected_version")
+        event = FrozenEvent.create(
+            "sop.issue.opened",
+            {
+                "expected_version": expected_version,
+                "title": title,
+                "severity": severity,
+                "description": description,
+                "task_id": task_id,
+            },
+            event_id=event_id,
+            time=time,
+        )
+        return self.enqueue_event(event, intended_project_id=intended_project_id)
 
     def sync_pull(self, modules: str = "") -> dict[str, Any]:
         data: dict[str, Any] = {}
@@ -224,5 +322,44 @@ class AgentdIpcClient:
             data["modules"] = modules
         return self.send("sync.pull", data=data)
 
-    def sync_push(self, module: str, record: dict[str, Any], action: str = "upsert") -> dict[str, Any]:
-        return self.send("sync.push", data={"module": module, "action": action, "record": record})
+    def sync_push(
+        self,
+        module: str,
+        record: dict[str, Any],
+        *,
+        expected_version: int,
+        intended_project_id: str,
+        event_id: str,
+        time: str,
+        action="upsert",
+    ) -> dict[str, Any]:
+        from .event_envelope import FrozenEvent, integer
+
+        integer(expected_version, "expected_version")
+        event = FrozenEvent.create(
+            "sop.sync.push",
+            {"expected_version": expected_version, "module": module, "action": action, "record": record},
+            event_id=event_id,
+            time=time,
+        )
+        return self.enqueue_event(event, intended_project_id=intended_project_id)
+
+    def outbox_stats(self):
+        return self.send("outbox.stats")
+
+    def outbox_list(self, *, state="all", limit=20, cursor=""):
+        return self.send("outbox.list", data={"state": state, "limit": limit, "cursor": cursor})
+
+    def outbox_inspect(self, event_id: str):
+        return self.send("outbox.inspect", data={"id": event_id})
+
+    def outbox_requeue(self, event_id: str, *, expected_revision: int, reason: str, idempotency_key: str):
+        return self.send(
+            "outbox.requeue",
+            data={
+                "id": event_id,
+                "expected_revision": expected_revision,
+                "reason": reason,
+                "idempotency_key": idempotency_key,
+            },
+        )

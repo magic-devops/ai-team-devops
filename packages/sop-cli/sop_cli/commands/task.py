@@ -1170,43 +1170,40 @@ def delete_task(
 @app.command()
 def issue(
     title: str,
+    expected_version: int = typer.Option(..., "--expected-version", min=0),
+    event_id: str = typer.Option(..., "--id"),
+    event_time: str = typer.Option(..., "--time"),
     severity: str = typer.Option("P2", "--severity"),
     description: str = typer.Option("", "--desc"),
-    task_id: str = typer.Option("", "--task", help="关联任务 ID"),
-    local: bool = typer.Option(False, "--local", help="只写本地并进入同步队列"),
+    task_id: str = typer.Option("", "--task"),
+    local: bool = typer.Option(False, "--local"),
 ) -> None:
-    """上报 issue；优先 agentd/Manager，离线时写入本地队列。"""
-    if not local:
-        from sop_sdk import AgentdIpcClient
+    """以同一冻结操作上报问题，未知送达结果保留原意图。"""
+    from sop_sdk.event_envelope import FrozenEvent, integer
+    from sop_sdk.event_outbox import EventOutbox
 
-        ipc = AgentdIpcClient()
-        if ipc.available():
-            out = ipc.report_issue(title=title, severity=severity, description=description)
-            if out.get("ok"):
-                ok(f"issue reported via agentd: {out.get('id', '-')}")
-                return
-            warn(f"agentd issue 上报失败，回退直连 Manager: {out.get('error', '-')}")
-        else:
-            warn("agentd 不可达，回退直连 Manager")
-        try:
-            out = get_client().create_issue(
-                {"title": title, "severity": severity.upper(), "description": description, "task_id": task_id}
-            )
-            ok(f"issue reported via Manager: {out.get('id', '-')}")
-            return
-        except Exception as e:
-            warn(f"Manager issue 上报不可用，写入本地队列: {e}")
+    from .._util import console
+    from .event import _flush, _outbox_path
 
-    from . import issue as issue_cmd
-
-    row = issue_cmd._new_row(
-        title,
-        description=description,
-        issue_type="bug",
-        severity=severity,
-        task_id=task_id,
-        sprint_id="",
-        reported_by="sop task issue",
-    )
-    issue_cmd._save_and_queue(row)
-    ok(f"local issue queued {row['id']}")
+    try:
+        integer(expected_version, "expected_version")
+        frozen = FrozenEvent.create(
+            "sop.issue.opened",
+            {
+                "expected_version": expected_version,
+                "title": title,
+                "severity": severity,
+                "description": description,
+                "task_id": task_id,
+            },
+            event_id=event_id,
+            time=event_time,
+            source="sop-cli",
+        )
+        with EventOutbox(_outbox_path()) as box:
+            console.print_json(data=box.enqueue(frozen, get_config().project_id))
+        if not local:
+            console.print_json(data=_flush(20))
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(2) from exc

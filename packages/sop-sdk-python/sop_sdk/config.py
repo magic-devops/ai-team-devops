@@ -34,6 +34,7 @@ class AgentConfig:
     verify_ssl: bool = True
     timeout_seconds: int = 30
     max_retries: int = 3
+    outbox_max_retries: int = 6
     outbox_path: str = ".sop-runtime/outbox.sqlite"
     a2a_port: int = 7741
     mcp_servers: list[str] = field(default_factory=lambda: ["lancedb", "knowledge", "tasks", "files"])
@@ -146,6 +147,7 @@ def load_config(project_path: Path | None = None) -> AgentConfig:
         verify_ssl=bool(auth.get("verify_ssl", True)),
         timeout_seconds=int(os.getenv("MANAGER_TIMEOUT") or rel.get("timeout_seconds", 30)),
         max_retries=int(os.getenv("MANAGER_MAX_RETRIES") or rel.get("max_retries", 3)),
+        outbox_max_retries=rel.get("max_retries", 6),
         outbox_path=str(rel.get("outbox_path", ".sop-runtime/outbox.sqlite")),
         a2a_port=int(trans.get("a2a_port", 7741)),
         mcp_servers=list(trans.get("mcp_servers", ["lancedb", "knowledge", "tasks", "files"])),

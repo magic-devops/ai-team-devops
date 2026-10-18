@@ -48,8 +48,11 @@ def status(
     outbox_tbl.add_column("name")
     outbox_tbl.add_column("pending")
     outbox_tbl.add_column("bad")
+    outbox_tbl.add_column("dead_letter")
+    outbox_tbl.add_column("state")
     for name, row in snapshot["outboxes"].items():
-        outbox_tbl.add_row(name, str(row.get("pending", 0)), str(row.get("bad", 0)))
+        outbox_tbl.add_row(name, str(row.get("pending") if row.get("pending") is not None else "—"),
+                          str(row.get("bad", 0)), str(row.get("dead_letter", "—")), str(row.get("storage_state", "ready")))
     console.print(outbox_tbl)
 
     # Manager
@@ -88,7 +91,7 @@ def build_status_snapshot() -> dict[str, Any]:
         "schema": "sop.status.snapshot.v1",
         "local": _read_local_state(cfg.project_path),
         "artifacts": _read_artifacts(cfg.project_path),
-        "outboxes": _read_outboxes(cfg.project_path),
+        "outboxes": _read_outboxes(cfg.project_path, cfg.outbox_path),
         "sync": _read_sync_state(cfg.project_path),
         "manager": {"ok": False},
     }
@@ -149,12 +152,14 @@ def _jsonl_count(path: Path) -> dict[str, int]:
     return {"pending": pending, "bad": bad}
 
 
-def _read_outboxes(project_path: Path) -> dict[str, dict[str, int]]:
+def _read_outboxes(project_path: Path, outbox_path=".sop-runtime/outbox.sqlite") -> dict[str, dict[str, Any]]:
+    from .event import queue_health
     return {
-        "sync": _jsonl_count(project_path / ".sop-runtime" / "sync" / "push_queue.jsonl"),
+        "sync": {**_jsonl_count(project_path / ".sop-runtime" / "sync" / "push_queue.jsonl"),
+                 "storage_state": "legacy_draft", "auto_flush": False},
         "memory": _jsonl_count(project_path / ".sop-runtime" / "memory" / "outbox.jsonl"),
         "kb": _jsonl_count(project_path / ".sop-runtime" / "kb" / "outbox.jsonl"),
-        "events": _jsonl_count(project_path / ".sop-runtime" / "events" / "outbox.jsonl"),
+        "events": queue_health(project_path, outbox_path),
         "usage": _jsonl_count(project_path / ".sop-runtime" / "usage" / "outbox.jsonl"),
     }
 

@@ -24,6 +24,8 @@ from .errors import (
     SopServerError,
     SopTransportError,
 )
+from .event_envelope import EventIdentity, EventProtocolError, FrozenEvent
+from .event_outbox import EventOutbox, QueueError
 from .hermes import HermesClient
 from .ipc import AgentdIpcClient
 from .security import Auth, BearerAuth, HmacAuth, NoAuth
@@ -42,6 +44,11 @@ __all__ = [
     "HmacAuth",
     "NoAuth",
     "AgentdIpcClient",
+    "FrozenEvent",
+    "EventIdentity",
+    "EventProtocolError",
+    "EventOutbox",
+    "QueueError",
     "HermesContractError",
     "HermesUnavailableError",
     "SopError",

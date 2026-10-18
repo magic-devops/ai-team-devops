@@ -37,7 +37,6 @@ type Reliability struct {
 	OutboxPath     string `toml:"outbox_path"`
 	BatchSize      int    `toml:"batch_size"`
 	MaxRetries     int    `toml:"max_retries"`
-	DLQPath        string `toml:"dlq_path"`
 	TimeoutSeconds int    `toml:"timeout_seconds"`
 }
 
@@ -68,7 +67,7 @@ func defaults() *Config {
 		},
 		Reliability: Reliability{
 			OutboxPath: ".sop-runtime/outbox.sqlite",
-			BatchSize:  50, MaxRetries: 6, DLQPath: ".sop-runtime/dlq",
+			BatchSize:  50, MaxRetries: 6,
 			TimeoutSeconds: 30,
 		},
 		Security: Security{NonceWindowSeconds: 300, SignBody: true},

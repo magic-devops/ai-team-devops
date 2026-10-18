@@ -167,7 +167,6 @@ def test_native_scope_change_and_restore_permanently_invalidates_receipt(bridge,
     monkeypatch.setattr(db_sql_compat, "resolved_project_id", lambda: "project")
     monkeypatch.setattr(sync_api, "_require_scope", lambda: "project")
     monkeypatch.setattr(sync_api, "resolved_tenant_id", lambda: "tenant")
-    monkeypatch.setattr(sync_api, "append_event", lambda **kwargs: {"id": "acceptance-event"})
     monkeypatch.setattr(sync_api, "_ws_sync_event", lambda *args: None)
     for criteria in (["Changed condition"], ["Original condition"]):
         with sessions() as db:
@@ -180,12 +179,12 @@ def test_native_scope_change_and_restore_permanently_invalidates_receipt(bridge,
                     f"id = '{task['id']}'", {"acceptance_criteria": criteria}
                 )
             elif writer == "sync":
-                sync_api.sync_push(
-                    sync_api.SyncPushIn(
-                        module="tasks", record={"id": task["id"], "acceptance_criteria": criteria}
-                    ),
-                    db=db,
+                from event_handoff_support import direct_sync
+
+                result = direct_sync(
+                    db, "project", record={"id": task["id"], "acceptance_criteria": criteria}
                 )
+                assert result["processing"]["state"] == "processed", result
             else:
                 data_exchange._merge_table(
                     db, "tasks", [{"id": task["id"], "acceptance_criteria": criteria}], "tenant", "project"
@@ -215,7 +214,9 @@ def test_missing_linked_requirement_cannot_turn_into_independent_task(env, mutat
             # Simulate external database tampering, which is outside the
             # application Session guard; ordinary reparenting is now forbidden.
             with db.get_bind().begin() as connection:
-                connection.execute(update(Requirement).where(Requirement.id == rid).values(project_id="other"))
+                connection.execute(
+                    update(Requirement).where(Requirement.id == rid).values(project_id="other")
+                )
     task = client.get("/api/v1/delivery/workspace").json()["tasks"][0]
     assert not task["acceptance"]["available"]
     assert task["execution_gate"]["reasons"][0]["code"] == "task_requirement_missing"
@@ -608,7 +609,9 @@ def test_stale_completed_intent_can_close_without_changing_terminal_run_or_curre
             # Deliberate out-of-band corruption must still not let an old run
             # overwrite a task now stored under a different project.
             with db.get_bind().begin() as connection:
-                connection.execute(update(Task).where(Task.id == task["id"]).values(project_id="other", status="pending"))
+                connection.execute(
+                    update(Task).where(Task.id == task["id"]).values(project_id="other", status="pending")
+                )
         elif mutation == "deleted":
             db.delete(row)
         else:

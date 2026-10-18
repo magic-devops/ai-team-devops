@@ -473,3 +473,23 @@ health返回真实pid/project_path/instance_id，PID文件仅诊断；停止必�
 证据 `.sop-runtime/delivery-evidence/delivery-discussion/` 保存原失败、完整/定向回归、真实HTTP/SQL、契约、独立复核及源码/产物散列。全部已验证阶段更改本地commit，不push；.pnpm-store零跟踪。清理仅在重要源/全部唯一证据盘点保留后处理精确任务scratch，不遍历链接。
 
 完整目标继续active、production_integration_complete=false。已独立复现但未在本阶段修改的Manager事件接收4项可靠性RED及Go跨SQLite/JSONL死信交接待下阶段原子化；通用跨存储活动、部分显式progress/人审/历史影响/quality/release详情仍有全项目成本。当前390px中英日真实视觉、生产身份/模型/数据库/基础设施和长期规模验证继续保留；既有浏览器协议与12ui安装/上传审批限制不绕过。
+
+## 可靠事件交接、真实处理与精确恢复增量（2026-10-18）
+
+阶段T-event-handoff，基线9ffc692a59408b0711986aa47ca3e4a1950d4706。设计 `docs/DURABLE_EVENT_HANDOFF_DESIGN.md`、指南 `docs/DURABLE_EVENT_HANDOFF_GUIDE.md`。完整平台目标保持active、production_integration_complete=false，阶段提交结果见 `.sop-runtime/delivery-evidence/event-handoff/commit-receipt.json`，不push。
+
+Go/Python采用同一SQLite v1规范，SHA256为16a95d7fe6e1b4f02bd8cb22c50f2d303e49b688fdc7bc0b32632e3555122988。原文/ID/摘要及首次认证tenant/project/User/Manager来源固定；pending/dead_letter/acked原子CAS，保留匹配原回执和原控制请求，有限分页与显式v0迁移保留全部有符号rowid范围。发送前完整ACK校验，未知/重复/错scope结果不吞原件；SQL失败、取消、坏ACK及错旧账号均保留原件。旧pusher及自动JSONL发送退出，剩余实体/规则/watch仅保留隔离草稿，不冒称全生产端统一。
+
+Manager不可变Inbox、Processing及追加Attempt为权威；真实身份/项目锁后复核、固定原key、严格JSON/大小/引用/游标、写后最小WS通知及逐帧授权。task.status、issue.create、sync.record.apply沿用原版本/业务门禁，业务效果、事件/命令回执与processed同SQL事务。文件先保存固定计划，验证原模块/解析路径/摘要，原子替换后可按原operation恢复；不宣称对任意外部写入者提供跨文件SQL原子性。已有Requirement定义变化缺预览明确失败，保留原正文和审批；通用/reflection无处理器只保存在pending。
+
+原事件页面沿用现主题/AntD，默认20条、精确详情与尝试、送达/处理/验收分离，实际对象当前归属导航与同项目返回，原始JSON折叠为文本。人工恢复使用当前能力、原因、原修订和原键；未知结果防退出，409保稿、明确读取采用，403/404不暴露旧原文，会话/项目ABA及SSR有回归。独立UI复核修复：只有重放原键后服务端锁内双查键发出的409 event_revision_conflict或403 event_retry_denied可解除未知；普通错误和单独GET processed不能解除，明确采用可显示最新只读结果而不再次提交。
+
+独立确认并修复原资产junction改向、错误asset结构导致混合batch整体失败、Task最终引用+completed门禁、SDK公开ACK伪造证明、IPC非bool成功、非法时区分钟、负/零rowid迁移及旧绑定队首阻塞等边界；原RED和固定症状GREEN、永久回归分别保留。旧独立Requirement探针把stage=intake当作唯一通过条件，正确安全实现为缺preview明确拒绝，故该旧断言仍RED；新增真实回归证明原定义/审批不变及正常预览入口有效，不能据旧oracle放松门禁。
+
+最终Manager完整1532通过（pytest5776.79秒，wall5823.031秒，源前后完全一致）；Web完整678项/128文件通过，TypeScript无错误、最终Vite构建通过；SDK/CLI完整426通过；Go完整75主项+38子例/6包通过，3个原Windows符号链接用例跳过，vet及CGO0最终binary成功。最后仅移除CLI三文件EOF多余空行后另有冻结源完整客户端复验，不把旧426运行快照写成最终相同。Python根21文件及后端单独lint均无新增/恶化配置诊断。OpenAPI新增6路径/6操作/23schema，180无关路径及445无关schema语义不变，1211局部引用解析；SDK最终wheel含与源码相同的Python文件和规范SQL。
+
+真实HTTP RUN4使用原FastAPI/login/middleware与autoflush=False：提交后丢ACK、实际Manager进程重启、轮换HMAC仍返回原receipt/time/digest；相同ID异原文拒绝；真实Task/Issue/Requirement效果只一次、旧版本失败、CRLF/UTF8资产保留、跨scope/无项目与读者retry拒绝、8项纯GET全部SQL表不变。实际CLI HTTP三项读取；通用事件不创建Workspace、不假装业务完成。真实Windowsbinary+SDK命名管道验证70,465字节帧/60,212字节冻结原文、重复原件、异原文冲突、Python入同库Go送实际Manager、真实心跳内容、任务回写（confidence仅审计/verified=false）、SDK report_issue实际open问题一次；Manager离线保留、原实例停止、双端重启后原件获得ACK。RUN4自有3个Manager和2个native进程全部停止，外部模型调用0。
+
+原失败完整保留：Go原测试受TEMP正斜线影响、真实Python首次WAL竞争、离线UV缓存缺构建依赖、native RUN2夹具帧9000字节不足分别记明；只将真实产品边界计入finding。工具链/模块来自原锁定版本，在任务目录校验；最终wheel复用已缓存纯Python构建依赖，未全局安装或改环境。所有重要源/唯一证据先盘点散列保留，清理不遍历链接；清理与实际commit以独立回执为准，.pnpm-store保持忽略且零跟踪。
+
+继续工作：旧实体/规则/watch草稿生产端的明确原版本事件意图；通用跨存储活动与reflection处理器；显式完整progress、人工评审、历史影响、quality/release详情的有界读取；当前390px中英日实机视觉，生产身份/模型/数据库/基础设施和长期可靠性。既有浏览器协议及12ui安装/上传审批拒绝不绕过，SSR/状态/结构/HTTP证据不冒充实际视觉。
