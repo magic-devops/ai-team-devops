@@ -194,7 +194,7 @@ def test_manual_acceptance_unlocks_all_consumers_then_returned_work_blocks_again
     client, sessions = env
     seed_chain(client, sessions)
     for decision in ("accept", "request_changes"):
-        current_response = client.get("/api/v1/delivery/tasks/T-upstream/reviews", headers=headers())
+        current_response = client.get("/api/v1/delivery/tasks/T-upstream/review-current", headers=headers())
         assert current_response.status_code == 200, current_response.text
         current = current_response.json()
         response = client.post(

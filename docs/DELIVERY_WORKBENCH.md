@@ -535,3 +535,17 @@ Web原意图保存在会话内，未知仅重放原正文/版本/键；明确拒
 真实HTTP最终Run6使用原登录/权限/中间件/会话和120需求、241项目任务，验证分页/精确范围、真实人工验收、签名CI、预览、创建、批准、取代失效及撤回。直接编译实际TS控制器并经真实HTTP制造成功后丢ACK，再以同原键重放，严格接收原receipt且业务版本只增加1。8直接GET+4SDK+4CLI读取覆盖35表零写，所有自有服务已停止，外部模型调用0。Run1缺fixture导入、Run2空Bearer启动、Run3未等正常POST异步审计、Run5误用缺失顶层esbuild路径均保留为夹具错误；Run4 Python链已成功，Run6是最终新源及TS控制器验证。Manager首轮1598通过，但3个测试仅导入格式变化导致来源检查失败；此后又修复独立边界，本节使用包含最终修复的完整复跑。
 
 证据 `.sop-runtime/delivery-evidence/bounded-delivery/`；源码、唯一测试文件和产物先盘点/散列保留，再清理精确任务scratch，不遍历链接。实际全部本地commit以commit-receipt为准，不push，.pnpm-store保持忽略及零跟踪。真实390px中英日浏览器视觉、PG/MySQL/MariaDB连接、生产身份/模型/数据库/基础设施和长期规模尚未验证；既有大chunk/非本阶段Deployment Drawer告警保留。完整目标active，production_integration_complete=false；人工评审/进度/基线/需求影响详情、Issue反向事件来源与generic/reflection真实处理继续待办。
+
+## 人工验收有界详情与原请求恢复（2026-10-19）
+
+阶段T-bounded-review，基线46e2b0e。设计 `docs/DELIVERY_BOUNDED_REVIEW_DESIGN.md`，使用 `docs/DELIVERY_MANUAL_REVIEW_GUIDE.md`。当前依据、历史小摘要和指定原件分开读取；目录只在SQL取240字意见摘要与是否有证据，不再加载全项目或历史快照正文。游标绑定租户/项目/阅读者/任务/页大小及固定序号窗口，追加决定不改变旧窗口。删除任务、当前证明超限或索引不可用时，授权历史原件仍独立可读。
+
+当前依据复用canonical完整必要依赖闭包，包括关联需求的全部兄弟任务、前驱、真实归属与有效证据。500任务/64层依赖和1MiB原件边界明确失败，不能将部分任务判为通过；写入继续完整事务证明。历史接受不冒充当前有效，通过effective_review_id对应真正有效人工决定。SQL中合法nullable req_id曾使独立任务查询索引写入非空parent_id失败；独立审查发现计划/流程显式null及非object被误当默认。两类真实症状均已修复并保留永久回归；普通Task创建接口本身已规范空值，未声称其必然触发SQL边界。
+
+Web沿用现主题，当前/历史各自加载刷新，展开才读取原件，取消整段历史轮询。共享release和manual命令的持久原件状态机，保留原正文/版本/键及会话；未知结果锁定并支持刷新恢复、原件重放，明确拒绝后保留意见并显式采用最新依据。三语文案、迟到读取/会话ABA、混代与严格真实ACK有回归；未把SSR或控制器测试当作浏览器视觉。
+
+最终Manager完整1637、Web完整796/135文件、SDK/CLI完整670通过，源码前后327/505/124项精确一致，TypeScript/Vite通过。OpenAPI三个相关读取路径和全部引用模型与实际应用核验，无关路径不变；离线SDK wheel12个Python文件与共享SQL原字节一致。Go源未改，本阶段未重复Go。
+
+真实HTTP使用原FastAPI/login/权限/中间件/会话，在1200个无关任务、600任务父需求及35份大历史背景下验证有界读取、完整范围失败、删除历史、账号/项目/任务游标隔离和数据库35表零写。实际Python命令幂等、SDK/CLI三个读取，以及编译真实TS控制器成功后丢ACK、重建控制器恢复同原件重放均通过；记录只新增一次且业务版本只加1。所有自有服务已停止，模型调用0。独立审查及失败夹具、RED/GREEN、源与证据散列在 `.sop-runtime/delivery-evidence/bounded-review/`，最终提交与精确临时目录清理以独立receipt为准。
+
+完整目标active。下一阶段优先补齐智能体实际创建问题的反向事件来源，再继续显式进度、基线和需求影响有界详情；generic/reflection真实处理仍待完善。真实390px中英日浏览器、其他数据库/生产接入和长期可靠性仍未验证；既有浏览器协议和12ui安装/上传审批限制不绕过。`.pnpm-store`保持忽略、零跟踪；本地提交、不push。

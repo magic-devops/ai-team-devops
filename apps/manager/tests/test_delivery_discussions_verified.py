@@ -81,7 +81,7 @@ def test_human_acceptance_remains_verified_after_discussion_and_reference(env):
     before = protected(sessions)
     discuss(client, task["id"])
     assert protected(sessions) == before
-    assert client.get(f"/api/v1/delivery/tasks/{task['id']}/reviews").json()["current"]["verified"]
+    assert client.get(f"/api/v1/delivery/tasks/{task['id']}/review-current").json()["current"]["verified"]
 
 
 def test_native_acceptance_remains_verified_after_discussion_and_reference(bridge):

@@ -1,4 +1,8 @@
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Alert,
   Button,
@@ -10,16 +14,14 @@ import {
   Tag,
 } from "antd";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  safeEvidenceUrl,
-  saveDelivery,
-  type DeliveryCommandAck,
-} from "@/lib/delivery";
+import { safeEvidenceUrl, type DeliveryCommandAck } from "@/lib/delivery";
 import {
   adoptManualReviewBasis,
   fetchTaskReviews,
+  fetchTaskReviewCurrent,
+  fetchTaskReviewOriginal,
   manualReviewError,
   manualReviewProblems,
   openManualReview,
@@ -27,8 +29,16 @@ import {
   type ManualReviewCurrent,
   type ManualReviewSession,
   type ManualTaskReview,
-  type TaskReviewPage,
+  type ManualReviewSummary,
+  type TaskReviewCurrentResponse,
 } from "@/lib/deliveryTaskReview";
+import {
+  useManualReviewCommand,
+  type ManualReviewOriginal,
+} from "@/lib/deliveryManualReviewCommand";
+import { bindSessionRequest } from "@/lib/http";
+import { getSessionRevision } from "@/lib/authStorage";
+import { projectSessionKey } from "@/lib/projectPortfolio";
 import "./delivery-manual-review.css";
 import { TaskAcceptanceFacts } from "./TaskAcceptanceFacts";
 import type { TaskAcceptance } from "@/lib/taskAcceptance";
@@ -174,8 +184,14 @@ export function ManualReviewFacts({
 
 export function ManualReviewHistory({
   reviews,
+  effectiveReviewId = null,
+  openedId = "",
+  onOpen,
 }: {
-  reviews: ManualTaskReview[];
+  reviews: ManualReviewSummary[];
+  effectiveReviewId?: string | null;
+  openedId?: string;
+  onOpen?: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const tr = (key: string, options?: Record<string, unknown>) =>
@@ -183,26 +199,25 @@ export function ManualReviewHistory({
   return (
     <div className="delivery-manual-history">
       {reviews.map((review) => {
-        const url = safeEvidenceUrl(review.evidence_url);
         const status = review.invalidated
           ? "invalidated"
-          : review.valid
+          : review.id === effectiveReviewId
             ? "verified"
             : review.decision === "request_changes"
               ? "request_changes"
               : "historical";
         return (
-          <details
+          <article
             className={`delivery-manual-review-record ${status}`}
             key={review.id}
           >
-            <summary>
+            <div className="delivery-manual-review-summary">
               <span className="delivery-manual-review-status">
                 <Tag
                   color={
                     review.invalidated
                       ? "warning"
-                      : review.valid
+                      : review.id === effectiveReviewId
                         ? "success"
                         : "default"
                   }
@@ -213,48 +228,83 @@ export function ManualReviewHistory({
               </span>
               <span>{review.reviewer.name || review.reviewer.id}</span>
               <small>{reviewTime(review.created_at, i18n.language)}</small>
-            </summary>
-            <p className="delivery-manual-content">{review.comment}</p>
-            {review.invalidated && (
-              <Alert
-                type="warning"
-                showIcon
-                title={tr(`reasons.${review.invalidated_reason}`, {
-                  defaultValue: review.invalidated_reason,
-                })}
-                description={`${tr("invalidatedAt")}: ${reviewTime(review.invalidated_at, i18n.language)}`}
-              />
-            )}
-            {(review.evidence_content || review.evidence_url) && (
-              <section className="delivery-manual-evidence">
-                <strong>{tr("evidenceLabel")}</strong>
-                <p className="delivery-manual-help">{tr("sourceHint")}</p>
-                {review.evidence_content && (
-                  <p className="delivery-manual-content">
-                    {review.evidence_content}
-                  </p>
-                )}
-                {review.evidence_url &&
-                  (url ? (
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      {review.evidence_url}
-                    </a>
-                  ) : (
-                    <p>{tr("problems.unsafeUrl")}</p>
-                  ))}
-              </section>
-            )}
-            <section className="delivery-manual-original">
-              <h4>{tr("originalFacts")}</h4>
-              <ManualTaskFacts {...review.snapshot} />
-              <small>
-                {tr("manualBasis")}: <code>{review.task_basis}</code>
-              </small>
-            </section>
-          </details>
+            </div>
+            <p className="delivery-manual-content">{review.comment_summary}</p>
+            <Button
+              size="small"
+              type="link"
+              aria-expanded={openedId === review.id}
+              onClick={() => onOpen?.(openedId === review.id ? "" : review.id)}
+            >
+              {tr(
+                openedId === review.id
+                  ? "hideOriginal"
+                  : review.has_evidence
+                    ? "showEvidence"
+                    : "showOriginal",
+              )}
+            </Button>
+          </article>
         );
       })}
     </div>
+  );
+}
+
+export function ManualReviewOriginalFacts({
+  review,
+}: {
+  review: ManualTaskReview;
+}) {
+  const { t, i18n } = useTranslation();
+  const tr = (key: string, options?: Record<string, unknown>) =>
+    t(`deliveryManualReview.${key}`, options);
+  const url = safeEvidenceUrl(review.evidence_url);
+  return (
+    <section
+      className="delivery-manual-original-detail"
+      aria-label={tr("originalFacts")}
+    >
+      <div className="delivery-manual-heading">
+        <strong>{review.reviewer.name || review.reviewer.id}</strong>
+        <small>{reviewTime(review.created_at, i18n.language)}</small>
+      </div>
+      <p className="delivery-manual-content">{review.comment}</p>
+      {review.invalidated && (
+        <Alert
+          type="warning"
+          showIcon
+          title={tr(`reasons.${review.invalidated_reason}`, {
+            defaultValue: review.invalidated_reason,
+          })}
+          description={`${tr("invalidatedAt")}: ${reviewTime(review.invalidated_at, i18n.language)}`}
+        />
+      )}
+      {(review.evidence_content || review.evidence_url) && (
+        <section className="delivery-manual-evidence">
+          <strong>{tr("evidenceLabel")}</strong>
+          <p className="delivery-manual-help">{tr("sourceHint")}</p>
+          {review.evidence_content && (
+            <p className="delivery-manual-content">{review.evidence_content}</p>
+          )}
+          {review.evidence_url &&
+            (url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                {review.evidence_url}
+              </a>
+            ) : (
+              <p>{tr("problems.unsafeUrl")}</p>
+            ))}
+        </section>
+      )}
+      <section className="delivery-manual-original">
+        <h4>{tr("originalFacts")}</h4>
+        <ManualTaskFacts {...review.snapshot} />
+        <small>
+          {tr("manualBasis")}: <code>{review.task_basis}</code>
+        </small>
+      </section>
+    </section>
   );
 }
 
@@ -344,66 +394,143 @@ export function DeliveryManualReviewPanel({
   projectId,
   sessionId,
   taskId,
+  disabled = false,
   onSaved,
   onEditingChange,
+  onUnresolvedChange,
 }: {
   projectId: string;
   sessionId: string;
   taskId: string;
+  disabled?: boolean;
   onSaved?: (workspace: DeliveryCommandAck) => void;
   onEditingChange?: (editing: boolean) => void;
+  onUnresolvedChange?: (pending: boolean) => void;
 }) {
   const { t } = useTranslation();
   const tr = (key: string, options?: Record<string, unknown>) =>
     t(`deliveryManualReview.${key}`, options);
   const qc = useQueryClient();
   const [session, setSession] = useState<ManualReviewSession | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [draftScope, setDraftScope] = useState("");
   const [feedback, setFeedback] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
-  const [conflict, setConflict] = useState(false);
-  const [latest, setLatest] = useState<TaskReviewPage | null>(null);
-  useEffect(() => {
-    if (!session) return;
-    onEditingChange?.(true);
-    return () => onEditingChange?.(false);
-  }, [Boolean(session), onEditingChange]);
-  const query = useInfiniteQuery({
-    queryKey: ["delivery-task-reviews", projectId, sessionId, taskId],
+  const [latest, setLatest] = useState<TaskReviewCurrentResponse | null>(null);
+  const [openedId, setOpenedId] = useState("");
+  const command = useManualReviewCommand(projectId, taskId, onUnresolvedChange);
+  const phase = command.state.phase,
+    busy = phase === "sending";
+  const modalOpen =
+    Boolean(session) || ["sending", "unknown", "refused"].includes(phase);
+  const origin = JSON.stringify([
+    projectId,
+    sessionId,
+    taskId,
+    projectSessionKey(),
+  ]);
+  const read = useMemo(
+    () =>
+      bindSessionRequest({ projectId, revision: getSessionRevision() || "" }),
+    [projectId, sessionId],
+  );
+  const current = useQuery({
+    queryKey: ["delivery-task-review-current", projectId, sessionId, taskId],
+    queryFn: ({ signal }) =>
+      fetchTaskReviewCurrent(projectId, taskId, { signal, read }),
+    gcTime: 0,
+    retry: false,
+  });
+  const historyKey = ["delivery-task-reviews", projectId, sessionId, taskId];
+  const history = useInfiniteQuery({
+    queryKey: historyKey,
     initialPageParam: "",
     queryFn: ({ signal, pageParam }) =>
-      fetchTaskReviews(projectId, taskId, { signal, cursor: pageParam }),
+      fetchTaskReviews(projectId, taskId, { signal, cursor: pageParam, read }),
     getNextPageParam: (page) => page.next_cursor || undefined,
     gcTime: 0,
     retry: false,
-    refetchInterval: 10000,
   });
-  const data = query.data?.pages[0];
+  const original = useQuery({
+    queryKey: [
+      "delivery-task-review-original",
+      projectId,
+      sessionId,
+      taskId,
+      openedId,
+    ],
+    queryFn: ({ signal }) =>
+      fetchTaskReviewOriginal(projectId, taskId, openedId, { signal, read }),
+    enabled: Boolean(openedId),
+    gcTime: 0,
+    retry: false,
+  });
+  const proof = !current.isError ? current.data : undefined;
+  const data = history.data?.pages[0];
   const reviews = [
     ...new Map(
-      query.data?.pages
+      history.data?.pages
         .flatMap((page) => page.reviews)
         .map((review) => [review.id, review]) || [],
     ).values(),
   ];
+  useEffect(() => {
+    if (!modalOpen) return;
+    onEditingChange?.(true);
+    return () => onEditingChange?.(false);
+  }, [modalOpen, onEditingChange]);
   function open() {
-    if (!data?.current?.can_review || query.isError) return;
-    setSession(openManualReview(data, crypto.randomUUID()));
-    setError("");
+    if (
+      disabled ||
+      !proof?.current?.can_review ||
+      !command.current() ||
+      phase !== "idle"
+    )
+      return;
+    setSession(openManualReview(proof, crypto.randomUUID()));
+    setDraftScope(origin);
     setFeedback("");
     setProblems([]);
-    setConflict(false);
     setLatest(null);
   }
+  async function saved(ack: DeliveryCommandAck | undefined) {
+    if (!ack || !command.current()) return;
+    const decision = command.snapshot().original?.payload.decision;
+    onSaved?.(ack);
+    setSession(null);
+    setLatest(null);
+    setFeedback(decision === "accept" ? "savedAccept" : "savedChanges");
+    for (const key of [
+      "delivery",
+      "delivery-inbox",
+      "delivery-progress",
+      "tasks",
+      "tasksSummary",
+      "taskAgentFeed",
+      "taskSchedulerInsights",
+      "delivery-task-review-current",
+    ])
+      void qc.invalidateQueries({ queryKey: [key] });
+    await qc.resetQueries({ queryKey: historyKey, exact: true });
+    command.reset();
+  }
   async function submit() {
-    if (busy || !session || conflict) return;
+    if (
+      disabled ||
+      !session ||
+      busy ||
+      phase !== "idle" ||
+      draftScope !== origin ||
+      session.projectId !== projectId ||
+      session.taskId !== taskId ||
+      !command.current()
+    )
+      return;
     const invalid = manualReviewProblems(session);
     setProblems(invalid);
     if (invalid.length) {
       const field = invalid[0].startsWith("comment")
         ? "comment"
-        : invalid[0] === "unsafeUrl" || invalid[0] === "urlTooLong"
+        : ["unsafeUrl", "urlTooLong"].includes(invalid[0])
           ? "url"
           : "evidence";
       document
@@ -413,51 +540,48 @@ export function DeliveryManualReviewPanel({
     }
     const prepared = prepareManualReview(session);
     setSession(prepared.session);
-    setBusy(true);
-    setError("");
-    try {
-      const result = await saveDelivery(
-        projectId,
-        prepared.command.action,
-        prepared.command.payload,
-        prepared.command.expected_version,
-        prepared.command.idempotency_key,
-      );
-      onSaved?.(result);
-      setSession(null);
-      setFeedback(
-        prepared.session.decision === "accept" ? "savedAccept" : "savedChanges",
-      );
-      for (const key of [
-        "delivery",
-        "delivery-inbox",
-        "delivery-progress",
-        "tasks",
-        "tasksSummary",
-        "taskAgentFeed",
-        "taskSchedulerInsights",
-      ])
-        void qc.invalidateQueries({ queryKey: [key] });
-      await query.refetch();
-    } catch (failure) {
-      const parsed = manualReviewError(failure);
-      setError(parsed.conflict ? tr("conflict") : parsed.message);
-      setConflict(parsed.conflict);
-      setLatest(null);
-    } finally {
-      setBusy(false);
-    }
+    await saved(
+      await command.run({
+        action: "task.manual_review",
+        payload: prepared.command.payload,
+        intent: prepared.session.intent,
+      }),
+    );
   }
   async function loadLatest() {
-    setBusy(true);
+    if (!command.current() || phase !== "refused") return;
     setLatest(null);
-    try {
-      setLatest(await fetchTaskReviews(projectId, taskId));
-    } catch (failure) {
-      setError(manualReviewError(failure).message);
-    } finally {
-      setBusy(false);
-    }
+    const result = await current.refetch();
+    if (command.current() && !result.isError && result.data)
+      setLatest(structuredClone(result.data));
+  }
+  function adopt() {
+    if (
+      !latest?.current?.can_review ||
+      !command.current() ||
+      phase !== "refused"
+    )
+      return;
+    const retained = command.state.original;
+    const draft =
+      session ||
+      (retained
+        ? {
+            ...openManualReview(latest, crypto.randomUUID()),
+            decision: retained.payload.decision,
+            comment: retained.payload.comment,
+            evidenceContent: retained.payload.evidence_content,
+            evidenceUrl: retained.payload.evidence_url,
+          }
+        : null);
+    if (!draft) return;
+    const next = adoptManualReviewBasis(draft, latest, crypto.randomUUID());
+    command.reset();
+    if (command.snapshot().phase !== "idle") return;
+    setSession(next);
+    setDraftScope(origin);
+    setLatest(null);
+    setProblems([]);
   }
   return (
     <section className="delivery-manual-panel" aria-label={tr("title")}>
@@ -466,23 +590,18 @@ export function DeliveryManualReviewPanel({
           <ClipboardCheck size={16} />
           <h3>{tr("title")}</h3>
         </div>
-        <div>
-          <Button
-            size="small"
-            onClick={open}
-            disabled={!data?.current?.can_review || query.isError}
-          >
-            {tr("open")}
-          </Button>
-          <Button
-            size="small"
-            type="text"
-            icon={<RefreshCw size={14} />}
-            aria-label={tr("refresh")}
-            loading={query.isFetching}
-            onClick={() => void query.refetch()}
-          />
-        </div>
+        <Button
+          size="small"
+          onClick={open}
+          disabled={
+            disabled ||
+            !proof?.current?.can_review ||
+            phase !== "idle" ||
+            !command.current()
+          }
+        >
+          {tr("open")}
+        </Button>
       </div>
       <p className="delivery-manual-help">{tr("intro")}</p>
       {feedback && (
@@ -494,52 +613,125 @@ export function DeliveryManualReviewPanel({
           onClose={() => setFeedback("")}
         />
       )}
-      {query.isPending && <Skeleton active paragraph={{ rows: 3 }} />}
-      {query.error && (
+      <div className="delivery-manual-heading">
+        <h4>{tr("currentFacts")}</h4>
+        <Button
+          size="small"
+          type="text"
+          icon={<RefreshCw size={14} />}
+          aria-label={tr("refreshCurrent")}
+          loading={current.isFetching}
+          onClick={() => void current.refetch()}
+        />
+      </div>
+      {current.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
+      {current.error && (
         <Alert
-          type="error"
+          type="warning"
           showIcon
-          title={tr(data ? "stale" : "readFailed")}
-          description={query.error.message}
+          title={tr("currentFailed")}
+          description={manualReviewError(current.error).message}
           action={
-            <Button size="small" onClick={() => void query.refetch()}>
+            <Button size="small" onClick={() => void current.refetch()}>
               {tr("retry")}
             </Button>
           }
         />
       )}
-      {data && (
+      {proof && <ManualReviewFacts current={proof.current} compact />}
+      <div className="delivery-manual-heading">
+        <h4>{tr("history")}</h4>
+        <div>
+          {data && <small>{tr("reviewCount", { count: data.total })}</small>}
+          <Button
+            size="small"
+            type="text"
+            icon={<RefreshCw size={14} />}
+            aria-label={tr("refreshHistory")}
+            loading={history.isFetching}
+            onClick={() =>
+              void qc.resetQueries({ queryKey: historyKey, exact: true })
+            }
+          />
+        </div>
+      </div>
+      {history.isPending && <Skeleton active paragraph={{ rows: 2 }} />}
+      {history.error && (
+        <Alert
+          type="error"
+          showIcon
+          title={tr("historyFailed")}
+          description={manualReviewError(history.error).message}
+          action={
+            <Button size="small" onClick={() => void history.refetch()}>
+              {tr("retry")}
+            </Button>
+          }
+        />
+      )}
+      {data && !history.isError && (
         <>
-          <ManualReviewFacts current={data.current} compact />
-          <div className="delivery-manual-heading">
-            <h4>{tr("history")}</h4>
-            <small>{tr("reviewCount", { count: data.total })}</small>
-          </div>
           {reviews.length ? (
-            <ManualReviewHistory reviews={reviews} />
+            <ManualReviewHistory
+              reviews={reviews}
+              effectiveReviewId={proof?.effective_review_id}
+              openedId={openedId}
+              onOpen={setOpenedId}
+            />
           ) : (
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
               description={tr("noHistory")}
             />
           )}
-          {query.hasNextPage && (
+          {history.hasNextPage && (
             <Button
-              loading={query.isFetchingNextPage}
-              onClick={() => void query.fetchNextPage()}
+              loading={history.isFetchingNextPage}
+              onClick={() => void history.fetchNextPage()}
             >
               {tr("loadMore")}
             </Button>
           )}
         </>
       )}
+      {openedId && (
+        <section className="delivery-manual-original-container">
+          <div className="delivery-manual-heading">
+            <h4>{tr("originalFacts")}</h4>
+            <Button size="small" onClick={() => setOpenedId("")}>
+              {tr("hideOriginal")}
+            </Button>
+          </div>
+          {original.isPending && <Skeleton active paragraph={{ rows: 3 }} />}
+          {original.error && (
+            <Alert
+              type="error"
+              showIcon
+              title={tr("originalFailed")}
+              description={manualReviewError(original.error).message}
+              action={
+                <Button size="small" onClick={() => void original.refetch()}>
+                  {tr("retry")}
+                </Button>
+              }
+            />
+          )}
+          {!original.isError && original.data && (
+            <ManualReviewOriginalFacts review={original.data.review} />
+          )}
+        </section>
+      )}
       <Modal
-        open={Boolean(session)}
+        open={modalOpen}
         className="delivery-manual-modal"
         title={tr("title")}
         width={680}
+        mask={{ closable: false }}
+        destroyOnHidden
         onCancel={() => {
-          if (!busy) setSession(null);
+          if (command.unresolved) return;
+          if (phase === "refused") command.reset();
+          if (command.snapshot().phase === "idle") setSession(null);
         }}
         onOk={() => void submit()}
         okText={tr("submit")}
@@ -547,17 +739,33 @@ export function DeliveryManualReviewPanel({
         confirmLoading={busy}
         okButtonProps={{
           disabled:
-            conflict ||
+            disabled ||
+            phase !== "idle" ||
             !session?.current.can_review ||
-            (session.decision === "accept" && !session.current.can_accept),
+            (session.decision === "accept" && !session.current.can_accept) ||
+            draftScope !== origin ||
+            !command.current(),
         }}
-        cancelButtonProps={{ disabled: busy }}
-        closable={!busy}
-        keyboard={!busy}
-        maskClosable={false}
-        destroyOnHidden
+        cancelButtonProps={{ disabled: command.unresolved }}
+        closable={!command.unresolved}
+        keyboard={!command.unresolved}
       >
-        {error && <Alert type="error" showIcon title={error} />}
+        {command.state.error && (
+          <Alert
+            type="error"
+            showIcon
+            title={tr("commandFailed")}
+            description={
+              [
+                "ackMismatch",
+                "retainedOriginalInvalid",
+                "retainedOriginalUnavailable",
+              ].includes(command.state.error)
+                ? tr(`commandErrors.${command.state.error}`)
+                : command.state.error
+            }
+          />
+        )}
         {problems.length > 0 && (
           <Alert
             type="error"
@@ -567,9 +775,29 @@ export function DeliveryManualReviewPanel({
               .join(" ")}
           />
         )}
-        {conflict && (
+        {phase === "unknown" && (
+          <Alert
+            type="warning"
+            showIcon
+            title={tr("unknownRequest")}
+            description={tr("unknownHint")}
+            action={
+              <Button
+                disabled={!command.state.original || !command.current()}
+                onClick={() => void command.replay().then(saved)}
+              >
+                {tr("retryOriginal")}
+              </Button>
+            }
+          />
+        )}
+        {phase === "refused" && (
           <section className="delivery-manual-conflict">
-            <Button loading={busy} onClick={() => void loadLatest()}>
+            <p className="delivery-manual-help">{tr("refusedHint")}</p>
+            <Button
+              loading={current.isFetching}
+              onClick={() => void loadLatest()}
+            >
               {tr("loadLatest")}
             </Button>
             {latest && (
@@ -579,41 +807,53 @@ export function DeliveryManualReviewPanel({
                 </h4>
                 <ManualReviewFacts current={latest.current} />
                 <p className="delivery-manual-help">{tr("adoptHint")}</p>
-                <Button
-                  disabled={busy || !latest.current}
-                  onClick={() => {
-                    if (session && latest.current) {
-                      setSession(
-                        adoptManualReviewBasis(
-                          session,
-                          latest,
-                          crypto.randomUUID(),
-                        ),
-                      );
-                      setConflict(false);
-                      setLatest(null);
-                      setError("");
-                      setProblems([]);
-                    }
-                  }}
-                >
+                <Button disabled={!latest.current?.can_review} onClick={adopt}>
                   {tr("adopt")}
                 </Button>
               </>
             )}
           </section>
         )}
-        {session && (
+        {session ? (
           <ManualReviewFormFields
             session={session}
-            busy={busy}
+            busy={phase !== "idle"}
             onChange={(patch) => {
-              setSession((value) => (value ? { ...value, ...patch } : value));
-              setProblems([]);
+              if (phase === "idle" && command.current()) {
+                setSession((value) => (value ? { ...value, ...patch } : value));
+                setProblems([]);
+              }
             }}
           />
+        ) : (
+          command.state.original && (
+            <ManualReviewRetainedOriginal original={command.state.original} />
+          )
         )}
       </Modal>
+    </section>
+  );
+}
+function ManualReviewRetainedOriginal({
+  original,
+}: {
+  original: ManualReviewOriginal;
+}) {
+  const { t } = useTranslation();
+  return (
+    <section className="delivery-manual-retained">
+      <p>{t("deliveryManualReview.frozen")}</p>
+      <p>
+        {t("deliveryManualReview.version")}: {original.intent.version}
+      </p>
+      <p className="delivery-manual-fixed">
+        {t("deliveryManualReview.basis")}: <code>{original.payload.basis}</code>
+      </p>
+      <p className="delivery-manual-content">{original.payload.comment}</p>
+      <p className="delivery-manual-content">
+        {original.payload.evidence_content}
+      </p>
+      <p className="delivery-manual-content">{original.payload.evidence_url}</p>
     </section>
   );
 }

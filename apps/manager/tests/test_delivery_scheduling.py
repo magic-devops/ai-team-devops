@@ -237,7 +237,7 @@ def test_pure_planning_preserves_manual_acceptance_and_scope_filters_do_not_chan
     assert review(client, work["id"]).status_code == 200
     assert planned(client, work["id"]).status_code == 200
     assert calendar(client).status_code == 200
-    assert client.get(f"/api/v1/delivery/tasks/{work['id']}/reviews").json()["current"]["verified"]
+    assert client.get(f"/api/v1/delivery/tasks/{work['id']}/review-current").json()["current"]["verified"]
     first = schedule(client, starts_on="2026-10-19", ends_on="2026-10-23").json()
     other = schedule(client, starts_on="2026-11-01", ends_on="2026-11-02").json()
     assert first["planning_basis"] == other["planning_basis"]
@@ -267,7 +267,7 @@ def test_reservation_change_is_observed_and_compared_to_immutable_delivery_basel
     assert change["fields"] == ["allocations"]
     assert change["before"]["allocations"][0]["quantity_per_day"] == 2
     assert change["after"]["allocations"][0]["quantity_per_day"] == 3
-    assert client.get(f"/api/v1/delivery/tasks/{work['id']}/reviews").json()["current"]["verified"]
+    assert client.get(f"/api/v1/delivery/tasks/{work['id']}/review-current").json()["current"]["verified"]
 
 
 def test_schedule_rejects_non_civil_dates_and_long_windows(env):

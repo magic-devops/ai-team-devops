@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ManualReviewFacts,
   ManualReviewHistory,
+  ManualReviewOriginalFacts,
   ManualReviewFormFields,
 } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryManualReviewPanel";
 import { manualReviewTranslations } from "../i18n/delivery-manual-review";
@@ -12,7 +13,9 @@ import { TasksWorkbenchHeader } from "../../subapps/ai-rd-center/src/pages/deliv
 import {
   openManualReview,
   type ManualTaskReview,
-  type TaskReviewPage,
+  type TaskReviewCurrentResponse,
+  type ManualReviewCurrent,
+  type ManualReviewSummary,
 } from "./deliveryTaskReview";
 
 let language: keyof typeof manualReviewTranslations = "en-US";
@@ -42,7 +45,7 @@ vi.mock("react-i18next", () => ({
     },
   }),
 }));
-const current: NonNullable<TaskReviewPage["current"]> = {
+const current: ManualReviewCurrent = {
   task: {
     id: "T-one",
     title: "Current task",
@@ -58,7 +61,13 @@ const current: NonNullable<TaskReviewPage["current"]> = {
   owner: { id: "user:lead", name: "Lead", kind: "human", active: true },
   requirement: null,
   planning: { requirement_criteria_indices: [], depends_on: ["T-before"] },
-  acceptance: { criteria: [], sources: [], available: true, requirement_id: null, requirement_revision: null },
+  acceptance: {
+    criteria: [],
+    sources: [],
+    available: true,
+    requirement_id: null,
+    requirement_revision: null,
+  },
   basis: "basis-one",
   eligible: true,
   can_review: true,
@@ -90,7 +99,20 @@ const historical: ManualTaskReview = {
   invalidated: true,
   invalidated_at: "2026-10-17T02:00:00Z",
   invalidated_reason: "task_review_basis_changed",
-  valid: false,
+};
+const summary: ManualReviewSummary = {
+  id: historical.id,
+  task_id: historical.task_id,
+  decision: historical.decision,
+  created_at: historical.created_at,
+  reviewer: historical.reviewer,
+  task_basis: historical.task_basis,
+  source: "manual",
+  invalidated: true,
+  invalidated_at: historical.invalidated_at,
+  invalidated_reason: historical.invalidated_reason,
+  comment_summary: "Short review opinion",
+  has_evidence: true,
 };
 describe("manual delivery review presentation", () => {
   it("labels raw task totals as recorded completion in all three languages", () => {
@@ -151,11 +173,9 @@ describe("manual delivery review presentation", () => {
   it("preserves original evidence, reviewer and task snapshot while marking stale approval", () => {
     language = "en-US";
     const html = renderToStaticMarkup(
-      createElement(ManualReviewHistory, { reviews: [historical] }),
+      createElement(ManualReviewOriginalFacts, { review: historical }),
     );
     for (const text of [
-      "No longer valid",
-      "Previous lead",
       "Original reviewed title",
       "Registered manual checks",
       "Manually registered evidence",
@@ -164,8 +184,8 @@ describe("manual delivery review presentation", () => {
       expect(html).toContain(text);
     expect(html).toContain('href="https://example.test/manual-proof"');
     const unsafe = renderToStaticMarkup(
-      createElement(ManualReviewHistory, {
-        reviews: [{ ...historical, evidence_url: "javascript:alert(1)" }],
+      createElement(ManualReviewOriginalFacts, {
+        review: { ...historical, evidence_url: "javascript:alert(1)" },
       }),
     );
     expect(unsafe).not.toContain('href="javascript:');
@@ -173,7 +193,7 @@ describe("manual delivery review presentation", () => {
       createElement(ManualReviewHistory, {
         reviews: [
           {
-            ...historical,
+            ...summary,
             decision: "request_changes",
             invalidated: false,
             invalidated_reason: "",
@@ -183,6 +203,27 @@ describe("manual delivery review presentation", () => {
     );
     expect(rejected).toContain("Changes requested");
   });
+  it("keeps catalogue rows small and displays a current acceptance only with an explicit current proof ID", () => {
+    language = "en-US";
+    const row = { ...summary, invalidated: false };
+    const closed = renderToStaticMarkup(
+      createElement(ManualReviewHistory, { reviews: [row] }),
+    );
+    expect(closed).toContain("Historical acceptance");
+    expect(closed).toContain("Short review opinion");
+    expect(closed).toContain("Open original and evidence");
+    expect(closed).not.toContain("Registered manual checks");
+    expect(closed).not.toContain("Original reviewed title");
+    expect(closed).not.toContain("Verified delivery");
+    expect(
+      renderToStaticMarkup(
+        createElement(ManualReviewHistory, {
+          reviews: [row],
+          effectiveReviewId: row.id,
+        }),
+      ),
+    ).toContain("Verified delivery");
+  });
   it("renders editable retained fields with fixed basis and explicit evidence requirements", () => {
     language = "en-US";
     const session = {
@@ -191,8 +232,10 @@ describe("manual delivery review presentation", () => {
           project_id: "project",
           task_id: "T-one",
           version: 9,
+          query_generation: 9,
+          effective_review_id: null,
           current,
-        } as TaskReviewPage,
+        } as TaskReviewCurrentResponse,
         "intent",
       ),
       comment: "Keep my opinion",
@@ -230,10 +273,10 @@ describe("manual delivery review presentation", () => {
     ) as (keyof typeof manualReviewTranslations)[]) {
       language = lang;
       const html = renderToStaticMarkup(
-        createElement(ManualReviewHistory, { reviews: [historical] }),
+        createElement(ManualReviewHistory, { reviews: [summary] }),
       );
       expect(html).not.toContain("deliveryManualReview.");
-      expect(html).toContain("Original reviewed title");
+      expect(html).toContain("Short review opinion");
       expect(html).toContain("Previous lead");
     }
   });

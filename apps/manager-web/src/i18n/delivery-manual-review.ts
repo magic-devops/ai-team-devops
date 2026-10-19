@@ -32,6 +32,27 @@ const zh = {
   noHistory: "尚无人工审查记录",
   reviewCount: "共 {{count}} 条审查",
   loadMore: "加载更早的审查",
+  refreshCurrent: "刷新当前依据",
+  refreshHistory: "重新读取审查目录",
+  currentFailed: "当前验收依据不可用，暂不能新审查；历史仍可查看",
+  historyFailed: "无法读取审查目录",
+  originalFailed: "无法读取这条审查的原件",
+  showEvidence: "展开原件与证据",
+  showOriginal: "展开审查原件",
+  hideOriginal: "收起原件",
+  unknownRequest: "提交结果未知，原请求已保留",
+  unknownHint:
+    "仅可重试同一份原请求。确认结果前，不能修改意见、采用新依据或取消后重新提交。",
+  retryOriginal: "重试原请求",
+  refusedHint:
+    "服务端已明确拒绝。意见与证据已保留，请读取并核对最新依据，再明确采用后提交。",
+  commandFailed: "审查尚未确认",
+  commandErrors: {
+    ackMismatch: "服务端回执与本次审查不一致，原请求已保留，请重试确认。",
+    retainedOriginalInvalid:
+      "保留的原请求无法核对。为避免重复审查，已暂停新提交。",
+    retainedOriginalUnavailable: "无法安全保存原请求。请恢复浏览器存储后重试。",
+  },
   readFailed: "无法读取审查事实",
   stale: "审查事实刷新失败，当前显示上次读取结果",
   retry: "重试",
@@ -122,6 +143,30 @@ const en = {
   noHistory: "No manual reviews yet",
   reviewCount: "{{count}} reviews",
   loadMore: "Load earlier reviews",
+  refreshCurrent: "Refresh current basis",
+  refreshHistory: "Reload review catalogue",
+  currentFailed:
+    "Current acceptance proof unavailable. New reviews are disabled; history remains available.",
+  historyFailed: "Unable to read review catalogue",
+  originalFailed: "Unable to read this review original",
+  showEvidence: "Open original and evidence",
+  showOriginal: "Open review original",
+  hideOriginal: "Close original",
+  unknownRequest: "Submission outcome unknown; original request retained",
+  unknownHint:
+    "Retry the same original request. Until its outcome is confirmed, editing, adopting a new basis and cancelling to submit again are disabled.",
+  retryOriginal: "Retry original request",
+  refusedHint:
+    "The server refused this request. Your comment and evidence are retained. Read and check the latest facts, then explicitly adopt them before submitting again.",
+  commandFailed: "Review not confirmed",
+  commandErrors: {
+    ackMismatch:
+      "The server receipt does not match this review. The original request is retained; retry to confirm it.",
+    retainedOriginalInvalid:
+      "The retained request could not be verified. New submissions are paused to prevent duplicate reviews.",
+    retainedOriginalUnavailable:
+      "The original request could not be saved safely. Restore browser storage, then retry.",
+  },
   readFailed: "Unable to read review facts",
   stale: "Refresh failed; showing previously read facts",
   retry: "Retry",
@@ -223,6 +268,30 @@ const ja = {
   noHistory: "手動レビューはまだありません",
   reviewCount: "レビュー {{count}} 件",
   loadMore: "以前のレビューを読み込む",
+  refreshCurrent: "現在の根拠を更新",
+  refreshHistory: "レビュー一覧を再読込",
+  currentFailed:
+    "現在の受入根拠を確認できません。新規レビューは停止していますが、履歴は確認できます。",
+  historyFailed: "レビュー一覧を読み込めません",
+  originalFailed: "このレビューの原本を読み込めません",
+  showEvidence: "原本と証拠を開く",
+  showOriginal: "レビュー原本を開く",
+  hideOriginal: "原本を閉じる",
+  unknownRequest: "送信結果が不明です。元のリクエストを保持しています",
+  unknownHint:
+    "同じ元のリクエストのみ再試行できます。結果の確認まで、編集、新しい根拠の採用、取消後の再送信はできません。",
+  retryOriginal: "元のリクエストを再試行",
+  refusedHint:
+    "サーバーが明確に拒否しました。意見と証拠は保持されています。最新の根拠を読み、確認して明示的に採用してから再送信してください。",
+  commandFailed: "レビューは未確認です",
+  commandErrors: {
+    ackMismatch:
+      "サーバーの受領記録がこのレビューと一致しません。元のリクエストを保持しました。再試行して確認してください。",
+    retainedOriginalInvalid:
+      "保持されたリクエストを検証できません。重複レビューを防ぐため、新規送信を停止しています。",
+    retainedOriginalUnavailable:
+      "元のリクエストを安全に保存できません。ブラウザーの保存領域を復旧して再試行してください。",
+  },
   readFailed: "レビュー情報を読み込めません",
   stale: "更新に失敗しました。前回の情報を表示しています",
   retry: "再試行",

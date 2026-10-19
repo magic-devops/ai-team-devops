@@ -1545,8 +1545,8 @@ paths:
     get:
       tags:
       - delivery
-      summary: Read current manual task review eligibility and original review evidence
-      operationId: task_reviews_api_v1_delivery_tasks__task_id__reviews_get
+      summary: Task Reviews
+      operationId: deliveryTaskReviews
       security:
       - bearerAuth: []
       parameters:
@@ -1570,10 +1570,16 @@ paths:
         required: false
         schema:
           type: string
-          maxLength: 64
+          maxLength: 4000
           default: ''
           title: Cursor
-      - $ref: '#/components/parameters/RequiredBusinessProjectId'
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
       responses:
         '200':
           description: Successful Response
@@ -1587,18 +1593,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-        '400':
-          $ref: '#/components/responses/BusinessProjectMissing'
-        '401':
-          $ref: '#/components/responses/BusinessUnauthorized'
-        '403':
-          $ref: '#/components/responses/BusinessForbidden'
-        '404':
-          $ref: '#/components/responses/BusinessNotFound'
-      description: Pure read in the explicitly selected authorized project. No runtime, model, default records or
-        progress observations are created. Manual evidence is human registered, not signed CI output. Records are
-        ordered by descending sequence; next_cursor identifies the last record in this page. The cursor is restricted
-        to this project and task. A deleted task with review evidence has current=null.
+      description: One small SQL page of recorded human review summaries. Default 20, maximum 100. Signed cursor binds tenant,
+        project, reader, task, limit and a fixed maximum sequence. No current proof, snapshot or evidence body; history remains
+        readable when the current task is deleted or its proof is unavailable.
   /api/v1/delivery/schedule:
     get:
       tags:
@@ -8532,6 +8529,86 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       description: Read one original signed CI statement and envelope with its current complete scoped proof. Missing IDs never
         fall back to another evidence.
+  /api/v1/delivery/tasks/{task_id}/review-current:
+    get:
+      tags:
+      - delivery
+      summary: Task Review Current
+      operationId: deliveryTaskReviewCurrent
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskReviewCurrentResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Complete canonical current review basis for one task and its necessary closure. Generation-consistent; a
+        scope exceeding the synchronous budget fails explicitly without partial approval.
+  /api/v1/delivery/tasks/{task_id}/reviews/{review_id}:
+    get:
+      tags:
+      - delivery
+      summary: Task Review Detail
+      operationId: deliveryTaskReview
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      - name: review_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Review Id
+      - name: X-Project-Id
+        in: header
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: X-Project-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskReviewDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      description: Read the exact original human decision, task snapshot and evidence in this project and task. No fallback
+        to another record or derived current validity. Does not require current proof or query index freshness.
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -11712,100 +11789,89 @@ components:
     TaskReviewsResponse:
       properties:
         project_id:
+          type: string
           title: Project Id
-          type: string
         task_id:
+          type: string
           title: Task Id
-          type: string
-        version:
-          title: Version
-          type: integer
         as_of:
-          title: As Of
           type: string
-        current:
-          anyOf:
-          - $ref: '#/components/schemas/TaskReviewCurrent'
-          - type: 'null'
+          title: As Of
         reviews:
           items:
-            $ref: '#/components/schemas/TaskReviewRecord'
-          title: Reviews
+            $ref: '#/components/schemas/TaskReviewSummary'
           type: array
+          title: Reviews
         total:
-          title: Total
           type: integer
+          title: Total
         next_cursor:
           anyOf:
           - type: string
           - type: 'null'
           title: Next Cursor
         limit:
-          title: Limit
           type: integer
+          title: Limit
+      type: object
       required:
       - project_id
       - task_id
-      - version
       - as_of
-      - current
       - reviews
       - total
       - next_cursor
       - limit
       title: TaskReviewsResponse
-      type: object
     TaskReviewRecord:
       properties:
         id:
+          type: string
           title: Id
-          type: string
         task_id:
-          title: Task Id
           type: string
+          title: Task Id
         decision:
+          type: string
           enum:
           - accept
           - request_changes
           title: Decision
-          type: string
         created_at:
-          title: Created At
           type: string
+          title: Created At
         reviewer:
           $ref: '#/components/schemas/TaskReviewReviewer'
         task_basis:
-          title: Task Basis
           type: string
+          title: Task Basis
         snapshot:
           $ref: '#/components/schemas/TaskReviewSnapshot'
         comment:
+          type: string
           title: Comment
-          type: string
         evidence_content:
+          type: string
           title: Evidence Content
-          type: string
         evidence_url:
-          title: Evidence Url
           type: string
+          title: Evidence Url
         source:
+          type: string
           const: manual
           title: Source
-          type: string
         invalidated:
-          title: Invalidated
           type: boolean
+          title: Invalidated
         invalidated_at:
           anyOf:
           - type: string
           - type: 'null'
           title: Invalidated At
         invalidated_reason:
-          title: Invalidated Reason
           type: string
-        valid:
-          title: Valid
-          type: boolean
+          title: Invalidated Reason
+      type: object
       required:
       - id
       - task_id
@@ -11821,9 +11887,7 @@ components:
       - invalidated
       - invalidated_at
       - invalidated_reason
-      - valid
       title: TaskReviewRecord
-      type: object
     TaskReviewSnapshot:
       properties:
         task:
@@ -11840,14 +11904,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/TaskAcceptance'
           - type: 'null'
-          default: null
         planning:
           $ref: '#/components/schemas/TaskReviewPlanning'
         dependency_basis:
           additionalProperties:
             type: string
-          title: Dependency Basis
           type: object
+          title: Dependency Basis
+      type: object
       required:
       - task
       - owner
@@ -11855,7 +11919,6 @@ components:
       - planning
       - dependency_basis
       title: TaskReviewSnapshot
-      type: object
     TaskReviewPlanning:
       properties:
         requirement_criteria_indices:
@@ -11864,17 +11927,16 @@ components:
               type: integer
             type: array
           - type: 'null'
-          default: null
           title: Requirement Criteria Indices
         depends_on:
           items:
             type: string
-          title: Depends On
           type: array
+          title: Depends On
+      type: object
       required:
       - depends_on
       title: TaskReviewPlanning
-      type: object
     TaskReviewRequirement:
       properties:
         id:
@@ -11909,8 +11971,8 @@ components:
     TaskReviewOwner:
       properties:
         id:
-          title: Id
           type: string
+          title: Id
         name:
           anyOf:
           - type: string
@@ -11918,79 +11980,77 @@ components:
           title: Name
         kind:
           anyOf:
-          - enum:
+          - type: string
+            enum:
             - human
             - agent
             - tool
-            type: string
           - type: 'null'
           title: Kind
         active:
-          title: Active
           type: boolean
+          title: Active
         available:
           anyOf:
           - type: boolean
           - type: 'null'
-          default: null
           title: Available
         reasons:
           items:
             additionalProperties:
               type: string
             type: object
-          title: Reasons
           type: array
+          title: Reasons
+      type: object
       required:
       - id
       - name
       - kind
       - active
       title: TaskReviewOwner
-      type: object
     TaskReviewTask:
       properties:
         id:
+          type: string
           title: Id
-          type: string
         title:
+          type: string
           title: Title
-          type: string
         description:
-          title: Description
           type: string
+          title: Description
         acceptance_criteria:
           anyOf:
           - items:
               type: string
             type: array
           - type: 'null'
-          default: null
           title: Acceptance Criteria
         req_id:
+          type: string
           title: Req Id
-          type: string
         status:
-          title: Status
           type: string
+          title: Status
         owner_id:
           anyOf:
           - type: string
           - type: 'null'
-          default: null
           title: Owner Id
         assigned_to:
+          type: string
           title: Assigned To
-          type: string
         priority:
+          type: string
           title: Priority
-          type: string
         estimate:
+          type: string
           title: Estimate
-          type: string
         blocked_reason:
-          title: Blocked Reason
           type: string
+          title: Blocked Reason
+      type: object
       required:
       - id
       - title
@@ -12002,7 +12062,6 @@ components:
       - estimate
       - blocked_reason
       title: TaskReviewTask
-      type: object
     TaskReviewReviewer:
       properties:
         id:
@@ -12032,39 +12091,39 @@ components:
           anyOf:
           - $ref: '#/components/schemas/TaskAcceptance'
           - type: 'null'
-          default: null
         planning:
           $ref: '#/components/schemas/TaskReviewPlanning'
         dependency_basis:
           additionalProperties:
             type: string
-          title: Dependency Basis
           type: object
+          title: Dependency Basis
         basis:
-          title: Basis
           type: string
+          title: Basis
         eligible:
+          type: boolean
           title: Eligible
-          type: boolean
         can_review:
+          type: boolean
           title: Can Review
-          type: boolean
         can_accept:
-          title: Can Accept
           type: boolean
+          title: Can Accept
         reasons:
           items:
             $ref: '#/components/schemas/TaskReviewReason'
-          title: Reasons
           type: array
+          title: Reasons
         dependency_blocked:
           items:
             type: string
-          title: Dependency Blocked
           type: array
+          title: Dependency Blocked
         verified:
-          title: Verified
           type: boolean
+          title: Verified
+      type: object
       required:
       - task
       - owner
@@ -12079,7 +12138,6 @@ components:
       - dependency_blocked
       - verified
       title: TaskReviewCurrent
-      type: object
     TaskReviewReason:
       properties:
         code:
@@ -26401,3 +26459,116 @@ components:
       - envelope
       - permissions
       title: ReleaseEvidenceDetail
+    TaskReviewCurrentResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        task_id:
+          type: string
+          title: Task Id
+        version:
+          type: integer
+          title: Version
+        query_generation:
+          type: integer
+          title: Query Generation
+        as_of:
+          type: string
+          title: As Of
+        current:
+          $ref: '#/components/schemas/TaskReviewCurrent'
+        effective_review_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Effective Review Id
+      type: object
+      required:
+      - project_id
+      - task_id
+      - version
+      - query_generation
+      - as_of
+      - current
+      - effective_review_id
+      title: TaskReviewCurrentResponse
+    TaskReviewSummary:
+      properties:
+        id:
+          type: string
+          title: Id
+        task_id:
+          type: string
+          title: Task Id
+        decision:
+          type: string
+          enum:
+          - accept
+          - request_changes
+          title: Decision
+        created_at:
+          type: string
+          title: Created At
+        reviewer:
+          $ref: '#/components/schemas/TaskReviewReviewer'
+        task_basis:
+          type: string
+          title: Task Basis
+        comment_summary:
+          type: string
+          maxLength: 240
+          title: Comment Summary
+        has_evidence:
+          type: boolean
+          title: Has Evidence
+        source:
+          type: string
+          const: manual
+          title: Source
+        invalidated:
+          type: boolean
+          title: Invalidated
+        invalidated_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invalidated At
+        invalidated_reason:
+          type: string
+          title: Invalidated Reason
+      type: object
+      required:
+      - id
+      - task_id
+      - decision
+      - created_at
+      - reviewer
+      - task_basis
+      - comment_summary
+      - has_evidence
+      - source
+      - invalidated
+      - invalidated_at
+      - invalidated_reason
+      title: TaskReviewSummary
+    TaskReviewDetailResponse:
+      properties:
+        project_id:
+          type: string
+          title: Project Id
+        task_id:
+          type: string
+          title: Task Id
+        as_of:
+          type: string
+          title: As Of
+        review:
+          $ref: '#/components/schemas/TaskReviewRecord'
+      type: object
+      required:
+      - project_id
+      - task_id
+      - as_of
+      - review
+      title: TaskReviewDetailResponse

@@ -112,7 +112,7 @@ def _task_facts(project, evaluation):
                 "task",
                 task["id"],
                 data,
-                parent_id=task["req_id"],
+                parent_id=task["req_id"] or "",
                 owner_id=task.get("owner_id") or "",
                 status=task["delivery_status"],
                 milestone_id=flows.get(task["req_id"], {}).get("milestone_id") or "",

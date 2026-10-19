@@ -93,74 +93,7 @@ def apply_review(db, project, user, data, body):
     db.add(review)
     if body.decision == "request_changes":
         context.tasks[body.task_id].status = "in_progress"
-    return review.id, None
-
-
-def _stamp(value):
-    return value.isoformat() + "Z" if value else None
-
-
-def list_reviews(db, project, task_id, *, can_approve, limit=20, cursor=""):
-    workspace = db.get(DeliveryWorkspace, project.id)
-    data = reconcile(db, project, workspace.data) if workspace else initial_state()
-    context = VerificationContext(db, project, data)
-    query = db.query(DeliveryTaskReview).filter_by(
-        tenant_id=project.tenant_id,
-        project_id=project.id,
-        task_id=task_id,
-    )
-    total = query.count()
-    if task_id not in context.tasks and not total:
-        raise HTTPException(404, "Task reviews not found in this project")
-    current = current_review(context, task_id, can_approve=can_approve)
-    if cursor:
-        previous = query.filter_by(id=cursor).first()
-        if previous is None:
-            raise HTTPException(404, "Review cursor not found for this project and task")
-        query = query.filter(DeliveryTaskReview.seq < previous.seq)
-    page = query.order_by(DeliveryTaskReview.seq.desc()).limit(limit + 1).all()
-    rows = page[:limit]
-    latest = context.reviews.get(task_id)
-    result = []
-    for row in rows:
-        valid = (
-            latest is row
-            and row.decision == "accept"
-            and not row.invalidated
-            and current is not None
-            and current["verified"]
-            and snapshots_match(row.snapshot, context.snapshot(task_id))
-        )
-        result.append(
-            {
-                "id": row.id,
-                "task_id": row.task_id,
-                "decision": row.decision,
-                "created_at": _stamp(row.created_at),
-                "reviewer": {"id": row.reviewer_id, "name": row.reviewer_name},
-                "task_basis": row.task_basis,
-                "snapshot": row.snapshot,
-                "comment": row.comment,
-                "evidence_content": row.evidence_content,
-                "evidence_url": row.evidence_url,
-                "source": "manual",
-                "invalidated": row.invalidated,
-                "invalidated_at": _stamp(row.invalidated_at),
-                "invalidated_reason": row.invalidated_reason,
-                "valid": bool(valid),
-            }
-        )
-    return {
-        "project_id": project.id,
-        "task_id": task_id,
-        "version": workspace.version if workspace else 0,
-        "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "current": current,
-        "reviews": result,
-        "total": total,
-        "next_cursor": rows[-1].id if len(page) > limit else None,
-        "limit": limit,
-    }
+    return review.id, None, {"task_ids": [body.task_id]}
 
 
 def invalidate_reviews(db, project, *, verification=None):

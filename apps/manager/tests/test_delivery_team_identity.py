@@ -6,7 +6,7 @@ import pytest
 from sop_manager.routers.delivery_contract import default_flow, stage_gates
 from sop_manager.routers.sql_models import DeliveryTaskReview, DeliveryWorkspace, ProjectMember, Task, User
 from test_delivery_execution import bridge, finish, queue, queue_payload, sync  # noqa: F401
-from test_delivery_manual_review import review, reviews
+from test_delivery_manual_review import review, review_current, review_detail, reviews
 from test_delivery_workbench import command, env, requirement  # noqa: F401
 
 
@@ -54,15 +54,16 @@ def test_manual_receipt_preserves_original_label_without_invalidating_on_rename(
     task = create(client)
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
     assert review(client, task["id"]).status_code == 200
-    before = reviews(client, task["id"]).json()
+    before = review_current(client, task["id"]).json()
     with sessions() as db:
         db.get(User, "lead").username = "Renamed lead"
         db.commit()
-    after = reviews(client, task["id"]).json()
-    assert after["current"]["verified"] and after["reviews"][0]["valid"]
+    after = review_current(client, task["id"]).json()
+    assert after["current"]["verified"] and after["effective_review_id"]
     assert after["current"]["basis"] == before["current"]["basis"]
     assert after["current"]["owner"]["name"] == "Renamed lead"
-    assert after["reviews"][0]["snapshot"]["owner"]["name"] == "lead"
+    original = review_detail(client, task["id"], after["effective_review_id"]).json()["review"]
+    assert original["snapshot"]["owner"]["name"] == "lead"
     with sessions() as db:
         assert not db.query(DeliveryTaskReview).one().invalidated
 
@@ -103,10 +104,11 @@ def test_responsible_agent_can_receive_explicit_human_manual_acceptance(env):
     accepted = review(client, task["id"])
     assert accepted.status_code == 200, accepted.text
     evidence = reviews(client, task["id"]).json()
-    assert evidence["current"]["verified"]
+    assert review_current(client, task["id"]).json()["current"]["verified"]
     assert evidence["reviews"][0]["source"] == "manual"
     assert evidence["reviews"][0]["reviewer"]["id"] == "lead"
-    assert evidence["reviews"][0]["snapshot"]["owner"]["id"] == agent["id"]
+    original = review_detail(client, task["id"], evidence["reviews"][0]["id"]).json()["review"]
+    assert original["snapshot"]["owner"]["id"] == agent["id"]
 
 
 def test_unassigned_draft_cannot_dispatch_and_does_not_adopt_operator(bridge):
@@ -212,7 +214,7 @@ def test_collective_parent_cannot_revive_after_responsibility_becomes_unavailabl
             db.commit()
             flow = db.get(DeliveryWorkspace, "project").data["flows"][task["req_id"]]
             assert flow["stage"] == "intake" and flow["revision"] > 1
-    assert not reviews(client, task["id"]).json()["current"]["verified"]
+    assert not review_current(client, task["id"]).json()["current"]["verified"]
 
 
 def test_member_role_and_display_changes_preserve_responsibility_and_manual_receipt(env):
@@ -220,14 +222,15 @@ def test_member_role_and_display_changes_preserve_responsibility_and_manual_rece
     task = create(client, owner_id="user:reader")
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
     assert review(client, task["id"]).status_code == 200
-    before = reviews(client, task["id"]).json()["current"]["basis"]
+    before = review_current(client, task["id"]).json()["current"]["basis"]
     with sessions() as db:
         db.get(ProjectMember, ("project", "reader")).role = "developer"
         db.get(User, "reader").username = "New reader label"
         db.commit()
-    current = reviews(client, task["id"]).json()
+    current = review_current(client, task["id"]).json()
     assert current["current"]["verified"] and current["current"]["basis"] == before
-    assert current["reviews"][0]["snapshot"]["owner"]["name"] == "reader"
+    original = review_detail(client, task["id"], current["effective_review_id"]).json()["review"]
+    assert original["snapshot"]["owner"]["name"] == "reader"
 
 
 def test_owner_reassignment_a_b_a_cannot_revive_manual_receipt(env):
@@ -238,13 +241,14 @@ def test_owner_reassignment_a_b_a_cannot_revive_manual_receipt(env):
     missing_basis = command(client, "task.update", {"id": task["id"], "owner_id": "user:reader"})
     assert missing_basis.status_code == 422
     for owner_id in ("user:reader", "user:lead"):
-        current = reviews(client, task["id"]).json()["current"]
+        current = review_current(client, task["id"]).json()["current"]
         response = command(
             client, "task.update", {"id": task["id"], "owner_id": owner_id, "task_basis": current["basis"]}
         )
         assert response.status_code == 200, response.text
     current = reviews(client, task["id"]).json()
-    assert current["reviews"][0]["invalidated"] and not current["current"]["verified"]
+    assert current["reviews"][0]["invalidated"]
+    assert not review_current(client, task["id"]).json()["current"]["verified"]
 
 
 def test_registered_agent_rename_preserves_receipt_but_disable_restore_invalidates(env):
@@ -257,12 +261,13 @@ def test_registered_agent_rename_preserves_receipt_but_disable_restore_invalidat
     assert review(client, task["id"]).status_code == 200
     member["name"] = "New agent label"
     assert command(client, "member.save", member).status_code == 200
-    assert reviews(client, task["id"]).json()["current"]["verified"]
+    assert review_current(client, task["id"]).json()["current"]["verified"]
     for active in (False, True):
         response = command(client, "member.save", {**member, "active": active})
         assert response.status_code == 200, response.text
     current = reviews(client, task["id"]).json()
-    assert current["reviews"][0]["invalidated"] and not current["current"]["verified"]
+    assert current["reviews"][0]["invalidated"]
+    assert not review_current(client, task["id"]).json()["current"]["verified"]
 
 
 def test_tool_resource_cannot_be_responsible_for_a_task(env):

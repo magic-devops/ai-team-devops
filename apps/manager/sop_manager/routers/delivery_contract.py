@@ -717,19 +717,48 @@ class TaskReviewRecord(BaseModel):
     invalidated: bool
     invalidated_at: str | None
     invalidated_reason: str
-    valid: bool
+
+
+class TaskReviewSummary(BaseModel):
+    id: str
+    task_id: str
+    decision: Literal["accept", "request_changes"]
+    created_at: str
+    reviewer: TaskReviewReviewer
+    task_basis: str
+    comment_summary: str = Field(max_length=240)
+    has_evidence: bool
+    source: Literal["manual"]
+    invalidated: bool
+    invalidated_at: str | None
+    invalidated_reason: str
 
 
 class TaskReviewsResponse(BaseModel):
     project_id: str
     task_id: str
-    version: int
     as_of: str
-    current: TaskReviewCurrent | None
-    reviews: list[TaskReviewRecord]
+    reviews: list[TaskReviewSummary]
     total: int
     next_cursor: str | None
     limit: int
+
+
+class TaskReviewCurrentResponse(BaseModel):
+    project_id: str
+    task_id: str
+    version: int
+    query_generation: int
+    as_of: str
+    current: TaskReviewCurrent
+    effective_review_id: str | None
+
+
+class TaskReviewDetailResponse(BaseModel):
+    project_id: str
+    task_id: str
+    as_of: str
+    review: TaskReviewRecord
 
 
 class StageAction(Input):

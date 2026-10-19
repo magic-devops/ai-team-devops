@@ -603,18 +603,34 @@ class ManagerClient:
         resource = _resource_segment(baseline_id)
         return self._request("GET", f"/api/v1/delivery/progress/baselines/{resource}")
 
+    def delivery_task_review_current(self, task_id: str) -> dict[str, Any]:
+        """Read the current canonical proof separately from historical decisions."""
+        resource = _resource_segment(task_id)
+        return self._request("GET", f"/api/v1/delivery/tasks/{resource}/review-current")
+
     def delivery_task_reviews(
         self, task_id: str, *, limit: int = 20, cursor: str = ""
     ) -> dict[str, Any]:
-        """Read manual review evidence and current eligibility in the selected project."""
+        """Read a bounded summary catalogue in the server's fixed historical window."""
         resource = _resource_segment(task_id)
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise ValueError("review limit must be an integer between 1 and 100")
+        if (
+            not isinstance(cursor, str)
+            or len(cursor) > 4000
+            or any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in cursor)
+        ):
+            raise ValueError("review cursor must be an opaque cursor of at most 4000 characters without controls")
         params: dict[str, Any] = {"limit": limit}
         if cursor:
-            _resource_segment(cursor)
             params["cursor"] = cursor
         return self._request("GET", f"/api/v1/delivery/tasks/{resource}/reviews", params=params)
+
+    def delivery_task_review(self, task_id: str, review_id: str) -> dict[str, Any]:
+        """Read one original decision and frozen evidence without current proof evaluation."""
+        task = _resource_segment(task_id)
+        review = _resource_segment(review_id)
+        return self._request("GET", f"/api/v1/delivery/tasks/{task}/reviews/{review}")
 
     def delivery_execution_targets(self) -> dict[str, Any]:
         return self._request("GET", "/api/v1/delivery/execution-targets")

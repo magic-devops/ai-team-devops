@@ -11,7 +11,7 @@ from .._util import console, get_client, warn
 from . import delivery_discussion
 
 app = typer.Typer(
-    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / reviews / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
+    help="项目交付：context / requirements / requirement / tasks / task / issues / references / query-rebuild / workspace / discussion / inbox / progress-summary / progress / activity / requirement-history / requirement-change-preview / issue / issue-diagnoses / issue-diagnose / quality / releases / deployments / deployment-preview / schedule / review-current / reviews / review / team-runtime / targets / execution / execution-runtime / execution-output / execution-control-preview / preview / command"
 )
 
 app.add_typer(delivery_discussion.app, name="discussion")
@@ -618,18 +618,49 @@ def workspace():
         console.print_json(data=client.delivery_workspace())
 
 
+@app.command("review-current")
+def review_current(
+    task_id: str,
+    json_out: Annotated[bool, typer.Option("--json", help="保留当前依据、查询代次和有效记录ID")] = False,
+):
+    """独立读取当前任务验收依据；不读取历史目录或原件。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_task_review_current(task_id)
+        _show_progress_record(result, json_out, "当前任务验收依据")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
 @app.command("reviews")
 def reviews(
     task_id: str,
     limit: Annotated[int, typer.Option("--limit", min=1, max=100, help="每页审查记录数")] = 20,
     cursor: Annotated[str, typer.Option("--cursor", help="上一页返回的 next_cursor")] = "",
-    json_out: Annotated[bool, typer.Option("--json", help="保留原始证据、资格和分页信息")] = False,
+    json_out: Annotated[bool, typer.Option("--json", help="保留历史摘要、完整计数和固定窗口游标")] = False,
 ):
-    """读取人工任务验收历史；删除或失效的历史不替代当前交付。"""
+    """分页读取人工验收历史摘要；当前依据和原件分别按需读取。"""
     try:
         with get_client() as client:
             result = client.delivery_task_reviews(task_id, limit=limit, cursor=cursor)
-        _show_progress_record(result, json_out, "人工任务验收")
+        _show_progress_record(result, json_out, "人工任务验收历史")
+    except Exception as exc:
+        warn(str(exc))
+        raise typer.Exit(1) from exc
+
+
+@app.command("review")
+def review(
+    task_id: str,
+    review_id: str,
+    json_out: Annotated[bool, typer.Option("--json", help="保留指定决定的完整快照、意见和证据")] = False,
+):
+    """精确读取历史决定原件；已删除任务的历史不替代当前有效性。"""
+    try:
+        with get_client() as client:
+            result = client.delivery_task_review(task_id, review_id)
+        _show_progress_record(result, json_out, "人工任务验收原件")
     except Exception as exc:
         warn(str(exc))
         raise typer.Exit(1) from exc

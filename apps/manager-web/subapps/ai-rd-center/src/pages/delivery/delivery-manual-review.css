@@ -30,7 +30,7 @@
 .delivery-manual-identity,
 .delivery-manual-fixed,
 .delivery-manual-dependencies,
-.delivery-manual-history summary > small {
+.delivery-manual-review-summary > small {
   color: var(--muted-strong, var(--muted));
   font-size: 12px;
 }
@@ -108,29 +108,15 @@
   margin: 10px 0;
   background: var(--surface);
 }
-.delivery-manual-review-record > summary {
+.delivery-manual-review-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  cursor: pointer;
-  list-style: none;
   padding: 12px;
   font-size: 12px;
 }
-.delivery-manual-review-record > summary::-webkit-details-marker {
-  display: none;
-}
-.delivery-manual-review-record > summary::before {
-  content: "›";
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-}
-.delivery-manual-review-record[open] > summary::before {
-  transform: rotate(90deg);
-}
-.delivery-manual-review-record > summary > small {
+.delivery-manual-review-summary > small {
   margin-left: auto;
 }
 .delivery-manual-review-status {
@@ -142,7 +128,7 @@
 .delivery-manual-review-status .ant-tag {
   margin: 0;
 }
-.delivery-manual-review-record > :not(summary) {
+.delivery-manual-review-record > :not(.delivery-manual-review-summary) {
   margin-left: 14px;
   margin-right: 14px;
 }
@@ -206,6 +192,18 @@
 .delivery-manual-conflict h4 {
   font-size: 13px;
 }
+.delivery-manual-original-container {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 0;
+}
+.delivery-manual-retained,
+.delivery-manual-original-detail {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .delivery-manual-panel button:focus-visible,
 .delivery-manual-panel summary:focus-visible,
 .delivery-manual-modal button:focus-visible {
@@ -221,10 +219,10 @@
     grid-template-columns: 86px minmax(0, 1fr);
     gap: 8px;
   }
-  .delivery-manual-review-record > summary {
+  .delivery-manual-review-summary {
     gap: 8px;
   }
-  .delivery-manual-review-record > summary > small {
+  .delivery-manual-review-summary > small {
     width: 100%;
     margin-left: 14px;
   }
@@ -239,6 +237,13 @@
     max-width: 100%;
   }
   .delivery-manual-conflict .ant-btn {
+    white-space: normal;
+    height: auto;
+    min-height: 32px;
+    max-width: 100%;
+  }
+  .delivery-manual-panel .ant-alert-action .ant-btn,
+  .delivery-manual-modal .ant-alert-action .ant-btn {
     white-space: normal;
     height: auto;
     min-height: 32px;

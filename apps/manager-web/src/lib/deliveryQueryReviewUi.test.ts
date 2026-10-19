@@ -1,6 +1,5 @@
-import { createElement, isValidElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Collapse } from "antd";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskDetailContent } from "../../subapps/ai-rd-center/src/pages/delivery/DeliveryTaskDetail";
 import type { DeliveryTaskData } from "./deliveryQuery";
@@ -50,18 +49,12 @@ function data(native: boolean): DeliveryTaskData {
     },
   } as unknown as DeliveryTaskData;
 }
-function collapse(node: ReactNode): any {
-  if (Array.isArray(node)) return node.map(collapse).find(Boolean);
-  if (!isValidElement<any>(node)) return undefined;
-  if (node.type === Collapse) return node.props;
-  return collapse(node.props.children);
-}
 beforeEach(() => {
   state.reads = 0;
 });
-describe("explicit manual review reads", () => {
+describe("task content leaves manual reads to its stable parent panel", () => {
   it.each([false, true])(
-    "does not mount the review reader on initial exact task render (native=%s)",
+    "does not duplicate the parent review reader (native=%s)",
     (native) => {
       renderToStaticMarkup(
         createElement(TaskDetailContent, {
@@ -73,25 +66,6 @@ describe("explicit manual review reads", () => {
         }),
       );
       expect(state.reads).toBe(0);
-    },
-  );
-  it.each([false, true])(
-    "mounts the review reader only when its panel is explicitly opened (native=%s)",
-    (native) => {
-      const props = collapse(
-        TaskDetailContent({
-          detail: data(native),
-          taskId: "T-10001",
-          canEdit: true,
-          onSaved: vi.fn(),
-          onEditingChange: vi.fn(),
-        }),
-      );
-      expect(props).toBeDefined();
-      renderToStaticMarkup(
-        createElement(Collapse, { ...props, activeKey: [props.items[0].key] }),
-      );
-      expect(state.reads).toBe(1);
     },
   );
 });

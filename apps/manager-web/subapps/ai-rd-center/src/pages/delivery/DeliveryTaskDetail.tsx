@@ -4,7 +4,7 @@ import {
   invalidateDeliveryQueries,
 } from "@/lib/deliveryQuery";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Collapse, Select, Skeleton, Tag } from "antd";
+import { Alert, Button, Select, Skeleton, Tag } from "antd";
 import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -195,35 +195,7 @@ export function TaskDetailContent({
         onEditingChange={onEditingChange}
       />
       {!native && execution}
-      {
-        <>
-          {native && <p className="runtime-help">{tr("nativeReview")}</p>}
-          <Collapse
-            size="small"
-            ghost
-            items={[
-              {
-                key: "manual-history",
-                label: t(
-                  native
-                    ? "deliveryManualReview.history"
-                    : "deliveryManualReview.title",
-                ),
-                forceRender: false,
-                children: (
-                  <DeliveryManualReviewPanel
-                    projectId={data.project.id}
-                    sessionId={sessionId}
-                    taskId={task.id}
-                    onSaved={onSaved}
-                    onEditingChange={onEditingChange}
-                  />
-                ),
-              },
-            ]}
-          />
-        </>
-      }
+      {native && <p className="runtime-help">{tr("nativeReview")}</p>}
     </div>
   );
 }
@@ -284,6 +256,7 @@ export function DeliveryTaskDetail({
     void invalidateDeliveryQueries(qc, projectId);
     for (const name of [
       "delivery-task-reviews",
+      "delivery-task-review-current",
       "delivery-inbox",
       "delivery-progress",
       "tasks",
@@ -390,7 +363,29 @@ export function DeliveryTaskDetail({
         onEditingChange={editingChanged}
         onCommand={command}
         onUnresolvedChange={(value) => {
-          const pending = executionExit.setPending(taskId, value);
+          const pending = executionExit.setPending(
+            `execution:${taskId}`,
+            value,
+          );
+          const latest = latestWorkspace.current;
+          if (pending && latest)
+            setExecutionPinnedWorkspace(
+              (previous) => previous || structuredClone(latest),
+            );
+          else if (!pending) setExecutionPinnedWorkspace(undefined);
+          onUnresolvedChange?.(pending);
+        }}
+      />
+      <DeliveryManualReviewPanel
+        key={`${projectId}:${sessionId}:${taskId}`}
+        projectId={projectId}
+        sessionId={sessionId}
+        taskId={taskId}
+        disabled={executionExit.pending || busy}
+        onSaved={saved}
+        onEditingChange={editingChanged}
+        onUnresolvedChange={(value) => {
+          const pending = executionExit.setPending(`manual:${taskId}`, value);
           const latest = latestWorkspace.current;
           if (pending && latest)
             setExecutionPinnedWorkspace(

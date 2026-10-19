@@ -31,8 +31,16 @@ def reviews(client, tid, **params):
     return client.get(f"/api/v1/delivery/tasks/{tid}/reviews", params=params)
 
 
+def review_current(client, tid):
+    return client.get(f"/api/v1/delivery/tasks/{tid}/review-current")
+
+
+def review_detail(client, tid, review_id):
+    return client.get(f"/api/v1/delivery/tasks/{tid}/reviews/{review_id}")
+
+
 def review(client, tid, *, decision="accept", **changes):
-    response = reviews(client, tid)
+    response = review_current(client, tid)
     assert response.status_code == 200, response.text
     payload = {
         "task_id": tid,
@@ -62,17 +70,48 @@ def test_completed_record_requires_explicit_manual_decision_before_it_is_verifie
     task = completed(client)
     before = facts(sessions)
     assert before["tasks"][0]["status"] == "recorded_completed"
-    current = reviews(client, task["id"])
+    current = review_current(client, task["id"])
     assert current.status_code == 200, current.text
     assert current.json()["current"]["can_accept"]
     assert review(client, task["id"]).status_code == 200
     assert facts(sessions)["tasks"][0]["status"] == "verified_completed"
     history = reviews(client, task["id"]).json()
-    assert history["current"]["verified"]
+    proof = review_current(client, task["id"]).json()
+    assert proof["current"]["verified"]
     assert history["reviews"][0]["source"] == "manual"
-    assert history["reviews"][0]["valid"]
+    assert proof["effective_review_id"] == history["reviews"][0]["id"]
     assert history["reviews"][0]["reviewer"] == {"id": "lead", "name": "lead"}
-    assert history["reviews"][0]["snapshot"]["task"]["title"] == "Human delivery"
+    original = review_detail(client, task["id"], proof["effective_review_id"]).json()["review"]
+    assert original["snapshot"]["task"]["title"] == "Human delivery"
+
+
+def test_actual_manual_ack_binds_original_task_and_replays_the_same_result(env):  # noqa: F811
+    client, _, _ = env
+    task = completed(client)
+    current = review_current(client, task["id"]).json()
+    original = {
+        "action": "task.manual_review",
+        "expected_version": current["version"],
+        "idempotency_key": "fixed-task-review-ack",
+        "payload": {
+            "task_id": task["id"],
+            "basis": current["current"]["basis"],
+            "decision": "accept",
+            "comment": "Checked this exact task",
+            "evidence_content": "Human evidence",
+        },
+    }
+    saved = client.post("/api/v1/delivery/commands", json=original)
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["result"] == {"task_ids": [task["id"]]}
+    assert body["resource"]["kind"] == "task_review" and body["resource"]["id"]
+    assert body["resource"] in body["affected_refs"]
+    assert {"kind": "task", "id": task["id"]} in body["affected_refs"]
+    replay = client.post("/api/v1/delivery/commands", json=original)
+    assert replay.status_code == 200 and replay.json()["replayed"]
+    assert replay.json()["result"] == body["result"]
+    assert replay.json()["affected_refs"] == body["affected_refs"]
 
 
 def test_recorded_predecessor_stays_blocked_until_review_then_successor_starts(env):  # noqa: F811
@@ -93,7 +132,7 @@ def test_recorded_predecessor_stays_blocked_until_review_then_successor_starts(e
 def test_current_basis_catches_legacy_edits_without_workspace_version_change_and_preserves_receipt(env):  # noqa: F811
     client, sessions, _ = env
     task = completed(client)
-    current = reviews(client, task["id"])
+    current = review_current(client, task["id"])
     assert current.status_code == 200, current.text
     frozen = current.json()
     payload = {
@@ -111,7 +150,7 @@ def test_current_basis_catches_legacy_edits_without_workspace_version_change_and
     )
     assert failed.status_code == 409
     assert failed.json()["detail"]["code"] == "task_review_basis_changed"
-    payload["basis"] = reviews(client, task["id"]).json()["current"]["basis"]
+    payload["basis"] = review_current(client, task["id"]).json()["current"]["basis"]
     accepted = command(client, "task.manual_review", payload, key="accepted-review")
     assert accepted.status_code == 200, accepted.text
     replay = command(client, "task.manual_review", payload, version=frozen["version"], key="accepted-review")
@@ -146,7 +185,7 @@ def test_scope_a_b_a_permanently_invalidates_old_acceptance_in_the_same_business
     result = reviews(client, task["id"]).json()
     assert result["reviews"][0]["invalidated"]
     assert result["reviews"][0]["invalidated_at"]
-    assert not result["current"]["verified"]
+    assert not review_current(client, task["id"]).json()["current"]["verified"]
     assert facts(sessions)["tasks"][0]["status"] == "recorded_completed"
     assert review(client, task["id"]).status_code == 200
     assert reviews(client, task["id"]).json()["total"] == 2
@@ -156,19 +195,20 @@ def test_date_changes_preserve_accepted_work_but_request_changes_appends_and_reo
     client, sessions, _ = env
     task = completed(client)
     assert review(client, task["id"]).status_code == 200
-    before = reviews(client, task["id"]).json()["current"]["basis"]
+    before = review_current(client, task["id"]).json()["current"]["basis"]
     assert (
         command(
             client, "task.update", {"id": task["id"], "starts_on": "2026-10-20", "ends_on": "2026-10-23"}
         ).status_code
         == 200
     )
-    current = reviews(client, task["id"]).json()["current"]
+    current = review_current(client, task["id"]).json()["current"]
     assert current["basis"] == before and current["verified"]
     assert review(client, task["id"], decision="request_changes", evidence_content="").status_code == 200
     result = reviews(client, task["id"]).json()
-    assert result["current"]["task"]["status"] == "in_progress"
-    assert not result["current"]["verified"]
+    proof = review_current(client, task["id"]).json()
+    assert proof["current"]["task"]["status"] == "in_progress"
+    assert not proof["current"]["verified"] and proof["effective_review_id"] is None
     assert result["reviews"][0]["decision"] == "request_changes"
     assert facts(sessions)["tasks"][0]["status"] == "in_progress"
 
@@ -181,13 +221,15 @@ def test_deleted_and_moved_tasks_keep_original_project_read_only_history(env):  
         # Application reparenting is forbidden. Simulate out-of-band database
         # damage, then explicitly capture the resulting proof invalidation.
         with db.get_bind().begin() as connection:
-            connection.execute(update(models.Task).where(models.Task.id == task["id"]).values(project_id="other"))
+            connection.execute(
+                update(models.Task).where(models.Task.id == task["id"]).values(project_id="other")
+            )
         from sop_manager.routers.delivery_progress_capture import record_observation
 
         record_observation(db, db.get(models.Project, "project"))
         db.commit()
     original = reviews(client, task["id"])
-    assert original.status_code == 200 and original.json()["current"] is None
+    assert original.status_code == 200 and review_current(client, task["id"]).status_code == 404
     assert original.json()["reviews"][0]["invalidated"]
     assert (
         client.get(f"/api/v1/delivery/tasks/{task['id']}/reviews", headers={"X-Project-Id": "other"}).json()[
@@ -198,7 +240,8 @@ def test_deleted_and_moved_tasks_keep_original_project_read_only_history(env):  
     with sessions() as db:
         db.execute(delete(models.Task).where(models.Task.id == task["id"]))
         db.commit()
-    assert reviews(client, task["id"]).json()["current"] is None
+    assert reviews(client, task["id"]).status_code == 200
+    assert review_current(client, task["id"]).status_code == 404
     assert reviews(client, "unknown-task").status_code == 404
 
 
@@ -208,7 +251,7 @@ def test_review_rejects_reader_pending_unsafe_evidence_and_allows_responsible_ag
     assert review(client, task["id"]).status_code == 409
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
     actor["id"] = "reader"
-    value = reviews(client, task["id"]).json()
+    value = review_current(client, task["id"]).json()
     assert not value["current"]["can_review"]
     assert review(client, task["id"]).status_code == 403
     actor["id"] = "lead"
@@ -217,14 +260,14 @@ def test_review_rejects_reader_pending_unsafe_evidence_and_allows_responsible_ag
     agent = command(client, "member.save", {"name": "Person-like agent", "kind": "agent"}).json()["members"][
         -1
     ]
-    basis = reviews(client, task["id"]).json()["current"]["basis"]
+    basis = review_current(client, task["id"]).json()["current"]["basis"]
     assert (
         command(
             client, "task.update", {"id": task["id"], "owner_id": agent["id"], "task_basis": basis}
         ).status_code
         == 200
     )
-    assert reviews(client, task["id"]).json()["current"]["eligible"]
+    assert review_current(client, task["id"]).json()["current"]["eligible"]
     assert review(client, task["id"]).status_code == 200
 
 
@@ -252,8 +295,9 @@ def test_standalone_human_review_and_pagination_are_read_only(env):  # noqa: F81
     second = reviews(client, "standalone", limit=2, cursor=first["next_cursor"]).json()
     assert first["total"] == 3 and len(first["reviews"]) == 2
     assert len(second["reviews"]) == 1 and second["next_cursor"] is None
-    assert first["reviews"][0]["valid"] and not second["reviews"][0]["valid"]
-    assert reviews(client, "standalone", cursor="foreign-review").status_code == 404
+    assert review_current(client, "standalone").json()["effective_review_id"] == first["reviews"][0]["id"]
+    assert second["reviews"][0]["id"] != first["reviews"][0]["id"]
+    assert reviews(client, "standalone", cursor="foreign-review").status_code == 422
     with sessions() as db:
         assert db.query(models.DeliveryProgressObservation).count() == count
         assert db.get(models.DeliveryWorkspace, "project").version == version
@@ -273,7 +317,7 @@ def test_human_identity_a_b_a_cannot_restore_old_delivery_after_inactivation(env
             db.commit()
     result = reviews(client, task["id"]).json()
     assert result["reviews"][0]["invalidated"]
-    assert not result["current"]["verified"]
+    assert not review_current(client, task["id"]).json()["current"]["verified"]
 
 
 def test_removing_human_membership_invalidates_its_delivery_but_not_reviewer_history(env):  # noqa: F811
@@ -294,7 +338,7 @@ def test_removing_human_membership_invalidates_its_delivery_but_not_reviewer_his
         db.add(models.ProjectMember(project_id="project", user_id="dev", role="developer"))
         db.commit()
     task = completed(client)
-    basis = reviews(client, task["id"]).json()["current"]["basis"]
+    basis = review_current(client, task["id"]).json()["current"]["basis"]
     assert (
         command(
             client, "task.update", {"id": task["id"], "owner_id": "user:dev", "task_basis": basis}
@@ -307,13 +351,13 @@ def test_removing_human_membership_invalidates_its_delivery_but_not_reviewer_his
         db.add(models.ProjectMember(project_id="project", user_id="lead", role="viewer"))
         db.get(models.User, "lead").role = "viewer"
         db.commit()
-    assert reviews(client, task["id"]).json()["current"]["verified"]
+    assert review_current(client, task["id"]).json()["current"]["verified"]
     with sessions() as db:
         db.delete(db.get(models.ProjectMember, ("project", "dev")))
         db.commit()
     result = reviews(client, task["id"]).json()
     assert result["reviews"][0]["invalidated"]
-    assert not result["current"]["eligible"]
+    assert not review_current(client, task["id"]).json()["current"]["eligible"]
 
 
 def test_predecessor_content_change_invalidates_entire_accepted_chain_permanently(env):  # noqa: F811
@@ -341,8 +385,8 @@ def test_predecessor_content_change_invalidates_entire_accepted_chain_permanentl
     for task in [first, successor]:
         result = reviews(client, task["id"]).json()
         assert result["reviews"][0]["invalidated"]
-        assert not result["current"]["verified"]
-    assert reviews(client, successor["id"]).json()["current"]["dependency_blocked"] == [first["id"]]
+        assert not review_current(client, task["id"]).json()["current"]["verified"]
+    assert review_current(client, successor["id"]).json()["current"]["dependency_blocked"] == [first["id"]]
 
 
 def test_native_execution_cannot_be_accepted_through_manual_review(bridge):  # noqa: F811
@@ -350,7 +394,7 @@ def test_native_execution_cannot_be_accepted_through_manual_review(bridge):  # n
 
     client, _, _, _, _, _, task = bridge
     queue(bridge)
-    response = reviews(client, task["id"])
+    response = review_current(client, task["id"])
     assert response.status_code == 200, response.text
     assert not response.json()["current"]["eligible"]
     assert response.json()["current"]["reasons"][0]["code"] == "manual_review_execution_managed"

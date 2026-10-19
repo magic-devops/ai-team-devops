@@ -274,7 +274,7 @@ def test_plan_dependencies_resolve_ids_and_block_completion_until_predecessor_de
     assert command(client, "task.update", {"id": second, "status": "completed"}).status_code == 409
     assert command(client, "task.update", {"id": first, "status": "completed"}).status_code == 200
     assert command(client, "task.update", {"id": second, "status": "completed"}).status_code == 409
-    basis = client.get(f"/api/v1/delivery/tasks/{first}/reviews").json()["current"]["basis"]
+    basis = client.get(f"/api/v1/delivery/tasks/{first}/review-current").json()["current"]["basis"]
     assert (
         command(
             client,

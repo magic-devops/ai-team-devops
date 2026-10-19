@@ -65,7 +65,7 @@ def test_recorded_manual_delivery_remains_actionable_until_real_acceptance(env):
     item = body["items"][0]
     assert item["status"] == "recorded_completed"
     assert item["acceptance_kind"] == "manual"
-    current = client.get("/api/v1/delivery/tasks/C/reviews").json()
+    current = client.get("/api/v1/delivery/tasks/C/review-current").json()
     assert current["current"]["can_accept"]
     saved = client.post(
         "/api/v1/delivery/commands",
@@ -282,7 +282,7 @@ def test_manual_acceptance_reappears_on_real_invalidation_and_changes_request_re
     seed(sessions)
 
     def decide(decision, key):
-        current = client.get("/api/v1/delivery/tasks/C/reviews").json()
+        current = client.get("/api/v1/delivery/tasks/C/review-current").json()
         response = client.post(
             "/api/v1/delivery/commands",
             json={

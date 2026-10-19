@@ -16,7 +16,7 @@ from sop_manager.routers.sql_models import (
 )
 from sqlalchemy import update
 from test_delivery_execution import bridge, cancel_execution, finish, queue_payload, sync  # noqa: F401
-from test_delivery_manual_review import review, reviews
+from test_delivery_manual_review import review, review_current, review_detail, reviews
 from test_delivery_workbench import command, env, requirement  # noqa: F401
 
 
@@ -35,7 +35,7 @@ def test_standalone_task_has_own_canonical_acceptance_and_manual_review(env):
     with sessions() as db:
         assert db.get(Task, task["id"]).acceptance_criteria == ["Requested behavior is verified"]
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
-    assert reviews(client, task["id"]).json()["current"]["acceptance"]["available"]
+    assert review_current(client, task["id"]).json()["current"]["acceptance"]["available"]
     assert review(client, task["id"]).status_code == 200
 
 
@@ -65,7 +65,7 @@ def test_empty_acceptance_draft_cannot_be_manually_accepted(env):
     task = create(client)
     assert not task["execution_gate"]["eligible"]
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
-    assert not reviews(client, task["id"]).json()["current"]["can_accept"]
+    assert not review_current(client, task["id"]).json()["current"]["can_accept"]
     assert review(client, task["id"]).status_code == 409
 
 
@@ -225,7 +225,14 @@ def test_missing_linked_requirement_cannot_turn_into_independent_task(env, mutat
     assert not task["acceptance"]["available"]
     assert task["execution_gate"]["reasons"][0]["code"] == "task_requirement_missing"
     assert command(client, "task.update", {"id": task["id"], "status": "completed"}).status_code == 200
-    assert review(client, task["id"]).status_code == 409
+    assert review_current(client, task["id"]).status_code == 404
+    current = client.get("/api/v1/delivery/workspace").json()["tasks"][0]
+    denied = command(client, "task.manual_review", {
+        "task_id": task["id"], "decision": "accept", "basis": current["basis"],
+        "comment": "The missing requirement must still block a direct write",
+        "evidence_content": "Manually inspected",
+    })
+    assert denied.status_code == 409
 
 
 def test_old_review_snapshot_is_readable_without_fabricating_task_conditions(env):
@@ -243,11 +250,11 @@ def test_old_review_snapshot_is_readable_without_fabricating_task_conditions(env
         db.commit()
     response = reviews(client, task["id"])
     assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["reviews"][0]["snapshot"]["acceptance"] is None
-    assert body["reviews"][0]["snapshot"]["task"]["acceptance_criteria"] is None
-    assert body["reviews"][0]["snapshot"]["planning"]["requirement_criteria_indices"] is None
-    assert body["current"]["acceptance"] is not None
+    body = review_detail(client, task["id"], response.json()["reviews"][0]["id"]).json()["review"]
+    assert body["snapshot"]["acceptance"] is None
+    assert body["snapshot"]["task"]["acceptance_criteria"] is None
+    assert body["snapshot"]["planning"]["requirement_criteria_indices"] is None
+    assert review_current(client, task["id"]).json()["current"]["acceptance"] is not None
     with sessions() as db:
         assert db.query(DeliveryTaskReview).one().snapshot == old
 

@@ -329,7 +329,10 @@ def test_scope_never_fetches_the_selected_flow_lifetime_histories(fixture):
             context = load(db, project, requirement_ids=[], task_ids=["A"])
             result = quality(db, project, context.data, task_ids=["A"], verification=context)
         assert result["scope_basis"] == truth["scope_basis"]
-        assert not any('\'$"flows"."R"\''.replace("$", "$.") in query for query in sql)
+        assert not any(
+            "JSON_EXTRACT" in query and '\'$"flows"."R"\''.replace("$", "$.") in query
+            for query in sql
+        )
         assert "releases" not in context.data["flows"]["R"]
         assert len(context.data["flows"]["R"]["artifacts"]) == len(context.data["flows"]["R"]["reviews"]) == 1
 

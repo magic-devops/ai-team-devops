@@ -23,9 +23,9 @@
 
 ## 读取契约与界面
 
-新增纯读取 `GET /api/v1/delivery/tasks/{task_id}/reviews`，需当前身份及显式 X-Project-Id；返回 project_id/version/as_of、current（当前任务与 basis、资格及具体原因，可为空）、reviews（真实决定、原快照、人工证据、失效说明）、分页信息。Task 已删除但本项目有审查时保留只读历史；跨项目 ID 返回404。响应挂实际 Pydantic模型，OpenAPI/SDK/CLI同步。
+人工验收读取按 `docs/DELIVERY_BOUNDED_REVIEW_DESIGN.md` 分为三个契约，均需当前身份及显式 X-Project-Id。`GET /api/v1/delivery/tasks/{task_id}/review-current` 返回固定版本/查询代次、当前完整依据和有效人工决定 ID；必要闭包超限明确失败。`GET /tasks/{task_id}/reviews` 只返回固定窗口的历史小摘要，默认20/最大100条，不含当前证明、原快照及证据正文。`GET /tasks/{task_id}/reviews/{review_id}` 精确读取指定原件。Task 已删除、当前证明太大或索引失效时历史仍独立可读；跨项目或错任务原件404。历史接受不是当前有效通过，不能推导 valid。
 
-任务详情内新增独立“人工验收”区，复用人员/任务/执行面板。默认说明当前口径与来源；没有执行记录的人工任务可打开审核，原生执行仍使用原入口。专用表单固定 basis/version，展示验收条件与当前任务内容；失败保留意见/证据，409 展示最新事实后明确采用，不自动升级基准。历史可展开原始快照及证据；失效、退回与通过分开呈现。无权限、未完成、依赖未交付、无活跃人类归属和已删除分别说明。三语、主题、键盘与390px均需实际核验；独立任务也能进入。
+任务详情内的“人工验收”区独立展示当前依据和历史目录，各自加载、刷新及报错；展开原件才读取完整快照及证据。没有执行记录的人工任务可打开审核，原生执行仍使用原入口。表单固定 basis/version，展示验收条件与当前任务内容；请求结果未知时锁定原正文、版本、键及会话，刷新后恢复且只能重放原请求。明确拒绝后保留意见/证据，读取最新事实并显式采用，不自动升级基准。失效、退回、历史接受与当前有效分开呈现。无权限、未完成、依赖未交付、无活跃人类归属和已删除分别说明。三语、主题、键盘与390px均需实际核验；组件与构建通过不代表实机视觉已验证。
 
 ## 验证和收尾
 
@@ -37,6 +37,6 @@
 
 用户明确无需历史兼容或保留不必要的旧设计，按最佳合理目标实现。必要的验收快照、证据、撤销/失效与审计属于交付有效性，不是旧版本兼容；继续保留。后续契约允许有目的重构，删除重复状态与存储，文档按最终实现更新。
 
-SDK `delivery_task_reviews(task_id, limit=20, cursor="")` 和 CLI `sop delivery reviews TASK_ID --limit 20 --json` 读取同一分页结果，`next_cursor` 用于下一页。写入仍提交固定 `task.manual_review` Command，保留原始 expected_version/basis/idempotency_key 重试；明确采用最新依据后使用新请求身份。
+SDK `delivery_task_reviews(task_id, limit=20, cursor="")` 和 CLI `sop delivery reviews TASK_ID --limit 20 --json` 只读历史小摘要。`next_cursor` 原样传回，绑定账号/租户/项目/任务/页大小及固定序号窗口；新决定不会混入旧窗口。当前依据用 SDK `delivery_task_review_current(task_id)` / CLI `sop delivery review-current TASK_ID --json`；原件用 SDK `delivery_task_review(task_id, review_id)` / CLI `sop delivery review TASK_ID REVIEW_ID --json`。写入仍提交固定 `task.manual_review` Command，保留原始 expected_version/basis/idempotency_key 重试；明确采用最新依据后使用新请求身份。
 
 统一任务计划编辑覆盖有关联需求和独立任务：materialize返回任务basis，task.update关联编辑固定task_basis；移除该payload旧requirement_basis/revision双重基准。基准包含关联需求定义，因此需求变化也被核验；无需求任务验收索引只能为空，前置依赖仍可维护。模板预览及新建计划保留各自需求依据。旧依赖POST/DELETE及Web重复写表单移除，保留只读图和到统一计划编辑的精确入口。

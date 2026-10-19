@@ -30,6 +30,8 @@ from .delivery_contract import (
     ProgressObservationResponse,
     ProgressResponse,
     TaskPlanPreview,
+    TaskReviewCurrentResponse,
+    TaskReviewDetailResponse,
     TaskReviewsResponse,
 )
 from .delivery_deployment_contract import (
@@ -851,20 +853,47 @@ def task_reviews(
     user: Annotated[User, Depends(current_user)],
     db: Annotated[Session, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    cursor: Annotated[str, Query(max_length=64)] = "",
+    cursor: Annotated[str, Query(max_length=4000)] = "",
     project_id: str = Header(default="", alias="X-Project-Id"),
 ):
-    from .delivery_manual_review import list_reviews
+    from .delivery_manual_review_query import list_reviews
 
     project = _project(db, user, project_id)
     return list_reviews(
         db,
         project,
+        user,
         task_id,
-        can_approve=_permissions(db, user, project)["approve"],
         limit=limit,
         cursor=cursor,
     )
+
+
+@router.get("/tasks/{task_id}/review-current", response_model=TaskReviewCurrentResponse)
+def task_review_current(
+    task_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_manual_review_query import review_current
+
+    project = _project(db, user, project_id)
+    return review_current(db, project, task_id, can_approve=_permissions(db, user, project)["approve"])
+
+
+@router.get("/tasks/{task_id}/reviews/{review_id}", response_model=TaskReviewDetailResponse)
+def task_review_detail(
+    task_id: str,
+    review_id: str,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Session, Depends(get_session)],
+    project_id: str = Header(default="", alias="X-Project-Id"),
+):
+    from .delivery_manual_review_query import review_detail
+
+    project = _project(db, user, project_id)
+    return review_detail(db, project, task_id, review_id)
 
 
 @router.post("/task-plan-preview")
